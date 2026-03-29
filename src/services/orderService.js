@@ -140,18 +140,22 @@ export async function submitOrder(orderItems, total) {
 
     if (orderError) throw orderError
 
-    // 2. Insert order items
-    const items = orderItems.map(item => ({
-        order_id: order.id,
-        product_id: item.productId,
-        quantity: item.quantity,
-    }))
+    // 2. Insert order items (excluding extras to avoid foreign key errors)
+    const items = orderItems
+        .filter(item => !item.isExtra)
+        .map(item => ({
+            order_id: order.id,
+            product_id: item.productId,
+            quantity: item.quantity,
+        }))
 
-    const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(items)
+    if (items.length > 0) {
+        const { error: itemsError } = await supabase
+            .from('order_items')
+            .insert(items)
 
-    if (itemsError) throw itemsError
+        if (itemsError) throw itemsError
+    }
 
     // 3. Inventory calculation disabled for now
 
