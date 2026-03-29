@@ -1,0 +1,139 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  /* Warm coffee palette */
+  --color-bg: #0c0a09;
+  --color-surface: #1c1917;
+  --color-surface-light: #292524;
+  --color-surface-hover: #3a3532;
+  --color-border: #44403c;
+  --color-border-light: #57534e;
+
+  /* Accent – warm amber/orange */
+  --color-primary: #f59e0b;
+  --color-primary-hover: #fbbf24;
+  --color-primary-glow: rgba(245, 158, 11, 0.25);
+  --color-primary-soft: rgba(245, 158, 11, 0.1);
+
+  /* Text */
+  --color-text: #fafaf9;
+  --color-text-secondary: #a8a29e;
+  --color-text-dim: #78716c;
+
+  /* Status colors */
+  --color-success: #22c55e;
+  --color-success-soft: rgba(34, 197, 94, 0.15);
+  --color-warning: #f59e0b;
+  --color-warning-soft: rgba(245, 158, 11, 0.15);
+  --color-danger: #ef4444;
+  --color-danger-soft: rgba(239, 68, 68, 0.15);
+
+  --color-white: #ffffff;
+}
+
+/* ====== Fonts ====== */
+
+/* ====== Base ====== */
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+
+/* ====== Scrollbar ====== */
+::-webkit-scrollbar {
+  width: 3px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+/* Hide scrollbar for horizontal lists */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+  /* Chrome, Safari and Opera */
+}
+
+/* ====== Active press animations ====== */
+.menu-btn {
+  transition: transform 50ms ease, background-color 50ms ease;
+}
+
+.menu-btn:active {
+  transform: scale(0.96);
+}
+
+.order-item-btn {
+  transition: transform 50ms ease, background-color 50ms ease;
+}
+
+.order-item-btn:active {
+  transform: scale(0.98);
+}
+
+/* ====== Badge bounce ====== */
+@keyframes badge-pop {
+  0% {
+    transform: scale(0.5);
+  }
+
+  60% {
+    transform: scale(1.2);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+.badge-pop {
+  animation: badge-pop 200ms ease-out;
+}
+
+/* ====== Toast slide-in ====== */
+@keyframes toast-in {
+  0% {
+    transform: translate(-50%, -20px);
+    opacity: 0;
+  }
+
+  100% {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+.toast-in {
+  animation: toast-in 200ms ease-out;
+}
