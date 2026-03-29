@@ -131,6 +131,39 @@ export default function App() {
     }
   }, [])
 
+  // ---- Auto-Reset Qua Ngày Mới (Chống treo máy) ----
+  useEffect(() => {
+    const checkNewDay = () => {
+      const storedDate = localStorage.getItem('pos_current_date')
+      const todayStr = new Date().toDateString()
+      if (storedDate && storedDate !== todayStr) {
+        // Nạp lại dữ liệu nếu phát hiện sang ngày mới
+        if (navigator.onLine && supabase) {
+          fetchTodayRevenue().then(setRevenue)
+          fetchTodayCupsSold().then(setCupsSold)
+          showToast('Đã qua ngày mới, dữ liệu đã được làm mới!', 'info')
+        } else {
+          setRevenue(0)
+          setCupsSold(0)
+        }
+        localStorage.setItem('pos_current_date', todayStr)
+      } else if (!storedDate) {
+        localStorage.setItem('pos_current_date', todayStr)
+      }
+    }
+
+    // Kiểm tra định kỳ mỗi khi bật máy lại hoặc chuyển tab về
+    window.addEventListener('focus', checkNewDay)
+    window.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') checkNewDay()
+    })
+
+    return () => {
+      window.removeEventListener('focus', checkNewDay)
+      window.removeEventListener('visibilitychange', checkNewDay)
+    }
+  }, [])
+
   // ---- Supabase realtime subscriptions ----
   useEffect(() => {
     if (!supabase) return
