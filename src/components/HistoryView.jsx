@@ -111,7 +111,7 @@ export default function HistoryView({ todayOrders, isLoadingHistory, onBack, onD
                                                 ? 'bg-green-500/15 text-green-600'
                                                 : 'bg-blue-500/15 text-blue-600'
                                                 }`}>
-                                                {order.paymentMethod === 'cash' ? 'CASH' : 'QR'}
+                                                {order.paymentMethod === 'cash' ? 'CASH' : 'MOMO'}
                                             </span>
                                         )}
                                     </div>
