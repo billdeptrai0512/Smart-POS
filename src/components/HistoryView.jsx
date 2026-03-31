@@ -12,10 +12,10 @@ export default function HistoryView({ todayOrders, isLoadingHistory, onBack, onD
         paymentMethod: o.payment_method || null,
         itemsText: o.order_items ? o.order_items.map(i => {
             const options = i.options
-                ? i.options.split(', ').filter(opt => opt !== 'Tiền mặt' && opt !== 'Chuyển khoản').join(' - ')
+                ? i.options.split(', ').filter(opt => opt !== 'Tiền mặt' && opt !== 'MoMo').join(' - ')
                 : ''
             return `${i.quantity} ${i.products?.name}${options ? ` (${options})` : ''}`
-        }).join(' + ') : ''
+        }).join('\n') : ''
     }))
 
     const pending = getPendingOrders()
@@ -30,10 +30,10 @@ export default function HistoryView({ todayOrders, isLoadingHistory, onBack, onD
             paymentMethod: o.paymentMethod || null,
             itemsText: o.cart
                 ? o.cart.map(i => {
-                    const extras = i.extras.filter(e => e.name !== 'Tiền mặt' && e.name !== 'Chuyển khoản')
-                    return `${i.quantity} ${i.name}${extras.length ? ` (${extras.map(e => e.name).join(', ')})` : ''}`
-                }).join(', ')
-                : o.orderItems ? o.orderItems.map(i => `${i.quantity} ${i.name}`).join(', ') : ''
+                    const extras = i.extras.filter(e => e.name !== 'Tiền mặt' && e.name !== 'MoMo')
+                    return `${i.quantity} ${i.name}${extras.length ? ` (${extras.map(e => e.name).join(' - ')})` : ''}`
+                }).join('\n')
+                : o.orderItems ? o.orderItems.map(i => `${i.quantity} ${i.name}`).join('\n') : ''
         }))
 
     const allOrders = [...formattedOnline, ...formattedOffline].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
@@ -71,12 +71,12 @@ export default function HistoryView({ todayOrders, isLoadingHistory, onBack, onD
                             <span className="text-[14px] font-black text-primary leading-none mt-1">{allOrders.length}</span>
                         </div> */}
                         <div className="flex-1 bg-green-500/10 border border-green-500/20 rounded-[14px] px-3 py-2.5 flex flex-col items-center">
-                            <span className="text-[10px] font-bold text-green-600/70 uppercase">Tiền mặt</span>
-                            <span className="text-[14px] font-black text-green-600 leading-none mt-1 tabular-nums">{formatVND(cashRevenue)}</span>
+                            <span className="text-[14px] font-black text-green-600 uppercase">Tiền mặt</span>
+                            <span className="text-[13px] font-bold text-green-600/70 leading-none mt-1 tabular-nums">{formatVND(cashRevenue)}</span>
                         </div>
                         <div className="flex-1 bg-blue-500/10 border border-blue-500/20 rounded-[14px] px-3 py-2.5 flex flex-col items-center">
-                            <span className="text-[10px] font-bold text-blue-600/70 uppercase">Chuyển khoản</span>
-                            <span className="text-[14px] font-black text-blue-600 leading-none mt-1 tabular-nums">{formatVND(transferRevenue)}</span>
+                            <span className="text-[14px] font-black text-blue-600 uppercase">MoMo</span>
+                            <span className="text-[13px] font-bold text-blue-600/70 leading-none mt-1 tabular-nums">{formatVND(transferRevenue)}</span>
                         </div>
                     </div>
                 </div>
@@ -105,13 +105,13 @@ export default function HistoryView({ todayOrders, isLoadingHistory, onBack, onD
                                 )}
                                 <div className="flex justify-between items-center mb-1">
                                     <div className="flex items-center gap-2">
-                                        <span className="text-text font-black text-[16px] text-primary">+ {formatVND(order.total)}</span>
+                                        <span className="text-text font-black text-[14px] text-primary">+ {formatVND(order.total)}</span>
                                         {order.paymentMethod && (
                                             <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${order.paymentMethod === 'cash'
                                                 ? 'bg-green-500/15 text-green-600'
                                                 : 'bg-blue-500/15 text-blue-600'
                                                 }`}>
-                                                {order.paymentMethod === 'cash' ? 'CASH' : 'MOMO'}
+                                                {order.paymentMethod === 'cash' ? 'Tiền mặt' : 'MOMO'}
                                             </span>
                                         )}
                                     </div>
@@ -120,23 +120,24 @@ export default function HistoryView({ todayOrders, isLoadingHistory, onBack, onD
                                     </span>
                                 </div>
                                 <div className="flex justify-between items-center mb-1  border-t border-border/40 pt-2">
-                                    <span className="text-text text-[14px] leading-snug font-medium flex-1 mr-2">{order.itemsText || 'Không có chi tiết'}</span>
+                                    <span className="text-text text-[14px] leading-snug font-medium flex-1 mr-2 max-w-[65%] whitespace-pre-wrap">{order.itemsText || 'Không có chi tiết'}</span>
                                     <div className="flex items-center gap-2 shrink-0">
-                                        <span className="text-text-secondary text-[14px] font-bold">{time}</span>
-                                        {!order.isOffline && (
-                                            <button
-                                                disabled={deletingId === order.id}
+                                        {!order.isOffline ? (
+                                            <span
+                                                className="text-red-500 text-[14px] font-bold cursor-pointer hover:text-red-400 active:text-red-600 transition-colors select-none disabled:opacity-40"
                                                 onClick={() => {
+                                                    if (deletingId === order.id) return
                                                     if (window.confirm(`Xóa đơn ${order.itemsText || ''} (${formatVND(order.total)})?\n\nHành động này không thể hoàn tác!`)) {
                                                         setDeletingId(order.id)
                                                         onDeleteOrder(order.id).finally(() => setDeletingId(null))
                                                     }
                                                 }}
-                                                className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/25 active:bg-red-500/40 transition-colors text-[13px] leading-none disabled:opacity-40"
-                                                title="Xóa đơn hàng"
+                                                title="Nhấn để xóa đơn hàng"
                                             >
-                                                {deletingId === order.id ? '⏳' : '🗑'}
-                                            </button>
+                                                {deletingId === order.id ? '⏳' : time}
+                                            </span>
+                                        ) : (
+                                            <span className="text-text-secondary text-[14px] font-bold">{time}</span>
                                         )}
                                     </div>
                                 </div>

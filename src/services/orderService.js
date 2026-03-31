@@ -196,7 +196,11 @@ export async function submitOrder(cart, total, paymentMethod = null) {
             .from('order_items')
             .insert(items)
 
-        if (itemsError) throw itemsError
+        if (itemsError) {
+            // Cleanup partial order to avoid duplicate accumulation offline
+            await supabase.from('orders').delete().eq('id', order.id)
+            throw itemsError
+        }
     }
 
     // 3. Inventory calculation disabled for now
