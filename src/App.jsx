@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from './lib/supabaseClient'
-import { fetchProducts, fetchTodayRevenue, fetchInventory, submitOrder, fetchAllRecipes, fetchTodayCupsSold, fetchTodayOrders } from './services/orderService'
+import { fetchProducts, fetchTodayRevenue, fetchInventory, submitOrder, fetchAllRecipes, fetchTodayCupsSold, fetchTodayOrders, deleteOrder } from './services/orderService'
 import { useOfflineSync, addPendingOrder } from './hooks/useOfflineSync'
 import { INGREDIENT_NAMES, LOW_STOCK_THRESHOLD, DAY_NAMES } from './constants'
 import './index.css'
@@ -13,6 +13,7 @@ import MiniCart from './components/MiniCart'
 import OrderFooter from './components/OrderFooter'
 import Toast from './components/Toast'
 import HistoryView from './components/HistoryView'
+import PWAUpdatePrompt from './components/PWAUpdatePrompt'
 
 export default function App() {
   // ---- Persisted State ----
@@ -252,6 +253,21 @@ export default function App() {
     }
   }
 
+  async function handleDeleteOrder(orderId) {
+    try {
+      await deleteOrder(orderId)
+      setTodayOrders(prev => prev.filter(o => o.id !== orderId))
+      // Refresh revenue & cups from server
+      const [rev, cups] = await Promise.all([fetchTodayRevenue(), fetchTodayCupsSold()])
+      setRevenue(rev)
+      setCupsSold(cups)
+      showToast('Đã xóa đơn hàng', 'success')
+    } catch (err) {
+      console.error('Delete order error:', err)
+      showToast('Lỗi khi xóa đơn hàng', 'warning')
+    }
+  }
+
   // ---- Format Date ----
   const today = new Date()
   const dayName = DAY_NAMES[today.getDay()]
@@ -260,11 +276,15 @@ export default function App() {
   // ---- Render ----
   if (currentView === 'history') {
     return (
-      <HistoryView
-        todayOrders={todayOrders}
-        isLoadingHistory={isLoadingHistory}
-        onBack={() => setCurrentView('pos')}
-      />
+      <>
+        <HistoryView
+          todayOrders={todayOrders}
+          isLoadingHistory={isLoadingHistory}
+          onBack={() => setCurrentView('pos')}
+          onDeleteOrder={handleDeleteOrder}
+        />
+        <PWAUpdatePrompt />
+      </>
     )
   }
 
@@ -310,6 +330,7 @@ export default function App() {
       />
 
       <Toast toast={toast} />
+      <PWAUpdatePrompt />
     </div>
   )
 }
