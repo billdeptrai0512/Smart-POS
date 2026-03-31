@@ -24,7 +24,7 @@ export default function PWAUpdatePrompt() {
         <div className="pwa-update-banner">
             <div className="pwa-update-content">
                 <span className="pwa-update-icon">🔄</span>
-                <span className="pwa-update-text">Cập nhật phiên bản mới nhất nhé !</span>
+                <span className="pwa-update-text">Đã có phiên bản mới !</span>
                 <button
                     className="pwa-update-btn"
                     onClick={() => updateServiceWorker(true)}
