@@ -203,3 +203,25 @@ export async function submitOrder(cart, total, paymentMethod = null) {
 
     return order
 }
+
+// Delete an order and its items (for duplicate order cleanup)
+export async function deleteOrder(orderId) {
+    if (!supabase) throw new Error('No Supabase connection')
+
+    // Delete order_items first (FK constraint)
+    const { error: itemsError } = await supabase
+        .from('order_items')
+        .delete()
+        .eq('order_id', orderId)
+
+    if (itemsError) throw itemsError
+
+    const { error: orderError } = await supabase
+        .from('orders')
+        .delete()
+        .eq('id', orderId)
+
+    if (orderError) throw orderError
+
+    return true
+}
