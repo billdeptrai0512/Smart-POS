@@ -5,8 +5,8 @@ export const QUICK_EXTRAS = [
 
 // Payment methods (order-level, not per-item)
 export const PAYMENT_METHODS = [
-    { id: 'cash', name: 'Tiền mặt', label: '💵 CASH' },
-    { id: 'transfer', name: 'Chuyển khoản', label: '📱 BANK' },
+    { id: 'cash', name: 'Tiền mặt', label: 'Tiền mặt' },
+    { id: 'transfer', name: 'Chuyển khoản', label: 'Momo' },
 ]
 
 // Ingredient display names for warnings

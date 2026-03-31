@@ -216,8 +216,9 @@ export default function App() {
     try {
       if (navigator.onLine && supabase) {
         await submitOrder(cart, total, paymentMethod)
-        setRevenue(prev => prev + total)
-        setCupsSold(prev => prev + orderCount)
+        const [rev, cups] = await Promise.all([fetchTodayRevenue(), fetchTodayCupsSold()])
+        setRevenue(rev)
+        setCupsSold(cups)
         showToast(`Tạo thành công`, 'success')
       } else {
         addPendingOrder(cart, total, paymentMethod)
@@ -231,6 +232,8 @@ export default function App() {
     } catch (err) {
       console.error('Submit error:', err)
       addPendingOrder(cart, total, paymentMethod)
+      setRevenue(prev => prev + total)
+      setCupsSold(prev => prev + orderCount)
       showToast('Lỗi mạng – đã lưu offline', 'warning')
       setCart([])
       setActiveCartItemId(null)
