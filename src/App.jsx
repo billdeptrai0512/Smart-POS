@@ -32,7 +32,6 @@ export default function App() {
   const [inventory, setInventory] = useState(() => loadLocalJSON('pos_inventory', {}))
   const [recipes, setRecipes] = useState([])
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [paymentMethod, setPaymentMethod] = useState(null)
   const [toast, setToast] = useState(null)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const toastTimer = useRef(null)
@@ -215,29 +214,27 @@ export default function App() {
 
     try {
       if (navigator.onLine && supabase) {
-        await submitOrder(cart, total, paymentMethod)
+        await submitOrder(cart, total)
         const [rev, cups] = await Promise.all([fetchTodayRevenue(), fetchTodayCupsSold()])
         setRevenue(rev)
         setCupsSold(cups)
         showToast(`Tạo thành công`, 'success')
       } else {
-        addPendingOrder(cart, total, paymentMethod)
+        addPendingOrder(cart, total)
         setRevenue(prev => prev + total)
         setCupsSold(prev => prev + orderCount)
         showToast(`Lưu offline (${getPendingCount()} đơn chờ)`, 'warning')
       }
       setCart([])
       setActiveCartItemId(null)
-      setPaymentMethod(null)
     } catch (err) {
       console.error('Submit error:', err)
-      addPendingOrder(cart, total, paymentMethod)
+      addPendingOrder(cart, total)
       setRevenue(prev => prev + total)
       setCupsSold(prev => prev + orderCount)
       showToast('Lỗi mạng – đã lưu offline', 'warning')
       setCart([])
       setActiveCartItemId(null)
-      setPaymentMethod(null)
     } finally {
       setIsSubmitting(false)
     }
@@ -326,9 +323,7 @@ export default function App() {
         total={total}
         hasOrder={hasOrder}
         isSubmitting={isSubmitting}
-        paymentMethod={paymentMethod}
         onToggleExtra={handleToggleExtra}
-        onSelectPayment={setPaymentMethod}
         onConfirm={handleConfirm}
       />
 
