@@ -1,13 +1,14 @@
 // Quick Extras (UUID formatted for safe DB parsing)
 export const QUICK_EXTRAS = [
     { id: '22222222-2222-2222-2222-222222222201', name: 'Lớn', price: 6000 },
+    { id: '22222222-2222-2222-2222-222222222202', name: 'Trà đá', price: 0 },
 ]
 
 // Payment methods (order-level, not per-item)
-export const PAYMENT_METHODS = [
-    { id: 'cash', name: 'Tiền mặt', label: 'Tiền mặt' },
-    { id: 'transfer', name: 'Chuyển khoản', label: 'Momo' },
-]
+// export const PAYMENT_METHODS = [
+//     { id: 'cash', name: 'Tiền mặt', label: 'Tiền mặt' },
+//     { id: 'transfer', name: 'Chuyển khoản', label: 'Momo' },
+// ]
 
 // Ingredient display names for warnings
 export const INGREDIENT_NAMES = {

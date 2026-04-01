@@ -1,34 +1,13 @@
 import { formatVND } from '../utils'
-import { QUICK_EXTRAS, PAYMENT_METHODS } from '../constants'
+import { QUICK_EXTRAS } from '../constants'
 
-export default function OrderFooter({ cart, activeCartItemId, total, hasOrder, isSubmitting, paymentMethod, onToggleExtra, onSelectPayment, onConfirm }) {
+export default function OrderFooter({ cart, activeCartItemId, total, hasOrder, isSubmitting, onToggleExtra, onConfirm }) {
     return (
         <footer className="shrink-0 bg-surface border-t border-border/80 shadow-[0_-4px_24px_rgba(0,0,0,0.02)] flex flex-col">
 
             {/* Quick Extras Bar */}
             {cart.length > 0 && (
                 <div className="w-full overflow-x-auto py-3 px-6 flex gap-2.5 items-center hide-scrollbar border-b border-border/40">
-                    {/* Payment Method Toggles */}
-                    {PAYMENT_METHODS.map(pm => {
-                        const isActive = paymentMethod === pm.id
-                        return (
-                            <button
-                                key={pm.id}
-                                onClick={() => onSelectPayment(isActive ? null : pm.id)}
-                                className={`shrink-0 h-[42px] px-4 rounded-[14px] border font-bold text-[14px] whitespace-nowrap focus:outline-none transition-all shadow-sm ${isActive
-                                    ? pm.id === 'cash'
-                                        ? 'bg-green-500/15 border-green-500/50 text-green-600 uppercase'
-                                        : 'bg-blue-500/15 border-blue-500/50 text-blue-600 uppercase'
-                                    : 'bg-surface-light border-border/80 text-text-secondary hover:text-text uppercase'
-                                    }`}
-                            >
-                                {pm.label}
-                            </button>
-                        )
-                    })}
-
-                    {/* Divider */}
-                    <div className="shrink-0 w-px h-7 bg-border/60" />
                     {QUICK_EXTRAS.map(ex => {
                         const activeItem = cart.find(item => item.cartItemId === activeCartItemId) || cart[cart.length - 1]
                         const hasExtra = activeItem?.extras.some(e => e.id === ex.id) || false
@@ -70,13 +49,13 @@ export default function OrderFooter({ cart, activeCartItemId, total, hasOrder, i
                 <button
                     id="confirm-order"
                     onClick={onConfirm}
-                    disabled={!hasOrder || !paymentMethod || isSubmitting}
-                    className={`w-full p-4 font-bold text-[18px] tracking-tight transition-all duration-75 flex items-center justify-center gap-2 ${!hasOrder || !paymentMethod || isSubmitting
+                    disabled={!hasOrder || isSubmitting}
+                    className={`w-full p-4 font-bold text-[18px] tracking-tight transition-all duration-75 flex items-center justify-center gap-2 ${!hasOrder || isSubmitting
                         ? 'bg-surface-light text-text-dim cursor-not-allowed border border-border/50'
                         : 'bg-primary text-bg active:bg-primary-hover shadow-[0_8px_32px_var(--color-primary-glow)] hover:-translate-y-0.5'
                         }`}
                 >
-                    {isSubmitting ? 'Đang tạo đơn...' : (hasOrder && !paymentMethod ? 'Chọn thanh toán' : 'Tạo đơn')}
+                    {isSubmitting ? 'Đang tạo đơn...' : 'Tạo đơn'}
                 </button>
             </div>
             {/* Safe area padding for notched phones */}
