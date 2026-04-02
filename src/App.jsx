@@ -15,7 +15,6 @@ import OrderFooter from './components/OrderFooter'
 import Toast from './components/Toast'
 import HistoryView from './components/HistoryView'
 import RecipeManager from './components/RecipeManager'
-import PWAUpdatePrompt from './components/PWAUpdatePrompt'
 
 export default function App() {
   // ---- Persisted State ----
@@ -307,7 +306,6 @@ export default function App() {
           onBack={() => setCurrentView('history')}
           onDataChanged={handleRecipeDataChanged}
         />
-        <PWAUpdatePrompt />
       </>
     )
   }
@@ -325,7 +323,6 @@ export default function App() {
           onDeleteOrder={handleDeleteOrder}
           onOpenRecipeManager={() => setCurrentView('recipe-manager')}
         />
-        <PWAUpdatePrompt />
       </>
     )
   }
@@ -371,7 +368,6 @@ export default function App() {
       />
 
       <Toast toast={toast} />
-      <PWAUpdatePrompt />
     </div>
   )
 }
