@@ -15,7 +15,7 @@ const DEMO_PRODUCTS = [
     { id: '11111111-1111-1111-1111-111111111110', name: 'Matcha kem muối', price: 27000 },
 ]
 
-const DEMO_RECIPES = [
+export const DEMO_RECIPES = [
     // 1. Cà phê đen (101)
     { product_id: '11111111-1111-1111-1111-111111111101', ingredient: 'coffee_g', amount: 20 },
     { product_id: '11111111-1111-1111-1111-111111111101', ingredient: 'cup', amount: 1 },
@@ -37,7 +37,7 @@ const DEMO_RECIPES = [
     // 4. Sữa tươi cà phê (104)
     { product_id: '11111111-1111-1111-1111-111111111104', ingredient: 'coffee_g', amount: 15 },
     { product_id: '11111111-1111-1111-1111-111111111104', ingredient: 'fresh_milk_ml', amount: 60 },
-    { product_id: '11111111-1111-1111-1111-111111111104', ingredient: 'sugar_syrup_ml', amount: 10 },
+    { product_id: '11111111-1111-1111-1111-111111111104', ingredient: 'sugar_g', amount: 10 },
     { product_id: '11111111-1111-1111-1111-111111111104', ingredient: 'cup', amount: 1 },
     { product_id: '11111111-1111-1111-1111-111111111104', ingredient: 'lid', amount: 1 },
 
@@ -89,7 +89,7 @@ const DEMO_INVENTORY = {
     condensed_milk_ml: 3000,
     fresh_milk_ml: 5000,
     salt_cream_ml: 1000,
-    sugar_syrup_ml: 2000,
+    sugar_g: 2000,
     cacao_powder_g: 1000,
     matcha_powder_g: 1000,
     tea_bag: 100,
