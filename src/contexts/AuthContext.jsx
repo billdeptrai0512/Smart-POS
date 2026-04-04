@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, fetchProfileByAuthId } from '../services/authService'
+import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, fetchProfileByAuthId, removeSession } from '../services/authService'
 
 const AuthContext = createContext(null)
 
@@ -70,10 +70,11 @@ export function AuthProvider({ children }) {
     }, [])
 
     const signOut = useCallback(async () => {
+        if (profile?.id) await removeSession(profile.id)
         await authSignOut()
         setUser(null)
         setProfile(null)
-    }, [])
+    }, [profile])
 
     const signUp = useCallback(async (username, password, name, role = 'staff', managerId = null) => {
         const data = await authSignUp(username, password, name, role, managerId)

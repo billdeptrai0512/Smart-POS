@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { useAuth } from './AuthContext'
-import { fetchAddresses, createAddress as apiCreateAddress } from '../services/authService'
+import { fetchAddresses, createAddress as apiCreateAddress, updateAddress as apiUpdateAddress, deleteAddress as apiDeleteAddress, upsertSession } from '../services/authService'
 import { Outlet } from 'react-router-dom'
 
 const AddressContext = createContext(null)
@@ -62,10 +62,11 @@ export function AddressProvider() {
         setSelectedAddressState(addr)
         if (addr) {
             localStorage.setItem('pos_selected_address', addr.id)
+            if (profile?.id) upsertSession(profile.id, addr.id)
         } else {
             localStorage.removeItem('pos_selected_address')
         }
-    }, [])
+    }, [profile])
 
     const createNewAddress = useCallback(async (name) => {
         if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể tạo địa chỉ')
@@ -74,12 +75,34 @@ export function AddressProvider() {
         return newAddr
     }, [profile])
 
+    const renameAddress = useCallback(async (addressId, newName) => {
+        if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể sửa địa chỉ')
+        const updatedAddr = await apiUpdateAddress(addressId, newName)
+        setAddresses(prev => prev.map(a => a.id === addressId ? updatedAddr : a))
+        if (selectedAddress?.id === addressId) {
+            setSelectedAddressState(updatedAddr)
+        }
+        return updatedAddr
+    }, [profile, selectedAddress])
+
+    const removeAddress = useCallback(async (addressId) => {
+        if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể xóa địa chỉ')
+        await apiDeleteAddress(addressId)
+        setAddresses(prev => prev.filter(a => a.id !== addressId))
+        if (selectedAddress?.id === addressId) {
+            setSelectedAddressState(null)
+            localStorage.removeItem('pos_selected_address')
+        }
+    }, [profile, selectedAddress])
+
     return (
         <AddressContext.Provider value={{
             addresses,
             selectedAddress,
             setSelectedAddress,
             createNewAddress,
+            renameAddress,
+            removeAddress,
             loading
         }}>
             <Outlet />

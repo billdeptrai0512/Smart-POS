@@ -84,9 +84,24 @@ CREATE TABLE IF NOT EXISTS expenses (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Active sessions (track who is currently on shift at which address)
+CREATE TABLE IF NOT EXISTS active_sessions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  address_id UUID REFERENCES addresses(id) ON DELETE CASCADE,
+  last_seen TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_id)
+);
+
 -- =============================================
 -- Row Level Security Policies
 -- =============================================
+
+-- Active sessions: authenticated users can manage sessions
+ALTER TABLE active_sessions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "sessions_full_access" ON active_sessions;
+CREATE POLICY "sessions_full_access" ON active_sessions
+  FOR ALL USING (auth.uid() IS NOT NULL);
 
 -- Orders: managers and admins can access orders
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;

@@ -1,16 +1,45 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
+import { fetchBranchTodayCups, fetchActiveSessions } from '../services/authService'
 
 export default function AddressSelectPage() {
-    const { addresses, setSelectedAddress, createNewAddress, loading } = useAddress()
+    const { addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading } = useAddress()
     const { signOut, profile, isStaff } = useAuth()
     const navigate = useNavigate()
     const [newName, setNewName] = useState('')
     const [creating, setCreating] = useState(false)
     const [showForm, setShowForm] = useState(false)
     const [error, setError] = useState('')
+    const [editingAddressId, setEditingAddressId] = useState(null)
+    const [editName, setEditName] = useState('')
+
+    // Quick stats
+    const [cupsMap, setCupsMap] = useState({})       // { addressId: cupCount }
+    const [sessionsMap, setSessionsMap] = useState({}) // { addressId: [{ name }] }
+    const [statsLoading, setStatsLoading] = useState(false)
+
+    // Fetch stats when addresses are loaded
+    useEffect(() => {
+        if (!addresses.length) return
+        const addrIds = addresses.map(a => a.id)
+        setStatsLoading(true)
+
+        Promise.all([
+            fetchBranchTodayCups(addrIds),
+            fetchActiveSessions(addrIds)
+        ]).then(([cups, sessions]) => {
+            setCupsMap(cups)
+            // Group sessions by address_id
+            const grouped = {}
+            sessions.forEach(s => {
+                if (!grouped[s.address_id]) grouped[s.address_id] = []
+                grouped[s.address_id].push(s.users?.name || 'Unknown')
+            })
+            setSessionsMap(grouped)
+        }).finally(() => setStatsLoading(false))
+    }, [addresses])
 
     function handleSelect(addr) {
         setSelectedAddress(addr)
@@ -47,8 +76,6 @@ export default function AddressSelectPage() {
         )
     }
 
-    console.log(profile)
-
     return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-4">
             <div className="w-full max-w-sm">
@@ -69,15 +96,89 @@ export default function AddressSelectPage() {
                         </div>
                     )}
 
-                    {addresses.map(addr => (
-                        <button
-                            key={addr.id}
-                            onClick={() => handleSelect(addr)}
-                            className="w-full bg-surface border border-border/60 rounded-[16px] px-5 py-4 text-left hover:bg-surface-light active:bg-border/30 transition-colors shadow-sm group"
-                        >
-                            <span className="text-text font-bold text-sm group-hover:text-primary transition-colors">{addr.name}</span>
-                        </button>
-                    ))}
+                    {addresses.map(addr => {
+                        const cups = cupsMap[addr.id] || 0
+                        const staffNames = sessionsMap[addr.id] || []
+
+                        return (
+                            <div key={addr.id} className="w-full bg-surface border border-border/60 rounded-[16px] overflow-hidden shadow-sm group">
+                                {editingAddressId === addr.id ? (
+                                    <form
+                                        className="flex w-full px-2 py-2 gap-2"
+                                        onSubmit={async (e) => {
+                                            e.preventDefault()
+                                            if (!editName.trim()) return
+                                            try {
+                                                await renameAddress(addr.id, editName.trim())
+                                                setEditingAddressId(null)
+                                            } catch (err) {
+                                                setError(err.message || 'Không thể đổi tên địa chỉ')
+                                            }
+                                        }}
+                                    >
+                                        <input
+                                            type="text"
+                                            value={editName}
+                                            onChange={e => setEditName(e.target.value)}
+                                            className="flex-1 px-3 py-2 rounded-[10px] bg-bg border border-border/60 text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                                            autoFocus
+                                        />
+                                        <button type="submit" className="px-3 py-2 bg-primary text-white text-xs font-bold rounded-[10px]">Lưu</button>
+                                        <button type="button" onClick={() => { setEditingAddressId(null); setError(''); }} className="px-3 py-2 bg-bg border border-border/60 text-text-secondary text-xs font-bold rounded-[10px]">Hủy</button>
+                                    </form>
+                                ) : (
+                                    <div className="flex items-center">
+                                        <button
+                                            onClick={() => handleSelect(addr)}
+                                            className="flex-1 px-5 py-3 text-left hover:bg-surface-light active:bg-border/30 transition-colors"
+                                        >
+                                            <span className="text-text font-bold text-sm group-hover:text-primary transition-colors block">{addr.name}</span>
+                                            {!statsLoading && (
+                                                <span className="text-text-secondary text-xs mt-1 flex items-center gap-3">
+                                                    <span>☕ {cups} ly</span>
+                                                    {staffNames.length > 0 && (
+                                                        <span>👤 {staffNames.join(', ')}</span>
+                                                    )}
+                                                </span>
+                                            )}
+                                        </button>
+                                        {(!isStaff) && (
+                                            <div className="flex flex-shrink-0 px-2 space-x-1">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setEditingAddressId(addr.id);
+                                                        setEditName(addr.name);
+                                                        setError('');
+                                                    }}
+                                                    className="p-2 text-text-secondary hover:text-primary transition-colors"
+                                                    title="Đổi tên"
+                                                >
+                                                    ✏️
+                                                </button>
+                                                <button
+                                                    onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        if (window.confirm(`Bạn có chắc muốn xóa địa chỉ "${addr.name}"? Việc này có thể ảnh hưởng đến các dữ liệu liên quan.`)) {
+                                                            try {
+                                                                await removeAddress(addr.id)
+                                                            } catch (err) {
+                                                                setError(err.message || 'Không thể xóa địa chỉ')
+                                                            }
+                                                        }
+                                                    }}
+                                                    className="p-2 text-text-secondary hover:text-danger transition-colors"
+                                                    title="Xóa"
+                                                >
+                                                    🗑️
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    })}
                 </div>
 
                 {(!isStaff) && (
