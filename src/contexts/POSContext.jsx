@@ -66,15 +66,19 @@ export function POSProvider() {
 
         async function load() {
             try {
-                const [rev, inv, cups] = await Promise.all([
+                const [rev, inv, cups, orders, expenses] = await Promise.all([
                     fetchTodayRevenue(addressId),
                     fetchInventory(),
                     fetchTodayCupsSold(addressId),
+                    fetchTodayOrders(addressId),
+                    fetchTodayExpenses(addressId),
                 ])
                 if (supabase) {
                     setRevenue(rev)
                     setInventory(inv)
                     setCupsSold(cups)
+                    setTodayOrders(orders)
+                    setTodayExpenses(expenses)
                 } else {
                     setInventory(prev => Object.keys(prev).length ? prev : inv)
                 }
