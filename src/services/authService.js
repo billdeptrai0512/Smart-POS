@@ -130,3 +130,110 @@ export async function createAddress(managerId, name) {
     if (error) throw error
     return data
 }
+
+// Update an address for a manager
+export async function updateAddress(addressId, name) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { data, error } = await supabase
+        .from('addresses')
+        .update({ name })
+        .eq('id', addressId)
+        .select()
+        .single()
+    if (error) throw error
+    return data
+}
+
+// Delete an address
+export async function deleteAddress(addressId) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase
+        .from('addresses')
+        .delete()
+        .eq('id', addressId)
+    if (error) throw error
+    return true
+}
+
+// =============================================
+// Active Sessions (staff presence tracking)
+// =============================================
+
+// Upsert active session when user enters POS
+export async function upsertSession(userId, addressId) {
+    if (!supabase) return
+    const { error } = await supabase
+        .from('active_sessions')
+        .upsert(
+            { user_id: userId, address_id: addressId, last_seen: new Date().toISOString() },
+            { onConflict: 'user_id' }
+        )
+    if (error) console.error('upsertSession error:', error)
+}
+
+// Remove session on signout
+export async function removeSession(userId) {
+    if (!supabase) return
+    const { error } = await supabase
+        .from('active_sessions')
+        .delete()
+        .eq('user_id', userId)
+    if (error) console.error('removeSession error:', error)
+}
+
+// Fetch active sessions for a list of address IDs (last_seen within 10 minutes)
+export async function fetchActiveSessions(addressIds) {
+    if (!supabase || !addressIds?.length) return []
+    const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+    const { data, error } = await supabase
+        .from('active_sessions')
+        .select('user_id, address_id, last_seen, users(name)')
+        .in('address_id', addressIds)
+        .gte('last_seen', cutoff)
+    if (error) {
+        console.error('fetchActiveSessions error:', error)
+        return []
+    }
+    return data
+}
+
+// Fetch today's cup count for multiple addresses in one query
+export async function fetchBranchTodayCups(addressIds) {
+    if (!supabase || !addressIds?.length) return {}
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    // Fetch all today's orders across those addresses
+    const { data: orders, error: ordErr } = await supabase
+        .from('orders')
+        .select('id, address_id')
+        .in('address_id', addressIds)
+        .gte('created_at', today.toISOString())
+
+    if (ordErr || !orders?.length) return {}
+
+    const orderIds = orders.map(o => o.id)
+
+    // Fetch all items for those orders
+    const { data: items, error: itemErr } = await supabase
+        .from('order_items')
+        .select('order_id, quantity')
+        .in('order_id', orderIds)
+
+    if (itemErr) {
+        console.error('fetchBranchTodayCups items error:', itemErr)
+        return {}
+    }
+
+    // Map order_id -> address_id
+    const orderAddrMap = {}
+    orders.forEach(o => { orderAddrMap[o.id] = o.address_id })
+
+    // Sum quantities per address
+    const result = {}
+    items.forEach(item => {
+        const addrId = orderAddrMap[item.order_id]
+        result[addrId] = (result[addrId] || 0) + item.quantity
+    })
+    return result
+}
