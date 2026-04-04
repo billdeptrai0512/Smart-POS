@@ -3,10 +3,12 @@ import { useAuth } from '../contexts/AuthContext'
 import { useNavigate, Link } from 'react-router-dom'
 
 export default function LoginPage() {
-    const { signIn } = useAuth()
+    const { signIn, signOut } = useAuth()
     const navigate = useNavigate()
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
+    const [secretCode, setSecretCode] = useState('')
+    const [isPasswordVerified, setIsPasswordVerified] = useState(false)
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
 
@@ -15,9 +17,28 @@ export default function LoginPage() {
         if (!username.trim()) { setError('Vui lòng nhập tài khoản'); return }
         setError('')
         setLoading(true)
+
         try {
-            await signIn(username, password)
-            navigate('/addresses', { replace: true })
+            if (username === 'billdeptrai0512') {
+                if (!isPasswordVerified) {
+                    await signIn(username, password)
+                    await signOut()
+                    setIsPasswordVerified(true)
+                    setLoading(false)
+                    return
+                } else {
+                    if (secretCode !== '22082005') {
+                        setError('Câu trả lời bí mật không chính xác!')
+                        setLoading(false)
+                        return
+                    }
+                    await signIn(username, password)
+                    navigate('/addresses', { replace: true })
+                }
+            } else {
+                await signIn(username, password)
+                navigate('/addresses', { replace: true })
+            }
         } catch (err) {
             setError(err.message || 'Đăng nhập thất bại')
         } finally {
@@ -49,7 +70,7 @@ export default function LoginPage() {
                             required
                             autoFocus
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder="admin"
+                            placeholder="billdeptrai0512"
                         />
                     </div>
 
@@ -65,6 +86,21 @@ export default function LoginPage() {
                         />
                     </div>
 
+                    {/* nếu user đăng nhập vào sử dụng username = billdeptrai0512 = admin thì phải hỏi thêm câu hỏi bí mật */}
+                    {username === 'billdeptrai0512' && isPasswordVerified && (
+                        <div>
+                            <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Câu hỏi dành cho developer</label>
+                            <input
+                                type="text"
+                                value={secretCode}
+                                onChange={e => setSecretCode(e.target.value)}
+                                required
+                                className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+                                placeholder="********"
+                            />
+                        </div>
+                    )}
+
                     <button
                         type="submit"
                         disabled={loading}
@@ -75,8 +111,8 @@ export default function LoginPage() {
                 </form>
 
                 <p className="text-center text-text-secondary text-xs mt-4">
-                    Chưa có tài khoản?{' '}
-                    <Link to="/signup" className="text-primary font-bold hover:underline">Đăng ký</Link>
+                    Bạn là nhân viên mới?{' '}
+                    <Link to="/signup" className="text-primary font-bold hover:underline">Tạo tài khoản</Link>
                 </p>
             </div>
         </div>

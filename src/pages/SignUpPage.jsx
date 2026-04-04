@@ -48,7 +48,7 @@ export default function SignUpPage() {
                 <div className="text-center mb-8">
                     {/* <img src="/icons/icon-512x512.png" alt="Kôphin" className="w-16 h-16 mx-auto rounded-[16px] shadow-sm" /> */}
                     <h1 className="text-2xl font-black text-text mt-3">Tạo tài khoản</h1>
-                    <p className="text-text-secondary text-sm mt-1">Đăng ký để bắt đầu làm việc</p>
+                    <p className="text-text-secondary text-sm mt-1">Bắt đầu làm việc</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="bg-surface border border-border/60 rounded-[20px] p-6 shadow-sm space-y-4">
@@ -165,7 +165,7 @@ export default function SignUpPage() {
                 </form>
 
                 <p className="text-center text-text-secondary text-xs mt-4">
-                    Đã có tài khoản?{' '}
+                    Có tài khoản rồi vô đây làm gì?{' '}
                     <Link to="/login" className="text-primary font-bold hover:underline">Đăng nhập</Link>
                 </p>
             </div>
