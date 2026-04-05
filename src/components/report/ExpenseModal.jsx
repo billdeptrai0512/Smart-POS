@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { MinusCircle } from 'lucide-react'
 import { formatVND } from '../../utils'
 
 export default function ExpenseModal({ todayExpenses, onClose, onAddExpense, onDeleteExpense }) {
@@ -23,19 +22,16 @@ export default function ExpenseModal({ todayExpenses, onClose, onAddExpense, onD
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 sm:p-4 animate-fade-in backdrop-blur-sm">
-            <div className="bg-bg w-full h-[85dvh] sm:h-[80dvh] sm:max-h-[600px] sm:max-w-md rounded-t-[24px] sm:rounded-[24px] shadow-lg animate-slide-up sm:animate-scale-up flex flex-col border-t sm:border border-border/40 overflow-hidden">
-                <div className="flex items-center justify-between p-4 border-b border-border/60 bg-surface">
-                    <div className="flex items-center gap-2">
-                        <MinusCircle className="text-danger" size={20} />
-                        <h3 className="text-[15px] font-black text-danger uppercase">Quản Lý Chi Phí</h3>
-                    </div>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-bg sm:bg-black/50 sm:p-4 animate-fade-in backdrop-blur-sm">
+            <div className="bg-bg w-full h-[100dvh] sm:h-[80dvh] sm:max-h-[600px] sm:max-w-md sm:rounded-[24px] shadow-lg animate-slide-up sm:animate-scale-up flex flex-col sm:border border-border/40 overflow-hidden">
+                <div className="flex items-center p-4 border-b border-border/60 bg-surface relative">
                     <button
                         onClick={onClose}
-                        className="text-[14px] font-bold text-text-secondary hover:text-text transition-colors p-1"
+                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
                     >
-                        Đóng
+                        <span className="text-xl leading-none -mt-[3px] font-bold">←</span>
                     </button>
+                    <h3 className="absolute left-1/2 -translate-x-1/2 text-[15px] font-black text-danger uppercase whitespace-nowrap">Chi Phí</h3>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -85,7 +81,7 @@ export default function ExpenseModal({ todayExpenses, onClose, onAddExpense, onD
                     <div className="flex gap-2">
                         <input
                             type="text"
-                            placeholder="Tên chi phí (VD: Nước đá)"
+                            placeholder="Tên chi phí"
                             value={costName}
                             onChange={e => setCostName(e.target.value)}
                             className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-danger/40 transition-colors"
