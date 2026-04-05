@@ -3,14 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { CirclePlus, ClipboardCheck } from 'lucide-react'
 import { formatVND, calculateProductCost } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
+import ExpenseModal from './report/ExpenseModal'
 
 export default function HistoryView({ todayOrders, todayExpenses, recipes, products, ingredientCosts, isLoadingHistory, onBack, onDeleteOrder, onAddExpense, onDeleteExpense }) {
     const navigate = useNavigate()
     const [deletingId, setDeletingId] = useState(null)
-    const [showCostModal, setShowCostModal] = useState(false)
-    const [costName, setCostName] = useState('')
-    const [costAmount, setCostAmount] = useState('')
-    const [isSubmittingCost, setIsSubmittingCost] = useState(false)
+    const [showExpenseModal, setShowExpenseModal] = useState(false)
 
     const formattedOnline = todayOrders.map(o => ({
         id: o.id,
@@ -90,23 +88,6 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
         runningTotals.set(order.id, cumulative)
     }
 
-    const handleAddCost = async () => {
-        if (!costName.trim() || !costAmount || isNaN(costAmount) || Number(costAmount) <= 0) return
-        if (!onAddExpense) return
-
-        setIsSubmittingCost(true)
-        try {
-            await onAddExpense(costName.trim(), Number(costAmount))
-            setCostName('')
-            setCostAmount('')
-            setShowCostModal(false)
-        } catch (err) {
-            console.error(err)
-        } finally {
-            setIsSubmittingCost(false)
-        }
-    }
-
     return (
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
@@ -125,7 +106,7 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                             <span className="text-[12px] font-bold text-primary/80 leading-none mt-1 tabular-nums">{totalCups} ly</span>
                         </div>
 
-                        <button onClick={() => setShowCostModal(true)}
+                        <button onClick={() => setShowExpenseModal(true)}
                             className="flex-1 bg-danger/10 border border-danger/20 rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-danger/15 active:bg-danger/20 active:scale-[0.98] transition-all select-none focus:outline-none focus:ring-2 focus:ring-danger/30"
                             title="Thêm chi phí"
                         >
@@ -243,8 +224,8 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
 
                     <button
                         onClick={() => navigate('/daily-report')}
-                        className="bg-surface-light border border-border/60 rounded-[16px] px-5 flex flex-col items-center justify-center gap-1 shadow-sm hover:bg-border/30 active:scale-95 transition-all group"
-                        title="Chốt ca"
+                        className="bg-surface-light border border-border/80 rounded-[16px] px-5 flex flex-col items-center justify-center gap-1 shadow-sm hover:bg-border/30 active:scale-95 transition-all group"
+                        title="Thống kê"
                     >
                         {/* <ClipboardCheck size={20} strokeWidth={2.5} className="text-text-secondary group-hover:text-text transition-colors" /> */}
                         <span className="text-[12px] font-black text-text-secondary uppercase whitespace-nowrap group-hover:text-text transition-colors">Thống kê</span>
@@ -252,65 +233,14 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                 </div>
             </div>
 
-            {/* Add Cost Modal */}
-            {showCostModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 animate-fade-in backdrop-blur-sm">
-                    <div className="bg-surface w-full max-w-xs rounded-[24px] shadow-lg animate-scale-up overflow-hidden flex flex-col border border-border/40">
-                        <div className="p-5 pb-4">
-                            <h3 className="text-[18px] font-black text-danger text-center">Thêm Chi Phí</h3>
-                            <p className="text-[13px] text-text-secondary text-center mt-1 leading-snug">
-                                Nhập thông tin chi phí phát sinh
-                            </p>
-
-                            <div className="mt-4 space-y-3">
-                                <div>
-                                    <label className="block text-[12px] font-black text-text-secondary uppercase tracking-wider mb-1.5 ml-1">
-                                        Tên chi phí
-                                    </label>
-                                    <input
-                                        type="text"
-                                        placeholder="VD: Tiền điện, Mua đá..."
-                                        value={costName}
-                                        onChange={e => setCostName(e.target.value)}
-                                        className="w-full bg-surface-light border border-border/60 rounded-[16px] px-4 py-3 min-h-[48px] text-[15px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-danger/40 transition-colors"
-                                        autoFocus
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[12px] font-black text-text-secondary uppercase tracking-wider mb-1.5 ml-1">
-                                        Số tiền (đ)
-                                    </label>
-                                    <input
-                                        type="number"
-                                        placeholder="Nhập số tiền..."
-                                        value={costAmount}
-                                        onChange={e => setCostAmount(e.target.value)}
-                                        className="w-full bg-surface-light border border-border/60 rounded-[16px] px-4 py-3 min-h-[48px] text-[15px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-danger/40 transition-colors"
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleAddCost()
-                                        }}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 border-t border-border/40 bg-surface-light">
-                            <button
-                                onClick={() => setShowCostModal(false)}
-                                className="py-3.5 text-[15px] font-bold text-text-secondary hover:text-text hover:bg-border/20 active:bg-border/40 transition-colors border-r border-border/40"
-                            >
-                                Hủy
-                            </button>
-                            <button
-                                onClick={handleAddCost}
-                                disabled={!costName.trim() || !costAmount || isNaN(costAmount) || Number(costAmount) <= 0 || isSubmittingCost}
-                                className="py-3.5 text-[15px] font-black text-danger hover:bg-danger/10 active:bg-danger/20 transition-colors disabled:opacity-50 disabled:bg-transparent"
-                            >
-                                {isSubmittingCost ? 'Đang lưu...' : 'Lưu'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
+            {/* Expense Modal */}
+            {showExpenseModal && (
+                <ExpenseModal
+                    todayExpenses={todayExpenses}
+                    onClose={() => setShowExpenseModal(false)}
+                    onAddExpense={onAddExpense}
+                    onDeleteExpense={onDeleteExpense}
+                />
             )}
         </div>
     )
