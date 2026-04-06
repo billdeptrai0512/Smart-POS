@@ -62,7 +62,7 @@ export default defineConfig({
   ],
   server: {
     allowedHosts: [
-      'tumor-varying-thoughts-scanning.trycloudflare.com'
+      'archive-purple-integrating-positions.trycloudflare.com'
     ]
   }
 })

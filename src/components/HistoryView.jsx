@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CirclePlus, ClipboardCheck } from 'lucide-react'
+import { CircleMinus } from 'lucide-react'
 import { formatVND, calculateProductCost } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
-import ExpenseModal from './report/ExpenseModal'
+
 
 export default function HistoryView({ todayOrders, todayExpenses, recipes, products, ingredientCosts, isLoadingHistory, onBack, onDeleteOrder, onAddExpense, onDeleteExpense }) {
     const navigate = useNavigate()
     const [deletingId, setDeletingId] = useState(null)
-    const [showExpenseModal, setShowExpenseModal] = useState(false)
+
 
     const formattedOnline = todayOrders.map(o => ({
         id: o.id,
@@ -106,15 +106,14 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                             <span className="text-[12px] font-bold text-primary/80 leading-none mt-1 tabular-nums">{totalCups} ly</span>
                         </div>
 
-                        <button onClick={() => setShowExpenseModal(true)}
+                        <button onClick={() => navigate('/expenses')}
                             className="flex-1 bg-danger/10 border border-danger/20 rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-danger/15 active:bg-danger/20 active:scale-[0.98] transition-all select-none focus:outline-none focus:ring-2 focus:ring-danger/30"
                             title="Thêm chi phí"
                         >
                             <div className="flex items-center gap-1">
                                 <span className="text-[12px] font-black text-danger uppercase line-clamp-1">Chi phí</span>
-                                <CirclePlus size={14} className="text-danger" strokeWidth={2.5} />
+                                <CircleMinus size={14} className="text-danger" strokeWidth={2.5} />
                             </div>
-                            <span className="text-[12px] font-bold text-danger/80 leading-none mt-1 tabular-nums">{formatVND(totalExpense)}</span>
                         </button>
 
                     </div>
@@ -233,15 +232,7 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                 </div>
             </div>
 
-            {/* Expense Modal */}
-            {showExpenseModal && (
-                <ExpenseModal
-                    todayExpenses={todayExpenses}
-                    onClose={() => setShowExpenseModal(false)}
-                    onAddExpense={onAddExpense}
-                    onDeleteExpense={onDeleteExpense}
-                />
-            )}
+
         </div>
     )
 }

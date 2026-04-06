@@ -170,8 +170,8 @@ export default function DailyReportPage() {
                             totalCOGS={totalCOGS}
                             totalExpense={totalExpense}
                             netProfit={netProfit}
-                            onRecipesClick={() => navigate('/recipes')}
-                            onExpenseClick={() => setShowExpenseListModal(true)}
+                            onRecipesClick={() => navigate('/cost')}
+                            onExpenseClick={() => navigate('/cost')}
                         />
 
                         {/* Divider */}

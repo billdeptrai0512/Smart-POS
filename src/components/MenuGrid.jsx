@@ -1,6 +1,7 @@
 import { formatVND } from '../utils'
 
 export default function MenuGrid({ products, cart, onAddItem }) {
+
     return (
         <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-6 pb-6 pt-5">
             <div className="grid grid-cols-2 gap-4 pt-1">

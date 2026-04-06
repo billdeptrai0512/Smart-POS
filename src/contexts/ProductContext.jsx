@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { fetchProducts, fetchAllRecipes, fetchIngredientCosts } from '../services/orderService'
+import { fetchProducts, fetchAllRecipes, fetchIngredientCosts, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { useAuth } from './AuthContext'
 import { useAddress } from './AddressContext'
 import { Outlet } from 'react-router-dom'
@@ -24,6 +24,8 @@ export function ProductProvider() {
     const [products, setProducts] = useState(() => readCache('cache_products', []))
     const [recipes, setRecipes] = useState(() => readCache('cache_recipes', []))
     const [ingredientCosts, setIngredientCosts] = useState(() => readCache('cache_costs', {}))
+    const [productExtras, setProductExtras] = useState(() => readCache('cache_extras', {}))
+    const [extraIngredients, setExtraIngredients] = useState(() => readCache('cache_extra_ingredients', {}))
     const [loading, setLoading] = useState(true)
 
     const { profile } = useAuth()
@@ -34,19 +36,25 @@ export function ProductProvider() {
         async function load() {
             try {
                 if (products.length === 0) setLoading(true)
-                const [prods, recs, costs] = await Promise.all([
+                const [prods, recs, costs, extras, extraIngs] = await Promise.all([
                     fetchProducts(selectedAddress?.id),
                     fetchAllRecipes(selectedAddress?.id),
-                    fetchIngredientCosts(selectedAddress?.id)
+                    fetchIngredientCosts(selectedAddress?.id),
+                    fetchProductExtras(selectedAddress?.id),
+                    fetchExtraIngredients()
                 ])
                 setProducts(prods)
                 setRecipes(recs)
                 setIngredientCosts(costs)
+                setProductExtras(extras)
+                setExtraIngredients(extraIngs)
                 // Update cache
                 try {
                     localStorage.setItem('cache_products', JSON.stringify(prods))
                     localStorage.setItem('cache_recipes', JSON.stringify(recs))
                     localStorage.setItem('cache_costs', JSON.stringify(costs))
+                    localStorage.setItem('cache_extras', JSON.stringify(extras))
+                    localStorage.setItem('cache_extra_ingredients', JSON.stringify(extraIngs))
                 } catch { /* ignore quota errors */ }
             } catch (error) {
                 console.error('Failed to load product data', error)
@@ -58,14 +66,18 @@ export function ProductProvider() {
     }, [activeManagerId, selectedAddress?.id])
 
     const refreshProducts = useCallback(async () => {
-        const [prods, recs, costs] = await Promise.all([
+        const [prods, recs, costs, extras, extraIngs] = await Promise.all([
             fetchProducts(selectedAddress?.id),
             fetchAllRecipes(selectedAddress?.id),
-            fetchIngredientCosts(selectedAddress?.id)
+            fetchIngredientCosts(selectedAddress?.id),
+            fetchProductExtras(selectedAddress?.id),
+            fetchExtraIngredients()
         ])
         setProducts(prods)
         setRecipes(recs)
         setIngredientCosts(costs)
+        setProductExtras(extras)
+        setExtraIngredients(extraIngs)
     }, [activeManagerId, selectedAddress?.id])
 
     return (
@@ -73,6 +85,8 @@ export function ProductProvider() {
             products,
             recipes,
             ingredientCosts,
+            productExtras,
+            extraIngredients,
             refreshProducts,
             loading
         }}>

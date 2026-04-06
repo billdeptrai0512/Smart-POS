@@ -1,0 +1,663 @@
+import { useState, useEffect, useMemo } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useProducts } from '../contexts/ProductContext'
+import { useAuth } from '../contexts/AuthContext'
+import { useAddress } from '../contexts/AddressContext'
+import { formatVND } from '../utils'
+import {
+    fetchIngredientCosts,
+    upsertRecipe,
+    deleteRecipeRow,
+    upsertIngredientCost,
+    upsertProductPrice,
+    insertProductExtra,
+    deleteProductExtra,
+    removeProductFromAddress,
+    upsertExtraIngredient,
+    deleteExtraIngredient
+} from '../services/orderService'
+import { ALL_INGREDIENTS, sortIngredients, ingredientLabel, getIngredientUnit } from '../components/recipe/recipeUtils'
+import IngredientCostItem from '../components/recipe/IngredientCostItem'
+
+export default function RecipeIngredientPage() {
+    const navigate = useNavigate()
+    const { productId } = useParams()
+    const { products, recipes: allRecipes, ingredientCosts: contextCosts, productExtras: contextExtras, extraIngredients: contextExtraIngs, refreshProducts } = useProducts()
+    const { selectedAddress } = useAddress()
+
+    const [ingredientCosts, setIngredientCosts] = useState(contextCosts || {})
+    const [recipes, setRecipes] = useState(allRecipes || [])
+    const [editingCost, setEditingCost] = useState(null)
+    const [editingAmount, setEditingAmount] = useState(null)
+    const [editingProductPrice, setEditingProductPrice] = useState(null)
+    const [saving, setSaving] = useState(false)
+    const [showCosts, setShowCosts] = useState(false)
+    const [addingIngredient, setAddingIngredient] = useState(false)
+    const [customIngredient, setCustomIngredient] = useState('')
+
+    // Extras state
+    const [extras, setExtras] = useState([])
+    const [addingExtra, setAddingExtra] = useState(false)
+    const [newExtraName, setNewExtraName] = useState('')
+    const [newExtraPrice, setNewExtraPrice] = useState('')
+
+    // Extra Ingredients state
+    const [extraIngs, setExtraIngs] = useState(contextExtraIngs || {})
+    const [addingExtraIng, setAddingExtraIng] = useState(null)
+    const [extraIngName, setExtraIngName] = useState('')
+    const [editingExtraAmount, setEditingExtraAmount] = useState(null)
+
+    const product = useMemo(() => products.find(p => p.id === productId), [products, productId])
+
+    // Sync from context when it updates
+    useEffect(() => { setRecipes(allRecipes) }, [allRecipes])
+    useEffect(() => { setIngredientCosts(contextCosts) }, [contextCosts])
+    useEffect(() => { setExtras(contextExtras?.[productId] || []) }, [contextExtras, productId])
+    useEffect(() => { setExtraIngs(contextExtraIngs || {}) }, [contextExtraIngs])
+
+    useEffect(() => {
+        if (selectedAddress?.id) {
+            fetchIngredientCosts(selectedAddress.id).then(setIngredientCosts)
+        }
+    }, [selectedAddress?.id])
+
+    const prodRecipes = useMemo(
+        () => recipes.filter(r => r.product_id === productId).sort((a, b) => sortIngredients(a.ingredient, b.ingredient)),
+        [recipes, productId]
+    )
+
+    const cost = useMemo(
+        () => prodRecipes.reduce((sum, r) => sum + r.amount * (ingredientCosts[r.ingredient] || 0), 0),
+        [prodRecipes, ingredientCosts]
+    )
+
+    const baseIngredients = prodRecipes.map(r => r.ingredient)
+    const availableBaseIngredients = ALL_INGREDIENTS.filter(i => !baseIngredients.includes(i))
+
+    const allUsedIngredients = useMemo(() => {
+        const ings = new Set(baseIngredients)
+        extras.forEach(extra => {
+            (extraIngs[extra.id] || []).forEach(ei => ings.add(ei.ingredient))
+        })
+        return Array.from(ings)
+    }, [baseIngredients, extras, extraIngs])
+
+    async function saveAmount(ingredient, newAmount) {
+        setSaving(true)
+        try {
+            await upsertRecipe(productId, ingredient, newAmount, selectedAddress?.id)
+            setRecipes(prev => prev.map(r =>
+                r.product_id === productId && r.ingredient === ingredient
+                    ? { ...r, amount: newAmount }
+                    : r
+            ))
+            refreshProducts?.()
+        } catch (err) {
+            console.error('Save recipe error:', err)
+        } finally {
+            setSaving(false)
+            setEditingAmount(null)
+        }
+    }
+
+    async function saveCost(ingredient, newCost) {
+        setSaving(true)
+        try {
+            await upsertIngredientCost(ingredient, newCost, selectedAddress?.id)
+            setIngredientCosts(prev => ({ ...prev, [ingredient]: newCost }))
+            refreshProducts?.()
+        } catch (err) {
+            console.error('Save cost error:', err)
+        } finally {
+            setSaving(false)
+            setEditingCost(null)
+        }
+    }
+
+    async function saveProductPrice(newPrice) {
+        if (!selectedAddress?.id) return
+        setSaving(true)
+        try {
+            await upsertProductPrice(productId, selectedAddress.id, newPrice)
+            refreshProducts?.()
+        } catch (err) {
+            console.error('Save product price error:', err)
+        } finally {
+            setSaving(false)
+            setEditingProductPrice(null)
+        }
+    }
+
+    async function handleDeleteIngredient(ingredient) {
+        if (!window.confirm(`Xóa ${ingredientLabel(ingredient)} khỏi công thức?`)) return
+        setSaving(true)
+        try {
+            await deleteRecipeRow(productId, ingredient, selectedAddress?.id)
+            setRecipes(prev => prev.filter(r => !(r.product_id === productId && r.ingredient === ingredient)))
+            refreshProducts?.()
+        } catch (err) {
+            console.error('Delete recipe error:', err)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    async function handleAddIngredient(ingredient) {
+        setSaving(true)
+        try {
+            await upsertRecipe(productId, ingredient, 0, selectedAddress?.id)
+            setRecipes(prev => [...prev, { product_id: productId, ingredient, amount: 0 }])
+            setAddingIngredient(false)
+            setCustomIngredient('')
+            refreshProducts?.()
+        } catch (err) {
+            console.error('Add ingredient error:', err)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    // ---- Extras handlers ----
+    async function handleAddExtra() {
+        if (!newExtraName.trim()) return
+        setSaving(true)
+        try {
+            const newExtra = await insertProductExtra(
+                productId,
+                newExtraName.trim(),
+                parseInt(newExtraPrice) || 0,
+                selectedAddress?.id
+            )
+            setExtras(prev => [...prev, { id: newExtra.id, name: newExtra.name, price: newExtra.price }])
+            setAddingExtra(false)
+            setNewExtraName('')
+            setNewExtraPrice('')
+            refreshProducts?.()
+        } catch (err) {
+            console.error('Add extra error:', err)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    async function handleDeleteExtra(extraId, extraName) {
+        if (!window.confirm(`Xóa tùy chọn "${extraName}"?`)) return
+        setSaving(true)
+        try {
+            await deleteProductExtra(extraId)
+            setExtras(prev => prev.filter(e => e.id !== extraId))
+            refreshProducts?.()
+        } catch (err) {
+            console.error('Delete extra error:', err)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    async function handleAddExtraIngredient(extraId, ingredient, amount = 0) {
+        setSaving(true)
+        try {
+            await upsertExtraIngredient(extraId, ingredient, amount)
+            refreshProducts?.()
+            setAddingExtraIng(null)
+            setExtraIngName('')
+        } catch (err) {
+            console.error('Add extra ingredient error:', err)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    async function saveExtraAmount(extraId, ingredient, newAmount) {
+        setSaving(true)
+        try {
+            await upsertExtraIngredient(extraId, ingredient, newAmount)
+            refreshProducts?.()
+        } catch (err) {
+            console.error('Save extra amount error:', err)
+        } finally {
+            setSaving(false)
+            setEditingExtraAmount(null)
+        }
+    }
+
+    async function handleDeleteExtraIngredient(extraId, ingredient) {
+        if (!window.confirm(`Xóa tác động nguyên liệu này?`)) return
+        setSaving(true)
+        try {
+            await deleteExtraIngredient(extraId, ingredient)
+            refreshProducts?.()
+        } catch (err) {
+            console.error('Delete extra ingredient error:', err)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    if (!product) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-6 gap-4">
+                <span className="text-text-secondary text-[14px]">Không tìm thấy món này.</span>
+                <button onClick={() => navigate('/recipes')} className="text-primary font-bold text-[14px] underline">
+                    ← Quay lại
+                </button>
+            </div>
+        )
+    }
+
+    return (
+        <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
+            {/* Header */}
+            <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => navigate('/recipes')}
+                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
+                        title="Trở về"
+                    >
+                        <span className="text-xl leading-none -mt-[3px] font-bold">←</span>
+                    </button>
+                    <div className="flex-1 min-w-0">
+                        <h1 className="text-[16px] font-black text-text truncate">{product.name}</h1>
+                        <div className="flex items-center gap-1.5 text-[12px] text-text-secondary mt-0.5">
+                            <span>Chi phí: <span className="text-danger font-bold">{formatVND(cost)}</span></span>
+                            {product.price > 0 && (
+                                <span className="bg-danger/10 text-danger text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                    {Math.round((cost / product.price) * 100)}%
+                                </span>
+                            )}
+                            <span className="text-text-dim px-0.5">•</span>
+                            <span className="flex items-center gap-1">Giá bán:
+                                {editingProductPrice ? (
+                                    <span className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                        <input
+                                            type="number"
+                                            autoFocus
+                                            className="w-[72px] bg-bg border border-primary/60 rounded-lg px-2 py-0.5 text-[12px] text-text text-right focus:outline-none focus:border-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                            value={editingProductPrice.value}
+                                            onChange={e => setEditingProductPrice(prev => ({ ...prev, value: e.target.value }))}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') saveProductPrice(parseInt(editingProductPrice.value) || 0)
+                                                if (e.key === 'Escape') setEditingProductPrice(null)
+                                            }}
+                                            onBlur={() => saveProductPrice(parseInt(editingProductPrice.value) || 0)}
+                                        />
+                                    </span>
+                                ) : (
+                                    <span
+                                        className="text-success font-bold hover:underline cursor-pointer"
+                                        onClick={() => setEditingProductPrice({ value: product.price.toString() })}
+                                    >
+                                        {formatVND(product.price)}
+                                    </span>
+                                )}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Tab toggle: Ingredients / Costs */}
+                <div className="flex flex-row gap-2">
+                    <button
+                        onClick={() => setShowCosts(false)}
+                        className={`flex-1 py-2 rounded-[12px] text-[13px] font-bold transition-colors ${!showCosts
+                            ? 'bg-primary text-bg'
+                            : 'bg-surface-light text-text-secondary border border-border/60'
+                            }`}
+                    >
+                        Nguyên liệu
+                    </button>
+                    <button
+                        onClick={() => setShowCosts(true)}
+                        className={`flex-1 py-2 rounded-[12px] text-[13px] font-bold transition-colors ${showCosts
+                            ? 'bg-primary text-bg'
+                            : 'bg-surface-light text-text-secondary border border-border/60'
+                            }`}
+                    >
+                        Giá nguyên liệu
+                    </button>
+                </div>
+            </header>
+
+            <main className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-bg">
+                {!showCosts ? (
+                    <div className="space-y-2">
+                        {prodRecipes.length === 0 && (
+                            <p className="text-text-secondary text-[13px] text-center py-6">Chưa có nguyên liệu nào.</p>
+                        )}
+
+                        {prodRecipes.map(recipe => {
+                            const isEditing = editingAmount?.ingredient === recipe.ingredient
+                            const unitCost = ingredientCosts[recipe.ingredient] || 0
+                            const lineCost = recipe.amount * unitCost
+
+                            return (
+                                <div key={recipe.ingredient} className="bg-surface border border-border/60 rounded-[14px] px-4 py-3 flex items-center gap-2 group">
+                                    <span className="text-[13px] text-text flex-1 min-w-0 truncate">
+                                        {ingredientLabel(recipe.ingredient)}
+                                    </span>
+
+                                    {isEditing ? (
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="number"
+                                                autoFocus
+                                                step="any"
+                                                className="w-[72px] bg-bg border border-primary/60 rounded-lg px-2 py-1 text-[13px] text-text text-right focus:outline-none focus:border-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                value={editingAmount.value}
+                                                onChange={e => setEditingAmount(prev => ({ ...prev, value: e.target.value }))}
+                                                onKeyDown={e => {
+                                                    if (e.key === 'Enter') saveAmount(recipe.ingredient, parseFloat(editingAmount.value) || 0)
+                                                    if (e.key === 'Escape') setEditingAmount(null)
+                                                }}
+                                                onBlur={() => saveAmount(recipe.ingredient, parseFloat(editingAmount.value) || 0)}
+                                            />
+                                            <span className="text-[12px] text-text-dim">{getIngredientUnit(recipe.ingredient)}</span>
+                                        </div>
+                                    ) : (
+                                        <span
+                                            className="text-[13px] font-bold text-primary cursor-pointer hover:underline tabular-nums min-w-[56px] text-right"
+                                            onClick={() => setEditingAmount({ ingredient: recipe.ingredient, value: recipe.amount.toString() })}
+                                        >
+                                            {recipe.amount} <span className="text-[11px] font-normal text-primary/70">{getIngredientUnit(recipe.ingredient)}</span>
+                                        </span>
+                                    )}
+
+                                    <span className="text-[11px] text-text-dim tabular-nums w-[64px] text-right shrink-0">
+                                        {formatVND(lineCost)}
+                                    </span>
+
+                                    <button
+                                        onClick={() => handleDeleteIngredient(recipe.ingredient)}
+                                        className="text-danger/60 hover:text-danger text-[14px] opacity-0 group-hover:opacity-100 transition-opacity shrink-0 w-6 h-6 flex items-center justify-center"
+                                        title="Xóa nguyên liệu"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            )
+                        })}
+
+                        {/* Add ingredient */}
+                        {addingIngredient ? (
+                            <div className="flex flex-col gap-2 pt-1 border-t border-border/30 mt-2 bg-surface border border-border/60 rounded-[14px] px-4 py-3">
+                                <span className="text-[11px] text-text-dim font-bold uppercase">Thêm nguyên liệu mới</span>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {availableBaseIngredients.map(ing => (
+                                        <button
+                                            key={ing}
+                                            onClick={() => setCustomIngredient(ing)}
+                                            className="text-[11px] bg-primary/10 text-primary border border-primary/20 px-2 py-1 rounded-lg hover:bg-primary/20 active:bg-primary/30 transition-colors font-medium"
+                                        >
+                                            + {ingredientLabel(ing)}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex flex-wrap sm:flex-nowrap gap-1.5 mt-1">
+                                    <input
+                                        type="text"
+                                        placeholder="Tên nguyên liệu..."
+                                        className="flex-1 w-0 min-w-[120px] bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[12px] text-text focus:outline-none focus:border-primary"
+                                        value={customIngredient}
+                                        onChange={e => setCustomIngredient(e.target.value)}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter' && customIngredient.trim()) {
+                                                handleAddIngredient(customIngredient.trim())
+                                            }
+                                        }}
+                                    />
+                                    <button
+                                        onClick={() => {
+                                            if (customIngredient.trim()) handleAddIngredient(customIngredient.trim())
+                                        }}
+                                        disabled={!customIngredient.trim()}
+                                        className="shrink-0 bg-primary/10 text-primary border border-primary/20 px-3 py-1.5 rounded-lg text-[12px] font-bold disabled:opacity-50 transition-opacity"
+                                    >
+                                        Thêm
+                                    </button>
+                                    <button
+                                        onClick={() => setAddingIngredient(false)}
+                                        className="shrink-0 bg-surface-light border border-border/60 text-text px-2 py-1.5 rounded-lg text-[12px] font-bold"
+                                    >
+                                        Hủy
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={() => setAddingIngredient(true)}
+                                className="w-full text-[12px] text-primary/70 hover:text-primary font-medium mt-1 transition-colors bg-surface border border-border/60 rounded-[14px] px-4 py-3 text-center"
+                            >
+                                + Thêm nguyên liệu
+                            </button>
+                        )}
+                    </div>
+                ) : (
+                    /* Ingredient costs tab */
+                    <div className="space-y-2">
+                        <p className="text-[12px] text-text-dim mb-2">Giá mỗi đơn vị nguyên liệu (VNĐ). Nhấn vào giá để chỉnh sửa.</p>
+                        {allUsedIngredients.sort(sortIngredients).map(ingredient => (
+                            <IngredientCostItem
+                                key={ingredient}
+                                ingredient={ingredient}
+                                cost={ingredientCosts[ingredient] || 0}
+                                isEditing={editingCost?.ingredient === ingredient}
+                                editingCost={editingCost}
+                                setEditingCost={setEditingCost}
+                                saveCost={saveCost}
+                                ingredientLabel={ingredientLabel}
+                                getIngredientUnit={getIngredientUnit}
+                            />
+                        ))}
+                        {allUsedIngredients.length === 0 && (
+                            <p className="text-text-secondary text-[13px] text-center py-6">Chưa có nguyên liệu nào để hiển thị giá.</p>
+                        )}
+                    </div>
+                )}
+
+                {/* ========== EXTRA OPTIONS SECTION ========== */}
+                {!showCosts && (
+                    <div className="mt-4 pt-4 border-t border-border/40">
+                        <div className="flex items-center justify-between mb-3">
+                            <span className="text-[13px] font-black text-text uppercase tracking-wide">Tùy chọn thêm</span>
+                            <span className="text-[11px] text-text-dim">Hiển thị khi đặt món</span>
+                        </div>
+
+                        {extras.length === 0 && !addingExtra && (
+                            <p className="text-text-secondary text-[12px] text-center py-3 bg-surface-light/50 rounded-[12px] border border-border/40">
+                                Chưa có tùy chọn nào (ví dụ: Lớn, Trà đá...)
+                            </p>
+                        )}
+
+                        <div className="space-y-2">
+                            {extras.map(extra => (
+                                <div key={extra.id} className="bg-surface border border-border/60 rounded-[14px] px-4 py-3 flex flex-col gap-2 group">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[13px] font-bold text-text flex-1 uppercase">{extra.name}</span>
+                                        <span className="text-[12px] text-success font-bold tabular-nums">
+                                            {extra.price > 0 ? `+${formatVND(extra.price)}` : 'Miễn phí'}
+                                        </span>
+                                        <button
+                                            onClick={() => handleDeleteExtra(extra.id, extra.name)}
+                                            className="text-danger/60 hover:text-danger text-[14px] shrink-0 w-6 h-6 flex items-center justify-center"
+                                            title="Xóa tùy chọn"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                    <div className="border-t border-border/40 pt-2 flex flex-col gap-1.5">
+                                        {(extraIngs[extra.id] || []).map(ei => {
+                                            const isEditingExtra = editingExtraAmount?.extraId === extra.id && editingExtraAmount?.ingredient === ei.ingredient;
+                                            return (
+                                                <div key={ei.id} className="flex justify-between items-center bg-bg/50 px-2 py-1.5 rounded text-[12px]">
+                                                    <span className="text-text flex-1 min-w-0 truncate">{ingredientLabel(ei.ingredient)}</span>
+                                                    <div className="flex items-center gap-2">
+                                                        {isEditingExtra ? (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <input
+                                                                    type="number"
+                                                                    autoFocus
+                                                                    step="any"
+                                                                    className="w-[60px] bg-bg border border-primary/60 rounded-lg px-2 py-1 text-[13px] text-text text-right focus:outline-none focus:border-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                    value={editingExtraAmount.value}
+                                                                    onChange={e => setEditingExtraAmount(prev => ({ ...prev, value: e.target.value }))}
+                                                                    onKeyDown={e => {
+                                                                        if (e.key === 'Enter') saveExtraAmount(extra.id, ei.ingredient, parseFloat(editingExtraAmount.value) || 0)
+                                                                        if (e.key === 'Escape') setEditingExtraAmount(null)
+                                                                    }}
+                                                                    onBlur={() => saveExtraAmount(extra.id, ei.ingredient, parseFloat(editingExtraAmount.value) || 0)}
+                                                                />
+                                                                <span className="text-[10px] font-normal text-text-dim/70">{getIngredientUnit(ei.ingredient)}</span>
+                                                            </div>
+                                                        ) : (
+                                                            <span
+                                                                className={`font-bold tabular-nums cursor-pointer hover:underline min-w-[32px] text-right ${ei.amount > 0 ? 'text-primary' : ei.amount < 0 ? 'text-danger' : 'text-text-dim'}`}
+                                                                onClick={() => setEditingExtraAmount({ extraId: extra.id, ingredient: ei.ingredient, value: ei.amount.toString() })}
+                                                            >
+                                                                {ei.amount > 0 ? '+' : ''}{ei.amount} <span className="text-[10px] font-normal text-text-dim/70">{getIngredientUnit(ei.ingredient)}</span>
+                                                            </span>
+                                                        )}
+                                                        <button onClick={() => handleDeleteExtraIngredient(extra.id, ei.ingredient)} className="text-danger/60 hover:text-danger text-[14px]">✕</button>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+
+                                        {addingExtraIng === extra.id ? (
+                                            <div className="flex flex-col gap-2 bg-bg/50 p-3 rounded-xl border border-border/60 mt-2">
+                                                <span className="text-[11px] text-text-dim font-bold uppercase">Thêm nguyên liệu / tác động</span>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {ALL_INGREDIENTS.filter(i => !(extraIngs[extra.id] || []).find(ei => ei.ingredient === i)).map(ing => (
+                                                        <button
+                                                            key={ing}
+                                                            onClick={() => setExtraIngName(ing)}
+                                                            className="text-[11px] bg-primary/10 text-primary border border-primary/20 px-2 py-1 rounded-lg hover:bg-primary/20 active:bg-primary/30 transition-colors font-medium"
+                                                        >
+                                                            + {ingredientLabel(ing)}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                <div className="flex flex-wrap sm:flex-nowrap gap-1.5 mt-1">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Tên..."
+                                                        className="flex-1 w-0 min-w-[80px] bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[12px] text-text focus:outline-none focus:border-primary"
+                                                        value={extraIngName}
+                                                        onChange={e => setExtraIngName(e.target.value)}
+                                                        onKeyDown={e => {
+                                                            if (e.key === 'Enter' && extraIngName.trim()) {
+                                                                handleAddExtraIngredient(extra.id, extraIngName.trim(), 0);
+                                                            }
+                                                        }}
+                                                    />
+                                                    <button
+                                                        onClick={() => {
+                                                            if (extraIngName.trim()) handleAddExtraIngredient(extra.id, extraIngName.trim(), 0)
+                                                        }}
+                                                        disabled={!extraIngName.trim()}
+                                                        className="shrink-0 bg-primary text-bg px-3 py-1.5 rounded-lg text-[12px] font-bold disabled:opacity-50"
+                                                    >
+                                                        Thêm
+                                                    </button>
+                                                    <button
+                                                        onClick={() => { setAddingExtraIng(null); setExtraIngName(''); }}
+                                                        className="shrink-0 bg-surface-light border border-border/60 text-text px-2 py-1.5 rounded-lg text-[12px] font-bold"
+                                                    >
+                                                        Hủy
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                onClick={() => { setAddingExtraIng(extra.id); setExtraIngName(''); }}
+                                                className="text-[11px] text-primary hover:underline self-start font-medium mt-1"
+                                            >
+                                                + Thay đổi nguyên liệu
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {addingExtra ? (
+                            <div className="mt-2 bg-surface border border-border/60 rounded-[14px] px-4 py-3 space-y-2">
+                                <span className="text-[11px] text-text-dim font-bold uppercase">Thêm tùy chọn</span>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Tên (VD: Lớn)"
+                                        autoFocus
+                                        className="flex-1 min-w-0 bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[13px] text-text focus:outline-none focus:border-primary"
+                                        value={newExtraName}
+                                        onChange={e => setNewExtraName(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') handleAddExtra() }}
+                                    />
+                                    <input
+                                        type="number"
+                                        placeholder="Giá"
+                                        className="w-[80px] bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[13px] text-text focus:outline-none focus:border-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        value={newExtraPrice}
+                                        onChange={e => setNewExtraPrice(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') handleAddExtra() }}
+                                    />
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={handleAddExtra}
+                                        disabled={!newExtraName.trim()}
+                                        className="bg-primary text-bg px-3 py-1.5 rounded-lg text-[12px] font-bold disabled:opacity-50"
+                                    >
+                                        Lưu
+                                    </button>
+                                    <button
+                                        onClick={() => { setAddingExtra(false); setNewExtraName(''); setNewExtraPrice('') }}
+                                        className="bg-surface-light text-text px-2 py-1.5 rounded-lg text-[12px] font-bold"
+                                    >
+                                        Hủy
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={() => setAddingExtra(true)}
+                                className="w-full text-[12px] text-primary/70 hover:text-primary font-medium mt-2 transition-colors bg-surface border border-border/60 rounded-[14px] px-4 py-3 text-center"
+                            >
+                                + Thêm tùy chọn
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {/* Remove from this address */}
+                {!showCosts && <div className="mt-6 pt-4 border-t border-border/30">
+                    <button
+                        onClick={async () => {
+                            if (!selectedAddress?.id) return
+                            if (!window.confirm(`Xóa "${product.name}" khỏi menu của chi nhánh này?`)) return
+                            setSaving(true)
+                            try {
+                                await removeProductFromAddress(productId, selectedAddress.id)
+                                refreshProducts?.()
+                                navigate('/recipes')
+                            } catch (err) {
+                                console.error('Remove product error:', err)
+                            } finally {
+                                setSaving(false)
+                            }
+                        }}
+                        className="w-full text-[12px] text-danger/70 hover:text-danger font-bold transition-colors bg-danger/5 border border-danger/20 rounded-[14px] px-4 py-3 text-center"
+                    >
+                        Xóa món này khỏi menu
+                    </button>
+                </div>}
+            </main>
+
+            {saving && (
+                <div className="fixed inset-0 z-50 bg-bg/60 flex items-center justify-center pointer-events-none">
+                    <span className="text-text font-bold text-[14px] animate-pulse">Đang lưu...</span>
+                </div>
+            )}
+        </div>
+    )
+}

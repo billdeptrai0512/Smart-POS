@@ -2,9 +2,41 @@ import { supabase } from '../lib/supabaseClient'
 import { INGREDIENT_COSTS as DEFAULT_COSTS } from '../constants'
 
 
-// Fetch all products for the menu
+// Fetch all products for the menu (scoped to address via address_products)
 export async function fetchProducts(addressId) {
     if (!supabase) return []
+
+    // If addressId provided, fetch via address_products join for per-address menu
+    if (addressId) {
+        const { data: addressProds, error: apError } = await supabase
+            .from('address_products')
+            .select('product_id, sort_order, products(*)')
+            .eq('address_id', addressId)
+            .order('sort_order')
+
+        if (!apError && addressProds && addressProds.length > 0) {
+            // Merge with address-specific prices
+            const { data: prices } = await supabase
+                .from('product_prices')
+                .select('product_id, price')
+                .eq('address_id', addressId)
+
+            const priceMap = {}
+            if (prices) for (let p of prices) priceMap[p.product_id] = p.price
+
+            return addressProds
+                .filter(ap => ap.products && ap.products.is_active !== false)
+                .map(ap => ({
+                    ...ap.products,
+                    price: priceMap[ap.product_id] !== undefined ? priceMap[ap.product_id] : ap.products.price
+                }))
+        }
+
+        // Fallback: address_products table might not exist yet or no rows
+        // Fall through to global fetch
+    }
+
+    // Global fallback (no address or address_products not set up yet)
     let { data: prods, error } = await supabase
         .from('products')
         .select('*')
@@ -380,8 +412,8 @@ export async function upsertIngredientCost(ingredient, unitCost, addressId = nul
     }
 }
 
-// Create a new product
-export async function insertProduct(name, price) {
+// Create a new product and link to the current address
+export async function insertProduct(name, price, addressId = null) {
     if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase
         .from('products')
@@ -389,35 +421,175 @@ export async function insertProduct(name, price) {
         .select()
         .single()
     if (error) throw error
+
+    // Link to address_products with sort_order at the end
+    if (data && addressId) {
+        // Get current max sort_order for this address
+        const { data: maxRow } = await supabase
+            .from('address_products')
+            .select('sort_order')
+            .eq('address_id', addressId)
+            .order('sort_order', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+        const nextOrder = (maxRow?.sort_order ?? -1) + 1
+
+        await supabase.from('address_products').insert({
+            address_id: addressId,
+            product_id: data.id,
+            sort_order: nextOrder
+        })
+    }
+
     return data
 }
 
-// Delete a product (soft delete)
-export async function deleteProduct(productId) {
+// Remove a product from an address (unlink from address_products)
+export async function removeProductFromAddress(productId, addressId) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase
+        .from('address_products')
+        .delete()
+        .eq('product_id', productId)
+        .eq('address_id', addressId)
+    if (error) throw error
+    return true
+}
+
+// Update sort order for products at an address
+export async function updateProductSortOrder(addressId, orderedProductIds) {
     if (!supabase) throw new Error('No Supabase connection')
 
-    // 1. Attempt soft delete first (preserves history and order items)
-    const { error: softError } = await supabase
-        .from('products')
-        .update({ is_active: false })
-        .eq('id', productId)
+    // Batch update sort_order for each product
+    const updates = orderedProductIds.map((productId, index) =>
+        supabase
+            .from('address_products')
+            .update({ sort_order: index })
+            .eq('address_id', addressId)
+            .eq('product_id', productId)
+    )
 
-    if (softError) {
-        if (softError.code === '42703') {
-            // Fallback: column doesn't exist yet. Attempt hard delete.
-            const { error: priceError } = await supabase.from('product_prices').delete().eq('product_id', productId)
-            if (priceError) throw priceError
+    await Promise.all(updates)
+}
 
-            const { error: recipeError } = await supabase.from('recipes').delete().eq('product_id', productId)
-            if (recipeError) throw recipeError
+// ---- Product Extras CRUD ----
 
-            const { error: hardError } = await supabase.from('products').delete().eq('id', productId)
-            if (hardError) throw hardError
-        } else {
-            throw softError
+// Fetch all product extras (returns { productId: [{ id, name, price }] })
+export async function fetchProductExtras(addressId) {
+    if (!supabase) return {}
+    let query = supabase.from('product_extras').select('id, product_id, name, price, address_id')
+
+    if (addressId) {
+        query = query.or(`address_id.eq.${addressId},address_id.is.null`)
+    } else {
+        query = query.is('address_id', null)
+    }
+
+    const { data, error } = await query
+    if (error) {
+        console.error('fetchProductExtras error:', error)
+        return {}
+    }
+    if (!data || data.length === 0) return {}
+
+    // Address-specific extras override defaults per product
+    const defaultExtras = data.filter(d => d.address_id === null)
+    const addressExtras = data.filter(d => d.address_id === addressId)
+    const addressProductIds = new Set(addressExtras.map(d => d.product_id))
+
+    const finalExtras = [...addressExtras]
+    for (const d of defaultExtras) {
+        if (!addressProductIds.has(d.product_id)) {
+            finalExtras.push(d)
         }
     }
 
+    const extrasMap = {}
+    for (const ex of finalExtras) {
+        if (!extrasMap[ex.product_id]) extrasMap[ex.product_id] = []
+        extrasMap[ex.product_id].push({ id: ex.id, name: ex.name, price: ex.price })
+    }
+    return extrasMap
+}
+
+// Add a new product extra
+export async function insertProductExtra(productId, name, price, addressId = null) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const payload = { product_id: productId, name, price }
+    if (addressId) payload.address_id = addressId
+
+    const { data, error } = await supabase
+        .from('product_extras')
+        .insert(payload)
+        .select()
+        .single()
+    if (error) throw error
+    return data
+}
+
+// Delete a product extra
+export async function deleteProductExtra(extraId) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase
+        .from('product_extras')
+        .delete()
+        .eq('id', extraId)
+    if (error) throw error
+    return true
+}
+
+// ---- Extra Ingredients CRUD ----
+
+// Fetch all extra ingredients (returns { extraId: [{ id, extra_id, ingredient, amount }] })
+export async function fetchExtraIngredients() {
+    if (!supabase) return {}
+    const { data, error } = await supabase.from('extra_ingredients').select('id, extra_id, ingredient, amount')
+    if (error) {
+        console.error('fetchExtraIngredients error:', error)
+        return {}
+    }
+    const extrasMap = {}
+    for (const row of data || []) {
+        if (!extrasMap[row.extra_id]) extrasMap[row.extra_id] = []
+        extrasMap[row.extra_id].push(row)
+    }
+    return extrasMap
+}
+
+// Upsert extra ingredient
+export async function upsertExtraIngredient(extraId, ingredient, amount) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { data: existing } = await supabase
+        .from('extra_ingredients')
+        .select('id')
+        .eq('extra_id', extraId)
+        .eq('ingredient', ingredient)
+        .maybeSingle()
+
+    if (existing) {
+        const { error } = await supabase
+            .from('extra_ingredients')
+            .update({ amount })
+            .eq('id', existing.id)
+        if (error) throw error
+    } else {
+        const { error } = await supabase
+            .from('extra_ingredients')
+            .insert({ extra_id: extraId, ingredient, amount })
+        if (error) throw error
+    }
+}
+
+// Delete extra ingredient
+export async function deleteExtraIngredient(extraId, ingredient) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase
+        .from('extra_ingredients')
+        .delete()
+        .eq('extra_id', extraId)
+        .eq('ingredient', ingredient)
+    if (error) throw error
     return true
 }
 

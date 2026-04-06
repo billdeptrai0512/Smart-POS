@@ -13,7 +13,7 @@ import RealtimeNotification from '../components/RealtimeNotification'
 
 export default function POSPage() {
     const navigate = useNavigate()
-    const { products } = useProducts()
+    const { products, productExtras } = useProducts()
     const { selectedAddress } = useAddress()
     const {
         cart, activeCartItemId, setActiveCartItemId,
@@ -68,6 +68,7 @@ export default function POSPage() {
                 isSubmitting={isSubmitting}
                 onToggleExtra={handleToggleExtra}
                 onConfirm={handleConfirm}
+                productExtras={productExtras}
             />
 
             <Toast toast={toast} />

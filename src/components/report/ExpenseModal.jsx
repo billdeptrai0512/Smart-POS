@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { formatVND } from '../../utils'
 
 export default function ExpenseModal({ todayExpenses, onClose, onAddExpense, onDeleteExpense }) {
+    const navigate = useNavigate()
     const [costName, setCostName] = useState('')
     const [costAmount, setCostAmount] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -21,18 +23,33 @@ export default function ExpenseModal({ todayExpenses, onClose, onAddExpense, onD
         }
     }
 
+    const totalExpense = (todayExpenses || []).reduce((sum, e) => sum + (e.amount || 0), 0)
+
     return (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-bg sm:bg-black/50 sm:p-4 animate-fade-in backdrop-blur-sm">
             <div className="bg-bg w-full h-[100dvh] sm:h-[80dvh] sm:max-h-[600px] sm:max-w-md sm:rounded-[24px] shadow-lg animate-slide-up sm:animate-scale-up flex flex-col sm:border border-border/40 overflow-hidden">
-                <div className="flex items-center p-4 border-b border-border/60 bg-surface relative">
-                    <button
-                        onClick={onClose}
-                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
-                    >
-                        <span className="text-xl leading-none -mt-[3px] font-bold">←</span>
-                    </button>
-                    <h3 className="absolute left-1/2 -translate-x-1/2 text-[15px] font-black text-danger uppercase whitespace-nowrap">Chi Phí</h3>
-                </div>
+                <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={onClose}
+                            className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
+                        >
+                            <span className="text-xl leading-none -mt-[3px] font-bold">←</span>
+                        </button>
+
+                        <div className="flex flex-row gap-2 flex-1">
+                            <div className="flex-1 bg-danger/5 border border-danger/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
+                                <span className="text-[12px] font-black text-danger uppercase line-clamp-1">Chi phí</span>
+                            </div>
+
+                            <div
+                                onClick={() => { onClose(); navigate('/recipes') }}
+                                className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
+                                <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Công thức</span>
+                            </div>
+                        </div>
+                    </div>
+                </header>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
                     {(!todayExpenses || todayExpenses.length === 0) ? (

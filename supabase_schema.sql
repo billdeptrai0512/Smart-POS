@@ -84,6 +84,24 @@ CREATE TABLE IF NOT EXISTS expenses (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Address-specific product menu (many-to-many with sort order)
+CREATE TABLE IF NOT EXISTS address_products (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  address_id UUID REFERENCES addresses(id) ON DELETE CASCADE,
+  product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(address_id, product_id)
+);
+
+-- Product extras (per-product quick options, e.g. "Lớn" +6000đ)
+CREATE TABLE IF NOT EXISTS product_extras (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  price INTEGER NOT NULL DEFAULT 0,
+  address_id UUID REFERENCES addresses(id) ON DELETE CASCADE
+);
+
 -- Active sessions (track who is currently on shift at which address)
 CREATE TABLE IF NOT EXISTS active_sessions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -163,6 +181,20 @@ DROP POLICY IF EXISTS "costs_read" ON ingredient_costs;
 DROP POLICY IF EXISTS "costs_write" ON ingredient_costs;
 CREATE POLICY "costs_read" ON ingredient_costs FOR SELECT USING (true);
 CREATE POLICY "costs_write" ON ingredient_costs FOR ALL USING (auth.uid() IS NOT NULL);
+
+-- Product extras: read for all, write for authenticated managers
+ALTER TABLE product_extras ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "extras_read" ON product_extras;
+DROP POLICY IF EXISTS "extras_write" ON product_extras;
+CREATE POLICY "extras_read" ON product_extras FOR SELECT USING (true);
+CREATE POLICY "extras_write" ON product_extras FOR ALL USING (auth.uid() IS NOT NULL);
+
+-- Address products: read for all, write for authenticated managers
+ALTER TABLE address_products ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "ap_read" ON address_products;
+DROP POLICY IF EXISTS "ap_write" ON address_products;
+CREATE POLICY "ap_read" ON address_products FOR SELECT USING (true);
+CREATE POLICY "ap_write" ON address_products FOR ALL USING (auth.uid() IS NOT NULL);
 
 -- Expenses: managers and admins can access expenses
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
