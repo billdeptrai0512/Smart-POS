@@ -12,8 +12,10 @@ import SignUpPage from './pages/SignUpPage'
 import AddressSelectPage from './pages/AddressSelectPage'
 import POSPage from './pages/POSPage'
 import HistoryPage from './pages/HistoryPage'
-import RecipeManagerPage from './pages/RecipeManagerPage'
+import RecipeMenuPage from './pages/RecipeMenuPage'
+import RecipeIngredientPage from './pages/RecipeIngredientPage'
 import DailyReportPage from './pages/DailyReportPage'
+import ExpensePage from './pages/ExpensePage'
 
 // Protected route: redirects to /login if not authenticated
 function ProtectedRoute() {
@@ -92,9 +94,11 @@ export default function App() {
                     <Route path="/pos" element={<POSPage />} />
                     <Route path="/history" element={<HistoryPage />} />
                     <Route path="/daily-report" element={<DailyReportPage />} />
+                    <Route path="/expenses" element={<ExpensePage />} />
                     {/* Manager-only routes */}
                     <Route element={<ManagerOnly />}>
-                      <Route path="/recipes" element={<RecipeManagerPage />} />
+                      <Route path="/recipes" element={<RecipeMenuPage />} />
+                      <Route path="/recipes/:productId" element={<RecipeIngredientPage />} />
                     </Route>
                   </Route>
                 </Route>

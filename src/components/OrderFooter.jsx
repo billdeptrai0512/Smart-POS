@@ -1,15 +1,23 @@
 import { formatVND } from '../utils'
 import { QUICK_EXTRAS } from '../constants'
 
-export default function OrderFooter({ cart, activeCartItemId, total, hasOrder, isSubmitting, onToggleExtra, onConfirm }) {
+export default function OrderFooter({ cart, activeCartItemId, total, hasOrder, isSubmitting, onToggleExtra, onConfirm, productExtras }) {
+    // Determine which extras to show based on the active cart item's product
+    const activeItem = cart.find(item => item.cartItemId === activeCartItemId) || cart[cart.length - 1]
+    const activeProductId = activeItem?.productId
+
+    // Use per-product extras if available, otherwise fall back to global QUICK_EXTRAS
+    const extrasToShow = (activeProductId && productExtras?.[activeProductId]?.length > 0)
+        ? productExtras[activeProductId]
+        : QUICK_EXTRAS
+
     return (
         <footer className="shrink-0 bg-surface border-t border-border/80 shadow-[0_-4px_24px_rgba(0,0,0,0.02)] flex flex-col">
 
             {/* Quick Extras Bar */}
             {cart.length > 0 && (
                 <div className="w-full overflow-x-auto py-3 px-6 flex gap-2.5 items-center hide-scrollbar border-b border-border/40">
-                    {QUICK_EXTRAS.map(ex => {
-                        const activeItem = cart.find(item => item.cartItemId === activeCartItemId) || cart[cart.length - 1]
+                    {extrasToShow.map(ex => {
                         const hasExtra = activeItem?.extras.some(e => e.id === ex.id) || false
 
                         if (!hasExtra) {
@@ -63,3 +71,4 @@ export default function OrderFooter({ cart, activeCartItemId, total, hasOrder, i
         </footer>
     )
 }
+

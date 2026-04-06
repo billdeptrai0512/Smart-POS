@@ -2,6 +2,13 @@ import { useEffect, useRef, useCallback } from 'react'
 import { submitOrder } from '../services/orderService'
 import { supabase } from '../lib/supabaseClient'
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function isValidOrder(order) {
+    if (!Array.isArray(order.orderItems) || order.orderItems.length === 0) return false
+    return order.orderItems.every(item => UUID_RE.test(item.productId))
+}
+
 const PENDING_ORDERS_KEY = 'coffee_pending_orders'
 
 export function getPendingOrders() {
@@ -33,7 +40,18 @@ export function useOfflineSync(onSyncComplete) {
 
     const syncPending = useCallback(async () => {
         if (isSyncing.current || !supabase) return
-        const pending = getPendingOrders()
+        const allPending = getPendingOrders()
+        if (allPending.length === 0) return
+
+        // Discard orders with invalid (non-UUID) product IDs from pre-migration data
+        const pending = allPending.filter(o => {
+            if (!isValidOrder(o)) {
+                console.warn('Discarding invalid pending order (non-UUID productId):', o)
+                return false
+            }
+            return true
+        })
+        if (pending.length < allPending.length) savePendingOrders(pending)
         if (pending.length === 0) return
 
         isSyncing.current = true
