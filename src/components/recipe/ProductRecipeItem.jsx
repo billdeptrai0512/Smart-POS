@@ -109,14 +109,14 @@ export default function ProductRecipeItem({
                                             }}
                                             onBlur={() => saveAmount(product.id, recipe.ingredient, parseFloat(editingAmount.value) || 0)}
                                         />
-                                        <span className="text-[12px] text-text-dim">{getIngredientUnit(recipe.ingredient)}</span>
+                                        <span className="text-[12px] text-text-dim">{getIngredientUnit(recipe.ingredient, recipe.unit)}</span>
                                     </div>
                                 ) : (
                                     <span
                                         className="text-[13px] font-bold text-primary cursor-pointer hover:underline tabular-nums min-w-[56px] text-right"
                                         onClick={() => setEditingAmount({ productId: product.id, ingredient: recipe.ingredient, value: recipe.amount.toString() })}
                                     >
-                                        {recipe.amount} <span className="text-[11px] font-normal text-primary/70">{getIngredientUnit(recipe.ingredient)}</span>
+                                        {recipe.amount} <span className="text-[11px] font-normal text-primary/70">{getIngredientUnit(recipe.ingredient, recipe.unit)}</span>
                                     </span>
                                 )}
 
