@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS recipes (
   product_id UUID REFERENCES products(id) ON DELETE CASCADE,
   ingredient TEXT NOT NULL,
   amount REAL NOT NULL, -- amount used per 1 serving
+  unit TEXT NOT NULL DEFAULT 'đv', -- ingredient unit (g, ml, ly, etc.)
   manager_id UUID REFERENCES users(id) ON DELETE CASCADE -- null means default recipe
 );
 
@@ -56,6 +57,7 @@ CREATE TABLE IF NOT EXISTS ingredient_costs (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   ingredient TEXT NOT NULL,
   unit_cost INTEGER NOT NULL DEFAULT 0, -- cost per unit in VND
+  unit TEXT NOT NULL DEFAULT 'đv', -- ingredient unit (g, ml, ly, etc.)
   manager_id UUID REFERENCES users(id) ON DELETE CASCADE -- null means default cost
 );
 

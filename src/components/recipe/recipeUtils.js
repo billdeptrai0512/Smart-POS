@@ -12,15 +12,20 @@ export function sortIngredients(a, b) {
 }
 
 export function ingredientLabel(key) {
-    return INGREDIENT_NAMES[key] || key
+    if (INGREDIENT_NAMES[key]) return INGREDIENT_NAMES[key]
+    // Capitalize first letter for custom ingredient names
+    const name = key.replace(/_/g, ' ')
+    return name.charAt(0).toUpperCase() + name.slice(1)
 }
 
-export function getIngredientUnit(key) {
+export function getIngredientUnit(key, storedUnit) {
+    // Prefer DB-stored unit if available and not the default placeholder
+    if (storedUnit && storedUnit !== 'đv') return storedUnit;
     if (key.endsWith('_g')) return 'g';
     if (key.endsWith('_ml')) return 'ml';
     if (key === 'cup') return 'ly';
     if (key === 'lid') return 'nắp';
     if (key === 'tea_bag') return 'gói';
     if (key === 'orange') return 'quả';
-    return 'đv';
+    return storedUnit || 'đv';
 }

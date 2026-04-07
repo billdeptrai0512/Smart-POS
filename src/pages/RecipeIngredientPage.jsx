@@ -33,7 +33,9 @@ export default function RecipeIngredientPage() {
     const [saving, setSaving] = useState(false)
     const [showCosts, setShowCosts] = useState(false)
     const [addingIngredient, setAddingIngredient] = useState(false)
-    const [customIngredient, setCustomIngredient] = useState('')
+    const [selectedIngredients, setSelectedIngredients] = useState(new Set())
+    const [customIngredientName, setCustomIngredientName] = useState('')
+    const [customIngredientUnit, setCustomIngredientUnit] = useState('')
 
     // Extras state
     const [extras, setExtras] = useState([])
@@ -44,7 +46,9 @@ export default function RecipeIngredientPage() {
     // Extra Ingredients state
     const [extraIngs, setExtraIngs] = useState(contextExtraIngs || {})
     const [addingExtraIng, setAddingExtraIng] = useState(null)
-    const [extraIngName, setExtraIngName] = useState('')
+    const [selectedExtraIngs, setSelectedExtraIngs] = useState(new Set())
+    const [customExtraIngName, setCustomExtraIngName] = useState('')
+    const [customExtraIngUnit, setCustomExtraIngUnit] = useState('')
     const [editingExtraAmount, setEditingExtraAmount] = useState(null)
 
     const product = useMemo(() => products.find(p => p.id === productId), [products, productId])
@@ -81,6 +85,16 @@ export default function RecipeIngredientPage() {
         })
         return Array.from(ings)
     }, [baseIngredients, extras, extraIngs])
+
+    // Build a map of ingredient -> stored unit from recipes and extra ingredients
+    const ingredientUnits = useMemo(() => {
+        const units = {}
+        prodRecipes.forEach(r => { if (r.unit) units[r.ingredient] = r.unit })
+        extras.forEach(extra => {
+            (extraIngs[extra.id] || []).forEach(ei => { if (ei.unit) units[ei.ingredient] = ei.unit })
+        })
+        return units
+    }, [prodRecipes, extras, extraIngs])
 
     async function saveAmount(ingredient, newAmount) {
         setSaving(true)
@@ -142,13 +156,39 @@ export default function RecipeIngredientPage() {
         }
     }
 
-    async function handleAddIngredient(ingredient) {
+    function toggleIngredient(ing, setFn) {
+        setFn(prev => {
+            const next = new Set(prev)
+            if (next.has(ing)) next.delete(ing)
+            else next.add(ing)
+            return next
+        })
+    }
+
+
+
+    async function handleAddMultipleIngredients() {
+        const toAdd = [...selectedIngredients].map(ing => ({ key: ing, unit: null }))
+        // Add custom ingredient if typed
+        if (customIngredientName.trim()) {
+            const key = customIngredientName.trim().toLowerCase().replace(/\s+/g, '_')
+            const unit = customIngredientUnit || 'đv'
+            if (!toAdd.find(i => i.key === key)) toAdd.push({ key, unit })
+        }
+        if (toAdd.length === 0) return
         setSaving(true)
         try {
-            await upsertRecipe(productId, ingredient, 0, selectedAddress?.id)
-            setRecipes(prev => [...prev, { product_id: productId, ingredient, amount: 0 }])
+            for (const { key, unit } of toAdd) {
+                await upsertRecipe(productId, key, 0, selectedAddress?.id, unit)
+            }
+            setRecipes(prev => [
+                ...prev,
+                ...toAdd.map(({ key, unit }) => ({ product_id: productId, ingredient: key, amount: 0, unit: unit || getIngredientUnit(key) }))
+            ])
             setAddingIngredient(false)
-            setCustomIngredient('')
+            setSelectedIngredients(new Set())
+            setCustomIngredientName('')
+            setCustomIngredientUnit('')
             refreshProducts?.()
         } catch (err) {
             console.error('Add ingredient error:', err)
@@ -194,13 +234,24 @@ export default function RecipeIngredientPage() {
         }
     }
 
-    async function handleAddExtraIngredient(extraId, ingredient, amount = 0) {
+    async function handleAddMultipleExtraIngredients(extraId) {
+        const toAdd = [...selectedExtraIngs].map(ing => ({ key: ing, unit: null }))
+        if (customExtraIngName.trim()) {
+            const key = customExtraIngName.trim().toLowerCase().replace(/\s+/g, '_')
+            const unit = customExtraIngUnit || 'đv'
+            if (!toAdd.find(i => i.key === key)) toAdd.push({ key, unit })
+        }
+        if (toAdd.length === 0) return
         setSaving(true)
         try {
-            await upsertExtraIngredient(extraId, ingredient, amount)
+            for (const { key, unit } of toAdd) {
+                await upsertExtraIngredient(extraId, key, 0, unit)
+            }
             refreshProducts?.()
             setAddingExtraIng(null)
-            setExtraIngName('')
+            setSelectedExtraIngs(new Set())
+            setCustomExtraIngName('')
+            setCustomExtraIngUnit('')
         } catch (err) {
             console.error('Add extra ingredient error:', err)
         } finally {
@@ -352,14 +403,14 @@ export default function RecipeIngredientPage() {
                                                 }}
                                                 onBlur={() => saveAmount(recipe.ingredient, parseFloat(editingAmount.value) || 0)}
                                             />
-                                            <span className="text-[12px] text-text-dim">{getIngredientUnit(recipe.ingredient)}</span>
+                                            <span className="text-[12px] text-text-dim">{getIngredientUnit(recipe.ingredient, recipe.unit)}</span>
                                         </div>
                                     ) : (
                                         <span
                                             className="text-[13px] font-bold text-primary cursor-pointer hover:underline tabular-nums min-w-[56px] text-right"
                                             onClick={() => setEditingAmount({ ingredient: recipe.ingredient, value: recipe.amount.toString() })}
                                         >
-                                            {recipe.amount} <span className="text-[11px] font-normal text-primary/70">{getIngredientUnit(recipe.ingredient)}</span>
+                                            {recipe.amount} <span className="text-[11px] font-normal text-primary/70">{getIngredientUnit(recipe.ingredient, recipe.unit)}</span>
                                         </span>
                                     )}
 
@@ -381,43 +432,81 @@ export default function RecipeIngredientPage() {
                         {/* Add ingredient */}
                         {addingIngredient ? (
                             <div className="flex flex-col gap-2 pt-1 border-t border-border/30 mt-2 bg-surface border border-border/60 rounded-[14px] px-4 py-3">
-                                <span className="text-[11px] text-text-dim font-bold uppercase">Thêm nguyên liệu mới</span>
-                                <div className="flex flex-wrap gap-1.5">
-                                    {availableBaseIngredients.map(ing => (
-                                        <button
-                                            key={ing}
-                                            onClick={() => setCustomIngredient(ing)}
-                                            className="text-[11px] bg-primary/10 text-primary border border-primary/20 px-2 py-1 rounded-lg hover:bg-primary/20 active:bg-primary/30 transition-colors font-medium"
-                                        >
-                                            + {ingredientLabel(ing)}
-                                        </button>
-                                    ))}
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[11px] text-text-dim font-bold uppercase">Thêm nguyên liệu</span>
+                                    {selectedIngredients.size > 0 && (
+                                        <span className="text-[10px] text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded">
+                                            Đã chọn {selectedIngredients.size}
+                                        </span>
+                                    )}
                                 </div>
-                                <div className="flex flex-wrap sm:flex-nowrap gap-1.5 mt-1">
-                                    <input
-                                        type="text"
-                                        placeholder="Tên nguyên liệu..."
-                                        className="flex-1 w-0 min-w-[120px] bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[12px] text-text focus:outline-none focus:border-primary"
-                                        value={customIngredient}
-                                        onChange={e => setCustomIngredient(e.target.value)}
-                                        onKeyDown={e => {
-                                            if (e.key === 'Enter' && customIngredient.trim()) {
-                                                handleAddIngredient(customIngredient.trim())
-                                            }
-                                        }}
-                                    />
+                                <div className="flex flex-wrap gap-1.5">
+                                    {availableBaseIngredients.map(ing => {
+                                        const isSelected = selectedIngredients.has(ing)
+                                        return (
+                                            <button
+                                                key={ing}
+                                                onClick={() => toggleIngredient(ing, setSelectedIngredients)}
+                                                className={`text-[11px] border px-2 py-1 rounded-lg transition-colors font-medium ${isSelected
+                                                    ? 'bg-primary text-bg border-primary shadow-sm'
+                                                    : 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 active:bg-primary/30'
+                                                    }`}
+                                            >
+                                                {isSelected ? '✓ ' : '+ '}{ingredientLabel(ing)}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                                {/* Custom ingredient input */}
+                                <div className="flex flex-col gap-1.5 mt-1 pt-2 border-t border-border/30">
+                                    <span className="text-[10px] text-text-dim">Hoặc nhập nguyên liệu mới:</span>
+                                    <div className="flex flex-wrap sm:flex-nowrap gap-1.5">
+                                        <input
+                                            type="text"
+                                            placeholder="Tên nguyên liệu..."
+                                            className="flex-1 w-0 min-w-[120px] bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[12px] text-text focus:outline-none focus:border-primary"
+                                            value={customIngredientName}
+                                            onChange={e => setCustomIngredientName(e.target.value)}
+                                        />
+                                        {customIngredientName.trim() && !ALL_INGREDIENTS.includes(customIngredientName.trim()) && (
+                                            <div className="flex items-center gap-1">
+                                                {['g', 'ml', 'ly', 'gói', 'quả'].map(u => (
+                                                    <button
+                                                        key={u}
+                                                        onClick={() => setCustomIngredientUnit(u)}
+                                                        className={`text-[10px] px-1.5 py-1 rounded-lg border transition-colors font-medium ${customIngredientUnit === u
+                                                            ? 'bg-primary text-bg border-primary'
+                                                            : 'bg-bg text-text-secondary border-border/60 hover:border-primary/40'
+                                                            }`}
+                                                    >
+                                                        {u}
+                                                    </button>
+                                                ))}
+                                                <input
+                                                    type="text"
+                                                    placeholder="đv"
+                                                    className="w-[40px] bg-bg border border-border/60 rounded-lg px-1.5 py-1 text-[10px] text-text text-center focus:outline-none focus:border-primary"
+                                                    value={!['g', 'ml', 'ly', 'gói', 'quả'].includes(customIngredientUnit) ? customIngredientUnit : ''}
+                                                    onChange={e => setCustomIngredientUnit(e.target.value)}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                {/* Action buttons */}
+                                <div className="flex gap-2 mt-1">
                                     <button
-                                        onClick={() => {
-                                            if (customIngredient.trim()) handleAddIngredient(customIngredient.trim())
-                                        }}
-                                        disabled={!customIngredient.trim()}
-                                        className="shrink-0 bg-primary/10 text-primary border border-primary/20 px-3 py-1.5 rounded-lg text-[12px] font-bold disabled:opacity-50 transition-opacity"
+                                        onClick={handleAddMultipleIngredients}
+                                        disabled={selectedIngredients.size === 0 && !customIngredientName.trim()}
+                                        className="flex-1 bg-primary text-bg px-3 py-2 rounded-lg text-[12px] font-bold disabled:opacity-50 transition-opacity"
                                     >
-                                        Thêm
+                                        {selectedIngredients.size > 0
+                                            ? `Thêm ${selectedIngredients.size + (customIngredientName.trim() ? 1 : 0)} nguyên liệu`
+                                            : 'Thêm'}
                                     </button>
                                     <button
-                                        onClick={() => setAddingIngredient(false)}
-                                        className="shrink-0 bg-surface-light border border-border/60 text-text px-2 py-1.5 rounded-lg text-[12px] font-bold"
+                                        onClick={() => { setAddingIngredient(false); setSelectedIngredients(new Set()); setCustomIngredientName(''); setCustomIngredientUnit('') }}
+                                        className="shrink-0 bg-surface-light border border-border/60 text-text px-3 py-2 rounded-lg text-[12px] font-bold"
                                     >
                                         Hủy
                                     </button>
@@ -447,6 +536,7 @@ export default function RecipeIngredientPage() {
                                 saveCost={saveCost}
                                 ingredientLabel={ingredientLabel}
                                 getIngredientUnit={getIngredientUnit}
+                                storedUnit={ingredientUnits[ingredient]}
                             />
                         ))}
                         {allUsedIngredients.length === 0 && (
@@ -507,14 +597,14 @@ export default function RecipeIngredientPage() {
                                                                     }}
                                                                     onBlur={() => saveExtraAmount(extra.id, ei.ingredient, parseFloat(editingExtraAmount.value) || 0)}
                                                                 />
-                                                                <span className="text-[10px] font-normal text-text-dim/70">{getIngredientUnit(ei.ingredient)}</span>
+                                                                <span className="text-[10px] font-normal text-text-dim/70">{getIngredientUnit(ei.ingredient, ei.unit)}</span>
                                                             </div>
                                                         ) : (
                                                             <span
                                                                 className={`font-bold tabular-nums cursor-pointer hover:underline min-w-[32px] text-right ${ei.amount > 0 ? 'text-primary' : ei.amount < 0 ? 'text-danger' : 'text-text-dim'}`}
                                                                 onClick={() => setEditingExtraAmount({ extraId: extra.id, ingredient: ei.ingredient, value: ei.amount.toString() })}
                                                             >
-                                                                {ei.amount > 0 ? '+' : ''}{ei.amount} <span className="text-[10px] font-normal text-text-dim/70">{getIngredientUnit(ei.ingredient)}</span>
+                                                                {ei.amount > 0 ? '+' : ''}{ei.amount} <span className="text-[10px] font-normal text-text-dim/70">{getIngredientUnit(ei.ingredient, ei.unit)}</span>
                                                             </span>
                                                         )}
                                                         <button onClick={() => handleDeleteExtraIngredient(extra.id, ei.ingredient)} className="text-danger/60 hover:text-danger text-[14px]">✕</button>
@@ -525,42 +615,80 @@ export default function RecipeIngredientPage() {
 
                                         {addingExtraIng === extra.id ? (
                                             <div className="flex flex-col gap-2 bg-bg/50 p-3 rounded-xl border border-border/60 mt-2">
-                                                <span className="text-[11px] text-text-dim font-bold uppercase">Thêm nguyên liệu / tác động</span>
-                                                <div className="flex flex-wrap gap-1.5">
-                                                    {ALL_INGREDIENTS.filter(i => !(extraIngs[extra.id] || []).find(ei => ei.ingredient === i)).map(ing => (
-                                                        <button
-                                                            key={ing}
-                                                            onClick={() => setExtraIngName(ing)}
-                                                            className="text-[11px] bg-primary/10 text-primary border border-primary/20 px-2 py-1 rounded-lg hover:bg-primary/20 active:bg-primary/30 transition-colors font-medium"
-                                                        >
-                                                            + {ingredientLabel(ing)}
-                                                        </button>
-                                                    ))}
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[11px] text-text-dim font-bold uppercase">Thêm nguyên liệu / tác động</span>
+                                                    {selectedExtraIngs.size > 0 && (
+                                                        <span className="text-[10px] text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded">
+                                                            Đã chọn {selectedExtraIngs.size}
+                                                        </span>
+                                                    )}
                                                 </div>
-                                                <div className="flex flex-wrap sm:flex-nowrap gap-1.5 mt-1">
-                                                    <input
-                                                        type="text"
-                                                        placeholder="Tên..."
-                                                        className="flex-1 w-0 min-w-[80px] bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[12px] text-text focus:outline-none focus:border-primary"
-                                                        value={extraIngName}
-                                                        onChange={e => setExtraIngName(e.target.value)}
-                                                        onKeyDown={e => {
-                                                            if (e.key === 'Enter' && extraIngName.trim()) {
-                                                                handleAddExtraIngredient(extra.id, extraIngName.trim(), 0);
-                                                            }
-                                                        }}
-                                                    />
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {ALL_INGREDIENTS.filter(i => !(extraIngs[extra.id] || []).find(ei => ei.ingredient === i)).map(ing => {
+                                                        const isSelected = selectedExtraIngs.has(ing)
+                                                        return (
+                                                            <button
+                                                                key={ing}
+                                                                onClick={() => toggleIngredient(ing, setSelectedExtraIngs)}
+                                                                className={`text-[11px] border px-2 py-1 rounded-lg transition-colors font-medium ${isSelected
+                                                                    ? 'bg-primary text-bg border-primary shadow-sm'
+                                                                    : 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 active:bg-primary/30'
+                                                                    }`}
+                                                            >
+                                                                {isSelected ? '✓ ' : '+ '}{ingredientLabel(ing)}
+                                                            </button>
+                                                        )
+                                                    })}
+                                                </div>
+                                                {/* Custom extra ingredient input */}
+                                                <div className="flex flex-col gap-1.5 mt-1 pt-2 border-t border-border/30">
+                                                    <span className="text-[10px] text-text-dim">Hoặc nhập nguyên liệu mới:</span>
+                                                    <div className="flex flex-wrap sm:flex-nowrap gap-1.5">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Tên..."
+                                                            className="flex-1 w-0 min-w-[80px] bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[12px] text-text focus:outline-none focus:border-primary"
+                                                            value={customExtraIngName}
+                                                            onChange={e => setCustomExtraIngName(e.target.value)}
+                                                        />
+                                                        {customExtraIngName.trim() && !ALL_INGREDIENTS.includes(customExtraIngName.trim()) && (
+                                                            <div className="flex items-center gap-1">
+                                                                {['g', 'ml', 'ly', 'gói', 'quả'].map(u => (
+                                                                    <button
+                                                                        key={u}
+                                                                        onClick={() => setCustomExtraIngUnit(u)}
+                                                                        className={`text-[10px] px-1.5 py-1 rounded-lg border transition-colors font-medium ${customExtraIngUnit === u
+                                                                            ? 'bg-primary text-bg border-primary'
+                                                                            : 'bg-bg text-text-secondary border-border/60 hover:border-primary/40'
+                                                                            }`}
+                                                                    >
+                                                                        {u}
+                                                                    </button>
+                                                                ))}
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="đv"
+                                                                    className="w-[40px] bg-bg border border-border/60 rounded-lg px-1.5 py-1 text-[10px] text-text text-center focus:outline-none focus:border-primary"
+                                                                    value={!['g', 'ml', 'ly', 'gói', 'quả'].includes(customExtraIngUnit) ? customExtraIngUnit : ''}
+                                                                    onChange={e => setCustomExtraIngUnit(e.target.value)}
+                                                                />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                {/* Action buttons */}
+                                                <div className="flex gap-2 mt-1">
                                                     <button
-                                                        onClick={() => {
-                                                            if (extraIngName.trim()) handleAddExtraIngredient(extra.id, extraIngName.trim(), 0)
-                                                        }}
-                                                        disabled={!extraIngName.trim()}
-                                                        className="shrink-0 bg-primary text-bg px-3 py-1.5 rounded-lg text-[12px] font-bold disabled:opacity-50"
+                                                        onClick={() => handleAddMultipleExtraIngredients(extra.id)}
+                                                        disabled={selectedExtraIngs.size === 0 && !customExtraIngName.trim()}
+                                                        className="flex-1 bg-primary text-bg px-3 py-1.5 rounded-lg text-[12px] font-bold disabled:opacity-50 transition-opacity"
                                                     >
-                                                        Thêm
+                                                        {selectedExtraIngs.size > 0
+                                                            ? `Thêm ${selectedExtraIngs.size + (customExtraIngName.trim() ? 1 : 0)} nguyên liệu`
+                                                            : 'Thêm'}
                                                     </button>
                                                     <button
-                                                        onClick={() => { setAddingExtraIng(null); setExtraIngName(''); }}
+                                                        onClick={() => { setAddingExtraIng(null); setSelectedExtraIngs(new Set()); setCustomExtraIngName(''); setCustomExtraIngUnit('') }}
                                                         className="shrink-0 bg-surface-light border border-border/60 text-text px-2 py-1.5 rounded-lg text-[12px] font-bold"
                                                     >
                                                         Hủy
@@ -569,7 +697,7 @@ export default function RecipeIngredientPage() {
                                             </div>
                                         ) : (
                                             <button
-                                                onClick={() => { setAddingExtraIng(extra.id); setExtraIngName(''); }}
+                                                onClick={() => { setAddingExtraIng(extra.id); setSelectedExtraIngs(new Set()); setCustomExtraIngName(''); setCustomExtraIngUnit('') }}
                                                 className="text-[11px] text-primary hover:underline self-start font-medium mt-1"
                                             >
                                                 + Thay đổi nguyên liệu

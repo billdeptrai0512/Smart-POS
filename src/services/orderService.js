@@ -238,7 +238,7 @@ export async function fetchInventory() {
 // Fetch all recipes from Supabase
 export async function fetchAllRecipes(addressId) {
     if (!supabase) return []
-    let query = supabase.from('recipes').select('product_id, ingredient, amount, address_id')
+    let query = supabase.from('recipes').select('product_id, ingredient, amount, unit, address_id')
 
     if (addressId) {
         query = query.or(`address_id.eq.${addressId},address_id.is.null`)
@@ -273,7 +273,7 @@ export async function fetchRecipes(productIds) {
     if (!supabase) return []
     const { data, error } = await supabase
         .from('recipes')
-        .select('product_id, ingredient, amount')
+        .select('product_id, ingredient, amount, unit')
         .in('product_id', productIds)
     if (error) {
         console.error('fetchRecipes error:', error)
@@ -285,7 +285,7 @@ export async function fetchRecipes(productIds) {
 // Fetch ingredient costs from Supabase, fallback to constants
 export async function fetchIngredientCosts(addressId) {
     if (!supabase) return { ...DEFAULT_COSTS }
-    let query = supabase.from('ingredient_costs').select('ingredient, unit_cost, address_id')
+    let query = supabase.from('ingredient_costs').select('ingredient, unit_cost, unit, address_id')
 
     if (addressId) {
         query = query.or(`address_id.eq.${addressId},address_id.is.null`)
@@ -325,7 +325,7 @@ async function ensureAddressRecipe(productId, addressId) {
         // clone default recipe for this product
         const { data: defaults } = await supabase
             .from('recipes')
-            .select('product_id, ingredient, amount')
+            .select('product_id, ingredient, amount, unit')
             .eq('product_id', productId)
             .is('address_id', null)
 
@@ -337,7 +337,7 @@ async function ensureAddressRecipe(productId, addressId) {
 }
 
 // Upsert a recipe row (insert or update ingredient amount for a product)
-export async function upsertRecipe(productId, ingredient, amount, addressId = null) {
+export async function upsertRecipe(productId, ingredient, amount, addressId = null, unit = null) {
     if (!supabase) throw new Error('No Supabase connection')
 
     if (addressId) {
@@ -363,6 +363,7 @@ export async function upsertRecipe(productId, ingredient, amount, addressId = nu
         if (error) throw error
     } else {
         const payload = { product_id: productId, ingredient, amount }
+        if (unit) payload.unit = unit
         if (addressId) payload.address_id = addressId
         const { error } = await supabase
             .from('recipes')
@@ -392,7 +393,7 @@ export async function deleteRecipeRow(productId, ingredient, addressId = null) {
 }
 
 // Upsert an ingredient cost
-export async function upsertIngredientCost(ingredient, unitCost, addressId = null) {
+export async function upsertIngredientCost(ingredient, unitCost, addressId = null, unit = null) {
     if (!supabase) throw new Error('No Supabase connection')
 
     let query = supabase.from('ingredient_costs').select('id').eq('ingredient', ingredient)
@@ -406,6 +407,7 @@ export async function upsertIngredientCost(ingredient, unitCost, addressId = nul
         if (error) throw error
     } else {
         const payload = { ingredient, unit_cost: unitCost }
+        if (unit) payload.unit = unit
         if (addressId) payload.address_id = addressId
         const { error } = await supabase.from('ingredient_costs').insert(payload)
         if (error) throw error
@@ -544,7 +546,7 @@ export async function deleteProductExtra(extraId) {
 // Fetch all extra ingredients (returns { extraId: [{ id, extra_id, ingredient, amount }] })
 export async function fetchExtraIngredients() {
     if (!supabase) return {}
-    const { data, error } = await supabase.from('extra_ingredients').select('id, extra_id, ingredient, amount')
+    const { data, error } = await supabase.from('extra_ingredients').select('id, extra_id, ingredient, amount, unit')
     if (error) {
         console.error('fetchExtraIngredients error:', error)
         return {}
@@ -558,7 +560,7 @@ export async function fetchExtraIngredients() {
 }
 
 // Upsert extra ingredient
-export async function upsertExtraIngredient(extraId, ingredient, amount) {
+export async function upsertExtraIngredient(extraId, ingredient, amount, unit = null) {
     if (!supabase) throw new Error('No Supabase connection')
     const { data: existing } = await supabase
         .from('extra_ingredients')
@@ -574,9 +576,11 @@ export async function upsertExtraIngredient(extraId, ingredient, amount) {
             .eq('id', existing.id)
         if (error) throw error
     } else {
+        const payload = { extra_id: extraId, ingredient, amount }
+        if (unit) payload.unit = unit
         const { error } = await supabase
             .from('extra_ingredients')
-            .insert({ extra_id: extraId, ingredient, amount })
+            .insert(payload)
         if (error) throw error
     }
 }
