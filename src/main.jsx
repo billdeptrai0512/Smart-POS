@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import App from './App.jsx'
 import PWAUpdatePrompt from './components/PWAUpdatePrompt.jsx'
+import PWAInstallPrompt from './components/PWAInstallPrompt.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -11,6 +12,7 @@ createRoot(document.getElementById('root')).render(
       <App />
     </BrowserRouter>
     <PWAUpdatePrompt />
+    <PWAInstallPrompt />
     <Analytics />
   </StrictMode>,
 )

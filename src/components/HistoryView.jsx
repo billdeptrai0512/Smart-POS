@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CircleMinus } from 'lucide-react'
+import { CircleMinus, ArrowLeft, ArrowRight } from 'lucide-react'
 import { formatVND, calculateProductCost } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 
@@ -94,9 +94,10 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                 <div className="flex items-center gap-3">
                     <button
                         onClick={onBack}
-                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
+                        className="w-10 h-10 flex flex-col items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
+                        title="Trở về"
                     >
-                        <span className="text-xl leading-none -mt-[3px] font-bold">←</span>
+                        <ArrowLeft size={20} strokeWidth={2.5} />
                     </button>
 
                     <div className="flex flex-row gap-2 flex-1">
@@ -107,12 +108,11 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                         </div>
 
                         <button onClick={() => navigate('/expenses')}
-                            className="flex-1 bg-danger/10 border border-danger/20 rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-danger/15 active:bg-danger/20 active:scale-[0.98] transition-all select-none focus:outline-none focus:ring-2 focus:ring-danger/30"
-                            title="Thêm chi phí"
+                            className="flex bg-surface-light border border-border/60 rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-border/40 active:bg-border/60 transition-all select-none focus:outline-none focus:ring-2 focus:ring-danger/30"
                         >
                             <div className="flex items-center gap-1">
-                                <span className="text-[12px] font-black text-danger uppercase line-clamp-1">Chi phí</span>
-                                <CircleMinus size={14} className="text-danger" strokeWidth={2.5} />
+                                <span className="text-[12px] font-black text-danger/80 uppercase line-clamp-1">Chi phí</span>
+                                <ArrowRight size={20} className="text-danger/80" strokeWidth={2.5} />
                             </div>
                         </button>
 
