@@ -18,6 +18,7 @@ import {
 } from '../services/orderService'
 import { ALL_INGREDIENTS, sortIngredients, ingredientLabel, getIngredientUnit } from '../components/recipe/recipeUtils'
 import IngredientCostItem from '../components/recipe/IngredientCostItem'
+import { ArrowLeft } from 'lucide-react'
 
 export default function RecipeIngredientPage() {
     const navigate = useNavigate()
@@ -303,10 +304,10 @@ export default function RecipeIngredientPage() {
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => navigate('/recipes')}
-                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
+                        className="w-10 h-10 flex flex-col items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
                         title="Trở về"
                     >
-                        <span className="text-xl leading-none -mt-[3px] font-bold">←</span>
+                        <ArrowLeft size={20} strokeWidth={2.5} />
                     </button>
                     <div className="flex-1 min-w-0">
                         <h1 className="text-[16px] font-black text-text truncate">{product.name}</h1>

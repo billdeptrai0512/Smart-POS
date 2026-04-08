@@ -1,3 +1,4 @@
+import { ArrowRight } from 'lucide-react'
 import { formatVND } from '../utils'
 
 export default function Header({ isOnline, dayName, dateOnly, cupsSold, revenue, totalCost, onOpenHistory, addressName, onAddressClick }) {
@@ -50,7 +51,7 @@ export default function Header({ isOnline, dayName, dateOnly, cupsSold, revenue,
                         <div className="flex items-center justify-between w-full mt-0.5">
                             <span className="text-[15px] sm:text-[16px] font-black text-success">{formatVND(revenue)}</span>
                             <div className="w-7 h-7 flex items-center justify-center rounded-full text-text pointer-events-none shadow-sm">
-                                <span className="text-[15px] leading-none mb-[2px] ml-[1px] font-bold">→</span>
+                                <ArrowRight size={20} strokeWidth={2.5} />
                             </div>
                         </div>
                     </div>

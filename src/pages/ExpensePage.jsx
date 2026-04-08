@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { formatVND } from '../utils'
 import { usePOS } from '../contexts/POSContext'
-import { CircleArrowRight } from 'lucide-react'
+import { ArrowRight, ArrowLeft } from 'lucide-react'
 
 export default function ExpensePage() {
     const navigate = useNavigate()
@@ -24,7 +24,7 @@ export default function ExpensePage() {
         if (!costName.trim() || !costAmount || isNaN(costAmount) || Number(costAmount) <= 0) return
         setIsSubmitting(true)
         try {
-            await handleAddExpense(costName.trim(), Number(costAmount))
+            await handleAddExpense(costName.trim(), Number(costAmount) * 1000)
             setCostName('')
             setCostAmount('')
         } catch (err) {
@@ -42,9 +42,10 @@ export default function ExpensePage() {
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => navigate('/history')}
-                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
+                        className="w-10 h-10 flex flex-col items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
+                        title="Trở về"
                     >
-                        <span className="text-xl leading-none -mt-[3px] font-bold">←</span>
+                        <ArrowLeft size={20} strokeWidth={2.5} />
                     </button>
 
                     <div className="flex flex-row gap-2 flex-1">
@@ -54,12 +55,11 @@ export default function ExpensePage() {
                         </div>
 
                         <button onClick={() => navigate('/recipes')}
-                            className="flex-1 bg-primary/5 border border-primary/10 rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-primary/15 active:bg-primary/20 active:scale-[0.98] transition-all select-none focus:outline-none focus:ring-2 focus:ring-primary/30"
-                            title="Công thức"
+                            className="flex bg-surface-light border border-border/60 rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-border/40 active:bg-border/60 transition-all select-none focus:outline-none focus:ring-2 focus:ring-primary/30"
                         >
                             <div className="flex items-center gap-1">
-                                <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Công thức</span>
-                                <CircleArrowRight size={14} className="text-primary" strokeWidth={2.5} />
+                                <span className="text-[12px] font-black text-primary/80 uppercase line-clamp-1">Công thức</span>
+                                <ArrowRight size={20} className="text-primary/80" strokeWidth={2.5} />
                             </div>
                         </button>
                     </div>
@@ -124,21 +124,29 @@ export default function ExpensePage() {
                 <div className="flex gap-2">
                     <input
                         type="text"
-                        placeholder="Chi phí gì ?"
+                        placeholder="Tên chi phí..."
                         value={costName}
                         onChange={e => setCostName(e.target.value)}
                         className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-danger/40 transition-colors"
                     />
-                    <input
-                        type="number"
-                        placeholder="Bao nhiêu ?"
-                        value={costAmount}
-                        onChange={e => setCostAmount(e.target.value)}
-                        className="w-[110px] shrink-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-danger/40 transition-colors"
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') submitExpense()
-                        }}
-                    />
+                    <div className="relative shrink-0 flex items-center w-[125px] bg-surface-light border border-border/60 rounded-[12px] focus-within:border-danger/40 transition-colors overflow-hidden">
+                        <input
+                            type="number"
+                            placeholder="Số tiền..."
+                            value={costAmount}
+                            onChange={e => setCostAmount(e.target.value)}
+                            className="w-full bg-transparent px-3 py-2 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none z-10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') submitExpense()
+                            }}
+                        />
+                        {costAmount && (
+                            <div className="absolute inset-0 pointer-events-none px-3 py-2 flex items-center space-x-0 whitespace-pre z-0">
+                                <span className="text-[14px] font-medium text-transparent">{costAmount}</span>
+                                <span className="text-[14px] font-medium text-text-secondary/60">.000đ</span>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <button

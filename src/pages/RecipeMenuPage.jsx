@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { formatVND } from '../utils'
-import ProductCreator from '../components/recipe/ProductCreator'
 import {
     upsertProductPrice,
     insertProduct,
@@ -15,7 +14,6 @@ export default function RecipeMenuPage() {
     const { products, recipes, ingredientCosts, refreshProducts, productExtras } = useProducts()
     const { selectedAddress } = useAddress()
 
-    const [addingProduct, setAddingProduct] = useState(false)
     const [newProductName, setNewProductName] = useState('')
     const [newProductPrice, setNewProductPrice] = useState('')
     const [saving, setSaving] = useState(false)
@@ -35,17 +33,17 @@ export default function RecipeMenuPage() {
     async function handleCreateProduct() {
         if (!newProductName.trim()) return
         setSaving(true)
+        const parsedPrice = parseInt(newProductPrice) ? parseInt(newProductPrice) * 1000 : 0
         try {
             const newProd = await insertProduct(
                 newProductName.trim(),
-                parseInt(newProductPrice) || 0,
+                parsedPrice,
                 selectedAddress?.id
             )
             if (newProd && selectedAddress?.id) {
-                await upsertProductPrice(newProd.id, selectedAddress.id, parseInt(newProductPrice) || 0)
+                await upsertProductPrice(newProd.id, selectedAddress.id, parsedPrice)
             }
             refreshProducts?.()
-            setAddingProduct(false)
             setNewProductName('')
             setNewProductPrice('')
         } catch (error) {
@@ -119,49 +117,7 @@ export default function RecipeMenuPage() {
             </header>
 
             {/* Product list */}
-            <main className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-bg">
-
-                {/* Action buttons: Thêm món + Sắp xếp */}
-                {!isSorting && (
-                    <div className={addingProduct ? "flex flex-col gap-3" : "grid grid-cols-2 gap-3"}>
-                        <ProductCreator
-                            addingProduct={addingProduct}
-                            setAddingProduct={setAddingProduct}
-                            newProductName={newProductName}
-                            setNewProductName={setNewProductName}
-                            newProductPrice={newProductPrice}
-                            setNewProductPrice={setNewProductPrice}
-                            handleCreateProduct={handleCreateProduct}
-                        />
-                        {!addingProduct && (
-                            <button
-                                onClick={enterSortMode}
-                                className="w-full h-full bg-surface border border-border/60 rounded-[1.5rem] p-4 flex flex-col items-center justify-center min-h-[20px] text-[14px] font-bold text-text-secondary hover:bg-surface-light active:scale-[0.98] transition-all shadow-sm shrink-0"
-                            >
-                                ↕ Sắp xếp
-                            </button>
-                        )}
-                    </div>
-                )}
-
-                {/* Sort mode toolbar */}
-                {isSorting && (
-                    <div className="flex justify-end items-center gap-1 bg-primary/5 border border-primary/20 rounded-[14px] px-4 py-3">
-                        <button
-                            onClick={cancelSortMode}
-                            className="text-[12px] font-bold text-text-secondary px-3 py-1.5 rounded-lg hover:bg-surface-light transition-colors"
-                        >
-                            Hủy
-                        </button>
-                        <button
-                            onClick={saveSortOrder}
-                            disabled={saving}
-                            className="text-[12px] font-bold text-bg bg-primary px-4 py-1.5 rounded-lg hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-50"
-                        >
-                            {saving ? '⏳' : 'Lưu'}
-                        </button>
-                    </div>
-                )}
+            <main className="flex-1 overflow-y-auto px-4 py-4 pb-48 space-y-3 bg-bg">
 
                 {/* Product grid / sort list */}
                 {isSorting ? (
@@ -236,6 +192,80 @@ export default function RecipeMenuPage() {
 
 
             </main>
+
+            {/* Footer */}
+            <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-50">
+                {/* Floating sort button above footer */}
+                {!isSorting && (
+                    <div className="flex justify-end px-4 mb-2 pointer-events-auto">
+                        <button
+                            onClick={enterSortMode}
+                            className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center justify-center text-[13px] font-bold text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
+                        >
+                            ↕ Sắp xếp
+                        </button>
+                    </div>
+                )}
+
+                {/* Footer Content */}
+                <div className="p-4 bg-surface border-t border-border/60 pointer-events-auto">
+                    {isSorting ? (
+                        <div className="flex gap-2">
+                            <button
+                                onClick={cancelSortMode}
+                                className="flex-1 py-3 rounded-[12px] bg-surface-light border border-border/60 text-text-secondary font-black hover:bg-border/40 active:scale-95 transition-all text-[14px]"
+                            >
+                                Hủy
+                            </button>
+                            <button
+                                onClick={saveSortOrder}
+                                disabled={saving}
+                                className="flex-1 py-3 rounded-[12px] bg-primary text-bg font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 text-[14px]"
+                            >
+                                {saving ? '⏳ Đang lưu...' : 'Lưu sắp xếp'}
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col gap-3">
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="Tên món mới..."
+                                    value={newProductName}
+                                    onChange={e => setNewProductName(e.target.value)}
+                                    className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
+                                />
+                                <div className="relative shrink-0 flex items-center w-[125px] bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden">
+                                    <input
+                                        type="number"
+                                        placeholder="Giá bán..."
+                                        value={newProductPrice}
+                                        onChange={e => setNewProductPrice(e.target.value)}
+                                        className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none z-10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') handleCreateProduct()
+                                        }}
+                                    />
+                                    {newProductPrice && (
+                                        <div className="absolute inset-0 pointer-events-none px-3 py-2.5 flex items-center space-x-0 whitespace-pre z-0">
+                                            <span className="text-[14px] font-medium text-transparent">{newProductPrice}</span>
+                                            <span className="text-[14px] font-medium text-text-secondary/60">.000đ</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={handleCreateProduct}
+                                disabled={!newProductName.trim() || !newProductPrice || isNaN(newProductPrice) || Number(newProductPrice) <= 0 || saving}
+                                className="w-full py-3 rounded-[12px] bg-primary text-bg text-[14px] font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase"
+                            >
+                                {saving ? 'Đang...' : 'Tạo'}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
 
             {saving && (
                 <div className="fixed inset-0 z-50 bg-bg/60 flex items-center justify-center pointer-events-none">
