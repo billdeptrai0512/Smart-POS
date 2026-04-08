@@ -8,6 +8,8 @@ import {
     insertProduct,
     updateProductSortOrder
 } from '../services/orderService'
+import { ingredientLabel, getIngredientUnit } from '../components/recipe/recipeUtils'
+import { ArrowLeft } from 'lucide-react'
 
 export default function RecipeMenuPage() {
     const navigate = useNavigate()
@@ -173,10 +175,18 @@ export default function RecipeMenuPage() {
                                     <div className="flex flex-col gap-1.5">
                                         <h3 className="font-black text-[15px] leading-tight text-text break-words line-clamp-2">{product.name}</h3>
                                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                            {ingredientCount > 0 ? (
-                                                <span className="text-[12px] font-medium text-text-secondary">có {ingredientCount} nguyên liệu</span>
-                                            ) : (
-                                                null
+                                            {prodRecipes.length > 0 && (
+                                                <div className="flex flex-col gap-0.5">
+                                                    {prodRecipes.map(r => {
+                                                        const u = getIngredientUnit(r.ingredient, r.unit)
+                                                        const isSymbol = ['g', 'ml', 'l', 'kg', 'oz', 'mg'].includes(String(u).toLowerCase())
+                                                        return (
+                                                            <span key={r.ingredient} className="text-[12px] font-medium text-text-secondary">
+                                                                • {ingredientLabel(r.ingredient)} {r.amount}{isSymbol ? u : ` ${u}`}
+                                                            </span>
+                                                        )
+                                                    })}
+                                                </div>
                                             )}
                                             {extraCount > 0 && (
                                                 <span className="text-[12px] font-medium text-text-secondary">và {extraCount} tùy chọn</span>
