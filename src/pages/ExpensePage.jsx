@@ -221,11 +221,6 @@ export default function ExpensePage() {
             {activeTab === 'fixed' && isManager && (
                 <>
                     <main className="flex-1 overflow-y-auto p-4 space-y-3">
-                        {/* Total summary */}
-                        <div className="bg-warning/5 border border-warning/20 rounded-[16px] px-4 py-3 flex items-center justify-between">
-                            <span className="text-[12px] font-black text-warning uppercase">Tổng cố định / ngày</span>
-                            <span className="text-[16px] font-bold text-warning tabular-nums">{formatVND(totalFixed)}</span>
-                        </div>
 
                         {(!fixedCosts || fixedCosts.length === 0) ? (
                             <div className="text-center text-text-secondary text-[13px] py-10 bg-surface-light rounded-xl border border-border/40">

@@ -12,7 +12,6 @@ import FinanceCards from '../components/report/FinanceCards'
 import RevenueChart from '../components/report/RevenueChart'
 import HeatmapChart from '../components/report/HeatmapChart'
 import MenuEngineering from '../components/report/MenuEngineering'
-import ExpenseModal from '../components/report/ExpenseModal'
 import { fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchYesterdayOrders, fetchYesterdayExpenses } from '../services/orderService'
 import { useAddress } from '../contexts/AddressContext'
 import { ingredientLabel, getIngredientUnit } from '../components/recipe/recipeUtils'
@@ -36,15 +35,21 @@ export default function DailyReportPage() {
     const [yesterdayClosing, setYesterdayClosing] = useState(null)
     const [yesterdayOrders, setYesterdayOrders] = useState([])
     const [yesterdayExpensesData, setYesterdayExpensesData] = useState([])
+    const [isAsyncReady, setIsAsyncReady] = useState(false)
 
     useEffect(() => {
         if (selectedAddress?.id) {
-            fetchTodayShiftClosing(selectedAddress.id).then(setShiftClosing)
-            fetchYesterdayShiftClosing(selectedAddress.id).then(setYesterdayClosing)
-            fetchYesterdayOrders(selectedAddress.id).then(setYesterdayOrders)
-            fetchYesterdayExpenses(selectedAddress.id).then(setYesterdayExpensesData)
+            setIsAsyncReady(false)
+            Promise.all([
+                fetchTodayShiftClosing(selectedAddress.id).then(setShiftClosing),
+                fetchYesterdayShiftClosing(selectedAddress.id).then(setYesterdayClosing),
+                fetchYesterdayOrders(selectedAddress.id).then(setYesterdayOrders),
+                fetchYesterdayExpenses(selectedAddress.id).then(setYesterdayExpensesData),
+            ]).finally(() => setIsAsyncReady(true))
         }
     }, [selectedAddress?.id])
+
+    const isReady = !isLoadingHistory && isAsyncReady
 
     const pending = getPendingOrders()
     const todayStr = new Date().toDateString()
@@ -172,19 +177,33 @@ export default function DailyReportPage() {
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-6 pb-24 space-y-4 bg-bg">
-                {isLoadingHistory ? (
+                {!isReady ? (
                     <div className="flex flex-col gap-4 animate-pulse">
+                        {/* ProfitCard skeleton */}
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-surface-light rounded-[24px] h-20" />
-                            <div className="bg-surface-light rounded-[24px] h-20" />
+                            <div className="bg-surface-light rounded-[24px] h-[72px]" />
+                            <div className="bg-surface-light rounded-[24px] h-[72px]" />
+                            <div className="bg-surface-light rounded-[24px] h-[72px]" />
+                            <div className="bg-surface-light rounded-[24px] h-[72px]" />
                         </div>
+                        <div className="bg-surface-light rounded-[24px] h-[62px]" />
+                        {/* Divider skeleton */}
+                        <div className="flex items-center gap-3 py-1 my-1 px-4">
+                            <div className="flex-1 h-[1px] bg-border/40 rounded-full" />
+                            <div className="h-3 w-32 bg-surface-light rounded" />
+                            <div className="flex-1 h-[1px] bg-border/40 rounded-full" />
+                        </div>
+                        {/* FinanceCards skeleton */}
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-surface-light rounded-[24px] h-20" />
-                            <div className="bg-surface-light rounded-[24px] h-20" />
-                            <div className="bg-surface-light rounded-[24px] h-20" />
-                            <div className="bg-surface-light rounded-[24px] h-20" />
+                            <div className="bg-surface-light rounded-[24px] h-[72px]" />
+                            <div className="bg-surface-light rounded-[24px] h-[72px]" />
+                            <div className="bg-surface-light rounded-[24px] h-[72px]" />
+                            <div className="bg-surface-light rounded-[24px] h-[72px]" />
+                            <div className="col-span-2 bg-surface-light rounded-[24px] h-[72px]" />
                         </div>
-                        <div className="bg-surface-light rounded-[24px] h-60" />
+                        {/* Chart skeleton */}
+                        <div className="bg-surface-light rounded-[24px] h-52" />
+                        <div className="bg-surface-light rounded-[24px] h-40" />
                     </div>
                 ) : (
                     <div className="flex flex-col gap-4 animate-fade-in">
@@ -216,6 +235,16 @@ export default function DailyReportPage() {
                             onFixedExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'fixed' } })}
                             yesterdayNetProfit={yesterdayNetProfit}
                         />
+
+                        {/* Divider */}
+                        <div className="flex items-center gap-3 py-1 mt-4 px-4">
+                            <div className="flex-1 h-[1px] bg-border/80 rounded-full"></div>
+                            <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Thống kê</span>
+                            <div className="flex-1 h-[1px] bg-border/80 rounded-full"></div>
+                        </div>
+
+                        <RevenueChart lineChartData={lineChartData} />
+                        <HeatmapChart hourRange={hourRange} soldProducts={soldProducts} products={products} heatmapData={heatmapData} maxHeatmapQty={maxHeatmapQty} />
 
                         {/* Inventory Analysis — only when shift closing has inventory */}
                         {shiftClosing?.inventory_report?.length > 0 && (() => {
@@ -313,16 +342,7 @@ export default function DailyReportPage() {
                             )
                         })()}
 
-                        {/* Divider */}
-                        <div className="flex items-center gap-3 py-1 mt-4 px-4">
-                            <div className="flex-1 h-[1px] bg-border/80 rounded-full"></div>
-                            <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Phân Tích Kinh Doanh</span>
-                            <div className="flex-1 h-[1px] bg-border/80 rounded-full"></div>
-                        </div>
-
-                        <RevenueChart lineChartData={lineChartData} />
-                        <HeatmapChart hourRange={hourRange} soldProducts={soldProducts} products={products} heatmapData={heatmapData} maxHeatmapQty={maxHeatmapQty} />
-                        <MenuEngineering classifiedItems={classifiedItems} />
+                        {/* <MenuEngineering classifiedItems={classifiedItems} /> */}
 
                         {/* Enhanced Footer */}
                         <div className="flex flex-col items-center justify-center py-8 mt-4 gap-3 relative">
@@ -336,27 +356,11 @@ export default function DailyReportPage() {
                                     Developed by billdeptrai0512
                                 </span>
                             </a>
-
-
                         </div>
                     </div>
                 )
                 }
             </main >
-
-            {showExpenseListModal && (
-                <ExpenseModal
-                    todayExpenses={todayExpenses}
-                    onClose={() => setShowExpenseListModal(false)}
-                    onAddExpense={handleAddExpense}
-                    onDeleteExpense={handleDeleteExpense}
-                    fixedCosts={fixedCosts}
-                    onAddFixedCost={handleAddFixedCost}
-                    onUpdateFixedCost={handleUpdateFixedCost}
-                    onDeleteFixedCost={handleDeleteFixedCost}
-                    userRole={userRole}
-                />
-            )}
         </div >
     )
 }
