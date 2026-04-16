@@ -73,7 +73,7 @@ export default function ProfitCard({ totalCups, selectedProductId, onFilterChang
                         <span className="text-[11px] font-black text-text-secondary uppercase mb-1">Thực nhận</span>
                         <span className="text-[18px] font-black text-success tabular-nums leading-none">{formatVND(actualTotal)}</span>
                     </div>
-                    <div className="flex flex-col items-end">
+                    <div className="flex flex-col items-center">
                         <span className="self-center text-[10px] font-black text-text-secondary uppercase mb-1 opacity-70">Chênh lệch</span>
                         <div className={`px-3 py-1 rounded-xl border ${difference >= 0 ? 'bg-success/10 border-success/20 text-success' : 'bg-danger/10 border-danger/20 text-danger'}`}>
                             <span className="text-[14px] font-black tabular-nums leading-none block">
