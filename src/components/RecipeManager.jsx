@@ -11,7 +11,7 @@ import {
 } from '../services/orderService'
 import { useAuth } from '../contexts/AuthContext'
 import { useAddress } from '../contexts/AddressContext'
-import { ALL_INGREDIENTS, sortIngredients, ingredientLabel, getIngredientUnit } from './recipe/recipeUtils'
+import { sortIngredients, ingredientLabel, getIngredientUnit } from './recipe/recipeUtils'
 
 import RecipeHeader from './recipe/RecipeHeader'
 import ProductCreator from './recipe/ProductCreator'
@@ -166,6 +166,7 @@ export default function RecipeManager({ products, recipes: initialRecipes, onBac
 
     // Get unique ingredients across all recipes for the cost table
     const allUsedIngredients = [...new Set(recipes.map(r => r.ingredient))].sort(sortIngredients)
+    const dbIngredients = Object.keys(ingredientCosts).sort(sortIngredients)
 
     return (
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg">
@@ -190,7 +191,7 @@ export default function RecipeManager({ products, recipes: initialRecipes, onBac
                             const cost = productCost(product.id)
                             const isExpanded = expandedProduct === product.id
                             const usedIngredients = prodRecipes.map(r => r.ingredient)
-                            const availableIngredients = ALL_INGREDIENTS.filter(i => !usedIngredients.includes(i))
+                            const availableIngredients = dbIngredients.filter(i => !usedIngredients.includes(i))
 
                             return (
                                 <ProductRecipeItem

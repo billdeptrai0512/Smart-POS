@@ -9,7 +9,7 @@ import {
     updateProductSortOrder
 } from '../services/orderService'
 import { ingredientLabel, getIngredientUnit } from '../components/recipe/recipeUtils'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ArrowRight } from 'lucide-react'
 
 export default function RecipeMenuPage() {
     const navigate = useNavigate()
@@ -103,10 +103,10 @@ export default function RecipeMenuPage() {
             <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={() => navigate('/expenses')}
+                        onClick={() => navigate('/history')}
                         className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
                     >
-                        <span className="text-xl leading-none -mt-[3px] font-bold">←</span>
+                        <ArrowLeft size={20} strokeWidth={2.5} />
                     </button>
 
                     <div className="flex flex-row gap-2 flex-1">
@@ -115,6 +115,12 @@ export default function RecipeMenuPage() {
                             <span className="text-[12px] font-bold text-primary/80 leading-none mt-1 tabular-nums">{products.length} món</span>
                         </div>
                     </div>
+                    <button
+                        onClick={() => navigate('/ingredients')}
+                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
+                    >
+                        <ArrowRight size={20} strokeWidth={2.5} />
+                    </button>
                 </div>
             </header>
 

@@ -1,13 +1,26 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CircleMinus, ArrowLeft, ArrowRight } from 'lucide-react'
 import { formatVND, calculateProductCost } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
+import { fetchTodayShiftClosing } from '../services/orderService'
+import { useAddress } from '../contexts/AddressContext'
 
 
 export default function HistoryView({ todayOrders, todayExpenses, recipes, products, ingredientCosts, isLoadingHistory, onBack, onDeleteOrder, onAddExpense, onDeleteExpense }) {
     const navigate = useNavigate()
     const [deletingId, setDeletingId] = useState(null)
+    const { selectedAddress } = useAddress()
+    const [shiftClosed, setShiftClosed] = useState(null)
+
+    useEffect(() => {
+        if (selectedAddress?.id) {
+            setShiftClosed(null)
+            fetchTodayShiftClosing(selectedAddress.id).then(data => setShiftClosed(!!data))
+        } else {
+            setShiftClosed(null)
+        }
+    }, [selectedAddress?.id])
 
 
     const formattedOnline = todayOrders.map(o => ({
@@ -57,7 +70,7 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                 })) : []
         }))
 
-    const formattedExpenses = (todayExpenses || []).map(e => ({
+    const formattedExpenses = (todayExpenses || []).filter(e => !e.is_fixed).map(e => ({
         id: e.id,
         total: 0,
         cost: e.amount,
@@ -107,16 +120,15 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                             <span className="text-[12px] font-bold text-primary/80 leading-none mt-1 tabular-nums">{totalCups} ly</span>
                         </div>
 
-                        <button onClick={() => navigate('/expenses')}
-                            className="flex bg-surface-light border border-border/60 rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-border/40 active:bg-border/60 transition-all select-none focus:outline-none focus:ring-2 focus:ring-danger/30"
-                        >
-                            <div className="flex items-center gap-1">
-                                <span className="text-[12px] font-black text-danger/80 uppercase line-clamp-1">Chi phí</span>
-                                <ArrowRight size={20} className="text-danger/80" strokeWidth={2.5} />
-                            </div>
-                        </button>
+
 
                     </div>
+
+                    <button onClick={() => navigate('/recipes')}
+                        className="w-10 h-10 flex flex-col items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
+                    >
+                        <ArrowRight size={20} strokeWidth={2.5} />
+                    </button>
                 </div>
             </header>
 
@@ -214,20 +226,31 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
             {/* Footer */}
             <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-bg via-bg via-60% to-transparent pointer-events-none">
                 <div className="flex gap-2 pointer-events-auto mt-6">
-                    <div className="flex-1 bg-success/10 border border-success/60 rounded-[16px] px-4 py-2 flex flex-col justify-center items-start shadow-sm">
-                        <span className="text-[12px] font-black text-success uppercase">Doanh thu</span>
-                        <span className="text-[16px] font-bold text-success max-w-full overflow-hidden text-ellipsis leading-none mt-1 tabular-nums">
-                            {formatVND(totalRevenue - totalExpense)}
+                    <div onClick={() => navigate('/expenses')}
+                        className="flex-1 bg-danger/10 border border-danger/60 rounded-[16px] px-4 py-2 flex flex-col justify-center items-start shadow-sm">
+                        <span className="text-[12px] font-black text-danger uppercase">Chi phí</span>
+                        <span className="text-[16px] font-bold text-danger max-w-full overflow-hidden text-ellipsis leading-none mt-1 tabular-nums">
+                            {formatVND(totalExpense)}
                         </span>
                     </div>
 
                     <button
-                        onClick={() => navigate('/daily-report')}
-                        className="bg-surface-light border border-border/80 rounded-[16px] px-5 flex flex-col items-center justify-center gap-1 shadow-sm hover:bg-border/30 active:scale-95 transition-all group"
+                        onClick={() => shiftClosed !== null && navigate(shiftClosed ? '/daily-report' : '/shift-closing')}
+                        className={`border rounded-[16px] px-5 flex flex-col items-center justify-center gap-1 shadow-sm hover:bg-border/30 active:scale-95 transition-all group ${shiftClosed === null
+                            ? 'bg-surface-light border-border/60 opacity-60'
+                            : shiftClosed
+                                ? 'bg-success/10 border-success/60'
+                                : 'bg-surface-light border-border/80'
+                            }`}
                         title="Thống kê"
+                        disabled={shiftClosed === null}
                     >
-                        {/* <ClipboardCheck size={20} strokeWidth={2.5} className="text-text-secondary group-hover:text-text transition-colors" /> */}
-                        <span className="text-[12px] font-black text-text-secondary uppercase whitespace-nowrap group-hover:text-text transition-colors">Thống kê</span>
+                        <span className={`text-[12px] font-black uppercase whitespace-nowrap transition-colors ${shiftClosed === null
+                            ? 'text-text-secondary'
+                            : shiftClosed
+                                ? 'text-success'
+                                : 'text-text-secondary group-hover:text-text'
+                            }`}>{shiftClosed === null ? '...' : shiftClosed ? 'Báo cáo' : 'Chốt ca'}</span>
                     </button>
                 </div>
             </div>

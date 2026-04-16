@@ -1,19 +1,22 @@
 import { INGREDIENT_NAMES } from '../../constants'
 
-export const ALL_INGREDIENTS = Object.keys(INGREDIENT_NAMES)
+// ALL_INGREDIENTS is now empty — all ingredients are fetched from DB
+export const ALL_INGREDIENTS = []
 
-export function sortIngredients(a, b) {
-    const idxA = ALL_INGREDIENTS.indexOf(a)
-    const idxB = ALL_INGREDIENTS.indexOf(b)
-    if (idxA === -1 && idxB === -1) return a.localeCompare(b)
-    if (idxA === -1) return 1
-    if (idxB === -1) return -1
-    return idxA - idxB
+export function sortIngredients(a, b, customOrderArray) {
+    if (customOrderArray && customOrderArray.length > 0) {
+        const idxA = customOrderArray.indexOf(a)
+        const idxB = customOrderArray.indexOf(b)
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB
+        if (idxA !== -1) return -1
+        if (idxB !== -1) return 1
+    }
+    return a.localeCompare(b)
 }
 
 export function ingredientLabel(key) {
     if (INGREDIENT_NAMES[key]) return INGREDIENT_NAMES[key]
-    // Capitalize first letter for custom ingredient names
+    // Capitalize first letter, replace underscores with spaces
     const name = key.replace(/_/g, ' ')
     return name.charAt(0).toUpperCase() + name.slice(1)
 }

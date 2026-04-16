@@ -25,7 +25,7 @@ export default function Header({ isOnline, dayName, dateOnly, cupsSold, revenue,
 
                         <span className="text-[12px] sm:text-[13px] text-text-secondary font-black uppercase tracking-wider">Địa chỉ</span>
                         <div className="flex items-center justify-between w-full mt-0.5">
-                            {addressName && <span className="text-[13px] text-primary font-black uppercase tracking-wider line-clamp-1">{addressName}</span>}
+                            {addressName && <span className="text-[13px] text-text font-black uppercase tracking-wider line-clamp-1">{addressName}</span>}
                         </div>
                     </div>
                     <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
@@ -47,9 +47,9 @@ export default function Header({ isOnline, dayName, dateOnly, cupsSold, revenue,
 
                     <div className="flex flex-col justify-between items-start relative z-10 mt-[6px] w-full">
 
-                        <span className="text-[12px] sm:text-[13px] text-text-secondary font-black uppercase tracking-wider">Doanh thu</span>
+                        <span className="text-[12px] sm:text-[13px] text-text-secondary font-black uppercase tracking-wider">Tổng cộng</span>
                         <div className="flex items-center justify-between w-full mt-0.5">
-                            <span className="text-[15px] sm:text-[16px] font-black text-success">{formatVND(revenue)}</span>
+                            <span className="text-[15px] sm:text-[16px] font-black text-primary">{cupsSold || 0} ly</span>
                             <div className="w-7 h-7 flex items-center justify-center rounded-full text-text pointer-events-none shadow-sm">
                                 <ArrowRight size={20} strokeWidth={2.5} />
                             </div>

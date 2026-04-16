@@ -1,6 +1,6 @@
 import { formatVND } from '../../utils'
 
-export default function IngredientCostItem({ ingredientLabel, getIngredientUnit, ingredient, cost, isEditing, editingCost, setEditingCost, saveCost, storedUnit }) {
+export default function IngredientCostItem({ ingredientLabel, getIngredientUnit, ingredient, cost, isEditing, editingCost, setEditingCost, saveCost, storedUnit, onDelete }) {
     return (
         <div className="bg-surface border border-border/60 rounded-[14px] px-4 py-3 flex items-center justify-between">
             <div className="flex flex-col">
@@ -31,6 +31,16 @@ export default function IngredientCostItem({ ingredientLabel, getIngredientUnit,
                 >
                     {formatVND(cost)}<span className="text-[12px] font-normal text-text-dim ml-0.5">/ {getIngredientUnit(ingredient, storedUnit)}</span>
                 </span>
+            )}
+
+            {onDelete && (
+                <button
+                    onClick={() => onDelete(ingredient)}
+                    className="text-danger/50 hover:text-danger active:text-danger text-[14px] shrink-0 w-7 h-7 flex items-center justify-center rounded-lg active:bg-danger/10 ml-1 transition-colors"
+                    title="Xóa nguyên liệu"
+                >
+                    ✕
+                </button>
             )}
         </div>
     )

@@ -1,11 +1,12 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { fetchTodayRevenue, fetchTodayCupsSold, fetchInventory, submitOrder, fetchTodayOrders, deleteOrder, fetchTodayExpenses, insertExpense, deleteExpense } from '../services/orderService'
+import { fetchTodayRevenue, fetchTodayCupsSold, fetchInventory, submitOrder, fetchTodayOrders, deleteOrder, fetchTodayExpenses, insertExpense, deleteExpense, fetchFixedCosts, insertFixedCost, updateFixedCost, deleteFixedCost } from '../services/orderService'
 import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder } from '../hooks/useOfflineSync'
 import { calculateProductCost } from '../utils'
 import { useProducts } from './ProductContext'
 import { useAddress } from './AddressContext'
+import { useAuth } from './AuthContext'
 import { Outlet } from 'react-router-dom'
 
 const POSContext = createContext(null)
@@ -19,6 +20,7 @@ export function usePOS() {
 export function POSProvider() {
     const { recipes, ingredientCosts } = useProducts()
     const { selectedAddress } = useAddress()
+    const { profile } = useAuth()
     const addressId = selectedAddress?.id
 
     const localOrderIds = useRef(new Set())
@@ -44,6 +46,7 @@ export function POSProvider() {
     // ---- History State ----
     const [todayOrders, setTodayOrders] = useState([])
     const [todayExpenses, setTodayExpenses] = useState([])
+    const [fixedCosts, setFixedCosts] = useState([])
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
 
     // ---- Toast helper ----
@@ -300,12 +303,14 @@ export function POSProvider() {
         if (!addressId) return
         setIsLoadingHistory(true)
         try {
-            const [orders, expenses] = await Promise.all([
+            const [orders, expenses, fixed] = await Promise.all([
                 fetchTodayOrders(addressId),
-                fetchTodayExpenses(addressId)
+                fetchTodayExpenses(addressId),
+                fetchFixedCosts(addressId)
             ])
             setTodayOrders(orders)
             setTodayExpenses(expenses)
+            setFixedCosts(fixed)
         } catch (err) {
             console.error(err)
         } finally {
@@ -356,6 +361,55 @@ export function POSProvider() {
         }
     }
 
+    // ---- Fixed Costs Handlers ----
+    async function handleLoadFixedCosts() {
+        if (!addressId) return
+        try {
+            const fixed = await fetchFixedCosts(addressId)
+            setFixedCosts(fixed)
+        } catch (err) {
+            console.error('Load fixed costs error:', err)
+        }
+    }
+
+    async function handleAddFixedCost(name, amount) {
+        if (!addressId) return
+        try {
+            const item = await insertFixedCost(name, amount, addressId)
+            setFixedCosts(prev => [...prev, item])
+            showToast('Đã thêm chi phí cố định', 'success')
+            return item
+        } catch (err) {
+            console.error('Add fixed cost error:', err)
+            showToast('Lỗi khi thêm chi phí cố định', 'danger')
+            throw err
+        }
+    }
+
+    async function handleUpdateFixedCost(id, updates) {
+        try {
+            const updated = await updateFixedCost(id, updates)
+            setFixedCosts(prev => prev.map(fc => fc.id === id ? updated : fc))
+            showToast('Đã cập nhật chi phí cố định', 'success')
+            return updated
+        } catch (err) {
+            console.error('Update fixed cost error:', err)
+            showToast('Lỗi khi cập nhật', 'warning')
+            throw err
+        }
+    }
+
+    async function handleDeleteFixedCost(id) {
+        try {
+            await deleteFixedCost(id)
+            setFixedCosts(prev => prev.filter(fc => fc.id !== id))
+            showToast('Đã xóa chi phí cố định', 'success')
+        } catch (err) {
+            console.error('Delete fixed cost error:', err)
+            showToast('Lỗi khi xóa', 'warning')
+        }
+    }
+
     return (
         <POSContext.Provider value={{
             // Cart
@@ -366,6 +420,10 @@ export function POSProvider() {
             revenue, totalCost, cupsSold, inventory, isOnline,
             // History
             todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, handleDeleteOrder, handleAddExpense, handleDeleteExpense,
+            // Fixed Costs
+            fixedCosts, handleLoadFixedCosts, handleAddFixedCost, handleUpdateFixedCost, handleDeleteFixedCost,
+            // User info
+            userRole: profile?.role || 'staff',
             // Toast & Realtime
             toast, showToast, realtimeNotification, setRealtimeNotification
         }}>
