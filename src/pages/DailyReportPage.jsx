@@ -11,7 +11,7 @@ import ProfitCard from '../components/report/ProfitCard'
 import FinanceCards from '../components/report/FinanceCards'
 import RevenueChart from '../components/report/RevenueChart'
 import HeatmapChart from '../components/report/HeatmapChart'
-import MenuEngineering from '../components/report/MenuEngineering'
+
 import { fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchYesterdayOrders, fetchYesterdayExpenses } from '../services/orderService'
 import { useAddress } from '../contexts/AddressContext'
 import { ingredientLabel, getIngredientUnit } from '../components/recipe/recipeUtils'
@@ -146,28 +146,7 @@ export default function DailyReportPage() {
         lineChartData.push({ hour: `${h}h`, revenue: cumulative })
     }
 
-    // Menu Engineering data
-    const menuItems = Array.from(soldProducts).map(productId => {
-        const prodDef = products.find(p => p.id === productId)
-        const stats = productStats[productId] || { qty: 0, revenue: 0, cost: 0 }
-        const profit = stats.revenue - stats.cost
-        const margin = stats.revenue > 0 ? (profit / stats.revenue) * 100 : 0
-        return { id: productId, name: prodDef ? prodDef.name : 'Unknown', qty: stats.qty, revenue: stats.revenue, cost: stats.cost, profit, margin }
-    })
 
-    const medianQty = menuItems.length > 0 ? [...menuItems].sort((a, b) => a.qty - b.qty)[Math.floor(menuItems.length / 2)].qty : 0
-    const medianMargin = menuItems.length > 0 ? [...menuItems].sort((a, b) => a.margin - b.margin)[Math.floor(menuItems.length / 2)].margin : 0
-
-    const classifiedItems = menuItems.map(item => {
-        const highPop = item.qty >= medianQty
-        const highProfit = item.margin >= medianMargin
-        let tag, emoji
-        if (highPop && highProfit) { tag = 'Star'; emoji = '⭐' }
-        else if (highPop && !highProfit) { tag = 'Plow'; emoji = '🐴' }
-        else if (!highPop && highProfit) { tag = 'Puzzle'; emoji = '🧩' }
-        else { tag = 'Dog'; emoji = '🐶' }
-        return { ...item, tag, emoji }
-    }).sort((a, b) => b.profit - a.profit)
 
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
@@ -215,6 +194,7 @@ export default function DailyReportPage() {
                             soldProducts={soldProducts}
                             totalRevenue={totalRevenue}
                             shiftClosing={shiftClosing}
+                            productStats={productStats}
                         />
 
                         {/* Divider */}
@@ -342,7 +322,7 @@ export default function DailyReportPage() {
                             )
                         })()}
 
-                        {/* <MenuEngineering classifiedItems={classifiedItems} /> */}
+
 
                         {/* Enhanced Footer */}
                         <div className="flex flex-col items-center justify-center py-8 mt-4 gap-3 relative">
@@ -350,9 +330,12 @@ export default function DailyReportPage() {
                                 href="https://github.com/billdeptrai0512"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-surface-light border border-border/50 text-text-secondary hover:text-primary hover:border-primary/30 hover:bg-primary/5 hover:shadow-[0_0_15px_var(--color-primary-glow)] transition-all duration-300 group z-10"
+                                className="flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-surface-light border border-border/50 hover:border-[#c8956c]/40 hover:bg-[#c8956c]/5 hover:shadow-[0_0_15px_rgba(200,149,108,0.15)] transition-all duration-300 group z-10"
                             >
-                                <span className="text-[10px] font-black uppercase tracking-[0.2em] whitespace-nowrap mt-[1px]">
+                                <span
+                                    className="text-[10px] font-black uppercase tracking-[0.2em] whitespace-nowrap mt-[1px] bg-clip-text text-transparent"
+                                    style={{ backgroundImage: 'linear-gradient(135deg, #c8956c, #e2b77d, #d4a06a, #b8865a)' }}
+                                >
                                     Developed by billdeptrai0512
                                 </span>
                             </a>
