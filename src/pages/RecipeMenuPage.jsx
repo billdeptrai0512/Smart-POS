@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { formatVND } from '../utils'
@@ -13,6 +13,8 @@ import { ArrowLeft, ArrowRight } from 'lucide-react'
 
 export default function RecipeMenuPage() {
     const navigate = useNavigate()
+    const location = useLocation()
+    const backTo = location.state?.from || '/history'
     const { products, recipes, ingredientCosts, refreshProducts, productExtras } = useProducts()
     const { selectedAddress } = useAddress()
 
@@ -103,7 +105,7 @@ export default function RecipeMenuPage() {
             <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={() => navigate('/history')}
+                        onClick={() => navigate(backTo)}
                         className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
                     >
                         <ArrowLeft size={20} strokeWidth={2.5} />
@@ -174,7 +176,7 @@ export default function RecipeMenuPage() {
                             return (
                                 <div
                                     key={product.id}
-                                    onClick={() => navigate(`/recipes/${product.id}`)}
+                                    onClick={() => navigate(`/recipes/${product.id}`, { state: location.state })}
                                     className={`bg-surface border ${ingredientCount === 0 ? 'border-danger/30 bg-danger/5' : 'border-border/60'} rounded-[1.5rem] p-4 flex flex-col justify-between gap-2 cursor-pointer transition-all shadow-sm hover:border-text/30 hover:shadow-md active:scale-[0.98]`}
                                 >
 

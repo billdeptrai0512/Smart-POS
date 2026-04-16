@@ -771,6 +771,61 @@ export async function updateShiftClosing(id, data) {
     return row
 }
 
+// Fetch all orders for yesterday (start of yesterday to start of today), scoped by address
+export async function fetchYesterdayOrders(addressId) {
+    if (!supabase) return []
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+
+    let query = supabase
+        .from('orders')
+        .select(`
+            id,
+            total,
+            order_items (
+                quantity,
+                product_id
+            )
+        `)
+        .gte('created_at', yesterday.toISOString())
+        .lt('created_at', today.toISOString())
+
+    if (addressId) query = query.eq('address_id', addressId)
+
+    const { data, error } = await query
+    if (error) {
+        console.error('fetchYesterdayOrders error:', error)
+        return []
+    }
+    return data || []
+}
+
+// Fetch yesterday's expenses, scoped by address
+export async function fetchYesterdayExpenses(addressId) {
+    if (!supabase) return []
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+
+    let query = supabase
+        .from('expenses')
+        .select('*')
+        .gte('created_at', yesterday.toISOString())
+        .lt('created_at', today.toISOString())
+
+    if (addressId) query = query.eq('address_id', addressId)
+
+    const { data, error } = await query
+    if (error) {
+        if (error.code !== '42P01') console.error('fetchYesterdayExpenses error:', error)
+        return []
+    }
+    return data || []
+}
+
 // Fetch today's shift closing for an address (latest one)
 export async function fetchTodayShiftClosing(addressId) {
     if (!supabase) return null
