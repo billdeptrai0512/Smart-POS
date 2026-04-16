@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS addresses (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   manager_id UUID REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  ingredient_sort_order JSONB DEFAULT '[]',
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -112,6 +113,23 @@ CREATE TABLE IF NOT EXISTS active_sessions (
   last_seen TIMESTAMPTZ DEFAULT now(),
   UNIQUE(user_id)
 );
+
+-- Shift closings (end-of-shift reports per address)
+CREATE TABLE IF NOT EXISTS shift_closings (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  address_id UUID REFERENCES addresses(id) NOT NULL,
+  closed_by UUID REFERENCES users(id),
+  system_total_revenue BIGINT NOT NULL DEFAULT 0,
+  actual_cash BIGINT NOT NULL DEFAULT 0,
+  actual_transfer BIGINT NOT NULL DEFAULT 0,
+  inventory_report JSONB DEFAULT '[]',
+  note TEXT DEFAULT '',
+  closed_at TIMESTAMPTZ DEFAULT now(),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_shift_closings_address_date
+  ON shift_closings (address_id, closed_at DESC);
 
 -- =============================================
 -- Row Level Security Policies

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { useAuth } from './AuthContext'
-import { fetchAddresses, createAddress as apiCreateAddress, updateAddress as apiUpdateAddress, deleteAddress as apiDeleteAddress, upsertSession } from '../services/authService'
+import { fetchAddresses, createAddress as apiCreateAddress, updateAddress as apiUpdateAddress, deleteAddress as apiDeleteAddress, upsertSession, updateAddressIngredientSort as apiUpdateAddressIngredientSort } from '../services/authService'
 import { Outlet } from 'react-router-dom'
 
 const AddressContext = createContext(null)
@@ -99,6 +99,15 @@ export function AddressProvider() {
         }
     }, [profile, selectedAddress])
 
+    const updateSortOrder = useCallback(async (addressId, sortOrderArray) => {
+        if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có quyền')
+        await apiUpdateAddressIngredientSort(addressId, sortOrderArray)
+        setAddresses(prev => prev.map(a => a.id === addressId ? { ...a, ingredient_sort_order: sortOrderArray } : a))
+        if (selectedAddress?.id === addressId) {
+            setSelectedAddressState(prev => ({ ...prev, ingredient_sort_order: sortOrderArray }))
+        }
+    }, [profile, selectedAddress])
+
     return (
         <AddressContext.Provider value={{
             addresses,
@@ -107,6 +116,7 @@ export function AddressProvider() {
             createNewAddress,
             renameAddress,
             removeAddress,
+            updateSortOrder,
             loading
         }}>
             <Outlet />

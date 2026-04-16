@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabaseClient'
-import { INGREDIENT_COSTS as DEFAULT_COSTS } from '../constants'
+
 
 
 // Fetch all products for the menu (scoped to address via address_products)
@@ -204,10 +204,10 @@ export async function fetchTodayExpenses(addressId) {
     return data
 }
 
-// Insert an expense
-export async function insertExpense(name, amount, addressId = null) {
+// Insert an expense (supports is_fixed flag for auto-injected fixed costs)
+export async function insertExpense(name, amount, addressId = null, isFixed = false) {
     if (!supabase) throw new Error('No Supabase connection')
-    const payload = { name, amount }
+    const payload = { name, amount, is_fixed: isFixed }
     if (addressId) payload.address_id = addressId
 
     const { data, error } = await supabase
@@ -226,6 +226,63 @@ export async function deleteExpense(expenseId) {
         .from('expenses')
         .delete()
         .eq('id', expenseId)
+    if (error) throw error
+    return true
+}
+
+// ---- Fixed Costs CRUD ----
+
+// Fetch all active fixed costs for an address
+export async function fetchFixedCosts(addressId) {
+    if (!supabase) return []
+    const { data, error } = await supabase
+        .from('fixed_costs')
+        .select('*')
+        .eq('address_id', addressId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: true })
+    if (error) {
+        if (error.code !== '42P01') console.error('fetchFixedCosts error:', error)
+        return []
+    }
+    return data || []
+}
+
+// Insert a new fixed cost
+export async function insertFixedCost(name, amount, addressId) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { data, error } = await supabase
+        .from('fixed_costs')
+        .insert({ name, amount, address_id: addressId })
+        .select()
+        .single()
+    if (error) throw error
+    return data
+}
+
+// Update a fixed cost (name and/or amount)
+export async function updateFixedCost(id, updates) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const payload = { updated_at: new Date().toISOString() }
+    if (updates.name !== undefined) payload.name = updates.name
+    if (updates.amount !== undefined) payload.amount = updates.amount
+    const { data, error } = await supabase
+        .from('fixed_costs')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single()
+    if (error) throw error
+    return data
+}
+
+// Soft-delete a fixed cost
+export async function deleteFixedCost(id) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase
+        .from('fixed_costs')
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('id', id)
     if (error) throw error
     return true
 }
@@ -284,7 +341,7 @@ export async function fetchRecipes(productIds) {
 
 // Fetch ingredient costs from Supabase, fallback to constants
 export async function fetchIngredientCosts(addressId) {
-    if (!supabase) return { ...DEFAULT_COSTS }
+    if (!supabase) return {}
     let query = supabase.from('ingredient_costs').select('ingredient, unit_cost, unit, address_id')
 
     if (addressId) {
@@ -296,11 +353,11 @@ export async function fetchIngredientCosts(addressId) {
     const { data, error } = await query
     if (error) {
         console.error('fetchIngredientCosts error:', error)
-        return { ...DEFAULT_COSTS }
+        return {}
     }
-    if (!data || data.length === 0) return { ...DEFAULT_COSTS }
+    if (!data || data.length === 0) return {}
 
-    const costs = { ...DEFAULT_COSTS }
+    const costs = {}
     const defaultData = data.filter(d => d.address_id === null)
     const addressData = data.filter(d => d.address_id === addressId)
 
@@ -412,6 +469,22 @@ export async function upsertIngredientCost(ingredient, unitCost, addressId = nul
         const { error } = await supabase.from('ingredient_costs').insert(payload)
         if (error) throw error
     }
+}
+
+// Delete an ingredient cost entry (removes all rows for this ingredient)
+export async function deleteIngredientCost(ingredient, addressId = null) {
+    if (!supabase) throw new Error('No Supabase connection')
+    // Delete address-specific row if exists
+    if (addressId) {
+        await supabase.from('ingredient_costs').delete()
+            .eq('ingredient', ingredient)
+            .eq('address_id', addressId)
+    }
+    // Also delete the default (null) row
+    await supabase.from('ingredient_costs').delete()
+        .eq('ingredient', ingredient)
+        .is('address_id', null)
+    return true
 }
 
 // Create a new product and link to the current address
@@ -669,4 +742,102 @@ export async function deleteOrder(orderId) {
     if (orderError) throw orderError
 
     return true
+}
+
+// ---- Shift Closing CRUD ----
+
+// Insert a shift closing record
+export async function insertShiftClosing(data) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { data: row, error } = await supabase
+        .from('shift_closings')
+        .insert(data)
+        .select()
+        .single()
+    if (error) throw error
+    return row
+}
+
+// Update an existing shift closing record
+export async function updateShiftClosing(id, data) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { data: row, error } = await supabase
+        .from('shift_closings')
+        .update(data)
+        .eq('id', id)
+        .select()
+        .single()
+    if (error) throw error
+    return row
+}
+
+// Fetch today's shift closing for an address (latest one)
+export async function fetchTodayShiftClosing(addressId) {
+    if (!supabase) return null
+    const startOfDay = new Date()
+    startOfDay.setHours(0, 0, 0, 0)
+
+    const { data, error } = await supabase
+        .from('shift_closings')
+        .select('*')
+        .eq('address_id', addressId)
+        .gte('closed_at', startOfDay.toISOString())
+        .order('closed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    if (error) {
+        console.error('fetchTodayShiftClosing error:', error)
+        return null
+    }
+    return data
+}
+
+// Fetch the most recent shift closing BEFORE today (for opening stock)
+export async function fetchYesterdayShiftClosing(addressId) {
+    if (!supabase) return null
+    const startOfDay = new Date()
+    startOfDay.setHours(0, 0, 0, 0)
+
+    const { data, error } = await supabase
+        .from('shift_closings')
+        .select('*')
+        .eq('address_id', addressId)
+        .lt('closed_at', startOfDay.toISOString())
+        .order('closed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    if (error) {
+        console.error('fetchYesterdayShiftClosing error:', error)
+        return null
+    }
+    return data
+}
+
+// Fetch ingredient costs WITH unit info (for shift closing inventory form)
+export async function fetchIngredientCostsWithUnits(addressId) {
+    if (!supabase) return []
+    let query = supabase.from('ingredient_costs').select('ingredient, unit_cost, unit, address_id')
+
+    if (addressId) {
+        query = query.or(`address_id.eq.${addressId},address_id.is.null`)
+    } else {
+        query = query.is('address_id', null)
+    }
+
+    const { data, error } = await query
+    if (error) {
+        console.error('fetchIngredientCostsWithUnits error:', error)
+        return []
+    }
+    if (!data || data.length === 0) return []
+
+    const defaultData = data.filter(d => d.address_id === null)
+    const addressData = data.filter(d => d.address_id === addressId)
+
+    // Address-specific overrides defaults
+    const ingredientMap = {}
+    for (const d of defaultData) ingredientMap[d.ingredient] = { ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost }
+    for (const d of addressData) ingredientMap[d.ingredient] = { ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost }
+
+    return Object.values(ingredientMap)
 }

@@ -62,7 +62,7 @@ export default defineConfig({
   ],
   server: {
     allowedHosts: [
-      'archive-purple-integrating-positions.trycloudflare.com'
+      'saver-listings-actual-passing.trycloudflare.com'
     ]
   }
 })

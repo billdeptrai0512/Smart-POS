@@ -145,11 +145,19 @@ export async function updateAddress(addressId, name) {
 }
 
 // Delete an address
-export async function deleteAddress(addressId) {
+export async function deleteAddress(id) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase.from('addresses').delete().eq('id', id)
+    if (error) throw error
+    return true
+}
+
+// Update ingredient sort order for an address
+export async function updateAddressIngredientSort(addressId, sortOrderArray) {
     if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
         .from('addresses')
-        .delete()
+        .update({ ingredient_sort_order: sortOrderArray })
         .eq('id', addressId)
     if (error) throw error
     return true
