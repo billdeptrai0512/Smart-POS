@@ -13,7 +13,7 @@ import RevenueChart from '../components/report/RevenueChart'
 import HeatmapChart from '../components/report/HeatmapChart'
 import MenuEngineering from '../components/report/MenuEngineering'
 import ExpenseModal from '../components/report/ExpenseModal'
-import { fetchTodayShiftClosing, fetchYesterdayShiftClosing } from '../services/orderService'
+import { fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchYesterdayOrders, fetchYesterdayExpenses } from '../services/orderService'
 import { useAddress } from '../contexts/AddressContext'
 import { ingredientLabel, getIngredientUnit } from '../components/recipe/recipeUtils'
 
@@ -34,11 +34,15 @@ export default function DailyReportPage() {
     const { selectedAddress } = useAddress()
     const [shiftClosing, setShiftClosing] = useState(null)
     const [yesterdayClosing, setYesterdayClosing] = useState(null)
+    const [yesterdayOrders, setYesterdayOrders] = useState([])
+    const [yesterdayExpensesData, setYesterdayExpensesData] = useState([])
 
     useEffect(() => {
         if (selectedAddress?.id) {
             fetchTodayShiftClosing(selectedAddress.id).then(setShiftClosing)
             fetchYesterdayShiftClosing(selectedAddress.id).then(setYesterdayClosing)
+            fetchYesterdayOrders(selectedAddress.id).then(setYesterdayOrders)
+            fetchYesterdayExpenses(selectedAddress.id).then(setYesterdayExpensesData)
         }
     }, [selectedAddress?.id])
 
@@ -105,6 +109,22 @@ export default function DailyReportPage() {
     const totalExpense = dailyExpense + fixedExpense
     const grossProfit = totalRevenue - totalCOGS
     const netProfit = grossProfit - totalExpense
+
+    // Compute yesterday's profit for comparison
+    let yesterdayRevenue = 0
+    let yesterdayCOGS = 0
+    yesterdayOrders.forEach(o => {
+        yesterdayRevenue += o.total
+        const items = o.order_items || []
+        items.forEach(i => {
+            const qty = i.quantity || 1
+            const cost = calculateProductCost(i.product_id, recipes, ingredientCosts)
+            yesterdayCOGS += cost * qty
+        })
+    })
+    const yesterdayDailyExpense = yesterdayExpensesData.filter(e => !e.is_fixed).reduce((sum, e) => sum + e.amount, 0)
+    const yesterdayFixedExpense = yesterdayExpensesData.filter(e => e.is_fixed).reduce((sum, e) => sum + e.amount, 0)
+    const yesterdayNetProfit = (yesterdayRevenue - yesterdayCOGS) - (yesterdayDailyExpense + yesterdayFixedExpense)
 
     // Build Chart Arrays
     const hourRange = []
@@ -191,8 +211,10 @@ export default function DailyReportPage() {
                             dailyExpense={dailyExpense}
                             fixedExpense={fixedExpense}
                             netProfit={netProfit}
-                            onRecipesClick={() => navigate('/recipes')}
-                            onExpenseClick={() => navigate('/expenses')}
+                            onRecipesClick={() => navigate('/recipes', { state: { from: '/daily-report' } })}
+                            onDailyExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'daily' } })}
+                            onFixedExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'fixed' } })}
+                            yesterdayNetProfit={yesterdayNetProfit}
                         />
 
                         {/* Inventory Analysis — only when shift closing has inventory */}

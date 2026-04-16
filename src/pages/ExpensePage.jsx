@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { formatVND, formatVNDInput, parseVNDInput } from '../utils'
 import { usePOS } from '../contexts/POSContext'
 import { ArrowLeft } from 'lucide-react'
 
 export default function ExpensePage() {
     const navigate = useNavigate()
+    const location = useLocation()
     const { todayExpenses, isLoadingHistory, handleAddExpense, handleDeleteExpense, handleLoadHistory, fixedCosts, handleAddFixedCost, handleUpdateFixedCost, handleDeleteFixedCost, userRole } = usePOS()
 
     const isManager = userRole === 'manager' || userRole === 'admin'
-    const [activeTab, setActiveTab] = useState('daily')
+    const backTo = location.state?.from || '/history'
+    const [activeTab, setActiveTab] = useState(location.state?.tab || 'daily')
 
     const [costName, setCostName] = useState('')
     const [costAmount, setCostAmount] = useState('')
@@ -84,7 +86,7 @@ export default function ExpensePage() {
             <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={() => navigate('/history')}
+                        onClick={() => navigate(backTo)}
                         className="w-10 h-10 flex flex-col items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
                         title="Trở về"
                     >
@@ -95,8 +97,8 @@ export default function ExpensePage() {
                         <div
                             onClick={() => setActiveTab('daily')}
                             className={`flex-1 border shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${activeTab === 'daily'
-                                    ? 'bg-danger/10 border-danger/30'
-                                    : 'bg-surface-light border-border/60 opacity-60 hover:opacity-100'
+                                ? 'bg-danger/10 border-danger/30'
+                                : 'bg-surface-light border-border/60 opacity-60 hover:opacity-100'
                                 }`}
                         >
                             <span className="text-[12px] font-black text-danger uppercase line-clamp-1">Chi phí</span>
@@ -107,8 +109,8 @@ export default function ExpensePage() {
                             <div
                                 onClick={() => setActiveTab('fixed')}
                                 className={`flex-1 border shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${activeTab === 'fixed'
-                                        ? 'bg-warning/10 border-warning/30'
-                                        : 'bg-surface-light border-border/60 opacity-60 hover:opacity-100'
+                                    ? 'bg-warning/10 border-warning/30'
+                                    : 'bg-surface-light border-border/60 opacity-60 hover:opacity-100'
                                     }`}
                             >
                                 <span className="text-[12px] font-black text-warning uppercase line-clamp-1">Cố định</span>

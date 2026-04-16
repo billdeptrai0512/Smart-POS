@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useAddress } from '../contexts/AddressContext'
@@ -20,6 +20,7 @@ import { ArrowLeft } from 'lucide-react'
 
 export default function RecipeIngredientPage() {
     const navigate = useNavigate()
+    const location = useLocation()
     const { productId } = useParams()
     const { products, recipes: allRecipes, ingredientCosts: contextCosts, productExtras: contextExtras, extraIngredients: contextExtraIngs, refreshProducts } = useProducts()
     const { selectedAddress } = useAddress()
@@ -273,7 +274,7 @@ export default function RecipeIngredientPage() {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-6 gap-4">
                 <span className="text-text-secondary text-[14px]">Không tìm thấy món này.</span>
-                <button onClick={() => navigate('/recipes')} className="text-primary font-bold text-[14px] underline">
+                <button onClick={() => navigate('/recipes', { state: location.state })} className="text-primary font-bold text-[14px] underline">
                     ← Quay lại
                 </button>
             </div>
@@ -286,7 +287,7 @@ export default function RecipeIngredientPage() {
             <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={() => navigate('/recipes')}
+                        onClick={() => navigate('/recipes', { state: location.state })}
                         className="w-10 h-10 flex flex-col items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
                         title="Trở về"
                     >
@@ -703,7 +704,7 @@ export default function RecipeIngredientPage() {
                             try {
                                 await removeProductFromAddress(productId, selectedAddress.id)
                                 refreshProducts?.()
-                                navigate('/recipes')
+                                navigate('/recipes', { state: location.state })
                             } catch (err) {
                                 console.error('Remove product error:', err)
                             } finally {
