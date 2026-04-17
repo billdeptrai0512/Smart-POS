@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Bell } from 'lucide-react'
-import { formatVND } from '../utils'
+import { formatVND } from '../../utils'
 
 export default function RealtimeNotification({ notification, onClose }) {
     const [visible, setVisible] = useState(false)

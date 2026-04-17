@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { formatVND, formatVNDInput, parseVNDInput } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import { insertShiftClosing, updateShiftClosing, fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchIngredientCostsWithUnits, fetchFixedCosts, insertExpense, fetchTodayExpenses } from '../services/orderService'
-import { ingredientLabel, getIngredientUnit, sortIngredients } from '../components/recipe/recipeUtils'
+import { ingredientLabel, getIngredientUnit, sortIngredients } from '../components/common/recipeUtils'
 
 export default function ShiftClosingPage() {
     const navigate = useNavigate()

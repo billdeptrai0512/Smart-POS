@@ -8,7 +8,7 @@ import {
     insertProduct,
     updateProductSortOrder
 } from '../services/orderService'
-import { ingredientLabel, getIngredientUnit } from '../components/recipe/recipeUtils'
+import { ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 
 export default function RecipeMenuPage() {

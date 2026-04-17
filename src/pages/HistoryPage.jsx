@@ -4,7 +4,7 @@ import { useProducts } from '../contexts/ProductContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 
-import HistoryView from '../components/HistoryView'
+import HistoryView from '../components/HistoryPage/HistoryView'
 
 export default function HistoryPage() {
     const navigate = useNavigate()

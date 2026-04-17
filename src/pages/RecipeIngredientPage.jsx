@@ -15,7 +15,7 @@ import {
     upsertExtraIngredient,
     deleteExtraIngredient
 } from '../services/orderService'
-import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/recipe/recipeUtils'
+import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
 import { ArrowLeft } from 'lucide-react'
 
 export default function RecipeIngredientPage() {

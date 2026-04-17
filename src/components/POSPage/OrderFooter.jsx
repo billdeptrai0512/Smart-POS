@@ -1,5 +1,5 @@
-import { formatVND } from '../utils'
-import { QUICK_EXTRAS } from '../constants'
+import { formatVND } from '../../utils'
+import { QUICK_EXTRAS } from '../../constants'
 
 export default function OrderFooter({ cart, activeCartItemId, total, hasOrder, isSubmitting, onToggleExtra, onConfirm, productExtras }) {
     // Determine which extras to show based on the active cart item's product

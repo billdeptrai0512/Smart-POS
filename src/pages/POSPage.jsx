@@ -4,12 +4,12 @@ import { useAddress } from '../contexts/AddressContext'
 import { useNavigate } from 'react-router-dom'
 import { DAY_NAMES } from '../constants'
 
-import Header from '../components/Header'
-import MenuGrid from '../components/MenuGrid'
-import MiniCart from '../components/MiniCart'
-import OrderFooter from '../components/OrderFooter'
-import Toast from '../components/Toast'
-import RealtimeNotification from '../components/RealtimeNotification'
+import Header from '../components/POSPage/Header'
+import MenuGrid from '../components/POSPage/MenuGrid'
+import MiniCart from '../components/POSPage/MiniCart'
+import OrderFooter from '../components/POSPage/OrderFooter'
+import Toast from '../components/POSPage/Toast'
+import RealtimeNotification from '../components/POSPage/RealtimeNotification'
 
 export default function POSPage() {
     const navigate = useNavigate()
