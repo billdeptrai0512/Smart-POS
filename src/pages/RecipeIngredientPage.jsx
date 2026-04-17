@@ -24,6 +24,8 @@ export default function RecipeIngredientPage() {
     const { productId } = useParams()
     const { products, recipes: allRecipes, ingredientCosts: contextCosts, productExtras: contextExtras, extraIngredients: contextExtraIngs, refreshProducts } = useProducts()
     const { selectedAddress } = useAddress()
+    const { isManager, isAdmin } = useAuth()
+    const canEdit = isManager || isAdmin
 
     const [ingredientCosts, setIngredientCosts] = useState(contextCosts || {})
     const [recipes, setRecipes] = useState(allRecipes || [])
@@ -296,9 +298,9 @@ export default function RecipeIngredientPage() {
                     <div className="flex-1 min-w-0">
                         <h1 className="text-[16px] font-black text-text truncate">{product.name}</h1>
                         <div className="flex items-center gap-1.5 text-[12px] text-text-secondary mt-0.5">
-                            <span>Chi phí: <span className="text-danger font-bold">{formatVND(cost)}</span></span>
+                            <span>Giá vốn: <span className="text-primary font-bold">{formatVND(cost)}</span></span>
                             {product.price > 0 && (
-                                <span className="bg-danger/10 text-danger text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                <span className="bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded">
                                     {Math.round((cost / product.price) * 100)}%
                                 </span>
                             )}
@@ -321,8 +323,8 @@ export default function RecipeIngredientPage() {
                                     </span>
                                 ) : (
                                     <span
-                                        className="text-success font-bold hover:underline cursor-pointer"
-                                        onClick={() => setEditingProductPrice({ value: product.price.toString() })}
+                                        className={`text-success font-bold ${canEdit ? 'hover:underline cursor-pointer' : ''}`}
+                                        onClick={() => canEdit && setEditingProductPrice({ value: product.price.toString() })}
                                     >
                                         {formatVND(product.price)}
                                     </span>
@@ -369,8 +371,8 @@ export default function RecipeIngredientPage() {
                                     </div>
                                 ) : (
                                     <span
-                                        className="text-[13px] font-bold text-primary cursor-pointer hover:underline tabular-nums min-w-[56px] text-right"
-                                        onClick={() => setEditingAmount({ ingredient: recipe.ingredient, value: recipe.amount.toString() })}
+                                        className={`text-[13px] font-bold text-primary tabular-nums min-w-[56px] text-right ${canEdit ? 'cursor-pointer hover:underline' : ''}`}
+                                        onClick={() => canEdit && setEditingAmount({ ingredient: recipe.ingredient, value: recipe.amount.toString() })}
                                     >
                                         {recipe.amount} <span className="text-[11px] font-normal text-primary/70">{getIngredientUnit(recipe.ingredient, recipe.unit)}</span>
                                     </span>
@@ -380,19 +382,21 @@ export default function RecipeIngredientPage() {
                                     {formatVND(lineCost)}
                                 </span>
 
-                                <button
-                                    onClick={() => handleDeleteIngredient(recipe.ingredient)}
-                                    className="text-danger/60 hover:text-danger text-[14px] opacity-0 group-hover:opacity-100 transition-opacity shrink-0 w-6 h-6 flex items-center justify-center"
-                                    title="Xóa nguyên liệu"
-                                >
-                                    ✕
-                                </button>
+                                {canEdit && (
+                                    <button
+                                        onClick={() => handleDeleteIngredient(recipe.ingredient)}
+                                        className="text-danger/60 hover:text-danger text-[14px] opacity-0 group-hover:opacity-100 transition-opacity shrink-0 w-6 h-6 flex items-center justify-center"
+                                        title="Xóa nguyên liệu"
+                                    >
+                                        ✕
+                                    </button>
+                                )}
                             </div>
                         )
                     })}
 
                     {/* Add ingredient */}
-                    {addingIngredient ? (
+                    {canEdit && (addingIngredient ? (
                         <div className="flex flex-col gap-2 pt-1 border-t border-border/30 mt-2 bg-surface border border-border/60 rounded-[14px] px-4 py-3">
                             <div className="flex items-center justify-between">
                                 <span className="text-[11px] text-text-dim font-bold uppercase">Thêm nguyên liệu</span>
@@ -481,7 +485,7 @@ export default function RecipeIngredientPage() {
                         >
                             + Thêm nguyên liệu
                         </button>
-                    )}
+                    ))}
                 </div>
 
                 {/* ========== EXTRA OPTIONS SECTION ========== */}
@@ -505,13 +509,15 @@ export default function RecipeIngredientPage() {
                                     <span className="text-[12px] text-success font-bold tabular-nums">
                                         {extra.price > 0 ? `+${formatVND(extra.price)}` : 'Miễn phí'}
                                     </span>
-                                    <button
-                                        onClick={() => handleDeleteExtra(extra.id, extra.name)}
-                                        className="text-danger/60 hover:text-danger text-[14px] shrink-0 w-6 h-6 flex items-center justify-center"
-                                        title="Xóa tùy chọn"
-                                    >
-                                        ✕
-                                    </button>
+                                    {canEdit && (
+                                        <button
+                                            onClick={() => handleDeleteExtra(extra.id, extra.name)}
+                                            className="text-danger/60 hover:text-danger text-[14px] shrink-0 w-6 h-6 flex items-center justify-center"
+                                            title="Xóa tùy chọn"
+                                        >
+                                            ✕
+                                        </button>
+                                    )}
                                 </div>
                                 <div className="border-t border-border/40 pt-2 flex flex-col gap-1.5">
                                     {(extraIngs[extra.id] || []).map(ei => {
@@ -539,19 +545,19 @@ export default function RecipeIngredientPage() {
                                                         </div>
                                                     ) : (
                                                         <span
-                                                            className={`font-bold tabular-nums cursor-pointer hover:underline min-w-[32px] text-right ${ei.amount > 0 ? 'text-primary' : ei.amount < 0 ? 'text-danger' : 'text-text-dim'}`}
-                                                            onClick={() => setEditingExtraAmount({ extraId: extra.id, ingredient: ei.ingredient, value: ei.amount.toString() })}
+                                                            className={`font-bold tabular-nums min-w-[32px] text-right ${ei.amount > 0 ? 'text-primary' : ei.amount < 0 ? 'text-danger' : 'text-text-dim'} ${canEdit ? 'cursor-pointer hover:underline' : ''}`}
+                                                            onClick={() => canEdit && setEditingExtraAmount({ extraId: extra.id, ingredient: ei.ingredient, value: ei.amount.toString() })}
                                                         >
                                                             {ei.amount > 0 ? '+' : ''}{ei.amount} <span className="text-[10px] font-normal text-text-dim/70">{getIngredientUnit(ei.ingredient, ei.unit)}</span>
                                                         </span>
                                                     )}
-                                                    <button onClick={() => handleDeleteExtraIngredient(extra.id, ei.ingredient)} className="text-danger/60 hover:text-danger text-[14px]">✕</button>
+                                                    {canEdit && <button onClick={() => handleDeleteExtraIngredient(extra.id, ei.ingredient)} className="text-danger/60 hover:text-danger text-[14px]">✕</button>}
                                                 </div>
                                             </div>
                                         )
                                     })}
 
-                                    {addingExtraIng === extra.id ? (
+                                    {canEdit && (addingExtraIng === extra.id ? (
                                         <div className="flex flex-col gap-2 bg-bg/50 p-3 rounded-xl border border-border/60 mt-2">
                                             <div className="flex items-center justify-between">
                                                 <span className="text-[11px] text-text-dim font-bold uppercase">Thêm nguyên liệu / tác động</span>
@@ -640,13 +646,13 @@ export default function RecipeIngredientPage() {
                                         >
                                             + Thay đổi nguyên liệu
                                         </button>
-                                    )}
+                                    ))}
                                 </div>
                             </div>
                         ))}
                     </div>
 
-                    {addingExtra ? (
+                    {canEdit && (addingExtra ? (
                         <div className="mt-2 bg-surface border border-border/60 rounded-[14px] px-4 py-3 space-y-2">
                             <span className="text-[11px] text-text-dim font-bold uppercase">Thêm tùy chọn</span>
                             <div className="flex gap-2">
@@ -691,11 +697,11 @@ export default function RecipeIngredientPage() {
                         >
                             + Thêm tùy chọn
                         </button>
-                    )}
+                    ))}
                 </div>
 
                 {/* Remove from this address */}
-                {<div className="mt-6 pt-4 border-t border-border/30">
+                {canEdit && <div className="mt-6 pt-4 border-t border-border/30">
                     <button
                         onClick={async () => {
                             if (!selectedAddress?.id) return

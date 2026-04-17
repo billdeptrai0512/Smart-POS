@@ -1,6 +1,6 @@
 import { formatVND } from '../../utils'
 
-export default function IngredientCostItem({ ingredientLabel, getIngredientUnit, ingredient, cost, isEditing, editingCost, setEditingCost, saveCost, storedUnit, onDelete }) {
+export default function IngredientCostItem({ ingredientLabel, getIngredientUnit, ingredient, cost, isEditing, editingCost, setEditingCost, saveCost, storedUnit, onDelete, canEdit = true }) {
     return (
         <div className="bg-surface border border-border/60 rounded-[14px] px-4 py-3 flex items-center justify-between">
             <div className="flex flex-col">
@@ -26,8 +26,8 @@ export default function IngredientCostItem({ ingredientLabel, getIngredientUnit,
                 </div>
             ) : (
                 <span
-                    className="text-[14px] font-bold text-primary cursor-pointer hover:underline tabular-nums"
-                    onClick={() => setEditingCost({ ingredient, value: cost.toString() })}
+                    className={`text-[14px] font-bold text-primary tabular-nums ${canEdit ? 'cursor-pointer hover:underline' : ''}`}
+                    onClick={() => canEdit && setEditingCost({ ingredient, value: cost.toString() })}
                 >
                     {formatVND(cost)}<span className="text-[12px] font-normal text-text-dim ml-0.5">/ {getIngredientUnit(ingredient, storedUnit)}</span>
                 </span>
