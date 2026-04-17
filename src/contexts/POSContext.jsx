@@ -288,12 +288,11 @@ export function POSProvider() {
             submitOrder(savedCart, savedTotal, null, addressId).then(res => {
                 localOrderIds.current.add(res.id)
             }).catch(err => {
-                console.error('Submit error:', err)
-                addPendingOrder(savedCart, savedTotal)
+                addPendingOrder(savedCart, savedTotal, null, addressId)
                 showToast('Lỗi mạng – đã lưu offline', 'warning')
             })
         } else {
-            addPendingOrder(savedCart, savedTotal)
+            addPendingOrder(savedCart, savedTotal, null, addressId)
             showToast(`Lưu offline (${getPendingCount()} đơn chờ)`, 'warning')
         }
         setIsSubmitting(false)
