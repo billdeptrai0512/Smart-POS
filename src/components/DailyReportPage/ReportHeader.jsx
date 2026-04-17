@@ -19,10 +19,10 @@ export default function ReportHeader({ onBack, onEditShiftClosing }) {
             {onEditShiftClosing ? (
                 <button
                     onClick={onEditShiftClosing}
-                    className="w-10 h-10 flex shrink-0 flex-col items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none relative z-10"
+                    className="w-10 h-10 flex shrink-0 flex-col items-center justify-center rounded-[14px] bg-surface-light border border-primary/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none relative z-10"
                     title="Chỉnh sửa chốt ca"
                 >
-                    <Pencil size={18} strokeWidth={2.5} />
+                    <Pencil size={18} className='text-primary/80' strokeWidth={2.5} />
                 </button>
             ) : (
                 <div className="w-10 h-10 shrink-0 relative z-10" />

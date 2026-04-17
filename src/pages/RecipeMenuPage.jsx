@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
+import { useAuth } from '../contexts/AuthContext'
 import { formatVND } from '../utils'
 import {
     upsertProductPrice,
@@ -17,6 +18,8 @@ export default function RecipeMenuPage() {
     const backTo = location.state?.from || '/history'
     const { products, recipes, ingredientCosts, refreshProducts, productExtras } = useProducts()
     const { selectedAddress } = useAddress()
+    const { isManager, isAdmin } = useAuth()
+    const canEdit = isManager || isAdmin
 
     const [newProductName, setNewProductName] = useState('')
     const [newProductPrice, setNewProductPrice] = useState('')
@@ -182,7 +185,7 @@ export default function RecipeMenuPage() {
 
                                     <div className="flex flex-col gap-1.5">
                                         <h3 className="font-black text-[15px] leading-tight text-text break-words line-clamp-2">{product.name}</h3>
-                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                        <div className="flex flex-col items-left gap-x-2 gap-y-1">
                                             {prodRecipes.length > 0 && (
                                                 <div className="flex flex-col gap-0.5">
                                                     {prodRecipes.map(r => {
@@ -196,9 +199,13 @@ export default function RecipeMenuPage() {
                                                     })}
                                                 </div>
                                             )}
-                                            {extraCount > 0 && (
-                                                <span className="text-[12px] font-medium text-text-secondary">và {extraCount} tùy chọn</span>
-                                            )}
+                                            {/* {extraCount > 0 && (
+                                                <span className="text-[12px] font-medium text-text-secondary">• Tùy chọn: {extraCount}</span>
+                                            )} */}
+                                        </div>
+                                        {/* Cost */}
+                                        <div className="flex items-center gap-1.5 text-[12px] text-text-secondary mt-0.5">
+                                            <span>Giá vốn: <span className="text-primary font-bold">{formatVND(productCost(product.id))}</span></span>
                                         </div>
                                     </div>
 
@@ -212,78 +219,80 @@ export default function RecipeMenuPage() {
             </main>
 
             {/* Footer */}
-            <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-50">
-                {/* Floating sort button above footer */}
-                {!isSorting && (
-                    <div className="flex justify-end px-4 mb-2 pointer-events-auto">
-                        <button
-                            onClick={enterSortMode}
-                            className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center justify-center text-[13px] font-bold text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
-                        >
-                            ↕ Sắp xếp
-                        </button>
-                    </div>
-                )}
-
-                {/* Footer Content */}
-                <div className="p-4 bg-surface border-t border-border/60 pointer-events-auto">
-                    {isSorting ? (
-                        <div className="flex gap-2">
+            {canEdit && (
+                <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-50">
+                    {/* Floating sort button above footer */}
+                    {!isSorting && (
+                        <div className="flex justify-end px-4 mb-2 pointer-events-auto">
                             <button
-                                onClick={cancelSortMode}
-                                className="flex-1 py-3 rounded-[12px] bg-surface-light border border-border/60 text-text-secondary font-black hover:bg-border/40 active:scale-95 transition-all text-[14px]"
+                                onClick={enterSortMode}
+                                className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center justify-center text-[13px] font-bold text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
                             >
-                                Hủy
-                            </button>
-                            <button
-                                onClick={saveSortOrder}
-                                disabled={saving}
-                                className="flex-1 py-3 rounded-[12px] bg-primary text-bg font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 text-[14px]"
-                            >
-                                {saving ? '⏳ Đang lưu...' : 'Lưu sắp xếp'}
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="flex flex-col gap-3">
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    placeholder="Tên món mới..."
-                                    value={newProductName}
-                                    onChange={e => setNewProductName(e.target.value)}
-                                    className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
-                                />
-                                <div className="relative shrink-0 flex items-center w-[125px] bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden">
-                                    <input
-                                        type="number"
-                                        placeholder="Giá bán..."
-                                        value={newProductPrice}
-                                        onChange={e => setNewProductPrice(e.target.value)}
-                                        className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none z-10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleCreateProduct()
-                                        }}
-                                    />
-                                    {newProductPrice && (
-                                        <div className="absolute inset-0 pointer-events-none px-3 py-2.5 flex items-center space-x-0 whitespace-pre z-0">
-                                            <span className="text-[14px] font-medium text-transparent">{newProductPrice}</span>
-                                            <span className="text-[14px] font-medium text-text-secondary/60">.000đ</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={handleCreateProduct}
-                                disabled={!newProductName.trim() || !newProductPrice || isNaN(newProductPrice) || Number(newProductPrice) <= 0 || saving}
-                                className="w-full py-3 rounded-[12px] bg-primary text-bg text-[14px] font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase"
-                            >
-                                {saving ? 'Đang...' : 'Tạo'}
+                                ↕ Sắp xếp
                             </button>
                         </div>
                     )}
+
+                    {/* Footer Content */}
+                    <div className="p-4 bg-surface border-t border-border/60 pointer-events-auto">
+                        {isSorting ? (
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={cancelSortMode}
+                                    className="flex-1 py-3 rounded-[12px] bg-surface-light border border-border/60 text-text-secondary font-black hover:bg-border/40 active:scale-95 transition-all text-[14px]"
+                                >
+                                    Hủy
+                                </button>
+                                <button
+                                    onClick={saveSortOrder}
+                                    disabled={saving}
+                                    className="flex-1 py-3 rounded-[12px] bg-primary text-bg font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 text-[14px]"
+                                >
+                                    {saving ? '⏳ Đang lưu...' : 'Lưu sắp xếp'}
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-3">
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Tên món mới..."
+                                        value={newProductName}
+                                        onChange={e => setNewProductName(e.target.value)}
+                                        className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
+                                    />
+                                    <div className="relative shrink-0 flex items-center w-[125px] bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden">
+                                        <input
+                                            type="number"
+                                            placeholder="Giá bán..."
+                                            value={newProductPrice}
+                                            onChange={e => setNewProductPrice(e.target.value)}
+                                            className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none z-10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') handleCreateProduct()
+                                            }}
+                                        />
+                                        {newProductPrice && (
+                                            <div className="absolute inset-0 pointer-events-none px-3 py-2.5 flex items-center space-x-0 whitespace-pre z-0">
+                                                <span className="text-[14px] font-medium text-transparent">{newProductPrice}</span>
+                                                <span className="text-[14px] font-medium text-text-secondary/60">.000đ</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={handleCreateProduct}
+                                    disabled={!newProductName.trim() || !newProductPrice || isNaN(newProductPrice) || Number(newProductPrice) <= 0 || saving}
+                                    className="w-full py-3 rounded-[12px] bg-primary text-bg text-[14px] font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase"
+                                >
+                                    {saving ? 'Đang...' : 'Tạo'}
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {saving && (
                 <div className="fixed inset-0 z-50 bg-bg/60 flex items-center justify-center pointer-events-none">

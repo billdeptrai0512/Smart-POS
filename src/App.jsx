@@ -98,12 +98,10 @@ export default function App() {
                     <Route path="/shift-closing" element={<ShiftClosingPage />} />
                     <Route path="/daily-report" element={<DailyReportPage />} />
                     <Route path="/expenses" element={<ExpensePage />} />
-                    {/* Manager-only routes */}
-                    <Route element={<ManagerOnly />}>
-                      <Route path="/recipes" element={<RecipeMenuPage />} />
-                      <Route path="/recipes/:productId" element={<RecipeIngredientPage />} />
-                      <Route path="/ingredients" element={<IngredientManagementPage />} />
-                    </Route>
+                    {/* Feature-level permission routes (anyone can view, managers can edit) */}
+                    <Route path="/recipes" element={<RecipeMenuPage />} />
+                    <Route path="/recipes/:productId" element={<RecipeIngredientPage />} />
+                    <Route path="/ingredients" element={<IngredientManagementPage />} />
                   </Route>
                 </Route>
               </Route>

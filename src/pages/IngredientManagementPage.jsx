@@ -14,6 +14,7 @@ export default function IngredientManagementPage() {
     const { ingredientCosts: contextCosts, refreshProducts } = useProducts()
     const { selectedAddress, updateSortOrder } = useAddress()
     const { isManager, isAdmin } = useAuth()
+    const canEdit = isManager || isAdmin
 
     const [ingredientCosts, setIngredientCosts] = useState(contextCosts || {})
     const [ingredientUnits, setIngredientUnits] = useState({})
@@ -200,7 +201,8 @@ export default function IngredientManagementPage() {
                                 ingredientLabel={ingredientLabel}
                                 getIngredientUnit={getIngredientUnit}
                                 storedUnit={ingredientUnits[ingredient]}
-                                onDelete={handleDeleteIngredient}
+                                onDelete={canEdit ? handleDeleteIngredient : null}
+                                canEdit={canEdit}
                             />
                         ))}
                         {allIngredients.length === 0 && (
@@ -211,81 +213,83 @@ export default function IngredientManagementPage() {
             </main>
 
             {/* Footer */}
-            <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-50">
-                {/* Floating sort button above footer */}
-                {!isSorting && (
-                    <div className="flex justify-end px-4 mb-2 pointer-events-auto">
-                        <button
-                            onClick={enterSortMode}
-                            className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center justify-center text-[13px] font-bold text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
-                        >
-                            ↕ Sắp xếp
-                        </button>
-                    </div>
-                )}
-
-                {/* Footer Content */}
-                <div className="p-4 bg-surface border-t border-border/60 pointer-events-auto">
-                    {isSorting ? (
-                        <div className="flex gap-2">
+            {canEdit && (
+                <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-50">
+                    {/* Floating sort button above footer */}
+                    {!isSorting && (
+                        <div className="flex justify-end px-4 mb-2 pointer-events-auto">
                             <button
-                                onClick={cancelSortMode}
-                                className="flex-1 py-3 rounded-[12px] bg-surface-light border border-border/60 text-text-secondary font-black hover:bg-border/40 active:scale-95 transition-all text-[14px]"
+                                onClick={enterSortMode}
+                                className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center justify-center text-[13px] font-bold text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
                             >
-                                Hủy
-                            </button>
-                            <button
-                                onClick={saveSortOrderHandler}
-                                disabled={saving}
-                                className="flex-1 py-3 rounded-[12px] bg-primary text-bg font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 text-[14px]"
-                            >
-                                {saving ? '⏳ Đang lưu...' : 'Lưu sắp xếp'}
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="flex flex-col gap-3">
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    placeholder="Tên nguyên liệu..."
-                                    value={newIngredientName}
-                                    onChange={e => setNewIngredientName(e.target.value)}
-                                    className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
-                                />
-                                <div className="relative shrink-0 flex items-center w-[80px] bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden">
-                                    <input
-                                        type="text"
-                                        placeholder="Đơn vị"
-                                        value={newIngredientUnit}
-                                        onChange={e => setNewIngredientUnit(e.target.value)}
-                                        className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none z-10"
-                                    />
-                                </div>
-                                <div className="relative shrink-0 flex items-center w-[90px] bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden">
-                                    <input
-                                        type="number"
-                                        placeholder="Giá/đv"
-                                        value={newIngredientCost}
-                                        onChange={e => setNewIngredientCost(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleCreateIngredient()
-                                        }}
-                                        className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none z-10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                    />
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={handleCreateIngredient}
-                                disabled={!newIngredientName.trim() || saving}
-                                className="w-full py-3 rounded-[12px] bg-primary text-bg text-[14px] font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase"
-                            >
-                                {saving ? 'Đang...' : 'Tạo nguyên liệu'}
+                                ↕ Sắp xếp
                             </button>
                         </div>
                     )}
+
+                    {/* Footer Content */}
+                    <div className="p-4 bg-surface border-t border-border/60 pointer-events-auto">
+                        {isSorting ? (
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={cancelSortMode}
+                                    className="flex-1 py-3 rounded-[12px] bg-surface-light border border-border/60 text-text-secondary font-black hover:bg-border/40 active:scale-95 transition-all text-[14px]"
+                                >
+                                    Hủy
+                                </button>
+                                <button
+                                    onClick={saveSortOrderHandler}
+                                    disabled={saving}
+                                    className="flex-1 py-3 rounded-[12px] bg-primary text-bg font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 text-[14px]"
+                                >
+                                    {saving ? '⏳ Đang lưu...' : 'Lưu sắp xếp'}
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-3">
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Tên nguyên liệu..."
+                                        value={newIngredientName}
+                                        onChange={e => setNewIngredientName(e.target.value)}
+                                        className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
+                                    />
+                                    <div className="relative shrink-0 flex items-center w-[80px] bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden">
+                                        <input
+                                            type="text"
+                                            placeholder="Đơn vị"
+                                            value={newIngredientUnit}
+                                            onChange={e => setNewIngredientUnit(e.target.value)}
+                                            className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none z-10"
+                                        />
+                                    </div>
+                                    <div className="relative shrink-0 flex items-center w-[90px] bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden">
+                                        <input
+                                            type="number"
+                                            placeholder="Giá/đv"
+                                            value={newIngredientCost}
+                                            onChange={e => setNewIngredientCost(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') handleCreateIngredient()
+                                            }}
+                                            className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none z-10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={handleCreateIngredient}
+                                    disabled={!newIngredientName.trim() || saving}
+                                    className="w-full py-3 rounded-[12px] bg-primary text-bg text-[14px] font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase"
+                                >
+                                    {saving ? 'Đang...' : 'Tạo nguyên liệu'}
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {saving && (
                 <div className="fixed inset-0 z-50 bg-bg/60 flex items-center justify-center pointer-events-none">

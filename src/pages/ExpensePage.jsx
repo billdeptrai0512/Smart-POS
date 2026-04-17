@@ -78,7 +78,8 @@ export default function ExpensePage() {
         }
     }
 
-    const totalExpense = (todayExpenses || []).reduce((sum, e) => sum + (e.amount || 0), 0)
+    const dailyExpenses = (todayExpenses || []).filter(e => !e.is_fixed)
+    const totalExpense = dailyExpenses.reduce((sum, e) => sum + (e.amount || 0), 0)
     const totalFixed = (fixedCosts || []).reduce((sum, fc) => sum + (fc.amount || 0), 0)
 
     return (
@@ -105,18 +106,16 @@ export default function ExpensePage() {
                             <span className="text-[12px] font-bold text-danger/80 leading-none mt-1 tabular-nums">{formatVND(totalExpense)}</span>
                         </div>
 
-                        {isManager && (
-                            <div
-                                onClick={() => setActiveTab('fixed')}
-                                className={`flex-1 border shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${activeTab === 'fixed'
-                                    ? 'bg-warning/10 border-warning/30'
-                                    : 'bg-surface-light border-border/60 opacity-60 hover:opacity-100'
-                                    }`}
-                            >
-                                <span className="text-[12px] font-black text-warning uppercase line-clamp-1">Cố định</span>
-                                <span className="text-[12px] font-bold text-warning/80 leading-none mt-1 tabular-nums">{formatVND(totalFixed)}</span>
-                            </div>
-                        )}
+                        <div
+                            onClick={() => setActiveTab('fixed')}
+                            className={`flex-1 border shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${activeTab === 'fixed'
+                                ? 'bg-warning/10 border-warning/30'
+                                : 'bg-surface-light border-border/60 opacity-60 hover:opacity-100'
+                                }`}
+                        >
+                            <span className="text-[12px] font-black text-warning uppercase line-clamp-1">Cố định</span>
+                            <span className="text-[12px] font-bold text-warning/80 leading-none mt-1 tabular-nums">{formatVND(totalFixed)}</span>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -130,12 +129,12 @@ export default function ExpensePage() {
                                 <div className="bg-surface-light rounded-[20px] h-20 w-full" />
                                 <div className="bg-surface-light rounded-[20px] h-20 w-full" />
                             </div>
-                        ) : (!todayExpenses || todayExpenses.length === 0) ? (
+                        ) : (dailyExpenses.length === 0) ? (
                             <div className="text-center text-text-secondary text-[13px] py-10 bg-surface-light rounded-xl border border-border/40">
                                 Chưa có chi phí nào phát sinh hôm nay.
                             </div>
                         ) : (
-                            [...todayExpenses].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).map(expense => {
+                            [...dailyExpenses].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).map(expense => {
                                 const time = `${new Date(expense.created_at).getHours().toString().padStart(2, '0')}:${new Date(expense.created_at).getMinutes().toString().padStart(2, '0')}`
                                 return (
                                     <div key={expense.id} className="bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden opacity-90">
@@ -218,7 +217,7 @@ export default function ExpensePage() {
             )}
 
             {/* ===== Fixed costs tab ===== */}
-            {activeTab === 'fixed' && isManager && (
+            {activeTab === 'fixed' && (
                 <>
                     <main className="flex-1 overflow-y-auto p-4 space-y-3">
 
@@ -271,26 +270,28 @@ export default function ExpensePage() {
                                             </div>
                                             <div className="flex justify-between items-center border-t border-border/40 pt-2">
                                                 <span className="text-[14px] leading-snug font-medium text-text">{fc.name}</span>
-                                                <div className="flex items-center gap-3 shrink-0">
-                                                    <span
-                                                        onClick={() => startEdit(fc)}
-                                                        className="text-primary text-[13px] font-bold cursor-pointer hover:text-primary/80 transition-colors select-none"
-                                                    >
-                                                        Sửa
-                                                    </span>
-                                                    <span
-                                                        onClick={() => {
-                                                            if (deletingFixedId === fc.id) return
-                                                            if (window.confirm(`Xóa chi phí cố định "${fc.name}"?\n\nChi phí này sẽ không còn được tính vào các ca sau.`)) {
-                                                                setDeletingFixedId(fc.id)
-                                                                handleDeleteFixedCost(fc.id).finally(() => setDeletingFixedId(null))
-                                                            }
-                                                        }}
-                                                        className="text-danger text-[13px] font-bold cursor-pointer hover:text-danger/80 transition-colors select-none"
-                                                    >
-                                                        {deletingFixedId === fc.id ? '⏳' : 'Xóa'}
-                                                    </span>
-                                                </div>
+                                                {isManager && (
+                                                    <div className="flex items-center gap-3 shrink-0">
+                                                        <span
+                                                            onClick={() => startEdit(fc)}
+                                                            className="text-primary text-[13px] font-bold cursor-pointer hover:text-primary/80 transition-colors select-none"
+                                                        >
+                                                            Sửa
+                                                        </span>
+                                                        <span
+                                                            onClick={() => {
+                                                                if (deletingFixedId === fc.id) return
+                                                                if (window.confirm(`Xóa chi phí cố định "${fc.name}"?\n\nChi phí này sẽ không còn được tính vào các ca sau.`)) {
+                                                                    setDeletingFixedId(fc.id)
+                                                                    handleDeleteFixedCost(fc.id).finally(() => setDeletingFixedId(null))
+                                                                }
+                                                            }}
+                                                            className="text-danger text-[13px] font-bold cursor-pointer hover:text-danger/80 transition-colors select-none"
+                                                        >
+                                                            {deletingFixedId === fc.id ? '⏳' : 'Xóa'}
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </div>
                                         </>
                                     )}
@@ -299,35 +300,37 @@ export default function ExpensePage() {
                         )}
                     </main>
 
-                    <div className="p-4 bg-surface border-t border-border/60 flex flex-col gap-3">
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                placeholder="Tên chi phí cố định"
-                                value={fixedName}
-                                onChange={e => setFixedName(e.target.value)}
-                                className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-warning/40 transition-colors"
-                            />
-                            <input
-                                type="text"
-                                inputMode="numeric"
-                                placeholder="Số tiền..."
-                                value={fixedAmount}
-                                onChange={e => setFixedAmount(formatVNDInput(e.target.value))}
-                                className="w-[120px] shrink-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-warning/40 transition-colors"
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') submitFixedCost()
-                                }}
-                            />
+                    {isManager && (
+                        <div className="p-4 bg-surface border-t border-border/60 flex flex-col gap-3">
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="Tên chi phí cố định"
+                                    value={fixedName}
+                                    onChange={e => setFixedName(e.target.value)}
+                                    className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-warning/40 transition-colors"
+                                />
+                                <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    placeholder="Số tiền..."
+                                    value={fixedAmount}
+                                    onChange={e => setFixedAmount(formatVNDInput(e.target.value))}
+                                    className="w-[120px] shrink-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-warning/40 transition-colors"
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') submitFixedCost()
+                                    }}
+                                />
+                            </div>
+                            <button
+                                onClick={submitFixedCost}
+                                disabled={!fixedName.trim() || !fixedAmount || parseVNDInput(fixedAmount) <= 0 || isFixedSubmitting}
+                                className="w-full py-3 rounded-[12px] bg-warning text-white text-[14px] font-black hover:bg-warning/90 active:bg-warning/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isFixedSubmitting ? 'Đang thêm...' : '+ Thêm chi phí cố định'}
+                            </button>
                         </div>
-                        <button
-                            onClick={submitFixedCost}
-                            disabled={!fixedName.trim() || !fixedAmount || parseVNDInput(fixedAmount) <= 0 || isFixedSubmitting}
-                            className="w-full py-3 rounded-[12px] bg-warning text-white text-[14px] font-black hover:bg-warning/90 active:bg-warning/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {isFixedSubmitting ? 'Đang thêm...' : '+ Thêm chi phí cố định'}
-                        </button>
-                    </div>
+                    )}
                 </>
             )}
         </div>
