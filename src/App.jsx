@@ -3,7 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AddressProvider, useAddress } from './contexts/AddressContext'
 import { ProductProvider } from './contexts/ProductContext'
 import { POSProvider } from './contexts/POSContext'
-import ErrorBoundary from './components/ErrorBoundary'
+import ErrorBoundary from './components/common/ErrorBoundary'
 import './index.css'
 
 // Pages

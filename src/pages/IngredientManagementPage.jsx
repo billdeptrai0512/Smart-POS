@@ -5,8 +5,8 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { formatVND } from '../utils'
 import { fetchIngredientCosts, fetchIngredientCostsWithUnits, upsertIngredientCost, deleteIngredientCost } from '../services/orderService'
-import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/recipe/recipeUtils'
-import IngredientCostItem from '../components/recipe/IngredientCostItem'
+import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
+import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import { ArrowLeft } from 'lucide-react'
 
 export default function IngredientManagementPage() {

@@ -6,15 +6,15 @@ import { useNavigate } from 'react-router-dom'
 import { calculateProductCost, formatVND } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 
-import ReportHeader from '../components/report/ReportHeader'
-import ProfitCard from '../components/report/ProfitCard'
-import FinanceCards from '../components/report/FinanceCards'
-import RevenueChart from '../components/report/RevenueChart'
-import HeatmapChart from '../components/report/HeatmapChart'
+import ReportHeader from '../components/DailyReportPage/ReportHeader'
+import ProfitCard from '../components/DailyReportPage/ProfitCard'
+import FinanceCards from '../components/DailyReportPage/FinanceCards'
+import RevenueChart from '../components/DailyReportPage/RevenueChart'
+import HeatmapChart from '../components/DailyReportPage/HeatmapChart'
 
 import { fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchYesterdayOrders, fetchYesterdayExpenses } from '../services/orderService'
 import { useAddress } from '../contexts/AddressContext'
-import { ingredientLabel, getIngredientUnit } from '../components/recipe/recipeUtils'
+import { ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
 
 export default function DailyReportPage() {
     const navigate = useNavigate()

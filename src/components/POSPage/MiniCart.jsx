@@ -1,4 +1,4 @@
-import { formatVND } from '../utils'
+import { formatVND } from '../../utils'
 
 export default function MiniCart({ cart, activeCartItemId, onSelectItem, onRemoveItem }) {
     if (cart.length === 0) return null
