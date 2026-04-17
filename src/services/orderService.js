@@ -670,56 +670,60 @@ export async function deleteExtraIngredient(extraId, ingredient) {
     return true
 }
 
-// Submit a complete order to Supabase
-// cart: [{ cartItemId, productId, quantity, basePrice, extras }]
+// Submit a complete order to Supabase using RPC for atomic transaction
 export async function submitOrder(cart, total, paymentMethod = null, addressId = null) {
     if (!supabase) throw new Error('No Supabase connection')
 
-    // 1. Insert order (with payment_method and address_id at order level)
-    const orderPayload = { total }
-    if (paymentMethod) orderPayload.payment_method = paymentMethod
-    if (addressId) orderPayload.address_id = addressId
-
-    const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert(orderPayload)
-        .select()
-        .single()
-
-    if (orderError) throw orderError
-
-    // 2. Insert order items
-    const items = cart.map(item => {
-        const payload = {
-            order_id: order.id,
-            product_id: item.productId,
-            quantity: item.quantity,
-        }
-
-        // Append options text if the user selected any extras (excludes payment method)
-        const optionsText = item.extras?.length > 0 ? item.extras.map(e => e.name).join(', ') : null;
-        if (optionsText) {
-            payload.options = optionsText;
-        }
-
-        return payload;
-    })
-
-    if (items.length > 0) {
-        const { error: itemsError } = await supabase
-            .from('order_items')
-            .insert(items)
-
-        if (itemsError) {
-            // Cleanup partial order to avoid duplicate accumulation offline
-            await supabase.from('orders').delete().eq('id', order.id)
-            throw itemsError
-        }
+    const orderPayload = {
+        total,
+        payment_method: paymentMethod,
+        address_id: addressId,
+        items: cart.map(item => {
+            const optionsText = item.extras?.length > 0 ? item.extras.map(e => e.name).join(', ') : null;
+            return {
+                product_id: item.productId,
+                quantity: item.quantity,
+                options: optionsText
+            }
+        })
     }
 
-    // 3. Inventory calculation disabled for now
+    // Call RPC function for single transaction order creation
+    const { error } = await supabase.rpc('bulk_create_orders', {
+        orders_payload: [orderPayload]
+    })
 
-    return order
+    if (error) throw error
+    // Temporary return mock order since SQL currently returns void.
+    // If the UI strictly needs the actual database ID, the SQL function needs to be updated.
+    return { id: null }
+}
+
+// Bulk submit offline orders in ONE HTTP Request
+export async function bulkSubmitOrders(ordersArray) {
+    if (!supabase) throw new Error('No Supabase connection')
+
+    const payload = ordersArray.map(o => ({
+        total: o.total,
+        payment_method: o.paymentMethod,
+        address_id: o.addressId,
+        created_at: o.createdAt,
+        items: o.orderItems.map(item => {
+            const optionsText = item.extras?.length > 0 ? item.extras.map(e => e.name).join(', ') : null;
+            return {
+                product_id: item.productId,
+                quantity: item.quantity,
+                options: optionsText
+            }
+        })
+    }))
+
+    const { error } = await supabase.rpc('bulk_create_orders', {
+        orders_payload: payload
+    })
+
+    if (error) throw error
+    return true
 }
 
 // Delete an order and its items (for duplicate order cleanup)

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react'
-import { submitOrder } from '../services/orderService'
+import { submitOrder, bulkSubmitOrders } from '../services/orderService'
 import { supabase } from '../lib/supabaseClient'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -24,12 +24,13 @@ function savePendingOrders(orders) {
     localStorage.setItem(PENDING_ORDERS_KEY, JSON.stringify(orders))
 }
 
-export function addPendingOrder(orderItems, total, paymentMethod = null) {
+export function addPendingOrder(orderItems, total, paymentMethod = null, addressId = null) {
     const pending = getPendingOrders()
     pending.push({
         orderItems,
         total,
         paymentMethod,
+        addressId,
         createdAt: new Date().toISOString(),
     })
     savePendingOrders(pending)
@@ -57,13 +58,14 @@ export function useOfflineSync(onSyncComplete) {
         isSyncing.current = true
         const failed = []
 
-        for (const order of pending) {
-            try {
-                await submitOrder(order.orderItems, order.total, order.paymentMethod)
-            } catch (err) {
-                console.error('Sync failed for order:', err)
-                failed.push(order)
-            }
+        try {
+            // Bulk exact orders. If this entire batch fails, it's pushed to failed stack.
+            // Supabase RPC does all in one Postgres transaction
+            await bulkSubmitOrders(pending)
+        } catch (err) {
+            console.error('Bulk sync failed for orders:', err)
+            // Rollback entire array to local cache if sync fails
+            failed.push(...pending)
         }
 
         savePendingOrders(failed)
