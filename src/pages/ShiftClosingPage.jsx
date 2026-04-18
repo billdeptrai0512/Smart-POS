@@ -30,9 +30,11 @@ export default function ShiftClosingPage() {
     const [note, setNote] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [existingClosing, setExistingClosing] = useState(null)
+    const [isLoadingExisting, setIsLoadingExisting] = useState(true)
 
     // --- Ingredient list with units ---
     const [ingredientsList, setIngredientsList] = useState([])
+    const [isLoadingIngredients, setIsLoadingIngredients] = useState(true)
     const [inventoryInputs, setInventoryInputs] = useState({})
     const [restockInputs, setRestockInputs] = useState({})
     const [openingStock, setOpeningStock] = useState({})
@@ -40,25 +42,38 @@ export default function ShiftClosingPage() {
     // Load existing shift closing data (for editing)
     useEffect(() => {
         if (selectedAddress?.id) {
+            setIsLoadingExisting(true)
             fetchTodayShiftClosing(selectedAddress.id).then(data => {
                 if (data) {
                     setExistingClosing(data)
-                    setActualCash(data.actual_cash ? formatVNDInput(data.actual_cash) : '')
-                    setActualTransfer(data.actual_transfer ? formatVNDInput(data.actual_transfer) : '')
+                    setActualCash(data.actual_cash !== null && data.actual_cash !== undefined ? formatVNDInput(data.actual_cash) : '')
+                    setActualTransfer(data.actual_transfer !== null && data.actual_transfer !== undefined ? formatVNDInput(data.actual_transfer) : '')
                     setNote(data.note || '')
                     // Pre-fill inventory inputs
-                    if (data.inventory_report && Array.isArray(data.inventory_report)) {
-                        const inputs = {}
-                        const restocks = {}
-                        data.inventory_report.forEach(item => {
-                            inputs[item.ingredient] = String(item.remaining)
-                            if (item.restock) restocks[item.ingredient] = String(item.restock)
-                        })
-                        setInventoryInputs(inputs)
-                        setRestockInputs(restocks)
+                    if (data.inventory_report) {
+                        let parsed = data.inventory_report
+                        if (typeof parsed === 'string') {
+                            try { parsed = JSON.parse(parsed) } catch (e) { }
+                        }
+                        if (Array.isArray(parsed)) {
+                            const inputs = {}
+                            const restocks = {}
+                            parsed.forEach(item => {
+                                inputs[item.ingredient] = String(item.remaining)
+                                if (item.restock !== undefined && item.restock !== null) {
+                                    restocks[item.ingredient] = String(item.restock)
+                                }
+                            })
+                            setInventoryInputs(inputs)
+                            setRestockInputs(restocks)
+                        }
                     }
                 }
+            }).finally(() => {
+                setIsLoadingExisting(false)
             })
+        } else {
+            setIsLoadingExisting(false)
         }
     }, [selectedAddress?.id])
 
@@ -79,10 +94,15 @@ export default function ShiftClosingPage() {
 
     useEffect(() => {
         if (selectedAddress?.id) {
+            setIsLoadingIngredients(true)
             fetchIngredientCostsWithUnits(selectedAddress.id).then(list => {
                 const sortedList = [...list].sort((a, b) => sortIngredients(a.ingredient, b.ingredient, selectedAddress?.ingredient_sort_order))
                 setIngredientsList(sortedList)
+            }).finally(() => {
+                setIsLoadingIngredients(false)
             })
+        } else {
+            setIsLoadingIngredients(false)
         }
     }, [selectedAddress?.id, selectedAddress?.ingredient_sort_order])
 
@@ -111,7 +131,11 @@ export default function ShiftClosingPage() {
 
         try {
             const inventoryReport = ingredientsList
-                .filter(ing => inventoryInputs[ing.ingredient] !== undefined && inventoryInputs[ing.ingredient] !== '')
+                .filter(ing => {
+                    const hasRemaining = inventoryInputs[ing.ingredient] !== undefined && inventoryInputs[ing.ingredient] !== ''
+                    const hasRestock = restockInputs[ing.ingredient] !== undefined && restockInputs[ing.ingredient] !== ''
+                    return hasRemaining || hasRestock
+                })
                 .map(ing => {
                     const unit = getIngredientUnit(ing.ingredient, ing.unit)
                     return {
@@ -246,7 +270,12 @@ export default function ShiftClosingPage() {
                         </div>
 
                         {/* Section 2: Inventory Report */}
-                        {ingredientsList.length > 0 && (
+                        {isLoadingIngredients ? (
+                            <div className="flex flex-col gap-3 py-4 animate-pulse">
+                                <div className="bg-surface-light rounded-[12px] h-8 w-1/3 mb-2" />
+                                <div className="bg-surface-light rounded-[20px] h-32 w-full" />
+                            </div>
+                        ) : ingredientsList.length > 0 && (
                             <div>
                                 <div className="flex items-center gap-3 py-1 mb-3 px-1">
                                     <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
@@ -267,7 +296,7 @@ export default function ShiftClosingPage() {
                                                     <div className="flex flex-col items-center">
                                                         <span className="text-[9px] font-black text-text-dim uppercase mb-0.5">Tồn đầu</span>
                                                         <span className="w-full bg-surface-light border border-border/60 rounded-[10px] px-2 py-1 text-[13px] font-medium text-text-secondary text-center tabular-nums block">
-                                                            {opening !== undefined ? opening : '—'}
+                                                            {opening !== undefined && opening !== null ? opening : '—'}
                                                         </span>
                                                     </div>
                                                     <div className="flex flex-col items-center">
@@ -322,7 +351,7 @@ export default function ShiftClosingPage() {
             <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-bg via-bg via-60% to-transparent pointer-events-none">
                 <button
                     onClick={handleSubmit}
-                    disabled={isSubmitting || isLoadingHistory}
+                    disabled={isSubmitting || isLoadingHistory || isLoadingIngredients || isLoadingExisting}
                     className="w-full py-3.5 rounded-[16px] bg-primary text-white text-[14px] font-black uppercase tracking-wide hover:bg-primary/90 active:bg-primary/80 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm pointer-events-auto flex items-center justify-center gap-2"
                 >
                     <PackageCheck size={18} strokeWidth={2.5} />

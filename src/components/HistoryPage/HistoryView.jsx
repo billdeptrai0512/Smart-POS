@@ -5,12 +5,13 @@ import { formatVND, calculateProductCost } from '../../utils'
 import { getPendingOrders } from '../../hooks/useOfflineSync'
 import { fetchTodayShiftClosing } from '../../services/orderService'
 import { useAddress } from '../../contexts/AddressContext'
-
+import { useAuth } from '../../contexts/AuthContext'
 
 export default function HistoryView({ todayOrders, todayExpenses, recipes, products, ingredientCosts, extraIngredients, isLoadingHistory, onBack, onDeleteOrder, onDeleteExpense }) {
     const navigate = useNavigate()
     const [deletingId, setDeletingId] = useState(null)
     const { selectedAddress } = useAddress()
+    const { isStaff } = useAuth()
     const [shiftClosed, setShiftClosed] = useState(null)
 
     useEffect(() => {
@@ -253,22 +254,21 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                     </div>
 
                     <button
-                        onClick={() => shiftClosed !== null && navigate(shiftClosed ? '/daily-report' : '/shift-closing')}
+                        onClick={() => {
+                            if (shiftClosed === null) return
+                            navigate(isStaff ? '/shift-closing' : '/daily-report')
+                        }}
                         className={`border rounded-[16px] px-5 flex flex-col items-center justify-center gap-1 shadow-sm hover:bg-border/30 active:scale-95 transition-all group ${shiftClosed === null
                             ? 'bg-surface-light border-border/60 opacity-60'
-                            : shiftClosed
-                                ? 'bg-success/10 border-success/60'
-                                : 'bg-surface-light border-border/80'
+                            : 'bg-success/10 border-success/60'
                             }`}
-                        title="Thống kê"
+                        title={isStaff ? "Chốt ca / Cập nhật" : "Báo cáo"}
                         disabled={shiftClosed === null}
                     >
-                        <span className={`text-[12px] font-black uppercase whitespace-nowrap transition-colors ${shiftClosed === null
-                            ? 'text-text-secondary'
-                            : shiftClosed
-                                ? 'text-success'
-                                : 'text-text-secondary group-hover:text-text'
-                            }`}>{shiftClosed === null ? '...' : shiftClosed ? 'Báo cáo' : 'Chốt ca'}</span>
+                        <span className={`text-[12px] font-black uppercase whitespace-nowrap transition-colors ${shiftClosed === null ? 'text-text-secondary' : 'text-success'
+                            }`}>
+                            {shiftClosed === null ? '...' : (isStaff ? (shiftClosed ? 'Cập nhật' : 'Chốt ca') : 'Báo cáo')}
+                        </span>
                     </button>
                 </div>
             </div>
