@@ -2,8 +2,20 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { execSync } from 'child_process'
+
+const getLatestCommitMessage = () => {
+  try {
+    return execSync('git log -1 --pretty=%B').toString().trim()
+  } catch (e) {
+    return 'Bản cập nhật mới giúp cải thiện hiệu suất và trải nghiệm ứng dụng.'
+  }
+}
 
 export default defineConfig({
+  define: {
+    '__APP_UPDATE_LOG__': JSON.stringify(getLatestCommitMessage()),
+  },
   plugins: [
     react(),
     tailwindcss(),
