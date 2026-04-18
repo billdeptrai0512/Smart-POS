@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react'
-import { submitOrder, bulkSubmitOrders } from '../services/orderService'
+import { bulkSubmitOrders } from '../services/orderService'
 import { supabase } from '../lib/supabaseClient'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -24,11 +24,12 @@ function savePendingOrders(orders) {
     localStorage.setItem(PENDING_ORDERS_KEY, JSON.stringify(orders))
 }
 
-export function addPendingOrder(orderItems, total, paymentMethod = null, addressId = null) {
+export function addPendingOrder(orderItems, total, paymentMethod = null, addressId = null, totalCost = 0) {
     const pending = getPendingOrders()
     pending.push({
         orderItems,
         total,
+        totalCost,
         paymentMethod,
         addressId,
         createdAt: new Date().toISOString(),

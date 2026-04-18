@@ -3,9 +3,9 @@ import { Heart, Coffee } from 'lucide-react'
 import { usePOS } from '../contexts/POSContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useNavigate } from 'react-router-dom'
-import { calculateProductCost, formatVND } from '../utils'
+import { calculateProductCost } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
-
+import { calculateEstimatedConsumption } from '../utils/inventory'
 import ReportHeader from '../components/DailyReportPage/ReportHeader'
 import ProfitCard from '../components/DailyReportPage/ProfitCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
@@ -18,8 +18,8 @@ import { ingredientLabel, getIngredientUnit } from '../components/common/recipeU
 
 export default function DailyReportPage() {
     const navigate = useNavigate()
-    const { products, recipes, ingredientCosts } = useProducts()
-    const { todayOrders, todayExpenses, isLoadingHistory, handleAddExpense, handleDeleteExpense, handleLoadHistory, fixedCosts, handleAddFixedCost, handleUpdateFixedCost, handleDeleteFixedCost, userRole } = usePOS()
+    const { products, recipes, ingredientCosts, extraIngredients } = useProducts()
+    const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, fixedCosts } = usePOS()
 
     useEffect(() => {
         if (todayOrders.length === 0 && !isLoadingHistory) {
@@ -29,7 +29,6 @@ export default function DailyReportPage() {
     }, [])
 
     const [selectedProductId, setSelectedProductId] = useState('all')
-    const [showExpenseListModal, setShowExpenseListModal] = useState(false)
     const { selectedAddress } = useAddress()
     const [shiftClosing, setShiftClosing] = useState(null)
     const [yesterdayClosing, setYesterdayClosing] = useState(null)
@@ -93,7 +92,11 @@ export default function DailyReportPage() {
             heatmapData[productId][hour] = (heatmapData[productId][hour] || 0) + qty
             if (heatmapData[productId][hour] > maxHeatmapQty) maxHeatmapQty = heatmapData[productId][hour]
 
-            const cost = calculateProductCost(productId, recipes, ingredientCosts)
+            // Hybrid COGS: use snapshot if available, fallback to dynamic calc
+            const snapshotCost = isOffline ? (i.unitCost || 0) : (i.unit_cost || 0)
+            const cost = snapshotCost > 0
+                ? snapshotCost
+                : calculateProductCost(productId, i.extras || [], recipes, extraIngredients, ingredientCosts)
             totalCOGS += cost * qty
 
             const prodDef = products.find(p => p.id === productId)
@@ -120,12 +123,20 @@ export default function DailyReportPage() {
     let yesterdayCOGS = 0
     yesterdayOrders.forEach(o => {
         yesterdayRevenue += o.total
-        const items = o.order_items || []
-        items.forEach(i => {
-            const qty = i.quantity || 1
-            const cost = calculateProductCost(i.product_id, recipes, ingredientCosts)
-            yesterdayCOGS += cost * qty
-        })
+        // Hybrid: prefer total_cost snapshot, fallback to dynamic calc
+        if (o.total_cost > 0) {
+            yesterdayCOGS += o.total_cost
+        } else {
+            const items = o.order_items || []
+            items.forEach(i => {
+                const qty = i.quantity || 1
+                const snapshotCost = i.unit_cost || 0
+                const cost = snapshotCost > 0
+                    ? snapshotCost
+                    : calculateProductCost(i.product_id, i.extras || [], recipes, extraIngredients, ingredientCosts)
+                yesterdayCOGS += cost * qty
+            })
+        }
     })
     const yesterdayDailyExpense = yesterdayExpensesData.filter(e => !e.is_fixed).reduce((sum, e) => sum + e.amount, 0)
     const yesterdayFixedExpense = yesterdayExpensesData.filter(e => e.is_fixed).reduce((sum, e) => sum + e.amount, 0)
@@ -237,14 +248,14 @@ export default function DailyReportPage() {
                             }
 
                             // Calculate estimated consumption
-                            const estimatedConsumption = {}
-                            const allOrderItems = [...todayOrders.flatMap(o => (o.order_items || []).map(i => ({ productId: i.product_id, qty: i.quantity || 1 })))]
-                            allOrderItems.forEach(({ productId, qty }) => {
-                                recipes.filter(r => r.product_id === productId).forEach(r => {
-                                    if (!estimatedConsumption[r.ingredient]) estimatedConsumption[r.ingredient] = 0
-                                    estimatedConsumption[r.ingredient] += r.amount * qty
-                                })
+                            const allOrderItems = []
+                            todayOrders.forEach(o => {
+                                (o.order_items || []).forEach(i => allOrderItems.push({ productId: i.product_id, qty: i.quantity || 1, extras: i.extras || [] }))
                             })
+                            offlineToday.forEach(o => {
+                                (o.cart || o.orderItems || []).forEach(i => allOrderItems.push({ productId: i.productId, qty: i.quantity || 1, extras: i.extras || [] }))
+                            })
+                            const estimatedConsumption = calculateEstimatedConsumption(allOrderItems, recipes, extraIngredients)
 
                             return (
                                 <>

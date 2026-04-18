@@ -8,7 +8,7 @@ import HistoryView from '../components/HistoryPage/HistoryView'
 
 export default function HistoryPage() {
     const navigate = useNavigate()
-    const { products, recipes, ingredientCosts } = useProducts()
+    const { products, recipes, ingredientCosts, extraIngredients } = useProducts()
     const { todayOrders, todayExpenses, isLoadingHistory, handleDeleteOrder, handleAddExpense, handleDeleteExpense, handleLoadHistory } = usePOS()
     const { isManager, isAdmin } = useAuth()
 
@@ -26,6 +26,7 @@ export default function HistoryPage() {
             recipes={recipes}
             products={products}
             ingredientCosts={ingredientCosts}
+            extraIngredients={extraIngredients}
             isLoadingHistory={isLoadingHistory}
             onBack={() => navigate('/pos')}
             onDeleteOrder={handleDeleteOrder}

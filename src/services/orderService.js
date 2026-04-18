@@ -155,12 +155,15 @@ export async function fetchTodayOrders(addressId) {
         .select(`
             id,
             total,
+            total_cost,
             payment_method,
             created_at,
             order_items (
                 quantity,
                 options,
                 product_id,
+                unit_cost,
+                extra_ids,
                 products (
                     name
                 )
@@ -671,19 +674,25 @@ export async function deleteExtraIngredient(extraId, ingredient) {
 }
 
 // Submit a complete order to Supabase using RPC for atomic transaction
-export async function submitOrder(cart, total, paymentMethod = null, addressId = null) {
+// totalCost: tổng giá vốn của bill (snapshot)
+// costPerItem: Map<cartItemId, unitCost> giá vốn mỗi dòng (snapshot)
+export async function submitOrder(cart, total, paymentMethod = null, addressId = null, totalCost = 0, costPerItem = {}) {
     if (!supabase) throw new Error('No Supabase connection')
 
     const orderPayload = {
         total,
+        total_cost: totalCost,
         payment_method: paymentMethod,
         address_id: addressId,
         items: cart.map(item => {
             const optionsText = item.extras?.length > 0 ? item.extras.map(e => e.name).join(', ') : null;
+            const extraIds = item.extras?.length > 0 ? item.extras.map(e => e.id) : [];
             return {
                 product_id: item.productId,
                 quantity: item.quantity,
-                options: optionsText
+                options: optionsText,
+                unit_cost: costPerItem[item.cartItemId] || 0,
+                extra_ids: extraIds
             }
         })
     }
@@ -694,8 +703,6 @@ export async function submitOrder(cart, total, paymentMethod = null, addressId =
     })
 
     if (error) throw error
-    // Temporary return mock order since SQL currently returns void.
-    // If the UI strictly needs the actual database ID, the SQL function needs to be updated.
     return { id: null }
 }
 
@@ -705,15 +712,19 @@ export async function bulkSubmitOrders(ordersArray) {
 
     const payload = ordersArray.map(o => ({
         total: o.total,
+        total_cost: o.totalCost || 0,
         payment_method: o.paymentMethod,
         address_id: o.addressId,
         created_at: o.createdAt,
         items: o.orderItems.map(item => {
             const optionsText = item.extras?.length > 0 ? item.extras.map(e => e.name).join(', ') : null;
+            const extraIds = item.extras?.length > 0 ? item.extras.map(e => e.id) : (item.extraIds || []);
             return {
                 product_id: item.productId,
                 quantity: item.quantity,
-                options: optionsText
+                options: optionsText,
+                unit_cost: item.unitCost || 0,
+                extra_ids: extraIds
             }
         })
     }))
@@ -788,9 +799,12 @@ export async function fetchYesterdayOrders(addressId) {
         .select(`
             id,
             total,
+            total_cost,
             order_items (
                 quantity,
-                product_id
+                product_id,
+                unit_cost,
+                extra_ids
             )
         `)
         .gte('created_at', yesterday.toISOString())

@@ -79,23 +79,6 @@ export default function RecipeIngredientPage() {
     const baseIngredients = prodRecipes.map(r => r.ingredient)
     const availableBaseIngredients = dbIngredients.filter(i => !baseIngredients.includes(i))
 
-    const allUsedIngredients = useMemo(() => {
-        const ings = new Set(baseIngredients)
-        extras.forEach(extra => {
-            (extraIngs[extra.id] || []).forEach(ei => ings.add(ei.ingredient))
-        })
-        return Array.from(ings)
-    }, [baseIngredients, extras, extraIngs])
-
-    // Build a map of ingredient -> stored unit from recipes and extra ingredients
-    const ingredientUnits = useMemo(() => {
-        const units = {}
-        prodRecipes.forEach(r => { if (r.unit) units[r.ingredient] = r.unit })
-        extras.forEach(extra => {
-            (extraIngs[extra.id] || []).forEach(ei => { if (ei.unit) units[ei.ingredient] = ei.unit })
-        })
-        return units
-    }, [prodRecipes, extras, extraIngs])
 
     async function saveAmount(ingredient, newAmount) {
         setSaving(true)
