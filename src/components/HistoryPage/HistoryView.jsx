@@ -7,7 +7,7 @@ import { fetchTodayShiftClosing } from '../../services/orderService'
 import { useAddress } from '../../contexts/AddressContext'
 
 
-export default function HistoryView({ todayOrders, todayExpenses, recipes, products, ingredientCosts, isLoadingHistory, onBack, onDeleteOrder, onAddExpense, onDeleteExpense }) {
+export default function HistoryView({ todayOrders, todayExpenses, recipes, products, ingredientCosts, extraIngredients, isLoadingHistory, onBack, onDeleteOrder, onDeleteExpense }) {
     const navigate = useNavigate()
     const [deletingId, setDeletingId] = useState(null)
     const { selectedAddress } = useAddress()
@@ -22,26 +22,39 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
         }
     }, [selectedAddress?.id])
 
+    // Helper: compute item cost with hybrid fallback
+    // If snapshot unit_cost > 0, use it; otherwise fallback to dynamic calculation
+    const getItemCost = (productId, extras, snapshotUnitCost) => {
+        if (snapshotUnitCost > 0) return snapshotUnitCost
+        return calculateProductCost(productId, extras || [], recipes, extraIngredients, ingredientCosts)
+    }
 
-    const formattedOnline = todayOrders.map(o => ({
-        id: o.id,
-        total: o.total,
-        cost: o.order_items ? o.order_items.reduce((sum, i) => sum + (calculateProductCost(i.product_id, recipes, ingredientCosts) * i.quantity), 0) : 0,
-        createdAt: o.created_at,
-        isOffline: false,
-        paymentMethod: o.payment_method || null,
-        items: o.order_items ? o.order_items.map(i => {
-            const options = i.options
-                ? i.options.split(', ').filter(opt => opt !== 'Tiền mặt' && opt !== 'MoMo').join(' - ')
-                : ''
-            const pName = products?.find(p => p.id === i.product_id)?.name || i.products?.name || '☕'
-            return {
-                text: `${i.quantity} ${pName}${options ? ` (${options})` : ''}`,
-                cost: calculateProductCost(i.product_id, recipes, ingredientCosts) * i.quantity,
-                quantity: i.quantity
-            }
-        }) : []
-    }))
+    const formattedOnline = todayOrders.map(o => {
+        // Hybrid: use order-level snapshot if available, else sum item-level
+        const cost = (o.total_cost > 0)
+            ? o.total_cost
+            : (o.order_items ? o.order_items.reduce((sum, i) => sum + (getItemCost(i.product_id, i.extras || [], i.unit_cost || 0) * i.quantity), 0) : 0)
+
+        return {
+            id: o.id,
+            total: o.total,
+            cost,
+            createdAt: o.created_at,
+            isOffline: false,
+            paymentMethod: o.payment_method || null,
+            items: o.order_items ? o.order_items.map(i => {
+                const options = i.options
+                    ? i.options.split(', ').filter(opt => opt !== 'Tiền mặt' && opt !== 'MoMo').join(' - ')
+                    : ''
+                const pName = products?.find(p => p.id === i.product_id)?.name || i.products?.name || '☕'
+                return {
+                    text: `${i.quantity} ${pName}${options ? ` (${options})` : ''}`,
+                    cost: getItemCost(i.product_id, i.extras || [], i.unit_cost || 0) * i.quantity,
+                    quantity: i.quantity
+                }
+            }) : []
+        }
+    })
 
     const pending = getPendingOrders()
     const todayStr = new Date().toDateString()
@@ -50,24 +63,30 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
         .map((o, idx) => ({
             id: `offline-${idx}`,
             total: o.total,
-            cost: (o.cart || o.orderItems || []).reduce((sum, i) => sum + (calculateProductCost(i.productId, recipes, ingredientCosts) * i.quantity), 0),
+            cost: o.totalCost > 0
+                ? o.totalCost
+                : (o.cart || o.orderItems || []).reduce((sum, i) => sum + (calculateProductCost(i.productId, i.extras || [], recipes, extraIngredients, ingredientCosts) * i.quantity), 0),
             createdAt: o.createdAt,
             isOffline: true,
             paymentMethod: o.paymentMethod || null,
             items: o.cart
                 ? o.cart.map(i => {
                     const extras = i.extras.filter(e => e.name !== 'Tiền mặt' && e.name !== 'MoMo')
+                    const itemCost = i.unitCost > 0 ? i.unitCost : calculateProductCost(i.productId, i.extras || [], recipes, extraIngredients, ingredientCosts)
                     return {
                         text: `${i.quantity} ${i.name}${extras.length ? ` (${extras.map(e => e.name).join(' - ')})` : ''}`,
-                        cost: calculateProductCost(i.productId, recipes, ingredientCosts) * i.quantity,
+                        cost: itemCost * i.quantity,
                         quantity: i.quantity
                     }
                 })
-                : o.orderItems ? o.orderItems.map(i => ({
-                    text: `${i.quantity} ${i.name}`,
-                    cost: calculateProductCost(i.productId, recipes, ingredientCosts) * i.quantity,
-                    quantity: i.quantity
-                })) : []
+                : o.orderItems ? o.orderItems.map(i => {
+                    const itemCost = i.unitCost > 0 ? i.unitCost : calculateProductCost(i.productId, i.extras || [], recipes, extraIngredients, ingredientCosts)
+                    return {
+                        text: `${i.quantity} ${i.name}`,
+                        cost: itemCost * i.quantity,
+                        quantity: i.quantity
+                    }
+                }) : []
         }))
 
     const formattedExpenses = (todayExpenses || []).filter(e => !e.is_fixed).map(e => ({
@@ -83,7 +102,6 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
     const allOrders = [...formattedOnline, ...formattedOffline, ...formattedExpenses].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
 
     // --- Stats ---
-    const totalRevenue = allOrders.reduce((sum, o) => sum + o.total, 0)
     const totalExpense = formattedExpenses.reduce((sum, e) => sum + e.cost, 0)
     const totalCups = allOrders.reduce((sum, o) => {
         if (o.isExpense || !o.items) return sum;

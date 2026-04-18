@@ -18,7 +18,7 @@ export function usePOS() {
 }
 
 export function POSProvider() {
-    const { recipes, ingredientCosts } = useProducts()
+    const { recipes, ingredientCosts, extraIngredients } = useProducts()
     const { selectedAddress } = useAddress()
     const { profile } = useAuth()
     const addressId = selectedAddress?.id
@@ -155,10 +155,8 @@ export function POSProvider() {
 
                         const { data: items } = await supabase.from('order_items').select('quantity, products(name)').eq('order_id', payload.new.id)
                         let qty = 0;
-                        let desc = '';
                         if (items) {
                             qty = items.reduce((s, i) => s + i.quantity, 0);
-                            desc = items.map(i => `${i.quantity} ly ${i.products?.name}`).join(' + ');
                         }
 
                         setRealtimeNotification({
@@ -267,9 +265,12 @@ export function POSProvider() {
         if (cart.length === 0 || isSubmitting) return
         setIsSubmitting(true)
 
+        // Build cost snapshot: per-item and total
+        const costPerItem = {}
         const cartCost = cart.reduce((sum, item) => {
-            const costPerItem = calculateProductCost(item.productId, recipes, ingredientCosts)
-            return sum + (costPerItem * item.quantity)
+            const itemCost = calculateProductCost(item.productId, item.extras || [], recipes, extraIngredients, ingredientCosts)
+            costPerItem[item.cartItemId] = itemCost
+            return sum + (itemCost * item.quantity)
         }, 0)
 
         // Optimistic: update UI immediately
@@ -283,16 +284,27 @@ export function POSProvider() {
         setActiveCartItemId(null)
         showToast('Tạo thành công', 'success')
 
-        // Submit in background
+        // Submit in background (with COGS snapshot)
         if (navigator.onLine && supabase) {
-            submitOrder(savedCart, savedTotal, null, addressId).then(res => {
+            submitOrder(savedCart, savedTotal, null, addressId, cartCost, costPerItem).then(res => {
                 localOrderIds.current.add(res.id)
-            }).catch(err => {
-                addPendingOrder(savedCart, savedTotal, null, addressId)
+            }).catch(() => {
+                // Fallback: enrich offline payload with cost snapshot
+                const enrichedCart = savedCart.map(item => ({
+                    ...item,
+                    unitCost: costPerItem[item.cartItemId] || 0,
+                    extraIds: (item.extras || []).map(e => e.id)
+                }))
+                addPendingOrder(enrichedCart, savedTotal, null, addressId, cartCost)
                 showToast('Lỗi mạng – đã lưu offline', 'warning')
             })
         } else {
-            addPendingOrder(savedCart, savedTotal, null, addressId)
+            const enrichedCart = savedCart.map(item => ({
+                ...item,
+                unitCost: costPerItem[item.cartItemId] || 0,
+                extraIds: (item.extras || []).map(e => e.id)
+            }))
+            addPendingOrder(enrichedCart, savedTotal, null, addressId, cartCost)
             showToast(`Lưu offline (${getPendingCount()} đơn chờ)`, 'warning')
         }
         setIsSubmitting(false)

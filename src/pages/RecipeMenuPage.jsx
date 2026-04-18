@@ -16,7 +16,7 @@ export default function RecipeMenuPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const backTo = location.state?.from || '/history'
-    const { products, recipes, ingredientCosts, refreshProducts, productExtras } = useProducts()
+    const { products, recipes, ingredientCosts, refreshProducts } = useProducts()
     const { selectedAddress } = useAddress()
     const { isManager, isAdmin } = useAuth()
     const canEdit = isManager || isAdmin
@@ -174,7 +174,6 @@ export default function RecipeMenuPage() {
                         {displayProducts.map(product => {
                             const prodRecipes = recipes.filter(r => r.product_id === product.id)
                             const ingredientCount = prodRecipes.length
-                            const extraCount = productExtras?.[product.id]?.length || 0
 
                             return (
                                 <div

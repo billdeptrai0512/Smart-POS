@@ -2,18 +2,17 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, PackageCheck } from 'lucide-react'
 import { usePOS } from '../contexts/POSContext'
-import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { formatVND, formatVNDInput, parseVNDInput } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import { insertShiftClosing, updateShiftClosing, fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchIngredientCostsWithUnits, fetchFixedCosts, insertExpense, fetchTodayExpenses } from '../services/orderService'
+
 import { ingredientLabel, getIngredientUnit, sortIngredients } from '../components/common/recipeUtils'
 
 export default function ShiftClosingPage() {
     const navigate = useNavigate()
     const { todayOrders, isLoadingHistory, handleLoadHistory } = usePOS()
-    const { recipes } = useProducts()
     const { selectedAddress } = useAddress()
     const { profile } = useAuth()
 
@@ -96,21 +95,7 @@ export default function ShiftClosingPage() {
     todayOrders.forEach(o => { systemTotalRevenue += o.total })
     offlineToday.forEach(o => { systemTotalRevenue += o.total })
 
-    // --- Calculate estimated ingredient consumption ---
-    const estimatedConsumption = {}
-    const processItems = (items, isOffline) => {
-        items.forEach(i => {
-            const productId = isOffline ? i.productId : i.product_id
-            const qty = i.quantity || 1
-            const productRecipes = recipes.filter(r => r.product_id === productId)
-            productRecipes.forEach(r => {
-                if (!estimatedConsumption[r.ingredient]) estimatedConsumption[r.ingredient] = 0
-                estimatedConsumption[r.ingredient] += r.amount * qty
-            })
-        })
-    }
-    todayOrders.forEach(o => processItems(o.order_items || [], false))
-    offlineToday.forEach(o => processItems(o.cart || o.orderItems || [], true))
+    // --- Note: estimatedConsumption calculation is intentionally removed here as the shift closing process relies on manual actuals.
 
     const handleInventoryChange = (ingredient, value) => {
         setInventoryInputs(prev => ({ ...prev, [ingredient]: value }))

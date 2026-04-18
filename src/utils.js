@@ -20,15 +20,10 @@ export function parseVNDInput(formatted) {
     return Number(numStr) || 0
 }
 
-// Calculate the ingredient cost of a single product based on its recipe
-// ingredientCosts must be provided from DB
-export function calculateProductCost(productId, recipes, ingredientCosts) {
-    if (!recipes || !Array.isArray(recipes)) return 0;
-    const costs = ingredientCosts || {};
-    const productRecipe = recipes.filter(r => r.product_id === productId);
+import { calculateItemCost } from './utils/inventory'
 
-    return productRecipe.reduce((totalCost, item) => {
-        const unitCost = costs[item.ingredient] || 0;
-        return totalCost + (item.amount * unitCost);
-    }, 0);
+// Calculate the ingredient cost of a single product based on its recipe and any extras
+// ingredientCosts must be provided from DB
+export function calculateProductCost(productId, extras = [], recipes = [], extraIngredients = {}, ingredientCosts = {}) {
+    return calculateItemCost(productId, extras, recipes, extraIngredients, ingredientCosts);
 }
