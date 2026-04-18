@@ -14,8 +14,9 @@ export default class ErrorBoundary extends Component {
         console.error('ErrorBoundary caught:', error, errorInfo)
     }
 
-    handleReload = () => {
-        window.location.reload()
+    handleGoBack = () => {
+        this.setState({ hasError: false, error: null })
+        window.history.back()
     }
 
     render() {
@@ -25,7 +26,7 @@ export default class ErrorBoundary extends Component {
                     <span className="text-5xl mb-4">⚠️</span>
                     <h1 className="text-xl font-black text-text mb-2">Đã xảy ra lỗi</h1>
                     <p className="text-text-secondary text-sm mb-6 max-w-sm">
-                        Ứng dụng gặp sự cố không mong muốn. Vui lòng tải lại trang để tiếp tục.
+                        Ứng dụng gặp sự cố không mong muốn. Vui lòng quay lại trang trước để tiếp tục.
                     </p>
                     {this.state.error && (
                         <pre className="text-[11px] text-danger/70 bg-surface border border-border/60 rounded-xl p-3 mb-6 max-w-sm overflow-auto text-left whitespace-pre-wrap">
@@ -33,10 +34,10 @@ export default class ErrorBoundary extends Component {
                         </pre>
                     )}
                     <button
-                        onClick={this.handleReload}
+                        onClick={this.handleGoBack}
                         className="px-6 py-3 rounded-[14px] bg-primary text-white font-bold text-sm hover:bg-primary/90 active:bg-primary/80 transition-colors"
                     >
-                        Tải lại trang
+                        Quay về trang trước
                     </button>
                 </div>
             )
