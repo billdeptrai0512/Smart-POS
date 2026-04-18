@@ -42,3 +42,8 @@ Dựa trên bộ khung Vision đã đề ra, dự án hiện tại đáp ứng g
 - **React + Vite**: Tốc độ phản hồi cực nhanh, thiết kế Component-based linh hoạt.
 - **TailwindCSS**: Chuẩn hóa giao diện hướng Mobile-first/PWA (Tối ưu hiển thị cho thiết bị cầm tay của nhân viên).
 - **PWA (Progressive Web App)**: Cho phép cài đặt ứng dụng độc lập trên OS mà không cần đưa lên App Store/Google Play.
+
+## 🚀 Monetize
+- Chúng ta sẽ thu 17k/ngày/xe thanh toán vào cuối ngày để có thể xem báo cáo ngày mai.
+- Free user có thể tạo đơn, tạo menu, thêm nguyên liệu nhưng không thể xem báo cáo.
+

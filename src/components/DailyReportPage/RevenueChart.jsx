@@ -5,12 +5,11 @@ import { formatVND } from '../../utils'
 export default function RevenueChart({ lineChartData }) {
     return (
         <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60">
-            <div className="flex flex-col mb-4">
-                <div className="flex items-center gap-2">
+            <div className="flex flex-col mb-4 pl-2">
+                <div className="flex justify-between items-center gap-2">
+                    <h3 className="text-[13px] font-black uppercase text-text-second">Dòng tiền</h3>
                     <TrendingUp className="text-warning" size={20} />
-                    <h3 className="text-[14px] font-black uppercase text-text-primary">Dòng tiền / Thời gian</h3>
                 </div>
-                <p className="text-[12px] text-text-secondary mt-1 ml-7">Giúp quyết định cắt giảm chi phí vận hành.</p>
             </div>
 
             {lineChartData.length > 0 ? (

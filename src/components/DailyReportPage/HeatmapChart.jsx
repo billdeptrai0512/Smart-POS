@@ -1,43 +1,93 @@
 import { Activity } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
 
 export default function HeatmapChart({ hourRange, soldProducts, products, heatmapData, maxHeatmapQty }) {
+    const [tooltip, setTooltip] = useState(null)
+    const tooltipRef = useRef(null)
+
+    useEffect(() => {
+        if (!tooltip) return
+        const handleClickOutside = (e) => {
+            if (tooltipRef.current && !tooltipRef.current.contains(e.target)) {
+                setTooltip(null)
+            }
+        }
+        document.addEventListener('pointerdown', handleClickOutside)
+        return () => document.removeEventListener('pointerdown', handleClickOutside)
+    }, [tooltip])
+
+    const handleCellClick = (e, pName, qty, hour) => {
+        if (qty === 0) return
+        const rect = e.currentTarget.getBoundingClientRect()
+        const parentRect = e.currentTarget.closest('.heatmap-container').getBoundingClientRect()
+        setTooltip({
+            name: pName,
+            qty,
+            hour,
+            x: rect.left - parentRect.left + rect.width / 2,
+            y: rect.top - parentRect.top
+        })
+    }
+
     return (
         <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 overflow-hidden">
             <div className="flex flex-col mb-4">
-                <div className="flex items-center gap-2">
+                <div className="flex justify-between items-center gap-2">
+                    <h3 className="text-[13px] font-black uppercase text-text-secondary">Lượng khách</h3>
                     <Activity className="text-primary" size={20} />
-                    <h3 className="text-[14px] font-black uppercase text-text-primary">Bán món gì / Khung giờ</h3>
                 </div>
-                <p className="text-[12px] text-text-secondary mt-1 ml-7">Giúp quyết định thời điểm chuẩn bị nguyên liệu (Prep).</p>
             </div>
 
             {hourRange.length > 0 ? (
-                <div className="overflow-x-auto hide-scrollbar pb-2">
-                    <div className="min-w-max">
-                        <div className="flex border-b border-border/40 pb-2 mb-2">
-                            <div className="w-[100px] shrink-0 text-[10px] uppercase text-text-secondary font-bold">Món \ Giờ</div>
-                            {hourRange.map(h => (
-                                <div key={h} className="w-10 shrink-0 text-center text-[9px] text-text-secondary font-bold leading-tight">
-                                    {h}‑{h + 1}h
+                <div className="pb-2">
+                    <div className="heatmap-container relative">
+                        {/* Tooltip popup giống RevenueChart */}
+                        {tooltip && (
+                            <div
+                                ref={tooltipRef}
+                                className="absolute z-20 pointer-events-none"
+                                style={{
+                                    left: tooltip.x,
+                                    top: tooltip.y,
+                                    transform: 'translate(-50%, -100%)',
+                                }}
+                            >
+                                <div
+                                    className="pointer-events-auto px-3 py-2 rounded-xl shadow-lg text-center whitespace-nowrap"
+                                    style={{
+                                        backgroundColor: '#1c1917',
+                                        border: '1px solid #44403c',
+                                    }}
+                                >
+                                    <div style={{ color: '#fafaf9', fontWeight: 'bold', fontSize: '12px', marginBottom: '2px' }}>
+                                        {tooltip.hour}:00 - {tooltip.hour + 1}:00
+                                    </div>
+                                    <div style={{ color: '#f59e0b', fontSize: '13px', fontWeight: 'bold' }}>
+                                        {tooltip.name}: {tooltip.qty} ly
+                                    </div>
                                 </div>
-                            ))}
-                        </div>
+                            </div>
+                        )}
+
                         {Array.from(soldProducts).map(productId => {
                             const prodDef = products.find(p => p.id === productId)
                             const pName = prodDef ? prodDef.name : 'Unknown'
                             return (
-                                <div key={productId} className="flex items-center py-[6px]">
-                                    <div className="w-[100px] shrink-0 text-[11px] font-medium text-text-primary truncate pr-2" title={pName}>{pName}</div>
+                                <div key={productId} className="flex items-center py-[2px] gap-[2px]">
                                     {hourRange.map(h => {
                                         const qty = heatmapData[productId]?.[h] || 0
                                         const intensity = maxHeatmapQty > 0 ? qty / maxHeatmapQty : 0
                                         return (
-                                            <div key={h} className="w-10 shrink-0 flex justify-center">
+                                            <div
+                                                key={h}
+                                                className="flex-1 flex justify-center cursor-pointer"
+                                                onClick={(e) => handleCellClick(e, pName, qty, h)}
+                                            >
                                                 <div
-                                                    className="w-[30px] h-[30px] rounded-md flex items-center justify-center text-[11px] font-bold transition-all"
+                                                    className="w-full aspect-square rounded-lg flex items-center justify-center text-[12px] font-bold transition-all hover:scale-110"
                                                     style={{
                                                         backgroundColor: qty > 0 ? `rgba(245, 158, 11, ${Math.max(0.15, intensity)})` : 'transparent',
-                                                        color: qty > 0 ? (intensity > 0.5 ? '#fff' : '#f59e0b') : 'transparent'
+                                                        color: qty > 0 ? (intensity > 0.5 ? '#fff' : '#f59e0b') : 'transparent',
                                                     }}
                                                 >
                                                     {qty > 0 ? qty : ''}
@@ -48,6 +98,15 @@ export default function HeatmapChart({ hourRange, soldProducts, products, heatma
                                 </div>
                             )
                         })}
+
+                        {/* Khung giờ ở dưới — style giống XAxis của RevenueChart */}
+                        <div className="flex pt-3 mt-2 gap-[2px]">
+                            {hourRange.map(h => (
+                                <div key={h} className="flex-1 text-center text-[10px] leading-tight" style={{ color: '#a8a29e' }}>
+                                    {h}h
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
             ) : (

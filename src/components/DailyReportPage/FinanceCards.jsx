@@ -54,7 +54,6 @@ export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, fi
                 const hasYesterday = yesterdayNetProfit !== null && yesterdayNetProfit !== undefined
                 const delta = hasYesterday ? netProfit - yesterdayNetProfit : 0
                 const isUp = delta >= 0
-                const pct = hasYesterday && yesterdayNetProfit !== 0 ? Math.abs(Math.round((delta / Math.abs(yesterdayNetProfit)) * 100)) : null
                 return (
                     <div className="col-span-2 bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex items-center justify-between relative overflow-hidden group">
                         <div className={`absolute top-4 right-4 ${hasYesterday && !isUp ? 'text-danger/20 group-hover:text-danger/30' : 'text-success/20 group-hover:text-success/30'} transition-colors`}>
@@ -71,7 +70,7 @@ export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, fi
                                 <span className="self-center text-[10px] font-black text-text-secondary uppercase mb-1 opacity-70">So với hôm qua</span>
                                 <div className={`px-3 py-1 rounded-xl border ${isUp ? 'bg-success/10 border-success/20 text-success' : 'bg-danger/10 border-danger/20 text-danger'}`}>
                                     <span className="text-[12px] font-black tabular-nums leading-none block">
-                                        {formatVND(delta)}{pct !== null ? ` (${pct}%)` : ''}
+                                        {formatVND(delta)}
                                     </span>
                                 </div>
                             </div>
