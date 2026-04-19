@@ -914,3 +914,42 @@ export async function fetchIngredientCostsWithUnits(addressId) {
 
     return Object.values(ingredientMap)
 }
+
+// Fetch order items for the past `days` fully completed days (excluding today)
+export async function fetchPastDaysOrderItems(addressId, days = 7) {
+    if (!supabase) return []
+    const endDate = new Date()
+    endDate.setHours(0, 0, 0, 0)
+
+    const startDate = new Date(endDate)
+    startDate.setDate(startDate.getDate() - days)
+
+    let query = supabase
+        .from('orders')
+        .select(`
+            order_items (
+                quantity,
+                product_id,
+                extra_ids
+            )
+        `)
+        .gte('created_at', startDate.toISOString())
+        .lt('created_at', endDate.toISOString())
+
+    if (addressId) query = query.eq('address_id', addressId)
+
+    const { data, error } = await query
+    if (error) {
+        console.error('fetchPastDaysOrderItems error:', error)
+        return []
+    }
+
+    // Flatten order items
+    const allItems = []
+    data.forEach(o => {
+        if (o.order_items) {
+            o.order_items.forEach(i => allItems.push(i))
+        }
+    })
+    return allItems
+}
