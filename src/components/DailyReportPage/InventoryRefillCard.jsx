@@ -1,0 +1,188 @@
+import React, { useState, useEffect } from 'react';
+import { calculateEstimatedConsumption } from '../../utils/inventory';
+import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils';
+import { fetchPastDaysOrderItems } from '../../services/orderService';
+import { Settings2 } from 'lucide-react';
+
+export default function InventoryRefillCard({
+    shiftClosing,
+    yesterdayClosing,
+    todayOrders,
+    offlineToday,
+    recipes,
+    extraIngredients,
+    selectedAddress
+}) {
+    const [wastageBuffer, setWastageBuffer] = useState(10); // default 10%
+    const [past7DaysItems, setPast7DaysItems] = useState([]);
+    const [isLoadingPast, setIsLoadingPast] = useState(false);
+    const [activeTab, setActiveTab] = useState('audit'); // 'audit' | 'refill'
+
+    useEffect(() => {
+        if (selectedAddress?.id) {
+            setIsLoadingPast(true);
+            fetchPastDaysOrderItems(selectedAddress.id, 7).then(items => {
+                setPast7DaysItems(items || []);
+            }).finally(() => {
+                setIsLoadingPast(false);
+            });
+        }
+    }, [selectedAddress?.id]);
+
+    if (!shiftClosing?.inventory_report?.length) return null;
+
+    // Build opening stock from yesterday
+    const openingMap = {};
+    if (yesterdayClosing?.inventory_report) {
+        yesterdayClosing.inventory_report.forEach(item => {
+            openingMap[item.ingredient] = item.remaining || 0;
+        });
+    }
+
+    // Calculate today's estimated consumption
+    const todayOrderItems = [];
+    todayOrders.forEach(o => {
+        (o.order_items || []).forEach(i => todayOrderItems.push({ productId: i.product_id, qty: i.quantity || 1, extras: i.extras || [] }));
+    });
+    offlineToday.forEach(o => {
+        (o.cart || o.orderItems || []).forEach(i => todayOrderItems.push({ productId: i.productId, qty: i.quantity || 1, extras: i.extras || [] }));
+    });
+    const todayEstimatedConsumption = calculateEstimatedConsumption(todayOrderItems, recipes, extraIngredients);
+
+    // Calculate past 7 days estimated consumption
+    const mappedPastItems = past7DaysItems.map(i => ({
+        productId: i.product_id,
+        qty: i.quantity,
+        extras: (i.extra_ids || []).map(id => ({ id }))
+    }));
+    const past7DaysConsumption = calculateEstimatedConsumption(mappedPastItems, recipes, extraIngredients);
+
+    return (
+        <div className="bg-surface rounded-[20px] p-4 border border-border/60 shadow-sm flex flex-col gap-3">
+            {/* Header & Tabs */}
+            <div className="flex flex-col gap-3 border-b border-border/40 pb-2">
+                <div className="flex items-center justify-between">
+                    {/* Tab Controls Area acts as Title */}
+                    <div className="flex p-0.5 bg-surface-light rounded-[12px] gap-1 shrink-0">
+                        <button
+                            onClick={() => setActiveTab('audit')}
+                            className={`px-3 py-1.5 rounded-[10px] text-[11px] font-bold transition-all ${activeTab === 'audit' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                        >
+                            Tồn kho
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('refill')}
+                            className={`px-3 py-1.5 rounded-[10px] text-[11px] font-bold transition-all flex items-center justify-center gap-1 ${activeTab === 'refill' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                        >
+                            Đi chợ
+                        </button>
+                    </div>
+
+                    {/* Wastage Buffer UI - Only show in Refill tab */}
+                    {activeTab === 'refill' && (
+                        <div className="flex items-center gap-1.5 bg-surface-light px-2 py-1.5 rounded-[10px] border border-border/40 shrink-0">
+                            <Settings2 size={12} className="text-text-secondary" />
+                            <span className="text-[10px] font-bold text-text-secondary uppercase">Hao hụt:</span>
+                            <select
+                                value={wastageBuffer}
+                                onChange={(e) => setWastageBuffer(Number(e.target.value))}
+                                className="bg-transparent text-[11px] font-black text-primary focus:outline-none cursor-pointer appearance-none text-right"
+                            >
+                                <option value={0}>0%</option>
+                                <option value={5}>5%</option>
+                                <option value={10}>10%</option>
+                                <option value={15}>15%</option>
+                                <option value={20}>20%</option>
+                                <option value={30}>30%</option>
+                            </select>
+                        </div>
+                    )}
+                </div>
+
+                {/* Column Headers depending on tab */}
+                {activeTab === 'audit' ? (
+                    <div className="flex items-center gap-1 mt-1 px-1">
+                        <span className="flex-1 text-[10px] font-black text-text-dim uppercase">Nguyên liệu</span>
+                        <span className="w-[50px] text-[10px] font-black text-text-dim uppercase text-center" title="Lý thuyết hôm nay">Lý.T</span>
+                        <span className="w-[50px] text-[10px] font-black text-text-dim uppercase text-center" title="Thực tế hôm nay">T.Tế</span>
+                        <span className="w-[50px] text-[10px] font-black text-text-dim uppercase text-center" title="Lệch">Lệch</span>
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-1 mt-1 px-1">
+                        <span className="flex-1 text-[10px] font-black text-text-dim uppercase">Nguyên liệu</span>
+                        <span className="w-[50px] text-[10px] font-black text-text-dim uppercase text-center">Tồn</span>
+                        <span className="w-[50px] text-[10px] font-black text-text-dim uppercase text-center" title={`Mục tiêu ngày mai (Kèm ${wastageBuffer}% hao hụt)`}>Sử dụng</span>
+                        <span className="w-[50px] text-[10px] font-black text-text-dim uppercase text-center" title="Số lượng cần mua thêm">Mua</span>
+                    </div>
+                )}
+            </div>
+
+            <div className="space-y-1">
+                {shiftClosing.inventory_report.map(item => {
+                    const opening = openingMap[item.ingredient];
+                    const restock = item.restock || 0;
+                    const used = Math.round((todayEstimatedConsumption[item.ingredient] || 0) * 10) / 10;
+                    const hasOpening = opening !== undefined;
+
+                    const theoretical = hasOpening ? Math.round((opening + restock - used) * 10) / 10 : null;
+                    const actual = item.remaining || 0;
+                    const diff = theoretical !== null ? Math.round((actual - theoretical) * 10) / 10 : null;
+
+                    let diffText = '—';
+                    let diffColor = 'text-text-dim';
+                    if (diff !== null) {
+                        if (diff < 0) {
+                            diffText = `Hụt ${Math.abs(diff)}`;
+                            diffColor = 'text-danger';
+                        } else if (diff > 0) {
+                            diffText = `Dư ${diff}`;
+                            diffColor = 'text-warning';
+                        } else {
+                            diffText = 'Khớp';
+                            diffColor = 'text-success';
+                        }
+                    }
+
+                    // Calculate Refill Logic
+                    const total7DayUsed = past7DaysConsumption[item.ingredient] || 0;
+                    const dailyAvgAvg = total7DayUsed / 7;
+                    const target = Math.round(dailyAvgAvg * (1 + wastageBuffer / 100) * 10) / 10;
+
+                    // Cần nhập = Target - Tồn thực tế
+                    let refill = Math.round((target - actual) * 10) / 10;
+                    if (refill <= 0) refill = 0; // Không cần nhập
+
+                    return (
+                        <div key={item.ingredient} className="flex items-center gap-1 py-2 border-b border-border/20 last:border-0 hover:bg-surface-light rounded-lg transition-colors px-1">
+                            <div className="flex-1 min-w-0 pr-1 flex flex-col justify-center">
+                                <span className="text-[12px] font-bold text-text truncate">
+                                    {ingredientLabel(item.ingredient)}
+                                    <span className="text-[10px] font-normal text-text-dim ml-1">({getIngredientUnit(item.ingredient)})</span>
+                                </span>
+                            </div>
+
+                            {activeTab === 'audit' ? (
+                                <>
+                                    <span className="w-[50px] text-[12px] font-bold text-text text-center tabular-nums">{theoretical !== null ? theoretical : '—'}</span>
+                                    <span className="w-[50px] text-[12px] font-bold text-text text-center tabular-nums">{actual}</span>
+                                    <span className={`w-[50px] text-[11px] font-black text-center tabular-nums ${diffColor}`}>{diffText}</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span className="w-[50px] text-[12px] font-bold text-text text-center tabular-nums">{actual}</span>
+                                    <span className="w-[50px] text-[12px] font-bold text-text text-center tabular-nums">
+                                        {isLoadingPast ? '...' : target > 0 ? target : '—'}
+                                    </span>
+                                    <span className={`w-[50px] text-[11px] font-black text-center tabular-nums ${refill > 0 ? 'text-warning' : 'text-success'}`}>
+                                        {isLoadingPast ? '...' : refill > 0 ? `+${refill}` : 'Ok'}
+                                    </span>
+                                </>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+

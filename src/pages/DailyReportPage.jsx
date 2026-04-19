@@ -5,12 +5,12 @@ import { useProducts } from '../contexts/ProductContext'
 import { useNavigate } from 'react-router-dom'
 import { calculateProductCost } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
-import { calculateEstimatedConsumption } from '../utils/inventory'
 import ReportHeader from '../components/DailyReportPage/ReportHeader'
 import ProfitCard from '../components/DailyReportPage/ProfitCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import RevenueChart from '../components/DailyReportPage/RevenueChart'
 import HeatmapChart from '../components/DailyReportPage/HeatmapChart'
+import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
 
 import { fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchYesterdayOrders, fetchYesterdayExpenses } from '../services/orderService'
 import { useAddress } from '../contexts/AddressContext'
@@ -230,93 +230,16 @@ export default function DailyReportPage() {
                             yesterdayNetProfit={yesterdayNetProfit}
                         />
 
-                        {/* Inventory Analysis — only when shift closing has inventory */}
-                        {shiftClosing?.inventory_report?.length > 0 && (() => {
-                            // Build opening stock from yesterday
-                            const openingMap = {}
-                            if (yesterdayClosing?.inventory_report) {
-                                yesterdayClosing.inventory_report.forEach(item => {
-                                    openingMap[item.ingredient] = item.remaining || 0
-                                })
-                            }
-
-                            // Calculate estimated consumption
-                            const allOrderItems = []
-                            todayOrders.forEach(o => {
-                                (o.order_items || []).forEach(i => allOrderItems.push({ productId: i.product_id, qty: i.quantity || 1, extras: i.extras || [] }))
-                            })
-                            offlineToday.forEach(o => {
-                                (o.cart || o.orderItems || []).forEach(i => allOrderItems.push({ productId: i.productId, qty: i.quantity || 1, extras: i.extras || [] }))
-                            })
-                            const estimatedConsumption = calculateEstimatedConsumption(allOrderItems, recipes, extraIngredients)
-
-                            return (
-                                <div className="bg-surface rounded-[20px] p-4 border border-border/60 shadow-sm">
-                                    {/* Headers */}
-                                    <div className="flex items-center gap-1 mb-2">
-                                        <span className="flex-1 text-[12px] font-black text-text-dim uppercase ">Tồn kho</span>
-                                        <span className="w-[60px] text-[10px] font-black text-text-dim uppercase text-center">Lý thuyết</span>
-                                        <span className="w-[60px] text-[10px] font-black text-text-dim uppercase text-center">Thực tế</span>
-                                        <span className="w-[60px] text-[10px] font-black text-text-dim uppercase text-center">Lệch</span>
-                                    </div>
-                                    <div className="space-y-1">
-                                        {shiftClosing.inventory_report.map(item => {
-                                            // === HƯỚNG DẪN CÁCH TÍNH TỒN KHO CỤ THỂ ===
-                                            // 1. opening (Tồn đầu): Số lượng còn lại từ báo cáo chốt ca ngày hôm trước.
-                                            // 2. restock (Nhập kho): Lượng nguyên liệu mới nhập vô trong vòng ca hôm nay.
-                                            // 3. used (Tiêu hao dự kiến): Tính tự động bằng cách lấy (Số lượng ly đã bán x Định lượng của từng nguyên liệu trong Menu công thức).
-                                            const opening = openingMap[item.ingredient]
-                                            const restock = item.restock || 0
-                                            const used = Math.round((estimatedConsumption[item.ingredient] || 0) * 10) / 10
-                                            const hasOpening = opening !== undefined
-
-                                            // 4. theoretical (Lý thuyết): Là số máy tự tính ra trên hệ thống. 
-                                            //    Công thức: Tồn lý thuyết = Tồn đầu (opening) + Nhập kho (restock) - Tiêu hao dự kiến (used).
-                                            const theoretical = hasOpening ? Math.round((opening + restock - used) * 10) / 10 : null
-
-                                            // 5. actual (Thực tế): Số lượng do nhân viên tự kiểm đếm (nhập bằng tay lúc chốt ca).
-                                            const actual = item.remaining || 0
-
-                                            // 6. diff (Lệch): Sự khác biệt giữa Thực Tế và Lý Thuyết = (actual - theoretical)
-                                            //    * Nếu diff < 0 (Hụt): Thực tế ít hơn máy tính -> Do pha tay bị lố, rớt đổ, hoặc hao hụt tự nhiên.
-                                            //    * Nếu diff > 0 (Dư): Thực tế nhiều hơn máy tính -> Do pha thiếu định mức nguyên liệu, hoặc khách kén không lấy.
-                                            // ============================================
-                                            const diff = theoretical !== null ? Math.round((actual - theoretical) * 10) / 10 : null
-
-                                            // ingredientCosts is an object mapping ingredient -> cost, no unit info here
-                                            const unit = getIngredientUnit(item.ingredient)
-
-                                            let diffText = '—'
-                                            let diffColor = 'text-text-dim'
-                                            if (diff !== null) {
-                                                if (diff < 0) {
-                                                    diffText = `Hụt ${Math.abs(diff)}${unit}`
-                                                    diffColor = 'text-danger'
-                                                } else if (diff > 0) {
-                                                    diffText = `Dư ${diff}${unit}`
-                                                    diffColor = 'text-warning' // Use warning for leftovers since it could mean inconsistent quality
-                                                } else {
-                                                    diffText = 'Khớp'
-                                                    diffColor = 'text-success'
-                                                }
-                                            }
-
-                                            return (
-                                                <div key={item.ingredient} className="flex items-center gap-1 py-1 border-b border-border/20 last:border-0">
-                                                    <span className="flex-1 text-[11px] font-bold text-text truncate">{ingredientLabel(item.ingredient)}</span>
-                                                    <span className="w-[60px] text-[11px] font-bold text-text text-center tabular-nums">{theoretical !== null ? theoretical : '—'}</span>
-
-                                                    <span className="w-[60px] text-[11px] font-bold text-text text-center tabular-nums">{actual}</span>
-                                                    <span className={`w-[60px] text-[10px] font-black text-center tabular-nums ${diffColor}`}>
-                                                        {diffText}
-                                                    </span>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                </div>
-                            )
-                        })()}
+                        {/* Inventory Analysis */}
+                        <InventoryRefillCard
+                            shiftClosing={shiftClosing}
+                            yesterdayClosing={yesterdayClosing}
+                            todayOrders={todayOrders}
+                            offlineToday={offlineToday}
+                            recipes={recipes}
+                            extraIngredients={extraIngredients}
+                            selectedAddress={selectedAddress}
+                        />
 
                         {/* Enhanced Footer */}
                         <div className="flex flex-col items-center justify-center py-8 mt-4 gap-3 relative">
