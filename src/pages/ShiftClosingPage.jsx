@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, PackageCheck } from 'lucide-react'
 import { usePOS } from '../contexts/POSContext'
@@ -7,11 +7,12 @@ import { useAuth } from '../contexts/AuthContext'
 import { formatVND, formatVNDInput, parseVNDInput } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import { insertShiftClosing, updateShiftClosing, fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchIngredientCostsWithUnits, fetchFixedCosts, insertExpense, fetchTodayExpenses } from '../services/orderService'
-
+import { supabase } from '../lib/supabaseClient'
 import { ingredientLabel, getIngredientUnit, sortIngredients } from '../components/common/recipeUtils'
 
 export default function ShiftClosingPage() {
     const navigate = useNavigate()
+    const channelRef = React.useRef(null)
     const { todayOrders, isLoadingHistory, handleLoadHistory } = usePOS()
     const { selectedAddress } = useAddress()
     const { profile } = useAuth()
@@ -106,6 +107,38 @@ export default function ShiftClosingPage() {
         }
     }, [selectedAddress?.id, selectedAddress?.ingredient_sort_order])
 
+    // --- Supabase Realtime Broadcast ---
+    useEffect(() => {
+        if (!selectedAddress?.id) return;
+
+        const channelName = `shift-closing-${selectedAddress.id}`
+        const channel = supabase.channel(channelName, {
+            config: {
+                broadcast: { self: false } // don't receive our own messages
+            }
+        })
+
+        channel
+            .on('broadcast', { event: 'sync-state' }, ({ payload }) => {
+                if (payload.type === 'actualCash') setActualCash(payload.value);
+                if (payload.type === 'actualTransfer') setActualTransfer(payload.value);
+                if (payload.type === 'note') setNote(payload.value);
+                if (payload.type === 'inventory') {
+                    setInventoryInputs(prev => ({ ...prev, [payload.ingredient]: payload.value }));
+                }
+                if (payload.type === 'restock') {
+                    setRestockInputs(prev => ({ ...prev, [payload.ingredient]: payload.value }));
+                }
+            })
+            .subscribe()
+
+        channelRef.current = channel
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [selectedAddress?.id])
+
     // --- Calculate system total revenue ---
     const pending = getPendingOrders()
     const todayStr = new Date().toDateString()
@@ -119,10 +152,20 @@ export default function ShiftClosingPage() {
 
     const handleInventoryChange = (ingredient, value) => {
         setInventoryInputs(prev => ({ ...prev, [ingredient]: value }))
+        channelRef.current?.send({
+            type: 'broadcast',
+            event: 'sync-state',
+            payload: { type: 'inventory', ingredient, value }
+        }).catch(() => { })
     }
 
     const handleRestockChange = (ingredient, value) => {
         setRestockInputs(prev => ({ ...prev, [ingredient]: value }))
+        channelRef.current?.send({
+            type: 'broadcast',
+            event: 'sync-state',
+            payload: { type: 'restock', ingredient, value }
+        }).catch(() => { })
     }
 
     const handleSubmit = async () => {
@@ -240,7 +283,11 @@ export default function ShiftClosingPage() {
                                             inputMode="numeric"
                                             placeholder="Số tiền..."
                                             value={actualCash}
-                                            onChange={e => setActualCash(formatVNDInput(e.target.value))}
+                                            onChange={e => {
+                                                const val = formatVNDInput(e.target.value);
+                                                setActualCash(val);
+                                                channelRef.current?.send({ type: 'broadcast', event: 'sync-state', payload: { type: 'actualCash', value: val } }).catch(() => { });
+                                            }}
                                             className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none"
                                         />
                                         {actualCash && (
@@ -258,7 +305,11 @@ export default function ShiftClosingPage() {
                                             inputMode="numeric"
                                             placeholder="Số tiền..."
                                             value={actualTransfer}
-                                            onChange={e => setActualTransfer(formatVNDInput(e.target.value))}
+                                            onChange={e => {
+                                                const val = formatVNDInput(e.target.value);
+                                                setActualTransfer(val);
+                                                channelRef.current?.send({ type: 'broadcast', event: 'sync-state', payload: { type: 'actualTransfer', value: val } }).catch(() => { });
+                                            }}
                                             className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none"
                                         />
                                         {actualTransfer && (
@@ -338,7 +389,11 @@ export default function ShiftClosingPage() {
                             <textarea
                                 placeholder="Ghi chú thêm (tùy chọn)..."
                                 value={note}
-                                onChange={e => setNote(e.target.value)}
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    setNote(val);
+                                    channelRef.current?.send({ type: 'broadcast', event: 'sync-state', payload: { type: 'note', value: val } }).catch(() => { });
+                                }}
                                 rows={3}
                                 className="w-full bg-surface border border-border/60 rounded-[20px] px-4 py-3 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors resize-none shadow-sm"
                             />
