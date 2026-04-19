@@ -23,8 +23,8 @@ export default defineConfig({
       registerType: 'prompt',
       includeAssets: ['favicon.svg', 'icons/*.png'],
       manifest: {
-        name: 'Kôphin Coffee - Cà phê sáng mang đi',
-        short_name: 'Cà phê sáng',
+        name: 'Smart POS - Kôphin Coffee',
+        short_name: 'Smart POS',
         description: 'Cà phê ngon mang đi buổi sáng',
         theme_color: '#3E2723',
         background_color: '#3E2723',
