@@ -165,7 +165,7 @@ export default function DailyReportPage() {
     let cumulative = 0
     for (const h of hourRange) {
         cumulative += (hourlyRevenue[h] || 0)
-        const hourItems = Object.entries(hourlyOrders[h] || {}).map(([name, qty]) => ({ name, qty }))
+        const hourItems = Object.entries(hourlyOrders[h] || {}).map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty)
         lineChartData.push({ hour: `${h}h`, revenue: cumulative, hourRevenue: hourlyRevenue[h] || 0, items: hourItems })
     }
 
