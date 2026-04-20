@@ -28,9 +28,9 @@ export default function PWAUpdatePrompt() {
                 <div className="pwa-update-header">
                     <span className="pwa-update-text">Đã có phiên bản mới !</span>
                 </div>
-                <div className="pwa-update-log">
+                {/* <div className="pwa-update-log">
                     {updateLog}
-                </div>
+                </div> */}
                 <div className="pwa-update-actions">
                     {/* <button
                         className="pwa-dismiss-btn"
