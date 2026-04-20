@@ -212,21 +212,32 @@ export function POSProvider() {
 
     // ---- Last order helpers ----
     function buildLastOrderFromDB(order) {
-        const items = (order.order_items || []).map(i => {
+        const map = {}
+        for (const i of (order.order_items || [])) {
             const name = i.products?.name || '?'
             const opts = i.options
                 ? i.options.split(', ').filter(o => o !== 'Tiền mặt' && o !== 'MoMo').join(', ')
                 : ''
-            return `${i.quantity} ${name}${opts ? ` (${opts})` : ''}`
-        })
+            const key = `${name}|${opts}`
+            if (!map[key]) map[key] = { name, opts, qty: 0 }
+            map[key].qty += i.quantity
+        }
+        const items = Object.values(map).map(({ qty, name, opts }) =>
+            `${qty} ${name}${opts ? ` (${opts})` : ''}`)
         return { total: order.total, createdAt: order.created_at, items }
     }
 
     function buildLastOrderFromCart(cartItems, total) {
-        const items = cartItems.map(i => {
+        const map = {}
+        for (const i of cartItems) {
             const extras = (i.extras || []).filter(e => e.name !== 'Tiền mặt' && e.name !== 'MoMo')
-            return `${i.quantity} ${i.name}${extras.length ? ` (${extras.map(e => e.name).join(', ')})` : ''}`
-        })
+            const opts = extras.map(e => e.name).join(', ')
+            const key = `${i.name}|${opts}`
+            if (!map[key]) map[key] = { name: i.name, opts, qty: 0 }
+            map[key].qty += i.quantity
+        }
+        const items = Object.values(map).map(({ qty, name, opts }) =>
+            `${qty} ${name}${opts ? ` (${opts})` : ''}`)
         return { total, createdAt: new Date().toISOString(), items }
     }
 
