@@ -9,7 +9,6 @@ import MenuGrid from '../components/POSPage/MenuGrid'
 import MiniCart from '../components/POSPage/MiniCart'
 import OrderFooter from '../components/POSPage/OrderFooter'
 import Toast from '../components/POSPage/Toast'
-import RealtimeNotification from '../components/POSPage/RealtimeNotification'
 
 export default function POSPage() {
     const navigate = useNavigate()
@@ -20,7 +19,7 @@ export default function POSPage() {
         handleAddItem, handleRemoveCartItem, handleToggleExtra, handleConfirm,
         total, hasOrder, isSubmitting,
         revenue, totalCost, cupsSold, isOnline,
-        toast, handleLoadHistory, realtimeNotification, setRealtimeNotification
+        toast, handleLoadHistory, lastOrder
     } = usePOS()
 
     // Format date
@@ -45,6 +44,7 @@ export default function POSPage() {
                 onOpenHistory={handleOpenHistory}
                 addressName={selectedAddress?.name}
                 onAddressClick={() => navigate('/addresses')}
+                lastOrder={lastOrder}
             />
 
             <MenuGrid
@@ -72,10 +72,6 @@ export default function POSPage() {
             />
 
             <Toast toast={toast} />
-            <RealtimeNotification
-                notification={realtimeNotification}
-                onClose={() => setRealtimeNotification(null)}
-            />
         </div>
     )
 }

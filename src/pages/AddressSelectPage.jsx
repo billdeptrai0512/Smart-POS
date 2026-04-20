@@ -3,6 +3,8 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { fetchBranchTodayCups, fetchActiveSessions } from '../services/authService'
+import { supabase } from '../lib/supabaseClient'
+import RealtimeNotification from '../components/POSPage/RealtimeNotification'
 
 export default function AddressSelectPage() {
     const { addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading } = useAddress()
@@ -14,11 +16,47 @@ export default function AddressSelectPage() {
     const [error, setError] = useState('')
     const [editingAddressId, setEditingAddressId] = useState(null)
     const [editName, setEditName] = useState('')
+    const [realtimeNotification, setRealtimeNotification] = useState(null)
 
     // Quick stats
     const [cupsMap, setCupsMap] = useState({})       // { addressId: cupCount }
     const [sessionsMap, setSessionsMap] = useState({}) // { addressId: [{ name }] }
     const [statsLoading, setStatsLoading] = useState(false)
+
+    // Listen for new orders if manager
+    useEffect(() => {
+        if (!supabase || isStaff) return;
+
+        const ordersChannel = supabase
+            .channel('address-orders-realtime')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, async (payload) => {
+                const addressId = payload.new.address_id;
+                const address = addresses.find(a => a.id === addressId);
+
+                const { data: items } = await supabase.from('order_items').select('quantity').eq('order_id', payload.new.id)
+                let qty = 0;
+                if (items) {
+                    qty = items.reduce((s, i) => s + i.quantity, 0);
+                }
+                const addrName = address ? address.name : 'Đơn mới';
+
+                setRealtimeNotification({
+                    title: addrName,
+                    description: `Khách vừa mua (${qty} ly)`,
+                    total: payload.new.total
+                });
+
+                // Update quick stats optimistically
+                if (addressId) {
+                    setCupsMap(prev => ({ ...prev, [addressId]: (prev[addressId] || 0) + qty }))
+                }
+            })
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(ordersChannel)
+        }
+    }, [addresses, isStaff])
 
     // Fetch stats when addresses are loaded
     useEffect(() => {
@@ -236,6 +274,11 @@ export default function AddressSelectPage() {
                     Đăng xuất
                 </button>
             </div>
+
+            <RealtimeNotification
+                notification={realtimeNotification}
+                onClose={() => setRealtimeNotification(null)}
+            />
         </div>
     )
 }

@@ -1,7 +1,7 @@
 import { ArrowRight } from 'lucide-react'
 import { formatVND } from '../../utils'
 
-export default function Header({ isOnline, dayName, dateOnly, cupsSold, revenue, totalCost, onOpenHistory, addressName, onAddressClick }) {
+export default function Header({ isOnline, dayName, dateOnly, cupsSold, revenue, totalCost, onOpenHistory, addressName, onAddressClick, lastOrder }) {
     return (
         <header className="shrink-0 pt-6 pb-6 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)] relative z-20">
             <div className="px-6 grid grid-cols-2 gap-3 mb-1">
@@ -25,10 +25,10 @@ export default function Header({ isOnline, dayName, dateOnly, cupsSold, revenue,
 
                         <span className="text-[12px] sm:text-[13px] text-text-secondary font-black uppercase tracking-wider">Địa chỉ</span>
                         <div className="flex items-center justify-between w-full mt-0.5">
-                            {addressName && <span className="text-[13px] text-primary font-black uppercase tracking-wider line-clamp-1">{addressName}</span>}
+                            {addressName && <span className="text-[13px] text-success font-black uppercase tracking-wider line-clamp-1">{addressName}</span>}
                         </div>
                     </div>
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-success/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
                 </div>
 
                 {/* Card 2: Revenue / Cost / Profit */}
@@ -46,11 +46,18 @@ export default function Header({ isOnline, dayName, dateOnly, cupsSold, revenue,
                     <div className="w-full h-[1px] bg-primary/15 rounded-full relative z-10 my-[3px]"></div>
 
                     <div className="flex flex-col justify-between items-start relative z-10 mt-[6px] w-full">
-
-                        <span className="text-[12px] sm:text-[13px] text-text-secondary font-black uppercase tracking-wider">Tổng cộng</span>
-                        <div className="flex items-center justify-between w-full mt-0.5">
-                            <span className="text-[15px] sm:text-[16px] font-black text-success">{cupsSold || 0} ly</span>
-                            <div className="w-7 h-7 flex items-center justify-center rounded-full text-text pointer-events-none shadow-sm">
+                        <span className="text-[12px] sm:text-[13px] text-text-secondary font-black uppercase tracking-wider">Nhật ký</span>
+                        <div className="flex items-start justify-between w-full mt-0.5 gap-1">
+                            {lastOrder ? (
+                                <div className="text-[13px] font-bold text-primary flex-1 leading-snug flex flex-col gap-0.5">
+                                    {lastOrder.items.map((item, i) => (
+                                        <span key={i}>{item}</span>
+                                    ))}
+                                </div>
+                            ) : (
+                                <span className="text-[13px] font-bold text-text-secondary">Chưa có đơn</span>
+                            )}
+                            <div className="w-7 h-7 flex items-center justify-center rounded-full text-text pointer-events-none shadow-sm shrink-0">
                                 <ArrowRight size={20} strokeWidth={2.5} />
                             </div>
                         </div>

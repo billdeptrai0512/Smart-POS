@@ -844,6 +844,24 @@ export async function fetchYesterdayExpenses(addressId) {
     return data || []
 }
 
+// Fetch the most recent order today for an address (with items + product names)
+export async function fetchLatestOrder(addressId) {
+    if (!supabase) return null
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    let query = supabase
+        .from('orders')
+        .select(`id, total, created_at, order_items(quantity, options, product_id, products(name))`)
+        .gte('created_at', today.toISOString())
+
+    if (addressId) query = query.eq('address_id', addressId)
+
+    const { data, error } = await query.order('created_at', { ascending: false }).limit(1).maybeSingle()
+    if (error || !data) return null
+    return data
+}
+
 // Fetch today's shift closing for an address (latest one)
 export async function fetchTodayShiftClosing(addressId) {
     if (!supabase) return null
