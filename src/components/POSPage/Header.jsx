@@ -46,10 +46,13 @@ export default function Header({ isOnline, dayName, dateOnly, cupsSold, revenue,
                     <div className="w-full h-[1px] bg-primary/15 rounded-full relative z-10 my-[3px]"></div>
 
                     <div className="flex flex-col justify-between items-start relative z-10 mt-[6px] w-full">
-                        <span className="text-[12px] sm:text-[13px] text-text-secondary font-black uppercase tracking-wider">Nhật ký</span>
-                        <div className="flex items-start justify-between w-full mt-0.5 gap-1">
+                        <div className="flex items-center justify-between w-full">
+                            <span className="text-[12px] sm:text-[13px] text-text-secondary font-black uppercase tracking-wider">Nhật ký</span>
+                            <ArrowRight size={20} strokeWidth={2.5} className="text-text shrink-0" />
+                        </div>
+                        <div className="mt-0.5 w-full">
                             {lastOrder ? (
-                                <div className="text-[13px] font-bold text-primary flex-1 leading-snug flex flex-col gap-0.5">
+                                <div className="text-[13px] font-bold text-primary leading-snug flex flex-col gap-0.5">
                                     {lastOrder.items.map((item, i) => (
                                         <span key={i}>{item}</span>
                                     ))}
@@ -57,9 +60,6 @@ export default function Header({ isOnline, dayName, dateOnly, cupsSold, revenue,
                             ) : (
                                 <span className="text-[13px] font-bold text-text-secondary">Chưa có đơn</span>
                             )}
-                            <div className="w-7 h-7 flex items-center justify-center rounded-full text-text pointer-events-none shadow-sm shrink-0">
-                                <ArrowRight size={20} strokeWidth={2.5} />
-                            </div>
                         </div>
                     </div>
                     <div className="absolute bottom-0 right-0 w-24 h-24 bg-primary/10 rounded-full blur-2xl -mr-10 -mb-10 pointer-events-none" />
