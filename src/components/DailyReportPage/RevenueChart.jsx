@@ -21,6 +21,11 @@ export default function RevenueChart({ lineChartData }) {
         }
     }, [])
 
+    const handleChartClick = (e) => {
+        // chỉ đóng tooltip nếu click vào vùng chart (không phải dot)
+        if (e?.target?.tagName !== 'circle') setActivePoint(null)
+    }
+
     const CustomDot = (props) => {
         const { cx, cy, payload, index } = props
         const isActive = activePoint?.hour === payload.hour
@@ -83,7 +88,7 @@ export default function RevenueChart({ lineChartData }) {
             </div>
 
             {lineChartData.length > 0 ? (
-                <div className="h-[220px] w-full mt-2 relative" ref={wrapperRef}>
+                <div className="h-[220px] w-full mt-2 relative [&_*]:outline-none [&_*]:focus:outline-none" ref={wrapperRef} onClick={handleChartClick}>
                     {activePoint && (
                         <div style={getTooltipStyle()}>
                             <div className="bg-[#1c1917] border border-[#44403c] rounded-[14px] px-3 py-2.5 shadow-xl">
