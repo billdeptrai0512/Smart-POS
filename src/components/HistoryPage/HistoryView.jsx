@@ -138,7 +138,6 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                         <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm  rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
                             <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Nhật ký</span>
                             <span className="text-[12px] font-bold text-text/80 leading-none mt-1 tabular-nums">{totalCups} ly</span>
-                            <span className="text-[12px] font-bold text-text/80 leading-none mt-1 tabular-nums">{totalExpenseCount} chi phí</span>
 
                         </div>
 
@@ -250,9 +249,9 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                 <div className="flex gap-2 pointer-events-auto mt-6">
                     <div onClick={() => navigate('/expenses')}
                         className="flex-1 bg-danger/10 border border-danger/60 rounded-[16px] px-4 py-2 flex flex-col justify-center items-start shadow-sm">
-                        <span className="text-[12px] font-black text-danger uppercase">Chi phí</span>
+                        <span className="text-[12px] font-black text-danger uppercase">Chi phí trong ngày</span>
                         <span className="text-[16px] font-bold text-danger max-w-full overflow-hidden text-ellipsis leading-none mt-1 tabular-nums">
-                            {totalExpenseCount} khoản
+                            {formatVND(totalExpenseAmount)}
                         </span>
                     </div>
 

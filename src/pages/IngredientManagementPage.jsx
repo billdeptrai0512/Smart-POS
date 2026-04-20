@@ -156,7 +156,7 @@ export default function IngredientManagementPage() {
                     <div className="flex flex-row gap-2 flex-1">
                         <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
                             <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Nguyên liệu</span>
-                            <span className="text-[12px] font-bold text-primary/80 leading-none mt-1 tabular-nums">{allIngredients.length} loại</span>
+                            <span className="text-[12px] font-bold text-text/80 leading-none mt-1 tabular-nums">{allIngredients.length} loại</span>
                         </div>
                     </div>
                 </div>
