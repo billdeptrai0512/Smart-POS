@@ -112,9 +112,9 @@ export default function RevenueChart({ lineChartData }) {
                                     </div>
                                 )}
                                 {activePoint.prevRevenue !== null && (
-                                    <div className="flex flex-col items-end border-t border-[#44403c] pt-1.5 mt-1">
+                                    <div className="flex flex-col items-start border-t border-[#44403c] pt-1.5 mt-1">
                                         <span className="text-[11px] text-warning">
-                                            Tổng cộng: {formatVND(activePoint.revenue)}
+                                            Tổng: {formatVND(activePoint.revenue)}
                                         </span>
                                     </div>
                                 )}
