@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { fetchTodayRevenue, fetchTodayCupsSold, fetchInventory, submitOrder, fetchTodayOrders, deleteOrder, fetchTodayExpenses, insertExpense, deleteExpense, fetchFixedCosts, insertFixedCost, updateFixedCost, deleteFixedCost } from '../services/orderService'
+import { fetchTodayRevenue, fetchTodayCupsSold, fetchInventory, submitOrder, fetchTodayOrders, deleteOrder, fetchTodayExpenses, insertExpense, deleteExpense, fetchFixedCosts, insertFixedCost, updateFixedCost, deleteFixedCost, fetchLatestOrder } from '../services/orderService'
 import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder } from '../hooks/useOfflineSync'
 import { calculateProductCost } from '../utils'
@@ -24,7 +24,6 @@ export function POSProvider() {
     const addressId = selectedAddress?.id
 
     const localOrderIds = useRef(new Set())
-    const [realtimeNotification, setRealtimeNotification] = useState(null)
 
     // ---- Persisted State ----
     const loadLocalJSON = (key, fallback) => {
@@ -48,6 +47,7 @@ export function POSProvider() {
     const [todayExpenses, setTodayExpenses] = useState([])
     const [fixedCosts, setFixedCosts] = useState([])
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+    const [lastOrder, setLastOrder] = useState(null)
 
     // ---- Toast helper ----
     function showToast(message, type = 'info') {
@@ -73,11 +73,13 @@ export function POSProvider() {
 
         async function load() {
             try {
-                const [rev, inv, cups] = await Promise.all([
+                const [rev, inv, cups, latest] = await Promise.all([
                     fetchTodayRevenue(addressId),
                     fetchInventory(),
-                    fetchTodayCupsSold(addressId)
+                    fetchTodayCupsSold(addressId),
+                    fetchLatestOrder(addressId)
                 ])
+                if (latest) setLastOrder(buildLastOrderFromDB(latest))
                 if (supabase) {
                     setRevenue(rev)
                     setInventory(inv)
@@ -149,22 +151,12 @@ export function POSProvider() {
                     fetchTodayRevenue(addressId).then(setRevenue)
                     fetchTodayCupsSold(addressId).then(setCupsSold)
 
-                    // Simple logic to detect if it's from another device: delay slightly
-                    setTimeout(async () => {
-                        if (localOrderIds.current.has(payload.new.id)) return;
-
-                        const { data: items } = await supabase.from('order_items').select('quantity, products(name)').eq('order_id', payload.new.id)
-                        let qty = 0;
-                        if (items) {
-                            qty = items.reduce((s, i) => s + i.quantity, 0);
-                        }
-
-                        setRealtimeNotification({
-                            title: `${selectedAddress?.name}`,
-                            description: `Khách vừa mua (${qty} ly)`,
-                            total: payload.new.total
-                        });
-                    }, 500)
+                    // Simple logic to detect if it's from another device
+                    if (!localOrderIds.current.has(payload.new.id)) {
+                        fetchLatestOrder(addressId).then(latest => {
+                            if (latest) setLastOrder(buildLastOrderFromDB(latest))
+                        })
+                    }
                 }
             })
             .subscribe()
@@ -217,6 +209,26 @@ export function POSProvider() {
         localStorage.setItem('pos_cups', cupsSold.toString())
         localStorage.setItem('pos_inventory', JSON.stringify(inventory))
     }, [cart, revenue, totalCost, cupsSold, inventory])
+
+    // ---- Last order helpers ----
+    function buildLastOrderFromDB(order) {
+        const items = (order.order_items || []).map(i => {
+            const name = i.products?.name || '?'
+            const opts = i.options
+                ? i.options.split(', ').filter(o => o !== 'Tiền mặt' && o !== 'MoMo').join(', ')
+                : ''
+            return `${i.quantity} ${name}${opts ? ` (${opts})` : ''}`
+        })
+        return { total: order.total, createdAt: order.created_at, items }
+    }
+
+    function buildLastOrderFromCart(cartItems, total) {
+        const items = cartItems.map(i => {
+            const extras = (i.extras || []).filter(e => e.name !== 'Tiền mặt' && e.name !== 'MoMo')
+            return `${i.quantity} ${i.name}${extras.length ? ` (${extras.map(e => e.name).join(', ')})` : ''}`
+        })
+        return { total, createdAt: new Date().toISOString(), items }
+    }
 
     // ---- Derived values ----
     const total = cart.reduce((sum, item) => {
@@ -280,6 +292,7 @@ export function POSProvider() {
         setRevenue(prev => prev + savedTotal)
         setTotalCost(prev => prev + cartCost)
         setCupsSold(prev => prev + savedOrderCount)
+        setLastOrder(buildLastOrderFromCart(savedCart, savedTotal))
         setCart([])
         setActiveCartItemId(null)
         showToast('Tạo thành công', 'success')
@@ -431,12 +444,13 @@ export function POSProvider() {
             revenue, totalCost, cupsSold, inventory, isOnline,
             // History
             todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, handleDeleteOrder, handleAddExpense, handleDeleteExpense,
+            lastOrder,
             // Fixed Costs
             fixedCosts, handleLoadFixedCosts, handleAddFixedCost, handleUpdateFixedCost, handleDeleteFixedCost,
             // User info
             userRole: profile?.role || 'staff',
             // Toast & Realtime
-            toast, showToast, realtimeNotification, setRealtimeNotification
+            toast, showToast
         }}>
             <Outlet />
         </POSContext.Provider>
