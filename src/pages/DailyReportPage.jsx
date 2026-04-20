@@ -61,6 +61,7 @@ export default function DailyReportPage() {
 
     const heatmapData = {}
     const hourlyRevenue = {}
+    const hourlyOrders = {}
     const productStats = {}
     const activeHours = new Set()
     const soldProducts = new Set()
@@ -78,6 +79,17 @@ export default function DailyReportPage() {
         totalRevenue += o.total
 
         const items = isOffline ? (o.cart || o.orderItems || []) : (o.order_items || [])
+
+        // Aggregate items per hour for dot tooltip
+        items.forEach(i => {
+            const productId = isOffline ? i.productId : i.product_id
+            const qty = i.quantity || 1
+            const prodDef = products.find(p => p.id === productId)
+            const name = prodDef?.name || (isOffline ? i.name : i.products?.name) || '?'
+            if (!hourlyOrders[hour]) hourlyOrders[hour] = {}
+            hourlyOrders[hour][name] = (hourlyOrders[hour][name] || 0) + qty
+        })
+
         items.forEach(i => {
             const productId = isOffline ? i.productId : i.product_id
             const qty = i.quantity || 1
@@ -92,7 +104,6 @@ export default function DailyReportPage() {
             heatmapData[productId][hour] = (heatmapData[productId][hour] || 0) + qty
             if (heatmapData[productId][hour] > maxHeatmapQty) maxHeatmapQty = heatmapData[productId][hour]
 
-            // Hybrid COGS: use snapshot if available, fallback to dynamic calc
             const snapshotCost = isOffline ? (i.unitCost || 0) : (i.unit_cost || 0)
             const cost = snapshotCost > 0
                 ? snapshotCost
@@ -154,7 +165,8 @@ export default function DailyReportPage() {
     let cumulative = 0
     for (const h of hourRange) {
         cumulative += (hourlyRevenue[h] || 0)
-        lineChartData.push({ hour: `${h}h`, revenue: cumulative })
+        const hourItems = Object.entries(hourlyOrders[h] || {}).map(([name, qty]) => ({ name, qty }))
+        lineChartData.push({ hour: `${h}h`, revenue: cumulative, hourRevenue: hourlyRevenue[h] || 0, items: hourItems })
     }
 
 
@@ -209,7 +221,6 @@ export default function DailyReportPage() {
                         />
 
                         <RevenueChart lineChartData={lineChartData} />
-                        <HeatmapChart hourRange={hourRange} soldProducts={soldProducts} products={products} heatmapData={heatmapData} maxHeatmapQty={maxHeatmapQty} />
 
                         {/* Divider */}
                         <div className="flex items-center gap-3 py-1 my-1 px-4">
