@@ -22,7 +22,7 @@ export default function MenuGrid({ products, cart, onAddItem }) {
                                     onAddItem(product);
                                 }
                             }}
-                            className={`menu-btn relative rounded-[1.5rem] p-4.5 sm:p-5 text-left min-h-[140px] flex flex-col justify-between border cursor-pointer transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-primary/30 ${qty > 0
+                            className={`menu-btn relative rounded-[1.5rem] p-3 sm:p-4 text-left min-h-[100px] flex flex-col justify-between border cursor-pointer transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-primary/30 ${qty > 0
                                 ? 'bg-gradient-to-br from-primary/15 to-primary/5 border-primary/40 shadow-[0_8px_24px_var(--color-primary-glow)] ring-1 ring-primary/20'
                                 : 'bg-surface border-border/60 shadow-sm hover:border-text/30 hover:shadow-md hover:bg-surface-hover'
                                 }`}
@@ -32,14 +32,14 @@ export default function MenuGrid({ products, cart, onAddItem }) {
 
                             {/* Top: Name */}
                             <div className="relative z-10 w-full">
-                                <h3 className={`font-black text-[18px] sm:text-[19px] leading-tight break-words pt-0.25 ${qty > 0 ? 'text-primary drop-shadow-sm' : 'text-text'}`}>
+                                <h3 className={`font-black text-[15px] sm:text-[16px] leading-tight break-words pt-0.25 ${qty > 0 ? 'text-primary drop-shadow-sm' : 'text-text'}`}>
                                     {product.name}
                                 </h3>
                             </div>
 
                             {/* Bottom: Price & Badge */}
-                            <div className="flex items-end justify-between mt-6 relative z-10 w-full gap-2">
-                                <span className={`font-extrabold text-[15px] pb-1 ${qty > 0 ? 'text-primary/90' : 'text-text-secondary'}`}>
+                            <div className="flex items-end justify-between mt-3 relative z-10 w-full gap-2">
+                                <span className={`font-extrabold text-[13px] pb-1 ${qty > 0 ? 'text-primary/90' : 'text-text-secondary'}`}>
                                     {formatVND(product.price)}
                                 </span>
                                 {qty > 0 && (
