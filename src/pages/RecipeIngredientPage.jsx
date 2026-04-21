@@ -10,6 +10,7 @@ import {
     deleteRecipeRow,
     upsertProductPrice,
     insertProductExtra,
+    updateProductExtraName,
     updateProductExtraPrice,
     duplicateProductExtra,
     updateExtrasSortOrder,
@@ -47,6 +48,7 @@ export default function RecipeIngredientPage() {
     const [newExtraName, setNewExtraName] = useState('')
     const [newExtraPrice, setNewExtraPrice] = useState('')
     const [editingExtraPrice, setEditingExtraPrice] = useState(null)
+    const [editingExtraName, setEditingExtraName] = useState(null)
     const [duplicatingExtra, setDuplicatingExtra] = useState(null)
     const [sortingExtras, setSortingExtras] = useState(false)
     const [sortedExtras, setSortedExtras] = useState([])
@@ -196,6 +198,22 @@ export default function RecipeIngredientPage() {
             console.error('Add extra error:', err)
         } finally {
             setSaving(false)
+        }
+    }
+
+    async function saveExtraName(extraId, newName) {
+        const trimmed = newName.trim()
+        if (!trimmed) { setEditingExtraName(null); return }
+        setSaving(true)
+        try {
+            await updateProductExtraName(extraId, trimmed)
+            setExtras(prev => prev.map(e => e.id === extraId ? { ...e, name: trimmed } : e))
+            refreshProducts?.()
+        } catch (err) {
+            console.error('Save extra name error:', err)
+        } finally {
+            setSaving(false)
+            setEditingExtraName(null)
         }
     }
 
@@ -539,10 +557,9 @@ export default function RecipeIngredientPage() {
                                     onClick={() => { setSortedExtras([...extras]); setSortingExtras(true) }}
                                     className="text-[11px] text-text-dim hover:text-primary font-bold transition-colors"
                                 >
-                                    ↕ Sắp xếp
+                                    Sắp xếp ↕
                                 </button>
                             )}
-                            {!sortingExtras && <span className="text-[11px] text-text-dim">Hiển thị khi đặt món</span>}
                         </div>
                     </div>
 
@@ -581,7 +598,27 @@ export default function RecipeIngredientPage() {
                         {extras.map(extra => (
                             <div key={extra.id} className="bg-surface border border-border/60 rounded-[14px] px-4 py-3 flex flex-col gap-2 group">
                                 <div className="flex items-center gap-2">
-                                    <span className="text-[13px] font-bold text-text flex-1 uppercase">{extra.name}</span>
+                                    {editingExtraName?.extraId === extra.id ? (
+                                        <input
+                                            type="text"
+                                            autoFocus
+                                            className="flex-1 bg-bg border border-primary/60 rounded-lg px-2 py-0.5 text-[13px] font-bold text-text uppercase focus:outline-none focus:border-primary"
+                                            value={editingExtraName.value}
+                                            onChange={e => setEditingExtraName(prev => ({ ...prev, value: e.target.value }))}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') saveExtraName(extra.id, editingExtraName.value)
+                                                if (e.key === 'Escape') setEditingExtraName(null)
+                                            }}
+                                            onBlur={() => saveExtraName(extra.id, editingExtraName.value)}
+                                        />
+                                    ) : (
+                                        <span
+                                            className={`text-[13px] font-bold text-text flex-1 uppercase ${canEdit ? 'cursor-pointer hover:text-primary' : ''}`}
+                                            onClick={() => canEdit && setEditingExtraName({ extraId: extra.id, value: extra.name })}
+                                        >
+                                            {extra.name}
+                                        </span>
+                                    )}
                                     {editingExtraPrice?.extraId === extra.id ? (
                                         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                                             <input
