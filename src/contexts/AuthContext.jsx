@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, fetchProfileByAuthId, removeSession } from '../services/authService'
+import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, signUpWithInvite as authSignUpWithInvite, fetchProfileByAuthId, removeSession } from '../services/authService'
 
 const AuthContext = createContext(null)
 
@@ -76,9 +76,15 @@ export function AuthProvider({ children }) {
         setProfile(null)
     }, [profile])
 
-    const signUp = useCallback(async (username, password, name, role = 'staff', managerId = null) => {
-        const data = await authSignUp(username, password, name, role, managerId)
-        // Manually set state to bypass race conditions with onAuthStateChange
+    const signUp = useCallback(async (username, password, name, email = null) => {
+        const data = await authSignUp(username, password, name, email)
+        setUser(data.user)
+        setProfile(data.profile)
+        return data
+    }, [])
+
+    const signUpWithInvite = useCallback(async (token, username, password, name) => {
+        const data = await authSignUpWithInvite(token, username, password, name)
         setUser(data.user)
         setProfile(data.profile)
         return data
@@ -89,7 +95,7 @@ export function AuthProvider({ children }) {
     const isAdmin = profile?.role === 'admin'
 
     return (
-        <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut, isManager, isStaff, isAdmin }}>
+        <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signUpWithInvite, signOut, isManager, isStaff, isAdmin }}>
             {children}
         </AuthContext.Provider>
     )
