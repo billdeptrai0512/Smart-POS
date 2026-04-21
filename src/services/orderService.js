@@ -567,7 +567,7 @@ export async function updateProductSortOrder(addressId, orderedProductIds) {
 // Fetch all product extras (returns { productId: [{ id, name, price }] })
 export async function fetchProductExtras(addressId) {
     if (!supabase) return {}
-    let query = supabase.from('product_extras').select('id, product_id, name, price, address_id')
+    let query = supabase.from('product_extras').select('id, product_id, name, price, address_id').order('sort_order', { ascending: true, nullsFirst: false }).order('id', { ascending: true })
 
     if (addressId) {
         query = query.or(`address_id.eq.${addressId},address_id.is.null`)
@@ -593,6 +593,10 @@ export async function fetchProductExtras(addressId) {
             finalExtras.push(d)
         }
     }
+    finalExtras.sort((a, b) => {
+        const so = (a.sort_order ?? 9999) - (b.sort_order ?? 9999)
+        return so !== 0 ? so : a.id - b.id
+    })
 
     const extrasMap = {}
     for (const ex of finalExtras) {
@@ -615,6 +619,50 @@ export async function insertProductExtra(productId, name, price, addressId = nul
         .single()
     if (error) throw error
     return data
+}
+
+// Update a product extra's price
+export async function updateProductExtraPrice(extraId, price) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase
+        .from('product_extras')
+        .update({ price })
+        .eq('id', extraId)
+    if (error) throw error
+}
+
+// Duplicate a product extra (copy extra + all its extra_ingredients) with a new name
+export async function duplicateProductExtra(extraId, newName, addressId = null) {
+    if (!supabase) throw new Error('No Supabase connection')
+
+    const { data: src, error: e1 } = await supabase
+        .from('product_extras').select('product_id, price').eq('id', extraId).single()
+    if (e1) throw e1
+
+    const payload = { product_id: src.product_id, name: newName, price: src.price }
+    if (addressId) payload.address_id = addressId
+    const { data: newExtra, error: e2 } = await supabase
+        .from('product_extras').insert(payload).select().single()
+    if (e2) throw e2
+
+    const { data: ings } = await supabase
+        .from('extra_ingredients').select('ingredient, amount, unit').eq('extra_id', extraId)
+    if (ings?.length) {
+        await supabase.from('extra_ingredients').insert(
+            ings.map(i => ({ extra_id: newExtra.id, ingredient: i.ingredient, amount: i.amount, unit: i.unit }))
+        )
+    }
+    return newExtra
+}
+
+// Update sort_order for a list of extras
+export async function updateExtrasSortOrder(orderedExtraIds) {
+    if (!supabase) throw new Error('No Supabase connection')
+    await Promise.all(
+        orderedExtraIds.map((id, index) =>
+            supabase.from('product_extras').update({ sort_order: index }).eq('id', id)
+        )
+    )
 }
 
 // Delete a product extra

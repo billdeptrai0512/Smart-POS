@@ -1,18 +1,39 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CircleMinus, ArrowLeft, ArrowRight } from 'lucide-react'
 import { formatVND, calculateProductCost } from '../../utils'
-import { getPendingOrders } from '../../hooks/useOfflineSync'
+import { getPendingOrders, removePendingOrder } from '../../hooks/useOfflineSync'
 import { fetchTodayShiftClosing } from '../../services/orderService'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAuth } from '../../contexts/AuthContext'
 
-export default function HistoryView({ todayOrders, todayExpenses, recipes, products, ingredientCosts, extraIngredients, isLoadingHistory, onBack, onDeleteOrder, onDeleteExpense }) {
+export default function HistoryView({ todayOrders, todayExpenses, recipes, products, ingredientCosts, extraIngredients, isLoadingHistory, onBack, onDeleteOrder, onDeleteExpense, onRetrySync }) {
     const navigate = useNavigate()
     const [deletingId, setDeletingId] = useState(null)
     const { selectedAddress } = useAddress()
     const { isStaff } = useAuth()
     const [shiftClosed, setShiftClosed] = useState(null)
+    const [pendingOrders, setPendingOrders] = useState(() => getPendingOrders())
+    const [isSyncing, setIsSyncing] = useState(false)
+
+    const refreshPending = useCallback(() => setPendingOrders(getPendingOrders()), [])
+
+    const handleDeleteOffline = useCallback((createdAt) => {
+        if (!window.confirm('Xóa đơn offline này khỏi máy?')) return
+        removePendingOrder(createdAt)
+        refreshPending()
+    }, [refreshPending])
+
+    const handleRetrySync = useCallback(async () => {
+        if (!onRetrySync) return
+        setIsSyncing(true)
+        try {
+            await onRetrySync()
+        } finally {
+            setIsSyncing(false)
+            refreshPending()
+        }
+    }, [onRetrySync, refreshPending])
 
     useEffect(() => {
         if (selectedAddress?.id) {
@@ -57,12 +78,12 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
         }
     })
 
-    const pending = getPendingOrders()
     const todayStr = new Date().toDateString()
-    const formattedOffline = pending
+    const formattedOffline = pendingOrders
         .filter(o => new Date(o.createdAt).toDateString() === todayStr)
-        .map((o, idx) => ({
-            id: `offline-${idx}`,
+        .map((o) => ({
+            id: `offline-${o.createdAt}`,
+            createdAt_key: o.createdAt,
             total: o.total,
             cost: o.totalCost > 0
                 ? o.totalCost
@@ -154,6 +175,21 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
             </header>
 
             <main className="flex-1 overflow-y-auto px-4 py-5 pb-24 space-y-3 bg-bg">
+                {pendingOrders.length > 0 && (
+                    <div className="bg-warning/10 border border-warning/40 rounded-[14px] px-4 py-3 flex items-center justify-between gap-3">
+                        <div className="flex flex-col min-w-0">
+                            <span className="text-[13px] font-black text-warning">{pendingOrders.length} đơn chờ đồng bộ</span>
+                            <span className="text-[11px] text-text-dim mt-0.5">Đơn offline chưa lên hệ thống</span>
+                        </div>
+                        <button
+                            onClick={handleRetrySync}
+                            disabled={isSyncing}
+                            className="shrink-0 bg-warning text-bg text-[12px] font-black px-3 py-1.5 rounded-lg disabled:opacity-60"
+                        >
+                            {isSyncing ? 'Đang sync...' : 'Thử lại'}
+                        </button>
+                    </div>
+                )}
                 {isLoadingHistory ? (
                     <div className="flex justify-center py-10">
                         <span className="text-text-secondary font-medium">Đang tải...</span>
@@ -234,7 +270,15 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                                                 {deletingId === order.id ? '⏳' : time}
                                             </span>
                                         ) : (
-                                            <span className="text-text-secondary text-[14px] font-bold">{time}</span>
+                                            <div className="flex flex-col items-end gap-1">
+                                                <span className="text-text-secondary text-[14px] font-bold">{time}</span>
+                                                <span
+                                                    className="text-warning/70 hover:text-danger text-[11px] font-bold cursor-pointer underline underline-offset-2 transition-colors"
+                                                    onClick={() => handleDeleteOffline(order.createdAt_key)}
+                                                >
+                                                    Xóa
+                                                </span>
+                                            </div>
                                         )}
                                     </div>
                                 </div>

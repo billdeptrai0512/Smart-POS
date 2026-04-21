@@ -9,7 +9,7 @@ import HistoryView from '../components/HistoryPage/HistoryView'
 export default function HistoryPage() {
     const navigate = useNavigate()
     const { products, recipes, ingredientCosts, extraIngredients } = useProducts()
-    const { todayOrders, todayExpenses, isLoadingHistory, handleDeleteOrder, handleAddExpense, handleDeleteExpense, handleLoadHistory } = usePOS()
+    const { todayOrders, todayExpenses, isLoadingHistory, handleDeleteOrder, handleAddExpense, handleDeleteExpense, handleLoadHistory, retrySync } = usePOS()
     const { isManager, isAdmin } = useAuth()
 
     useEffect(() => {
@@ -33,6 +33,7 @@ export default function HistoryPage() {
             onOpenRecipeManager={(isManager || isAdmin) ? () => navigate('/recipes') : null}
             onAddExpense={handleAddExpense}
             onDeleteExpense={handleDeleteExpense}
+            onRetrySync={retrySync}
         />
     )
 }

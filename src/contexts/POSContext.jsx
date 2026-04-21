@@ -65,7 +65,7 @@ export function POSProvider() {
         showToast('Đã đồng bộ đơn hàng offline!', 'success')
     }, [addressId])
 
-    const { getPendingCount } = useOfflineSync(handleSyncComplete)
+    const { getPendingCount, retrySync } = useOfflineSync(handleSyncComplete)
 
     // ---- Load data when address changes ----
     useEffect(() => {
@@ -460,6 +460,8 @@ export function POSProvider() {
             fixedCosts, handleLoadFixedCosts, handleAddFixedCost, handleUpdateFixedCost, handleDeleteFixedCost,
             // User info
             userRole: profile?.role || 'staff',
+            // Offline sync
+            retrySync,
             // Toast & Realtime
             toast, showToast
         }}>

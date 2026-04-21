@@ -24,6 +24,11 @@ function savePendingOrders(orders) {
     localStorage.setItem(PENDING_ORDERS_KEY, JSON.stringify(orders))
 }
 
+export function removePendingOrder(createdAt) {
+    const pending = getPendingOrders()
+    savePendingOrders(pending.filter(o => o.createdAt !== createdAt))
+}
+
 export function addPendingOrder(orderItems, total, paymentMethod = null, addressId = null, totalCost = 0) {
     const pending = getPendingOrders()
     pending.push({
@@ -90,5 +95,5 @@ export function useOfflineSync(onSyncComplete) {
         return () => window.removeEventListener('online', handleOnline)
     }, [syncPending])
 
-    return { syncPending, getPendingCount: () => getPendingOrders().length }
+    return { syncPending, getPendingCount: () => getPendingOrders().length, retrySync: syncPending }
 }
