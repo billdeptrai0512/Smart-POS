@@ -21,14 +21,16 @@ export function ingredientLabel(key) {
     return name.charAt(0).toUpperCase() + name.slice(1)
 }
 
-export function getIngredientUnit(key, storedUnit) {
+export function getIngredientUnit(key, storedUnit, ingredientUnits) {
     // Prefer DB-stored unit if available and not the default placeholder
     if (storedUnit && storedUnit !== 'đv') return storedUnit;
+    // Fall back to ingredient_costs unit map
+    if (ingredientUnits?.[key] && ingredientUnits[key] !== 'đv') return ingredientUnits[key];
     if (key.endsWith('_g')) return 'g';
     if (key.endsWith('_ml')) return 'ml';
     if (key === 'cup') return 'ly';
     if (key === 'lid') return 'nắp';
     if (key === 'tea_bag') return 'gói';
     if (key === 'orange') return 'quả';
-    return storedUnit || 'đv';
+    return storedUnit || ingredientUnits?.[key] || 'đv';
 }

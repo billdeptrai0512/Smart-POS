@@ -6,6 +6,7 @@ import { useAddress } from '../contexts/AddressContext'
 import { formatVND } from '../utils'
 import {
     fetchIngredientCosts,
+    fetchIngredientCostsWithUnits,
     upsertRecipe,
     deleteRecipeRow,
     upsertProductPrice,
@@ -28,6 +29,7 @@ export default function RecipeIngredientPage() {
     const canEdit = isManager || isAdmin
 
     const [ingredientCosts, setIngredientCosts] = useState(contextCosts || {})
+    const [ingredientUnits, setIngredientUnits] = useState({})
     const [recipes, setRecipes] = useState(allRecipes || [])
     const [editingAmount, setEditingAmount] = useState(null)
     const [editingProductPrice, setEditingProductPrice] = useState(null)
@@ -62,6 +64,11 @@ export default function RecipeIngredientPage() {
     useEffect(() => {
         if (selectedAddress?.id) {
             fetchIngredientCosts(selectedAddress.id).then(setIngredientCosts)
+            fetchIngredientCostsWithUnits(selectedAddress.id).then(list => {
+                const units = {}
+                list.forEach(d => { units[d.ingredient] = d.unit })
+                setIngredientUnits(units)
+            })
         }
     }, [selectedAddress?.id])
 
@@ -350,14 +357,14 @@ export default function RecipeIngredientPage() {
                                             }}
                                             onBlur={() => saveAmount(recipe.ingredient, parseFloat(editingAmount.value) || 0)}
                                         />
-                                        <span className="text-[12px] text-text-dim">{getIngredientUnit(recipe.ingredient, recipe.unit)}</span>
+                                        <span className="text-[12px] text-text-dim">{getIngredientUnit(recipe.ingredient, recipe.unit, ingredientUnits)}</span>
                                     </div>
                                 ) : (
                                     <span
                                         className={`text-[13px] font-bold text-primary tabular-nums min-w-[56px] text-right ${canEdit ? 'cursor-pointer hover:underline' : ''}`}
                                         onClick={() => canEdit && setEditingAmount({ ingredient: recipe.ingredient, value: recipe.amount.toString() })}
                                     >
-                                        {recipe.amount} <span className="text-[11px] font-normal text-primary/70">{getIngredientUnit(recipe.ingredient, recipe.unit)}</span>
+                                        {recipe.amount} <span className="text-[11px] font-normal text-primary/70">{getIngredientUnit(recipe.ingredient, recipe.unit, ingredientUnits)}</span>
                                     </span>
                                 )}
 
@@ -524,14 +531,14 @@ export default function RecipeIngredientPage() {
                                                                 }}
                                                                 onBlur={() => saveExtraAmount(extra.id, ei.ingredient, parseFloat(editingExtraAmount.value) || 0)}
                                                             />
-                                                            <span className="text-[10px] font-normal text-text-dim/70">{getIngredientUnit(ei.ingredient, ei.unit)}</span>
+                                                            <span className="text-[10px] font-normal text-text-dim/70">{getIngredientUnit(ei.ingredient, ei.unit, ingredientUnits)}</span>
                                                         </div>
                                                     ) : (
                                                         <span
                                                             className={`font-bold tabular-nums min-w-[32px] text-right ${ei.amount > 0 ? 'text-primary' : ei.amount < 0 ? 'text-danger' : 'text-text-dim'} ${canEdit ? 'cursor-pointer hover:underline' : ''}`}
                                                             onClick={() => canEdit && setEditingExtraAmount({ extraId: extra.id, ingredient: ei.ingredient, value: ei.amount.toString() })}
                                                         >
-                                                            {ei.amount > 0 ? '+' : ''}{ei.amount} <span className="text-[10px] font-normal text-text-dim/70">{getIngredientUnit(ei.ingredient, ei.unit)}</span>
+                                                            {ei.amount > 0 ? '+' : ''}{ei.amount} <span className="text-[10px] font-normal text-text-dim/70">{getIngredientUnit(ei.ingredient, ei.unit, ingredientUnits)}</span>
                                                         </span>
                                                     )}
                                                     {canEdit && <button onClick={() => handleDeleteExtraIngredient(extra.id, ei.ingredient)} className="text-danger/60 hover:text-danger text-[14px]">✕</button>}

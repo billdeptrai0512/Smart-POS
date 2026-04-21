@@ -1,4 +1,4 @@
-import { Banknote, ArrowRight, MinusCircle, Activity, PinOff, ArrowUp, ArrowDown } from 'lucide-react'
+import { Banknote, ArrowRight, MinusCircle, ArrowUp, ArrowDown } from 'lucide-react'
 import { formatVND } from '../../utils'
 
 export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, fixedExpense, netProfit, onRecipesClick, onDailyExpenseClick, onFixedExpenseClick, yesterdayNetProfit }) {

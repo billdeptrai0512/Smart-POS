@@ -15,6 +15,7 @@ import HistoryPage from './pages/HistoryPage'
 import RecipeMenuPage from './pages/RecipeMenuPage'
 import RecipeIngredientPage from './pages/RecipeIngredientPage'
 import DailyReportPage from './pages/DailyReportPage'
+import RangeReportPage from './pages/RangeReportPage'
 import ExpensePage from './pages/ExpensePage'
 import ShiftClosingPage from './pages/ShiftClosingPage'
 import IngredientManagementPage from './pages/IngredientManagementPage'
@@ -97,6 +98,7 @@ export default function App() {
                     <Route path="/history" element={<HistoryPage />} />
                     <Route path="/shift-closing" element={<ShiftClosingPage />} />
                     <Route path="/daily-report" element={<DailyReportPage />} />
+                    <Route path="/range-report" element={<RangeReportPage />} />
                     <Route path="/expenses" element={<ExpensePage />} />
                     {/* Feature-level permission routes (anyone can view, managers can edit) */}
                     <Route path="/recipes" element={<RecipeMenuPage />} />
