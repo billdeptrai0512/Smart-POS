@@ -16,7 +16,7 @@ export default function RecipeMenuPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const backTo = location.state?.from || '/history'
-    const { products, recipes, ingredientCosts, refreshProducts } = useProducts()
+    const { products, recipes, ingredientCosts, ingredientUnits, refreshProducts } = useProducts()
     const { selectedAddress } = useAddress()
     const { isManager, isAdmin } = useAuth()
     const canEdit = isManager || isAdmin
@@ -188,7 +188,7 @@ export default function RecipeMenuPage() {
                                             {prodRecipes.length > 0 && (
                                                 <div className="flex flex-col gap-0.5">
                                                     {prodRecipes.map(r => {
-                                                        const u = getIngredientUnit(r.ingredient, r.unit)
+                                                        const u = getIngredientUnit(r.ingredient, r.unit, ingredientUnits)
                                                         const isSymbol = ['g', 'ml', 'l', 'kg', 'oz', 'mg'].includes(String(u).toLowerCase())
                                                         return (
                                                             <span key={r.ingredient} className="text-[12px] font-medium text-text-secondary">

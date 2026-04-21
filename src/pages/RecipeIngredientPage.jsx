@@ -6,7 +6,6 @@ import { useAddress } from '../contexts/AddressContext'
 import { formatVND } from '../utils'
 import {
     fetchIngredientCosts,
-    fetchIngredientCostsWithUnits,
     upsertRecipe,
     deleteRecipeRow,
     upsertProductPrice,
@@ -23,13 +22,13 @@ export default function RecipeIngredientPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const { productId } = useParams()
-    const { products, recipes: allRecipes, ingredientCosts: contextCosts, productExtras: contextExtras, extraIngredients: contextExtraIngs, refreshProducts } = useProducts()
+    const { products, recipes: allRecipes, ingredientCosts: contextCosts, ingredientUnits: contextUnits, productExtras: contextExtras, extraIngredients: contextExtraIngs, refreshProducts } = useProducts()
     const { selectedAddress } = useAddress()
     const { isManager, isAdmin } = useAuth()
     const canEdit = isManager || isAdmin
 
     const [ingredientCosts, setIngredientCosts] = useState(contextCosts || {})
-    const [ingredientUnits, setIngredientUnits] = useState({})
+    const [ingredientUnits, setIngredientUnits] = useState(contextUnits || {})
     const [recipes, setRecipes] = useState(allRecipes || [])
     const [editingAmount, setEditingAmount] = useState(null)
     const [editingProductPrice, setEditingProductPrice] = useState(null)
@@ -58,17 +57,13 @@ export default function RecipeIngredientPage() {
     // Sync from context when it updates
     useEffect(() => { setRecipes(allRecipes) }, [allRecipes])
     useEffect(() => { setIngredientCosts(contextCosts) }, [contextCosts])
+    useEffect(() => { setIngredientUnits(contextUnits || {}) }, [contextUnits])
     useEffect(() => { setExtras(contextExtras?.[productId] || []) }, [contextExtras, productId])
     useEffect(() => { setExtraIngs(contextExtraIngs || {}) }, [contextExtraIngs])
 
     useEffect(() => {
         if (selectedAddress?.id) {
             fetchIngredientCosts(selectedAddress.id).then(setIngredientCosts)
-            fetchIngredientCostsWithUnits(selectedAddress.id).then(list => {
-                const units = {}
-                list.forEach(d => { units[d.ingredient] = d.unit })
-                setIngredientUnits(units)
-            })
         }
     }, [selectedAddress?.id])
 
