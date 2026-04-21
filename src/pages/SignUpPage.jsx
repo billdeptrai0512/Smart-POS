@@ -58,7 +58,7 @@ export default function SignUpPage() {
                     )}
 
                     <div>
-                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Tên</label>
+                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Họ và Tên</label>
                         <input
                             type="text"
                             value={name}
@@ -78,7 +78,7 @@ export default function SignUpPage() {
                             onChange={e => setUsername(e.target.value)}
                             required
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder="Đăng nhập"
+                            placeholder="Tên đăng nhập"
                         />
                     </div>
 
