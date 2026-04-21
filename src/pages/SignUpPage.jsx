@@ -47,8 +47,7 @@ export default function SignUpPage() {
             <div className="w-full max-w-sm">
                 <div className="text-center mb-8">
                     {/* <img src="/icons/icon-512x512.png" alt="Kôphin" className="w-16 h-16 mx-auto rounded-[16px] shadow-sm" /> */}
-                    <h1 className="text-2xl font-black text-text mt-3">Tạo tài khoản</h1>
-                    <p className="text-text-secondary text-sm mt-1">Bắt đầu làm việc</p>
+                    <h1 className="text-2xl font-black text-text mt-3">Đăng ký</h1>
                 </div>
 
                 <form onSubmit={handleSubmit} className="bg-surface border border-border/60 rounded-[20px] p-6 shadow-sm space-y-4">
@@ -165,8 +164,7 @@ export default function SignUpPage() {
                 </form>
 
                 <p className="text-center text-text-secondary text-xs mt-4">
-                    Có tài khoản rồi vô đây làm gì?{' '}
-                    <Link to="/login" className="text-primary font-bold hover:underline">Đăng nhập</Link>
+                    <Link to="/login" className="text-primary font-bold hover:underline">Quay lại trang đăng nhập</Link>
                 </p>
             </div>
         </div>

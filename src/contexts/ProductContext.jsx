@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { fetchProducts, fetchAllRecipes, fetchIngredientCosts, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
+import { fetchProducts, fetchAllRecipes, fetchIngredientCosts, fetchIngredientCostsWithUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { useAuth } from './AuthContext'
 import { useAddress } from './AddressContext'
 import { Outlet } from 'react-router-dom'
@@ -24,6 +24,7 @@ export function ProductProvider() {
     const [products, setProducts] = useState(() => readCache('cache_products', []))
     const [recipes, setRecipes] = useState(() => readCache('cache_recipes', []))
     const [ingredientCosts, setIngredientCosts] = useState(() => readCache('cache_costs', {}))
+    const [ingredientUnits, setIngredientUnits] = useState(() => readCache('cache_units', {}))
     const [productExtras, setProductExtras] = useState(() => readCache('cache_extras', {}))
     const [extraIngredients, setExtraIngredients] = useState(() => readCache('cache_extra_ingredients', {}))
     const [loading, setLoading] = useState(true)
@@ -36,16 +37,20 @@ export function ProductProvider() {
         async function load() {
             try {
                 if (products.length === 0) setLoading(true)
-                const [prods, recs, costs, extras, extraIngs] = await Promise.all([
+                const [prods, recs, costs, unitsData, extras, extraIngs] = await Promise.all([
                     fetchProducts(selectedAddress?.id),
                     fetchAllRecipes(selectedAddress?.id),
                     fetchIngredientCosts(selectedAddress?.id),
+                    fetchIngredientCostsWithUnits(selectedAddress?.id),
                     fetchProductExtras(selectedAddress?.id),
                     fetchExtraIngredients()
                 ])
+                const units = {}
+                unitsData.forEach(d => { units[d.ingredient] = d.unit })
                 setProducts(prods)
                 setRecipes(recs)
                 setIngredientCosts(costs)
+                setIngredientUnits(units)
                 setProductExtras(extras)
                 setExtraIngredients(extraIngs)
                 // Update cache
@@ -53,6 +58,7 @@ export function ProductProvider() {
                     localStorage.setItem('cache_products', JSON.stringify(prods))
                     localStorage.setItem('cache_recipes', JSON.stringify(recs))
                     localStorage.setItem('cache_costs', JSON.stringify(costs))
+                    localStorage.setItem('cache_units', JSON.stringify(units))
                     localStorage.setItem('cache_extras', JSON.stringify(extras))
                     localStorage.setItem('cache_extra_ingredients', JSON.stringify(extraIngs))
                 } catch { /* ignore quota errors */ }
@@ -66,16 +72,20 @@ export function ProductProvider() {
     }, [activeManagerId, selectedAddress?.id])
 
     const refreshProducts = useCallback(async () => {
-        const [prods, recs, costs, extras, extraIngs] = await Promise.all([
+        const [prods, recs, costs, unitsData, extras, extraIngs] = await Promise.all([
             fetchProducts(selectedAddress?.id),
             fetchAllRecipes(selectedAddress?.id),
             fetchIngredientCosts(selectedAddress?.id),
+            fetchIngredientCostsWithUnits(selectedAddress?.id),
             fetchProductExtras(selectedAddress?.id),
             fetchExtraIngredients()
         ])
+        const units = {}
+        unitsData.forEach(d => { units[d.ingredient] = d.unit })
         setProducts(prods)
         setRecipes(recs)
         setIngredientCosts(costs)
+        setIngredientUnits(units)
         setProductExtras(extras)
         setExtraIngredients(extraIngs)
     }, [activeManagerId, selectedAddress?.id])
@@ -85,6 +95,7 @@ export function ProductProvider() {
             products,
             recipes,
             ingredientCosts,
+            ingredientUnits,
             productExtras,
             extraIngredients,
             refreshProducts,
