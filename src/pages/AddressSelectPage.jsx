@@ -5,10 +5,12 @@ import { useNavigate } from 'react-router-dom'
 import { fetchBranchTodayCups, fetchActiveSessions, fetchStaffByManager, createInviteToken } from '../services/authService'
 import { supabase } from '../lib/supabaseClient'
 import RealtimeNotification from '../components/POSPage/RealtimeNotification'
+import ErrorBanner from '../components/common/ErrorBanner'
+import Skeleton from '../components/common/Skeleton'
 
 export default function AddressSelectPage() {
     const { addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading } = useAddress()
-    const { signOut, profile, isStaff } = useAuth()
+    const { signOut, profile, isStaff, isAdmin } = useAuth()
     const navigate = useNavigate()
 
     const [activeTab, setActiveTab] = useState('branches')
@@ -143,9 +145,9 @@ export default function AddressSelectPage() {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-4">
                 <div className="w-full max-w-sm space-y-3">
-                    <div className="animate-pulse bg-surface-light rounded-[16px] h-16 w-full" />
-                    <div className="animate-pulse bg-surface-light rounded-[16px] h-16 w-full" />
-                    <div className="animate-pulse bg-surface-light rounded-[16px] h-10 w-1/2 mx-auto mt-4" />
+                    <Skeleton className="h-16 w-full" />
+                    <Skeleton className="h-16 w-full" />
+                    <Skeleton className="h-10 w-1/2 mx-auto mt-4" />
                 </div>
             </div>
         )
@@ -284,10 +286,18 @@ export default function AddressSelectPage() {
                             })}
                         </div>
 
-                        {error && (
-                            <div className="bg-danger/10 border border-danger/20 text-danger text-xs font-medium rounded-[10px] p-2 mb-3">
-                                {error}
-                            </div>
+                        <ErrorBanner message={error} small className="mb-3" />
+
+                        {isAdmin && (
+                            <button
+                                onClick={() => {
+                                    setSelectedAddress({ id: null, name: 'Mẫu mặc định' })
+                                    navigate('/recipes')
+                                }}
+                                className="w-full py-3 rounded-[14px] bg-surface border border-border/60 text-text-secondary font-bold text-sm hover:bg-surface-light transition-colors mb-1"
+                            >
+                                Mẫu mặc định
+                            </button>
                         )}
 
                         {!isStaff && (
@@ -367,11 +377,7 @@ export default function AddressSelectPage() {
                                 </div>
                             )}
 
-                            {error && (
-                                <div className="bg-danger/10 border border-danger/20 text-danger text-xs font-medium rounded-[10px] p-2">
-                                    {error}
-                                </div>
-                            )}
+                            <ErrorBanner message={error} small />
                         </div>
 
                         {/* Staff list */}
@@ -381,8 +387,8 @@ export default function AddressSelectPage() {
                             </div>
                             {staffLoading ? (
                                 <div className="p-4 space-y-2">
-                                    <div className="animate-pulse bg-surface-light rounded-[10px] h-10 w-full" />
-                                    <div className="animate-pulse bg-surface-light rounded-[10px] h-10 w-full" />
+                                    <Skeleton className="h-10 rounded-[10px]" />
+                                    <Skeleton className="h-10 rounded-[10px]" />
                                 </div>
                             ) : staffList.length === 0 ? (
                                 <div className="px-4 py-6 text-center text-text-secondary text-sm">

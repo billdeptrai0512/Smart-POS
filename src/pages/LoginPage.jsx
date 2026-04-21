@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate, Link } from 'react-router-dom'
+import ErrorBanner from '../components/common/ErrorBanner'
 
 export default function LoginPage() {
     const { signIn } = useAuth()
@@ -54,11 +55,7 @@ export default function LoginPage() {
                 </div>
 
                 <form onSubmit={handleSubmit} className="bg-surface border border-border/60 rounded-[20px] p-6 shadow-sm space-y-4">
-                    {error && (
-                        <div className="bg-danger/10 border border-danger/20 text-danger text-sm font-medium rounded-[12px] p-3">
-                            {error}
-                        </div>
-                    )}
+                    <ErrorBanner message={error} />
 
                     <div>
                         <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Tài khoản</label>
