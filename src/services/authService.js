@@ -16,44 +16,117 @@ export async function signIn(username, password) {
     return data
 }
 
-// Sign up: creates Auth user + profile row in one step
-export async function signUp(username, password, name, role = 'staff', managerId = null) {
+// Sign up: creates manager Auth user + profile row
+export async function signUp(username, password, name, email = null) {
     if (!supabase) throw new Error('No Supabase connection')
+
+    const authEmail = formatUsernameToEmail(username)
+
+    // 1. Create Supabase Auth user
+    const { data: authData, error: authError } = await supabase.auth.signUp({ email: authEmail, password })
+    if (authError) throw authError
+
+    let authUser = authData.user
+    if (!authUser) throw new Error('Đăng ký thất bại')
+
+    // Lỗi vi phạm RLS (Row Level Security) khi insert user profile thường là do
+    // Supabase chưa trả về Session (chưa thực sự logged in) ngay lúc gọi hàm signUp.
+    if (!authData.session) {
+        const { data: signData, error: signError } = await supabase.auth.signInWithPassword({ email: authEmail, password })
+        if (signError) throw new Error('Tài khoản đã tạo nhưng không thể tự động đăng nhập: ' + signError.message)
+        authUser = signData.user
+    }
+
+    // 2. Create profile row linked to auth user
+    const { data: profile, error: profileError } = await supabase
+        .from('users')
+        .insert({ auth_id: authUser.id, name, role: 'manager', manager_id: null, email: email || null })
+        .select()
+        .single()
+
+    if (profileError) throw profileError
+    return { user: authUser, profile }
+}
+
+// Validate an invite token — returns { valid, tokenId, managerId, managerName, error }
+export async function validateInviteToken(token) {
+    if (!supabase) return { valid: false, error: 'No connection' }
+    const { data, error } = await supabase
+        .from('invite_tokens')
+        .select('id, manager_id, expires_at, used_at, users(name)')
+        .eq('token', token)
+        .maybeSingle()
+
+    if (error || !data) return { valid: false, error: 'Link không hợp lệ' }
+    if (data.used_at) return { valid: false, error: 'Link này đã được sử dụng' }
+    if (new Date(data.expires_at) < new Date()) return { valid: false, error: 'Link đã hết hạn' }
+
+    return { valid: true, tokenId: data.id, managerId: data.manager_id, managerName: data.users?.name }
+}
+
+// Create an invite token for a manager
+export async function createInviteToken(managerId) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { data, error } = await supabase
+        .from('invite_tokens')
+        .insert({ manager_id: managerId })
+        .select('token, expires_at')
+        .single()
+    if (error) throw error
+    return data
+}
+
+// Sign up staff via invite token
+export async function signUpWithInvite(token, username, password, name) {
+    if (!supabase) throw new Error('No Supabase connection')
+
+    const validation = await validateInviteToken(token)
+    if (!validation.valid) throw new Error(validation.error)
 
     const email = formatUsernameToEmail(username)
 
-    // 1. Create Supabase Auth user
     const { data: authData, error: authError } = await supabase.auth.signUp({ email, password })
     if (authError) throw authError
 
     let authUser = authData.user
     if (!authUser) throw new Error('Đăng ký thất bại')
 
-    // Lỗi vi phạm RLS (Row Level Security) khi insert user profile thường là do 
-    // Supabase chưa trả về Session (chưa thực sự logged in) ngay lúc gọi hàm signUp.
-    // Chúng ta bắt buộc phải ép hệ thống Login lấy Session trước khi ghi data vào bảng users.
     if (!authData.session) {
         const { data: signData, error: signError } = await supabase.auth.signInWithPassword({ email, password })
-        if (signError) throw new Error('Tài khoản đã tạo nhưng không thể tự động đăng nhập (Có thể Supabase vẫn đòi xác nhận Email): ' + signError.message)
+        if (signError) throw new Error('Tài khoản đã tạo nhưng không thể tự động đăng nhập: ' + signError.message)
         authUser = signData.user
-    }
-
-    // 2. Create profile row linked to auth user
-    const profileData = {
-        auth_id: authUser.id,
-        name,
-        role,
-        manager_id: role === 'staff' ? managerId : null
     }
 
     const { data: profile, error: profileError } = await supabase
         .from('users')
-        .insert(profileData)
+        .insert({ auth_id: authUser.id, name, role: 'staff', manager_id: validation.managerId })
         .select()
         .single()
-
     if (profileError) throw profileError
+
+    // Mark token as used
+    await supabase
+        .from('invite_tokens')
+        .update({ used_at: new Date().toISOString() })
+        .eq('id', validation.tokenId)
+
     return { user: authUser, profile }
+}
+
+// Fetch staff belonging to a manager
+export async function fetchStaffByManager(managerId) {
+    if (!supabase) return []
+    const { data, error } = await supabase
+        .from('users')
+        .select('id, name')
+        .eq('role', 'staff')
+        .eq('manager_id', managerId)
+        .order('name')
+    if (error) {
+        console.error('fetchStaffByManager error:', error)
+        return []
+    }
+    return data
 }
 
 

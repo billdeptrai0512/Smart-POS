@@ -9,6 +9,7 @@ import './index.css'
 // Pages
 import LoginPage from './pages/LoginPage'
 import SignUpPage from './pages/SignUpPage'
+import StaffInvitePage from './pages/StaffInvitePage'
 import AddressSelectPage from './pages/AddressSelectPage'
 import POSPage from './pages/POSPage'
 import HistoryPage from './pages/HistoryPage'
@@ -88,6 +89,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignUpPage />} />
+          <Route path="/signup/:token" element={<StaffInvitePage />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<AddressProvider />}>
               <Route path="/addresses" element={<AddressSelectPage />} />
