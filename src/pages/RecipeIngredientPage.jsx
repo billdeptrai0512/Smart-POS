@@ -10,6 +10,9 @@ import {
     deleteRecipeRow,
     upsertProductPrice,
     insertProductExtra,
+    updateProductExtraPrice,
+    duplicateProductExtra,
+    updateExtrasSortOrder,
     deleteProductExtra,
     removeProductFromAddress,
     upsertExtraIngredient,
@@ -43,6 +46,10 @@ export default function RecipeIngredientPage() {
     const [addingExtra, setAddingExtra] = useState(false)
     const [newExtraName, setNewExtraName] = useState('')
     const [newExtraPrice, setNewExtraPrice] = useState('')
+    const [editingExtraPrice, setEditingExtraPrice] = useState(null)
+    const [duplicatingExtra, setDuplicatingExtra] = useState(null)
+    const [sortingExtras, setSortingExtras] = useState(false)
+    const [sortedExtras, setSortedExtras] = useState([])
 
     // Extra Ingredients state
     const [extraIngs, setExtraIngs] = useState(contextExtraIngs || {})
@@ -177,7 +184,7 @@ export default function RecipeIngredientPage() {
             const newExtra = await insertProductExtra(
                 productId,
                 newExtraName.trim(),
-                parseInt(newExtraPrice) || 0,
+                parseInt(newExtraPrice) ?? 0,
                 selectedAddress?.id
             )
             setExtras(prev => [...prev, { id: newExtra.id, name: newExtra.name, price: newExtra.price }])
@@ -192,6 +199,20 @@ export default function RecipeIngredientPage() {
         }
     }
 
+    async function saveExtraPrice(extraId, newPrice) {
+        setSaving(true)
+        try {
+            await updateProductExtraPrice(extraId, newPrice)
+            setExtras(prev => prev.map(e => e.id === extraId ? { ...e, price: newPrice } : e))
+            refreshProducts?.()
+        } catch (err) {
+            console.error('Save extra price error:', err)
+        } finally {
+            setSaving(false)
+            setEditingExtraPrice(null)
+        }
+    }
+
     async function handleDeleteExtra(extraId, extraName) {
         if (!window.confirm(`Xóa tùy chọn "${extraName}"?`)) return
         setSaving(true)
@@ -201,6 +222,41 @@ export default function RecipeIngredientPage() {
             refreshProducts?.()
         } catch (err) {
             console.error('Delete extra error:', err)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    async function handleDuplicateExtra(extraId, newName) {
+        if (!newName.trim()) return
+        setSaving(true)
+        try {
+            await duplicateProductExtra(extraId, newName.trim(), selectedAddress?.id)
+            refreshProducts?.()
+            setDuplicatingExtra(null)
+        } catch (err) {
+            console.error('Duplicate extra error:', err)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    function moveExtra(from, to) {
+        if (to < 0 || to >= sortedExtras.length) return
+        const next = [...sortedExtras]
+        const [moved] = next.splice(from, 1)
+        next.splice(to, 0, moved)
+        setSortedExtras(next)
+    }
+
+    async function saveExtrasSortOrder() {
+        setSaving(true)
+        try {
+            await updateExtrasSortOrder(sortedExtras.map(e => e.id))
+            refreshProducts?.()
+            setSortingExtras(false)
+        } catch (err) {
+            console.error('Sort extras error:', err)
         } finally {
             setSaving(false)
         }
@@ -477,8 +533,43 @@ export default function RecipeIngredientPage() {
                 <div className="mt-4 pt-4 border-t border-border/40">
                     <div className="flex items-center justify-between mb-3">
                         <span className="text-[13px] font-black text-text uppercase tracking-wide">Tùy chọn thêm</span>
-                        <span className="text-[11px] text-text-dim">Hiển thị khi đặt món</span>
+                        <div className="flex items-center gap-2">
+                            {canEdit && extras.length > 1 && !sortingExtras && (
+                                <button
+                                    onClick={() => { setSortedExtras([...extras]); setSortingExtras(true) }}
+                                    className="text-[11px] text-text-dim hover:text-primary font-bold transition-colors"
+                                >
+                                    ↕ Sắp xếp
+                                </button>
+                            )}
+                            {!sortingExtras && <span className="text-[11px] text-text-dim">Hiển thị khi đặt món</span>}
+                        </div>
                     </div>
+
+                    {sortingExtras && (
+                        <div className="space-y-1.5 mb-3">
+                            {sortedExtras.map((extra, index) => (
+                                <div key={extra.id} className="flex items-center gap-2 bg-surface border border-border/60 rounded-[12px] px-3 py-2">
+                                    <span className="text-[11px] text-text-dim font-bold w-4 text-right shrink-0">{index + 1}</span>
+                                    <span className="flex-1 text-[13px] font-bold text-text truncate uppercase">{extra.name}</span>
+                                    <div className="flex border border-border/80 rounded-[8px] overflow-hidden shrink-0">
+                                        <button onClick={() => moveExtra(index, index - 1)} disabled={index === 0}
+                                            className="px-2.5 py-1 bg-surface-light text-text hover:bg-border/30 disabled:opacity-30 border-r border-border/80 text-[10px] font-bold">▲</button>
+                                        <button onClick={() => moveExtra(index, index + 1)} disabled={index === sortedExtras.length - 1}
+                                            className="px-2.5 py-1 bg-surface-light text-text hover:bg-border/30 disabled:opacity-30 text-[10px] font-bold">▼</button>
+                                    </div>
+                                </div>
+                            ))}
+                            <div className="flex gap-2 mt-2">
+                                <button onClick={() => setSortingExtras(false)}
+                                    className="flex-1 py-2 rounded-[10px] bg-surface-light border border-border/60 text-text-secondary text-[12px] font-bold">Hủy</button>
+                                <button onClick={saveExtrasSortOrder} disabled={saving}
+                                    className="flex-1 py-2 rounded-[10px] bg-primary text-bg text-[12px] font-bold disabled:opacity-50">
+                                    {saving ? 'Đang lưu...' : 'Lưu thứ tự'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
 
                     {extras.length === 0 && !addingExtra && (
                         <p className="text-text-secondary text-[12px] text-center py-3 bg-surface-light/50 rounded-[12px] border border-border/40">
@@ -486,24 +577,83 @@ export default function RecipeIngredientPage() {
                         </p>
                     )}
 
-                    <div className="space-y-2">
+                    <div className={`space-y-2 ${sortingExtras ? 'hidden' : ''}`}>
                         {extras.map(extra => (
                             <div key={extra.id} className="bg-surface border border-border/60 rounded-[14px] px-4 py-3 flex flex-col gap-2 group">
                                 <div className="flex items-center gap-2">
                                     <span className="text-[13px] font-bold text-text flex-1 uppercase">{extra.name}</span>
-                                    <span className="text-[12px] text-success font-bold tabular-nums">
-                                        {extra.price > 0 ? `+${formatVND(extra.price)}` : 'Miễn phí'}
-                                    </span>
-                                    {canEdit && (
-                                        <button
-                                            onClick={() => handleDeleteExtra(extra.id, extra.name)}
-                                            className="text-danger/60 hover:text-danger text-[14px] shrink-0 w-6 h-6 flex items-center justify-center"
-                                            title="Xóa tùy chọn"
+                                    {editingExtraPrice?.extraId === extra.id ? (
+                                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                            <input
+                                                type="number"
+                                                autoFocus
+                                                className="w-[80px] bg-bg border border-primary/60 rounded-lg px-2 py-0.5 text-[12px] text-text text-right focus:outline-none focus:border-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                value={editingExtraPrice.value}
+                                                onChange={e => setEditingExtraPrice(prev => ({ ...prev, value: e.target.value }))}
+                                                onKeyDown={e => {
+                                                    if (e.key === 'Enter') saveExtraPrice(extra.id, parseInt(editingExtraPrice.value) || 0)
+                                                    if (e.key === 'Escape') setEditingExtraPrice(null)
+                                                }}
+                                                onBlur={() => saveExtraPrice(extra.id, parseInt(editingExtraPrice.value) || 0)}
+                                            />
+                                            <span className="text-[11px] text-text-dim">đ</span>
+                                        </div>
+                                    ) : (
+                                        <span
+                                            className={`text-[12px] font-bold tabular-nums ${extra.price < 0 ? 'text-danger' : extra.price > 0 ? 'text-success' : 'text-text-dim'} ${canEdit ? 'cursor-pointer hover:underline' : ''}`}
+                                            onClick={() => canEdit && setEditingExtraPrice({ extraId: extra.id, value: extra.price.toString() })}
                                         >
-                                            ✕
-                                        </button>
+                                            {extra.price > 0 ? `+${formatVND(extra.price)}` : extra.price < 0 ? `-${formatVND(Math.abs(extra.price))}` : 'Miễn phí'}
+                                        </span>
+                                    )}
+                                    {canEdit && (
+                                        <>
+                                            <button
+                                                onClick={() => setDuplicatingExtra({ id: extra.id, value: extra.name + ' (copy)' })}
+                                                className="text-text-dim/60 hover:text-primary text-[12px] shrink-0 w-6 h-6 flex items-center justify-center"
+                                                title="Nhân bản"
+                                            >
+                                                ⧉
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteExtra(extra.id, extra.name)}
+                                                className="text-danger/60 hover:text-danger text-[14px] shrink-0 w-6 h-6 flex items-center justify-center"
+                                                title="Xóa tùy chọn"
+                                            >
+                                                ✕
+                                            </button>
+                                        </>
                                     )}
                                 </div>
+                                {duplicatingExtra?.id === extra.id && (
+                                    <div className="flex items-center gap-2 pt-1 border-t border-border/30">
+                                        <input
+                                            type="text"
+                                            autoFocus
+                                            placeholder="Tên bản sao..."
+                                            className="flex-1 bg-bg border border-primary/60 rounded-lg px-2 py-1 text-[12px] text-text focus:outline-none focus:border-primary"
+                                            value={duplicatingExtra.value}
+                                            onChange={e => setDuplicatingExtra(prev => ({ ...prev, value: e.target.value }))}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') handleDuplicateExtra(extra.id, duplicatingExtra.value)
+                                                if (e.key === 'Escape') setDuplicatingExtra(null)
+                                            }}
+                                        />
+                                        <button
+                                            onClick={() => handleDuplicateExtra(extra.id, duplicatingExtra.value)}
+                                            disabled={!duplicatingExtra.value.trim() || saving}
+                                            className="text-[11px] font-bold bg-primary text-bg px-2.5 py-1 rounded-lg disabled:opacity-50"
+                                        >
+                                            Nhân bản
+                                        </button>
+                                        <button
+                                            onClick={() => setDuplicatingExtra(null)}
+                                            className="text-[11px] text-text-dim hover:text-text"
+                                        >
+                                            Hủy
+                                        </button>
+                                    </div>
+                                )}
                                 <div className="border-t border-border/40 pt-2 flex flex-col gap-1.5">
                                     {(extraIngs[extra.id] || []).map(ei => {
                                         const isEditingExtra = editingExtraAmount?.extraId === extra.id && editingExtraAmount?.ingredient === ei.ingredient;
@@ -637,7 +787,7 @@ export default function RecipeIngredientPage() {
                         ))}
                     </div>
 
-                    {canEdit && (addingExtra ? (
+                    {canEdit && !sortingExtras && (addingExtra ? (
                         <div className="mt-2 bg-surface border border-border/60 rounded-[14px] px-4 py-3 space-y-2">
                             <span className="text-[11px] text-text-dim font-bold uppercase">Thêm tùy chọn</span>
                             <div className="flex gap-2">

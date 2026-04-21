@@ -47,7 +47,7 @@ export default function LoginPage() {
     return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-4">
             <div className="w-full max-w-sm">
-                <div className="text-center mb-8">
+                <div className="text-center mb-4">
                     {/* <img src="/icons/icon-512x512.png" alt="Kôphin" className="w-16 h-16 mx-auto rounded-[16px] shadow-sm" /> */}
                     <h1 className="text-2xl font-black text-text mt-3">Đăng nhập</h1>
                     <p className="text-center text-text-secondary text-xs mt-2">
@@ -72,7 +72,7 @@ export default function LoginPage() {
                             required
                             autoFocus
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder="billdeptrai0512"
+                            placeholder="username"
                         />
                     </div>
 

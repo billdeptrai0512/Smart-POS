@@ -45,7 +45,7 @@ export default function SignUpPage() {
     return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-4">
             <div className="w-full max-w-sm">
-                <div className="text-center mb-8">
+                <div className="text-center mb-4">
                     {/* <img src="/icons/icon-512x512.png" alt="Kôphin" className="w-16 h-16 mx-auto rounded-[16px] shadow-sm" /> */}
                     <h1 className="text-2xl font-black text-text mt-3">Đăng ký</h1>
                 </div>
@@ -121,7 +121,7 @@ export default function SignUpPage() {
                         </div>
                     </div>
 
-                    {role === 'manager' && (
+                    {/* {role === 'manager' && (
                         <div>
                             <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Mã giới thiệu</label>
                             <input
@@ -133,7 +133,7 @@ export default function SignUpPage() {
                                 placeholder="Nhập mã bí mật..."
                             />
                         </div>
-                    )}
+                    )} */}
 
                     {role === 'staff' && (
                         <div>
