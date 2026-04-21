@@ -1,27 +1,42 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { useNavigate, Link } from 'react-router-dom'
+import { validateInviteToken } from '../services/authService'
 
-export default function SignUpPage() {
-    const { signUp } = useAuth()
+export default function StaffInvitePage() {
+    const { token } = useParams()
+    const { signUpWithInvite } = useAuth()
     const navigate = useNavigate()
+
+    const [tokenInfo, setTokenInfo] = useState(null)   // { managerId, managerName }
+    const [tokenError, setTokenError] = useState('')
+    const [validating, setValidating] = useState(true)
+
     const [name, setName] = useState('')
-    const [email, setEmail] = useState('')
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
 
+    useEffect(() => {
+        validateInviteToken(token).then(result => {
+            if (result.valid) {
+                setTokenInfo({ managerId: result.managerId, managerName: result.managerName })
+            } else {
+                setTokenError(result.error)
+            }
+        }).finally(() => setValidating(false))
+    }, [token])
+
     async function handleSubmit(e) {
         e.preventDefault()
         if (!name.trim()) { setError('Vui lòng nhập tên'); return }
-        if (!email.trim()) { setError('Vui lòng nhập email'); return }
         if (!username.trim()) { setError('Vui lòng nhập tài khoản'); return }
         if (username.length < 3) { setError('Tài khoản ít nhất 3 ký tự'); return }
         setError('')
         setLoading(true)
         try {
-            await signUp(username.trim(), password, name.trim(), email.trim())
+            await signUpWithInvite(token, username.trim(), password, name.trim())
             navigate('/addresses', { replace: true })
         } catch (err) {
             setError(err.message || 'Đăng ký thất bại')
@@ -30,12 +45,43 @@ export default function SignUpPage() {
         }
     }
 
+    if (validating) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-bg">
+                <div className="w-full max-w-sm px-4 space-y-3">
+                    <div className="animate-pulse bg-surface rounded-[16px] h-14 w-full" />
+                    <div className="animate-pulse bg-surface rounded-[16px] h-14 w-full" />
+                    <div className="animate-pulse bg-surface rounded-[16px] h-10 w-3/4 mx-auto" />
+                </div>
+            </div>
+        )
+    }
+
+    if (tokenError) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-4">
+                <div className="w-full max-w-sm text-center">
+                    <p className="text-4xl mb-4">🔗</p>
+                    <h1 className="text-xl font-black text-text mb-2">Link không hợp lệ</h1>
+                    <p className="text-text-secondary text-sm mb-6">{tokenError}</p>
+                    <Link to="/login" className="text-primary font-bold text-sm hover:underline">
+                        Quay lại đăng nhập
+                    </Link>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-4">
             <div className="w-full max-w-sm">
                 <div className="text-center mb-4">
-                    <h1 className="text-2xl font-black text-text mt-3">Đăng ký quản lý</h1>
-                    <p className="text-text-secondary text-xs mt-1">Tạo tài khoản để quản lý quán của bạn</p>
+                    <h1 className="text-2xl font-black text-text mt-3">Tạo tài khoản</h1>
+                    {tokenInfo?.managerName && (
+                        <p className="text-text-secondary text-xs mt-1">
+                            Bạn được mời bởi <span className="font-bold text-text">{tokenInfo.managerName}</span>
+                        </p>
+                    )}
                 </div>
 
                 <form onSubmit={handleSubmit} className="bg-surface border border-border/60 rounded-[20px] p-6 shadow-sm space-y-4">
@@ -54,19 +100,7 @@ export default function SignUpPage() {
                             required
                             autoFocus
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder="Nguyễn Văn A"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Email</label>
-                        <input
-                            type="email"
-                            value={email}
-                            onChange={e => setEmail(e.target.value)}
-                            required
-                            className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder="example@gmail.com"
+                            placeholder="Nguyễn Văn B"
                         />
                     </div>
 
@@ -105,7 +139,7 @@ export default function SignUpPage() {
                 </form>
 
                 <p className="text-center text-text-secondary text-xs mt-4">
-                    <Link to="/login" className="text-primary font-bold hover:underline">Quay lại trang đăng nhập</Link>
+                    <Link to="/login" className="text-primary font-bold hover:underline">Đã có tài khoản? Đăng nhập</Link>
                 </p>
             </div>
         </div>
