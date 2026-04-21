@@ -567,7 +567,7 @@ export async function updateProductSortOrder(addressId, orderedProductIds) {
 // Fetch all product extras (returns { productId: [{ id, name, price }] })
 export async function fetchProductExtras(addressId) {
     if (!supabase) return {}
-    let query = supabase.from('product_extras').select('id, product_id, name, price, address_id').order('sort_order', { ascending: true, nullsFirst: false }).order('id', { ascending: true })
+    let query = supabase.from('product_extras').select('id, product_id, name, price, address_id').order('id', { ascending: true })
 
     if (addressId) {
         query = query.or(`address_id.eq.${addressId},address_id.is.null`)
@@ -593,10 +593,7 @@ export async function fetchProductExtras(addressId) {
             finalExtras.push(d)
         }
     }
-    finalExtras.sort((a, b) => {
-        const so = (a.sort_order ?? 9999) - (b.sort_order ?? 9999)
-        return so !== 0 ? so : a.id - b.id
-    })
+    finalExtras.sort((a, b) => a.id - b.id)
 
     const extrasMap = {}
     for (const ex of finalExtras) {
@@ -619,6 +616,16 @@ export async function insertProductExtra(productId, name, price, addressId = nul
         .single()
     if (error) throw error
     return data
+}
+
+// Update a product extra's name
+export async function updateProductExtraName(extraId, name) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase
+        .from('product_extras')
+        .update({ name })
+        .eq('id', extraId)
+    if (error) throw error
 }
 
 // Update a product extra's price
