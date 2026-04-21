@@ -4,7 +4,7 @@ import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 
-import { fetchIngredientCosts, fetchIngredientCostsWithUnits, upsertIngredientCost, deleteIngredientCost } from '../services/orderService'
+import { fetchIngredientCosts, fetchIngredientCostsWithUnits, upsertIngredientCost, deleteIngredientCost, renameIngredient } from '../services/orderService'
 import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import { ArrowLeft } from 'lucide-react'
@@ -19,6 +19,8 @@ export default function IngredientManagementPage() {
     const [ingredientCosts, setIngredientCosts] = useState(contextCosts || {})
     const [ingredientUnits, setIngredientUnits] = useState({})
     const [editingCost, setEditingCost] = useState(null)
+    const [editingUnit, setEditingUnit] = useState(null)
+    const [editingName, setEditingName] = useState(null)
     const [saving, setSaving] = useState(false)
 
     // Sorting state
@@ -61,6 +63,47 @@ export default function IngredientManagementPage() {
         } finally {
             setSaving(false)
             setEditingCost(null)
+        }
+    }
+
+    async function handleRenameIngredient(oldKey, newDisplayName) {
+        const newKey = newDisplayName.trim().toLowerCase().replace(/\s+/g, '_')
+        if (!newKey || newKey === oldKey) { setEditingName(null); return }
+        setSaving(true)
+        try {
+            await renameIngredient(oldKey, newKey)
+            setIngredientCosts(prev => {
+                const next = { ...prev }
+                next[newKey] = next[oldKey]
+                delete next[oldKey]
+                return next
+            })
+            setIngredientUnits(prev => {
+                const next = { ...prev }
+                next[newKey] = next[oldKey]
+                delete next[oldKey]
+                return next
+            })
+            refreshProducts?.()
+        } catch (err) {
+            console.error('Rename ingredient error:', err)
+        } finally {
+            setSaving(false)
+            setEditingName(null)
+        }
+    }
+
+    async function saveUnit(ingredient, newUnit, currentCost) {
+        setSaving(true)
+        try {
+            await upsertIngredientCost(ingredient, currentCost, selectedAddress?.id, newUnit)
+            setIngredientUnits(prev => ({ ...prev, [ingredient]: newUnit }))
+            refreshProducts?.()
+        } catch (err) {
+            console.error('Save unit error:', err)
+        } finally {
+            setSaving(false)
+            setEditingUnit(null)
         }
     }
 
@@ -201,6 +244,14 @@ export default function IngredientManagementPage() {
                                 ingredientLabel={ingredientLabel}
                                 getIngredientUnit={getIngredientUnit}
                                 storedUnit={ingredientUnits[ingredient]}
+                                isEditingUnit={editingUnit?.ingredient === ingredient}
+                                editingUnit={editingUnit}
+                                setEditingUnit={setEditingUnit}
+                                saveUnit={saveUnit}
+                                isEditingName={editingName?.ingredient === ingredient}
+                                editingName={editingName}
+                                setEditingName={setEditingName}
+                                saveName={handleRenameIngredient}
                                 onDelete={canEdit ? handleDeleteIngredient : null}
                                 canEdit={canEdit}
                             />
@@ -255,6 +306,18 @@ export default function IngredientManagementPage() {
                                         onChange={e => setNewIngredientName(e.target.value)}
                                         className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
                                     />
+                                    <div className="relative shrink-0 flex items-center w-[90px] bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden">
+                                        <input
+                                            type="number"
+                                            placeholder="Giá"
+                                            value={newIngredientCost}
+                                            onChange={e => setNewIngredientCost(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') handleCreateIngredient()
+                                            }}
+                                            className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none z-10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        />
+                                    </div>
                                     <div className="relative shrink-0 flex items-center w-[80px] bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden">
                                         <input
                                             type="text"
@@ -264,18 +327,7 @@ export default function IngredientManagementPage() {
                                             className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none z-10"
                                         />
                                     </div>
-                                    <div className="relative shrink-0 flex items-center w-[90px] bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden">
-                                        <input
-                                            type="number"
-                                            placeholder="Giá/đv"
-                                            value={newIngredientCost}
-                                            onChange={e => setNewIngredientCost(e.target.value)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') handleCreateIngredient()
-                                            }}
-                                            className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none z-10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                        />
-                                    </div>
+
                                 </div>
 
                                 <button

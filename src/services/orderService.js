@@ -463,7 +463,9 @@ export async function upsertIngredientCost(ingredient, unitCost, addressId = nul
     const { data: existing } = await query.maybeSingle()
 
     if (existing) {
-        const { error } = await supabase.from('ingredient_costs').update({ unit_cost: unitCost }).eq('id', existing.id)
+        const updatePayload = { unit_cost: unitCost }
+        if (unit) updatePayload.unit = unit
+        const { error } = await supabase.from('ingredient_costs').update(updatePayload).eq('id', existing.id)
         if (error) throw error
     } else {
         const payload = { ingredient, unit_cost: unitCost }
@@ -472,6 +474,15 @@ export async function upsertIngredientCost(ingredient, unitCost, addressId = nul
         const { error } = await supabase.from('ingredient_costs').insert(payload)
         if (error) throw error
     }
+}
+
+// Rename an ingredient key across all tables
+export async function renameIngredient(oldKey, newKey) {
+    if (!supabase) throw new Error('No Supabase connection')
+    if (oldKey === newKey) return
+    await supabase.from('ingredient_costs').update({ ingredient: newKey }).eq('ingredient', oldKey)
+    await supabase.from('recipes').update({ ingredient: newKey }).eq('ingredient', oldKey)
+    await supabase.from('extra_ingredients').update({ ingredient: newKey }).eq('ingredient', oldKey)
 }
 
 // Delete an ingredient cost entry (removes all rows for this ingredient)
@@ -841,6 +852,48 @@ export async function fetchYesterdayExpenses(addressId) {
         if (error.code !== '42P01') console.error('fetchYesterdayExpenses error:', error)
         return []
     }
+    return data || []
+}
+
+// Fetch orders within a date range for an address (same structure as fetchTodayOrders)
+export async function fetchOrdersByRange(addressId, start, end) {
+    if (!supabase) return []
+    let query = supabase
+        .from('orders')
+        .select(`id, total, total_cost, payment_method, created_at,
+            order_items(quantity, options, product_id, unit_cost, extra_ids, products(name))`)
+        .gte('created_at', start.toISOString())
+        .lte('created_at', end.toISOString())
+    if (addressId) query = query.eq('address_id', addressId)
+    const { data, error } = await query.order('created_at', { ascending: false })
+    if (error) { console.error('fetchOrdersByRange error:', error); return [] }
+    return data || []
+}
+
+// Fetch expenses within a date range
+export async function fetchExpensesByRange(addressId, start, end) {
+    if (!supabase) return []
+    let query = supabase
+        .from('expenses')
+        .select('*')
+        .gte('created_at', start.toISOString())
+        .lte('created_at', end.toISOString())
+    if (addressId) query = query.eq('address_id', addressId)
+    const { data, error } = await query.order('created_at', { ascending: false })
+    if (error) { console.error('fetchExpensesByRange error:', error); return [] }
+    return data || []
+}
+
+// Fetch shift closings within a date range (for summing cash/transfer)
+export async function fetchShiftClosingsByRange(addressId, start, end) {
+    if (!supabase) return []
+    const { data, error } = await supabase
+        .from('shift_closings')
+        .select('actual_cash, actual_transfer, system_total_revenue, closed_at')
+        .eq('address_id', addressId)
+        .gte('closed_at', start.toISOString())
+        .lte('closed_at', end.toISOString())
+    if (error) { console.error('fetchShiftClosingsByRange error:', error); return [] }
     return data || []
 }
 
