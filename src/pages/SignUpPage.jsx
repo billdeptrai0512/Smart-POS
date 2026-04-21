@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate, Link } from 'react-router-dom'
+import ErrorBanner from '../components/common/ErrorBanner'
 
 export default function SignUpPage() {
     const { signUp } = useAuth()
@@ -34,16 +35,23 @@ export default function SignUpPage() {
         <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-4">
             <div className="w-full max-w-sm">
                 <div className="text-center mb-4">
-                    <h1 className="text-2xl font-black text-text mt-3">Đăng ký quản lý</h1>
-                    <p className="text-text-secondary text-xs mt-1">Tạo tài khoản để quản lý quán của bạn</p>
+                    <h1 className="text-2xl font-black text-text mt-3">Đăng ký</h1>
                 </div>
 
                 <form onSubmit={handleSubmit} className="bg-surface border border-border/60 rounded-[20px] p-6 shadow-sm space-y-4">
-                    {error && (
-                        <div className="bg-danger/10 border border-danger/20 text-danger text-sm font-medium rounded-[12px] p-3">
-                            {error}
-                        </div>
-                    )}
+                    <ErrorBanner message={error} />
+
+                    <div>
+                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Email</label>
+                        <input
+                            type="email"
+                            value={email}
+                            onChange={e => setEmail(e.target.value)}
+                            required
+                            className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+                            placeholder="example@gmail.com"
+                        />
+                    </div>
 
                     <div>
                         <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Họ và Tên</label>
@@ -55,18 +63,6 @@ export default function SignUpPage() {
                             autoFocus
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
                             placeholder="Nguyễn Văn A"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Email</label>
-                        <input
-                            type="email"
-                            value={email}
-                            onChange={e => setEmail(e.target.value)}
-                            required
-                            className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder="example@gmail.com"
                         />
                     </div>
 

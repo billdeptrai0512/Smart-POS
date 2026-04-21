@@ -21,22 +21,22 @@ import ExpensePage from './pages/ExpensePage'
 import ShiftClosingPage from './pages/ShiftClosingPage'
 import IngredientManagementPage from './pages/IngredientManagementPage'
 
+function PageLoading() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-6 gap-4">
+      <div className="w-full max-w-sm space-y-3">
+        <div className="animate-pulse bg-surface-light rounded-[16px] h-14 w-full" />
+        <div className="animate-pulse bg-surface-light rounded-[16px] h-14 w-full" />
+        <div className="animate-pulse bg-surface-light rounded-[16px] h-10 w-3/4 mx-auto" />
+      </div>
+    </div>
+  )
+}
+
 // Protected route: redirects to /login if not authenticated
 function ProtectedRoute() {
   const { user, loading } = useAuth()
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-6 gap-4">
-        <div className="w-full max-w-sm space-y-3">
-          <div className="animate-pulse bg-surface-light rounded-[16px] h-14 w-full" />
-          <div className="animate-pulse bg-surface-light rounded-[16px] h-14 w-full" />
-          <div className="animate-pulse bg-surface-light rounded-[16px] h-10 w-3/4 mx-auto" />
-        </div>
-      </div>
-    )
-  }
-
+  if (loading) return <PageLoading />
   if (!user) return <Navigate to="/login" replace />
   return <Outlet />
 }
@@ -44,19 +44,7 @@ function ProtectedRoute() {
 // Requires a selected address before entering POS pages
 function RequireAddress() {
   const { selectedAddress, loading } = useAddress()
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-6 gap-4">
-        <div className="w-full max-w-sm space-y-3">
-          <div className="animate-pulse bg-surface-light rounded-[16px] h-14 w-full" />
-          <div className="animate-pulse bg-surface-light rounded-[16px] h-14 w-full" />
-          <div className="animate-pulse bg-surface-light rounded-[16px] h-10 w-3/4 mx-auto" />
-        </div>
-      </div>
-    )
-  }
-
+  if (loading) return <PageLoading />
   if (!selectedAddress) return <Navigate to="/addresses" replace />
   return <Outlet />
 }
@@ -64,21 +52,8 @@ function RequireAddress() {
 // Manager-only route guard
 function ManagerOnly() {
   const { isManager, isAdmin, loading } = useAuth()
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-6 gap-4">
-        <div className="w-full max-w-sm space-y-3">
-          <div className="animate-pulse bg-surface-light rounded-[16px] h-14 w-full" />
-          <div className="animate-pulse bg-surface-light rounded-[16px] h-14 w-full" />
-          <div className="animate-pulse bg-surface-light rounded-[16px] h-10 w-3/4 mx-auto" />
-        </div>
-      </div>
-    )
-  }
-
+  if (loading) return <PageLoading />
   if (!isManager && !isAdmin) return <Navigate to="/pos" replace />
-
   return <Outlet />
 }
 
