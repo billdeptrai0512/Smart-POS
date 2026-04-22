@@ -16,7 +16,7 @@ import { useAddress } from '../contexts/AddressContext'
 
 export default function DailyReportPage() {
     const navigate = useNavigate()
-    const { products, recipes, ingredientCosts, extraIngredients, productExtras } = useProducts()
+    const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits } = useProducts()
     const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, fixedCosts } = usePOS()
 
     useEffect(() => {
@@ -221,6 +221,7 @@ export default function DailyReportPage() {
                             extraIngredients={extraIngredients}
                             selectedAddress={selectedAddress}
                             products={products}
+                            ingredientUnits={ingredientUnits}
                         />
 
                         <div className="flex flex-col items-center justify-center py-8 mt-4">

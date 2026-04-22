@@ -99,15 +99,15 @@ export default function ProfitCard({ totalCups, selectedProductId, onFilterChang
                 {singleStats && (
                     <div className="mt-3 pt-3 border-t border-border/30">
                         <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[10px] font-bold text-text-dim">Vốn {formatVND(singleStats.cost)}</span>
-                            <span className={`text-[10px] font-black tabular-nums ${singleProfit >= 0 ? 'text-success' : 'text-danger'}`}>
-                                Lãi {singleMargin.toFixed(0)}%
+                            <span className="text-[10px] font-black tabular-nums text-primary">
+                                {totalRevenue > 0 ? ((singleStats.revenue / totalRevenue) * 100).toFixed(1) : 0}%
                             </span>
+                            <span className="text-[10px] font-bold text-primary">100%</span>
                         </div>
                         <div className="h-[6px] rounded-full bg-border/30 overflow-hidden">
                             <div
-                                className="h-full rounded-full bg-success transition-all duration-300"
-                                style={{ width: `${Math.max(2, singleMargin)}%` }}
+                                className="h-full rounded-full bg-primary transition-all duration-300"
+                                style={{ width: `${totalRevenue > 0 ? Math.max(2, (singleStats.revenue / totalRevenue) * 100) : 0}%` }}
                             ></div>
                         </div>
                     </div>
