@@ -76,3 +76,37 @@ export function calculateEstimatedConsumption(orderItems, recipes, extraIngredie
 
     return estimated;
 }
+
+/**
+ * Tính breakdown tiêu hao theo từng sản phẩm cho mỗi nguyên liệu.
+ * Dùng để drill-down "Tiêu CT" trong inventory audit.
+ *
+ * @returns {Object} breakdown[ingredient][productId] = { name, qty, totalAmount }
+ */
+export function calculateConsumptionBreakdown(orderItems, recipes, extraIngredients, products = []) {
+    const breakdown = {};
+
+    const add = (ingredient, productId, productName, qty, amount) => {
+        if (!breakdown[ingredient]) breakdown[ingredient] = {};
+        if (!breakdown[ingredient][productId]) {
+            breakdown[ingredient][productId] = { name: productName, qty: 0, totalAmount: 0 };
+        }
+        breakdown[ingredient][productId].qty += qty;
+        breakdown[ingredient][productId].totalAmount =
+            Math.round((breakdown[ingredient][productId].totalAmount + amount * qty) * 10) / 10;
+    };
+
+    orderItems.forEach(item => {
+        const id = item.productId || item.product_id;
+        const qty = item.quantity || item.qty || 1;
+        const extras = item.extras || [];
+        const productName = products.find(p => p.id === id)?.name || id;
+
+        recipes.filter(r => r.product_id === id).forEach(r => add(r.ingredient, id, productName, qty, r.amount));
+        extras.forEach(extra => {
+            (extraIngredients[extra.id] || []).forEach(ei => add(ei.ingredient, id, productName, qty, ei.amount));
+        });
+    });
+
+    return breakdown;
+}
