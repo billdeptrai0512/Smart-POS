@@ -3,6 +3,7 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { fetchBranchTodayCups, fetchActiveSessions, fetchStaffByManager, createInviteToken } from '../services/authService'
+import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { supabase } from '../lib/supabaseClient'
 import RealtimeNotification from '../components/POSPage/RealtimeNotification'
 import ErrorBanner from '../components/common/ErrorBanner'
@@ -63,6 +64,31 @@ export default function AddressSelectPage() {
 
         return () => { supabase.removeChannel(ordersChannel) }
     }, [addresses, isStaff])
+
+    // Background prefetch ProductContext data for all addresses into cache
+    useEffect(() => {
+        if (!addresses.length) return
+        addresses.forEach(addr => {
+            Promise.all([
+                fetchProducts(addr.id),
+                fetchAllRecipes(addr.id),
+                fetchIngredientCostsAndUnits(addr.id),
+                fetchProductExtras(addr.id),
+                fetchExtraIngredients()
+            ]).then(([prods, recs, costsResult, extras, extraIngs]) => {
+                const { costs, units } = costsResult
+                const key = name => `cache_${name}_${addr.id}`
+                try {
+                    localStorage.setItem(key('products'), JSON.stringify(prods))
+                    localStorage.setItem(key('recipes'), JSON.stringify(recs))
+                    localStorage.setItem(key('costs'), JSON.stringify(costs))
+                    localStorage.setItem(key('units'), JSON.stringify(units))
+                    localStorage.setItem(key('extras'), JSON.stringify(extras))
+                    localStorage.setItem(key('extra_ingredients'), JSON.stringify(extraIngs))
+                } catch { /* ignore quota */ }
+            })
+        })
+    }, [addresses])
 
     // Fetch branch stats
     useEffect(() => {

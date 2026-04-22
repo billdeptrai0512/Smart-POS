@@ -4,7 +4,7 @@ import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 
-import { fetchIngredientCosts, fetchIngredientCostsWithUnits, upsertIngredientCost, deleteIngredientCost, renameIngredient } from '../services/orderService'
+import { upsertIngredientCost, deleteIngredientCost, renameIngredient } from '../services/orderService'
 import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import { ArrowLeft } from 'lucide-react'
@@ -13,14 +13,14 @@ import Toast from '../components/POSPage/Toast'
 
 export default function IngredientManagementPage() {
     const navigate = useNavigate()
-    const { ingredientCosts: contextCosts, refreshProducts } = useProducts()
+    const { ingredientCosts: contextCosts, ingredientUnits: contextUnits, refreshProducts } = useProducts()
     const { selectedAddress, updateSortOrder } = useAddress()
     const { isManager, isAdmin } = useAuth()
     const { toast, showError } = useToast()
     const canEdit = isManager || isAdmin
 
     const [ingredientCosts, setIngredientCosts] = useState(contextCosts || {})
-    const [ingredientUnits, setIngredientUnits] = useState({})
+    const [ingredientUnits, setIngredientUnits] = useState(contextUnits || {})
     const [editingCost, setEditingCost] = useState(null)
     const [editingUnit, setEditingUnit] = useState(null)
     const [editingName, setEditingName] = useState(null)
@@ -35,19 +35,9 @@ export default function IngredientManagementPage() {
     const [newIngredientUnit, setNewIngredientUnit] = useState('')
     const [newIngredientCost, setNewIngredientCost] = useState('')
 
-    // Sync from context
+    // Sync from context when address changes or data refreshes
     useEffect(() => { setIngredientCosts(contextCosts) }, [contextCosts])
-
-    useEffect(() => {
-        if (selectedAddress?.id) {
-            fetchIngredientCosts(selectedAddress.id).then(setIngredientCosts)
-            fetchIngredientCostsWithUnits(selectedAddress.id).then(data => {
-                const units = {}
-                data.forEach(d => { units[d.ingredient] = d.unit })
-                setIngredientUnits(units)
-            })
-        }
-    }, [selectedAddress?.id])
+    useEffect(() => { setIngredientUnits(contextUnits || {}) }, [contextUnits])
 
     // Build ingredient list from DB costs only
     const allIngredients = useMemo(() => {
