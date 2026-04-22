@@ -42,7 +42,7 @@ export default function InventoryRefillCard({
     // Calculate today's estimated consumption
     const todayOrderItems = [];
     todayOrders.forEach(o => {
-        (o.order_items || []).forEach(i => todayOrderItems.push({ productId: i.product_id, qty: i.quantity || 1, extras: i.extras || [] }));
+        (o.order_items || []).forEach(i => todayOrderItems.push({ productId: i.product_id, qty: i.quantity || 1, extras: (i.extra_ids || []).map(id => ({ id })) }));
     });
     offlineToday.forEach(o => {
         (o.cart || o.orderItems || []).forEach(i => todayOrderItems.push({ productId: i.productId, qty: i.quantity || 1, extras: i.extras || [] }));
