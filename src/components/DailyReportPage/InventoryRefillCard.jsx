@@ -12,7 +12,8 @@ export default function InventoryRefillCard({
     recipes,
     extraIngredients,
     selectedAddress,
-    products = []
+    products = [],
+    ingredientUnits = {}
 }) {
     const [wastageBuffer, setWastageBuffer] = useState(10); // default 10%
     const [past7DaysItems, setPast7DaysItems] = useState([]);
@@ -173,7 +174,7 @@ export default function InventoryRefillCard({
                                 <div className="flex-1 min-w-0 pr-1 flex items-center gap-1">
                                     <span className="text-[12px] font-bold text-text truncate">
                                         {ingredientLabel(item.ingredient)}
-                                        <span className="text-[10px] font-normal text-text-dim ml-1">({getIngredientUnit(item.ingredient)})</span>
+                                        <span className="text-[10px] font-normal text-text-dim ml-1">({getIngredientUnit(item.ingredient, item.unit, ingredientUnits)})</span>
                                     </span>
                                     {canExpand && (
                                         <ChevronDown
