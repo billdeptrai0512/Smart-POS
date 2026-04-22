@@ -3,6 +3,7 @@ import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useNavigate } from 'react-router-dom'
 import { DAY_NAMES } from '../constants'
+import { useCallback } from 'react'
 
 import Header from '../components/POSPage/Header'
 import MenuGrid from '../components/POSPage/MenuGrid'
@@ -19,7 +20,9 @@ export default function POSPage() {
         handleAddItem, handleRemoveCartItem, handleToggleExtra, handleConfirm,
         total, hasOrder, isSubmitting,
         revenue, totalCost, cupsSold, isOnline,
-        toast, handleLoadHistory, lastOrder
+        toast, handleLoadHistory, lastOrder,
+        enabledStickyExtraIds,
+        handleToggleStickyExtra,
     } = usePOS()
 
     // Format date
@@ -69,6 +72,8 @@ export default function POSPage() {
                 onToggleExtra={handleToggleExtra}
                 onConfirm={handleConfirm}
                 productExtras={productExtras}
+                enabledStickyExtraIds={enabledStickyExtraIds}
+                onToggleStickyExtra={handleToggleStickyExtra}
             />
 
             <Toast toast={toast} />

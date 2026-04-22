@@ -1,7 +1,8 @@
 import { formatVND } from '../../utils'
 import { QUICK_EXTRAS } from '../../constants'
+import { Zap } from 'lucide-react'
 
-export default function OrderFooter({ cart, activeCartItemId, total, hasOrder, isSubmitting, onToggleExtra, onConfirm, productExtras }) {
+export default function OrderFooter({ cart, activeCartItemId, total, hasOrder, isSubmitting, onToggleExtra, onConfirm, productExtras, enabledStickyExtraIds = [], onToggleStickyExtra }) {
     // Determine which extras to show based on the active cart item's product
     const activeItem = cart.find(item => item.cartItemId === activeCartItemId) || cart[cart.length - 1]
     const activeProductId = activeItem?.productId
@@ -11,13 +12,51 @@ export default function OrderFooter({ cart, activeCartItemId, total, hasOrder, i
         ? productExtras[activeProductId]
         : QUICK_EXTRAS
 
+    const stickyExtrasToShow = extrasToShow.filter(e => e.is_sticky)
+    const normalExtrasToShow = extrasToShow.filter(e => !e.is_sticky)
+
+    // Show promo toggle only if any product has sticky extras
+    const hasStickyExtras = Object.values(productExtras || {}).some(extras => extras.some(e => e.is_sticky))
+
     return (
         <footer className="shrink-0 bg-surface border-t border-border/80 shadow-[0_-4px_24px_rgba(0,0,0,0.02)] flex flex-col">
 
             {/* Quick Extras Bar */}
             {cart.length > 0 && (
-                <div className="w-full overflow-x-auto py-3 px-6 flex gap-2.5 items-center hide-scrollbar border-b border-border/40">
-                    {extrasToShow.map(ex => {
+                <div className="w-full overflow-x-auto py-2.5 px-4 flex gap-2 items-center hide-scrollbar border-b border-border/40">
+                    {/* Global Sticky Extras */}
+                    {hasStickyExtras && (
+                        <>
+                            {stickyExtrasToShow.map(ex => {
+                                const isGlobalEnabled = enabledStickyExtraIds.includes(ex.id)
+                                if (!isGlobalEnabled) {
+                                    return (
+                                        <button
+                                            key={ex.id}
+                                            onClick={() => onToggleStickyExtra(ex)}
+                                            className="shrink-0 h-[34px] px-3 rounded-[10px] border bg-surface-light border-border/80 text-text-secondary hover:text-text font-bold text-[12px] whitespace-nowrap focus:outline-none transition-all shadow-sm uppercase"
+                                        >
+                                            {ex.name}
+                                        </button>
+                                    )
+                                }
+                                return (
+                                    <button
+                                        key={ex.id}
+                                        onClick={() => onToggleStickyExtra(ex)}
+                                        className="shrink-0 flex items-center gap-1.5 h-[34px] px-3 rounded-[10px] border bg-warning/10 border-warning/50 text-warning font-bold text-[12px] whitespace-nowrap focus:outline-none shadow-sm active:bg-warning/20 uppercase"
+                                    >
+                                        <span className="w-1.5 h-1.5 rounded-full bg-warning mb-[1px]"></span>
+                                        {ex.name}
+                                    </button>
+                                )
+                            })}
+
+                            <div className="w-px h-5 bg-border/40 shrink-0" />
+                        </>
+                    )}
+
+                    {normalExtrasToShow.map(ex => {
                         const hasExtra = activeItem?.extras.some(e => e.id === ex.id) || false
 
                         if (!hasExtra) {
@@ -25,7 +64,7 @@ export default function OrderFooter({ cart, activeCartItemId, total, hasOrder, i
                                 <button
                                     key={ex.id}
                                     onClick={() => onToggleExtra(ex)}
-                                    className="shrink-0 h-[42px] px-4 rounded-[14px] border bg-surface-light border-border/80 text-text-secondary hover:text-text font-bold text-[14px] whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all shadow-sm uppercase"
+                                    className="shrink-0 h-[34px] px-3 rounded-[10px] border bg-surface-light border-border/80 text-text-secondary hover:text-text font-bold text-[12px] whitespace-nowrap focus:outline-none transition-all shadow-sm uppercase"
                                 >
                                     {ex.name}
                                 </button>
@@ -36,14 +75,13 @@ export default function OrderFooter({ cart, activeCartItemId, total, hasOrder, i
                             <button
                                 key={ex.id}
                                 onClick={() => onToggleExtra(ex)}
-                                className="shrink-0 flex items-center gap-1.5 h-[42px] px-4 rounded-[14px] border bg-primary/10 border-primary/50 text-primary font-bold text-[14px] whitespace-nowrap focus:outline-none shadow-sm backdrop-blur-sm active:bg-primary/20 uppercase"
+                                className="shrink-0 flex items-center gap-1.5 h-[34px] px-3 rounded-[10px] border bg-primary/10 border-primary/50 text-primary font-bold text-[12px] whitespace-nowrap focus:outline-none shadow-sm active:bg-primary/20 uppercase"
                             >
-                                <span className="w-1.5 h-1.5 rounded-full bg-primary mb-[1px] uppercase"></span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-primary mb-[1px]"></span>
                                 {ex.name}
                             </button>
                         )
                     })}
-
                 </div>
             )}
 

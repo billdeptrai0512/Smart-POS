@@ -574,7 +574,7 @@ export async function updateProductSortOrder(addressId, orderedProductIds) {
 // Fetch all product extras (returns { productId: [{ id, name, price }] })
 export async function fetchProductExtras(addressId) {
     if (!supabase) return {}
-    let query = supabase.from('product_extras').select('id, product_id, name, price, address_id, sort_order').order('sort_order', { ascending: true, nullsFirst: false })
+    let query = supabase.from('product_extras').select('id, product_id, name, price, address_id, sort_order, is_sticky').order('sort_order', { ascending: true, nullsFirst: false })
 
     if (addressId) {
         query = query.or(`address_id.eq.${addressId},address_id.is.null`)
@@ -606,7 +606,7 @@ export async function fetchProductExtras(addressId) {
     for (const ex of finalExtras) {
         if (!ex.id) continue  // skip corrupted rows with null id
         if (!extrasMap[ex.product_id]) extrasMap[ex.product_id] = []
-        extrasMap[ex.product_id].push({ id: ex.id, name: ex.name, price: ex.price })
+        extrasMap[ex.product_id].push({ id: ex.id, name: ex.name, price: ex.price, is_sticky: ex.is_sticky || false })
     }
     return extrasMap
 }
@@ -683,6 +683,15 @@ export async function updateExtrasSortOrder(orderedExtraIds) {
 }
 
 // Delete a product extra
+export async function updateProductExtraSticky(extraId, isSticky) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase
+        .from('product_extras')
+        .update({ is_sticky: isSticky })
+        .eq('id', extraId)
+    if (error) throw error
+}
+
 export async function deleteProductExtra(extraId) {
     if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase

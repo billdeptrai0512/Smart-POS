@@ -11,6 +11,7 @@ import {
     insertProductExtra,
     updateProductExtraName,
     updateProductExtraPrice,
+    updateProductExtraSticky,
     duplicateProductExtra,
     updateExtrasSortOrder,
     deleteProductExtra,
@@ -225,6 +226,16 @@ export default function RecipeIngredientPage() {
         } finally {
             setSaving(false)
             setEditingExtraPrice(null)
+        }
+    }
+
+    async function handleToggleSticky(extraId, currentValue) {
+        try {
+            await updateProductExtraSticky(extraId, !currentValue)
+            setExtras(prev => prev.map(e => e.id === extraId ? { ...e, is_sticky: !currentValue } : e))
+            refreshProducts?.()
+        } catch (err) {
+            showError(err, 'Cập nhật sticky')
         }
     }
 
@@ -643,6 +654,13 @@ export default function RecipeIngredientPage() {
                                     )}
                                     {canEdit && (
                                         <>
+                                            <button
+                                                onClick={() => handleToggleSticky(extra.id, extra.is_sticky)}
+                                                className={`shrink-0 w-6 h-6 flex items-center justify-center rounded transition-colors ${extra.is_sticky ? 'text-warning' : 'text-text-dim/40 hover:text-text-dim'}`}
+                                                title={extra.is_sticky ? 'Đang tự chọn — bấm để tắt' : 'Bấm để bật tự chọn'}
+                                            >
+                                                ⚡
+                                            </button>
                                             <button
                                                 onClick={() => setDuplicatingExtra({ id: extra.id, value: extra.name + ' (copy)' })}
                                                 className="text-text-dim/60 hover:text-primary text-[12px] shrink-0 w-6 h-6 flex items-center justify-center"

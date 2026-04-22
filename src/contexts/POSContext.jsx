@@ -19,7 +19,7 @@ export function usePOS() {
 }
 
 export function POSProvider() {
-    const { recipes, ingredientCosts, extraIngredients } = useProducts()
+    const { recipes, ingredientCosts, extraIngredients, productExtras } = useProducts()
     const { selectedAddress } = useAddress()
     const { profile } = useAuth()
     const addressId = selectedAddress?.id
@@ -34,6 +34,7 @@ export function POSProvider() {
 
     const [cart, setCart] = useState(() => loadLocalJSON('pos_cart', []))
     const [activeCartItemId, setActiveCartItemId] = useState(null)
+    const [enabledStickyExtraIds, setEnabledStickyExtraIds] = useState([])
     const [revenue, setRevenue] = useState(() => Number(localStorage.getItem('pos_revenue')) || 0)
     const [totalCost, setTotalCost] = useState(() => Number(localStorage.getItem('pos_total_cost')) || 0)
     const [cupsSold, setCupsSold] = useState(() => Number(localStorage.getItem('pos_cups')) || 0)
@@ -246,19 +247,49 @@ export function POSProvider() {
     // ---- Handlers ----
     function handleAddItem(product) {
         const cartItemId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9)
+        const stickyExtras = (productExtras[product.id] || []).filter(e => e.is_sticky && enabledStickyExtraIds.includes(e.id))
         setCart(prev => [...prev, {
             cartItemId,
             productId: product.id,
             name: product.name,
             basePrice: product.price,
             quantity: 1,
-            extras: []
+            extras: [...stickyExtras]
         }])
         setActiveCartItemId(cartItemId)
     }
 
     function handleRemoveCartItem(cartItemId) {
         setCart(prev => prev.filter(item => item.cartItemId !== cartItemId))
+    }
+
+    function handleToggleStickyExtra(extra) {
+        setEnabledStickyExtraIds(prev => {
+            const isEnabledNow = prev.includes(extra.id)
+            const nextState = isEnabledNow ? prev.filter(id => id !== extra.id) : [...prev, extra.id]
+
+            // Sync current active item to match the new global state
+            setCart(prevCart => {
+                if (prevCart.length === 0) return prevCart
+                let targetIndex = prevCart.findIndex(item => item.cartItemId === activeCartItemId)
+                if (targetIndex === -1) targetIndex = prevCart.length - 1
+
+                const next = [...prevCart]
+                const targetItem = next[targetIndex]
+
+                let newExtras = [...targetItem.extras]
+                if (!isEnabledNow) {
+                    if (!newExtras.some(e => e.id === extra.id)) newExtras.push(extra)
+                } else {
+                    newExtras = newExtras.filter(e => e.id !== extra.id)
+                }
+
+                next[targetIndex] = { ...targetItem, extras: newExtras }
+                return next
+            })
+
+            return nextState
+        })
     }
 
     function handleToggleExtra(extra) {
@@ -441,7 +472,8 @@ export function POSProvider() {
         <POSContext.Provider value={{
             // Cart
             cart, activeCartItemId, setActiveCartItemId,
-            handleAddItem, handleRemoveCartItem, handleToggleExtra, handleConfirm,
+            handleAddItem, handleRemoveCartItem, handleToggleExtra, handleToggleStickyExtra, handleConfirm,
+            enabledStickyExtraIds, setEnabledStickyExtraIds,
             total, orderCount, hasOrder, isSubmitting,
             // Dashboard
             revenue, totalCost, cupsSold, inventory, isOnline,
