@@ -284,37 +284,21 @@ export async function fetchBranchTodayCups(addressIds) {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    // Fetch all today's orders across those addresses
-    const { data: orders, error: ordErr } = await supabase
+    const { data, error } = await supabase
         .from('orders')
-        .select('id, address_id')
+        .select('address_id, order_items(quantity)')
         .in('address_id', addressIds)
         .gte('created_at', today.toISOString())
 
-    if (ordErr || !orders?.length) return {}
-
-    const orderIds = orders.map(o => o.id)
-
-    // Fetch all items for those orders
-    const { data: items, error: itemErr } = await supabase
-        .from('order_items')
-        .select('order_id, quantity')
-        .in('order_id', orderIds)
-
-    if (itemErr) {
-        console.error('fetchBranchTodayCups items error:', itemErr)
+    if (error) {
+        console.error('fetchBranchTodayCups error:', error)
         return {}
     }
 
-    // Map order_id -> address_id
-    const orderAddrMap = {}
-    orders.forEach(o => { orderAddrMap[o.id] = o.address_id })
-
-    // Sum quantities per address
     const result = {}
-    items.forEach(item => {
-        const addrId = orderAddrMap[item.order_id]
-        result[addrId] = (result[addrId] || 0) + item.quantity
+    ;(data || []).forEach(order => {
+        const qty = (order.order_items || []).reduce((s, i) => s + i.quantity, 0)
+        result[order.address_id] = (result[order.address_id] || 0) + qty
     })
     return result
 }
