@@ -16,7 +16,7 @@ import { useAddress } from '../contexts/AddressContext'
 
 export default function DailyReportPage() {
     const navigate = useNavigate()
-    const { products, recipes, ingredientCosts, extraIngredients } = useProducts()
+    const { products, recipes, ingredientCosts, extraIngredients, productExtras } = useProducts()
     const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, fixedCosts } = usePOS()
 
     useEffect(() => {
@@ -51,6 +51,15 @@ export default function DailyReportPage() {
     const todayStr = new Date().toDateString()
     const offlineToday = pending.filter(o => new Date(o.createdAt).toDateString() === todayStr)
 
+    // Flat maps extraId → price/name for quick lookup on online orders
+    const extraPriceMap = {}, extraNameMap = {}
+    Object.values(productExtras || {}).forEach(extras => {
+        extras.forEach(e => {
+            extraPriceMap[e.id] = e.price || 0
+            extraNameMap[e.id] = e.name || e.id
+        })
+    })
+
     let totalRevenue = 0, totalCOGS = 0, totalCups = 0
     const hourlyRevenue = {}, hourlyOrders = {}, productStats = {}
     const activeHours = new Set(), soldProducts = new Set()
@@ -82,11 +91,24 @@ export default function DailyReportPage() {
                 : calculateProductCost(productId, i.extras || [], recipes, extraIngredients, ingredientCosts)
             totalCOGS += cost * qty
 
-            const price = prodDef?.price || 0
-            if (!productStats[productId]) productStats[productId] = { qty: 0, revenue: 0, cost: 0 }
+            const basePrice = prodDef?.price || 0
+            const extrasPrice = isOffline
+                ? (i.extras || []).reduce((sum, e) => sum + (e.price || 0), 0)
+                : (i.extra_ids || []).reduce((sum, id) => sum + (extraPriceMap[id] || 0), 0)
+            const unitRevenue = basePrice + extrasPrice
+
+            const extraNames = isOffline
+                ? (i.extras || []).map(e => e.name).filter(Boolean)
+                : (i.extra_ids || []).map(id => extraNameMap[id]).filter(Boolean)
+            const variantLabel = extraNames.length > 0
+                ? [...extraNames].sort((a, b) => a.trim().toLowerCase().localeCompare(b.trim().toLowerCase(), 'vi')).join(' + ')
+                : 'Thường'
+
+            if (!productStats[productId]) productStats[productId] = { qty: 0, revenue: 0, cost: 0, variants: {} }
             productStats[productId].qty += qty
-            productStats[productId].revenue += price * qty
+            productStats[productId].revenue += unitRevenue * qty
             productStats[productId].cost += cost * qty
+            productStats[productId].variants[variantLabel] = (productStats[productId].variants[variantLabel] || 0) + qty
         })
     }
 
@@ -198,6 +220,7 @@ export default function DailyReportPage() {
                             recipes={recipes}
                             extraIngredients={extraIngredients}
                             selectedAddress={selectedAddress}
+                            products={products}
                         />
 
                         <div className="flex flex-col items-center justify-center py-8 mt-4">

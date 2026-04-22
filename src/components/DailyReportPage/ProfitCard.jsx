@@ -53,12 +53,23 @@ export default function ProfitCard({ totalCups, selectedProductId, onFilterChang
             </div>
 
             <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 relative overflow-hidden">
-                <div className="flex items-center justify-between">
+                <div className="flex items-start justify-between">
                     <div className="flex flex-col min-w-0 flex-1">
                         <span className="text-[11px] font-black text-text-secondary uppercase mb-1">Tổng cộng</span>
                         <span className="text-[17px] font-bold text-primary tabular-nums leading-none truncate">
                             {totalCups} ly {selectedProduct ? selectedProduct.name.toLowerCase() : ''}
                         </span>
+                        {singleStats && singleStats.variants && Object.keys(singleStats.variants).length > 0 && (
+                            <div className="flex flex-col gap-0.5 mt-1.5">
+                                {Object.entries(singleStats.variants)
+                                    .sort((a, b) => b[1] - a[1])
+                                    .map(([label, qty]) => (
+                                        <span key={label} className="text-[11px] text-text-secondary tabular-nums">
+                                            · {label}: <span className="font-black text-text">{qty} ly</span>
+                                        </span>
+                                    ))}
+                            </div>
+                        )}
                     </div>
                     <div className="flex flex-col items-end shrink-0 ml-3">
                         <div className="flex items-center gap-2 mb-1">

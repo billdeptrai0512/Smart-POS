@@ -380,58 +380,74 @@ export default function ShiftClosingPage() {
                                     <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
                                 </div>
 
-                                <div className="bg-surface rounded-[20px] p-3 border border-border/60 shadow-sm space-y-2">
+                                <div className="bg-surface rounded-[20px] p-3 border border-border/60 shadow-sm space-y-3">
                                     {ingredientsList.map(ing => {
                                         const unit = ing.unit || 'đv'
                                         const opening = openingStock[ing.ingredient]
+                                        const isLocked = openingLocked[ing.ingredient]
+                                        const showLockBtn = !isLocked || canUnlock
                                         return (
-                                            <div key={ing.ingredient} className="border-b border-border/20 last:border-0 pb-2 last:pb-0">
-                                                {/* Row 1: ingredient name + unit */}
-                                                <span className="text-[12px] font-bold text-text block mb-1.5">{ingredientLabel(ing.ingredient)} <span className="text-text-dim font-normal">({unit})</span></span>
+                                            <div key={ing.ingredient} className="border-b border-border/20 last:border-0 pb-2.5 last:pb-0">
+                                                {/* Row 1: name */}
+                                                <span className="text-[12px] font-bold text-text block mb-1.5">{ingredientLabel(ing.ingredient)}</span>
+
                                                 {/* Row 2: 3 columns */}
                                                 <div className="grid grid-cols-3 gap-2">
-                                                    <div className="flex flex-col items-center">
-                                                        <span className="text-[9px] font-black text-text-dim uppercase mb-0.5">Tồn đầu</span>
-                                                        <div className="w-full flex items-center gap-1">
+                                                    {/* Tồn đầu */}
+                                                    <div className="flex flex-col">
+                                                        <div className="flex items-center justify-between mb-1">
+                                                            <span className="text-[9px] font-black text-text-dim uppercase">Tồn đầu</span>
+                                                            {showLockBtn && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleOpeningLock(ing.ingredient, !isLocked)}
+                                                                    className={`transition-colors ${isLocked ? 'text-primary' : 'text-text-dim hover:text-primary'}`}
+                                                                >
+                                                                    {isLocked ? <Lock size={10} strokeWidth={2.5} /> : <Unlock size={10} strokeWidth={2} />}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        <div className={`flex items-center rounded-[10px] overflow-hidden transition-all gap-1 ${isLocked ? 'bg-primary/8 border border-primary/30' : 'bg-surface-light border border-border/60 focus-within:border-primary/40'}`}>
                                                             <input
                                                                 type="number"
                                                                 placeholder="0"
                                                                 value={openingInputs[ing.ingredient] ?? (opening !== undefined && opening !== null ? String(opening) : '')}
                                                                 onChange={e => handleOpeningChange(ing.ingredient, e.target.value)}
-                                                                disabled={openingLocked[ing.ingredient]}
-                                                                className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[10px] px-2 py-1 text-[13px] font-medium text-center placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:opacity-50 disabled:cursor-not-allowed disabled:text-text-secondary"
+                                                                disabled={isLocked}
+                                                                className={`flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-bold text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isLocked ? 'text-primary cursor-not-allowed' : 'text-text'}`}
                                                             />
-                                                            {canUnlock && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleOpeningLock(ing.ingredient, !openingLocked[ing.ingredient])}
-                                                                    className={`shrink-0 p-1 rounded-[8px] transition-colors ${openingLocked[ing.ingredient] ? 'text-primary bg-primary/10 border border-primary/20' : 'text-text-secondary/50 bg-surface-light border border-border/60 hover:text-primary hover:border-primary/30'}`}
-                                                                    title={openingLocked[ing.ingredient] ? 'Mở khóa tồn đầu' : 'Xác nhận & khoá tồn đầu'}
-                                                                >
-                                                                    {openingLocked[ing.ingredient] ? <Lock size={11} strokeWidth={2.5} /> : <Unlock size={11} strokeWidth={2.5} />}
-                                                                </button>
-                                                            )}
+                                                            <span className={`pr-1.5 text-[10px] font-medium shrink-0 ${isLocked ? 'text-primary/70' : 'text-text-dim'}`}>{unit}</span>
                                                         </div>
                                                     </div>
-                                                    <div className="flex flex-col items-center">
-                                                        <span className="text-[9px] font-black text-text-dim uppercase mb-0.5">Nhập thêm</span>
-                                                        <input
-                                                            type="number"
-                                                            placeholder="0"
-                                                            value={restockInputs[ing.ingredient] || ''}
-                                                            onChange={e => handleRestockChange(ing.ingredient, e.target.value)}
-                                                            className="w-full bg-surface-light border border-border/60 rounded-[10px] px-2 py-1 text-[13px] font-medium text-text text-center placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                        />
+
+                                                    {/* Nhập thêm */}
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[9px] font-black text-text-dim uppercase mb-1">Nhập thêm</span>
+                                                        <div className="flex items-center gap-1 bg-surface-light border border-border/60 rounded-[10px] overflow-hidden focus-within:border-primary/40 transition-colors">
+                                                            <input
+                                                                type="number"
+                                                                placeholder="0"
+                                                                value={restockInputs[ing.ingredient] || ''}
+                                                                onChange={e => handleRestockChange(ing.ingredient, e.target.value)}
+                                                                className="flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-medium text-text text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                            />
+                                                            <span className="pr-1.5 text-[10px] font-medium text-text-dim shrink-0">{unit}</span>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex flex-col items-center">
-                                                        <span className="text-[9px] font-black text-text-dim uppercase mb-0.5">Tồn cuối</span>
-                                                        <input
-                                                            type="number"
-                                                            placeholder="0"
-                                                            value={inventoryInputs[ing.ingredient] || ''}
-                                                            onChange={e => handleInventoryChange(ing.ingredient, e.target.value)}
-                                                            className="w-full bg-surface-light border border-border/60 rounded-[10px] px-2 py-1 text-[13px] font-medium text-text text-center placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                        />
+
+                                                    {/* Tồn cuối */}
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[9px] font-black text-text-dim uppercase mb-1">Tồn cuối</span>
+                                                        <div className="flex items-center gap-1 bg-surface-light border border-border/60 rounded-[10px] overflow-hidden focus-within:border-primary/40 transition-colors">
+                                                            <input
+                                                                type="number"
+                                                                placeholder="0"
+                                                                value={inventoryInputs[ing.ingredient] || ''}
+                                                                onChange={e => handleInventoryChange(ing.ingredient, e.target.value)}
+                                                                className="flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-medium text-text text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                            />
+                                                            <span className="pr-1.5 text-[10px] font-medium text-text-dim shrink-0">{unit}</span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
