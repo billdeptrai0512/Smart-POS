@@ -102,7 +102,8 @@ CREATE TABLE IF NOT EXISTS product_extras (
   product_id UUID REFERENCES products(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   price INTEGER NOT NULL DEFAULT 0,
-  address_id UUID REFERENCES addresses(id) ON DELETE CASCADE
+  address_id UUID REFERENCES addresses(id) ON DELETE CASCADE,
+  sort_order INTEGER DEFAULT 0
 );
 
 -- Active sessions (track who is currently on shift at which address)

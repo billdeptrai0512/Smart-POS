@@ -41,8 +41,8 @@ export default function ExpensePage() {
             await handleAddExpense(costName.trim(), Number(costAmount) * 1000)
             setCostName('')
             setCostAmount('')
-        } catch (err) {
-            console.error(err)
+        } catch {
+            // error handled in POSContext
         } finally {
             setIsSubmitting(false)
         }
@@ -55,8 +55,8 @@ export default function ExpensePage() {
             await handleAddFixedCost(fixedName.trim(), parseVNDInput(fixedAmount))
             setFixedName('')
             setFixedAmount('')
-        } catch (err) {
-            console.error(err)
+        } catch {
+            // error handled in POSContext
         } finally {
             setIsFixedSubmitting(false)
         }
@@ -73,8 +73,8 @@ export default function ExpensePage() {
         try {
             await handleUpdateFixedCost(editingId, { name: editName.trim(), amount: parseVNDInput(editAmount) })
             setEditingId(null)
-        } catch (err) {
-            console.error(err)
+        } catch {
+            // error handled in POSContext
         }
     }
 

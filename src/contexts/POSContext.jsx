@@ -8,6 +8,7 @@ import { useProducts } from './ProductContext'
 import { useAddress } from './AddressContext'
 import { useAuth } from './AuthContext'
 import { Outlet } from 'react-router-dom'
+import { useToast } from '../hooks/useToast'
 
 const POSContext = createContext(null)
 
@@ -38,9 +39,8 @@ export function POSProvider() {
     const [cupsSold, setCupsSold] = useState(() => Number(localStorage.getItem('pos_cups')) || 0)
     const [inventory, setInventory] = useState(() => loadLocalJSON('pos_inventory', {}))
     const [isSubmitting, setIsSubmitting] = useState(false)
-    const [toast, setToast] = useState(null)
     const [isOnline, setIsOnline] = useState(navigator.onLine)
-    const toastTimer = useRef(null)
+    const { toast, showToast, showError } = useToast()
 
     // ---- History State ----
     const [todayOrders, setTodayOrders] = useState([])
@@ -48,13 +48,6 @@ export function POSProvider() {
     const [fixedCosts, setFixedCosts] = useState([])
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
     const [lastOrder, setLastOrder] = useState(null)
-
-    // ---- Toast helper ----
-    function showToast(message, type = 'info') {
-        if (toastTimer.current) clearTimeout(toastTimer.current)
-        setToast({ message, type })
-        toastTimer.current = setTimeout(() => setToast(null), 3000)
-    }
 
     // ---- Offline sync ----
     const handleSyncComplete = useCallback(() => {
@@ -312,15 +305,20 @@ export function POSProvider() {
         if (navigator.onLine && supabase) {
             submitOrder(savedCart, savedTotal, null, addressId, cartCost, costPerItem).then(res => {
                 localOrderIds.current.add(res.id)
-            }).catch(() => {
-                // Fallback: enrich offline payload with cost snapshot
-                const enrichedCart = savedCart.map(item => ({
-                    ...item,
-                    unitCost: costPerItem[item.cartItemId] || 0,
-                    extraIds: (item.extras || []).map(e => e.id)
-                }))
-                addPendingOrder(enrichedCart, savedTotal, null, addressId, cartCost)
-                showToast('Lỗi mạng – đã lưu offline', 'warning')
+            }).catch((err) => {
+                // Only fallback to offline for genuine network errors
+                if (!navigator.onLine || err?.message?.includes('fetch') || err?.message?.includes('network') || err?.message?.includes('NetworkError')) {
+                    const enrichedCart = savedCart.map(item => ({
+                        ...item,
+                        unitCost: costPerItem[item.cartItemId] || 0,
+                        extraIds: (item.extras || []).map(e => e.id).filter(Boolean)
+                    }))
+                    addPendingOrder(enrichedCart, savedTotal, null, addressId, cartCost)
+                    showToast('Lỗi mạng – đã lưu offline', 'warning')
+                } else {
+                    console.error('Order submit error (data):', err)
+                    showToast('Lỗi tạo đơn – vui lòng thử lại', 'danger')
+                }
             })
         } else {
             const enrichedCart = savedCart.map(item => ({
@@ -347,7 +345,7 @@ export function POSProvider() {
             setTodayExpenses(expenses)
             setFixedCosts(fixed)
         } catch (err) {
-            console.error(err)
+            showError(err, 'Tải lịch sử đơn hàng')
         } finally {
             setIsLoadingHistory(false)
         }
@@ -364,8 +362,7 @@ export function POSProvider() {
             }
             showToast('Đã xóa đơn hàng', 'success')
         } catch (err) {
-            console.error('Delete order error:', err)
-            showToast('Lỗi khi xóa đơn hàng', 'warning')
+            showError(err, 'Xóa đơn hàng')
         }
     }
 
@@ -378,8 +375,7 @@ export function POSProvider() {
             showToast('Đã thêm chi phí', 'success')
             return expense
         } catch (err) {
-            console.error('Add expense error:', err)
-            showToast('Lỗi mạng khi thêm chi phí', 'danger')
+            showError(err, 'Thêm chi phí')
             throw err
         }
     }
@@ -391,8 +387,7 @@ export function POSProvider() {
             setTotalCost(prev => Math.max(0, prev - amount))
             showToast('Đã xóa chi phí', 'success')
         } catch (err) {
-            console.error('Delete expense error:', err)
-            showToast('Lỗi khi xóa chi phí', 'warning')
+            showError(err, 'Xóa chi phí')
         }
     }
 
@@ -403,7 +398,7 @@ export function POSProvider() {
             const fixed = await fetchFixedCosts(addressId)
             setFixedCosts(fixed)
         } catch (err) {
-            console.error('Load fixed costs error:', err)
+            showError(err, 'Tải chi phí cố định')
         }
     }
 
@@ -415,8 +410,7 @@ export function POSProvider() {
             showToast('Đã thêm chi phí cố định', 'success')
             return item
         } catch (err) {
-            console.error('Add fixed cost error:', err)
-            showToast('Lỗi khi thêm chi phí cố định', 'danger')
+            showError(err, 'Thêm chi phí cố định')
             throw err
         }
     }
@@ -428,8 +422,7 @@ export function POSProvider() {
             showToast('Đã cập nhật chi phí cố định', 'success')
             return updated
         } catch (err) {
-            console.error('Update fixed cost error:', err)
-            showToast('Lỗi khi cập nhật', 'warning')
+            showError(err, 'Cập nhật chi phí cố định')
             throw err
         }
     }
@@ -440,8 +433,7 @@ export function POSProvider() {
             setFixedCosts(prev => prev.filter(fc => fc.id !== id))
             showToast('Đã xóa chi phí cố định', 'success')
         } catch (err) {
-            console.error('Delete fixed cost error:', err)
-            showToast('Lỗi khi xóa', 'warning')
+            showError(err, 'Xóa chi phí cố định')
         }
     }
 
