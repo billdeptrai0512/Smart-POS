@@ -4,6 +4,7 @@ import { ArrowLeft, PackageCheck } from 'lucide-react'
 import { usePOS } from '../contexts/POSContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
+import { Lock, Unlock } from 'lucide-react'
 import { formatVND, formatVNDInput, parseVNDInput } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import { insertShiftClosing, updateShiftClosing, fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchIngredientCostsWithUnits, fetchFixedCosts, insertExpense, fetchTodayExpenses } from '../services/orderService'
@@ -18,7 +19,8 @@ export default function ShiftClosingPage() {
     const { todayOrders, isLoadingHistory, handleLoadHistory } = usePOS()
     const { selectedAddress } = useAddress()
     const { toast, showError } = useToast()
-    const { profile } = useAuth()
+    const { profile, isManager, isAdmin } = useAuth()
+    const canUnlock = isManager || isAdmin
 
     // Load history if not loaded
     useEffect(() => {
@@ -42,6 +44,8 @@ export default function ShiftClosingPage() {
     const [inventoryInputs, setInventoryInputs] = useState({})
     const [restockInputs, setRestockInputs] = useState({})
     const [openingStock, setOpeningStock] = useState({})
+    const [openingInputs, setOpeningInputs] = useState({})
+    const [openingLocked, setOpeningLocked] = useState({})
 
     // Load existing shift closing data (for editing)
     useEffect(() => {
@@ -62,14 +66,24 @@ export default function ShiftClosingPage() {
                         if (Array.isArray(parsed)) {
                             const inputs = {}
                             const restocks = {}
+                            const openings = {}
+                            const locked = {}
                             parsed.forEach(item => {
                                 inputs[item.ingredient] = String(item.remaining)
                                 if (item.restock !== undefined && item.restock !== null) {
                                     restocks[item.ingredient] = String(item.restock)
                                 }
+                                if (item.opening !== undefined && item.opening !== null) {
+                                    openings[item.ingredient] = String(item.opening)
+                                }
+                                if (item.opening_locked) {
+                                    locked[item.ingredient] = true
+                                }
                             })
                             setInventoryInputs(inputs)
                             setRestockInputs(restocks)
+                            if (Object.keys(openings).length) setOpeningInputs(openings)
+                            if (Object.keys(locked).length) setOpeningLocked(locked)
                         }
                     }
                 }
@@ -87,10 +101,17 @@ export default function ShiftClosingPage() {
             fetchYesterdayShiftClosing(selectedAddress.id).then(data => {
                 if (data?.inventory_report && Array.isArray(data.inventory_report)) {
                     const stock = {}
+                    const openings = {}
                     data.inventory_report.forEach(item => {
                         stock[item.ingredient] = item.remaining || 0
+                        openings[item.ingredient] = String(item.remaining || 0)
                     })
                     setOpeningStock(stock)
+                    // Seed openingInputs from yesterday only if today's closing hasn't set them yet
+                    setOpeningInputs(prev => {
+                        if (Object.keys(prev).length > 0) return prev
+                        return openings
+                    })
                 }
             })
         }
@@ -132,6 +153,12 @@ export default function ShiftClosingPage() {
                 if (payload.type === 'restock') {
                     setRestockInputs(prev => ({ ...prev, [payload.ingredient]: payload.value }));
                 }
+                if (payload.type === 'opening') {
+                    setOpeningInputs(prev => ({ ...prev, [payload.ingredient]: payload.value }));
+                }
+                if (payload.type === 'openingLocked') {
+                    setOpeningLocked(prev => ({ ...prev, [payload.ingredient]: payload.value }));
+                }
             })
             .subscribe()
 
@@ -152,6 +179,22 @@ export default function ShiftClosingPage() {
     offlineToday.forEach(o => { systemTotalRevenue += o.total })
 
     // --- Note: estimatedConsumption calculation is intentionally removed here as the shift closing process relies on manual actuals.
+
+    const handleOpeningChange = (ingredient, value) => {
+        setOpeningInputs(prev => ({ ...prev, [ingredient]: value }))
+        channelRef.current?.send({
+            type: 'broadcast', event: 'sync-state',
+            payload: { type: 'opening', ingredient, value }
+        }).catch(() => { })
+    }
+
+    const handleOpeningLock = (ingredient, locked) => {
+        setOpeningLocked(prev => ({ ...prev, [ingredient]: locked }))
+        channelRef.current?.send({
+            type: 'broadcast', event: 'sync-state',
+            payload: { type: 'openingLocked', ingredient, value: locked }
+        }).catch(() => { })
+    }
 
     const handleInventoryChange = (ingredient, value) => {
         setInventoryInputs(prev => ({ ...prev, [ingredient]: value }))
@@ -186,6 +229,8 @@ export default function ShiftClosingPage() {
                     return {
                         ingredient: ing.ingredient,
                         unit: ing.unit || 'đv',
+                        opening: openingInputs[ing.ingredient] !== undefined ? Number(openingInputs[ing.ingredient]) : null,
+                        opening_locked: openingLocked[ing.ingredient] || false,
                         remaining: Number(inventoryInputs[ing.ingredient]) || 0,
                         restock: Number(restockInputs[ing.ingredient]) || 0
                     }
@@ -347,9 +392,26 @@ export default function ShiftClosingPage() {
                                                 <div className="grid grid-cols-3 gap-2">
                                                     <div className="flex flex-col items-center">
                                                         <span className="text-[9px] font-black text-text-dim uppercase mb-0.5">Tồn đầu</span>
-                                                        <span className="w-full bg-surface-light border border-border/60 rounded-[10px] px-2 py-1 text-[13px] font-medium text-text-secondary text-center tabular-nums block">
-                                                            {opening !== undefined && opening !== null ? opening : '—'}
-                                                        </span>
+                                                        <div className="w-full flex items-center gap-1">
+                                                            <input
+                                                                type="number"
+                                                                placeholder="0"
+                                                                value={openingInputs[ing.ingredient] ?? (opening !== undefined && opening !== null ? String(opening) : '')}
+                                                                onChange={e => handleOpeningChange(ing.ingredient, e.target.value)}
+                                                                disabled={openingLocked[ing.ingredient]}
+                                                                className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[10px] px-2 py-1 text-[13px] font-medium text-center placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:opacity-50 disabled:cursor-not-allowed disabled:text-text-secondary"
+                                                            />
+                                                            {canUnlock && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleOpeningLock(ing.ingredient, !openingLocked[ing.ingredient])}
+                                                                    className={`shrink-0 p-1 rounded-[8px] transition-colors ${openingLocked[ing.ingredient] ? 'text-primary bg-primary/10 border border-primary/20' : 'text-text-secondary/50 bg-surface-light border border-border/60 hover:text-primary hover:border-primary/30'}`}
+                                                                    title={openingLocked[ing.ingredient] ? 'Mở khóa tồn đầu' : 'Xác nhận & khoá tồn đầu'}
+                                                                >
+                                                                    {openingLocked[ing.ingredient] ? <Lock size={11} strokeWidth={2.5} /> : <Unlock size={11} strokeWidth={2.5} />}
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                     <div className="flex flex-col items-center">
                                                         <span className="text-[9px] font-black text-text-dim uppercase mb-0.5">Nhập thêm</span>

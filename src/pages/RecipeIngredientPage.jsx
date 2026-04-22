@@ -5,7 +5,6 @@ import { useAuth } from '../contexts/AuthContext'
 import { useAddress } from '../contexts/AddressContext'
 import { formatVND } from '../utils'
 import {
-    fetchIngredientCosts,
     upsertRecipe,
     deleteRecipeRow,
     upsertProductPrice,
@@ -73,11 +72,6 @@ export default function RecipeIngredientPage() {
     useEffect(() => { setExtras(contextExtras?.[productId] || []) }, [contextExtras, productId])
     useEffect(() => { setExtraIngs(contextExtraIngs || {}) }, [contextExtraIngs])
 
-    useEffect(() => {
-        if (selectedAddress?.id) {
-            fetchIngredientCosts(selectedAddress.id).then(setIngredientCosts)
-        }
-    }, [selectedAddress?.id])
 
     const prodRecipes = useMemo(
         () => recipes.filter(r => r.product_id === productId).sort((a, b) => sortIngredients(a.ingredient, b.ingredient, selectedAddress?.ingredient_sort_order)),

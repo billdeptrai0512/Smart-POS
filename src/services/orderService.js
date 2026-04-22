@@ -121,27 +121,17 @@ export async function fetchTodayCupsSold(addressId) {
 
     let query = supabase
         .from('orders')
-        .select('id')
+        .select('order_items(quantity)')
         .gte('created_at', today.toISOString())
 
     if (addressId) query = query.eq('address_id', addressId)
 
-    const { data: orders, error: ordersError } = await query
-
-    if (ordersError || !orders?.length) return 0
-
-    const orderIds = orders.map(o => o.id)
-    const { data: items, error: itemsError } = await supabase
-        .from('order_items')
-        .select('quantity')
-        .in('order_id', orderIds)
-
-    if (itemsError) {
-        console.error('fetchTodayCupsSold items error:', itemsError)
+    const { data, error } = await query
+    if (error) {
+        console.error('fetchTodayCupsSold error:', error)
         return 0
     }
-
-    return items.reduce((sum, i) => sum + i.quantity, 0)
+    return (data || []).reduce((sum, o) => sum + (o.order_items || []).reduce((s, i) => s + i.quantity, 0), 0)
 }
 
 // Fetch all orders for today, newest first (optionally scoped by address)
@@ -342,9 +332,9 @@ export async function fetchRecipes(productIds) {
     return data || []
 }
 
-// Fetch ingredient costs from Supabase, fallback to constants
-export async function fetchIngredientCosts(addressId) {
-    if (!supabase) return {}
+// Fetch ingredient costs + units in one query, return both shapes
+export async function fetchIngredientCostsAndUnits(addressId) {
+    if (!supabase) return { costs: {}, units: {}, rows: [] }
     let query = supabase.from('ingredient_costs').select('ingredient, unit_cost, unit, address_id')
 
     if (addressId) {
@@ -355,18 +345,35 @@ export async function fetchIngredientCosts(addressId) {
 
     const { data, error } = await query
     if (error) {
-        console.error('fetchIngredientCosts error:', error)
-        return {}
+        console.error('fetchIngredientCostsAndUnits error:', error)
+        return { costs: {}, units: {}, rows: [] }
     }
-    if (!data || data.length === 0) return {}
+    if (!data || data.length === 0) return { costs: {}, units: {}, rows: [] }
 
-    const costs = {}
     const defaultData = data.filter(d => d.address_id === null)
     const addressData = data.filter(d => d.address_id === addressId)
 
-    for (const d of defaultData) costs[d.ingredient] = d.unit_cost
-    for (const d of addressData) costs[d.ingredient] = d.unit_cost
+    const costs = {}
+    const units = {}
+    const ingredientMap = {}
 
+    for (const d of defaultData) {
+        costs[d.ingredient] = d.unit_cost
+        units[d.ingredient] = d.unit || 'đv'
+        ingredientMap[d.ingredient] = { ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost }
+    }
+    for (const d of addressData) {
+        costs[d.ingredient] = d.unit_cost
+        units[d.ingredient] = d.unit || 'đv'
+        ingredientMap[d.ingredient] = { ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost }
+    }
+
+    return { costs, units, rows: Object.values(ingredientMap) }
+}
+
+// Kept for backward-compat with callers that only need the costs map
+export async function fetchIngredientCosts(addressId) {
+    const { costs } = await fetchIngredientCostsAndUnits(addressId)
     return costs
 }
 
@@ -1015,33 +1022,10 @@ export async function fetchYesterdayShiftClosing(addressId) {
     return data
 }
 
-// Fetch ingredient costs WITH unit info (for shift closing inventory form)
+// Kept for backward-compat — delegates to fetchIngredientCostsAndUnits
 export async function fetchIngredientCostsWithUnits(addressId) {
-    if (!supabase) return []
-    let query = supabase.from('ingredient_costs').select('ingredient, unit_cost, unit, address_id')
-
-    if (addressId) {
-        query = query.or(`address_id.eq.${addressId},address_id.is.null`)
-    } else {
-        query = query.is('address_id', null)
-    }
-
-    const { data, error } = await query
-    if (error) {
-        console.error('fetchIngredientCostsWithUnits error:', error)
-        return []
-    }
-    if (!data || data.length === 0) return []
-
-    const defaultData = data.filter(d => d.address_id === null)
-    const addressData = data.filter(d => d.address_id === addressId)
-
-    // Address-specific overrides defaults
-    const ingredientMap = {}
-    for (const d of defaultData) ingredientMap[d.ingredient] = { ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost }
-    for (const d of addressData) ingredientMap[d.ingredient] = { ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost }
-
-    return Object.values(ingredientMap)
+    const { rows } = await fetchIngredientCostsAndUnits(addressId)
+    return rows
 }
 
 // Fetch order items for the past `days` fully completed days (excluding today)
