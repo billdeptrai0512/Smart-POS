@@ -21,6 +21,8 @@ import {
 } from '../services/orderService'
 import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
 import { ArrowLeft } from 'lucide-react'
+import { useToast } from '../hooks/useToast'
+import Toast from '../components/POSPage/Toast'
 
 export default function RecipeIngredientPage() {
     const navigate = useNavigate()
@@ -29,6 +31,7 @@ export default function RecipeIngredientPage() {
     const { products, recipes: allRecipes, ingredientCosts: contextCosts, ingredientUnits: contextUnits, productExtras: contextExtras, extraIngredients: contextExtraIngs, refreshProducts } = useProducts()
     const { selectedAddress } = useAddress()
     const { isManager, isAdmin } = useAuth()
+    const { toast, showError } = useToast()
     const canEdit = isManager || isAdmin
 
     const [ingredientCosts, setIngredientCosts] = useState(contextCosts || {})
@@ -102,7 +105,7 @@ export default function RecipeIngredientPage() {
             ))
             refreshProducts?.()
         } catch (err) {
-            console.error('Save recipe error:', err)
+            showError(err, 'Lưu lượng nguyên liệu')
         } finally {
             setSaving(false)
             setEditingAmount(null)
@@ -116,7 +119,7 @@ export default function RecipeIngredientPage() {
             await upsertProductPrice(productId, selectedAddress.id, newPrice)
             refreshProducts?.()
         } catch (err) {
-            console.error('Save product price error:', err)
+            showError(err, 'Lưu giá bán sản phẩm')
         } finally {
             setSaving(false)
             setEditingProductPrice(null)
@@ -131,7 +134,7 @@ export default function RecipeIngredientPage() {
             setRecipes(prev => prev.filter(r => !(r.product_id === productId && r.ingredient === ingredient)))
             refreshProducts?.()
         } catch (err) {
-            console.error('Delete recipe error:', err)
+            showError(err, 'Xóa nguyên liệu khỏi công thức')
         } finally {
             setSaving(false)
         }
@@ -172,7 +175,7 @@ export default function RecipeIngredientPage() {
             setCustomIngredientUnit('')
             refreshProducts?.()
         } catch (err) {
-            console.error('Add ingredient error:', err)
+            showError(err, 'Thêm nguyên liệu vào công thức')
         } finally {
             setSaving(false)
         }
@@ -195,7 +198,7 @@ export default function RecipeIngredientPage() {
             setNewExtraPrice('')
             refreshProducts?.()
         } catch (err) {
-            console.error('Add extra error:', err)
+            showError(err, 'Thêm tùy chọn')
         } finally {
             setSaving(false)
         }
@@ -210,7 +213,7 @@ export default function RecipeIngredientPage() {
             setExtras(prev => prev.map(e => e.id === extraId ? { ...e, name: trimmed } : e))
             refreshProducts?.()
         } catch (err) {
-            console.error('Save extra name error:', err)
+            showError(err, 'Lưu tên tùy chọn')
         } finally {
             setSaving(false)
             setEditingExtraName(null)
@@ -224,7 +227,7 @@ export default function RecipeIngredientPage() {
             setExtras(prev => prev.map(e => e.id === extraId ? { ...e, price: newPrice } : e))
             refreshProducts?.()
         } catch (err) {
-            console.error('Save extra price error:', err)
+            showError(err, 'Lưu giá tùy chọn')
         } finally {
             setSaving(false)
             setEditingExtraPrice(null)
@@ -239,7 +242,7 @@ export default function RecipeIngredientPage() {
             setExtras(prev => prev.filter(e => e.id !== extraId))
             refreshProducts?.()
         } catch (err) {
-            console.error('Delete extra error:', err)
+            showError(err, 'Xóa tùy chọn')
         } finally {
             setSaving(false)
         }
@@ -253,7 +256,7 @@ export default function RecipeIngredientPage() {
             refreshProducts?.()
             setDuplicatingExtra(null)
         } catch (err) {
-            console.error('Duplicate extra error:', err)
+            showError(err, 'Nhân bản tùy chọn')
         } finally {
             setSaving(false)
         }
@@ -271,10 +274,10 @@ export default function RecipeIngredientPage() {
         setSaving(true)
         try {
             await updateExtrasSortOrder(sortedExtras.map(e => e.id))
-            refreshProducts?.()
+            await refreshProducts?.()
             setSortingExtras(false)
         } catch (err) {
-            console.error('Sort extras error:', err)
+            showError(err, 'Lưu thứ tự tùy chọn')
         } finally {
             setSaving(false)
         }
@@ -299,7 +302,7 @@ export default function RecipeIngredientPage() {
             setCustomExtraIngName('')
             setCustomExtraIngUnit('')
         } catch (err) {
-            console.error('Add extra ingredient error:', err)
+            showError(err, 'Thêm nguyên liệu vào tùy chọn')
         } finally {
             setSaving(false)
         }
@@ -311,7 +314,7 @@ export default function RecipeIngredientPage() {
             await upsertExtraIngredient(extraId, ingredient, newAmount)
             refreshProducts?.()
         } catch (err) {
-            console.error('Save extra amount error:', err)
+            showError(err, 'Lưu lượng nguyên liệu tùy chọn')
         } finally {
             setSaving(false)
             setEditingExtraAmount(null)
@@ -325,7 +328,7 @@ export default function RecipeIngredientPage() {
             await deleteExtraIngredient(extraId, ingredient)
             refreshProducts?.()
         } catch (err) {
-            console.error('Delete extra ingredient error:', err)
+            showError(err, 'Xóa nguyên liệu khỏi tùy chọn')
         } finally {
             setSaving(false)
         }
@@ -344,6 +347,7 @@ export default function RecipeIngredientPage() {
 
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
+            <Toast toast={toast} />
             {/* Header */}
             <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
                 <div className="flex items-center gap-3">
@@ -557,7 +561,7 @@ export default function RecipeIngredientPage() {
                                     onClick={() => { setSortedExtras([...extras]); setSortingExtras(true) }}
                                     className="text-[11px] text-text-dim hover:text-primary font-bold transition-colors"
                                 >
-                                    Sắp xếp ↕
+                                    Sắp xếp
                                 </button>
                             )}
                         </div>
@@ -884,7 +888,7 @@ export default function RecipeIngredientPage() {
                                 refreshProducts?.()
                                 navigate('/recipes', { state: location.state })
                             } catch (err) {
-                                console.error('Remove product error:', err)
+                                showError(err, 'Xóa món khỏi menu')
                             } finally {
                                 setSaving(false)
                             }

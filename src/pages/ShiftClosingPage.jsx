@@ -8,13 +8,16 @@ import { formatVND, formatVNDInput, parseVNDInput } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import { insertShiftClosing, updateShiftClosing, fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchIngredientCostsWithUnits, fetchFixedCosts, insertExpense, fetchTodayExpenses } from '../services/orderService'
 import { supabase } from '../lib/supabaseClient'
-import { ingredientLabel, getIngredientUnit, sortIngredients } from '../components/common/recipeUtils'
+import { ingredientLabel, sortIngredients } from '../components/common/recipeUtils'
+import { useToast } from '../hooks/useToast'
+import Toast from '../components/POSPage/Toast'
 
 export default function ShiftClosingPage() {
     const navigate = useNavigate()
     const channelRef = React.useRef(null)
     const { todayOrders, isLoadingHistory, handleLoadHistory } = usePOS()
     const { selectedAddress } = useAddress()
+    const { toast, showError } = useToast()
     const { profile } = useAuth()
 
     // Load history if not loaded
@@ -180,10 +183,9 @@ export default function ShiftClosingPage() {
                     return hasRemaining || hasRestock
                 })
                 .map(ing => {
-                    const unit = getIngredientUnit(ing.ingredient, ing.unit)
                     return {
                         ingredient: ing.ingredient,
-                        unit: unit,
+                        unit: ing.unit || 'đv',
                         remaining: Number(inventoryInputs[ing.ingredient]) || 0,
                         restock: Number(restockInputs[ing.ingredient]) || 0
                     }
@@ -220,15 +222,13 @@ export default function ShiftClosingPage() {
                         }
                     }
                 } catch (fixedErr) {
-                    console.error('Fixed cost injection error:', fixedErr)
-                    // Non-blocking: shift closing still succeeds
+                    showError(fixedErr, 'Ghi chi phí cố định vào ca')
                 }
             }
 
             navigate('/daily-report')
         } catch (err) {
-            console.error('Shift closing error:', err)
-            alert('Lỗi khi chốt ca. Vui lòng thử lại.')
+            showError(err, 'Chốt ca')
         } finally {
             setIsSubmitting(false)
         }
@@ -236,6 +236,7 @@ export default function ShiftClosingPage() {
 
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
+            <Toast toast={toast} />
             {/* Header */}
             <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
                 <div className="flex items-center gap-3">
@@ -336,7 +337,7 @@ export default function ShiftClosingPage() {
 
                                 <div className="bg-surface rounded-[20px] p-3 border border-border/60 shadow-sm space-y-2">
                                     {ingredientsList.map(ing => {
-                                        const unit = getIngredientUnit(ing.ingredient, ing.unit)
+                                        const unit = ing.unit || 'đv'
                                         const opening = openingStock[ing.ingredient]
                                         return (
                                             <div key={ing.ingredient} className="border-b border-border/20 last:border-0 pb-2 last:pb-0">

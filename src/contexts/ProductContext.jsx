@@ -88,6 +88,14 @@ export function ProductProvider() {
         setIngredientUnits(units)
         setProductExtras(extras)
         setExtraIngredients(extraIngs)
+        try {
+            localStorage.setItem('cache_products', JSON.stringify(prods))
+            localStorage.setItem('cache_recipes', JSON.stringify(recs))
+            localStorage.setItem('cache_costs', JSON.stringify(costs))
+            localStorage.setItem('cache_units', JSON.stringify(units))
+            localStorage.setItem('cache_extras', JSON.stringify(extras))
+            localStorage.setItem('cache_extra_ingredients', JSON.stringify(extraIngs))
+        } catch { /* ignore quota errors */ }
     }, [activeManagerId, selectedAddress?.id])
 
     return (

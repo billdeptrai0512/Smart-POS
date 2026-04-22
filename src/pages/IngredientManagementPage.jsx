@@ -8,12 +8,15 @@ import { fetchIngredientCosts, fetchIngredientCostsWithUnits, upsertIngredientCo
 import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import { ArrowLeft } from 'lucide-react'
+import { useToast } from '../hooks/useToast'
+import Toast from '../components/POSPage/Toast'
 
 export default function IngredientManagementPage() {
     const navigate = useNavigate()
     const { ingredientCosts: contextCosts, refreshProducts } = useProducts()
     const { selectedAddress, updateSortOrder } = useAddress()
     const { isManager, isAdmin } = useAuth()
+    const { toast, showError } = useToast()
     const canEdit = isManager || isAdmin
 
     const [ingredientCosts, setIngredientCosts] = useState(contextCosts || {})
@@ -59,7 +62,7 @@ export default function IngredientManagementPage() {
             setIngredientCosts(prev => ({ ...prev, [ingredient]: newCost }))
             refreshProducts?.()
         } catch (err) {
-            console.error('Save cost error:', err)
+            showError(err, 'Lưu giá nguyên liệu')
         } finally {
             setSaving(false)
             setEditingCost(null)
@@ -86,7 +89,7 @@ export default function IngredientManagementPage() {
             })
             refreshProducts?.()
         } catch (err) {
-            console.error('Rename ingredient error:', err)
+            showError(err, 'Đổi tên nguyên liệu')
         } finally {
             setSaving(false)
             setEditingName(null)
@@ -100,7 +103,7 @@ export default function IngredientManagementPage() {
             setIngredientUnits(prev => ({ ...prev, [ingredient]: newUnit }))
             refreshProducts?.()
         } catch (err) {
-            console.error('Save unit error:', err)
+            showError(err, 'Lưu đơn vị nguyên liệu')
         } finally {
             setSaving(false)
             setEditingUnit(null)
@@ -122,7 +125,7 @@ export default function IngredientManagementPage() {
             setNewIngredientUnit('')
             setNewIngredientCost('')
         } catch (err) {
-            console.error('Create ingredient error:', err)
+            showError(err, 'Tạo nguyên liệu mới')
         } finally {
             setSaving(false)
         }
@@ -145,7 +148,7 @@ export default function IngredientManagementPage() {
             })
             refreshProducts?.()
         } catch (err) {
-            console.error('Delete ingredient error:', err)
+            showError(err, 'Xóa nguyên liệu')
         } finally {
             setSaving(false)
         }
@@ -177,8 +180,7 @@ export default function IngredientManagementPage() {
             await updateSortOrder(selectedAddress.id, sortedIngredients)
             setIsSorting(false)
         } catch (err) {
-            console.error(err)
-            alert('Lỗi lưu thứ tự')
+            showError(err, 'Lưu thứ tự nguyên liệu')
         } finally {
             setSaving(false)
         }
@@ -186,6 +188,7 @@ export default function IngredientManagementPage() {
 
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
+            <Toast toast={toast} />
             {/* Header */}
             <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
                 <div className="flex items-center gap-3">

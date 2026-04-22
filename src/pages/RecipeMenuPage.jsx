@@ -11,6 +11,8 @@ import {
 } from '../services/orderService'
 import { ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
+import { useToast } from '../hooks/useToast'
+import Toast from '../components/POSPage/Toast'
 
 export default function RecipeMenuPage() {
     const navigate = useNavigate()
@@ -21,6 +23,7 @@ export default function RecipeMenuPage() {
     const { isManager, isAdmin } = useAuth()
     const canEdit = isManager || isAdmin
 
+    const { toast, showError } = useToast()
     const [newProductName, setNewProductName] = useState('')
     const [newProductPrice, setNewProductPrice] = useState('')
     const [saving, setSaving] = useState(false)
@@ -54,7 +57,7 @@ export default function RecipeMenuPage() {
             setNewProductName('')
             setNewProductPrice('')
         } catch (error) {
-            console.error('Create product error:', error)
+            showError(error, 'Tạo món mới')
         } finally {
             setSaving(false)
         }
@@ -94,7 +97,7 @@ export default function RecipeMenuPage() {
             setSortedProducts([])
             setSelectedSortProductId(null)
         } catch (err) {
-            console.error('Sort order error:', err)
+            showError(err, 'Lưu thứ tự món')
         } finally {
             setSaving(false)
         }
@@ -104,6 +107,7 @@ export default function RecipeMenuPage() {
 
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
+            <Toast toast={toast} />
             {/* Header */}
             <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
                 <div className="flex items-center gap-3">

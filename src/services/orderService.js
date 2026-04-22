@@ -567,7 +567,7 @@ export async function updateProductSortOrder(addressId, orderedProductIds) {
 // Fetch all product extras (returns { productId: [{ id, name, price }] })
 export async function fetchProductExtras(addressId) {
     if (!supabase) return {}
-    let query = supabase.from('product_extras').select('id, product_id, name, price, address_id').order('id', { ascending: true })
+    let query = supabase.from('product_extras').select('id, product_id, name, price, address_id, sort_order').order('sort_order', { ascending: true, nullsFirst: false })
 
     if (addressId) {
         query = query.or(`address_id.eq.${addressId},address_id.is.null`)
@@ -593,10 +593,11 @@ export async function fetchProductExtras(addressId) {
             finalExtras.push(d)
         }
     }
-    finalExtras.sort((a, b) => a.id - b.id)
+    finalExtras.sort((a, b) => (a.sort_order ?? Infinity) - (b.sort_order ?? Infinity))
 
     const extrasMap = {}
     for (const ex of finalExtras) {
+        if (!ex.id) continue  // skip corrupted rows with null id
         if (!extrasMap[ex.product_id]) extrasMap[ex.product_id] = []
         extrasMap[ex.product_id].push({ id: ex.id, name: ex.name, price: ex.price })
     }
@@ -665,11 +666,13 @@ export async function duplicateProductExtra(extraId, newName, addressId = null) 
 // Update sort_order for a list of extras
 export async function updateExtrasSortOrder(orderedExtraIds) {
     if (!supabase) throw new Error('No Supabase connection')
-    await Promise.all(
+    const results = await Promise.all(
         orderedExtraIds.map((id, index) =>
             supabase.from('product_extras').update({ sort_order: index }).eq('id', id)
         )
     )
+    const failed = results.find(r => r.error)
+    if (failed) throw new Error(failed.error.message)
 }
 
 // Delete a product extra
@@ -752,7 +755,7 @@ export async function submitOrder(cart, total, paymentMethod = null, addressId =
         address_id: addressId,
         items: cart.map(item => {
             const optionsText = item.extras?.length > 0 ? item.extras.map(e => e.name).join(', ') : null;
-            const extraIds = item.extras?.length > 0 ? item.extras.map(e => e.id) : [];
+            const extraIds = item.extras?.length > 0 ? item.extras.map(e => e.id).filter(Boolean) : [];
             return {
                 product_id: item.productId,
                 quantity: item.quantity,
@@ -784,7 +787,7 @@ export async function bulkSubmitOrders(ordersArray) {
         created_at: o.createdAt,
         items: o.orderItems.map(item => {
             const optionsText = item.extras?.length > 0 ? item.extras.map(e => e.name).join(', ') : null;
-            const extraIds = item.extras?.length > 0 ? item.extras.map(e => e.id) : (item.extraIds || []);
+            const extraIds = item.extras?.length > 0 ? item.extras.map(e => e.id).filter(Boolean) : (item.extraIds || []).filter(Boolean);
             return {
                 product_id: item.productId,
                 quantity: item.quantity,
