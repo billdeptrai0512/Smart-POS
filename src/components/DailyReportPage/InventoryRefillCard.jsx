@@ -137,28 +137,24 @@ export default function InventoryRefillCard({
 
             <div className="space-y-1">
                 {shiftClosing.inventory_report.map(item => {
-                    const opening = openingMap[item.ingredient];
+                    const opening = openingMap[item.ingredient] ?? 0;
                     const restock = item.restock || 0;
                     const used = Math.round((todayEstimatedConsumption[item.ingredient] || 0) * 10) / 10;
-                    const hasOpening = opening !== undefined;
 
-                    const theoretical = hasOpening ? Math.round((opening + restock - used) * 10) / 10 : null;
+                    const theoretical = Math.round((opening + restock - used) * 10) / 10;
                     const actual = item.remaining || 0;
-                    const diff = theoretical !== null ? Math.round((actual - theoretical) * 10) / 10 : null;
+                    const diff = Math.round((actual - theoretical) * 10) / 10;
 
-                    let diffText = '—';
-                    let diffColor = 'text-text-dim';
-                    if (diff !== null) {
-                        if (diff < 0) {
-                            diffText = `Hụt ${Math.abs(diff)}`;
-                            diffColor = 'text-danger';
-                        } else if (diff > 0) {
-                            diffText = `Dư ${diff}`;
-                            diffColor = 'text-warning';
-                        } else {
-                            diffText = 'Khớp';
-                            diffColor = 'text-success';
-                        }
+                    let diffText, diffColor;
+                    if (diff < 0) {
+                        diffText = `Hụt ${Math.abs(diff)}`;
+                        diffColor = 'text-danger';
+                    } else if (diff > 0) {
+                        diffText = `Dư ${diff}`;
+                        diffColor = 'text-warning';
+                    } else {
+                        diffText = 'Khớp';
+                        diffColor = 'text-success';
                     }
 
                     // Calculate Refill Logic
@@ -195,7 +191,7 @@ export default function InventoryRefillCard({
 
                                 {activeTab === 'audit' ? (
                                     <>
-                                        <span className="w-[52px] text-[12px] font-bold text-text text-center tabular-nums">{theoretical !== null ? theoretical : '—'}</span>
+                                        <span className="w-[52px] text-[12px] font-bold text-text text-center tabular-nums">{theoretical}</span>
                                         <span className="w-[52px] text-[12px] font-bold text-text text-center tabular-nums">{actual}</span>
                                         <span className={`w-[56px] text-[11px] font-black text-center tabular-nums ${diffColor}`}>{diffText}</span>
                                     </>
@@ -219,7 +215,7 @@ export default function InventoryRefillCard({
                                     <div className="flex items-center justify-between gap-2">
                                         <div className="flex items-center gap-1.5 flex-wrap">
                                             <div className="flex flex-col items-center">
-                                                <span className="text-[13px] font-black text-text tabular-nums">{opening ?? '—'}</span>
+                                                <span className="text-[13px] font-black text-text tabular-nums">{opening}</span>
                                                 <span className="text-[9px] font-bold text-text-dim uppercase mt-0.5">Đầu kỳ</span>
                                             </div>
                                             <span className="text-[11px] font-black text-text-dim">+</span>
@@ -234,7 +230,7 @@ export default function InventoryRefillCard({
                                             </div>
                                             <span className="text-[11px] font-black text-text-dim">=</span>
                                             <div className="flex flex-col items-center">
-                                                <span className="text-[13px] font-black text-text tabular-nums">{theoretical ?? '—'}</span>
+                                                <span className="text-[13px] font-black text-text tabular-nums">{theoretical}</span>
                                                 <span className="text-[9px] font-bold text-text-dim uppercase mt-0.5">Lý.T</span>
                                             </div>
                                         </div>
