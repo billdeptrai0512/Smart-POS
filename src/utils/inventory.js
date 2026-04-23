@@ -86,14 +86,11 @@ export function calculateEstimatedConsumption(orderItems, recipes, extraIngredie
 export function calculateConsumptionBreakdown(orderItems, recipes, extraIngredients, products = []) {
     const breakdown = {};
 
-    const add = (ingredient, productId, productName, qty, amount) => {
+    const ensure = (ingredient, productId, productName) => {
         if (!breakdown[ingredient]) breakdown[ingredient] = {};
         if (!breakdown[ingredient][productId]) {
             breakdown[ingredient][productId] = { name: productName, qty: 0, totalAmount: 0 };
         }
-        breakdown[ingredient][productId].qty += qty;
-        breakdown[ingredient][productId].totalAmount =
-            Math.round((breakdown[ingredient][productId].totalAmount + amount * qty) * 10) / 10;
     };
 
     orderItems.forEach(item => {
@@ -102,9 +99,23 @@ export function calculateConsumptionBreakdown(orderItems, recipes, extraIngredie
         const extras = item.extras || [];
         const productName = products.find(p => p.id === id)?.name || id;
 
-        recipes.filter(r => r.product_id === id).forEach(r => add(r.ingredient, id, productName, qty, r.amount));
+        // Track which ingredients this order item touches, so qty is counted only once
+        // even if both base recipe and an extra affect the same ingredient.
+        const counted = new Set();
+
+        const touch = (ingredient, amount) => {
+            ensure(ingredient, id, productName);
+            if (!counted.has(ingredient)) {
+                breakdown[ingredient][id].qty += qty;
+                counted.add(ingredient);
+            }
+            breakdown[ingredient][id].totalAmount =
+                Math.round((breakdown[ingredient][id].totalAmount + amount * qty) * 10) / 10;
+        };
+
+        recipes.filter(r => r.product_id === id).forEach(r => touch(r.ingredient, r.amount));
         extras.forEach(extra => {
-            (extraIngredients[extra.id] || []).forEach(ei => add(ei.ingredient, id, productName, qty, ei.amount));
+            (extraIngredients[extra.id] || []).forEach(ei => touch(ei.ingredient, ei.amount));
         });
     });
 
