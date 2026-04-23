@@ -20,7 +20,7 @@ import {
     deleteExtraIngredient
 } from '../services/orderService'
 import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Trash2 } from 'lucide-react'
 import { useToast } from '../hooks/useToast'
 import Toast from '../components/POSPage/Toast'
 
@@ -363,22 +363,17 @@ export default function RecipeIngredientPage() {
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => navigate('/recipes', { state: location.state })}
-                        className="w-10 h-10 flex flex-col items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
+                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none shrink-0"
                         title="Trở về"
                     >
                         <ArrowLeft size={20} strokeWidth={2.5} />
                     </button>
-                    <div className="flex-1 min-w-0">
-                        <h1 className="text-[16px] font-black text-text truncate">{product.name}</h1>
-                        <div className="flex items-center gap-1.5 text-[12px] text-text-secondary mt-0.5">
-                            <span>Giá vốn: <span className="text-primary font-bold">{formatVND(cost)}</span></span>
-                            {product.price > 0 && (
-                                <span className="bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded">
-                                    {Math.round((cost / product.price) * 100)}%
-                                </span>
-                            )}
-                            <span className="text-text-dim px-0.5">•</span>
-                            <span className="flex items-center gap-1">Giá bán:
+
+                    <div className="flex flex-row gap-2 flex-1 min-w-0">
+                        <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center min-w-0">
+                            <span className="text-[13px] font-black text-primary uppercase line-clamp-1 break-words w-full px-2" title={product.name}>{product.name}</span>
+                            <div className="flex items-center justify-center gap-1.5 text-[12px] font-bold text-text-secondary leading-none mt-1 w-full">
+                                <span>Giá bán:</span>
                                 {editingProductPrice ? (
                                     <span className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                                         <input
@@ -402,9 +397,30 @@ export default function RecipeIngredientPage() {
                                         {formatVND(product.price)}
                                     </span>
                                 )}
-                            </span>
+                            </div>
                         </div>
                     </div>
+
+                    <button
+                        onClick={async () => {
+                            if (!selectedAddress?.id) return
+                            if (!window.confirm(`Xóa "${product.name}" khỏi menu của chi nhánh này?`)) return
+                            setSaving(true)
+                            try {
+                                await removeProductFromAddress(productId, selectedAddress.id)
+                                refreshProducts?.()
+                                navigate('/recipes', { state: location.state })
+                            } catch (err) {
+                                showError(err, 'Xóa món khỏi menu')
+                            } finally {
+                                setSaving(false)
+                            }
+                        }}
+                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-danger/5 border border-danger/20 text-danger/70 hover:text-danger hover:bg-danger/10 transition-colors shadow-sm focus:outline-none shrink-0"
+                        title="Xóa món khỏi menu"
+                    >
+                        <Trash2 size={20} strokeWidth={2.5} />
+                    </button>
                 </div>
             </header>
 
@@ -455,15 +471,8 @@ export default function RecipeIngredientPage() {
                                     {formatVND(lineCost)}
                                 </span>
 
-                                {canEdit && (
-                                    <button
-                                        onClick={() => handleDeleteIngredient(recipe.ingredient)}
-                                        className="text-danger/60 hover:text-danger text-[14px] opacity-0 group-hover:opacity-100 transition-opacity shrink-0 w-6 h-6 flex items-center justify-center"
-                                        title="Xóa nguyên liệu"
-                                    >
-                                        ✕
-                                    </button>
-                                )}
+
+
                             </div>
                         )
                     })}
@@ -626,12 +635,23 @@ export default function RecipeIngredientPage() {
                                             onBlur={() => saveExtraName(extra.id, editingExtraName.value)}
                                         />
                                     ) : (
-                                        <span
-                                            className={`text-[13px] font-bold text-text flex-1 uppercase ${canEdit ? 'cursor-pointer hover:text-primary' : ''}`}
-                                            onClick={() => canEdit && setEditingExtraName({ extraId: extra.id, value: extra.name })}
-                                        >
-                                            {extra.name}
-                                        </span>
+                                        <div className="flex-1 flex items-center gap-1 min-w-0">
+                                            <span
+                                                className={`text-[13px] font-bold text-text uppercase truncate ${canEdit ? 'cursor-pointer hover:text-primary' : ''}`}
+                                                onClick={() => canEdit && setEditingExtraName({ extraId: extra.id, value: extra.name })}
+                                            >
+                                                {extra.name}
+                                            </span>
+                                            {canEdit && (
+                                                <button
+                                                    onClick={() => setDuplicatingExtra({ id: extra.id, value: extra.name + ' (copy)' })}
+                                                    className="text-text-dim hover:text-primary text-[14px] shrink-0 w-6 h-6 flex items-center justify-center"
+                                                    title="Nhân bản"
+                                                >
+                                                    ⧉
+                                                </button>
+                                            )}
+                                        </div>
                                     )}
                                     {editingExtraPrice?.extraId === extra.id ? (
                                         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
@@ -661,21 +681,15 @@ export default function RecipeIngredientPage() {
                                         <>
                                             <button
                                                 onClick={() => handleToggleSticky(extra.id, extra.is_sticky)}
-                                                className={`shrink-0 w-6 h-6 flex items-center justify-center rounded transition-colors ${extra.is_sticky ? 'text-warning' : 'text-text-dim/40 hover:text-text-dim'}`}
+                                                className={`shrink-0 w-6 h-6 flex items-center text-[13px] justify-center rounded transition-colors ${extra.is_sticky ? 'text-warning' : 'text-text-dim/40 hover:text-text-dim'}`}
                                                 title={extra.is_sticky ? 'Đang tự chọn — bấm để tắt' : 'Bấm để bật tự chọn'}
                                             >
-                                                ⚡
+                                                🔒
                                             </button>
-                                            <button
-                                                onClick={() => setDuplicatingExtra({ id: extra.id, value: extra.name + ' (copy)' })}
-                                                className="text-text-dim/60 hover:text-primary text-[12px] shrink-0 w-6 h-6 flex items-center justify-center"
-                                                title="Nhân bản"
-                                            >
-                                                ⧉
-                                            </button>
+
                                             <button
                                                 onClick={() => handleDeleteExtra(extra.id, extra.name)}
-                                                className="text-danger/60 hover:text-danger text-[14px] shrink-0 w-6 h-6 flex items-center justify-center"
+                                                className="text-danger hover:text-danger text-[14px] shrink-0 w-6 h-6 flex items-center justify-center"
                                                 title="Xóa tùy chọn"
                                             >
                                                 ✕
@@ -893,28 +907,7 @@ export default function RecipeIngredientPage() {
                     ))}
                 </div>
 
-                {/* Remove from this address */}
-                {canEdit && <div className="mt-6 pt-4 border-t border-border/30">
-                    <button
-                        onClick={async () => {
-                            if (!selectedAddress?.id) return
-                            if (!window.confirm(`Xóa "${product.name}" khỏi menu của chi nhánh này?`)) return
-                            setSaving(true)
-                            try {
-                                await removeProductFromAddress(productId, selectedAddress.id)
-                                refreshProducts?.()
-                                navigate('/recipes', { state: location.state })
-                            } catch (err) {
-                                showError(err, 'Xóa món khỏi menu')
-                            } finally {
-                                setSaving(false)
-                            }
-                        }}
-                        className="w-full text-[12px] text-danger/70 hover:text-danger font-bold transition-colors bg-danger/5 border border-danger/20 rounded-[14px] px-4 py-3 text-center"
-                    >
-                        Xóa món này khỏi menu
-                    </button>
-                </div>}
+
             </main>
 
             {saving && (
