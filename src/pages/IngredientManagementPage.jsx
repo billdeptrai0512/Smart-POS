@@ -50,12 +50,11 @@ export default function IngredientManagementPage() {
         try {
             await upsertIngredientCost(ingredient, newCost, selectedAddress?.id)
             setIngredientCosts(prev => ({ ...prev, [ingredient]: newCost }))
-            refreshProducts?.()
         } catch (err) {
             showError(err, 'Lưu giá nguyên liệu')
         } finally {
             setSaving(false)
-            setEditingCost(null)
+            setEditingCost(prev => prev?.ingredient === ingredient ? null : prev)
         }
     }
 
@@ -77,12 +76,11 @@ export default function IngredientManagementPage() {
                 delete next[oldKey]
                 return next
             })
-            refreshProducts?.()
         } catch (err) {
             showError(err, 'Đổi tên nguyên liệu')
         } finally {
             setSaving(false)
-            setEditingName(null)
+            setEditingName(prev => prev?.ingredient === oldKey ? null : prev)
         }
     }
 
@@ -91,12 +89,11 @@ export default function IngredientManagementPage() {
         try {
             await upsertIngredientCost(ingredient, currentCost, selectedAddress?.id, newUnit)
             setIngredientUnits(prev => ({ ...prev, [ingredient]: newUnit }))
-            refreshProducts?.()
         } catch (err) {
             showError(err, 'Lưu đơn vị nguyên liệu')
         } finally {
             setSaving(false)
-            setEditingUnit(null)
+            setEditingUnit(prev => prev?.ingredient === ingredient ? null : prev)
         }
     }
 
@@ -110,7 +107,6 @@ export default function IngredientManagementPage() {
             await upsertIngredientCost(key, cost, selectedAddress?.id, unit)
             setIngredientCosts(prev => ({ ...prev, [key]: cost }))
             setIngredientUnits(prev => ({ ...prev, [key]: unit }))
-            refreshProducts?.()
             setNewIngredientName('')
             setNewIngredientUnit('')
             setNewIngredientCost('')
@@ -136,7 +132,6 @@ export default function IngredientManagementPage() {
                 delete next[ingredient]
                 return next
             })
-            refreshProducts?.()
         } catch (err) {
             showError(err, 'Xóa nguyên liệu')
         } finally {
@@ -337,8 +332,8 @@ export default function IngredientManagementPage() {
             )}
 
             {saving && (
-                <div className="fixed inset-0 z-50 bg-bg/60 flex items-center justify-center pointer-events-none">
-                    <span className="text-text font-bold text-[14px] animate-pulse">Đang lưu...</span>
+                <div className="fixed bottom-4 right-4 z-50 pointer-events-none">
+                    <span className="text-text-secondary text-[11px] animate-pulse">Đang lưu...</span>
                 </div>
             )}
         </div>
