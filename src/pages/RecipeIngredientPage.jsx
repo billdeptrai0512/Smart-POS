@@ -98,7 +98,6 @@ export default function RecipeIngredientPage() {
                     ? { ...r, amount: newAmount }
                     : r
             ))
-            refreshProducts?.()
         } catch (err) {
             showError(err, 'Lưu lượng nguyên liệu')
         } finally {
@@ -127,7 +126,6 @@ export default function RecipeIngredientPage() {
         try {
             await deleteRecipeRow(productId, ingredient, selectedAddress?.id)
             setRecipes(prev => prev.filter(r => !(r.product_id === productId && r.ingredient === ingredient)))
-            refreshProducts?.()
         } catch (err) {
             showError(err, 'Xóa nguyên liệu khỏi công thức')
         } finally {
@@ -148,7 +146,6 @@ export default function RecipeIngredientPage() {
 
     async function handleAddMultipleIngredients() {
         const toAdd = [...selectedIngredients].map(ing => ({ key: ing, unit: null }))
-        // Add custom ingredient if typed
         if (customIngredientName.trim()) {
             const key = customIngredientName.trim().toLowerCase().replace(/\s+/g, '_')
             const unit = customIngredientUnit || 'đv'
@@ -168,7 +165,6 @@ export default function RecipeIngredientPage() {
             setSelectedIngredients(new Set())
             setCustomIngredientName('')
             setCustomIngredientUnit('')
-            refreshProducts?.()
         } catch (err) {
             showError(err, 'Thêm nguyên liệu vào công thức')
         } finally {
@@ -191,7 +187,6 @@ export default function RecipeIngredientPage() {
             setAddingExtra(false)
             setNewExtraName('')
             setNewExtraPrice('')
-            refreshProducts?.()
         } catch (err) {
             showError(err, 'Thêm tùy chọn')
         } finally {
@@ -206,7 +201,6 @@ export default function RecipeIngredientPage() {
         try {
             await updateProductExtraName(extraId, trimmed)
             setExtras(prev => prev.map(e => e.id === extraId ? { ...e, name: trimmed } : e))
-            refreshProducts?.()
         } catch (err) {
             showError(err, 'Lưu tên tùy chọn')
         } finally {
@@ -220,7 +214,6 @@ export default function RecipeIngredientPage() {
         try {
             await updateProductExtraPrice(extraId, newPrice)
             setExtras(prev => prev.map(e => e.id === extraId ? { ...e, price: newPrice } : e))
-            refreshProducts?.()
         } catch (err) {
             showError(err, 'Lưu giá tùy chọn')
         } finally {
@@ -233,7 +226,6 @@ export default function RecipeIngredientPage() {
         try {
             await updateProductExtraSticky(extraId, !currentValue)
             setExtras(prev => prev.map(e => e.id === extraId ? { ...e, is_sticky: !currentValue } : e))
-            refreshProducts?.()
         } catch (err) {
             showError(err, 'Cập nhật sticky')
         }
@@ -245,7 +237,6 @@ export default function RecipeIngredientPage() {
         try {
             await deleteProductExtra(extraId)
             setExtras(prev => prev.filter(e => e.id !== extraId))
-            refreshProducts?.()
         } catch (err) {
             showError(err, 'Xóa tùy chọn')
         } finally {
@@ -258,8 +249,8 @@ export default function RecipeIngredientPage() {
         setSaving(true)
         try {
             await duplicateProductExtra(extraId, newName.trim(), selectedAddress?.id)
-            refreshProducts?.()
             setDuplicatingExtra(null)
+            refreshProducts?.()
         } catch (err) {
             showError(err, 'Nhân bản tùy chọn')
         } finally {
@@ -301,7 +292,13 @@ export default function RecipeIngredientPage() {
             for (const { key, unit } of toAdd) {
                 await upsertExtraIngredient(extraId, key, 0, unit)
             }
-            refreshProducts?.()
+            setExtraIngs(prev => ({
+                ...prev,
+                [extraId]: [
+                    ...(prev[extraId] || []),
+                    ...toAdd.map(({ key, unit }) => ({ extra_id: extraId, ingredient: key, amount: 0, unit: unit || getIngredientUnit(key) }))
+                ]
+            }))
             setAddingExtraIng(null)
             setSelectedExtraIngs(new Set())
             setCustomExtraIngName('')
@@ -317,7 +314,12 @@ export default function RecipeIngredientPage() {
         setSaving(true)
         try {
             await upsertExtraIngredient(extraId, ingredient, newAmount)
-            refreshProducts?.()
+            setExtraIngs(prev => ({
+                ...prev,
+                [extraId]: (prev[extraId] || []).map(ei =>
+                    ei.ingredient === ingredient ? { ...ei, amount: newAmount } : ei
+                )
+            }))
         } catch (err) {
             showError(err, 'Lưu lượng nguyên liệu tùy chọn')
         } finally {
@@ -331,7 +333,10 @@ export default function RecipeIngredientPage() {
         setSaving(true)
         try {
             await deleteExtraIngredient(extraId, ingredient)
-            refreshProducts?.()
+            setExtraIngs(prev => ({
+                ...prev,
+                [extraId]: (prev[extraId] || []).filter(ei => ei.ingredient !== ingredient)
+            }))
         } catch (err) {
             showError(err, 'Xóa nguyên liệu khỏi tùy chọn')
         } finally {
@@ -913,8 +918,8 @@ export default function RecipeIngredientPage() {
             </main>
 
             {saving && (
-                <div className="fixed inset-0 z-50 bg-bg/60 flex items-center justify-center pointer-events-none">
-                    <span className="text-text font-bold text-[14px] animate-pulse">Đang lưu...</span>
+                <div className="fixed bottom-4 right-4 z-50 pointer-events-none">
+                    <span className="text-text-secondary text-[11px] animate-pulse">Đang lưu...</span>
                 </div>
             )}
         </div>
