@@ -102,7 +102,7 @@ export default function RecipeIngredientPage() {
             showError(err, 'Lưu lượng nguyên liệu')
         } finally {
             setSaving(false)
-            setEditingAmount(null)
+            setEditingAmount(prev => prev?.ingredient === ingredient ? null : prev)
         }
     }
 
@@ -205,7 +205,7 @@ export default function RecipeIngredientPage() {
             showError(err, 'Lưu tên tùy chọn')
         } finally {
             setSaving(false)
-            setEditingExtraName(null)
+            setEditingExtraName(prev => prev?.extraId === extraId ? null : prev)
         }
     }
 
@@ -218,7 +218,7 @@ export default function RecipeIngredientPage() {
             showError(err, 'Lưu giá tùy chọn')
         } finally {
             setSaving(false)
-            setEditingExtraPrice(null)
+            setEditingExtraPrice(prev => prev?.extraId === extraId ? null : prev)
         }
     }
 
@@ -324,7 +324,7 @@ export default function RecipeIngredientPage() {
             showError(err, 'Lưu lượng nguyên liệu tùy chọn')
         } finally {
             setSaving(false)
-            setEditingExtraAmount(null)
+            setEditingExtraAmount(prev => prev?.extraId === extraId && prev?.ingredient === ingredient ? null : prev)
         }
     }
 
