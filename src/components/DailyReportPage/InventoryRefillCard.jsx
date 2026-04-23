@@ -38,11 +38,20 @@ export default function InventoryRefillCard({
 
     if (!shiftClosing?.inventory_report?.length) return null;
 
-    // Build opening stock from yesterday
+    // Build opening stock: default = yesterday's remaining, override = today's explicit opening
     const openingMap = {};
     if (yesterdayClosing?.inventory_report) {
         yesterdayClosing.inventory_report.forEach(item => {
             openingMap[item.ingredient] = item.remaining || 0;
+        });
+    }
+    // User can manually override opening stock in shift-closing (saved as item.opening).
+    // If set (non-null), it takes priority over yesterday's remaining.
+    if (shiftClosing?.inventory_report) {
+        shiftClosing.inventory_report.forEach(item => {
+            if (item.opening != null) {
+                openingMap[item.ingredient] = item.opening;
+            }
         });
     }
 
