@@ -1,7 +1,8 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { useAuth } from './AuthContext'
 import { useAddress } from './AddressContext'
+import { supabase } from '../lib/supabaseClient'
 import { Outlet } from 'react-router-dom'
 
 const ProductContext = createContext(null)
@@ -67,13 +68,14 @@ export function ProductProvider() {
         async function load() {
             try {
                 setLoading(true)
-                const [prods, recs, costsResult, extras, extraIngs] = await Promise.all([
+                const [prods, recs, costsResult, extras] = await Promise.all([
                     fetchProducts(addressId),
                     fetchAllRecipes(addressId),
                     fetchIngredientCostsAndUnits(addressId),
                     fetchProductExtras(addressId),
-                    fetchExtraIngredients()
                 ])
+                const extraIds = Object.values(extras).flat().map(e => e.id)
+                const extraIngs = await fetchExtraIngredients(extraIds)
                 applyData(prods, recs, costsResult, extras, extraIngs, addressId)
             } catch (error) {
                 console.error('Failed to load product data', error)
@@ -84,15 +86,42 @@ export function ProductProvider() {
         load()
     }, [activeManagerId, selectedAddress?.id])
 
+    // Realtime: re-fetch when menu/recipe/cost/extras change on any device
+    const refreshTimerRef = useRef(null)
+    useEffect(() => {
+        if (!supabase || !selectedAddress?.id) return
+        const addressId = selectedAddress.id
+
+        const scheduleRefresh = () => {
+            clearTimeout(refreshTimerRef.current)
+            refreshTimerRef.current = setTimeout(() => refreshProducts(), 400)
+        }
+
+        const channel = supabase
+            .channel(`product-data-${addressId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, scheduleRefresh)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'product_prices', filter: `address_id=eq.${addressId}` }, scheduleRefresh)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'recipes', filter: `address_id=eq.${addressId}` }, scheduleRefresh)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredient_costs', filter: `address_id=eq.${addressId}` }, scheduleRefresh)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'product_extras', filter: `address_id=eq.${addressId}` }, scheduleRefresh)
+            .subscribe()
+
+        return () => {
+            clearTimeout(refreshTimerRef.current)
+            supabase.removeChannel(channel)
+        }
+    }, [selectedAddress?.id])
+
     const refreshProducts = useCallback(async () => {
         const addressId = selectedAddress?.id
-        const [prods, recs, costsResult, extras, extraIngs] = await Promise.all([
+        const [prods, recs, costsResult, extras] = await Promise.all([
             fetchProducts(addressId),
             fetchAllRecipes(addressId),
             fetchIngredientCostsAndUnits(addressId),
             fetchProductExtras(addressId),
-            fetchExtraIngredients()
         ])
+        const extraIds = Object.values(extras).flat().map(e => e.id)
+        const extraIngs = await fetchExtraIngredients(extraIds)
         applyData(prods, recs, costsResult, extras, extraIngs, addressId)
     }, [activeManagerId, selectedAddress?.id])
 

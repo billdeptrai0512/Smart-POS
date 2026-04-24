@@ -77,18 +77,10 @@ export async function fetchProducts(addressId) {
 // Upsert a product price override for a specific address
 export async function upsertProductPrice(productId, addressId, price) {
     if (!supabase) return
-    const { data: existing } = await supabase
+    const { error } = await supabase
         .from('product_prices')
-        .select('id')
-        .eq('product_id', productId)
-        .eq('address_id', addressId)
-        .maybeSingle()
-
-    if (existing) {
-        await supabase.from('product_prices').update({ price }).eq('id', existing.id)
-    } else {
-        await supabase.from('product_prices').insert({ product_id: productId, address_id: addressId, price })
-    }
+        .upsert({ product_id: productId, address_id: addressId, price }, { onConflict: 'product_id,address_id' })
+    if (error) throw error
 }
 
 // Fetch today's total revenue (optionally scoped by address)
@@ -411,32 +403,14 @@ export async function upsertRecipe(productId, ingredient, amount, addressId = nu
         await ensureAddressRecipe(productId, addressId)
     }
 
-    let query = supabase
+    const payload = { product_id: productId, ingredient, amount }
+    if (unit) payload.unit = unit
+    if (addressId) payload.address_id = addressId
+
+    const { error } = await supabase
         .from('recipes')
-        .select('id')
-        .eq('product_id', productId)
-        .eq('ingredient', ingredient)
-
-    if (addressId) query = query.eq('address_id', addressId)
-    else query = query.is('address_id', null)
-
-    const { data: existing } = await query.maybeSingle()
-
-    if (existing) {
-        const { error } = await supabase
-            .from('recipes')
-            .update({ amount })
-            .eq('id', existing.id)
-        if (error) throw error
-    } else {
-        const payload = { product_id: productId, ingredient, amount }
-        if (unit) payload.unit = unit
-        if (addressId) payload.address_id = addressId
-        const { error } = await supabase
-            .from('recipes')
-            .insert(payload)
-        if (error) throw error
-    }
+        .upsert(payload, { onConflict: 'product_id,ingredient,address_id' })
+    if (error) throw error
 }
 
 // Delete a recipe row
@@ -463,24 +437,14 @@ export async function deleteRecipeRow(productId, ingredient, addressId = null) {
 export async function upsertIngredientCost(ingredient, unitCost, addressId = null, unit = null) {
     if (!supabase) throw new Error('No Supabase connection')
 
-    let query = supabase.from('ingredient_costs').select('id').eq('ingredient', ingredient)
-    if (addressId) query = query.eq('address_id', addressId)
-    else query = query.is('address_id', null)
+    const payload = { ingredient, unit_cost: unitCost }
+    if (unit) payload.unit = unit
+    if (addressId) payload.address_id = addressId
 
-    const { data: existing } = await query.maybeSingle()
-
-    if (existing) {
-        const updatePayload = { unit_cost: unitCost }
-        if (unit) updatePayload.unit = unit
-        const { error } = await supabase.from('ingredient_costs').update(updatePayload).eq('id', existing.id)
-        if (error) throw error
-    } else {
-        const payload = { ingredient, unit_cost: unitCost }
-        if (unit) payload.unit = unit
-        if (addressId) payload.address_id = addressId
-        const { error } = await supabase.from('ingredient_costs').insert(payload)
-        if (error) throw error
-    }
+    const { error } = await supabase
+        .from('ingredient_costs')
+        .upsert(payload, { onConflict: 'ingredient,address_id' })
+    if (error) throw error
 }
 
 // Rename an ingredient key across all tables
@@ -704,10 +668,15 @@ export async function deleteProductExtra(extraId) {
 
 // ---- Extra Ingredients CRUD ----
 
-// Fetch all extra ingredients (returns { extraId: [{ id, extra_id, ingredient, amount }] })
-export async function fetchExtraIngredients() {
+// Fetch extra ingredients scoped to a set of extra IDs (pass [] to skip, null to fetch all)
+export async function fetchExtraIngredients(extraIds = null) {
     if (!supabase) return {}
-    const { data, error } = await supabase.from('extra_ingredients').select('id, extra_id, ingredient, amount, unit')
+    if (Array.isArray(extraIds) && extraIds.length === 0) return {}
+
+    let query = supabase.from('extra_ingredients').select('id, extra_id, ingredient, amount, unit')
+    if (extraIds?.length) query = query.in('extra_id', extraIds)
+
+    const { data, error } = await query
     if (error) {
         console.error('fetchExtraIngredients error:', error)
         return {}
@@ -723,27 +692,12 @@ export async function fetchExtraIngredients() {
 // Upsert extra ingredient
 export async function upsertExtraIngredient(extraId, ingredient, amount, unit = null) {
     if (!supabase) throw new Error('No Supabase connection')
-    const { data: existing } = await supabase
+    const payload = { extra_id: extraId, ingredient, amount }
+    if (unit) payload.unit = unit
+    const { error } = await supabase
         .from('extra_ingredients')
-        .select('id')
-        .eq('extra_id', extraId)
-        .eq('ingredient', ingredient)
-        .maybeSingle()
-
-    if (existing) {
-        const { error } = await supabase
-            .from('extra_ingredients')
-            .update({ amount })
-            .eq('id', existing.id)
-        if (error) throw error
-    } else {
-        const payload = { extra_id: extraId, ingredient, amount }
-        if (unit) payload.unit = unit
-        const { error } = await supabase
-            .from('extra_ingredients')
-            .insert(payload)
-        if (error) throw error
-    }
+        .upsert(payload, { onConflict: 'extra_id,ingredient' })
+    if (error) throw error
 }
 
 // Delete extra ingredient
