@@ -188,6 +188,7 @@ export default function DailyReportPage() {
                             products={products}
                             soldProducts={soldProducts}
                             totalRevenue={totalRevenue}
+                            dailyExpense={dailyExpense}
                             shiftClosing={shiftClosing}
                             productStats={productStats}
                         />
