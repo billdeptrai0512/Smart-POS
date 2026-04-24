@@ -34,17 +34,19 @@ CREATE TABLE IF NOT EXISTS product_prices (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   product_id UUID REFERENCES products(id) ON DELETE CASCADE,
   address_id UUID REFERENCES addresses(id) ON DELETE CASCADE,
-  price INTEGER NOT NULL -- price in VND
+  price INTEGER NOT NULL, -- price in VND
+  UNIQUE (product_id, address_id)
 );
 
--- Recipes (ingredients per product)
+-- Recipes (ingredients per product, address_id NULL = global default)
 CREATE TABLE IF NOT EXISTS recipes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   product_id UUID REFERENCES products(id) ON DELETE CASCADE,
   ingredient TEXT NOT NULL,
   amount REAL NOT NULL, -- amount used per 1 serving
   unit TEXT NOT NULL DEFAULT 'đv', -- ingredient unit (g, ml, ly, etc.)
-  manager_id UUID REFERENCES users(id) ON DELETE CASCADE -- null means default recipe
+  address_id UUID REFERENCES addresses(id) ON DELETE CASCADE, -- null means default recipe
+  UNIQUE NULLS NOT DISTINCT (product_id, ingredient, address_id)
 );
 
 -- Inventory (current stock)
@@ -53,13 +55,14 @@ CREATE TABLE IF NOT EXISTS inventory (
   stock REAL NOT NULL DEFAULT 0
 );
 
--- Ingredient costs (unit cost per ingredient)
+-- Ingredient costs (unit cost per ingredient, address_id NULL = global default)
 CREATE TABLE IF NOT EXISTS ingredient_costs (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   ingredient TEXT NOT NULL,
   unit_cost INTEGER NOT NULL DEFAULT 0, -- cost per unit in VND
   unit TEXT NOT NULL DEFAULT 'đv', -- ingredient unit (g, ml, ly, etc.)
-  manager_id UUID REFERENCES users(id) ON DELETE CASCADE -- null means default cost
+  address_id UUID REFERENCES addresses(id) ON DELETE CASCADE, -- null means default cost
+  UNIQUE NULLS NOT DISTINCT (ingredient, address_id)
 );
 
 -- Orders (scoped to address)
@@ -103,7 +106,18 @@ CREATE TABLE IF NOT EXISTS product_extras (
   name TEXT NOT NULL,
   price INTEGER NOT NULL DEFAULT 0,
   address_id UUID REFERENCES addresses(id) ON DELETE CASCADE,
-  sort_order INTEGER DEFAULT 0
+  sort_order INTEGER DEFAULT 0,
+  is_sticky BOOLEAN NOT NULL DEFAULT false
+);
+
+-- Extra ingredients (ingredients consumed by a product extra)
+CREATE TABLE IF NOT EXISTS extra_ingredients (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  extra_id UUID REFERENCES product_extras(id) ON DELETE CASCADE,
+  ingredient TEXT NOT NULL,
+  amount REAL NOT NULL,
+  unit TEXT NOT NULL DEFAULT 'đv',
+  UNIQUE (extra_id, ingredient)
 );
 
 -- Active sessions (track who is currently on shift at which address)
