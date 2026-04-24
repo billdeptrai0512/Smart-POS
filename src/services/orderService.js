@@ -766,7 +766,7 @@ export async function submitOrder(cart, total, paymentMethod = null, addressId =
 
     const orderPayload = {
         total,
-        total_cost: totalCost,
+        total_cost: Math.round(totalCost),
         payment_method: paymentMethod,
         address_id: addressId,
         items: cart.map(item => {
@@ -776,7 +776,7 @@ export async function submitOrder(cart, total, paymentMethod = null, addressId =
                 product_id: item.productId,
                 quantity: item.quantity,
                 options: optionsText,
-                unit_cost: costPerItem[item.cartItemId] || 0,
+                unit_cost: Math.round(costPerItem[item.cartItemId] || 0),
                 extra_ids: extraIds
             }
         })
@@ -808,7 +808,7 @@ export async function bulkSubmitOrders(ordersArray) {
                 product_id: item.productId,
                 quantity: item.quantity,
                 options: optionsText,
-                unit_cost: item.unitCost || 0,
+                unit_cost: Math.round(item.unitCost || 0),
                 extra_ids: extraIds
             }
         })
