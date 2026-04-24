@@ -1,11 +1,11 @@
 import { Filter } from "lucide-react";
 import { formatVND } from "../../utils";
 
-export default function ProfitCard({ totalCups, selectedProductId, onFilterChange, products, soldProducts, totalRevenue, shiftClosing, productStats }) {
+export default function ProfitCard({ totalCups, selectedProductId, onFilterChange, products, soldProducts, totalRevenue, dailyExpense, shiftClosing, productStats }) {
     const selectedProduct = selectedProductId !== 'all' ? products.find(p => p.id === selectedProductId) : null;
 
-    const actualTotal = shiftClosing ? ((shiftClosing.actual_cash || 0) + (shiftClosing.actual_transfer || 0)) : 0;
-    const systemTotal = shiftClosing ? (shiftClosing.system_total_revenue || 0) : 0;
+    const actualTotal = (shiftClosing?.actual_cash || 0) + (shiftClosing?.actual_transfer || 0) + (dailyExpense || 0);
+    const systemTotal = shiftClosing?.system_total_revenue || 0;
     const difference = actualTotal - systemTotal;
 
     const singleStats = selectedProduct && productStats?.[selectedProductId]
@@ -32,24 +32,15 @@ export default function ProfitCard({ totalCups, selectedProductId, onFilterChang
                 </div>
             </div>
 
-            <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex items-center justify-between relative overflow-hidden">
-                <div className="flex flex-col">
-                    <span className="text-[11px] font-black text-text-secondary uppercase mb-1">Thực nhận</span>
-                    {shiftClosing
-                        ? <span className="text-[18px] font-black text-success tabular-nums leading-none">{formatVND(actualTotal)}</span>
-                        : <span className="text-[18px] font-bold text-success tabular-nums">{formatVND(shiftClosing?.actual_transfer || 0)}</span>
-                    }
+            <div className="grid grid-cols-2 gap-3">
+                <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center">
+                    <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí ngày</h3>
+                    <div className="text-[18px] font-bold text-danger tabular-nums">{formatVND(dailyExpense || 0)}</div>
                 </div>
-                {shiftClosing && (
-                    <div className="flex flex-col items-center">
-                        <span className="self-center text-[10px] font-black text-text-secondary uppercase mb-1 opacity-70">Chênh lệch</span>
-                        <div className={`px-3 py-1 rounded-xl border ${difference >= 0 ? 'bg-success/10 border-success/20 text-success' : 'bg-danger/10 border-danger/20 text-danger'}`}>
-                            <span className="text-[14px] font-black tabular-nums leading-none block">
-                                {difference >= 0 ? '+' : ''}{formatVND(difference)}
-                            </span>
-                        </div>
-                    </div>
-                )}
+                <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center">
+                    <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Thực nhận</h3>
+                    <div className="text-[18px] font-bold text-success tabular-nums">{formatVND(actualTotal || 0)}</div>
+                </div>
             </div>
 
             <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 relative overflow-hidden">
