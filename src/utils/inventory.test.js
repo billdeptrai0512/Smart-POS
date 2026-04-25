@@ -114,11 +114,11 @@ describe('calculateConsumptionBreakdown', () => {
         expect(result['coffee_g']['cf_den'].totalAmount).toBe(90);
     });
 
-    it('extras cộng vào đúng sản phẩm đặt hàng', () => {
+    it('extras cộng vào đúng biến thể đặt hàng', () => {
         const orders = [{ productId: 'cf_den', qty: 1, extras: [{ id: 'size_l' }] }];
         const result = calculateConsumptionBreakdown(orders, recipes, extraIngredients, products);
-        // 18 (recipe) + 5 (extra) = 23
-        expect(result['coffee_g']['cf_den'].totalAmount).toBe(23);
+        // 18 (recipe) + 5 (extra) = 23, key có extra
+        expect(result['coffee_g']['cf_den|size_l'].totalAmount).toBe(23);
     });
 
     it('trả về object rỗng khi không có đơn hàng', () => {
@@ -138,11 +138,11 @@ describe('calculateConsumptionBreakdown', () => {
         const orders = [{ productId: 'cf_den', qty: 1, extras: [{ id: 'size_l' }] }];
         const result = calculateConsumptionBreakdown(orders, recipes, extraIngredients, products);
         // BUG cũ: qty=2 (base+extra đều increment), ĐÚNG: qty=1
-        expect(result['coffee_g']['cf_den'].qty).toBe(1);
-        expect(result['coffee_g']['cf_den'].totalAmount).toBe(23); // 18+5
+        expect(result['coffee_g']['cf_den|size_l'].qty).toBe(1);
+        expect(result['coffee_g']['cf_den|size_l'].totalAmount).toBe(23); // 18+5
     });
 
-    it('[qty] 50 ly cà phê sữa, 20 có size_l → qty=50 (không phải 70)', () => {
+    it('[qty] 50 ly cà phê sữa, 20 có size_l → tách 2 biến thể (30 base + 20 size_l)', () => {
         const recipesLocal = [{ product_id: 'cf_sua', ingredient: 'coffee_g', amount: 17 }];
         const extraIngsLocal = { size_l: [{ ingredient: 'coffee_g', amount: 8 }] };
         const orders = [
@@ -150,8 +150,10 @@ describe('calculateConsumptionBreakdown', () => {
             ...Array.from({ length: 20 }, () => ({ productId: 'cf_sua', qty: 1, extras: [{ id: 'size_l' }] })),
         ];
         const result = calculateConsumptionBreakdown(orders, recipesLocal, extraIngsLocal, [{ id: 'cf_sua', name: 'Cà phê sữa' }]);
-        expect(result['coffee_g']['cf_sua'].qty).toBe(50);                    // 50 ly thực tế
-        expect(result['coffee_g']['cf_sua'].totalAmount).toBe(30 * 17 + 20 * 25); // 510+500=1010
+        expect(result['coffee_g']['cf_sua'].qty).toBe(30);
+        expect(result['coffee_g']['cf_sua'].totalAmount).toBe(30 * 17); // 510
+        expect(result['coffee_g']['cf_sua|size_l'].qty).toBe(20);
+        expect(result['coffee_g']['cf_sua|size_l'].totalAmount).toBe(20 * 25); // 500
     });
 
     it('[qty] extra chỉ-only ingredient (không có trong recipe) → qty = số order có extra đó', () => {
@@ -164,12 +166,14 @@ describe('calculateConsumptionBreakdown', () => {
             { productId: 'p1', qty: 2, extras: [{ id: 'topping' }] },
         ];
         const result = calculateConsumptionBreakdown(orders, recipesLocal, extraIngsLocal, [{ id: 'p1', name: 'P1' }]);
-        // coffee_g: 5 cups tổng
-        expect(result['coffee_g']['p1'].qty).toBe(5);
-        expect(result['coffee_g']['p1'].totalAmount).toBe(50);
+        // coffee_g: tách 3 (base) + 2 (topping) = 5 cups tổng
+        expect(result['coffee_g']['p1'].qty).toBe(3);
+        expect(result['coffee_g']['p1'].totalAmount).toBe(30);
+        expect(result['coffee_g']['p1|topping'].qty).toBe(2);
+        expect(result['coffee_g']['p1|topping'].totalAmount).toBe(20);
         // tran_chau: chỉ 2 cups có topping
-        expect(result['tran_chau']['p1'].qty).toBe(2);
-        expect(result['tran_chau']['p1'].totalAmount).toBe(100);
+        expect(result['tran_chau']['p1|topping'].qty).toBe(2);
+        expect(result['tran_chau']['p1|topping'].totalAmount).toBe(100);
     });
 
     it('[qty] extra âm (swap ly nhỏ → ly lớn) → qty của ingredient bị ảnh hưởng không bị double-count', () => {
@@ -182,11 +186,11 @@ describe('calculateConsumptionBreakdown', () => {
         const orders = [{ productId: 'p1', qty: 5, extras: [{ id: 'ly_lon' }] }];
         const result = calculateConsumptionBreakdown(orders, recipesLocal, extraIngsLocal, [{ id: 'p1', name: 'P1' }]);
         // LyNho: base +1, extra -1 → totalAmount=0 → entry có thể tồn tại với total=0
-        expect(result['LyNho']['p1'].qty).toBe(5);       // 5 ly thực, không phải 10
-        expect(result['LyNho']['p1'].totalAmount).toBe(0);
+        expect(result['LyNho']['p1|ly_lon'].qty).toBe(5);       // 5 ly thực, không phải 10
+        expect(result['LyNho']['p1|ly_lon'].totalAmount).toBe(0);
         // LyLon: chỉ từ extra → qty=5
-        expect(result['LyLon']['p1'].qty).toBe(5);
-        expect(result['LyLon']['p1'].totalAmount).toBe(5);
+        expect(result['LyLon']['p1|ly_lon'].qty).toBe(5);
+        expect(result['LyLon']['p1|ly_lon'].totalAmount).toBe(5);
     });
 
     it('[qty] tổng breakdown totalAmount khớp calculateEstimatedConsumption (invariant)', () => {
@@ -210,9 +214,43 @@ describe('calculateConsumptionBreakdown', () => {
         };
         const orders = [{ productId: 'p1', qty: 2, extras: [{ id: 'size_l' }, { id: 'topping' }] }];
         const result = calculateConsumptionBreakdown(orders, recipesLocal, extraIngsLocal, [{ id: 'p1', name: 'P1' }]);
-        expect(result['coffee_g']['p1'].qty).toBe(2);           // không double-count
-        expect(result['coffee_g']['p1'].totalAmount).toBe(44);  // 2*(17+5)
-        expect(result['tran_chau']['p1'].qty).toBe(2);
-        expect(result['tran_chau']['p1'].totalAmount).toBe(100);
+        // Variant key gồm cả 2 extras (sorted): size_l,topping
+        const key = 'p1|size_l,topping';
+        expect(result['coffee_g'][key].qty).toBe(2);           // không double-count
+        expect(result['coffee_g'][key].totalAmount).toBe(44);  // 2*(17+5)
+        expect(result['tran_chau'][key].qty).toBe(2);
+        expect(result['tran_chau'][key].totalAmount).toBe(100);
+    });
+
+    it('[variant] hiển thị tên kèm extras khi truyền productExtras', () => {
+        const recipesLocal = [{ product_id: 'cf_sua', ingredient: 'coffee_g', amount: 17 }];
+        const extraIngsLocal = {
+            size_l: [{ ingredient: 'coffee_g', amount: 8 }],
+            it_ngot: [{ ingredient: 'coffee_g', amount: 0 }],
+        };
+        const productExtrasLocal = {
+            cf_sua: [
+                { id: 'size_l', name: 'Size L' },
+                { id: 'it_ngot', name: 'Ít ngọt' },
+            ],
+        };
+        const orders = [
+            ...Array.from({ length: 10 }, () => ({ productId: 'cf_sua', qty: 1, extras: [] })),
+            ...Array.from({ length: 15 }, () => ({ productId: 'cf_sua', qty: 1, extras: [{ id: 'size_l' }] })),
+            ...Array.from({ length: 10 }, () => ({ productId: 'cf_sua', qty: 1, extras: [{ id: 'it_ngot' }] })),
+        ];
+        const result = calculateConsumptionBreakdown(
+            orders,
+            recipesLocal,
+            extraIngsLocal,
+            [{ id: 'cf_sua', name: 'Cà phê sữa' }],
+            productExtrasLocal
+        );
+        expect(result['coffee_g']['cf_sua'].name).toBe('Cà phê sữa');
+        expect(result['coffee_g']['cf_sua'].qty).toBe(10);
+        expect(result['coffee_g']['cf_sua|size_l'].name).toBe('Cà phê sữa (Size L)');
+        expect(result['coffee_g']['cf_sua|size_l'].qty).toBe(15);
+        expect(result['coffee_g']['cf_sua|it_ngot'].name).toBe('Cà phê sữa (Ít ngọt)');
+        expect(result['coffee_g']['cf_sua|it_ngot'].qty).toBe(10);
     });
 });

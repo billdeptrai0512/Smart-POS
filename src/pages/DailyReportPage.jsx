@@ -222,6 +222,7 @@ export default function DailyReportPage() {
                             extraIngredients={extraIngredients}
                             selectedAddress={selectedAddress}
                             products={products}
+                            productExtras={productExtras}
                             ingredientUnits={ingredientUnits}
                         />
 

@@ -13,6 +13,7 @@ export default function InventoryRefillCard({
     extraIngredients,
     selectedAddress,
     products = [],
+    productExtras = {},
     ingredientUnits = {}
 }) {
     const [wastageBuffer, setWastageBuffer] = useState(10); // default 10%
@@ -65,7 +66,7 @@ export default function InventoryRefillCard({
     });
     const todayEstimatedConsumption = calculateEstimatedConsumption(todayOrderItems, recipes, extraIngredients);
 
-    const consumptionBreakdown = calculateConsumptionBreakdown(todayOrderItems, recipes, extraIngredients, products);
+    const consumptionBreakdown = calculateConsumptionBreakdown(todayOrderItems, recipes, extraIngredients, products, productExtras);
 
     // Calculate past 7 days estimated consumption
     const mappedPastItems = past7DaysItems.map(i => ({
