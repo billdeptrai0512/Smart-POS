@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router-dom'
 import { calculateProductCost } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import ReportHeader from '../components/DailyReportPage/ReportHeader'
-import ReportSettingsSheet from '../components/DailyReportPage/ReportSettingsSheet'
 import ProfitCard from '../components/DailyReportPage/ProfitCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import RevenueChart from '../components/DailyReportPage/RevenueChart'
@@ -25,7 +24,6 @@ export default function DailyReportPage() {
     }, [])
 
     const [selectedProductId, setSelectedProductId] = useState('all')
-    const [showSettings, setShowSettings] = useState(false)
     const { selectedAddress } = useAddress()
     const [shiftClosing, setShiftClosing] = useState(null)
     const [yesterdayClosing, setYesterdayClosing] = useState(null)
@@ -152,18 +150,11 @@ export default function DailyReportPage() {
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
             <ReportHeader
                 onBack={() => navigate('/history')}
-                onOpenSettings={() => setShowSettings(true)}
-                subtitle="Hôm nay"
-            />
-            <ReportSettingsSheet
-                open={showSettings}
-                onClose={() => setShowSettings(false)}
+                onEditShiftClosing={() => navigate('/shift-closing')}
                 selectedRange="day"
                 onNavigateRange={(range) => {
-                    setShowSettings(false)
                     if (range !== 'day') navigate(`/range-report?range=${range}`)
                 }}
-                onEditShiftClosing={() => { setShowSettings(false); navigate('/shift-closing') }}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-6 pb-24 space-y-4 bg-bg">

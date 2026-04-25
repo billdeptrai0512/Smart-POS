@@ -6,7 +6,6 @@ import { useAddress } from '../contexts/AddressContext'
 import { calculateProductCost, formatVND } from '../utils'
 import { fetchOrdersByRange, fetchExpensesByRange } from '../services/orderService'
 import ReportHeader from '../components/DailyReportPage/ReportHeader'
-import ReportSettingsSheet from '../components/DailyReportPage/ReportSettingsSheet'
 import { Banknote, ArrowRight, MinusCircle, ArrowUp, ArrowDown, TrendingUp } from 'lucide-react'
 
 const RANGE_CONFIG = {
@@ -24,7 +23,6 @@ export default function RangeReportPage() {
     const { fixedCosts } = usePOS()
     const { selectedAddress } = useAddress()
 
-    const [showSettings, setShowSettings] = useState(false)
     const [orders, setOrders] = useState([])
     const [expenses, setExpenses] = useState([])
     const [isLoading, setIsLoading] = useState(true)
@@ -73,7 +71,6 @@ export default function RangeReportPage() {
     const avg = (v) => days > 0 ? Math.round(v / days) : v
 
     const handleNavigateRange = (r) => {
-        setShowSettings(false)
         if (r === 'day') navigate('/daily-report')
         else navigate(`/range-report?range=${r}`)
     }
@@ -82,15 +79,9 @@ export default function RangeReportPage() {
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
             <ReportHeader
                 onBack={() => navigate('/daily-report')}
-                onOpenSettings={() => setShowSettings(true)}
-                subtitle={config.label}
-            />
-            <ReportSettingsSheet
-                open={showSettings}
-                onClose={() => setShowSettings(false)}
+                onEditShiftClosing={() => navigate('/shift-closing')}
                 selectedRange={range}
                 onNavigateRange={handleNavigateRange}
-                onEditShiftClosing={() => { setShowSettings(false); navigate('/shift-closing') }}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-6 pb-24 space-y-4 bg-bg">
