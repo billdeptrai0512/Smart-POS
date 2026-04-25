@@ -6,7 +6,29 @@ const RANGES = [
     { key: 'month', label: 'Tháng này' },
 ]
 
+const fmt = (d) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+
+function getDateSubtitle(range) {
+    const now = new Date()
+    if (range === 'day') {
+        return `${fmt(now)}/${now.getFullYear()}`
+    }
+    if (range === 'week') {
+        const diff = (now.getDay() + 6) % 7
+        const start = new Date(now)
+        start.setDate(now.getDate() - diff)
+        return `${fmt(start)} – ${fmt(now)}`
+    }
+    if (range === 'month') {
+        const start = new Date(now.getFullYear(), now.getMonth(), 1)
+        return `${fmt(start)} – ${fmt(now)}`
+    }
+    return ''
+}
+
 export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange = 'day', onNavigateRange }) {
+    const dateSubtitle = getDateSubtitle(selectedRange)
+
     return (
         <header className="shrink-0 pt-6 pb-3 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col gap-3 px-4">
             {/* Row 1: Back / Title / Shift closing */}
@@ -19,8 +41,9 @@ export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange
                     <ArrowLeft size={20} strokeWidth={2.5} />
                 </button>
 
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <h1 className="text-[16px] font-black uppercase text-primary tracking-wider truncate px-24">Báo Cáo</h1>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <h1 className="text-[16px] font-black uppercase text-primary tracking-wider">Báo Cáo</h1>
+                    <span className="text-[11px] font-medium text-text-secondary">{dateSubtitle}</span>
                 </div>
 
                 <button
