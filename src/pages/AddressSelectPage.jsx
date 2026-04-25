@@ -459,6 +459,35 @@ export default function AddressSelectPage() {
                 {/* ── STAFF TAB ── */}
                 {activeTab === 'staff' && !isStaff && (
                     <div className="space-y-3">
+                        {/* Staff list */}
+                        <div className="bg-surface border border-border/60 rounded-[20px] overflow-hidden">
+                            <div className="px-4 py-3 border-b border-border/40">
+                                <p className="text-[11px] font-black text-text-secondary uppercase tracking-wider">Danh sách nhân viên</p>
+                            </div>
+                            {staffLoading ? (
+                                <div className="p-4 space-y-2">
+                                    <Skeleton className="h-10 rounded-[10px]" />
+                                    <Skeleton className="h-10 rounded-[10px]" />
+                                </div>
+                            ) : staffList.length === 0 ? (
+                                <div className="px-4 py-6 text-center">
+                                    <Users size={20} className="text-text-secondary mx-auto mb-2" />
+                                    <p className="text-text-secondary text-sm">Chưa có nhân viên nào</p>
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-border/40">
+                                    {staffList.map(staff => (
+                                        <div key={staff.id} className="px-4 py-3 flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                                                <span className="text-primary text-xs font-black">{staff.name.charAt(0).toUpperCase()}</span>
+                                            </div>
+                                            <span className="text-text text-sm font-medium">{staff.name}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
                         {/* Invite section */}
                         <div className="bg-surface border border-border/60 rounded-[20px] p-4 space-y-3">
                             <p className="text-[11px] font-black text-text-secondary uppercase tracking-wider">Mời nhân viên mới</p>
@@ -496,34 +525,7 @@ export default function AddressSelectPage() {
                             <ErrorBanner message={error} small />
                         </div>
 
-                        {/* Staff list */}
-                        <div className="bg-surface border border-border/60 rounded-[20px] overflow-hidden">
-                            <div className="px-4 py-3 border-b border-border/40">
-                                <p className="text-[11px] font-black text-text-secondary uppercase tracking-wider">Danh sách nhân viên</p>
-                            </div>
-                            {staffLoading ? (
-                                <div className="p-4 space-y-2">
-                                    <Skeleton className="h-10 rounded-[10px]" />
-                                    <Skeleton className="h-10 rounded-[10px]" />
-                                </div>
-                            ) : staffList.length === 0 ? (
-                                <div className="px-4 py-6 text-center">
-                                    <Users size={20} className="text-text-secondary mx-auto mb-2" />
-                                    <p className="text-text-secondary text-sm">Chưa có nhân viên nào</p>
-                                </div>
-                            ) : (
-                                <div className="divide-y divide-border/40">
-                                    {staffList.map(staff => (
-                                        <div key={staff.id} className="px-4 py-3 flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                                                <span className="text-primary text-xs font-black">{staff.name.charAt(0).toUpperCase()}</span>
-                                            </div>
-                                            <span className="text-text text-sm font-medium">{staff.name}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+
                     </div>
                 )}
 
