@@ -6,6 +6,7 @@ import { useAddress } from '../contexts/AddressContext'
 import { calculateProductCost, formatVND } from '../utils'
 import { fetchOrdersByRange, fetchExpensesByRange, fetchShiftClosingsByRange } from '../services/orderService'
 import ReportHeader, { getDateRange } from '../components/DailyReportPage/ReportHeader'
+import DayPerformanceChart from '../components/DailyReportPage/DayPerformanceChart'
 import { Banknote, ArrowRight, MinusCircle, ArrowUp, ArrowDown, TrendingUp } from 'lucide-react'
 
 const RANGE_LABEL = { week: 'Tuần này', month: 'Tháng này' }
@@ -21,6 +22,7 @@ export default function RangeReportPage() {
 
     const [offset, setOffset] = useState(0)
     const [orders, setOrders] = useState([])
+    const [prevOrders, setPrevOrders] = useState([])
     const [expenses, setExpenses] = useState([])
     const [shiftClosings, setShiftClosings] = useState([])
     const [isLoading, setIsLoading] = useState(true)
@@ -35,14 +37,16 @@ export default function RangeReportPage() {
         if (!selectedAddress?.id) return
         setIsLoading(true)
         const { start, end } = getDateRange(range, offset)
+        const { start: prevStart, end: prevEnd } = getDateRange(range, offset - 1)
         Promise.all([
             fetchOrdersByRange(selectedAddress.id, start, end).then(setOrders),
+            fetchOrdersByRange(selectedAddress.id, prevStart, prevEnd).then(setPrevOrders),
             fetchExpensesByRange(selectedAddress.id, start, end).then(setExpenses),
             fetchShiftClosingsByRange(selectedAddress.id, start, end).then(setShiftClosings),
         ]).finally(() => setIsLoading(false))
     }, [selectedAddress?.id, range, offset])
 
-    const { days } = useMemo(() => getDateRange(range, offset), [range, offset])
+    const { days, start: periodStart, end: periodEnd } = useMemo(() => getDateRange(range, offset), [range, offset])
 
     const stats = useMemo(() => {
         let totalRevenue = 0, totalCOGS = 0, totalCups = 0
@@ -71,6 +75,32 @@ export default function RangeReportPage() {
 
         return { totalRevenue, totalCOGS, totalCups, cashRevenue, transferRevenue, dailyExpense, fixedExpense, netProfit }
     }, [orders, expenses, shiftClosings, fixedCosts, days, recipes, extraIngredients, ingredientCosts])
+
+    const prevStats = useMemo(() => {
+        let revenue = 0, cups = 0
+        prevOrders.forEach(o => {
+            revenue += o.total
+            cups += (o.order_items || []).reduce((s, i) => s + (i.quantity || 1), 0)
+        })
+        return { revenue, cups }
+    }, [prevOrders])
+
+    const delta = (curr, prev) => {
+        if (!prev) return null
+        const pct = Math.round((curr - prev) / prev * 100)
+        return pct
+    }
+
+    const DeltaBadge = ({ curr, prev }) => {
+        const pct = delta(curr, prev)
+        if (pct === null) return null
+        const up = pct >= 0
+        return (
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${up ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger'}`}>
+                {up ? '▲' : '▼'} {Math.abs(pct)}%
+            </span>
+        )
+    }
 
     const avg = (v) => days > 0 ? Math.round(v / days) : v
 
@@ -110,6 +140,7 @@ export default function RangeReportPage() {
                             <div className="flex items-end gap-3 mt-1">
                                 <span className="text-[22px] font-bold text-primary tabular-nums leading-none">{stats.totalCups} ly</span>
                                 <span className="text-[13px] font-medium text-text-secondary mb-0.5">≈ {avg(stats.totalCups)} ly/ngày</span>
+                                <DeltaBadge curr={stats.totalCups} prev={prevStats.cups} />
                             </div>
                         </div>
 
