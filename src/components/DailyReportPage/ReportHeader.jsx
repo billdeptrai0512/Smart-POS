@@ -1,4 +1,4 @@
-import { ArrowLeft, Pencil } from 'lucide-react'
+import { ArrowLeft, Pencil, ChevronLeft, ChevronRight } from 'lucide-react'
 
 const RANGES = [
     { key: 'day', label: 'Hôm nay' },
@@ -8,32 +8,52 @@ const RANGES = [
 
 const fmt = (d) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
 
-function getDateSubtitle(range) {
+export function getDateRange(range, offset = 0) {
     const now = new Date()
-    if (range === 'day') {
-        return `${fmt(now)}/${now.getFullYear()}`
-    }
     if (range === 'week') {
-        const diff = (now.getDay() + 6) % 7
-        const start = new Date(now)
-        start.setDate(now.getDate() - diff)
+        const todayDiff = (now.getDay() + 6) % 7
+        const thisMonday = new Date(now)
+        thisMonday.setDate(now.getDate() - todayDiff)
+        thisMonday.setHours(0, 0, 0, 0)
+        const start = new Date(thisMonday)
+        start.setDate(thisMonday.getDate() + offset * 7)
         const end = new Date(start)
         end.setDate(start.getDate() + 6)
-        return `${fmt(start)} – ${fmt(end)}`
+        end.setHours(23, 59, 59, 999)
+        const days = offset === 0 ? todayDiff + 1 : 7
+        return { start, end, days }
     }
     if (range === 'month') {
-        const start = new Date(now.getFullYear(), now.getMonth(), 1)
-        return `${fmt(start)} – ${fmt(now)}`
+        const year = now.getFullYear()
+        const month = now.getMonth() + offset
+        const start = new Date(year, month, 1, 0, 0, 0, 0)
+        if (offset === 0) {
+            const end = new Date(now)
+            end.setHours(23, 59, 59, 999)
+            return { start, end, days: now.getDate() }
+        }
+        const end = new Date(year, month + 1, 0, 23, 59, 59, 999)
+        return { start, end, days: end.getDate() }
     }
-    return ''
+    const start = new Date(now); start.setHours(0, 0, 0, 0)
+    const end = new Date(now); end.setHours(23, 59, 59, 999)
+    return { start, end, days: 1 }
 }
 
-export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange = 'day', onNavigateRange }) {
-    const dateSubtitle = getDateSubtitle(selectedRange)
+function getSubtitle(range, offset) {
+    const now = new Date()
+    if (range === 'day') return `${fmt(now)}/${now.getFullYear()}`
+    const { start, end } = getDateRange(range, offset)
+    return `${fmt(start)} – ${fmt(end)}`
+}
+
+export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange = 'day', onNavigateRange, offset = 0, onOffsetChange }) {
+    const subtitle = getSubtitle(selectedRange, offset)
+    const canGoForward = offset < 0
 
     return (
         <header className="shrink-0 pt-6 pb-3 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col gap-3 px-4">
-            {/* Row 1: Back / Title / Shift closing */}
+            {/* Row 1: Back / Title+Nav / Shift closing */}
             <div className="relative flex items-center justify-between">
                 <button
                     onClick={onBack}
@@ -45,7 +65,25 @@ export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange
 
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                     <h1 className="text-[16px] font-black uppercase text-primary tracking-wider">Báo Cáo</h1>
-                    <span className="text-[11px] font-medium text-text-secondary">{dateSubtitle}</span>
+                    {selectedRange === 'day' ? (
+                        <span className="text-[11px] font-medium text-text-secondary">{subtitle}</span>
+                    ) : (
+                        <div className="flex items-center gap-1 pointer-events-auto">
+                            <button
+                                onClick={() => onOffsetChange?.(offset - 1)}
+                                className="w-5 h-5 flex items-center justify-center rounded-full text-text-secondary hover:text-primary active:text-primary transition-colors"
+                            >
+                                <ChevronLeft size={14} strokeWidth={2.5} />
+                            </button>
+                            <span className="text-[11px] font-medium text-text-secondary tabular-nums">{subtitle}</span>
+                            <button
+                                onClick={() => canGoForward && onOffsetChange?.(offset + 1)}
+                                className={`w-5 h-5 flex items-center justify-center rounded-full transition-colors ${canGoForward ? 'text-text-secondary hover:text-primary active:text-primary' : 'text-text-dim opacity-30 cursor-default'}`}
+                            >
+                                <ChevronRight size={14} strokeWidth={2.5} />
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <button

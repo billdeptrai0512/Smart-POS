@@ -5,39 +5,38 @@ import { usePOS } from '../contexts/POSContext'
 import { useAddress } from '../contexts/AddressContext'
 import { calculateProductCost, formatVND } from '../utils'
 import { fetchOrdersByRange, fetchExpensesByRange } from '../services/orderService'
-import ReportHeader from '../components/DailyReportPage/ReportHeader'
+import ReportHeader, { getDateRange } from '../components/DailyReportPage/ReportHeader'
 import { Banknote, ArrowRight, MinusCircle, ArrowUp, ArrowDown, TrendingUp } from 'lucide-react'
 
-const RANGE_CONFIG = {
-    week: { label: 'Tuần này', getDates: () => { const now = new Date(); const day = now.getDay(); const diff = (day + 6) % 7; const start = new Date(now); start.setDate(now.getDate() - diff); start.setHours(0, 0, 0, 0); const end = new Date(now); end.setHours(23, 59, 59, 999); return { start, end, days: diff + 1 } } },
-    month: { label: 'Tháng này', getDates: () => { const now = new Date(); const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0); const end = new Date(now); end.setHours(23, 59, 59, 999); return { start, end, days: now.getDate() } } },
-}
+const RANGE_LABEL = { week: 'Tuần này', month: 'Tháng này' }
 
 export default function RangeReportPage() {
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
     const range = searchParams.get('range') || 'week'
-    const config = RANGE_CONFIG[range] || RANGE_CONFIG.week
 
     const { products, recipes, ingredientCosts, extraIngredients } = useProducts()
     const { fixedCosts } = usePOS()
     const { selectedAddress } = useAddress()
 
+    const [offset, setOffset] = useState(0)
     const [orders, setOrders] = useState([])
     const [expenses, setExpenses] = useState([])
     const [isLoading, setIsLoading] = useState(true)
 
+    useEffect(() => { setOffset(0) }, [range])
+
     useEffect(() => {
         if (!selectedAddress?.id) return
         setIsLoading(true)
-        const { start, end } = config.getDates()
+        const { start, end } = getDateRange(range, offset)
         Promise.all([
             fetchOrdersByRange(selectedAddress.id, start, end).then(setOrders),
             fetchExpensesByRange(selectedAddress.id, start, end).then(setExpenses),
         ]).finally(() => setIsLoading(false))
-    }, [selectedAddress?.id, range])
+    }, [selectedAddress?.id, range, offset])
 
-    const { days } = useMemo(() => config.getDates(), [range])
+    const { days } = useMemo(() => getDateRange(range, offset), [range, offset])
 
     const stats = useMemo(() => {
         let totalRevenue = 0, totalCOGS = 0, totalCups = 0
@@ -82,6 +81,8 @@ export default function RangeReportPage() {
                 onEditShiftClosing={() => navigate('/shift-closing')}
                 selectedRange={range}
                 onNavigateRange={handleNavigateRange}
+                offset={offset}
+                onOffsetChange={setOffset}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-6 pb-24 space-y-4 bg-bg">
@@ -166,7 +167,7 @@ export default function RangeReportPage() {
                                             {isUp ? <ArrowUp size={42} /> : <ArrowDown size={42} />}
                                         </div>
                                         <div className="flex flex-col">
-                                            <h3 className="text-[11px] font-black text-text-secondary uppercase mb-1">Lợi nhuận ròng <span className="normal-case font-medium">({config.label.toLowerCase()})</span></h3>
+                                            <h3 className="text-[11px] font-black text-text-secondary uppercase mb-1">Lợi nhuận ròng <span className="normal-case font-medium">({offset === 0 ? RANGE_LABEL[range]?.toLowerCase() : offset === -1 ? (range === 'week' ? 'tuần trước' : 'tháng trước') : `${Math.abs(offset)} ${range === 'week' ? 'tuần' : 'tháng'} trước`})</span></h3>
                                             <div className={`text-[18px] font-bold tabular-nums ${stats.netProfit >= 0 ? 'text-success' : 'text-danger'}`}>
                                                 {formatVND(stats.netProfit)}
                                             </div>
