@@ -4,7 +4,7 @@ import { useProducts } from '../contexts/ProductContext'
 import { usePOS } from '../contexts/POSContext'
 import { useAddress } from '../contexts/AddressContext'
 import { calculateProductCost, formatVND } from '../utils'
-import { fetchOrdersByRange, fetchExpensesByRange } from '../services/orderService'
+import { fetchOrdersByRange, fetchExpensesByRange, fetchShiftClosingsByRange } from '../services/orderService'
 import ReportHeader, { getDateRange } from '../components/DailyReportPage/ReportHeader'
 import { Banknote, ArrowRight, MinusCircle, ArrowUp, ArrowDown, TrendingUp } from 'lucide-react'
 
@@ -22,6 +22,7 @@ export default function RangeReportPage() {
     const [offset, setOffset] = useState(0)
     const [orders, setOrders] = useState([])
     const [expenses, setExpenses] = useState([])
+    const [shiftClosings, setShiftClosings] = useState([])
     const [isLoading, setIsLoading] = useState(true)
 
     useEffect(() => { setOffset(0) }, [range])
@@ -33,6 +34,7 @@ export default function RangeReportPage() {
         Promise.all([
             fetchOrdersByRange(selectedAddress.id, start, end).then(setOrders),
             fetchExpensesByRange(selectedAddress.id, start, end).then(setExpenses),
+            fetchShiftClosingsByRange(selectedAddress.id, start, end).then(setShiftClosings),
         ]).finally(() => setIsLoading(false))
     }, [selectedAddress?.id, range, offset])
 
@@ -40,12 +42,8 @@ export default function RangeReportPage() {
 
     const stats = useMemo(() => {
         let totalRevenue = 0, totalCOGS = 0, totalCups = 0
-        let cashRevenue = 0, transferRevenue = 0
-
         orders.forEach(o => {
             totalRevenue += o.total
-            if (o.payment_method === 'transfer') transferRevenue += o.total
-            else cashRevenue += o.total
 
             totalCups += (o.order_items || []).reduce((s, i) => s + (i.quantity || 1), 0)
 
@@ -60,12 +58,15 @@ export default function RangeReportPage() {
             }
         })
 
+        const cashRevenue = shiftClosings.reduce((s, sc) => s + (sc.actual_cash || 0), 0)
+        const transferRevenue = shiftClosings.reduce((s, sc) => s + (sc.actual_transfer || 0), 0)
+
         const dailyExpense = expenses.filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0)
         const fixedExpense = (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0) * days
         const netProfit = totalRevenue - totalCOGS - dailyExpense - fixedExpense
 
         return { totalRevenue, totalCOGS, totalCups, cashRevenue, transferRevenue, dailyExpense, fixedExpense, netProfit }
-    }, [orders, expenses, fixedCosts, days, recipes, extraIngredients, ingredientCosts])
+    }, [orders, expenses, shiftClosings, fixedCosts, days, recipes, extraIngredients, ingredientCosts])
 
     const avg = (v) => days > 0 ? Math.round(v / days) : v
 
