@@ -17,7 +17,9 @@ function getDateSubtitle(range) {
         const diff = (now.getDay() + 6) % 7
         const start = new Date(now)
         start.setDate(now.getDate() - diff)
-        return `${fmt(start)} – ${fmt(now)}`
+        const end = new Date(start)
+        end.setDate(start.getDate() + 6)
+        return `${fmt(start)} – ${fmt(end)}`
     }
     if (range === 'month') {
         const start = new Date(now.getFullYear(), now.getMonth(), 1)
