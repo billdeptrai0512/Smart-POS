@@ -78,18 +78,28 @@ export function calculateEstimatedConsumption(orderItems, recipes, extraIngredie
 }
 
 /**
- * Tính breakdown tiêu hao theo từng sản phẩm cho mỗi nguyên liệu.
+ * Tính breakdown tiêu hao theo từng biến thể (sản phẩm + tổ hợp extras) cho mỗi nguyên liệu.
  * Dùng để drill-down "Tiêu CT" trong inventory audit.
  *
- * @returns {Object} breakdown[ingredient][productId] = { name, qty, totalAmount }
+ * Variant key: `productId` nếu không có extras, hoặc `productId|<sorted extra ids>`.
+ *
+ * @returns {Object} breakdown[ingredient][variantKey] = { name, qty, totalAmount }
  */
-export function calculateConsumptionBreakdown(orderItems, recipes, extraIngredients, products = []) {
+export function calculateConsumptionBreakdown(orderItems, recipes, extraIngredients, products = [], productExtras = {}) {
     const breakdown = {};
 
-    const ensure = (ingredient, productId, productName) => {
+    // Build extra-id → extra-name lookup từ productExtras { productId: [{ id, name, ... }] }
+    const extraNames = {};
+    Object.values(productExtras || {}).forEach(list => {
+        (list || []).forEach(ex => {
+            if (ex && ex.id) extraNames[ex.id] = ex.name || ex.id;
+        });
+    });
+
+    const ensure = (ingredient, variantKey, displayName) => {
         if (!breakdown[ingredient]) breakdown[ingredient] = {};
-        if (!breakdown[ingredient][productId]) {
-            breakdown[ingredient][productId] = { name: productName, qty: 0, totalAmount: 0 };
+        if (!breakdown[ingredient][variantKey]) {
+            breakdown[ingredient][variantKey] = { name: displayName, qty: 0, totalAmount: 0 };
         }
     };
 
@@ -99,18 +109,25 @@ export function calculateConsumptionBreakdown(orderItems, recipes, extraIngredie
         const extras = item.extras || [];
         const productName = products.find(p => p.id === id)?.name || id;
 
+        const extraIds = extras.map(e => e?.id).filter(Boolean).slice().sort();
+        const variantKey = extraIds.length ? `${id}|${extraIds.join(',')}` : id;
+        const extraLabels = extraIds.map(eid => extraNames[eid] || eid);
+        const displayName = extraLabels.length
+            ? `${productName} (${extraLabels.join(', ')})`
+            : productName;
+
         // Track which ingredients this order item touches, so qty is counted only once
         // even if both base recipe and an extra affect the same ingredient.
         const counted = new Set();
 
         const touch = (ingredient, amount) => {
-            ensure(ingredient, id, productName);
+            ensure(ingredient, variantKey, displayName);
             if (!counted.has(ingredient)) {
-                breakdown[ingredient][id].qty += qty;
+                breakdown[ingredient][variantKey].qty += qty;
                 counted.add(ingredient);
             }
-            breakdown[ingredient][id].totalAmount =
-                Math.round((breakdown[ingredient][id].totalAmount + amount * qty) * 10) / 10;
+            breakdown[ingredient][variantKey].totalAmount =
+                Math.round((breakdown[ingredient][variantKey].totalAmount + amount * qty) * 10) / 10;
         };
 
         recipes.filter(r => r.product_id === id).forEach(r => touch(r.ingredient, r.amount));
