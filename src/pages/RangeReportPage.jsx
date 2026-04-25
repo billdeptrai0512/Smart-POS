@@ -16,7 +16,7 @@ export default function RangeReportPage() {
     const range = searchParams.get('range') || 'week'
 
     const { products, recipes, ingredientCosts, extraIngredients } = useProducts()
-    const { fixedCosts } = usePOS()
+    const { fixedCosts, handleLoadFixedCosts } = usePOS()
     const { selectedAddress } = useAddress()
 
     const [offset, setOffset] = useState(0)
@@ -26,6 +26,10 @@ export default function RangeReportPage() {
     const [isLoading, setIsLoading] = useState(true)
 
     useEffect(() => { setOffset(0) }, [range])
+
+    useEffect(() => {
+        if (selectedAddress?.id && fixedCosts.length === 0) handleLoadFixedCosts()
+    }, [selectedAddress?.id])
 
     useEffect(() => {
         if (!selectedAddress?.id) return
