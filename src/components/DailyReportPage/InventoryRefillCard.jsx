@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown } from '../../utils/inventory';
 import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils';
 import { fetchPastDaysOrderItems } from '../../services/orderService';
@@ -16,10 +16,10 @@ export default function InventoryRefillCard({
     productExtras = {},
     ingredientUnits = {}
 }) {
-    const [wastageBuffer, setWastageBuffer] = useState(10); // default 10%
+    const [wastageBuffer, setWastageBuffer] = useState(10);
     const [past7DaysItems, setPast7DaysItems] = useState([]);
     const [isLoadingPast, setIsLoadingPast] = useState(false);
-    const [activeTab, setActiveTab] = useState('audit'); // 'audit' | 'refill'
+    const [activeTab, setActiveTab] = useState('audit');
     const [expandedRows, setExpandedRows] = useState({});
 
     const toggleRow = (ingredient) => {
@@ -31,57 +31,74 @@ export default function InventoryRefillCard({
             setIsLoadingPast(true);
             fetchPastDaysOrderItems(selectedAddress.id, 7).then(items => {
                 setPast7DaysItems(items || []);
-            }).finally(() => {
-                setIsLoadingPast(false);
-            });
+            }).finally(() => setIsLoadingPast(false));
         }
     }, [selectedAddress?.id]);
 
+    // All useMemo hooks BEFORE early return (React rules of hooks)
+
+    const openingMap = useMemo(() => {
+        const map = {};
+        if (yesterdayClosing?.inventory_report) {
+            yesterdayClosing.inventory_report.forEach(item => {
+                map[item.ingredient] = item.remaining || 0;
+            });
+        }
+        if (shiftClosing?.inventory_report) {
+            shiftClosing.inventory_report.forEach(item => {
+                if (item.opening != null) map[item.ingredient] = item.opening;
+            });
+        }
+        return map;
+    }, [shiftClosing, yesterdayClosing]);
+
+    const todayOrderItems = useMemo(() => {
+        const items = [];
+        todayOrders.forEach(o => {
+            (o.order_items || []).forEach(i => items.push({
+                productId: i.product_id, qty: i.quantity || 1,
+                extras: (i.extra_ids || []).map(id => ({ id }))
+            }));
+        });
+        offlineToday.forEach(o => {
+            (o.cart || o.orderItems || []).forEach(i => items.push({
+                productId: i.productId, qty: i.quantity || 1,
+                extras: i.extras || []
+            }));
+        });
+        return items;
+    }, [todayOrders, offlineToday]);
+
+    const todayEstimatedConsumption = useMemo(() =>
+        calculateEstimatedConsumption(todayOrderItems, recipes, extraIngredients),
+        [todayOrderItems, recipes, extraIngredients]
+    );
+
+    const consumptionBreakdown = useMemo(() =>
+        calculateConsumptionBreakdown(todayOrderItems, recipes, extraIngredients, products, productExtras),
+        [todayOrderItems, recipes, extraIngredients, products, productExtras]
+    );
+
+    const mappedPastItems = useMemo(() =>
+        past7DaysItems.map(i => ({
+            productId: i.product_id, qty: i.quantity,
+            extras: (i.extra_ids || []).map(id => ({ id }))
+        })),
+        [past7DaysItems]
+    );
+
+    const past7DaysConsumption = useMemo(() =>
+        calculateEstimatedConsumption(mappedPastItems, recipes, extraIngredients),
+        [mappedPastItems, recipes, extraIngredients]
+    );
+
     if (!shiftClosing?.inventory_report?.length) return null;
-
-    // Build opening stock: default = yesterday's remaining, override = today's explicit opening
-    const openingMap = {};
-    if (yesterdayClosing?.inventory_report) {
-        yesterdayClosing.inventory_report.forEach(item => {
-            openingMap[item.ingredient] = item.remaining || 0;
-        });
-    }
-    // User can manually override opening stock in shift-closing (saved as item.opening).
-    // If set (non-null), it takes priority over yesterday's remaining.
-    if (shiftClosing?.inventory_report) {
-        shiftClosing.inventory_report.forEach(item => {
-            if (item.opening != null) {
-                openingMap[item.ingredient] = item.opening;
-            }
-        });
-    }
-
-    // Calculate today's estimated consumption
-    const todayOrderItems = [];
-    todayOrders.forEach(o => {
-        (o.order_items || []).forEach(i => todayOrderItems.push({ productId: i.product_id, qty: i.quantity || 1, extras: (i.extra_ids || []).map(id => ({ id })) }));
-    });
-    offlineToday.forEach(o => {
-        (o.cart || o.orderItems || []).forEach(i => todayOrderItems.push({ productId: i.productId, qty: i.quantity || 1, extras: i.extras || [] }));
-    });
-    const todayEstimatedConsumption = calculateEstimatedConsumption(todayOrderItems, recipes, extraIngredients);
-
-    const consumptionBreakdown = calculateConsumptionBreakdown(todayOrderItems, recipes, extraIngredients, products, productExtras);
-
-    // Calculate past 7 days estimated consumption
-    const mappedPastItems = past7DaysItems.map(i => ({
-        productId: i.product_id,
-        qty: i.quantity,
-        extras: (i.extra_ids || []).map(id => ({ id }))
-    }));
-    const past7DaysConsumption = calculateEstimatedConsumption(mappedPastItems, recipes, extraIngredients);
 
     return (
         <div className="bg-surface rounded-[20px] p-4 border border-border/60 shadow-sm flex flex-col gap-3">
             {/* Header & Tabs */}
             <div className="flex flex-col gap-3 border-b border-border/40 pb-2">
                 <div className="flex items-center justify-between">
-                    {/* Tab Controls Area acts as Title */}
                     <div className="flex p-0.5 bg-surface-light rounded-[12px] gap-1 shrink-0">
                         <button
                             onClick={() => setActiveTab('audit')}
@@ -97,7 +114,6 @@ export default function InventoryRefillCard({
                         </button>
                     </div>
 
-                    {/* Wastage Buffer UI - Only show in Refill tab */}
                     {activeTab === 'refill' && (
                         <div className="flex items-center gap-1.5 bg-surface-light px-2 py-1.5 rounded-[10px] border border-border/40 shrink-0">
                             <Settings2 size={12} className="text-text-secondary" />
@@ -118,7 +134,6 @@ export default function InventoryRefillCard({
                     )}
                 </div>
 
-                {/* Column Headers depending on tab */}
                 {activeTab === 'audit' ? (
                     <div className="flex items-center gap-1 mt-1 px-1">
                         <span className="flex-1 text-[10px] font-black text-text-dim uppercase">Nguyên liệu</span>
@@ -158,21 +173,18 @@ export default function InventoryRefillCard({
                         diffColor = 'text-success';
                     }
 
-                    // Calculate Refill Logic
                     const total7DayUsed = past7DaysConsumption[item.ingredient] || 0;
                     const dailyAvgAvg = total7DayUsed / 7;
                     const target = Math.round(dailyAvgAvg * (1 + wastageBuffer / 100) * 10) / 10;
 
-                    // Cần nhập = Target - Tồn thực tế
                     let refill = Math.round((target - actual) * 10) / 10;
-                    if (refill <= 0) refill = 0; // Không cần nhập
+                    if (refill <= 0) refill = 0;
 
                     const isExpanded = !!expandedRows[item.ingredient];
                     const canExpand = activeTab === 'audit';
 
                     return (
                         <div key={item.ingredient} className="border-b border-border/20 last:border-0">
-                            {/* Main row */}
                             <div
                                 className={`flex items-center gap-1 py-2 rounded-lg transition-colors px-1 ${canExpand ? 'cursor-pointer active:bg-surface-light' : ''} ${isExpanded ? 'bg-surface-light' : 'hover:bg-surface-light'}`}
                                 onClick={canExpand ? () => toggleRow(item.ingredient) : undefined}
@@ -209,10 +221,8 @@ export default function InventoryRefillCard({
                                 )}
                             </div>
 
-                            {/* Expanded formula breakdown */}
                             {isExpanded && activeTab === 'audit' && (
                                 <div className="mx-1 mb-2 px-3 py-2.5 bg-surface rounded-[10px] border border-border/40 flex flex-col gap-2.5">
-                                    {/* Formula row */}
                                     <div className="flex items-center justify-between gap-2">
                                         <div className="flex items-center gap-1.5 flex-wrap">
                                             <div className="flex flex-col items-center">
@@ -241,7 +251,6 @@ export default function InventoryRefillCard({
                                         </div>
                                     </div>
 
-                                    {/* Tiêu CT drill-down */}
                                     {consumptionBreakdown[item.ingredient] && Object.keys(consumptionBreakdown[item.ingredient]).length > 0 && (
                                         <div className="border-t border-border/30 pt-2 flex flex-col gap-1">
                                             <span className="text-[9px] font-black text-text-dim uppercase mb-0.5">Chi tiết Tiêu CT</span>
@@ -267,4 +276,3 @@ export default function InventoryRefillCard({
         </div>
     );
 }
-

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { usePOS } from '../contexts/POSContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useNavigate } from 'react-router-dom'
@@ -9,7 +9,6 @@ import ProfitCard from '../components/DailyReportPage/ProfitCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import RevenueChart from '../components/DailyReportPage/RevenueChart'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
-
 import { fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchYesterdayOrders, fetchYesterdayExpenses } from '../services/orderService'
 import { useAddress } from '../contexts/AddressContext'
 
@@ -45,106 +44,142 @@ export default function DailyReportPage() {
 
     const isReady = !isLoadingHistory && isAsyncReady
 
-    const pending = getPendingOrders()
-    const todayStr = new Date().toDateString()
-    const offlineToday = pending.filter(o => new Date(o.createdAt).toDateString() === todayStr)
+    // O(1) product lookup — rebuilt only when products list changes
+    const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products])
 
-    // Flat maps extraId → price/name for quick lookup on online orders
-    const extraPriceMap = {}, extraNameMap = {}
-    Object.values(productExtras || {}).forEach(extras => {
-        extras.forEach(e => {
-            extraPriceMap[e.id] = e.price || 0
-            extraNameMap[e.id] = e.name || e.id
+    // Extra maps — rebuilt only when productExtras changes
+    const extraMaps = useMemo(() => {
+        const priceMap = {}, nameMap = {}
+        Object.values(productExtras || {}).forEach(extras => {
+            extras.forEach(e => {
+                priceMap[e.id] = e.price || 0
+                nameMap[e.id] = e.name || e.id
+            })
         })
-    })
+        return { priceMap, nameMap }
+    }, [productExtras])
 
-    let totalRevenue = 0, totalCOGS = 0, totalCups = 0
-    const hourlyRevenue = {}, hourlyOrders = {}, productStats = {}
-    const activeHours = new Set(), soldProducts = new Set()
+    // All heavy stats: only reruns when orders/recipes/products change, NOT on UI state changes
+    const { totalRevenue, totalCOGS, productStats, soldProducts, lineChartData, offlineToday } = useMemo(() => {
+        const { priceMap: extraPriceMap, nameMap: extraNameMap } = extraMaps
 
-    const processOrder = (o, isOffline) => {
-        const createdAt = isOffline ? o.createdAt : o.created_at
-        if (!createdAt) return
-        const d = new Date(createdAt)
-        const hour = d.getHours()
-        activeHours.add(hour)
-        hourlyRevenue[hour] = (hourlyRevenue[hour] || 0) + o.total
-        totalRevenue += o.total
+        const pending = getPendingOrders()
+        const todayStr = new Date().toDateString()
+        const offlineToday = pending.filter(o => new Date(o.createdAt).toDateString() === todayStr)
 
-        const items = isOffline ? (o.cart || o.orderItems || []) : (o.order_items || [])
-        items.forEach(i => {
-            const productId = isOffline ? i.productId : i.product_id
-            const qty = i.quantity || 1
-            const prodDef = products.find(p => p.id === productId)
-            const name = prodDef?.name || (isOffline ? i.name : i.products?.name) || '?'
-            if (!hourlyOrders[hour]) hourlyOrders[hour] = {}
-            hourlyOrders[hour][name] = (hourlyOrders[hour][name] || 0) + qty
+        let totalRevenue = 0, totalCOGS = 0
+        const hourlyRevenue = {}, hourlyOrders = {}, productStats = {}
+        const activeHours = new Set(), soldProducts = new Set()
 
-            if (selectedProductId === 'all' || selectedProductId === productId) totalCups += qty
-            soldProducts.add(productId)
+        const processOrder = (o, isOffline) => {
+            const createdAt = isOffline ? o.createdAt : o.created_at
+            if (!createdAt) return
+            const d = new Date(createdAt)
+            const hour = d.getHours()
+            activeHours.add(hour)
+            hourlyRevenue[hour] = (hourlyRevenue[hour] || 0) + o.total
+            totalRevenue += o.total
 
-            const snapshotCost = isOffline ? (i.unitCost || 0) : (i.unit_cost || 0)
-            const cost = snapshotCost > 0
-                ? snapshotCost
-                : calculateProductCost(productId, i.extras || [], recipes, extraIngredients, ingredientCosts)
-            totalCOGS += cost * qty
-
-            const basePrice = prodDef?.price || 0
-            const extrasPrice = isOffline
-                ? (i.extras || []).reduce((sum, e) => sum + (e.price || 0), 0)
-                : (i.extra_ids || []).reduce((sum, id) => sum + (extraPriceMap[id] || 0), 0)
-            const unitRevenue = basePrice + extrasPrice
-
-            const extraNames = isOffline
-                ? (i.extras || []).map(e => e.name).filter(Boolean)
-                : (i.extra_ids || []).map(id => extraNameMap[id]).filter(Boolean)
-            const variantLabel = extraNames.length > 0
-                ? [...extraNames].sort((a, b) => a.trim().toLowerCase().localeCompare(b.trim().toLowerCase(), 'vi')).join(' + ')
-                : 'Thường'
-
-            if (!productStats[productId]) productStats[productId] = { qty: 0, revenue: 0, cost: 0, variants: {} }
-            productStats[productId].qty += qty
-            productStats[productId].revenue += unitRevenue * qty
-            productStats[productId].cost += cost * qty
-            productStats[productId].variants[variantLabel] = (productStats[productId].variants[variantLabel] || 0) + qty
-        })
-    }
-
-    todayOrders.forEach(o => processOrder(o, false))
-    offlineToday.forEach(o => processOrder(o, true))
-
-    const dailyExpense = (todayExpenses || []).filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0)
-    const fixedExpense = (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0)
-    const netProfit = totalRevenue - totalCOGS - dailyExpense - fixedExpense
-
-    let yesterdayRevenue = 0, yesterdayCOGS = 0
-    yesterdayOrders.forEach(o => {
-        yesterdayRevenue += o.total
-        if (o.total_cost > 0) {
-            yesterdayCOGS += o.total_cost
-        } else {
-            (o.order_items || []).forEach(i => {
+            const items = isOffline ? (o.cart || o.orderItems || []) : (o.order_items || [])
+            items.forEach(i => {
+                const productId = isOffline ? i.productId : i.product_id
                 const qty = i.quantity || 1
-                const cost = i.unit_cost > 0 ? i.unit_cost : calculateProductCost(i.product_id, [], recipes, extraIngredients, ingredientCosts)
-                yesterdayCOGS += cost * qty
+                const prodDef = productMap.get(productId)
+                const name = prodDef?.name || (isOffline ? i.name : i.products?.name) || '?'
+                if (!hourlyOrders[hour]) hourlyOrders[hour] = {}
+                hourlyOrders[hour][name] = (hourlyOrders[hour][name] || 0) + qty
+
+                soldProducts.add(productId)
+
+                const snapshotCost = isOffline ? (i.unitCost || 0) : (i.unit_cost || 0)
+                const cost = snapshotCost > 0
+                    ? snapshotCost
+                    : calculateProductCost(productId, i.extras || [], recipes, extraIngredients, ingredientCosts)
+                totalCOGS += cost * qty
+
+                const basePrice = prodDef?.price || 0
+                const extrasPrice = isOffline
+                    ? (i.extras || []).reduce((sum, e) => sum + (e.price || 0), 0)
+                    : (i.extra_ids || []).reduce((sum, id) => sum + (extraPriceMap[id] || 0), 0)
+                const unitRevenue = basePrice + extrasPrice
+
+                const extraNames = isOffline
+                    ? (i.extras || []).map(e => e.name).filter(Boolean)
+                    : (i.extra_ids || []).map(id => extraNameMap[id]).filter(Boolean)
+                const variantLabel = extraNames.length > 0
+                    ? [...extraNames].sort((a, b) => a.trim().toLowerCase().localeCompare(b.trim().toLowerCase(), 'vi')).join(' + ')
+                    : 'Thường'
+
+                if (!productStats[productId]) productStats[productId] = { qty: 0, revenue: 0, cost: 0, variants: {} }
+                productStats[productId].qty += qty
+                productStats[productId].revenue += unitRevenue * qty
+                productStats[productId].cost += cost * qty
+                productStats[productId].variants[variantLabel] = (productStats[productId].variants[variantLabel] || 0) + qty
             })
         }
-    })
-    const yesterdayNetProfit = (yesterdayRevenue - yesterdayCOGS)
-        - yesterdayExpensesData.filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0)
-        - yesterdayExpensesData.filter(e => e.is_fixed).reduce((s, e) => s + e.amount, 0)
 
-    const hourRange = []
-    if (activeHours.size > 0) {
-        const minH = Math.min(...activeHours), maxH = Math.max(...activeHours)
-        for (let h = minH; h <= maxH; h++) hourRange.push(h)
-    }
-    let cumulative = 0
-    const lineChartData = hourRange.map(h => {
-        cumulative += (hourlyRevenue[h] || 0)
-        const items = Object.entries(hourlyOrders[h] || {}).map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty)
-        return { hour: `${h}h`, revenue: cumulative, hourRevenue: hourlyRevenue[h] || 0, items }
-    })
+        todayOrders.forEach(o => processOrder(o, false))
+        offlineToday.forEach(o => processOrder(o, true))
+
+        const hourRange = []
+        if (activeHours.size > 0) {
+            const minH = Math.min(...activeHours), maxH = Math.max(...activeHours)
+            for (let h = minH; h <= maxH; h++) hourRange.push(h)
+        }
+        let cumulative = 0
+        const lineChartData = hourRange.map(h => {
+            cumulative += (hourlyRevenue[h] || 0)
+            const items = Object.entries(hourlyOrders[h] || {}).map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty)
+            return { hour: `${h}h`, revenue: cumulative, hourRevenue: hourlyRevenue[h] || 0, items }
+        })
+
+        return { totalRevenue, totalCOGS, productStats, soldProducts, lineChartData, offlineToday }
+    }, [todayOrders, productMap, extraMaps, recipes, extraIngredients, ingredientCosts])
+
+    // totalCups separated: only reruns when filter or orders change, not on other UI state
+    const totalCups = useMemo(() => {
+        let cups = 0
+        todayOrders.forEach(o => {
+            ;(o.order_items || []).forEach(i => {
+                if (selectedProductId === 'all' || selectedProductId === i.product_id) cups += i.quantity || 1
+            })
+        })
+        offlineToday.forEach(o => {
+            ;(o.cart || o.orderItems || []).forEach(i => {
+                if (selectedProductId === 'all' || selectedProductId === i.productId) cups += i.quantity || 1
+            })
+        })
+        return cups
+    }, [todayOrders, offlineToday, selectedProductId])
+
+    const dailyExpense = useMemo(() =>
+        (todayExpenses || []).filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0),
+        [todayExpenses]
+    )
+    const fixedExpense = useMemo(() =>
+        (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0),
+        [fixedCosts]
+    )
+    const netProfit = totalRevenue - totalCOGS - dailyExpense - fixedExpense
+
+    const yesterdayNetProfit = useMemo(() => {
+        let rev = 0, cogs = 0
+        yesterdayOrders.forEach(o => {
+            rev += o.total
+            if (o.total_cost > 0) {
+                cogs += o.total_cost
+            } else {
+                ;(o.order_items || []).forEach(i => {
+                    const qty = i.quantity || 1
+                    const cost = i.unit_cost > 0 ? i.unit_cost : calculateProductCost(i.product_id, [], recipes, extraIngredients, ingredientCosts)
+                    cogs += cost * qty
+                })
+            }
+        })
+        return (rev - cogs)
+            - yesterdayExpensesData.filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0)
+            - yesterdayExpensesData.filter(e => e.is_fixed).reduce((s, e) => s + e.amount, 0)
+    }, [yesterdayOrders, yesterdayExpensesData, recipes, extraIngredients, ingredientCosts])
 
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
