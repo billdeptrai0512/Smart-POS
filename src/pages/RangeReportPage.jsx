@@ -87,8 +87,12 @@ export default function RangeReportPage() {
 
     const delta = (curr, prev) => {
         if (!prev) return null
+<<<<<<< HEAD
         const pct = Math.round((curr - prev) / prev * 100)
         return pct
+=======
+        return Math.round((curr - prev) / prev * 100)
+>>>>>>> c5a3d024aba994c9386decded13f5a7f2d83d6ef
     }
 
     const DeltaBadge = ({ curr, prev }) => {
@@ -167,7 +171,10 @@ export default function RangeReportPage() {
                             <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
                                 <div className="absolute top-3 right-3 text-success/20"><Banknote size={36} /></div>
                                 <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Doanh thu <span className="normal-case font-medium text-[11px]">/ngày</span></h3>
-                                <div className="text-[18px] font-bold text-success tabular-nums">{formatVND(avg(stats.totalRevenue))}</div>
+                                <div className="flex items-center gap-2">
+                                    <div className="text-[18px] font-bold text-success tabular-nums">{formatVND(avg(stats.totalRevenue))}</div>
+                                    <DeltaBadge curr={stats.totalRevenue} prev={prevStats.revenue} />
+                                </div>
                             </div>
                             <div
                                 onClick={() => navigate('/recipes', { state: { from: '/range-report' } })}
@@ -220,6 +227,9 @@ export default function RangeReportPage() {
                                 )
                             })()}
                         </div>
+
+                        {/* Performance chart */}
+                        <DayPerformanceChart orders={orders} range={range} start={periodStart} end={periodEnd} />
 
                         <div className="flex flex-col items-center justify-center py-8 mt-4">
                             <a href="https://github.com/billdeptrai0512" target="_blank" rel="noopener noreferrer"
