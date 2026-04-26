@@ -24,3 +24,7 @@ dist-ssr
 *.sw?
 
 .vercel
+
+CLAUDE.md
+PROJECT.md
+supabase_schema.sql
