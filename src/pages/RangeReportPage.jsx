@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
 import { usePOS } from '../contexts/POSContext'
@@ -28,6 +28,9 @@ export default function RangeReportPage() {
     const [shiftClosings, setShiftClosings] = useState([])
     const [isLoading, setIsLoading] = useState(true)
 
+    // Cache fetched periods so navigating back doesn't re-fetch
+    const fetchCache = useRef({})
+
     useEffect(() => { setOffset(0) }, [range])
 
     useEffect(() => {
@@ -36,15 +39,38 @@ export default function RangeReportPage() {
 
     useEffect(() => {
         if (!selectedAddress?.id) return
+        const key = `${selectedAddress.id}_${range}_${offset}`
+        const prevKey = `${selectedAddress.id}_${range}_${offset - 1}`
+
+        const cached = fetchCache.current[key]
+        const prevCached = fetchCache.current[prevKey]
+
+        if (cached) {
+            setOrders(cached.orders)
+            setExpenses(cached.expenses)
+            setShiftClosings(cached.shiftClosings)
+            setPrevOrders(prevCached ? prevCached.orders : [])
+            setIsLoading(false)
+            return
+        }
+
         setIsLoading(true)
         const { start, end } = getDateRange(range, offset)
         const { start: prevStart, end: prevEnd } = getDateRange(range, offset - 1)
+
         Promise.all([
-            fetchOrdersByRange(selectedAddress.id, start, end).then(setOrders),
-            fetchOrdersByRange(selectedAddress.id, prevStart, prevEnd).then(setPrevOrders),
-            fetchExpensesByRange(selectedAddress.id, start, end).then(setExpenses),
-            fetchShiftClosingsByRange(selectedAddress.id, start, end).then(setShiftClosings),
-        ]).finally(() => setIsLoading(false))
+            fetchOrdersByRange(selectedAddress.id, start, end),
+            prevCached ? Promise.resolve(prevCached.orders) : fetchOrdersByRange(selectedAddress.id, prevStart, prevEnd),
+            fetchExpensesByRange(selectedAddress.id, start, end),
+            fetchShiftClosingsByRange(selectedAddress.id, start, end),
+        ]).then(([ords, prevOrds, exps, closings]) => {
+            fetchCache.current[key] = { orders: ords, expenses: exps, shiftClosings: closings }
+            if (!prevCached) fetchCache.current[prevKey] = { orders: prevOrds, expenses: [], shiftClosings: [] }
+            setOrders(ords)
+            setPrevOrders(prevOrds)
+            setExpenses(exps)
+            setShiftClosings(closings)
+        }).finally(() => setIsLoading(false))
     }, [selectedAddress?.id, range, offset])
 
     const { days, start: periodStart, end: periodEnd } = useMemo(() => getDateRange(range, offset), [range, offset])
@@ -54,6 +80,7 @@ export default function RangeReportPage() {
         const productStats = {}
         const soldProducts = new Set()
 
+        const productMap = new Map(products.map(p => [p.id, p]))
         const extraPriceMap = {}, extraNameMap = {}
         Object.values(productExtras || {}).forEach(extras => {
             extras.forEach(e => {
@@ -86,7 +113,7 @@ export default function RangeReportPage() {
                     totalCOGS += cost * qty
                 }
 
-                const prodDef = products.find(p => p.id === productId)
+                const prodDef = productMap.get(productId)
                 const basePrice = prodDef?.price || 0
                 const extrasPrice = (i.extra_ids || []).reduce((sum, id) => sum + (extraPriceMap[id] || 0), 0)
                 const unitRevenue = basePrice + extrasPrice
