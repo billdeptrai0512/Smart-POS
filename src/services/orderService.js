@@ -922,7 +922,7 @@ export async function fetchTodayShiftClosing(addressId) {
 
     const { data, error } = await supabase
         .from('shift_closings')
-        .select('id, closed_at, address_id, inventory_report')
+        .select('id, closed_at, address_id, inventory_report, actual_cash, actual_transfer, system_total_revenue')
         .eq('address_id', addressId)
         .gte('closed_at', startOfDay.toISOString())
         .order('closed_at', { ascending: false })
