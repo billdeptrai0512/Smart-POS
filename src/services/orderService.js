@@ -39,13 +39,13 @@ export async function fetchProducts(addressId) {
     // Global fallback (no address or address_products not set up yet)
     let { data: prods, error } = await supabase
         .from('products')
-        .select('*')
+        .select('id, name, price, is_active')
         .eq('is_active', true)
         .order('name')
 
     if (error) {
         if (error.code === '42703') {
-            const { data: fallbackProds } = await supabase.from('products').select('*').order('name')
+            const { data: fallbackProds } = await supabase.from('products').select('id, name, price, is_active').order('name')
             prods = fallbackProds
         } else {
             console.error('fetchProducts error:', error)
@@ -193,7 +193,7 @@ export async function fetchFixedCosts(addressId) {
     if (!supabase) return []
     const { data, error } = await supabase
         .from('fixed_costs')
-        .select('*')
+        .select('id, name, amount, is_active, address_id, created_at')
         .eq('address_id', addressId)
         .eq('is_active', true)
         .order('created_at', { ascending: true })
@@ -840,7 +840,7 @@ export async function fetchYesterdayExpenses(addressId) {
 
     let query = supabase
         .from('expenses')
-        .select('*')
+        .select('id, name, amount, is_fixed, created_at, address_id')
         .gte('created_at', yesterday.toISOString())
         .lt('created_at', today.toISOString())
 
@@ -874,7 +874,7 @@ export async function fetchExpensesByRange(addressId, start, end) {
     if (!supabase) return []
     let query = supabase
         .from('expenses')
-        .select('*')
+        .select('id, name, amount, is_fixed, created_at, address_id')
         .gte('created_at', start.toISOString())
         .lte('created_at', end.toISOString())
     if (addressId) query = query.eq('address_id', addressId)
@@ -922,7 +922,7 @@ export async function fetchTodayShiftClosing(addressId) {
 
     const { data, error } = await supabase
         .from('shift_closings')
-        .select('*')
+        .select('id, closed_at, address_id, inventory_report')
         .eq('address_id', addressId)
         .gte('closed_at', startOfDay.toISOString())
         .order('closed_at', { ascending: false })
@@ -943,7 +943,7 @@ export async function fetchYesterdayShiftClosing(addressId) {
 
     const { data, error } = await supabase
         .from('shift_closings')
-        .select('*')
+        .select('id, closed_at, address_id, inventory_report')
         .eq('address_id', addressId)
         .lt('closed_at', startOfDay.toISOString())
         .order('closed_at', { ascending: false })
