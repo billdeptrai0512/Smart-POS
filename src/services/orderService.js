@@ -83,47 +83,18 @@ export async function upsertProductPrice(productId, addressId, price) {
     if (error) throw error
 }
 
-// Fetch today's total revenue (optionally scoped by address)
-export async function fetchTodayRevenue(addressId) {
-    if (!supabase) return 0
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    let query = supabase
-        .from('orders')
-        .select('total')
-        .gte('created_at', today.toISOString())
-
-    if (addressId) query = query.eq('address_id', addressId)
-
-    const { data, error } = await query
-
-    if (error) {
-        console.error('fetchTodayRevenue error:', error)
-        return 0
-    }
-    return data.reduce((sum, o) => sum + o.total, 0)
-}
-
-// Fetch today's total cups sold (optionally scoped by address)
-export async function fetchTodayCupsSold(addressId) {
-    if (!supabase) return 0
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    let query = supabase
-        .from('orders')
-        .select('order_items(quantity)')
-        .gte('created_at', today.toISOString())
-
-    if (addressId) query = query.eq('address_id', addressId)
-
-    const { data, error } = await query
-    if (error) {
-        console.error('fetchTodayCupsSold error:', error)
-        return 0
-    }
-    return (data || []).reduce((sum, o) => sum + (o.order_items || []).reduce((s, i) => s + i.quantity, 0), 0)
+// Fetch today's revenue + cups in a single DB aggregate (replaces fetchTodayRevenue + fetchTodayCupsSold)
+export async function fetchTodayStats(addressId) {
+    if (!supabase || !addressId) return { revenue: 0, cups: 0 }
+    const from = new Date()
+    from.setHours(0, 0, 0, 0)
+    const { data, error } = await supabase.rpc('get_today_stats', {
+        p_address_id: addressId,
+        p_from: from.toISOString(),
+        p_to: new Date().toISOString(),
+    })
+    if (error) { console.error('fetchTodayStats error:', error); return { revenue: 0, cups: 0 } }
+    return { revenue: Number(data?.revenue || 0), cups: Number(data?.cups || 0) }
 }
 
 // Fetch all orders for today, newest first (optionally scoped by address)
@@ -172,7 +143,7 @@ export async function fetchTodayExpenses(addressId) {
 
     let query = supabase
         .from('expenses')
-        .select('*')
+        .select('id, name, amount, is_fixed, created_at')
         .gte('created_at', today.toISOString())
 
     if (addressId) query = query.eq('address_id', addressId)

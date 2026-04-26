@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { fetchTodayRevenue, fetchTodayCupsSold, fetchInventory, submitOrder, fetchTodayOrders, deleteOrder, fetchTodayExpenses, insertExpense, deleteExpense, fetchFixedCosts, insertFixedCost, updateFixedCost, deleteFixedCost, fetchLatestOrder } from '../services/orderService'
+import { fetchTodayStats, fetchInventory, submitOrder, fetchTodayOrders, deleteOrder, fetchTodayExpenses, insertExpense, deleteExpense, fetchFixedCosts, insertFixedCost, updateFixedCost, deleteFixedCost, fetchLatestOrder } from '../services/orderService'
 import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder } from '../hooks/useOfflineSync'
 import { calculateProductCost } from '../utils'
@@ -53,8 +53,7 @@ export function POSProvider() {
     // ---- Offline sync ----
     const handleSyncComplete = useCallback(() => {
         if (!addressId) return
-        fetchTodayRevenue(addressId).then(setRevenue)
-        fetchTodayCupsSold(addressId).then(setCupsSold)
+        fetchTodayStats(addressId).then(({ revenue, cups }) => { setRevenue(revenue); setCupsSold(cups) })
         fetchInventory().then(setInventory)
         showToast('Đã đồng bộ đơn hàng offline!', 'success')
     }, [addressId])
@@ -67,10 +66,9 @@ export function POSProvider() {
 
         async function load() {
             try {
-                const [rev, inv, cups, latest] = await Promise.all([
-                    fetchTodayRevenue(addressId),
+                const [{ revenue: rev, cups }, inv, latest] = await Promise.all([
+                    fetchTodayStats(addressId),
                     fetchInventory(),
-                    fetchTodayCupsSold(addressId),
                     fetchLatestOrder(addressId)
                 ])
                 if (latest) setLastOrder(buildLastOrderFromDB(latest))
@@ -107,8 +105,7 @@ export function POSProvider() {
             const todayStr = new Date().toDateString()
             if (storedDate && storedDate !== todayStr) {
                 if (navigator.onLine && supabase && addressId) {
-                    fetchTodayRevenue(addressId).then(setRevenue)
-                    fetchTodayCupsSold(addressId).then(setCupsSold)
+                    fetchTodayStats(addressId).then(({ revenue, cups }) => { setRevenue(revenue); setCupsSold(cups) })
                     setTotalCost(0)
                     showToast('Đã qua ngày mới, dữ liệu đã được làm mới!', 'info')
                 } else {
@@ -142,8 +139,7 @@ export function POSProvider() {
             .channel(`orders-realtime-${addressId}`)
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
                 if (payload.new?.address_id === addressId) {
-                    fetchTodayRevenue(addressId).then(setRevenue)
-                    fetchTodayCupsSold(addressId).then(setCupsSold)
+                    fetchTodayStats(addressId).then(({ revenue, cups }) => { setRevenue(revenue); setCupsSold(cups) })
 
                     // Simple logic to detect if it's from another device
                     if (!localOrderIds.current.has(payload.new.id)) {
@@ -387,7 +383,7 @@ export function POSProvider() {
             await deleteOrder(orderId)
             setTodayOrders(prev => prev.filter(o => o.id !== orderId))
             if (addressId) {
-                const [rev, cups] = await Promise.all([fetchTodayRevenue(addressId), fetchTodayCupsSold(addressId)])
+                const { revenue: rev, cups } = await fetchTodayStats(addressId)
                 setRevenue(rev)
                 setCupsSold(cups)
             }
