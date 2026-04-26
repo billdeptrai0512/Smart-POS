@@ -25,7 +25,9 @@ export default function RangeReportPage() {
     const [orders, setOrders] = useState([])
     const [prevOrders, setPrevOrders] = useState([])
     const [expenses, setExpenses] = useState([])
+    const [prevExpenses, setPrevExpenses] = useState([])
     const [shiftClosings, setShiftClosings] = useState([])
+    const [prevShiftClosings, setPrevShiftClosings] = useState([])
     const [isLoading, setIsLoading] = useState(true)
 
     // Cache fetched periods so navigating back doesn't re-fetch
@@ -50,6 +52,8 @@ export default function RangeReportPage() {
             setExpenses(cached.expenses)
             setShiftClosings(cached.shiftClosings)
             setPrevOrders(prevCached ? prevCached.orders : [])
+            setPrevExpenses(prevCached ? prevCached.expenses : [])
+            setPrevShiftClosings(prevCached ? prevCached.shiftClosings : [])
             setIsLoading(false)
             return
         }
@@ -62,18 +66,23 @@ export default function RangeReportPage() {
             fetchOrdersByRange(selectedAddress.id, start, end),
             prevCached ? Promise.resolve(prevCached.orders) : fetchOrdersByRange(selectedAddress.id, prevStart, prevEnd),
             fetchExpensesByRange(selectedAddress.id, start, end),
+            prevCached ? Promise.resolve(prevCached.expenses) : fetchExpensesByRange(selectedAddress.id, prevStart, prevEnd),
             fetchShiftClosingsByRange(selectedAddress.id, start, end),
-        ]).then(([ords, prevOrds, exps, closings]) => {
+            prevCached ? Promise.resolve(prevCached.shiftClosings) : fetchShiftClosingsByRange(selectedAddress.id, prevStart, prevEnd),
+        ]).then(([ords, prevOrds, exps, prevExps, closings, prevClosings]) => {
             fetchCache.current[key] = { orders: ords, expenses: exps, shiftClosings: closings }
-            if (!prevCached) fetchCache.current[prevKey] = { orders: prevOrds, expenses: [], shiftClosings: [] }
+            if (!prevCached) fetchCache.current[prevKey] = { orders: prevOrds, expenses: prevExps, shiftClosings: prevClosings }
             setOrders(ords)
             setPrevOrders(prevOrds)
             setExpenses(exps)
+            setPrevExpenses(prevExps)
             setShiftClosings(closings)
+            setPrevShiftClosings(prevClosings)
         }).finally(() => setIsLoading(false))
     }, [selectedAddress?.id, range, offset])
 
     const { days, start: periodStart, end: periodEnd } = useMemo(() => getDateRange(range, offset), [range, offset])
+    const { days: prevDays } = useMemo(() => getDateRange(range, offset - 1), [range, offset])
 
     const stats = useMemo(() => {
         let totalRevenue = 0, totalCOGS = 0, totalCups = 0
@@ -146,9 +155,14 @@ export default function RangeReportPage() {
     }, [orders, expenses, shiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, productExtras, products, selectedProductId])
 
     const prevStats = useMemo(() => {
-        let revenue = 0, cups = 0
+        let revenue = 0, cups = 0, totalCOGS = 0
         prevOrders.forEach(o => {
             revenue += o.total
+
+            if (o.total_cost > 0) {
+                totalCOGS += o.total_cost
+            }
+
             const orderItems = o.order_items || []
             orderItems.forEach(i => {
                 const qty = i.quantity || 1
@@ -156,10 +170,24 @@ export default function RangeReportPage() {
                 if (selectedProductId === 'all' || selectedProductId === productId) {
                     cups += qty
                 }
+
+                if (!(o.total_cost > 0)) {
+                    const cost = i.unit_cost > 0 ? i.unit_cost : calculateProductCost(productId, [], recipes, extraIngredients, ingredientCosts)
+                    totalCOGS += cost * qty
+                }
             })
         })
-        return { revenue, cups }
-    }, [prevOrders, selectedProductId])
+
+        const dailyExpense = prevExpenses.filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0)
+
+        const activeDays = new Set(prevOrders.map(o => o.created_at.split('T')[0])).size
+        const daysToCalculate = activeDays > 0 ? activeDays : 0
+        const fixedExpense = (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0) * daysToCalculate
+
+        const netProfit = revenue - totalCOGS - dailyExpense - fixedExpense
+
+        return { revenue, cups, netProfit }
+    }, [prevOrders, prevExpenses, prevShiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, selectedProductId])
 
     const delta = (curr, prev) => {
         if (!prev) return null
@@ -302,6 +330,9 @@ export default function RangeReportPage() {
                             )}
                         </div>
 
+                        {/* Performance chart */}
+                        <DayPerformanceChart orders={orders} range={range} start={periodStart} end={periodEnd} />
+
 
                         <div className="flex items-center gap-3 py-1 px-4">
                             <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
@@ -341,7 +372,9 @@ export default function RangeReportPage() {
 
                             {/* Net profit */}
                             {(() => {
-                                const isUp = stats.netProfit >= 0
+                                const profitDelta = stats.netProfit - prevStats.netProfit
+                                const isUpDelta = profitDelta >= 0
+
                                 return (
                                     <div className="col-span-2 bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex items-center justify-between relative overflow-hidden group">
 
@@ -351,21 +384,22 @@ export default function RangeReportPage() {
                                                 {formatVND(stats.netProfit)}
                                             </div>
                                         </div>
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-[10px] font-black text-text-secondary uppercase mb-1 opacity-70">Trung bình / ngày</span>
-                                            <div className={`px-3 py-1 rounded-xl border ${isUp ? 'bg-success/10 border-success/20 text-success' : 'bg-danger/10 border-danger/20 text-danger'}`}>
-                                                <span className="text-[12px] font-black tabular-nums leading-none block">
-                                                    {formatVND(avg(stats.netProfit))}
-                                                </span>
+                                        {prevStats.netProfit !== undefined && (
+                                            <div className="flex flex-col items-center">
+                                                <span className="self-center text-[10px] font-black text-text-secondary uppercase mb-1 opacity-70">So với {range === 'week' ? 'tuần trước' : 'tháng trước'}</span>
+                                                <div className={`px-3 py-1 rounded-xl border ${isUpDelta ? 'bg-success/10 border-success/20 text-success' : 'bg-danger/10 border-danger/20 text-danger'}`}>
+                                                    <span className="text-[12px] font-black tabular-nums leading-none block">
+                                                        {formatVND(profitDelta)}
+                                                    </span>
+                                                </div>
                                             </div>
-                                        </div>
+                                        )}
                                     </div>
                                 )
                             })()}
                         </div>
 
-                        {/* Performance chart */}
-                        <DayPerformanceChart orders={orders} range={range} start={periodStart} end={periodEnd} />
+
 
                         <div className="flex flex-col items-center justify-center py-8 mt-4">
                             <a href="https://github.com/billdeptrai0512" target="_blank" rel="noopener noreferrer"
