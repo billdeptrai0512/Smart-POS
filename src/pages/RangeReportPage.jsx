@@ -87,12 +87,8 @@ export default function RangeReportPage() {
 
     const delta = (curr, prev) => {
         if (!prev) return null
-<<<<<<< HEAD
         const pct = Math.round((curr - prev) / prev * 100)
         return pct
-=======
-        return Math.round((curr - prev) / prev * 100)
->>>>>>> c5a3d024aba994c9386decded13f5a7f2d83d6ef
     }
 
     const DeltaBadge = ({ curr, prev }) => {
