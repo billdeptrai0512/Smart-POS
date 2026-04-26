@@ -2,50 +2,25 @@ import { supabase } from '../lib/supabaseClient'
 
 
 
-// Fetch all products for the menu (scoped to address via address_products)
+// Fetch all products for the menu (incorporates default system products + branch specific)
 export async function fetchProducts(addressId) {
     if (!supabase) return []
 
-    // If addressId provided, fetch via address_products join for per-address menu
+    // 1. Fetch base products (default + branch owned)
+    let query = supabase.from('products').select('id, name, price, is_active, owner_address_id, sort_order').eq('is_active', true)
+
     if (addressId) {
-        const { data: addressProds, error: apError } = await supabase
-            .from('address_products')
-            .select('product_id, sort_order, products(*)')
-            .eq('address_id', addressId)
-            .order('sort_order')
-
-        if (!apError && addressProds && addressProds.length > 0) {
-            // Merge with address-specific prices
-            const { data: prices } = await supabase
-                .from('product_prices')
-                .select('product_id, price')
-                .eq('address_id', addressId)
-
-            const priceMap = {}
-            if (prices) for (let p of prices) priceMap[p.product_id] = p.price
-
-            return addressProds
-                .filter(ap => ap.products && ap.products.is_active !== false)
-                .map(ap => ({
-                    ...ap.products,
-                    price: priceMap[ap.product_id] !== undefined ? priceMap[ap.product_id] : ap.products.price
-                }))
-        }
-
-        // Fallback: address_products table might not exist yet or no rows
-        // Fall through to global fetch
+        query = query.or(`owner_address_id.is.null,owner_address_id.eq.${addressId}`)
+    } else {
+        query = query.is('owner_address_id', null)
     }
 
-    // Global fallback (no address or address_products not set up yet)
-    let { data: prods, error } = await supabase
-        .from('products')
-        .select('id, name, price, is_active')
-        .eq('is_active', true)
-        .order('name')
+    let { data: prods, error } = await query
 
     if (error) {
         if (error.code === '42703') {
-            const { data: fallbackProds } = await supabase.from('products').select('id, name, price, is_active').order('name')
+            // Fallback if migration hasn't been run yet
+            const { data: fallbackProds } = await supabase.from('products').select('id, name, price, is_active').eq('is_active', true).order('name')
             prods = fallbackProds
         } else {
             console.error('fetchProducts error:', error)
@@ -53,22 +28,47 @@ export async function fetchProducts(addressId) {
         }
     }
 
-    const products = prods || []
+    let products = prods || []
 
     if (addressId && products.length > 0) {
-        const { data: prices } = await supabase
-            .from('product_prices')
-            .select('product_id, price')
-            .eq('address_id', addressId)
+        // 2. Fetch overrides (hidden flags, sort order, custom prices)
+        const [apRes, pricesRes] = await Promise.all([
+            supabase.from('address_products').select('product_id, sort_order, is_hidden').eq('address_id', addressId),
+            supabase.from('product_prices').select('product_id, price').eq('address_id', addressId)
+        ])
 
-        if (prices && prices.length > 0) {
-            const priceMap = {}
-            for (let p of prices) priceMap[p.product_id] = p.price
-            return products.map(prod => ({
-                ...prod,
-                price: priceMap[prod.id] !== undefined ? priceMap[prod.id] : prod.price
-            }))
-        }
+        const apData = apRes.data || []
+        const pricesData = pricesRes.data || []
+
+        const hiddenIds = new Set(apData.filter(ap => ap.is_hidden).map(ap => ap.product_id))
+
+        const priceMap = {}
+        for (let p of pricesData) priceMap[p.product_id] = p.price
+
+        const sortMap = {}
+        for (let ap of apData) sortMap[ap.product_id] = ap.sort_order
+
+        // 3. Filter out hidden and apply overrides
+        products = products.filter(p => !hiddenIds.has(p.id))
+
+        products = products.map(p => ({
+            ...p,
+            price: priceMap[p.id] !== undefined ? priceMap[p.id] : p.price,
+            sort_order: sortMap[p.id] !== undefined ? sortMap[p.id] : (p.sort_order ?? 999999)
+        }))
+
+        // Sort by sort_order naturally, fallback to name
+        products.sort((a, b) => {
+            if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order
+            return a.name.localeCompare(b.name)
+        })
+    } else {
+        products.sort((a, b) => {
+            const aSort = a.sort_order ?? 999999;
+            const bSort = b.sort_order ?? 999999;
+            if (aSort !== bSort) return aSort - bSort;
+            return a.name.localeCompare(b.name);
+        })
     }
 
     return products
@@ -446,14 +446,20 @@ export async function deleteIngredientCost(ingredient, addressId = null) {
 // Create a new product and link to the current address
 export async function insertProduct(name, price, addressId = null) {
     if (!supabase) throw new Error('No Supabase connection')
+
+    const payload = { name, price }
+    // Add owner_address_id safely
+    if (addressId) payload.owner_address_id = addressId
+
     const { data, error } = await supabase
         .from('products')
-        .insert({ name, price })
+        .insert(payload)
         .select()
         .single()
+
     if (error) throw error
 
-    // Link to address_products with sort_order at the end
+    // Link to address_products with sort_order at the end so it can be explicitly sorted
     if (data && addressId) {
         // Get current max sort_order for this address
         const { data: maxRow } = await supabase
@@ -469,22 +475,45 @@ export async function insertProduct(name, price, addressId = null) {
         await supabase.from('address_products').insert({
             address_id: addressId,
             product_id: data.id,
-            sort_order: nextOrder
+            sort_order: nextOrder,
+            is_hidden: false
         })
     }
 
     return data
 }
 
-// Remove a product from an address (unlink from address_products)
+// Remove a product from an address (hide default or delete custom)
 export async function removeProductFromAddress(productId, addressId) {
     if (!supabase) throw new Error('No Supabase connection')
-    const { error } = await supabase
-        .from('address_products')
-        .delete()
-        .eq('product_id', productId)
-        .eq('address_id', addressId)
-    if (error) throw error
+
+    // Check if this product is owned by this address (custom product)
+    const { data: prod } = await supabase
+        .from('products')
+        .select('owner_address_id')
+        .eq('id', productId)
+        .single()
+
+    if (prod && prod.owner_address_id === addressId) {
+        // Soft-delete custom branch product or default global product
+        // We use is_active = false to avoid violating order_items foreign keys
+        const { error } = await supabase.from('products').update({ is_active: false }).eq('id', productId)
+        if (error) throw error
+    } else {
+        // Soft-delete (hide) default system product for a specific branch
+        const { data: existing } = await supabase
+            .from('address_products')
+            .select('id')
+            .eq('address_id', addressId)
+            .eq('product_id', productId)
+            .maybeSingle()
+
+        if (existing) {
+            await supabase.from('address_products').update({ is_hidden: true }).eq('id', existing.id)
+        } else {
+            await supabase.from('address_products').insert({ address_id: addressId, product_id: productId, is_hidden: true })
+        }
+    }
     return true
 }
 
@@ -492,16 +521,26 @@ export async function removeProductFromAddress(productId, addressId) {
 export async function updateProductSortOrder(addressId, orderedProductIds) {
     if (!supabase) throw new Error('No Supabase connection')
 
-    // Batch update sort_order for each product
-    const updates = orderedProductIds.map((productId, index) =>
-        supabase
-            .from('address_products')
-            .update({ sort_order: index })
-            .eq('address_id', addressId)
-            .eq('product_id', productId)
-    )
-
-    await Promise.all(updates)
+    if (addressId) {
+        // Batch update sort_order for each product
+        const updates = orderedProductIds.map((productId, index) =>
+            supabase
+                .from('address_products')
+                .update({ sort_order: index })
+                .eq('address_id', addressId)
+                .eq('product_id', productId)
+        )
+        await Promise.all(updates)
+    } else {
+        // Admin sorting global default products
+        const updates = orderedProductIds.map((productId, index) =>
+            supabase
+                .from('products')
+                .update({ sort_order: index })
+                .eq('id', productId)
+        )
+        await Promise.all(updates)
+    }
 }
 
 // ---- Product Extras CRUD ----
