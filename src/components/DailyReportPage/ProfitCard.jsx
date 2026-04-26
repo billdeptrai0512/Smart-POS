@@ -43,6 +43,31 @@ export default function ProfitCard({ totalCups, selectedProductId, onFilterChang
                 </div>
             </div>
 
+            {shiftClosing && systemTotal > 0 && (
+                <div className={`rounded-[20px] px-4 py-3 border flex items-center justify-between ${
+                    difference === 0
+                        ? 'bg-success/8 border-success/20'
+                        : difference > 0
+                            ? 'bg-warning/8 border-warning/20'
+                            : 'bg-danger/8 border-danger/20'
+                }`}>
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-black uppercase text-text-secondary tracking-wide">Đối soát tiền</span>
+                        <span className="text-[11px] text-text-dim mt-0.5">Hệ thống ghi: <span className="font-bold text-text">{formatVND(systemTotal)}</span></span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                        <span className={`text-[16px] font-black tabular-nums leading-none ${
+                            difference === 0 ? 'text-success' : difference > 0 ? 'text-warning' : 'text-danger'
+                        }`}>
+                            {difference === 0 ? 'Khớp' : difference > 0 ? `+${formatVND(difference)}` : `-${formatVND(Math.abs(difference))}`}
+                        </span>
+                        <span className="text-[10px] text-text-dim mt-0.5">
+                            {difference === 0 ? 'Tiền khớp hệ thống' : difference > 0 ? 'Dư so hệ thống' : 'Thiếu so hệ thống'}
+                        </span>
+                    </div>
+                </div>
+            )}
+
             <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 relative overflow-hidden">
                 <div className="flex items-start justify-between">
                     <div className="flex flex-col min-w-0 flex-1">
