@@ -403,11 +403,15 @@ export default function RecipeIngredientPage() {
 
                     <button
                         onClick={async () => {
-                            if (!selectedAddress?.id) return
-                            if (!window.confirm(`Xóa "${product.name}" khỏi menu của chi nhánh này?`)) return
+                            const addrId = selectedAddress?.id || null;
+                            if (!addrId && !isAdmin) return; // Only Admin handling default menu can proceed without address_id
+
+                            const targetName = addrId ? 'của chi nhánh này' : 'mặc định của hệ thống';
+                            if (!window.confirm(`Xóa "${product.name}" khỏi menu ${targetName}?`)) return
+
                             setSaving(true)
                             try {
-                                await removeProductFromAddress(productId, selectedAddress.id)
+                                await removeProductFromAddress(productId, addrId)
                                 refreshProducts?.()
                                 navigate('/recipes', { state: location.state })
                             } catch (err) {

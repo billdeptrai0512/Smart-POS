@@ -85,11 +85,13 @@ export default function RecipeMenuPage() {
     }
 
     async function saveSortOrder() {
-        if (!selectedAddress?.id) return
+        const addrId = selectedAddress?.id || null;
+        if (!addrId && !isAdmin) return; // Only Admin can sort default menu
+
         setSaving(true)
         try {
             await updateProductSortOrder(
-                selectedAddress.id,
+                addrId,
                 sortedProducts.map(p => p.id)
             )
             refreshProducts?.()
