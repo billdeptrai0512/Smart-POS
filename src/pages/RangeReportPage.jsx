@@ -7,7 +7,7 @@ import { calculateProductCost, formatVND } from '../utils'
 import { fetchOrdersByRange, fetchExpensesByRange, fetchShiftClosingsByRange } from '../services/orderService'
 import ReportHeader, { getDateRange } from '../components/DailyReportPage/ReportHeader'
 import DayPerformanceChart from '../components/DailyReportPage/DayPerformanceChart'
-import { Banknote, ArrowRight, MinusCircle, ArrowUp, ArrowDown, TrendingUp } from 'lucide-react'
+import { Banknote, ArrowRight, MinusCircle, ArrowUp, ArrowDown, TrendingUp, Filter } from 'lucide-react'
 
 const RANGE_LABEL = { week: 'Tuần này', month: 'Tháng này' }
 
@@ -16,10 +16,11 @@ export default function RangeReportPage() {
     const [searchParams] = useSearchParams()
     const range = searchParams.get('range') || 'week'
 
-    const { products, recipes, ingredientCosts, extraIngredients } = useProducts()
+    const { products, recipes, ingredientCosts, extraIngredients, productExtras } = useProducts()
     const { fixedCosts, handleLoadFixedCosts } = usePOS()
     const { selectedAddress } = useAddress()
 
+    const [selectedProductId, setSelectedProductId] = useState('all')
     const [offset, setOffset] = useState(0)
     const [orders, setOrders] = useState([])
     const [prevOrders, setPrevOrders] = useState([])
@@ -50,40 +51,88 @@ export default function RangeReportPage() {
 
     const stats = useMemo(() => {
         let totalRevenue = 0, totalCOGS = 0, totalCups = 0
+        const productStats = {}
+        const soldProducts = new Set()
+
+        const extraPriceMap = {}, extraNameMap = {}
+        Object.values(productExtras || {}).forEach(extras => {
+            extras.forEach(e => {
+                extraPriceMap[e.id] = e.price || 0
+                extraNameMap[e.id] = e.name || e.id
+            })
+        })
         orders.forEach(o => {
             totalRevenue += o.total
 
-            totalCups += (o.order_items || []).reduce((s, i) => s + (i.quantity || 1), 0)
+            // totalCups handled inside items loop
 
             if (o.total_cost > 0) {
                 totalCOGS += o.total_cost
-            } else {
-                (o.order_items || []).forEach(i => {
-                    const qty = i.quantity || 1
-                    const cost = i.unit_cost > 0 ? i.unit_cost : calculateProductCost(i.product_id, [], recipes, extraIngredients, ingredientCosts)
-                    totalCOGS += cost * qty
-                })
             }
+
+            const orderItems = o.order_items || []
+            orderItems.forEach(i => {
+                const qty = i.quantity || 1
+                const productId = i.product_id
+
+                if (selectedProductId === 'all' || selectedProductId === productId) {
+                    totalCups += qty
+                }
+                soldProducts.add(productId)
+
+                let cost = 0;
+                if (!(o.total_cost > 0)) {
+                    cost = i.unit_cost > 0 ? i.unit_cost : calculateProductCost(productId, [], recipes, extraIngredients, ingredientCosts)
+                    totalCOGS += cost * qty
+                }
+
+                const prodDef = products.find(p => p.id === productId)
+                const basePrice = prodDef?.price || 0
+                const extrasPrice = (i.extra_ids || []).reduce((sum, id) => sum + (extraPriceMap[id] || 0), 0)
+                const unitRevenue = basePrice + extrasPrice
+
+                const extraNames = (i.extra_ids || []).map(id => extraNameMap[id]).filter(Boolean)
+                const variantLabel = extraNames.length > 0
+                    ? [...extraNames].sort((a, b) => a.trim().toLowerCase().localeCompare(b.trim().toLowerCase(), 'vi')).join(' + ')
+                    : 'Thường'
+
+                if (!productStats[productId]) productStats[productId] = { qty: 0, revenue: 0, cost: 0, variants: {} }
+                productStats[productId].qty += qty
+                productStats[productId].revenue += unitRevenue * qty
+                productStats[productId].cost += cost * qty
+                productStats[productId].variants[variantLabel] = (productStats[productId].variants[variantLabel] || 0) + qty
+            })
         })
 
         const cashRevenue = shiftClosings.reduce((s, sc) => s + (sc.actual_cash || 0), 0)
         const transferRevenue = shiftClosings.reduce((s, sc) => s + (sc.actual_transfer || 0), 0)
 
         const dailyExpense = expenses.filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0)
-        const fixedExpense = (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0) * days
+
+        const activeDays = new Set(orders.map(o => o.created_at.split('T')[0])).size
+        const daysToCalculate = activeDays > 0 ? activeDays : 0
+        const fixedExpense = (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0) * daysToCalculate
+
         const netProfit = totalRevenue - totalCOGS - dailyExpense - fixedExpense
 
-        return { totalRevenue, totalCOGS, totalCups, cashRevenue, transferRevenue, dailyExpense, fixedExpense, netProfit }
-    }, [orders, expenses, shiftClosings, fixedCosts, days, recipes, extraIngredients, ingredientCosts])
+        return { totalRevenue, totalCOGS, totalCups, cashRevenue, transferRevenue, dailyExpense, fixedExpense, netProfit, productStats, soldProducts }
+    }, [orders, expenses, shiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, productExtras, products, selectedProductId])
 
     const prevStats = useMemo(() => {
         let revenue = 0, cups = 0
         prevOrders.forEach(o => {
             revenue += o.total
-            cups += (o.order_items || []).reduce((s, i) => s + (i.quantity || 1), 0)
+            const orderItems = o.order_items || []
+            orderItems.forEach(i => {
+                const qty = i.quantity || 1
+                const productId = i.product_id
+                if (selectedProductId === 'all' || selectedProductId === productId) {
+                    cups += qty
+                }
+            })
         })
         return { revenue, cups }
-    }, [prevOrders])
+    }, [prevOrders, selectedProductId])
 
     const delta = (curr, prev) => {
         if (!prev) return null
@@ -109,6 +158,10 @@ export default function RangeReportPage() {
         else navigate(`/range-report?range=${r}`)
     }
 
+    const selectedProduct = selectedProductId !== 'all' ? products.find(p => p.id === selectedProductId) : null;
+    const singleStats = selectedProduct && stats.productStats?.[selectedProductId] ? stats.productStats[selectedProductId] : null;
+    const displayRevenue = singleStats ? singleStats.revenue : stats.totalRevenue;
+
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
             <ReportHeader
@@ -131,30 +184,97 @@ export default function RangeReportPage() {
                     </div>
                 ) : (
                     <div className="flex flex-col gap-4 animate-fade-in">
-                        {/* Summary card */}
-                        <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 relative overflow-hidden">
-                            <div className="absolute top-3 right-3 text-primary/10">
-                                <TrendingUp size={36} />
-                            </div>
-                            <span className="text-[11px] font-black text-text-secondary uppercase">Tổng {days} ngày</span>
-                            <div className="flex items-end gap-3 mt-1">
-                                <span className="text-[22px] font-bold text-primary tabular-nums leading-none">{stats.totalCups} ly</span>
-                                <span className="text-[13px] font-medium text-text-secondary mb-0.5">≈ {avg(stats.totalCups)} ly/ngày</span>
-                                <DeltaBadge curr={stats.totalCups} prev={prevStats.cups} />
-                            </div>
-                        </div>
-
                         {/* Cash / Transfer */}
                         <div className="grid grid-cols-2 gap-3">
                             <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center">
-                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Tiền mặt <span className="normal-case font-medium text-[11px]">/ngày</span></h3>
-                                <div className="text-[18px] font-bold text-primary tabular-nums">{formatVND(avg(stats.cashRevenue))}</div>
+                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Tiền mặt </h3>
+                                <div className="text-[18px] font-bold text-primary tabular-nums">{formatVND((stats.cashRevenue))}</div>
                             </div>
                             <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center">
-                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chuyển khoản <span className="normal-case font-medium text-[11px]">/ngày</span></h3>
-                                <div className="text-[18px] font-bold text-primary tabular-nums">{formatVND(avg(stats.transferRevenue))}</div>
+                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chuyển khoản </h3>
+                                <div className="text-[18px] font-bold text-primary tabular-nums">{formatVND(stats.transferRevenue)}</div>
                             </div>
                         </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all">
+                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí ngày</h3>
+                                <div className="text-[18px] font-bold text-danger tabular-nums">{formatVND(stats.dailyExpense)}</div>
+                            </div>
+                            <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all">
+                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Thực nhận </h3>
+                                <div className="text-[18px] font-bold text-success tabular-nums">{formatVND(stats.cashRevenue + stats.transferRevenue + stats.dailyExpense)}</div>
+                            </div>
+                        </div>
+
+                        {/* Summary card */}
+                        <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 relative overflow-hidden">
+                            <div className="flex items-start justify-between">
+                                <div className="flex flex-col min-w-0 flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-[11px] font-black text-text-secondary uppercase">Tổng cộng</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <span className="text-[17px] font-bold text-primary tabular-nums leading-none truncate">
+                                            {stats.totalCups} ly {selectedProduct ? selectedProduct.name.toLowerCase() : ''}
+                                        </span>
+                                        {!singleStats && <span className="text-[11px] font-medium text-text-secondary">≈ {avg(stats.totalCups)} ly/ngày</span>}
+                                    </div>
+                                    {singleStats && singleStats.variants && Object.keys(singleStats.variants).length > 0 && (
+                                        <div className="flex flex-col gap-0.5 mt-1.5">
+                                            {Object.entries(singleStats.variants)
+                                                .sort((a, b) => b[1] - a[1])
+                                                .map(([label, qty]) => (
+                                                    <span key={label} className="text-[11px] text-text-secondary tabular-nums">
+                                                        · {label}: <span className="font-black text-text">{qty} ly</span>
+                                                    </span>
+                                                ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex flex-col items-end shrink-0 ml-3">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-[11px] font-black text-text-secondary uppercase">Doanh thu</span>
+                                        <div className="relative flex items-center justify-center w-5 h-5 bg-surface-light rounded-full border border-border/40 text-text-secondary hover:text-primary transition-colors cursor-pointer">
+                                            <Filter size={10} className={selectedProductId !== 'all' ? "text-primary" : ""} />
+                                            <select
+                                                value={selectedProductId}
+                                                onChange={(e) => setSelectedProductId(e.target.value)}
+                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                            >
+                                                <option value="all">Tất cả</option>
+                                                {products.filter(p => stats.soldProducts.has(p.id)).sort((a, b) => a.name.localeCompare(b.name)).map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className={`px-3 py-1 rounded-xl border ${displayRevenue > 0 ? 'bg-success/10 border-success/20 text-success' : 'bg-surface-light border-border/40 text-text-secondary'}`}>
+                                        <span className="text-[13px] font-black tabular-nums leading-none block">
+                                            {formatVND(displayRevenue || 0)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {singleStats && (
+                                <div className="mt-3 pt-3 border-t border-border/30">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <span className="text-[10px] font-black tabular-nums text-primary">
+                                            {stats.totalRevenue > 0 ? ((singleStats.revenue / stats.totalRevenue) * 100).toFixed(1) : 0}%
+                                        </span>
+                                        <span className="text-[10px] font-bold text-primary">100%</span>
+                                    </div>
+                                    <div className="h-[6px] rounded-full bg-border/30 overflow-hidden">
+                                        <div
+                                            className="h-full rounded-full bg-primary transition-all duration-300"
+                                            style={{ width: `${stats.totalRevenue > 0 ? Math.max(2, (singleStats.revenue / stats.totalRevenue) * 100) : 0}%` }}
+                                        ></div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
 
                         <div className="flex items-center gap-3 py-1 px-4">
                             <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
@@ -165,36 +285,31 @@ export default function RangeReportPage() {
                         {/* Finance cards */}
                         <div className="grid grid-cols-2 gap-3">
                             <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
-                                <div className="absolute top-3 right-3 text-success/20"><Banknote size={36} /></div>
-                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Doanh thu <span className="normal-case font-medium text-[11px]">/ngày</span></h3>
+                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Doanh thu</h3>
                                 <div className="flex items-center gap-2">
-                                    <div className="text-[18px] font-bold text-success tabular-nums">{formatVND(avg(stats.totalRevenue))}</div>
-                                    <DeltaBadge curr={stats.totalRevenue} prev={prevStats.revenue} />
+                                    <div className="text-[18px] font-bold text-success tabular-nums">{formatVND(stats.totalRevenue)}</div>
                                 </div>
                             </div>
                             <div
                                 onClick={() => navigate('/recipes', { state: { from: '/range-report' } })}
                                 className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
                             >
-                                <div className="absolute top-3 right-3 text-warning/30"><ArrowRight size={36} /></div>
-                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Giá vốn <span className="normal-case font-medium text-[11px]">/ngày</span></h3>
-                                <div className="text-[18px] font-bold text-warning tabular-nums">- {formatVND(avg(stats.totalCOGS))}</div>
+                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Giá vốn</h3>
+                                <div className="text-[18px] font-bold text-warning tabular-nums">{formatVND(stats.totalCOGS)}</div>
                             </div>
                             <div
                                 onClick={() => navigate('/expenses', { state: { from: '/range-report', tab: 'daily' } })}
                                 className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
                             >
-                                <div className="absolute top-3 right-3 text-danger/20"><MinusCircle size={36} /></div>
-                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí ngày <span className="normal-case font-medium text-[11px]">/ngày</span></h3>
-                                <div className="text-[18px] font-bold text-danger tabular-nums">- {formatVND(avg(stats.dailyExpense))}</div>
+                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí ngày</h3>
+                                <div className="text-[18px] font-bold text-danger tabular-nums">{formatVND(stats.dailyExpense)}</div>
                             </div>
                             <div
                                 onClick={() => navigate('/expenses', { state: { from: '/range-report', tab: 'fixed' } })}
                                 className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
                             >
-                                <div className="absolute top-3 right-3 text-danger/20"><MinusCircle size={36} /></div>
-                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">CP cố định <span className="normal-case font-medium text-[11px]">/ngày</span></h3>
-                                <div className="text-[18px] font-bold text-danger tabular-nums">- {formatVND(avg(stats.fixedExpense))}</div>
+                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí cố định</h3>
+                                <div className="text-[18px] font-bold text-danger tabular-nums">{formatVND(stats.fixedExpense)}</div>
                             </div>
 
                             {/* Net profit */}
@@ -202,17 +317,15 @@ export default function RangeReportPage() {
                                 const isUp = stats.netProfit >= 0
                                 return (
                                     <div className="col-span-2 bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex items-center justify-between relative overflow-hidden group">
-                                        <div className={`absolute top-4 right-4 ${isUp ? 'text-success/20 group-hover:text-success/30' : 'text-danger/20 group-hover:text-danger/30'} transition-colors`}>
-                                            {isUp ? <ArrowUp size={42} /> : <ArrowDown size={42} />}
-                                        </div>
+
                                         <div className="flex flex-col">
-                                            <h3 className="text-[11px] font-black text-text-secondary uppercase mb-1">Lợi nhuận ròng <span className="normal-case font-medium">({offset === 0 ? RANGE_LABEL[range]?.toLowerCase() : offset === -1 ? (range === 'week' ? 'tuần trước' : 'tháng trước') : `${Math.abs(offset)} ${range === 'week' ? 'tuần' : 'tháng'} trước`})</span></h3>
+                                            <h3 className="text-[11px] font-black text-text-secondary uppercase mb-1">Lợi nhuận ròng</h3>
                                             <div className={`text-[18px] font-bold tabular-nums ${stats.netProfit >= 0 ? 'text-success' : 'text-danger'}`}>
                                                 {formatVND(stats.netProfit)}
                                             </div>
                                         </div>
                                         <div className="flex flex-col items-end">
-                                            <span className="text-[10px] font-black text-text-secondary uppercase mb-1 opacity-70">Trung bình/ngày</span>
+                                            <span className="text-[10px] font-black text-text-secondary uppercase mb-1 opacity-70">Trung bình / ngày</span>
                                             <div className={`px-3 py-1 rounded-xl border ${isUp ? 'bg-success/10 border-success/20 text-success' : 'bg-danger/10 border-danger/20 text-danger'}`}>
                                                 <span className="text-[12px] font-black tabular-nums leading-none block">
                                                     {formatVND(avg(stats.netProfit))}

@@ -88,12 +88,12 @@ export default function DayPerformanceChart({ orders, range, start, end }) {
                 </h3>
                 {bestDay.cups > 0 && (
                     <span className="text-[11px] font-bold text-warning">
-                        Đỉnh: {bestDay.label} · {bestDay.cups} ly
+                        Cao nhất: {bestDay.cups} ly
                     </span>
                 )}
             </div>
 
-            <div className="h-[140px] w-full">
+            <div className="h-[140px] w-full [&_*]:outline-none [&_*]:focus:outline-none">
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data} barCategoryGap="28%" margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
                         <XAxis
