@@ -145,14 +145,13 @@ export default function RangeReportPage() {
 
         const dailyExpense = expenses.filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0)
 
-        const activeDays = new Set(orders.map(o => o.created_at.split('T')[0])).size
-        const daysToCalculate = activeDays > 0 ? activeDays : 0
+        const daysToCalculate = days > 0 ? days : 1
         const fixedExpense = (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0) * daysToCalculate
 
         const netProfit = totalRevenue - totalCOGS - dailyExpense - fixedExpense
 
         return { totalRevenue, totalCOGS, totalCups, cashRevenue, transferRevenue, dailyExpense, fixedExpense, netProfit, productStats, soldProducts }
-    }, [orders, expenses, shiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, productExtras, products, selectedProductId])
+    }, [orders, expenses, shiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, productExtras, products, selectedProductId, days])
 
     const prevStats = useMemo(() => {
         let revenue = 0, cups = 0, totalCOGS = 0
@@ -180,14 +179,13 @@ export default function RangeReportPage() {
 
         const dailyExpense = prevExpenses.filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0)
 
-        const activeDays = new Set(prevOrders.map(o => o.created_at.split('T')[0])).size
-        const daysToCalculate = activeDays > 0 ? activeDays : 0
+        const daysToCalculate = prevDays > 0 ? prevDays : 1
         const fixedExpense = (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0) * daysToCalculate
 
         const netProfit = revenue - totalCOGS - dailyExpense - fixedExpense
 
         return { revenue, cups, netProfit }
-    }, [prevOrders, prevExpenses, prevShiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, selectedProductId])
+    }, [prevOrders, prevExpenses, prevShiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, selectedProductId, prevDays])
 
     const delta = (curr, prev) => {
         if (!prev) return null
