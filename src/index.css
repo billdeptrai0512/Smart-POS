@@ -58,6 +58,13 @@ body {
   overscroll-behavior: none;
 }
 
+/* iOS PWA standalone mode: respect notch / Dynamic Island */
+@media (display-mode: standalone) {
+  body {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
 /* ====== Scrollbar ====== */
 ::-webkit-scrollbar {
   width: 3px;

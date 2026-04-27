@@ -1,6 +1,57 @@
 import { formatVND } from '../../utils'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../contexts/AuthContext'
+import { useProducts } from '../../contexts/ProductContext'
 
 export default function MenuGrid({ products, cart, onAddItem }) {
+    const navigate = useNavigate()
+    const { isManager, isAdmin } = useAuth()
+    const { loading, loadError } = useProducts()
+    const canSetup = isManager || isAdmin
+
+    if (products.length === 0) {
+        const isLoading = loading
+        const hasError = !!loadError
+        const title = isLoading
+            ? 'Đang tải menu…'
+            : hasError
+                ? 'Không tải được menu'
+                : 'Chưa có món nào trong menu'
+        const description = isLoading
+            ? 'Vui lòng chờ giây lát.'
+            : hasError
+                ? (navigator.onLine
+                    ? 'Có lỗi khi tải dữ liệu. Thử tải lại trang.'
+                    : 'Đang offline. Khi có mạng dữ liệu sẽ tự đồng bộ.')
+                : (canSetup
+                    ? 'Thiết lập menu và công thức để bắt đầu bán hàng.'
+                    : 'Liên hệ quản lý để được thiết lập menu.')
+
+        return (
+            <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-6 pb-6 pt-5 flex items-center justify-center">
+                <div className="bg-surface border border-border/60 rounded-[24px] p-6 max-w-sm w-full text-center shadow-sm">
+                    <div className="text-[15px] font-black text-text mb-1.5">{title}</div>
+                    <div className="text-[13px] text-text-secondary mb-4 leading-relaxed">{description}</div>
+                    {!isLoading && hasError && (
+                        <button
+                            onClick={() => window.location.reload()}
+                            className="w-full py-3 rounded-[12px] bg-primary text-bg font-black text-[14px] hover:bg-primary/90 active:bg-primary/80 transition-colors uppercase"
+                        >
+                            Tải lại
+                        </button>
+                    )}
+                    {!isLoading && !hasError && canSetup && (
+                        <button
+                            onClick={() => navigate('/recipes', { state: { from: '/pos' } })}
+                            className="w-full py-3 rounded-[12px] bg-primary text-bg font-black text-[14px] hover:bg-primary/90 active:bg-primary/80 transition-colors uppercase"
+                        >
+                            Thiết lập menu
+                        </button>
+                    )}
+                </div>
+            </main>
+        )
+    }
 
     return (
         <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-6 pb-6 pt-5">

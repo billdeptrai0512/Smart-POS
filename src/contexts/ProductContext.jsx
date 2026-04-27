@@ -34,6 +34,7 @@ export function ProductProvider() {
     const [productExtras, setProductExtras] = useState(() => readCache('extras', {}))
     const [extraIngredients, setExtraIngredients] = useState(() => readCache('extra_ingredients', {}))
     const [loading, setLoading] = useState(true)
+    const [loadError, setLoadError] = useState(null)
 
     const applyData = useCallback((prods, recs, costsResult, extras, extraIngs, addressId) => {
         const { costs, units } = costsResult
@@ -68,6 +69,7 @@ export function ProductProvider() {
         async function load() {
             try {
                 setLoading(true)
+                setLoadError(null)
                 const [prods, recs, costsResult, extras] = await Promise.all([
                     fetchProducts(addressId),
                     fetchAllRecipes(addressId),
@@ -79,6 +81,7 @@ export function ProductProvider() {
                 applyData(prods, recs, costsResult, extras, extraIngs, addressId)
             } catch (error) {
                 console.error('Failed to load product data', error)
+                setLoadError(error)
             } finally {
                 setLoading(false)
             }
@@ -134,7 +137,8 @@ export function ProductProvider() {
             productExtras,
             extraIngredients,
             refreshProducts,
-            loading
+            loading,
+            loadError
         }}>
             <Outlet />
         </ProductContext.Provider>
