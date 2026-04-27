@@ -2,84 +2,44 @@ import { supabase } from '../lib/supabaseClient'
 
 
 
-// Fetch all products for the menu (incorporates default system products + branch specific)
+// Fetch all products for the menu (purely branch isolated)
 export async function fetchProducts(addressId) {
     if (!supabase) return []
 
-    // 1. Fetch base products (default + branch owned)
     let query = supabase.from('products').select('id, name, price, is_active, owner_address_id, sort_order').eq('is_active', true)
 
     if (addressId) {
-        query = query.or(`owner_address_id.is.null,owner_address_id.eq.${addressId}`)
+        query = query.eq('owner_address_id', addressId)
     } else {
         query = query.is('owner_address_id', null)
     }
 
-    let { data: prods, error } = await query
+    const { data: prods, error } = await query
 
     if (error) {
-        if (error.code === '42703') {
-            // Fallback if migration hasn't been run yet
-            const { data: fallbackProds } = await supabase.from('products').select('id, name, price, is_active').eq('is_active', true).order('name')
-            prods = fallbackProds
-        } else {
-            console.error('fetchProducts error:', error)
-            return []
-        }
+        console.error('fetchProducts error:', error)
+        return []
     }
 
     let products = prods || []
 
-    if (addressId && products.length > 0) {
-        // 2. Fetch overrides (hidden flags, sort order, custom prices)
-        const [apRes, pricesRes] = await Promise.all([
-            supabase.from('address_products').select('product_id, sort_order, is_hidden').eq('address_id', addressId),
-            supabase.from('product_prices').select('product_id, price').eq('address_id', addressId)
-        ])
-
-        const apData = apRes.data || []
-        const pricesData = pricesRes.data || []
-
-        const hiddenIds = new Set(apData.filter(ap => ap.is_hidden).map(ap => ap.product_id))
-
-        const priceMap = {}
-        for (let p of pricesData) priceMap[p.product_id] = p.price
-
-        const sortMap = {}
-        for (let ap of apData) sortMap[ap.product_id] = ap.sort_order
-
-        // 3. Filter out hidden and apply overrides
-        products = products.filter(p => !hiddenIds.has(p.id))
-
-        products = products.map(p => ({
-            ...p,
-            price: priceMap[p.id] !== undefined ? priceMap[p.id] : p.price,
-            sort_order: sortMap[p.id] !== undefined ? sortMap[p.id] : (p.sort_order ?? 999999)
-        }))
-
-        // Sort by sort_order naturally, fallback to name
-        products.sort((a, b) => {
-            if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order
-            return a.name.localeCompare(b.name)
-        })
-    } else {
-        products.sort((a, b) => {
-            const aSort = a.sort_order ?? 999999;
-            const bSort = b.sort_order ?? 999999;
-            if (aSort !== bSort) return aSort - bSort;
-            return a.name.localeCompare(b.name);
-        })
-    }
+    products.sort((a, b) => {
+        const aSort = a.sort_order ?? 999999;
+        const bSort = b.sort_order ?? 999999;
+        if (aSort !== bSort) return aSort - bSort;
+        return a.name.localeCompare(b.name);
+    })
 
     return products
 }
 
-// Upsert a product price override for a specific address
+// Update product price directly (isolated clone architecture)
 export async function upsertProductPrice(productId, addressId, price) {
     if (!supabase) return
     const { error } = await supabase
-        .from('product_prices')
-        .upsert({ product_id: productId, address_id: addressId, price }, { onConflict: 'product_id,address_id' })
+        .from('products')
+        .update({ price })
+        .eq('id', productId)
     if (error) throw error
 }
 
@@ -248,13 +208,13 @@ export async function fetchInventory() {
     return {}
 }
 
-// Fetch all recipes from Supabase
+// Fetch all recipes from Supabase (Pure isolated by address)
 export async function fetchAllRecipes(addressId) {
     if (!supabase) return []
     let query = supabase.from('recipes').select('product_id, ingredient, amount, unit, address_id')
 
     if (addressId) {
-        query = query.or(`address_id.eq.${addressId},address_id.is.null`)
+        query = query.eq('address_id', addressId)
     } else {
         query = query.is('address_id', null)
     }
@@ -265,20 +225,7 @@ export async function fetchAllRecipes(addressId) {
         return []
     }
 
-    if (!data || data.length === 0) return []
-
-    const defaultData = data.filter(d => d.address_id === null)
-    const addressData = data.filter(d => d.address_id === addressId)
-    const addressProductIds = new Set(addressData.map(d => d.product_id))
-
-    const finalRecipes = [...addressData]
-    for (const d of defaultData) {
-        if (!addressProductIds.has(d.product_id)) {
-            finalRecipes.push(d)
-        }
-    }
-
-    return finalRecipes
+    return data || []
 }
 
 // Fetch recipes for a list of product IDs
@@ -340,39 +287,9 @@ export async function fetchIngredientCosts(addressId) {
     return costs
 }
 
-// Utility to ensure an address has a copy of the default recipe for a product before modifying
-async function ensureAddressRecipe(productId, addressId) {
-    if (!supabase || !addressId) return
-
-    const { data } = await supabase
-        .from('recipes')
-        .select('id')
-        .eq('product_id', productId)
-        .eq('address_id', addressId)
-        .limit(1)
-
-    if (!data || data.length === 0) {
-        // clone default recipe for this product
-        const { data: defaults } = await supabase
-            .from('recipes')
-            .select('product_id, ingredient, amount, unit')
-            .eq('product_id', productId)
-            .is('address_id', null)
-
-        if (defaults && defaults.length > 0) {
-            const inserts = defaults.map(d => ({ ...d, address_id: addressId }))
-            await supabase.from('recipes').insert(inserts)
-        }
-    }
-}
-
 // Upsert a recipe row (insert or update ingredient amount for a product)
 export async function upsertRecipe(productId, ingredient, amount, addressId = null, unit = null) {
     if (!supabase) throw new Error('No Supabase connection')
-
-    if (addressId) {
-        await ensureAddressRecipe(productId, addressId)
-    }
 
     const payload = { product_id: productId, ingredient, amount }
     if (unit) payload.unit = unit
@@ -387,9 +304,6 @@ export async function upsertRecipe(productId, ingredient, amount, addressId = nu
 // Delete a recipe row
 export async function deleteRecipeRow(productId, ingredient, addressId = null) {
     if (!supabase) throw new Error('No Supabase connection')
-    if (addressId) {
-        await ensureAddressRecipe(productId, addressId)
-    }
 
     let query = supabase
         .from('recipes')
@@ -448,8 +362,14 @@ export async function insertProduct(name, price, addressId = null) {
     if (!supabase) throw new Error('No Supabase connection')
 
     const payload = { name, price }
-    // Add owner_address_id safely
     if (addressId) payload.owner_address_id = addressId
+
+    let query = supabase.from('products').select('sort_order')
+    if (addressId) query = query.eq('owner_address_id', addressId)
+    else query = query.is('owner_address_id', null)
+
+    const { data: maxRow } = await query.order('sort_order', { ascending: false }).limit(1).maybeSingle()
+    payload.sort_order = (maxRow?.sort_order ?? -1) + 1
 
     const { data, error } = await supabase
         .from('products')
@@ -458,100 +378,40 @@ export async function insertProduct(name, price, addressId = null) {
         .single()
 
     if (error) throw error
-
-    // Link to address_products with sort_order at the end so it can be explicitly sorted
-    if (data && addressId) {
-        // Get current max sort_order for this address
-        const { data: maxRow } = await supabase
-            .from('address_products')
-            .select('sort_order')
-            .eq('address_id', addressId)
-            .order('sort_order', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-
-        const nextOrder = (maxRow?.sort_order ?? -1) + 1
-
-        await supabase.from('address_products').insert({
-            address_id: addressId,
-            product_id: data.id,
-            sort_order: nextOrder,
-            is_hidden: false
-        })
-    }
-
     return data
 }
 
-// Remove a product from an address (hide default or delete custom)
+// Remove a product from an address (soft delete)
 export async function removeProductFromAddress(productId, addressId) {
     if (!supabase) throw new Error('No Supabase connection')
-
-    // Check if this product is owned by this address (custom product)
-    const { data: prod } = await supabase
-        .from('products')
-        .select('owner_address_id')
-        .eq('id', productId)
-        .single()
-
-    if (prod && prod.owner_address_id === addressId) {
-        // Soft-delete custom branch product or default global product
-        // We use is_active = false to avoid violating order_items foreign keys
-        const { error } = await supabase.from('products').update({ is_active: false }).eq('id', productId)
-        if (error) throw error
-    } else {
-        // Soft-delete (hide) default system product for a specific branch
-        const { data: existing } = await supabase
-            .from('address_products')
-            .select('id')
-            .eq('address_id', addressId)
-            .eq('product_id', productId)
-            .maybeSingle()
-
-        if (existing) {
-            await supabase.from('address_products').update({ is_hidden: true }).eq('id', existing.id)
-        } else {
-            await supabase.from('address_products').insert({ address_id: addressId, product_id: productId, is_hidden: true })
-        }
-    }
+    // Everyone owns their isolated products, so just soft-delete the specific ID.
+    const { error } = await supabase.from('products').update({ is_active: false }).eq('id', productId)
+    if (error) throw error
     return true
 }
 
 // Update sort order for products at an address
 export async function updateProductSortOrder(addressId, orderedProductIds) {
     if (!supabase) throw new Error('No Supabase connection')
-
-    if (addressId) {
-        // Batch update sort_order for each product
-        const updates = orderedProductIds.map((productId, index) =>
-            supabase
-                .from('address_products')
-                .update({ sort_order: index })
-                .eq('address_id', addressId)
-                .eq('product_id', productId)
-        )
-        await Promise.all(updates)
-    } else {
-        // Admin sorting global default products
-        const updates = orderedProductIds.map((productId, index) =>
-            supabase
-                .from('products')
-                .update({ sort_order: index })
-                .eq('id', productId)
-        )
-        await Promise.all(updates)
-    }
+    // Directly update native sort_order in products table
+    const updates = orderedProductIds.map((productId, index) =>
+        supabase
+            .from('products')
+            .update({ sort_order: index })
+            .eq('id', productId)
+    )
+    await Promise.all(updates)
 }
 
 // ---- Product Extras CRUD ----
 
-// Fetch all product extras (returns { productId: [{ id, name, price }] })
+// Fetch all product extras (Pure isolated)
 export async function fetchProductExtras(addressId) {
     if (!supabase) return {}
     let query = supabase.from('product_extras').select('id, product_id, name, price, address_id, sort_order, is_sticky').order('sort_order', { ascending: true, nullsFirst: false })
 
     if (addressId) {
-        query = query.or(`address_id.eq.${addressId},address_id.is.null`)
+        query = query.eq('address_id', addressId)
     } else {
         query = query.is('address_id', null)
     }
@@ -563,21 +423,8 @@ export async function fetchProductExtras(addressId) {
     }
     if (!data || data.length === 0) return {}
 
-    // Address-specific extras override defaults per product
-    const defaultExtras = data.filter(d => d.address_id === null)
-    const addressExtras = data.filter(d => d.address_id === addressId)
-    const addressProductIds = new Set(addressExtras.map(d => d.product_id))
-
-    const finalExtras = [...addressExtras]
-    for (const d of defaultExtras) {
-        if (!addressProductIds.has(d.product_id)) {
-            finalExtras.push(d)
-        }
-    }
-    finalExtras.sort((a, b) => (a.sort_order ?? Infinity) - (b.sort_order ?? Infinity))
-
     const extrasMap = {}
-    for (const ex of finalExtras) {
+    for (const ex of data) {
         if (!ex.id) continue  // skip corrupted rows with null id
         if (!extrasMap[ex.product_id]) extrasMap[ex.product_id] = []
         extrasMap[ex.product_id].push({ id: ex.id, name: ex.name, price: ex.price, is_sticky: ex.is_sticky || false })
