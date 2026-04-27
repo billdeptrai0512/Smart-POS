@@ -286,7 +286,7 @@ export async function fetchBranchTodayCups(addressIds) {
 
     const { data, error } = await supabase
         .from('orders')
-        .select('address_id, order_items(quantity)')
+        .select('address_id, order_items(quantity, products(count_as_cup))')
         .in('address_id', addressIds)
         .gte('created_at', today.toISOString())
 
@@ -297,7 +297,10 @@ export async function fetchBranchTodayCups(addressIds) {
 
     const result = {}
     ;(data || []).forEach(order => {
-        const qty = (order.order_items || []).reduce((s, i) => s + i.quantity, 0)
+        const qty = (order.order_items || []).reduce((s, i) => {
+            if (i.products?.count_as_cup === false) return s
+            return s + i.quantity
+        }, 0)
         result[order.address_id] = (result[order.address_id] || 0) + qty
     })
     return result

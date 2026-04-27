@@ -111,7 +111,10 @@ export default function RangeReportPage() {
                 const qty = i.quantity || 1
                 const productId = i.product_id
 
-                if (selectedProductId === 'all' || selectedProductId === productId) {
+                const prodDef = productMap.get(productId)
+                if (selectedProductId === 'all') {
+                    if (prodDef?.count_as_cup !== false) totalCups += qty
+                } else if (selectedProductId === productId) {
                     totalCups += qty
                 }
                 soldProducts.add(productId)
@@ -122,7 +125,6 @@ export default function RangeReportPage() {
                     totalCOGS += cost * qty
                 }
 
-                const prodDef = productMap.get(productId)
                 const basePrice = prodDef?.price || 0
                 const extrasPrice = (i.extra_ids || []).reduce((sum, id) => sum + (extraPriceMap[id] || 0), 0)
                 const unitRevenue = basePrice + extrasPrice
@@ -155,6 +157,7 @@ export default function RangeReportPage() {
 
     const prevStats = useMemo(() => {
         let revenue = 0, cups = 0, totalCOGS = 0
+        const prevProductMap = new Map(products.map(p => [p.id, p]))
         prevOrders.forEach(o => {
             revenue += o.total
 
@@ -166,7 +169,9 @@ export default function RangeReportPage() {
             orderItems.forEach(i => {
                 const qty = i.quantity || 1
                 const productId = i.product_id
-                if (selectedProductId === 'all' || selectedProductId === productId) {
+                if (selectedProductId === 'all') {
+                    if (prevProductMap.get(productId)?.count_as_cup !== false) cups += qty
+                } else if (selectedProductId === productId) {
                     cups += qty
                 }
 
@@ -185,7 +190,7 @@ export default function RangeReportPage() {
         const netProfit = revenue - totalCOGS - dailyExpense - fixedExpense
 
         return { revenue, cups, netProfit }
-    }, [prevOrders, prevExpenses, prevShiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, selectedProductId, prevDays])
+    }, [prevOrders, prevExpenses, prevShiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, selectedProductId, prevDays, products])
 
     const delta = (curr, prev) => {
         if (!prev) return null
@@ -329,7 +334,7 @@ export default function RangeReportPage() {
                         </div>
 
                         {/* Performance chart */}
-                        <DayPerformanceChart orders={orders} range={range} start={periodStart} end={periodEnd} />
+                        <DayPerformanceChart orders={orders} range={range} start={periodStart} end={periodEnd} products={products} />
 
 
                         <div className="flex items-center gap-3 py-1 px-4">

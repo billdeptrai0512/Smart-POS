@@ -72,7 +72,8 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                 return {
                     text: `${i.quantity} ${pName}${options ? ` (${options})` : ''}`,
                     cost: getItemCost(i.product_id, i.extras || [], i.unit_cost || 0) * i.quantity,
-                    quantity: i.quantity
+                    quantity: i.quantity,
+                    productId: i.product_id
                 }
             }) : []
         }
@@ -98,7 +99,8 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                     return {
                         text: `${i.quantity} ${i.name}${extras.length ? ` (${extras.map(e => e.name).join(' - ')})` : ''}`,
                         cost: itemCost * i.quantity,
-                        quantity: i.quantity
+                        quantity: i.quantity,
+                        productId: i.productId
                     }
                 })
                 : o.orderItems ? o.orderItems.map(i => {
@@ -106,7 +108,8 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                     return {
                         text: `${i.quantity} ${i.name}`,
                         cost: itemCost * i.quantity,
-                        quantity: i.quantity
+                        quantity: i.quantity,
+                        productId: i.productId
                     }
                 }) : []
         }))
@@ -126,9 +129,13 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
     // --- Stats ---
     const totalExpenseCount = formattedExpenses.length
     const totalExpenseAmount = formattedExpenses.reduce((sum, e) => sum + e.cost, 0)
+    const productCountMap = new Map((products || []).map(p => [p.id, p.count_as_cup !== false]))
     const totalCups = allOrders.reduce((sum, o) => {
         if (o.isExpense || !o.items) return sum;
-        return sum + o.items.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0);
+        return sum + o.items.reduce((itemSum, item) => {
+            if (item.productId && productCountMap.get(item.productId) === false) return itemSum
+            return itemSum + (item.quantity || 0)
+        }, 0);
     }, 0)
 
     // Running totals (oldest first to accumulate)

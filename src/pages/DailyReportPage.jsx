@@ -137,20 +137,30 @@ export default function DailyReportPage() {
     }, [todayOrders, productMap, extraMaps, recipes, extraIngredients, ingredientCosts])
 
     // totalCups separated: only reruns when filter or orders change, not on other UI state
+    // When 'all' filter, products with count_as_cup=false are excluded; when filtering a specific product, always count it.
     const totalCups = useMemo(() => {
         let cups = 0
+        const isExcluded = (pid) => productMap.get(pid)?.count_as_cup === false
         todayOrders.forEach(o => {
             ;(o.order_items || []).forEach(i => {
-                if (selectedProductId === 'all' || selectedProductId === i.product_id) cups += i.quantity || 1
+                if (selectedProductId === 'all') {
+                    if (!isExcluded(i.product_id)) cups += i.quantity || 1
+                } else if (selectedProductId === i.product_id) {
+                    cups += i.quantity || 1
+                }
             })
         })
         offlineToday.forEach(o => {
             ;(o.cart || o.orderItems || []).forEach(i => {
-                if (selectedProductId === 'all' || selectedProductId === i.productId) cups += i.quantity || 1
+                if (selectedProductId === 'all') {
+                    if (!isExcluded(i.productId)) cups += i.quantity || 1
+                } else if (selectedProductId === i.productId) {
+                    cups += i.quantity || 1
+                }
             })
         })
         return cups
-    }, [todayOrders, offlineToday, selectedProductId])
+    }, [todayOrders, offlineToday, selectedProductId, productMap])
 
     const dailyExpense = useMemo(() =>
         (todayExpenses || []).filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0),

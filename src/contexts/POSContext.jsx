@@ -19,7 +19,7 @@ export function usePOS() {
 }
 
 export function POSProvider() {
-    const { recipes, ingredientCosts, extraIngredients, productExtras } = useProducts()
+    const { products, recipes, ingredientCosts, extraIngredients, productExtras } = useProducts()
     const { selectedAddress } = useAddress()
     const { profile } = useAuth()
     const addressId = selectedAddress?.id
@@ -80,7 +80,7 @@ export function POSProvider() {
                     setInventory(prev => Object.keys(prev).length ? prev : inv)
                 }
             } catch (error) {
-                console.error('Failed to load POS data', error)
+                showError(error, 'Tải dữ liệu hôm nay')
             }
         }
         load()
@@ -320,9 +320,14 @@ export function POSProvider() {
         const savedCart = [...cart]
         const savedTotal = total
         const savedOrderCount = orderCount
+        const countableQty = cart.reduce((sum, item) => {
+            const prod = products?.find(p => p.id === item.productId)
+            if (prod?.count_as_cup === false) return sum
+            return sum + item.quantity
+        }, 0)
         setRevenue(prev => prev + savedTotal)
         setTotalCost(prev => prev + cartCost)
-        setCupsSold(prev => prev + savedOrderCount)
+        setCupsSold(prev => prev + countableQty)
         setLastOrder(buildLastOrderFromCart(savedCart, savedTotal))
         setCart([])
         setActiveCartItemId(null)
@@ -343,8 +348,7 @@ export function POSProvider() {
                     addPendingOrder(enrichedCart, savedTotal, null, addressId, cartCost)
                     showToast('Lỗi mạng – đã lưu offline', 'warning')
                 } else {
-                    console.error('Order submit error (data):', err)
-                    showToast('Lỗi tạo đơn – vui lòng thử lại', 'danger')
+                    showError(err, 'Tạo đơn hàng')
                 }
             })
         } else {

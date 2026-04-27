@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabaseClient'
 export async function fetchProducts(addressId) {
     if (!supabase) return []
 
-    let query = supabase.from('products').select('id, name, price, is_active, owner_address_id, sort_order').eq('is_active', true)
+    let query = supabase.from('products').select('id, name, price, is_active, owner_address_id, sort_order, count_as_cup').eq('is_active', true)
 
     if (addressId) {
         query = query.eq('owner_address_id', addressId)
@@ -43,18 +43,38 @@ export async function upsertProductPrice(productId, addressId, price) {
     if (error) throw error
 }
 
-// Fetch today's revenue + cups in a single DB aggregate (replaces fetchTodayRevenue + fetchTodayCupsSold)
+// Toggle whether a product counts toward daily cup total
+export async function updateProductCountAsCup(productId, countAsCup) {
+    if (!supabase) return
+    const { error } = await supabase
+        .from('products')
+        .update({ count_as_cup: countAsCup })
+        .eq('id', productId)
+    if (error) throw error
+}
+
+// Fetch today's revenue + cups (cups excludes products with count_as_cup=false)
 export async function fetchTodayStats(addressId) {
     if (!supabase || !addressId) return { revenue: 0, cups: 0 }
     const from = new Date()
     from.setHours(0, 0, 0, 0)
-    const { data, error } = await supabase.rpc('get_today_stats', {
-        p_address_id: addressId,
-        p_from: from.toISOString(),
-        p_to: new Date().toISOString(),
-    })
+
+    const { data, error } = await supabase
+        .from('orders')
+        .select('total, order_items(quantity, products(count_as_cup))')
+        .eq('address_id', addressId)
+        .gte('created_at', from.toISOString())
+
     if (error) { console.error('fetchTodayStats error:', error); return { revenue: 0, cups: 0 } }
-    return { revenue: Number(data?.revenue || 0), cups: Number(data?.cups || 0) }
+
+    let revenue = 0, cups = 0
+    ;(data || []).forEach(o => {
+        revenue += Number(o.total || 0)
+        ;(o.order_items || []).forEach(i => {
+            if (i.products?.count_as_cup !== false) cups += Number(i.quantity || 0)
+        })
+    })
+    return { revenue, cups }
 }
 
 // Fetch all orders for today, newest first (optionally scoped by address)

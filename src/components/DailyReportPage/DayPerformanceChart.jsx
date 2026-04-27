@@ -4,7 +4,14 @@ import { formatVND } from '../../utils'
 
 const DAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
 
-function buildWeekData(orders, start) {
+function countableQty(items, countMap) {
+    return (items || []).reduce((s, i) => {
+        if (countMap.get(i.product_id) === false) return s
+        return s + (i.quantity || 1)
+    }, 0)
+}
+
+function buildWeekData(orders, start, countMap) {
     const slots = Array.from({ length: 7 }, (_, i) => {
         const d = new Date(start)
         d.setDate(start.getDate() + i)
@@ -14,14 +21,14 @@ function buildWeekData(orders, start) {
         const d = new Date(o.created_at)
         const diff = Math.floor((d - start) / 86400000)
         if (diff >= 0 && diff < 7) {
-            slots[diff].cups += (o.order_items || []).reduce((s, i) => s + (i.quantity || 1), 0)
+            slots[diff].cups += countableQty(o.order_items, countMap)
             slots[diff].revenue += o.total
         }
     })
     return slots
 }
 
-function buildMonthData(orders, start, end) {
+function buildMonthData(orders, start, end, countMap) {
     const slots = []
     let wStart = new Date(start)
     let wNum = 1
@@ -36,7 +43,7 @@ function buildMonthData(orders, start, end) {
         const d = new Date(o.created_at)
         const slot = slots.find(w => d >= w.wStart && d <= w.wEnd)
         if (slot) {
-            slot.cups += (o.order_items || []).reduce((s, i) => s + (i.quantity || 1), 0)
+            slot.cups += countableQty(o.order_items, countMap)
             slot.revenue += o.total
         }
     })
@@ -56,15 +63,20 @@ const CustomTooltip = ({ active, payload, label }) => {
     )
 }
 
-export default function DayPerformanceChart({ orders, range, start, end }) {
+export default function DayPerformanceChart({ orders, range, start, end, products }) {
     const now = new Date()
+
+    const countMap = useMemo(
+        () => new Map((products || []).map(p => [p.id, p.count_as_cup !== false])),
+        [products]
+    )
 
     const data = useMemo(() => {
         if (!start) return []
-        if (range === 'week') return buildWeekData(orders, start)
-        if (range === 'month') return buildMonthData(orders, start, end)
+        if (range === 'week') return buildWeekData(orders, start, countMap)
+        if (range === 'month') return buildMonthData(orders, start, end, countMap)
         return []
-    }, [orders, range, start, end])
+    }, [orders, range, start, end, countMap])
 
     const maxCups = useMemo(() => Math.max(...data.map(d => d.cups), 1), [data])
 

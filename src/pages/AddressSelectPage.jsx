@@ -53,9 +53,9 @@ export default function AddressSelectPage() {
                 const addressId = payload.new.address_id
                 const address = addresses.find(a => a.id === addressId)
 
-                const { data: items } = await supabase.from('order_items').select('quantity').eq('order_id', payload.new.id)
+                const { data: items } = await supabase.from('order_items').select('quantity, products(count_as_cup)').eq('order_id', payload.new.id)
                 let qty = 0
-                if (items) qty = items.reduce((s, i) => s + i.quantity, 0)
+                if (items) qty = items.reduce((s, i) => i.products?.count_as_cup === false ? s : s + i.quantity, 0)
 
                 setRealtimeNotification({
                     title: address ? address.name : 'Đơn mới',

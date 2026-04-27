@@ -8,6 +8,7 @@ import {
     upsertRecipe,
     deleteRecipeRow,
     upsertProductPrice,
+    updateProductCountAsCup,
     insertProductExtra,
     updateProductExtraName,
     updateProductExtraPrice,
@@ -117,6 +118,19 @@ export default function RecipeIngredientPage() {
         } finally {
             setSaving(false)
             setEditingProductPrice(null)
+        }
+    }
+
+    async function toggleCountAsCup() {
+        const next = product?.count_as_cup === false
+        setSaving(true)
+        try {
+            await updateProductCountAsCup(productId, next)
+            refreshProducts?.()
+        } catch (err) {
+            showError(err, 'Cập nhật cờ đếm ly')
+        } finally {
+            setSaving(false)
         }
     }
 
@@ -429,6 +443,21 @@ export default function RecipeIngredientPage() {
             </header>
 
             <main className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-bg">
+                {canEdit && (
+                    <label className="flex items-center justify-between gap-3 bg-surface border border-border/60 rounded-[14px] px-4 py-3 cursor-pointer select-none">
+                        <span className="flex flex-col min-w-0">
+                            <span className="text-[13px] font-bold text-text">Tính vào tổng số ly bán/ngày</span>
+                            <span className="text-[11px] text-text-secondary">Tắt cho món tặng kèm như Trà Đá</span>
+                        </span>
+                        <input
+                            type="checkbox"
+                            checked={product?.count_as_cup !== false}
+                            onChange={toggleCountAsCup}
+                            disabled={saving}
+                            className="w-5 h-5 accent-primary cursor-pointer shrink-0"
+                        />
+                    </label>
+                )}
                 <div className="space-y-2">
                     {prodRecipes.length === 0 && (
                         <p className="text-text-secondary text-[13px] text-center py-6">Chưa có nguyên liệu nào.</p>
