@@ -175,8 +175,9 @@ export async function fetchManagers() {
 }
 
 // Fetch addresses for a manager
+// Returns { data, error } — caller decides how to surface failures.
 export async function fetchAddresses(managerId) {
-    if (!supabase) return []
+    if (!supabase) return { data: [], error: null }
 
     let query = supabase.from('addresses').select('*').order('created_at')
 
@@ -187,9 +188,19 @@ export async function fetchAddresses(managerId) {
     const { data, error } = await query
     if (error) {
         console.error('fetchAddresses error:', error)
-        return []
+        return { data: [], error }
     }
-    return data
+    return { data, error: null }
+}
+
+// Translate Postgres unique-violation (23505) into a user-facing message.
+function rethrowAddressError(error, name) {
+    if (error?.code === '23505') {
+        const e = new Error(`Địa chỉ "${name}" đã tồn tại`)
+        e.code = '23505'
+        throw e
+    }
+    throw error
 }
 
 // Create a new address for a manager
@@ -200,7 +211,7 @@ export async function createAddress(managerId, name) {
         .insert({ manager_id: managerId, name })
         .select()
         .single()
-    if (error) throw error
+    if (error) rethrowAddressError(error, name)
     return data
 }
 
@@ -213,7 +224,7 @@ export async function updateAddress(addressId, name) {
         .eq('id', addressId)
         .select()
         .single()
-    if (error) throw error
+    if (error) rethrowAddressError(error, name)
     return data
 }
 

@@ -1,6 +1,9 @@
 -- =============================================
 -- Coffee Cart Order App – Supabase Schema
 -- =============================================
+-- Reflects the schema actually in use by the application code.
+-- Drift can creep in via the Supabase dashboard; if you change the DB there,
+-- mirror the change here too.
 
 -- Users profiles (managers and staff, linked to Supabase Auth)
 CREATE TABLE IF NOT EXISTS users (
@@ -9,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('manager', 'staff', 'admin')),
   manager_id UUID REFERENCES users(id), -- staff belongs to a manager
+  email TEXT,
   password TEXT NOT NULL DEFAULT ''
 );
 
@@ -21,22 +25,37 @@ CREATE TABLE IF NOT EXISTS addresses (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Products (menu items)
+-- Prevent duplicate address names per manager (case/space-insensitive).
+-- Backstop for the client-side check; required to defeat concurrent-tab races.
+CREATE UNIQUE INDEX IF NOT EXISTS addresses_manager_name_unique
+  ON addresses (manager_id, lower(regexp_replace(trim(name), '\s+', ' ', 'g')));
+
+-- Invite tokens for staff onboarding
+CREATE TABLE IF NOT EXISTS invite_tokens (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  token TEXT NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(16), 'hex'),
+  manager_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TIMESTAMPTZ DEFAULT (now() + interval '7 days'),
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Products (menu items) — per-address isolated.
+-- Each address owns its own clone of every product (set via owner_address_id).
+-- Rows with owner_address_id IS NULL are the global "default template" used by
+-- the admin "Mẫu mặc định" view.
 CREATE TABLE IF NOT EXISTS products (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
   price INTEGER NOT NULL, -- price in VND
-  is_active BOOLEAN DEFAULT true
+  is_active BOOLEAN DEFAULT true,
+  owner_address_id UUID REFERENCES addresses(id) ON DELETE CASCADE,
+  sort_order INTEGER,
+  count_as_cup BOOLEAN NOT NULL DEFAULT true
 );
 
--- Product prices (overrides per address)
-CREATE TABLE IF NOT EXISTS product_prices (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  product_id UUID REFERENCES products(id) ON DELETE CASCADE,
-  address_id UUID REFERENCES addresses(id) ON DELETE CASCADE,
-  price INTEGER NOT NULL, -- price in VND
-  UNIQUE (product_id, address_id)
-);
+CREATE INDEX IF NOT EXISTS idx_products_owner_address
+  ON products (owner_address_id) WHERE is_active;
 
 -- Recipes (ingredients per product, address_id NULL = global default)
 CREATE TABLE IF NOT EXISTS recipes (
@@ -84,7 +103,7 @@ CREATE TABLE IF NOT EXISTS order_items (
   quantity INTEGER NOT NULL
 );
 
--- Expenses (manual costs)
+-- Expenses (manual one-off costs)
 CREATE TABLE IF NOT EXISTS expenses (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   address_id UUID REFERENCES addresses(id) ON DELETE CASCADE,
@@ -95,13 +114,15 @@ CREATE TABLE IF NOT EXISTS expenses (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Address-specific product menu (many-to-many with sort order)
-CREATE TABLE IF NOT EXISTS address_products (
+-- Fixed monthly costs (rent, salary etc.) per address — soft-delete via is_active=false
+CREATE TABLE IF NOT EXISTS fixed_costs (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   address_id UUID REFERENCES addresses(id) ON DELETE CASCADE,
-  product_id UUID REFERENCES products(id) ON DELETE CASCADE,
-  sort_order INTEGER NOT NULL DEFAULT 0,
-  UNIQUE(address_id, product_id)
+  name TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Product extras (per-product quick options, e.g. "Lớn" +6000đ)
@@ -150,6 +171,16 @@ CREATE TABLE IF NOT EXISTS shift_closings (
 
 CREATE INDEX IF NOT EXISTS idx_shift_closings_address_date
   ON shift_closings (address_id, closed_at DESC);
+
+-- =============================================
+-- Deprecated tables (commit 43af730 "new design of database product on address")
+-- =============================================
+-- The product menu used to be a many-to-many link via address_products and
+-- per-address price overrides via product_prices. Both are now obsolete:
+-- products.owner_address_id + products.price replaces them entirely.
+-- Drop only after confirming nothing in production reads these.
+DROP TABLE IF EXISTS address_products CASCADE;
+DROP TABLE IF EXISTS product_prices CASCADE;
 
 -- =============================================
 -- Row Level Security Policies
@@ -201,13 +232,6 @@ DROP POLICY IF EXISTS "products_write" ON products;
 CREATE POLICY "products_read" ON products FOR SELECT USING (true);
 CREATE POLICY "products_write" ON products FOR ALL USING (auth.uid() IS NOT NULL);
 
--- Product prices: read for all, write for authenticated managers
-ALTER TABLE product_prices ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "prices_read" ON product_prices;
-DROP POLICY IF EXISTS "prices_write" ON product_prices;
-CREATE POLICY "prices_read" ON product_prices FOR SELECT USING (true);
-CREATE POLICY "prices_write" ON product_prices FOR ALL USING (auth.uid() IS NOT NULL);
-
 -- Recipes: read for all, write for authenticated managers
 ALTER TABLE recipes ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "recipes_read" ON recipes;
@@ -229,17 +253,32 @@ DROP POLICY IF EXISTS "extras_write" ON product_extras;
 CREATE POLICY "extras_read" ON product_extras FOR SELECT USING (true);
 CREATE POLICY "extras_write" ON product_extras FOR ALL USING (auth.uid() IS NOT NULL);
 
--- Address products: read for all, write for authenticated managers
-ALTER TABLE address_products ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "ap_read" ON address_products;
-DROP POLICY IF EXISTS "ap_write" ON address_products;
-CREATE POLICY "ap_read" ON address_products FOR SELECT USING (true);
-CREATE POLICY "ap_write" ON address_products FOR ALL USING (auth.uid() IS NOT NULL);
+-- Extra ingredients: read for all, write for authenticated managers
+ALTER TABLE extra_ingredients ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "extra_ings_read" ON extra_ingredients;
+DROP POLICY IF EXISTS "extra_ings_write" ON extra_ingredients;
+CREATE POLICY "extra_ings_read" ON extra_ingredients FOR SELECT USING (true);
+CREATE POLICY "extra_ings_write" ON extra_ingredients FOR ALL USING (auth.uid() IS NOT NULL);
 
 -- Expenses: managers and admins can access expenses
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "managers_expenses" ON expenses;
 CREATE POLICY "managers_expenses" ON expenses
+  FOR ALL USING (
+    address_id IN (
+      SELECT a.id FROM addresses a
+      JOIN users u ON u.id = a.manager_id
+      WHERE u.auth_id = auth.uid() OR u.id IN (
+        SELECT manager_id FROM users WHERE auth_id = auth.uid() AND role = 'staff'
+      )
+    )
+    OR EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND role = 'admin')
+  );
+
+-- Fixed costs: same access pattern as expenses
+ALTER TABLE fixed_costs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "managers_fixed_costs" ON fixed_costs;
+CREATE POLICY "managers_fixed_costs" ON fixed_costs
   FOR ALL USING (
     address_id IN (
       SELECT a.id FROM addresses a
@@ -261,6 +300,28 @@ CREATE POLICY "managers_own_addresses" ON addresses
     )
     OR manager_id IN (
       SELECT u.manager_id FROM users u WHERE u.auth_id = auth.uid() AND role = 'staff'
+    )
+    OR EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND role = 'admin')
+  );
+
+-- Invite tokens: managers can create/read their own, anyone can validate (for signup)
+ALTER TABLE invite_tokens ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "invite_read" ON invite_tokens;
+DROP POLICY IF EXISTS "invite_write" ON invite_tokens;
+CREATE POLICY "invite_read" ON invite_tokens FOR SELECT USING (true);
+CREATE POLICY "invite_write" ON invite_tokens FOR ALL USING (auth.uid() IS NOT NULL);
+
+-- Shift closings: managers and admins
+ALTER TABLE shift_closings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "managers_shift_closings" ON shift_closings;
+CREATE POLICY "managers_shift_closings" ON shift_closings
+  FOR ALL USING (
+    address_id IN (
+      SELECT a.id FROM addresses a
+      JOIN users u ON u.id = a.manager_id
+      WHERE u.auth_id = auth.uid() OR u.id IN (
+        SELECT manager_id FROM users WHERE auth_id = auth.uid() AND role = 'staff'
+      )
     )
     OR EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND role = 'admin')
   );

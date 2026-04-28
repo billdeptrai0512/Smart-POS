@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
@@ -15,7 +15,7 @@ import Skeleton from '../components/common/Skeleton'
 import BackupModal from '../components/AddressSelectPage/BackupModal'
 
 export default function AddressSelectPage() {
-    const { addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading } = useAddress()
+    const { addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading, fetchError } = useAddress()
     const { signOut, profile, isStaff, isAdmin } = useAuth()
     const navigate = useNavigate()
 
@@ -28,6 +28,8 @@ export default function AddressSelectPage() {
     const [error, setError] = useState('')
     const [editingAddressId, setEditingAddressId] = useState(null)
     const [editName, setEditName] = useState('')
+    const [renaming, setRenaming] = useState(false)
+    const submitGuardRef = useRef(false)
     const [realtimeNotification, setRealtimeNotification] = useState(null)
     const [cupsMap, setCupsMap] = useState({})
     const [sessionsMap, setSessionsMap] = useState({})
@@ -43,6 +45,11 @@ export default function AddressSelectPage() {
     const [generatingLink, setGeneratingLink] = useState(false)
     const [copied, setCopied] = useState(false)
 
+    // Keep a stable ref to addresses so the realtime channel below doesn't
+    // resubscribe on every create/rename/delete (which can drop INSERT events).
+    const addressesRef = useRef(addresses)
+    useEffect(() => { addressesRef.current = addresses }, [addresses])
+
     // Listen for new orders if manager
     useEffect(() => {
         if (!supabase || isStaff) return
@@ -51,7 +58,7 @@ export default function AddressSelectPage() {
             .channel('address-orders-realtime')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, async (payload) => {
                 const addressId = payload.new.address_id
-                const address = addresses.find(a => a.id === addressId)
+                const address = addressesRef.current.find(a => a.id === addressId)
 
                 const { data: items } = await supabase.from('order_items').select('quantity, products(count_as_cup)').eq('order_id', payload.new.id)
                 let qty = 0
@@ -70,12 +77,22 @@ export default function AddressSelectPage() {
             .subscribe()
 
         return () => { supabase.removeChannel(ordersChannel) }
-    }, [addresses, isStaff])
+    }, [isStaff])
 
-    // Background prefetch ProductContext data for all addresses into cache
+    // Stable signature of address IDs — changes only when an address is added/removed,
+    // not on rename. Avoids re-running the heavy prefetch + stats effects unnecessarily.
+    const addressIdsKey = useMemo(() => addresses.map(a => a.id).join('|'), [addresses])
+
+    // Track which IDs we've already prefetched so renames/new addresses don't refetch all.
+    const prefetchedIdsRef = useRef(new Set())
+
+    // Background prefetch ProductContext data into cache (only for new addresses).
     useEffect(() => {
         if (!addresses.length) return
-        addresses.forEach(async addr => {
+        const newAddrs = addresses.filter(a => !prefetchedIdsRef.current.has(a.id))
+        if (!newAddrs.length) return
+        newAddrs.forEach(async addr => {
+            prefetchedIdsRef.current.add(addr.id)
             try {
                 const [prods, recs, costsResult, extras] = await Promise.all([
                     fetchProducts(addr.id),
@@ -95,11 +112,14 @@ export default function AddressSelectPage() {
                     localStorage.setItem(key('extras'), JSON.stringify(extras))
                     localStorage.setItem(key('extra_ingredients'), JSON.stringify(extraIngs))
                 } catch { /* ignore quota */ }
-            } catch { /* ignore prefetch errors */ }
+            } catch {
+                // Allow retry on next render if prefetch failed
+                prefetchedIdsRef.current.delete(addr.id)
+            }
         })
-    }, [addresses])
+    }, [addressIdsKey])
 
-    // Fetch branch stats
+    // Fetch branch stats — only when set of addresses changes, not on rename.
     useEffect(() => {
         if (!addresses.length) return
         const addrIds = addresses.map(a => a.id)
@@ -117,7 +137,7 @@ export default function AddressSelectPage() {
             })
             setSessionsMap(grouped)
         }).finally(() => setStatsLoading(false))
-    }, [addresses])
+    }, [addressIdsKey])
 
     // Fetch staff when tab opens
     useEffect(() => {
@@ -136,6 +156,9 @@ export default function AddressSelectPage() {
     async function handleCreate(e) {
         e.preventDefault()
         if (!newName.trim()) return
+        // Synchronous guard against double-submit (state updates are async, ref is not).
+        if (submitGuardRef.current) return
+        submitGuardRef.current = true
         setCreating(true)
         setError('')
         try {
@@ -147,6 +170,7 @@ export default function AddressSelectPage() {
             setError(err.message || 'Không thể tạo địa chỉ')
         } finally {
             setCreating(false)
+            submitGuardRef.current = false
         }
     }
 
@@ -269,10 +293,17 @@ export default function AddressSelectPage() {
                     <>
                         <div className="space-y-2.5 mb-4">
                             {addresses.length === 0 && !showForm && (
-                                <div className="bg-surface border border-border/60 rounded-[20px] p-6 text-center">
-                                    <Coffee size={24} className="text-text-secondary mx-auto mb-2" />
-                                    <p className="text-text-secondary text-sm">Chưa có địa chỉ nào. Tạo địa chỉ mới để bắt đầu!</p>
-                                </div>
+                                fetchError ? (
+                                    <div className="bg-surface border border-danger/40 rounded-[20px] p-6 text-center">
+                                        <p className="text-danger text-sm font-bold mb-1">Không tải được danh sách địa chỉ</p>
+                                        <p className="text-text-secondary text-xs">{fetchError}</p>
+                                    </div>
+                                ) : (
+                                    <div className="bg-surface border border-border/60 rounded-[20px] p-6 text-center">
+                                        <Coffee size={24} className="text-text-secondary mx-auto mb-2" />
+                                        <p className="text-text-secondary text-sm">Chưa có địa chỉ nào. Tạo địa chỉ mới để bắt đầu!</p>
+                                    </div>
+                                )
                             )}
 
                             {addresses.map(addr => {
@@ -291,11 +322,18 @@ export default function AddressSelectPage() {
                                                 onSubmit={async (e) => {
                                                     e.preventDefault()
                                                     if (!editName.trim()) return
+                                                    if (submitGuardRef.current) return
+                                                    submitGuardRef.current = true
+                                                    setRenaming(true)
+                                                    setError('')
                                                     try {
                                                         await renameAddress(addr.id, editName.trim())
                                                         setEditingAddressId(null)
                                                     } catch (err) {
                                                         setError(err.message || 'Không thể đổi tên')
+                                                    } finally {
+                                                        setRenaming(false)
+                                                        submitGuardRef.current = false
                                                     }
                                                 }}
                                             >
@@ -303,11 +341,25 @@ export default function AddressSelectPage() {
                                                     type="text"
                                                     value={editName}
                                                     onChange={e => setEditName(e.target.value)}
-                                                    className="flex-1 px-3 py-2 rounded-[12px] bg-bg border border-border/60 text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                                                    disabled={renaming}
+                                                    className="flex-1 px-3 py-2 rounded-[12px] bg-bg border border-border/60 text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50"
                                                     autoFocus
                                                 />
-                                                <button type="submit" className="px-3 py-2 bg-primary text-black text-xs font-black rounded-[12px]">Lưu</button>
-                                                <button type="button" onClick={() => { setEditingAddressId(null); setError('') }} className="px-3 py-2 bg-bg border border-border/60 text-text-secondary text-xs font-bold rounded-[12px]">Hủy</button>
+                                                <button
+                                                    type="submit"
+                                                    disabled={renaming || !editName.trim()}
+                                                    className="px-3 py-2 bg-primary text-black text-xs font-black rounded-[12px] disabled:opacity-50 flex items-center gap-1"
+                                                >
+                                                    {renaming ? <Loader size={12} className="animate-spin" /> : 'Lưu'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={renaming}
+                                                    onClick={() => { setEditingAddressId(null); setError('') }}
+                                                    className="px-3 py-2 bg-bg border border-border/60 text-text-secondary text-xs font-bold rounded-[12px] disabled:opacity-50"
+                                                >
+                                                    Hủy
+                                                </button>
                                             </form>
                                         ) : (
                                             <div className="flex items-stretch">
@@ -543,7 +595,6 @@ export default function AddressSelectPage() {
             {backupSource && (
                 <BackupModal
                     sourceAddress={backupSource}
-                    addresses={addresses}
                     onClose={() => setBackupSource(null)}
                 />
             )}

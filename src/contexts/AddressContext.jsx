@@ -11,11 +11,15 @@ export function useAddress() {
     return ctx
 }
 
+// Normalize a name for duplicate detection (trim + collapse spaces + lowercase)
+const normalizeName = (s) => (s || '').trim().replace(/\s+/g, ' ').toLowerCase()
+
 export function AddressProvider() {
     const { profile } = useAuth()
     const [addresses, setAddresses] = useState([])
     const [selectedAddress, setSelectedAddressState] = useState(null)
     const [loading, setLoading] = useState(true)
+    const [fetchError, setFetchError] = useState(null)
 
     // Load addresses when profile is available
     useEffect(() => {
@@ -40,7 +44,14 @@ export function AddressProvider() {
         }
 
         if (addresses.length === 0) setLoading(true)
-        fetchAddresses(addressOwnerId).then(addrs => {
+        setFetchError(null)
+        fetchAddresses(addressOwnerId).then(({ data, error }) => {
+            if (error) {
+                setFetchError(error.message || 'Không tải được danh sách địa chỉ')
+                setLoading(false)
+                return
+            }
+            const addrs = data || []
             setAddresses(addrs)
 
             // Restore previously selected address from localStorage
@@ -74,20 +85,32 @@ export function AddressProvider() {
 
     const createNewAddress = useCallback(async (name) => {
         if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể tạo địa chỉ')
-        const newAddr = await apiCreateAddress(profile.id, name)
+        const cleanName = (name || '').trim().replace(/\s+/g, ' ')
+        if (!cleanName) throw new Error('Tên địa chỉ không được để trống')
+        const norm = normalizeName(cleanName)
+        if (addresses.some(a => normalizeName(a.name) === norm)) {
+            throw new Error(`Địa chỉ "${cleanName}" đã tồn tại`)
+        }
+        const newAddr = await apiCreateAddress(profile.id, cleanName)
         setAddresses(prev => [...prev, newAddr])
         return newAddr
-    }, [profile])
+    }, [profile, addresses])
 
     const renameAddress = useCallback(async (addressId, newName) => {
         if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể sửa địa chỉ')
-        const updatedAddr = await apiUpdateAddress(addressId, newName)
+        const cleanName = (newName || '').trim().replace(/\s+/g, ' ')
+        if (!cleanName) throw new Error('Tên địa chỉ không được để trống')
+        const norm = normalizeName(cleanName)
+        if (addresses.some(a => a.id !== addressId && normalizeName(a.name) === norm)) {
+            throw new Error(`Địa chỉ "${cleanName}" đã tồn tại`)
+        }
+        const updatedAddr = await apiUpdateAddress(addressId, cleanName)
         setAddresses(prev => prev.map(a => a.id === addressId ? updatedAddr : a))
         if (selectedAddress?.id === addressId) {
             setSelectedAddressState(updatedAddr)
         }
         return updatedAddr
-    }, [profile, selectedAddress])
+    }, [profile, selectedAddress, addresses])
 
     const removeAddress = useCallback(async (addressId) => {
         if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể xóa địa chỉ')
@@ -117,7 +140,8 @@ export function AddressProvider() {
             renameAddress,
             removeAddress,
             updateSortOrder,
-            loading
+            loading,
+            fetchError
         }}>
             <Outlet />
         </AddressContext.Provider>
