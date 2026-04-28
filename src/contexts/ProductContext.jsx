@@ -103,7 +103,6 @@ export function ProductProvider() {
         const channel = supabase
             .channel(`product-data-${addressId}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, scheduleRefresh)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'product_prices', filter: `address_id=eq.${addressId}` }, scheduleRefresh)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'recipes', filter: `address_id=eq.${addressId}` }, scheduleRefresh)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredient_costs', filter: `address_id=eq.${addressId}` }, scheduleRefresh)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'product_extras', filter: `address_id=eq.${addressId}` }, scheduleRefresh)
