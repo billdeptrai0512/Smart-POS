@@ -6,7 +6,11 @@
       "Bash(npx vite *)",
       "Bash(npm install *)",
       "Bash(npm run *)",
-      "Bash(npx vitest *)"
+      "Bash(npx vitest *)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(git fetch *)",
+      "Bash(git check-ignore *)",
+      "Bash(git add *)"
     ]
   }
 }
