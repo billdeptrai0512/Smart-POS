@@ -68,12 +68,12 @@ export async function fetchTodayStats(addressId) {
     if (error) { console.error('fetchTodayStats error:', error); return { revenue: 0, cups: 0 } }
 
     let revenue = 0, cups = 0
-    ;(data || []).forEach(o => {
-        revenue += Number(o.total || 0)
-        ;(o.order_items || []).forEach(i => {
-            if (i.products?.count_as_cup !== false) cups += Number(i.quantity || 0)
+        ; (data || []).forEach(o => {
+            revenue += Number(o.total || 0)
+                ; (o.order_items || []).forEach(i => {
+                    if (i.products?.count_as_cup !== false) cups += Number(i.quantity || 0)
+                })
         })
-    })
     return { revenue, cups }
 }
 
@@ -100,7 +100,8 @@ export async function fetchTodayOrders(addressId) {
                 products (
                     name
                 )
-            )
+            ),
+            staff_name
         `)
         .gte('created_at', today.toISOString())
 
@@ -123,7 +124,7 @@ export async function fetchTodayExpenses(addressId) {
 
     let query = supabase
         .from('expenses')
-        .select('id, name, amount, is_fixed, created_at')
+        .select('id, name, amount, staff_name, is_fixed, created_at')
         .gte('created_at', today.toISOString())
 
     if (addressId) query = query.eq('address_id', addressId)
@@ -141,10 +142,11 @@ export async function fetchTodayExpenses(addressId) {
 }
 
 // Insert an expense (supports is_fixed flag for auto-injected fixed costs)
-export async function insertExpense(name, amount, addressId = null, isFixed = false) {
+export async function insertExpense(name, amount, addressId = null, isFixed = false, staffName = null) {
     if (!supabase) throw new Error('No Supabase connection')
     const payload = { name, amount, is_fixed: isFixed }
     if (addressId) payload.address_id = addressId
+    if (staffName) payload.staff_name = staffName
 
     const { data, error } = await supabase
         .from('expenses')
@@ -592,7 +594,7 @@ export async function deleteExtraIngredient(extraId, ingredient) {
 // Submit a complete order to Supabase using RPC for atomic transaction
 // totalCost: tổng giá vốn của bill (snapshot)
 // costPerItem: Map<cartItemId, unitCost> giá vốn mỗi dòng (snapshot)
-export async function submitOrder(cart, total, paymentMethod = null, addressId = null, totalCost = 0, costPerItem = {}) {
+export async function submitOrder(cart, total, paymentMethod = null, addressId = null, totalCost = 0, costPerItem = {}, staffName = null) {
     if (!supabase) throw new Error('No Supabase connection')
 
     const orderPayload = {
@@ -600,6 +602,7 @@ export async function submitOrder(cart, total, paymentMethod = null, addressId =
         total_cost: Math.round(totalCost),
         payment_method: paymentMethod,
         address_id: addressId,
+        staff_name: staffName,
         items: cart.map(item => {
             const optionsText = item.extras?.length > 0 ? item.extras.map(e => e.name).join(', ') : null;
             const extraIds = item.extras?.length > 0 ? item.extras.map(e => e.id).filter(Boolean) : [];
@@ -632,6 +635,7 @@ export async function bulkSubmitOrders(ordersArray) {
         payment_method: o.paymentMethod,
         address_id: o.addressId,
         created_at: o.createdAt,
+        staff_name: o.staffName,
         items: o.orderItems.map(item => {
             const optionsText = item.extras?.length > 0 ? item.extras.map(e => e.name).join(', ') : null;
             const extraIds = item.extras?.length > 0 ? item.extras.map(e => e.id).filter(Boolean) : (item.extraIds || []).filter(Boolean);
@@ -716,6 +720,7 @@ export async function fetchYesterdayOrders(addressId) {
             id,
             total,
             total_cost,
+            staff_name,
             order_items (
                 quantity,
                 product_id,
@@ -746,7 +751,7 @@ export async function fetchYesterdayExpenses(addressId) {
 
     let query = supabase
         .from('expenses')
-        .select('id, name, amount, is_fixed, created_at, address_id')
+        .select('id, name, amount, staff_name, is_fixed, created_at, address_id')
         .gte('created_at', yesterday.toISOString())
         .lt('created_at', today.toISOString())
 
@@ -765,7 +770,7 @@ export async function fetchOrdersByRange(addressId, start, end) {
     if (!supabase) return []
     let query = supabase
         .from('orders')
-        .select(`id, total, total_cost, payment_method, created_at,
+        .select(`id, total, total_cost, payment_method, staff_name, created_at,
             order_items(quantity, options, product_id, unit_cost, extra_ids, products(name))`)
         .gte('created_at', start.toISOString())
         .lte('created_at', end.toISOString())
@@ -780,7 +785,7 @@ export async function fetchExpensesByRange(addressId, start, end) {
     if (!supabase) return []
     let query = supabase
         .from('expenses')
-        .select('id, name, amount, is_fixed, created_at, address_id')
+        .select('id, name, amount, staff_name, is_fixed, created_at, address_id')
         .gte('created_at', start.toISOString())
         .lte('created_at', end.toISOString())
     if (addressId) query = query.eq('address_id', addressId)

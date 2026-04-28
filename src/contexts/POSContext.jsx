@@ -335,7 +335,7 @@ export function POSProvider() {
 
         // Submit in background (with COGS snapshot)
         if (navigator.onLine && supabase) {
-            submitOrder(savedCart, savedTotal, null, addressId, cartCost, costPerItem).then(res => {
+            submitOrder(savedCart, savedTotal, null, addressId, cartCost, costPerItem, profile?.name).then(res => {
                 localOrderIds.current.add(res.id)
             }).catch((err) => {
                 // Only fallback to offline for genuine network errors
@@ -345,7 +345,7 @@ export function POSProvider() {
                         unitCost: costPerItem[item.cartItemId] || 0,
                         extraIds: (item.extras || []).map(e => e.id).filter(Boolean)
                     }))
-                    addPendingOrder(enrichedCart, savedTotal, null, addressId, cartCost)
+                    addPendingOrder(enrichedCart, savedTotal, null, addressId, cartCost, profile?.name)
                     showToast('Lỗi mạng – đã lưu offline', 'warning')
                 } else {
                     showError(err, 'Tạo đơn hàng')
@@ -357,7 +357,7 @@ export function POSProvider() {
                 unitCost: costPerItem[item.cartItemId] || 0,
                 extraIds: (item.extras || []).map(e => e.id)
             }))
-            addPendingOrder(enrichedCart, savedTotal, null, addressId, cartCost)
+            addPendingOrder(enrichedCart, savedTotal, null, addressId, cartCost, profile?.name)
             showToast(`Lưu offline (${getPendingCount()} đơn chờ)`, 'warning')
         }
         setIsSubmitting(false)
@@ -400,7 +400,7 @@ export function POSProvider() {
     async function handleAddExpense(name, amount) {
         if (!addressId) return
         try {
-            const expense = await insertExpense(name, amount, addressId)
+            const expense = await insertExpense(name, amount, addressId, false, profile?.name)
             setTodayExpenses(prev => [expense, ...prev])
             setTotalCost(prev => prev + amount)
             showToast('Đã thêm chi phí', 'success')

@@ -62,6 +62,7 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
             total: o.total,
             cost,
             createdAt: o.created_at,
+            staffName: o.staff_name,
             isOffline: false,
             paymentMethod: o.payment_method || null,
             items: o.order_items ? o.order_items.map(i => {
@@ -90,6 +91,7 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                 ? o.totalCost
                 : (o.cart || o.orderItems || []).reduce((sum, i) => sum + (calculateProductCost(i.productId, i.extras || [], recipes, extraIngredients, ingredientCosts) * i.quantity), 0),
             createdAt: o.createdAt,
+            staffName: o.staffName,
             isOffline: true,
             paymentMethod: o.paymentMethod || null,
             items: o.cart
@@ -119,6 +121,7 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
         total: 0,
         cost: e.amount,
         createdAt: e.created_at,
+        staffName: e.staff_name,
         isOffline: false,
         isExpense: true,
         items: [{ text: `${e.name}`, cost: e.amount }]
@@ -237,54 +240,60 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                                     ) : null}
                                 </div>
                                 <div className="flex justify-between items-stretch mb-1 border-t border-border/40 pt-2">
-                                    <div className="flex flex-col flex-1 gap-1.5 mt-0.5 mr-2">
-                                        {order.items?.length > 0 ? (
-                                            order.items.map((item, idx) => (
-                                                <div key={idx} className="flex flex-row gap-2 items-start w-full">
-                                                    <span className={`text-[14px] leading-snug font-medium max-w-[85%] whitespace-pre-wrap text-text`}>{item.text}</span>
-                                                    {/* {!order.isExpense && item.cost > 0 && (
-                                                        <div className="flex gap-2 text-[11px] font-medium mt-0.5 items-start shrink-0">
-                                                            <span className="text-danger bg-danger/10 px-1.5 py-0.5 rounded-md">{formatVND(item.cost)}</span>
-                                                        </div>
-                                                    )} */}
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <span className="text-text text-[14px] leading-snug font-medium whitespace-pre-wrap">Không có chi tiết</span>
+                                    <div className="flex flex-col justify-between flex-1 gap-1.5 mt-0.5 mr-2">
+                                        <div className="flex flex-col gap-1.5 flex-1">
+                                            {order.items?.length > 0 ? (
+                                                order.items.map((item, idx) => (
+                                                    <div key={idx} className="flex flex-row gap-2 items-start w-full">
+                                                        <span className={`text-[14px] leading-snug font-medium max-w-[85%] whitespace-pre-wrap text-text`}>{item.text}</span>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <span className="text-text text-[14px] leading-snug font-medium whitespace-pre-wrap">Không có chi tiết</span>
+                                            )}
+                                        </div>
+                                        {order.staffName && (
+                                            <div className="flex items-end pb-[1px] mt-1">
+                                                <span className="text-text-secondary/70 text-[12px] font-bold truncate max-w-[150px] leading-none" title={order.staffName}>{order.staffName}</span>
+                                            </div>
                                         )}
                                     </div>
                                     <div className="flex flex-col justify-end items-end gap-2 shrink-0 mt-0.5">
                                         {!order.isOffline ? (
-                                            <span
-                                                className="text-text-secondary text-[14px] text-end font-bold cursor-pointer underline decoration-dashed decoration-text-secondary/50 underline-offset-4 hover:text-danger hover:decoration-danger active:text-danger/80 transition-all select-none disabled:opacity-40"
-                                                onClick={() => {
-                                                    if (deletingId === order.id) return
-                                                    const text = order.items?.map(i => i.text).join(', ') || ''
-                                                    if (order.isExpense) {
-                                                        if (window.confirm(`Xóa chi phí ${text}?\n\nHành động này không thể hoàn tác!`)) {
-                                                            setDeletingId(order.id)
-                                                            onDeleteExpense(order.id, order.cost).finally(() => setDeletingId(null))
-                                                        }
-                                                    } else {
-                                                        if (window.confirm(`Xóa đơn ${text} (${formatVND(order.total)})?\n\nHành động này không thể hoàn tác!`)) {
-                                                            setDeletingId(order.id)
-                                                            onDeleteOrder(order.id).finally(() => setDeletingId(null))
-                                                        }
-                                                    }
-                                                }}
-                                                title={order.isExpense ? "Nhấn để xóa chi phí" : "Nhấn để xóa đơn hàng"}
-                                            >
-                                                {deletingId === order.id ? '⏳' : time}
-                                            </span>
-                                        ) : (
-                                            <div className="flex flex-col items-end gap-1">
-                                                <span className="text-text-secondary text-[14px] font-bold">{time}</span>
+                                            <div className="flex flex-col items-end gap-1 mt-auto">
                                                 <span
-                                                    className="text-warning/70 hover:text-danger text-[11px] font-bold cursor-pointer underline underline-offset-2 transition-colors"
-                                                    onClick={() => handleDeleteOffline(order.createdAt_key)}
+                                                    className="text-text-secondary text-[14px] text-end font-bold cursor-pointer underline decoration-dashed decoration-text-secondary/50 underline-offset-4 hover:text-danger hover:decoration-danger active:text-danger/80 transition-all select-none disabled:opacity-40 leading-none"
+                                                    onClick={() => {
+                                                        if (deletingId === order.id) return
+                                                        const text = order.items?.map(i => i.text).join(', ') || ''
+                                                        if (order.isExpense) {
+                                                            if (window.confirm(`Xóa chi phí ${text}?\n\nHành động này không thể hoàn tác!`)) {
+                                                                setDeletingId(order.id)
+                                                                onDeleteExpense(order.id, order.cost).finally(() => setDeletingId(null))
+                                                            }
+                                                        } else {
+                                                            if (window.confirm(`Xóa đơn ${text} (${formatVND(order.total)})?\n\nHành động này không thể hoàn tác!`)) {
+                                                                setDeletingId(order.id)
+                                                                onDeleteOrder(order.id).finally(() => setDeletingId(null))
+                                                            }
+                                                        }
+                                                    }}
+                                                    title={order.isExpense ? "Nhấn để xóa chi phí" : "Nhấn để xóa đơn hàng"}
                                                 >
-                                                    Xóa
+                                                    {deletingId === order.id ? '⏳' : time}
                                                 </span>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-end gap-1 mt-auto">
+                                                <div className="flex items-end gap-2 leading-none">
+                                                    <span
+                                                        className="text-warning/70 hover:text-danger text-[11px] font-bold cursor-pointer underline underline-offset-2 transition-colors leading-none"
+                                                        onClick={() => handleDeleteOffline(order.createdAt_key)}
+                                                    >
+                                                        Xóa
+                                                    </span>
+                                                    <span className="text-text-secondary text-[14px] font-bold leading-none">{time}</span>
+                                                </div>
                                             </div>
                                         )}
                                     </div>

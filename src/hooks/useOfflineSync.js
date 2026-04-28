@@ -29,7 +29,7 @@ export function removePendingOrder(createdAt) {
     savePendingOrders(pending.filter(o => o.createdAt !== createdAt))
 }
 
-export function addPendingOrder(orderItems, total, paymentMethod = null, addressId = null, totalCost = 0) {
+export function addPendingOrder(orderItems, total, paymentMethod = null, addressId = null, totalCost = 0, staffName = null) {
     const pending = getPendingOrders()
     pending.push({
         orderItems,
@@ -37,6 +37,7 @@ export function addPendingOrder(orderItems, total, paymentMethod = null, address
         totalCost,
         paymentMethod,
         addressId,
+        staffName,
         createdAt: new Date().toISOString(),
     })
     savePendingOrders(pending)

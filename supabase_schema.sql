@@ -70,6 +70,9 @@ CREATE TABLE IF NOT EXISTS orders (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   address_id UUID REFERENCES addresses(id) ON DELETE CASCADE,
   total INTEGER NOT NULL, -- total in VND
+  total_cost INTEGER NOT NULL DEFAULT 0,
+  payment_method TEXT,
+  staff_name TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -87,6 +90,8 @@ CREATE TABLE IF NOT EXISTS expenses (
   address_id UUID REFERENCES addresses(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   amount INTEGER NOT NULL, -- cost in VND
+  staff_name TEXT,
+  is_fixed BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -279,3 +284,50 @@ CREATE POLICY "insert_profile" ON users
 -- Note: Supabase will ignore these if already added
 -- ALTER PUBLICATION supabase_realtime ADD TABLE orders;
 -- ALTER PUBLICATION supabase_realtime ADD TABLE inventory;
+
+
+-- =============================================
+-- RPC: bulk_create_orders
+-- =============================================
+CREATE OR REPLACE FUNCTION bulk_create_orders(orders_payload JSONB)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  order_rec JSONB;
+  item_rec JSONB;
+  new_order_id UUID;
+  new_order_time TIMESTAMPTZ;
+BEGIN
+  FOR order_rec IN SELECT * FROM jsonb_array_elements(orders_payload)
+  LOOP
+    -- use provided created_at if exists, else now()
+    new_order_time := COALESCE((order_rec->>'created_at')::TIMESTAMPTZ, now());
+
+    INSERT INTO orders (total, total_cost, payment_method, address_id, staff_name, created_at)
+    VALUES (
+      (order_rec->>'total')::INTEGER,
+      COALESCE((order_rec->>'total_cost')::INTEGER, 0),
+      order_rec->>'payment_method',
+      (order_rec->>'address_id')::UUID,
+      order_rec->>'staff_name',
+      new_order_time
+    )
+    RETURNING id INTO new_order_id;
+
+    FOR item_rec IN SELECT * FROM jsonb_array_elements(order_rec->'items')
+    LOOP
+      INSERT INTO order_items (order_id, product_id, quantity, options, unit_cost, extra_ids)
+      VALUES (
+        new_order_id,
+        (item_rec->>'product_id')::UUID,
+        (item_rec->>'quantity')::INTEGER,
+        item_rec->>'options',
+        COALESCE((item_rec->>'unit_cost')::INTEGER, 0),
+        COALESCE(item_rec->'extra_ids', '[]'::JSONB)::UUID[]
+      );
+    END LOOP;
+  END LOOP;
+END;
+$$;
