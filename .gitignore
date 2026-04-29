@@ -25,6 +25,10 @@ dist-ssr
 
 .vercel
 
+.env
+.env.local
+.env.*.local
+
 CLAUDE.md
 PROJECT.md
 supabase_schema.sql
