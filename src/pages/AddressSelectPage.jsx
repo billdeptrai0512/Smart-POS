@@ -30,9 +30,12 @@ export default function AddressSelectPage() {
     // Staff tab state
     const [staffList, setStaffList] = useState([])
     const [staffLoading, setStaffLoading] = useState(false)
-    const [inviteLink, setInviteLink] = useState('')
-    const [inviteExpiry, setInviteExpiry] = useState(null)
-    const [generatingLink, setGeneratingLink] = useState(false)
+    const [staffInviteLink, setStaffInviteLink] = useState('')
+    const [staffInviteExpiry, setStaffInviteExpiry] = useState(null)
+    const [generatingStaffLink, setGeneratingStaffLink] = useState(false)
+    const [coManagerInviteLink, setCoManagerInviteLink] = useState('')
+    const [coManagerInviteExpiry, setCoManagerInviteExpiry] = useState(null)
+    const [generatingCoManagerLink, setGeneratingCoManagerLink] = useState(false)
 
     // Keep a stable ref to addresses so the realtime channel below doesn't
     // resubscribe on every create/rename/delete (which can drop INSERT events).
@@ -150,18 +153,22 @@ export default function AddressSelectPage() {
         handleSelect(addr)
     }
 
-    async function handleGenerateInvite() {
+    async function handleGenerateInvite(role) {
         if (!profile?.id) return
-        setGeneratingLink(true)
-        setInviteLink('')
+        const isCoManager = role === 'co-manager'
+        const setLink = isCoManager ? setCoManagerInviteLink : setStaffInviteLink
+        const setExpiry = isCoManager ? setCoManagerInviteExpiry : setStaffInviteExpiry
+        const setGenerating = isCoManager ? setGeneratingCoManagerLink : setGeneratingStaffLink
+        setGenerating(true)
+        setLink('')
         try {
-            const { token, expires_at } = await createInviteToken(profile.id)
-            setInviteLink(`${window.location.origin}/signup/${token}`)
-            setInviteExpiry(new Date(expires_at))
+            const { token, expires_at } = await createInviteToken(profile.id, role)
+            setLink(`${window.location.origin}/signup/${token}`)
+            setExpiry(new Date(expires_at))
         } catch (err) {
             setError(err.message || 'Không thể tạo link')
         } finally {
-            setGeneratingLink(false)
+            setGenerating(false)
         }
     }
 
@@ -238,9 +245,12 @@ export default function AddressSelectPage() {
                         staffLoading={staffLoading}
                         error={error}
                         onGenerateInvite={handleGenerateInvite}
-                        generatingLink={generatingLink}
-                        inviteLink={inviteLink}
-                        inviteExpiry={inviteExpiry}
+                        staffInviteLink={staffInviteLink}
+                        staffInviteExpiry={staffInviteExpiry}
+                        generatingStaffLink={generatingStaffLink}
+                        coManagerInviteLink={coManagerInviteLink}
+                        coManagerInviteExpiry={coManagerInviteExpiry}
+                        generatingCoManagerLink={generatingCoManagerLink}
                     />
                 )}
 

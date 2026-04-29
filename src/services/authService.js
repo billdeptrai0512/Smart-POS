@@ -48,12 +48,12 @@ export async function signUp(username, password, name, email = null) {
     return { user: authUser, profile }
 }
 
-// Validate an invite token — returns { valid, tokenId, managerId, managerName, error }
+// Validate an invite token — returns { valid, tokenId, managerId, managerName, role, error }
 export async function validateInviteToken(token) {
     if (!supabase) return { valid: false, error: 'No connection' }
     const { data, error } = await supabase
         .from('invite_tokens')
-        .select('id, manager_id, expires_at, used_at, users(name)')
+        .select('id, manager_id, role, expires_at, used_at, users(name)')
         .eq('token', token)
         .maybeSingle()
 
@@ -61,15 +61,15 @@ export async function validateInviteToken(token) {
     if (data.used_at) return { valid: false, error: 'Link này đã được sử dụng' }
     if (new Date(data.expires_at) < new Date()) return { valid: false, error: 'Link đã hết hạn' }
 
-    return { valid: true, tokenId: data.id, managerId: data.manager_id, managerName: data.users?.name }
+    return { valid: true, tokenId: data.id, managerId: data.manager_id, managerName: data.users?.name, role: data.role || 'staff' }
 }
 
-// Create an invite token for a manager
-export async function createInviteToken(managerId) {
+// Create an invite token for a manager (role = 'staff' | 'co-manager')
+export async function createInviteToken(managerId, role = 'staff') {
     if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase
         .from('invite_tokens')
-        .insert({ manager_id: managerId })
+        .insert({ manager_id: managerId, role })
         .select('token, expires_at')
         .single()
     if (error) throw error
@@ -97,9 +97,11 @@ export async function signUpWithInvite(token, username, password, name) {
         authUser = signData.user
     }
 
+    // co-manager → role 'manager' with manager_id pointing to the original manager
+    const userRole = validation.role === 'co-manager' ? 'manager' : 'staff'
     const { data: profile, error: profileError } = await supabase
         .from('users')
-        .insert({ auth_id: authUser.id, name, role: 'staff', manager_id: validation.managerId })
+        .insert({ auth_id: authUser.id, name, role: userRole, manager_id: validation.managerId })
         .select()
         .single()
     if (profileError) throw profileError
@@ -113,13 +115,13 @@ export async function signUpWithInvite(token, username, password, name) {
     return { user: authUser, profile }
 }
 
-// Fetch staff belonging to a manager
+// Fetch staff and co-managers belonging to a manager
 export async function fetchStaffByManager(managerId) {
     if (!supabase) return []
     const { data, error } = await supabase
         .from('users')
-        .select('id, name')
-        .eq('role', 'staff')
+        .select('id, name, role')
+        .in('role', ['staff', 'manager'])
         .eq('manager_id', managerId)
         .order('name')
     if (error) {

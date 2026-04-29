@@ -33,7 +33,8 @@ export function AddressProvider() {
         if (profile.role === 'admin') {
             addressOwnerId = 'ALL'
         } else if (profile.role === 'manager') {
-            addressOwnerId = profile.id
+            // co-manager has manager_id pointing to the main manager
+            addressOwnerId = profile.manager_id || profile.id
         } else {
             addressOwnerId = profile.manager_id
         }
@@ -91,7 +92,9 @@ export function AddressProvider() {
         if (addresses.some(a => normalizeName(a.name) === norm)) {
             throw new Error(`Địa chỉ "${cleanName}" đã tồn tại`)
         }
-        const newAddr = await apiCreateAddress(profile.id, cleanName)
+        // co-manager creates under main manager's id
+        const ownerId = profile.manager_id || profile.id
+        const newAddr = await apiCreateAddress(ownerId, cleanName)
         setAddresses(prev => [...prev, newAddr])
         return newAddr
     }, [profile, addresses])

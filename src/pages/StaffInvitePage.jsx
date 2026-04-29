@@ -23,7 +23,7 @@ export default function StaffInvitePage() {
     useEffect(() => {
         validateInviteToken(token).then(result => {
             if (result.valid) {
-                setTokenInfo({ managerId: result.managerId, managerName: result.managerName })
+                setTokenInfo({ managerId: result.managerId, managerName: result.managerName, role: result.role })
             } else {
                 setTokenError(result.error)
             }
@@ -82,6 +82,10 @@ export default function StaffInvitePage() {
                     {tokenInfo?.managerName && (
                         <p className="text-text-secondary text-xs mt-1">
                             Bạn được <span className="font-bold text-text">{tokenInfo.managerName}</span> mời tham gia
+                            {tokenInfo.role === 'co-manager'
+                                ? <span className="ml-1 text-primary font-bold">với tư cách đồng quản lý</span>
+                                : <span className="ml-1 text-text-secondary">với tư cách nhân viên</span>
+                            }
                         </p>
                     )}
                 </div>
