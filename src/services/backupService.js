@@ -31,10 +31,13 @@ export async function cloneAddressConfig(sourceAddressId, targetAddressId, optio
 
     // ── 1. Menu = products (price + sort_order + count_as_cup live on this row) ─────
     if (opts.menu) {
+        // is_active = false = soft-deleted product. Don't carry deleted products
+        // (and their recipes/extras) into the new address.
         const { data: srcProducts, error } = await supabase
             .from('products')
-            .select('id, name, price, sort_order, count_as_cup, is_active')
+            .select('id, name, price, sort_order, count_as_cup')
             .eq('owner_address_id', sourceAddressId)
+            .eq('is_active', true)
         if (error) throw new Error('Lỗi khi đọc menu nguồn: ' + error.message)
 
         const list = srcProducts || []
@@ -50,7 +53,7 @@ export async function cloneAddressConfig(sourceAddressId, targetAddressId, optio
                     price: p.price,
                     sort_order: p.sort_order,
                     count_as_cup: p.count_as_cup ?? true,
-                    is_active: p.is_active ?? true,
+                    is_active: true,
                     owner_address_id: targetAddressId,
                 }
             })
