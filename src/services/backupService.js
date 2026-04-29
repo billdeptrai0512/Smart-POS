@@ -29,6 +29,31 @@ export async function cloneAddressConfig(sourceAddressId, targetAddressId, optio
 
     const productIdMap = new Map() // source product id → target product id
 
+    // ── 0. Wipe any pre-existing data at target ───────────────────────────────────
+    // Why: a Postgres trigger seeds every new address with a default menu (products +
+    // recipes). If we just append clone results, the new address ends up with
+    // defaults + clone instead of clone only. Safe to hard-delete here because the
+    // target address was created seconds ago and has no order_items yet.
+    //
+    // Delete order matters: extra_ingredients ← product_extras (CASCADE) and
+    // recipes ← products (CASCADE), so deleting products + product_extras handles
+    // their children. ingredient_costs is independent.
+    {
+        const { error: e1 } = await supabase.from('product_extras').delete().eq('address_id', targetAddressId)
+        if (e1) throw new Error('Lỗi khi dọn tùy chọn cũ ở địa chỉ mới: ' + e1.message)
+
+        const { error: e2 } = await supabase.from('products').delete().eq('owner_address_id', targetAddressId)
+        if (e2) throw new Error('Lỗi khi dọn menu cũ ở địa chỉ mới: ' + e2.message)
+
+        // recipes cascades from products, but the trigger may also seed address-scoped
+        // recipes that reference shared/global products; clean those up too.
+        const { error: e3 } = await supabase.from('recipes').delete().eq('address_id', targetAddressId)
+        if (e3) throw new Error('Lỗi khi dọn công thức cũ ở địa chỉ mới: ' + e3.message)
+
+        const { error: e4 } = await supabase.from('ingredient_costs').delete().eq('address_id', targetAddressId)
+        if (e4) throw new Error('Lỗi khi dọn nguyên liệu cũ ở địa chỉ mới: ' + e4.message)
+    }
+
     // ── 1. Menu = products (price + sort_order + count_as_cup live on this row) ─────
     if (opts.menu) {
         // is_active = false = soft-deleted product. Don't carry deleted products
