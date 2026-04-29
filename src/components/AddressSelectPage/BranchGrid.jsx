@@ -1,12 +1,13 @@
 import { useRef, useState } from 'react'
 import {
     Pencil, Trash2, ClipboardCopy, ChevronRight,
-    Coffee, UserCircle2, Plus, Loader, FileText
+    Coffee, UserCircle2, Plus, Loader, FileText, DollarSign
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
+import { formatVND } from '../../utils'
 
 export default function BranchGrid({
-    addresses, fetchError, cupsMap, sessionsMap, statsLoading,
+    addresses, fetchError, cupsMap, revenueMap, sessionsMap, statsLoading,
     isStaff, isAdmin, error, setError,
     onSelect, onBackup, onRename, onRemove, onCreateNew, onDefaultTemplate,
 }) {
@@ -75,6 +76,7 @@ export default function BranchGrid({
 
                 {addresses.map(addr => {
                     const cups = cupsMap[addr.id] || 0
+                    const revenue = revenueMap[addr.id] || 0
                     const staffNames = sessionsMap[addr.id] || []
                     const isEditing = editingAddressId === addr.id
 
@@ -122,17 +124,21 @@ export default function BranchGrid({
                                         className="flex-1 p-3.5 text-left hover:bg-surface-light active:bg-border/30 transition-colors min-w-0"
                                     >
                                         <div className="flex items-center gap-2 mb-1.5">
-                                            <span className="text-text font-black text-sm group-hover:text-primary transition-colors line-clamp-2 leading-tight">{addr.name}</span>
+                                            <span className="text-text font-black text-sm group-hover:text-primary transition-colors line-clamp-2 leading-tight truncate">{addr.name}</span>
                                             <ChevronRight size={14} className="text-text-secondary shrink-0 group-hover:text-primary transition-colors" />
                                         </div>
                                         {!statsLoading && (
-                                            <div className="flex flex-col gap-1">
+                                            <div className="flex flex-col gap-1 mt-1">
                                                 <span className="flex items-center gap-1 text-text-secondary text-xs">
                                                     <Coffee size={11} />
                                                     <span>{cups} ly</span>
                                                 </span>
+                                                <span className="flex items-center gap-1 text-text-secondary text-xs">
+                                                    <DollarSign size={11} />
+                                                    <span>{formatVND(revenue)}</span>
+                                                </span>
                                                 {staffNames.length > 0 && (
-                                                    <span className="flex items-center gap-1 text-success text-xs">
+                                                    <span className="flex items-center gap-1 text-text-secondary text-xs">
                                                         <UserCircle2 size={11} />
                                                         <span className="truncate">{staffNames.join(', ')}</span>
                                                     </span>

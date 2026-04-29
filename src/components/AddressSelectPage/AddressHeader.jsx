@@ -1,6 +1,6 @@
 import { Building2, Users } from 'lucide-react'
 
-export default function AddressHeader({ isStaff, activeTab, setActiveTab, profile, dateOnly, setError }) {
+export default function AddressHeader({ isStaff, activeTab, setActiveTab, profile, dateOnly, setError, addressCount, staffCount }) {
     return (
         <header className="shrink-0 pt-6 pb-6 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)] relative z-20">
             <div className="px-6">
@@ -23,7 +23,7 @@ export default function AddressHeader({ isStaff, activeTab, setActiveTab, profil
                             <div className="flex items-center gap-1.5 relative z-10 mt-[6px]">
                                 <Building2 size={13} className={activeTab === 'branches' ? 'text-primary' : 'text-text-secondary'} />
                                 <span className={`text-[12px] sm:text-[13px] font-black uppercase tracking-wider ${activeTab === 'branches' ? 'text-primary' : 'text-text-secondary'}`}>
-                                    Cơ sở
+                                    {addressCount} Cơ sở
                                 </span>
                             </div>
                             {activeTab === 'branches' && (
@@ -48,7 +48,7 @@ export default function AddressHeader({ isStaff, activeTab, setActiveTab, profil
                             <div className="flex items-center gap-1.5 relative z-10 mt-[6px]">
                                 <Users size={13} className={activeTab === 'staff' ? 'text-primary' : 'text-text-secondary'} />
                                 <span className={`text-[12px] sm:text-[13px] font-black uppercase tracking-wider ${activeTab === 'staff' ? 'text-primary' : 'text-text-secondary'}`}>
-                                    Nhân viên
+                                    {staffCount} Nhân viên
                                 </span>
                             </div>
                             {activeTab === 'staff' && (

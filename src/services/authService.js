@@ -316,3 +316,27 @@ export async function fetchBranchTodayCups(addressIds) {
     })
     return result
 }
+
+// Fetch today's revenue for multiple addresses in one query
+export async function fetchBranchTodayRevenue(addressIds) {
+    if (!supabase || !addressIds?.length) return {}
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const { data, error } = await supabase
+        .from('orders')
+        .select('address_id, total')
+        .in('address_id', addressIds)
+        .gte('created_at', today.toISOString())
+
+    if (error) {
+        console.error('fetchBranchTodayRevenue error:', error)
+        return {}
+    }
+
+    const result = {}
+    ;(data || []).forEach(order => {
+        result[order.address_id] = (result[order.address_id] || 0) + (order.total || 0)
+    })
+    return result
+}

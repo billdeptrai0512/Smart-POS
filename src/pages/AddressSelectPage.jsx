@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { fetchBranchTodayCups, fetchActiveSessions, fetchStaffByManager, createInviteToken } from '../services/authService'
+import { fetchBranchTodayCups, fetchBranchTodayRevenue, fetchActiveSessions, fetchStaffByManager, createInviteToken } from '../services/authService'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { supabase } from '../lib/supabaseClient'
 import { LogOut } from 'lucide-react'
@@ -22,6 +22,7 @@ export default function AddressSelectPage() {
     const [error, setError] = useState('')
     const [realtimeNotification, setRealtimeNotification] = useState(null)
     const [cupsMap, setCupsMap] = useState({})
+    const [revenueMap, setRevenueMap] = useState({})
     const [sessionsMap, setSessionsMap] = useState({})
     const [statsLoading, setStatsLoading] = useState(false)
     const [backupSource, setBackupSource] = useState(null)
@@ -60,6 +61,7 @@ export default function AddressSelectPage() {
 
                 if (addressId) {
                     setCupsMap(prev => ({ ...prev, [addressId]: (prev[addressId] || 0) + qty }))
+                    setRevenueMap(prev => ({ ...prev, [addressId]: (prev[addressId] || 0) + (payload.new.total || 0) }))
                 }
             })
             .subscribe()
@@ -115,9 +117,11 @@ export default function AddressSelectPage() {
 
         Promise.all([
             fetchBranchTodayCups(addrIds),
+            fetchBranchTodayRevenue(addrIds),
             fetchActiveSessions(addrIds)
-        ]).then(([cups, sessions]) => {
+        ]).then(([cups, revenue, sessions]) => {
             setCupsMap(cups)
+            setRevenueMap(revenue)
             const grouped = {}
             sessions.forEach(s => {
                 if (!grouped[s.address_id]) grouped[s.address_id] = []
@@ -127,14 +131,14 @@ export default function AddressSelectPage() {
         }).finally(() => setStatsLoading(false))
     }, [addressIdsKey])
 
-    // Fetch staff when tab opens
+    // Fetch staff list for manager (needed for header count + staff tab)
     useEffect(() => {
-        if (activeTab !== 'staff' || !profile?.id || isStaff) return
+        if (!profile?.id || isStaff) return
         setStaffLoading(true)
         fetchStaffByManager(profile.id)
             .then(setStaffList)
             .finally(() => setStaffLoading(false))
-    }, [activeTab, profile?.id, isStaff])
+    }, [profile?.id, isStaff])
 
     function handleSelect(addr) {
         setSelectedAddress(addr)
@@ -197,6 +201,8 @@ export default function AddressSelectPage() {
                 profile={profile}
                 dateOnly={dateOnly}
                 setError={setError}
+                addressCount={addresses.length}
+                staffCount={staffList.length}
             />
 
             <div className="flex-1 overflow-y-auto px-4 pt-4 pb-8 hide-scrollbar">
@@ -206,6 +212,7 @@ export default function AddressSelectPage() {
                         addresses={addresses}
                         fetchError={fetchError}
                         cupsMap={cupsMap}
+                        revenueMap={revenueMap}
                         sessionsMap={sessionsMap}
                         statsLoading={statsLoading}
                         isStaff={isStaff}
