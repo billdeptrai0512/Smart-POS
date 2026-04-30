@@ -202,6 +202,7 @@ export default function RecipeIngredientPage() {
             setAddingExtra(false)
             setNewExtraName('')
             setNewExtraPrice('')
+            refreshProducts?.()
         } catch (err) {
             showError(err, 'Thêm tùy chọn')
         } finally {
@@ -216,6 +217,7 @@ export default function RecipeIngredientPage() {
         try {
             await updateProductExtraName(extraId, trimmed)
             setExtras(prev => prev.map(e => e.id === extraId ? { ...e, name: trimmed } : e))
+            refreshProducts?.()
         } catch (err) {
             showError(err, 'Lưu tên tùy chọn')
         } finally {
@@ -229,6 +231,7 @@ export default function RecipeIngredientPage() {
         try {
             await updateProductExtraPrice(extraId, newPrice)
             setExtras(prev => prev.map(e => e.id === extraId ? { ...e, price: newPrice } : e))
+            refreshProducts?.()
         } catch (err) {
             showError(err, 'Lưu giá tùy chọn')
         } finally {
@@ -241,6 +244,7 @@ export default function RecipeIngredientPage() {
         try {
             await updateProductExtraSticky(extraId, !currentValue)
             setExtras(prev => prev.map(e => e.id === extraId ? { ...e, is_sticky: !currentValue } : e))
+            refreshProducts?.()
         } catch (err) {
             showError(err, 'Cập nhật sticky')
         }
@@ -252,6 +256,7 @@ export default function RecipeIngredientPage() {
         try {
             await deleteProductExtra(extraId)
             setExtras(prev => prev.filter(e => e.id !== extraId))
+            refreshProducts?.()
         } catch (err) {
             showError(err, 'Xóa tùy chọn')
         } finally {
@@ -318,6 +323,7 @@ export default function RecipeIngredientPage() {
             setSelectedExtraIngs(new Set())
             setCustomExtraIngName('')
             setCustomExtraIngUnit('')
+            refreshProducts?.()
         } catch (err) {
             showError(err, 'Thêm nguyên liệu vào tùy chọn')
         } finally {
@@ -335,6 +341,7 @@ export default function RecipeIngredientPage() {
                     ei.ingredient === ingredient ? { ...ei, amount: newAmount } : ei
                 )
             }))
+            refreshProducts?.()
         } catch (err) {
             showError(err, 'Lưu lượng nguyên liệu tùy chọn')
         } finally {
@@ -352,6 +359,7 @@ export default function RecipeIngredientPage() {
                 ...prev,
                 [extraId]: (prev[extraId] || []).filter(ei => ei.ingredient !== ingredient)
             }))
+            refreshProducts?.()
         } catch (err) {
             showError(err, 'Xóa nguyên liệu khỏi tùy chọn')
         } finally {
