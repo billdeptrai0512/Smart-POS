@@ -460,6 +460,16 @@ export async function insertProductExtra(productId, name, price, addressId = nul
     const payload = { product_id: productId, name, price }
     if (addressId) payload.address_id = addressId
 
+    // Assign sort_order = max + 1 so the new extra lands at the bottom
+    let maxQuery = supabase.from('product_extras').select('sort_order').eq('product_id', productId)
+    if (addressId) maxQuery = maxQuery.eq('address_id', addressId)
+    else maxQuery = maxQuery.is('address_id', null)
+    const { data: maxRow } = await maxQuery
+        .order('sort_order', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle()
+    payload.sort_order = (maxRow?.sort_order ?? -1) + 1
+
     const { data, error } = await supabase
         .from('product_extras')
         .insert(payload)
@@ -499,6 +509,17 @@ export async function duplicateProductExtra(extraId, newName, addressId = null) 
 
     const payload = { product_id: src.product_id, name: newName, price: src.price }
     if (addressId) payload.address_id = addressId
+
+    // Assign sort_order = max + 1 so the duplicate lands at the bottom
+    let maxQuery = supabase.from('product_extras').select('sort_order').eq('product_id', src.product_id)
+    if (addressId) maxQuery = maxQuery.eq('address_id', addressId)
+    else maxQuery = maxQuery.is('address_id', null)
+    const { data: maxRow } = await maxQuery
+        .order('sort_order', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle()
+    payload.sort_order = (maxRow?.sort_order ?? -1) + 1
+
     const { data: newExtra, error: e2 } = await supabase
         .from('product_extras').insert(payload).select().single()
     if (e2) throw e2
