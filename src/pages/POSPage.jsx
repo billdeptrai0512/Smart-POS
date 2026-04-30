@@ -3,7 +3,6 @@ import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useNavigate } from 'react-router-dom'
 import { DAY_NAMES } from '../constants'
-import { useCallback } from 'react'
 
 import Header from '../components/POSPage/Header'
 import MenuGrid from '../components/POSPage/MenuGrid'
@@ -19,7 +18,7 @@ export default function POSPage() {
         cart, activeCartItemId, setActiveCartItemId,
         handleAddItem, handleRemoveCartItem, handleToggleExtra, handleConfirm,
         total, hasOrder, isSubmitting,
-        revenue, totalCost, cupsSold, isOnline,
+        isOnline,
         toast, handleLoadHistory, lastOrder,
         enabledStickyExtraIds,
         handleToggleStickyExtra,
@@ -41,9 +40,6 @@ export default function POSPage() {
                 isOnline={isOnline}
                 dayName={dayName}
                 dateOnly={dateOnly}
-                cupsSold={cupsSold}
-                revenue={revenue}
-                totalCost={totalCost}
                 onOpenHistory={handleOpenHistory}
                 addressName={selectedAddress?.name}
                 onAddressClick={() => navigate('/addresses')}

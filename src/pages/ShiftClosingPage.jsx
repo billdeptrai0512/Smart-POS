@@ -61,7 +61,9 @@ export default function ShiftClosingPage() {
                     if (data.inventory_report) {
                         let parsed = data.inventory_report
                         if (typeof parsed === 'string') {
-                            try { parsed = JSON.parse(parsed) } catch (e) { }
+                            try { parsed = JSON.parse(parsed) } catch {
+                                console.warn('Could not parse inventory_report JSON, ignoring')
+                            }
                         }
                         if (Array.isArray(parsed)) {
                             const inputs = {}

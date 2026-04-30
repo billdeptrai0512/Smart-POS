@@ -6,7 +6,6 @@ import { useAddress } from '../contexts/AddressContext'
 import { formatVND } from '../utils'
 import {
     upsertRecipe,
-    deleteRecipeRow,
     upsertProductPrice,
     updateProductCountAsCup,
     insertProductExtra,
@@ -80,11 +79,6 @@ export default function RecipeIngredientPage() {
         [recipes, productId, selectedAddress?.ingredient_sort_order]
     )
 
-    const cost = useMemo(
-        () => prodRecipes.reduce((sum, r) => sum + r.amount * (ingredientCosts[r.ingredient] || 0), 0),
-        [prodRecipes, ingredientCosts]
-    )
-
     const dbIngredients = useMemo(() => Object.keys(ingredientCosts).sort((a, b) => sortIngredients(a, b, selectedAddress?.ingredient_sort_order)), [ingredientCosts, selectedAddress?.ingredient_sort_order])
     const baseIngredients = prodRecipes.map(r => r.ingredient)
     const availableBaseIngredients = dbIngredients.filter(i => !baseIngredients.includes(i))
@@ -129,19 +123,6 @@ export default function RecipeIngredientPage() {
             refreshProducts?.()
         } catch (err) {
             showError(err, 'Cập nhật cờ đếm ly')
-        } finally {
-            setSaving(false)
-        }
-    }
-
-    async function handleDeleteIngredient(ingredient) {
-        if (!window.confirm(`Xóa ${ingredientLabel(ingredient)} khỏi công thức?`)) return
-        setSaving(true)
-        try {
-            await deleteRecipeRow(productId, ingredient, selectedAddress?.id)
-            setRecipes(prev => prev.filter(r => !(r.product_id === productId && r.ingredient === ingredient)))
-        } catch (err) {
-            showError(err, 'Xóa nguyên liệu khỏi công thức')
         } finally {
             setSaving(false)
         }

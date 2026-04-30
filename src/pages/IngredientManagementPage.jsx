@@ -13,7 +13,7 @@ import Toast from '../components/POSPage/Toast'
 
 export default function IngredientManagementPage() {
     const navigate = useNavigate()
-    const { ingredientCosts: contextCosts, ingredientUnits: contextUnits, refreshProducts } = useProducts()
+    const { ingredientCosts: contextCosts, ingredientUnits: contextUnits } = useProducts()
     const { selectedAddress, updateSortOrder } = useAddress()
     const { isManager, isAdmin } = useAuth()
     const { toast, showError } = useToast()

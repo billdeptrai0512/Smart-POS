@@ -16,9 +16,11 @@ export default function SignUpPage() {
     async function handleSubmit(e) {
         e.preventDefault()
         if (!name.trim()) { setError('Vui lòng nhập tên'); return }
-        if (!email.trim()) { setError('Vui lòng nhập email'); return }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+        if (!emailRegex.test(email.trim())) { setError('Email không hợp lệ'); return }
         if (!username.trim()) { setError('Vui lòng nhập tài khoản'); return }
         if (username.length < 3) { setError('Tài khoản ít nhất 3 ký tự'); return }
+        if (password.length < 6) { setError('Mật khẩu ít nhất 6 ký tự'); return }
         setError('')
         setLoading(true)
         try {
@@ -48,9 +50,13 @@ export default function SignUpPage() {
                             value={email}
                             onChange={e => setEmail(e.target.value)}
                             required
+                            autoComplete="email"
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
                             placeholder="example@gmail.com"
                         />
+                        <p className="text-[11px] text-text-secondary mt-1.5 leading-snug">
+                            Cần email thật để khôi phục mật khẩu khi quên.
+                        </p>
                     </div>
 
                     <div>

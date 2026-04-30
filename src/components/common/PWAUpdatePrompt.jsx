@@ -2,10 +2,10 @@ import { useRegisterSW } from 'virtual:pwa-register/react'
 
 export default function PWAUpdatePrompt() {
     const {
-        needRefresh: [needRefresh, setNeedRefresh],
+        needRefresh: [needRefresh],
         updateServiceWorker,
     } = useRegisterSW({
-        onRegisteredSW(swUrl, r) {
+        onRegisteredSW(_swUrl, r) {
             // Check for updates every 30 minutes
             if (r) {
                 setInterval(() => {
@@ -19,8 +19,6 @@ export default function PWAUpdatePrompt() {
     })
 
     if (!needRefresh) return null
-
-    const updateLog = typeof __APP_UPDATE_LOG__ !== 'undefined' ? __APP_UPDATE_LOG__ : 'Bản cập nhật mới giúp cải thiện hiệu suất và trải nghiệm.';
 
     return (
         <div className="pwa-update-banner">

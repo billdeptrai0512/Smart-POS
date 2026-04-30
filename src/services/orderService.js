@@ -403,10 +403,11 @@ export async function insertProduct(name, price, addressId = null) {
     return data
 }
 
-// Remove a product from an address (soft delete)
-export async function removeProductFromAddress(productId, addressId) {
+// Remove a product from an address (soft delete).
+// addressId kept for call-site clarity / future RLS scoping; today it's not
+// used because each address owns its own product rows.
+export async function removeProductFromAddress(productId, _addressId) {
     if (!supabase) throw new Error('No Supabase connection')
-    // Everyone owns their isolated products, so just soft-delete the specific ID.
     const { error } = await supabase.from('products').update({ is_active: false }).eq('id', productId)
     if (error) throw error
     return true

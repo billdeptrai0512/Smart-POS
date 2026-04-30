@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AddressProvider, useAddress } from './contexts/AddressContext'
@@ -6,20 +7,20 @@ import { POSProvider } from './contexts/POSContext'
 import ErrorBoundary from './components/common/ErrorBoundary'
 import './index.css'
 
-// Pages
-import LoginPage from './pages/LoginPage'
-import SignUpPage from './pages/SignUpPage'
-import StaffInvitePage from './pages/StaffInvitePage'
-import AddressSelectPage from './pages/AddressSelectPage'
-import POSPage from './pages/POSPage'
-import HistoryPage from './pages/HistoryPage'
-import RecipeMenuPage from './pages/RecipeMenuPage'
-import RecipeIngredientPage from './pages/RecipeIngredientPage'
-import DailyReportPage from './pages/DailyReportPage'
-import RangeReportPage from './pages/RangeReportPage'
-import ExpensePage from './pages/ExpensePage'
-import ShiftClosingPage from './pages/ShiftClosingPage'
-import IngredientManagementPage from './pages/IngredientManagementPage'
+// Pages — lazy-loaded for route-level code splitting
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const SignUpPage = lazy(() => import('./pages/SignUpPage'))
+const StaffInvitePage = lazy(() => import('./pages/StaffInvitePage'))
+const AddressSelectPage = lazy(() => import('./pages/AddressSelectPage'))
+const POSPage = lazy(() => import('./pages/POSPage'))
+const HistoryPage = lazy(() => import('./pages/HistoryPage'))
+const RecipeMenuPage = lazy(() => import('./pages/RecipeMenuPage'))
+const RecipeIngredientPage = lazy(() => import('./pages/RecipeIngredientPage'))
+const DailyReportPage = lazy(() => import('./pages/DailyReportPage'))
+const RangeReportPage = lazy(() => import('./pages/RangeReportPage'))
+const ExpensePage = lazy(() => import('./pages/ExpensePage'))
+const ShiftClosingPage = lazy(() => import('./pages/ShiftClosingPage'))
+const IngredientManagementPage = lazy(() => import('./pages/IngredientManagementPage'))
 
 function PageLoading() {
   return (
@@ -61,33 +62,35 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignUpPage />} />
-          <Route path="/signup/:token" element={<StaffInvitePage />} />
-          <Route element={<ProtectedRoute />}>
-            <Route element={<AddressProvider />}>
-              <Route path="/addresses" element={<AddressSelectPage />} />
-              <Route element={<RequireAddress />}>
-                <Route element={<ProductProvider />}>
-                  <Route element={<POSProvider />}>
-                    <Route path="/pos" element={<POSPage />} />
-                    <Route path="/history" element={<HistoryPage />} />
-                    <Route path="/shift-closing" element={<ShiftClosingPage />} />
-                    <Route path="/daily-report" element={<DailyReportPage />} />
-                    <Route path="/range-report" element={<RangeReportPage />} />
-                    <Route path="/expenses" element={<ExpensePage />} />
-                    {/* Feature-level permission routes (anyone can view, managers can edit) */}
-                    <Route path="/recipes" element={<RecipeMenuPage />} />
-                    <Route path="/recipes/:productId" element={<RecipeIngredientPage />} />
-                    <Route path="/ingredients" element={<IngredientManagementPage />} />
+        <Suspense fallback={<PageLoading />}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignUpPage />} />
+            <Route path="/signup/:token" element={<StaffInvitePage />} />
+            <Route element={<ProtectedRoute />}>
+              <Route element={<AddressProvider />}>
+                <Route path="/addresses" element={<AddressSelectPage />} />
+                <Route element={<RequireAddress />}>
+                  <Route element={<ProductProvider />}>
+                    <Route element={<POSProvider />}>
+                      <Route path="/pos" element={<POSPage />} />
+                      <Route path="/history" element={<HistoryPage />} />
+                      <Route path="/shift-closing" element={<ShiftClosingPage />} />
+                      <Route path="/daily-report" element={<DailyReportPage />} />
+                      <Route path="/range-report" element={<RangeReportPage />} />
+                      <Route path="/expenses" element={<ExpensePage />} />
+                      {/* Feature-level permission routes (anyone can view, managers can edit) */}
+                      <Route path="/recipes" element={<RecipeMenuPage />} />
+                      <Route path="/recipes/:productId" element={<RecipeIngredientPage />} />
+                      <Route path="/ingredients" element={<IngredientManagementPage />} />
+                    </Route>
                   </Route>
                 </Route>
               </Route>
             </Route>
-          </Route>
-          <Route path="*" element={<Navigate to="/pos" />} />
-        </Routes>
+            <Route path="*" element={<Navigate to="/pos" />} />
+          </Routes>
+        </Suspense>
       </AuthProvider>
     </ErrorBoundary>
   )

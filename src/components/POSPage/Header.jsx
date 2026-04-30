@@ -1,7 +1,6 @@
 import { ArrowRight } from 'lucide-react'
-import { formatVND } from '../../utils'
 
-export default function Header({ isOnline, dayName, dateOnly, cupsSold, revenue, totalCost, onOpenHistory, addressName, onAddressClick, lastOrder }) {
+export default function Header({ isOnline, dayName, dateOnly, onOpenHistory, addressName, onAddressClick, lastOrder }) {
     return (
         <header className="shrink-0 pt-6 pb-6 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)] relative z-20">
             <div className="px-6 grid grid-cols-2 gap-3 mb-1">

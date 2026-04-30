@@ -7,10 +7,16 @@ import { execSync } from 'child_process'
 const getLatestCommitMessage = () => {
   try {
     return execSync('git log -1 --pretty=%B').toString().trim()
-  } catch (e) {
+  } catch {
     return 'Bản cập nhật mới giúp cải thiện hiệu suất và trải nghiệm ứng dụng.'
   }
 }
+
+// Allow extra dev hosts (e.g. cloudflare tunnel) via VITE_DEV_ALLOWED_HOSTS=host1,host2
+const devAllowedHosts = (process.env.VITE_DEV_ALLOWED_HOSTS || '')
+  .split(',')
+  .map(h => h.trim())
+  .filter(Boolean)
 
 export default defineConfig({
   test: {
@@ -56,19 +62,22 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Don't cache Auth/Storage/Realtime endpoints — they are stateful and
+        // serving stale tokens or websocket frames is worse than failing fast.
+        navigateFallbackDenylist: [/^\/api\//, /^\/auth\//],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
+            // Read-heavy REST queries — short TTL so price/recipe updates show up quickly.
+            urlPattern: ({ url }) => url.hostname.endsWith('.supabase.co') && url.pathname.startsWith('/rest/'),
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'supabase-api-cache',
+              cacheName: 'supabase-rest-cache',
+              networkTimeoutSeconds: 5,
               expiration: {
                 maxEntries: 50,
-                maxAgeSeconds: 60 * 60 // 1 hour
+                maxAgeSeconds: 10 * 60 // 10 minutes
               },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
+              cacheableResponse: { statuses: [0, 200] }
             }
           }
         ]
@@ -76,8 +85,6 @@ export default defineConfig({
     })
   ],
   server: {
-    allowedHosts: [
-      'saver-listings-actual-passing.trycloudflare.com'
-    ]
+    allowedHosts: devAllowedHosts
   }
 })
