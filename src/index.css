@@ -145,6 +145,19 @@ body {
   animation: toast-in 200ms ease-out;
 }
 
+/* ====== Realtime notification entry ====== */
+@keyframes notification-in {
+  0% {
+    transform: translateY(-3rem) scale(0.95);
+    opacity: 0;
+  }
+
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
 @keyframes shrink {
   from {
     width: 100%;

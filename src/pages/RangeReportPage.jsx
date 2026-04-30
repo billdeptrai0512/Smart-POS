@@ -30,10 +30,18 @@ export default function RangeReportPage() {
     const [prevShiftClosings, setPrevShiftClosings] = useState([])
     const [isLoading, setIsLoading] = useState(true)
 
+    // Reset offset when the URL `range` changes, by tracking the previous
+    // value and updating during render. React 19 handles this without an
+    // extra render pass (vs. a useEffect that would cascade into the data-
+    // fetching effect below and trigger a stale fetch on the wrong offset).
+    const [prevRange, setPrevRange] = useState(range)
+    if (range !== prevRange) {
+        setPrevRange(range)
+        setOffset(0)
+    }
+
     // Cache fetched periods so navigating back doesn't re-fetch
     const fetchCache = useRef({})
-
-    useEffect(() => { setOffset(0) }, [range])
 
     useEffect(() => {
         if (selectedAddress?.id && fixedCosts.length === 0) handleLoadFixedCosts()

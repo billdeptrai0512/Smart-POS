@@ -2,25 +2,42 @@ import { useEffect, useState } from 'react'
 import { Bell } from 'lucide-react'
 import { formatVND } from '../../utils'
 
+const VISIBLE_MS = 5000
+const EXIT_MS = 300
+
 export default function RealtimeNotification({ notification, onClose }) {
-    const [visible, setVisible] = useState(false)
+    // `closing` is only set asynchronously by the auto-hide timer (not
+    // synchronously in the effect body), so React doesn't cascade renders.
+    // Entry animation runs from a CSS keyframe that auto-plays on mount,
+    // which avoids needing a `visible` state we'd have to flip in an effect.
+    const [closing, setClosing] = useState(false)
+
+    // Reset `closing` during render when a new notification arrives, instead
+    // of setting it inside the effect (which would cascade).
+    const [shownId, setShownId] = useState(null)
+    const currentId = notification ? `${notification.title}|${notification.total}` : null
+    if (currentId !== shownId) {
+        setShownId(currentId)
+        setClosing(false)
+    }
 
     useEffect(() => {
-        if (notification) {
-            setVisible(true)
-            const timer = setTimeout(() => {
-                setVisible(false)
-                setTimeout(onClose, 300) // wait for exit animation
-            }, 5000)
-            return () => clearTimeout(timer)
+        if (!notification) return
+        const closeTimer = setTimeout(() => setClosing(true), VISIBLE_MS)
+        const removeTimer = setTimeout(onClose, VISIBLE_MS + EXIT_MS)
+        return () => {
+            clearTimeout(closeTimer)
+            clearTimeout(removeTimer)
         }
     }, [notification, onClose])
 
-    if (!notification && !visible) return null
+    if (!notification) return null
 
     return (
         <div
-            className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] transition-all duration-300 w-[90%] max-w-[360px] ${visible ? 'translate-y-0 opacity-100 scale-100' : '-translate-y-12 opacity-0 scale-95'
+            className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] transition-all duration-300 w-[90%] max-w-[360px] ${closing
+                ? '-translate-y-12 opacity-0 scale-95'
+                : 'translate-y-0 opacity-100 scale-100 animate-[notification-in_300ms_ease-out]'
                 }`}
         >
             <div className="bg-primary border border-primary/20 shadow-lg rounded-2xl p-4 flex items-start gap-3 text-bg text-left relative overflow-hidden">
@@ -45,7 +62,7 @@ export default function RealtimeNotification({ notification, onClose }) {
                 </div>
 
                 <button
-                    onClick={() => setVisible(false)}
+                    onClick={() => setClosing(true)}
                     className="absolute top-3 right-3 p-1 rounded-full hover:bg-white/20 transition-colors"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
