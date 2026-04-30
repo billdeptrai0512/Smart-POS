@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Users, Copy, Check, Loader, UserPlus, Shield } from 'lucide-react'
+import { Users, Copy, Check, Loader, UserPlus, Shield, LinkIcon } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
 
@@ -15,23 +15,28 @@ function InviteLink({ link, expiry }) {
     if (!link) return null
 
     return (
-        <div className="space-y-2 mt-3">
+        <div className="space-y-2">
             <div className="flex gap-2">
                 <input
                     readOnly
                     value={link}
-                    className="flex-1 min-w-0 px-3 py-2 rounded-[10px] bg-bg border border-border/60 text-text-secondary text-xs font-medium focus:outline-none truncate"
+                    onFocus={e => e.target.select()}
+                    className="flex-1 min-w-0 px-3 py-2.5 rounded-[10px] bg-bg border border-border/60 text-text-secondary text-xs font-medium focus:outline-none focus:border-primary/40 truncate"
                 />
                 <button
                     onClick={handleCopy}
-                    className="px-3 py-2 bg-primary text-black text-xs font-black rounded-[10px] shrink-0 hover:bg-primary/90 transition-colors flex items-center gap-1.5"
+                    className="px-3 py-2.5 bg-primary text-black text-xs font-black rounded-[10px] shrink-0 hover:bg-primary/90 active:scale-95 transition-all flex items-center gap-1.5"
+                    title="Sao chép link"
                 >
-                    {copied ? <><Check size={13} /> Đã copy</> : <><Copy size={13} /> Copy</>}
+                    {copied ? <Check size={14} /> : <Copy size={14} />}
                 </button>
             </div>
             {expiry && (
-                <p className="text-text-secondary text-xs text-center">
-                    Hết hạn: {expiry.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                <p className="text-text-secondary text-[11px] text-center">
+                    Hết hạn lúc{' '}
+                    <span className="font-bold text-text">
+                        {expiry.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                    </span>
                 </p>
             )}
         </div>
@@ -39,8 +44,8 @@ function InviteLink({ link, expiry }) {
 }
 
 const TABS = [
-    { key: 'staff', label: 'Nhân viên', icon: UserPlus, role: 'staff' },
-    { key: 'co-manager', label: 'Đồng quản lý', icon: Shield, role: 'co-manager' },
+    { key: 'staff', label: 'Nhân viên', role: 'staff', icon: UserPlus },
+    { key: 'co-manager', label: 'Quản lý', role: 'co-manager', icon: Shield },
 ]
 
 export default function StaffTab({
@@ -59,6 +64,7 @@ export default function StaffTab({
     const link = isStaffTab ? staffInviteLink : coManagerInviteLink
     const expiry = isStaffTab ? staffInviteExpiry : coManagerInviteExpiry
     const generating = isStaffTab ? generatingStaffLink : generatingCoManagerLink
+    const ActiveIcon = isStaffTab ? UserPlus : Shield
 
     return (
         <div className="space-y-3">
@@ -67,6 +73,7 @@ export default function StaffTab({
                 {TABS.map(tab => {
                     const active = subTab === tab.key
                     const count = tab.key === 'staff' ? staffMembers.length : coManagers.length
+                    const Icon = tab.icon
                     return (
                         <button
                             key={tab.key}
@@ -75,8 +82,11 @@ export default function StaffTab({
                                 ? 'bg-primary/10 text-primary border border-primary/20'
                                 : 'text-text-secondary hover:bg-bg border border-transparent'}`}
                         >
-                            <tab.icon size={13} />
-                            {tab.label} ({count})
+                            <Icon size={13} />
+                            <span>{tab.label}</span>
+                            <span className={`text-[10px] font-bold tabular-nums ${active ? 'text-primary/70' : 'text-text-secondary/70'}`}>
+                                ({count})
+                            </span>
                         </button>
                     )
                 })}
@@ -85,27 +95,30 @@ export default function StaffTab({
             {/* Member list */}
             <div className="bg-surface border border-border/60 rounded-[20px] overflow-hidden">
                 {staffLoading ? (
-                    <div className="p-4 grid grid-cols-2 gap-3">
+                    <div className="p-3 flex flex-col gap-2">
                         <Skeleton className="h-12 rounded-[12px]" />
                         <Skeleton className="h-12 rounded-[12px]" />
                     </div>
                 ) : members.length === 0 ? (
-                    <div className="px-4 py-6 text-center">
-                        <Users size={20} className="text-text-secondary mx-auto mb-2" />
-                        <p className="text-text-secondary text-sm">
-                            {isStaffTab ? 'Chưa có nhân viên nào' : 'Chưa có đồng quản lý nào'}
+                    <div className="px-4 py-8 text-center">
+                        <Users size={20} className="text-text-secondary/60 mx-auto mb-2" />
+                        <p className="text-text-secondary text-sm font-medium">
+                            {isStaffTab ? 'Chưa có nhân viên nào' : 'Chưa có quản lý nào'}
+                        </p>
+                        <p className="text-text-secondary/70 text-xs mt-0.5">
+                            Tạo link bên dưới để mời người mới
                         </p>
                     </div>
                 ) : (
                     <div className="p-3 flex flex-col gap-2">
                         {members.map(member => (
                             <div key={member.id} className="p-2.5 flex items-center gap-2.5 bg-bg rounded-[12px] border border-border/40">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${member.role === 'manager' ? 'bg-blue-500/10' : 'bg-primary/10'}`}>
-                                    <span className={`text-xs font-black ${member.role === 'manager' ? 'text-blue-500' : 'text-primary'}`}>
+                                <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${member.role === 'manager' ? 'bg-blue-500/10' : 'bg-primary/10'}`}>
+                                    <span className={`text-sm font-black ${member.role === 'manager' ? 'text-blue-500' : 'text-primary'}`}>
                                         {member.name.charAt(0).toUpperCase()}
                                     </span>
                                 </div>
-                                <span className="text-text text-sm font-medium truncate">{member.name}</span>
+                                <span className="flex-1 text-text text-sm font-bold truncate">{member.name}</span>
                             </div>
                         ))}
                     </div>
@@ -113,19 +126,44 @@ export default function StaffTab({
             </div>
 
             {/* Invite section */}
-            <div className="bg-surface border border-border/60 rounded-[20px] p-4 space-y-1">
-                <button
-                    onClick={() => onGenerateInvite(isStaffTab ? 'staff' : 'co-manager')}
-                    disabled={generating}
-                    className="w-full py-3 rounded-[14px] bg-primary/10 border border-primary/20 text-primary font-black text-sm hover:bg-primary/15 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                    {generating
-                        ? <><Loader size={14} className="animate-spin" /> Đang tạo...</>
-                        : isStaffTab ? 'Tạo link mời nhân viên' : 'Tạo link mời đồng quản lý'
-                    }
-                </button>
+            <div className="bg-surface border border-border/60 rounded-[20px] p-4 space-y-3">
+                <div className="flex items-start gap-2.5">
+                    <div className={`w-9 h-9 rounded-[12px] flex items-center justify-center shrink-0 ${link ? 'bg-primary/10' : 'bg-bg border border-border/60'}`}>
+                        {link
+                            ? <LinkIcon size={16} className="text-primary" />
+                            : <ActiveIcon size={16} className="text-text-secondary" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <h3 className="text-text font-black text-sm leading-tight">
+                            {link
+                                ? 'Link mời đã sẵn sàng'
+                                : (isStaffTab ? 'Mời nhân viên mới' : 'Mời quản lý mới')}
+                        </h3>
+                        <p className="text-text-secondary text-xs mt-0.5 leading-snug">
+                            {link
+                                ? 'Sao chép và gửi link cho người được mời.'
+                                : (isStaffTab
+                                    ? 'Tạo link đăng ký để nhân viên tham gia.'
+                                    : 'Tạo link đăng ký cho quản lý cùng quyền.')}
+                        </p>
+                    </div>
+                </div>
 
-                <InviteLink link={link} expiry={expiry} />
+                {link ? (
+                    <InviteLink link={link} expiry={expiry} />
+                ) : (
+                    <button
+                        onClick={() => onGenerateInvite(isStaffTab ? 'staff' : 'co-manager')}
+                        disabled={generating}
+                        className="w-full py-3 rounded-[14px] bg-primary/10 border border-primary/20 text-primary font-black text-sm hover:bg-primary/15 active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                        {generating
+                            ? <><Loader size={14} className="animate-spin" /> Đang tạo...</>
+                            : <>+ Tạo link mời</>
+                        }
+                    </button>
+                )}
+
                 <ErrorBanner message={error} small />
             </div>
         </div>
