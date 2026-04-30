@@ -38,7 +38,12 @@ export default function SignUpPage() {
             <div className="w-full max-w-sm">
                 <div className="text-center mb-4">
                     <h1 className="text-2xl font-black text-text mt-3">Đăng ký</h1>
+                    <p className="text-center text-text-secondary text-xs mt-2">
+                        {' '}
+                        <Link to="/login" className="text-primary font-bold hover:underline">Quay lại</Link> trang đăng nhập
+                    </p>
                 </div>
+
 
                 <form onSubmit={handleSubmit} className="bg-surface border border-border/60 rounded-[20px] p-6 shadow-sm space-y-4">
                     <ErrorBanner message={error} />
@@ -54,9 +59,6 @@ export default function SignUpPage() {
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
                             placeholder="example@gmail.com"
                         />
-                        <p className="text-[11px] text-text-secondary mt-1.5 leading-snug">
-                            Cần email thật để khôi phục mật khẩu khi quên.
-                        </p>
                     </div>
 
                     <div>
@@ -73,14 +75,14 @@ export default function SignUpPage() {
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Tài khoản đăng nhập</label>
+                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Tên đăng nhập</label>
                         <input
                             type="text"
                             value={username}
                             onChange={e => setUsername(e.target.value)}
                             required
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder="Tên đăng nhập"
+                            placeholder="Tối thiểu 6 ký tự"
                         />
                     </div>
 
@@ -106,9 +108,7 @@ export default function SignUpPage() {
                     </button>
                 </form>
 
-                <p className="text-center text-text-secondary text-xs mt-4">
-                    <Link to="/login" className="text-primary font-bold hover:underline">Quay lại trang đăng nhập</Link>
-                </p>
+
             </div>
         </div>
     )

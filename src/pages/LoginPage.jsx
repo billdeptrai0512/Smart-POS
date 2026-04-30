@@ -51,7 +51,10 @@ export default function LoginPage() {
                 <div className="text-center mb-4">
                     {/* <img src="/icons/icon-512x512.png" alt="Kôphin" className="w-16 h-16 mx-auto rounded-[16px] shadow-sm" /> */}
                     <h1 className="text-2xl font-black text-text mt-3">Đăng nhập</h1>
-
+                    <p className="text-center text-text-secondary text-xs mt-2">
+                        Bạn chưa có tài khoản?{' '}
+                        <Link to="/signup" className="text-primary font-bold hover:underline">Đăng ký</Link>
+                    </p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="bg-surface border border-border/60 rounded-[20px] p-6 shadow-sm space-y-4">
@@ -105,10 +108,7 @@ export default function LoginPage() {
                         {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
                     </button>
                 </form>
-                <p className="text-center text-text-secondary text-xs mt-4">
-                    Bạn chưa có tài khoản?{' '}
-                    <Link to="/signup" className="text-primary font-bold hover:underline">Đăng ký</Link>
-                </p>
+
 
 
             </div>
