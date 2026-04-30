@@ -1,4 +1,4 @@
-import { Building2, Users } from 'lucide-react'
+import { Building2, Shield, Users } from 'lucide-react'
 
 export default function AddressHeader({ isStaff, activeTab, setActiveTab, profile, dateOnly, setError, addressCount, staffCount }) {
     return (
@@ -13,19 +13,24 @@ export default function AddressHeader({ isStaff, activeTab, setActiveTab, profil
                                 ? 'bg-primary/5 border-primary/20 shadow-[0_4px_20px_rgba(245,158,11,0.08)]'
                                 : 'bg-bg border-border/60 hover:bg-surface-light'}`}
                         >
-                            <div className="flex flex-col justify-between items-start relative z-10">
+                            <div className="flex flex-col justify-between items-start relative z-10 mb-[8px]">
                                 <span className="text-[12px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider">Xin chào</span>
                                 <span className={`text-[15px] sm:text-[16px] font-black tracking-tight leading-none ${activeTab === 'branches' ? 'text-primary' : 'text-text'}`}>
                                     {profile?.name || '...'}
                                 </span>
                             </div>
                             <div className={`w-full h-[1px] rounded-full relative z-10 my-[3px] mt-[4px] ${activeTab === 'branches' ? 'bg-primary/20' : 'bg-border/60'}`} />
-                            <div className="flex items-center gap-1.5 relative z-10 mt-[6px]">
-                                <Building2 size={13} className={activeTab === 'branches' ? 'text-primary' : 'text-text-secondary'} />
-                                <span className={`text-[12px] sm:text-[13px] font-black uppercase tracking-wider ${activeTab === 'branches' ? 'text-primary' : 'text-text-secondary'}`}>
-                                    {addressCount} Cơ sở
-                                </span>
+                            <div className="flex flex-col justify-between items-start relative z-10 mt-[2px] w-full">
+                                <span className="text-[12px] sm:text-[13px] text-text-secondary font-black uppercase tracking-wider">Địa chỉ</span>
+                                <div className="flex items-center gap-1.5">
+                                    <Building2 size={15} className={activeTab === 'branches' ? 'text-primary' : 'text-text-secondary'} />
+                                    <span className={`text-[14px] sm:text-[14px] font-black uppercase tracking-wider ${activeTab === 'branches' ? 'text-primary' : 'text-text-secondary'}`}>
+                                        {addressCount}
+                                    </span>
+                                </div>
                             </div>
+
+
                             {activeTab === 'branches' && (
                                 <div className="absolute bottom-0 right-0 w-20 h-20 bg-primary/10 rounded-full blur-2xl -mr-8 -mb-8 pointer-events-none" />
                             )}
@@ -38,18 +43,21 @@ export default function AddressHeader({ isStaff, activeTab, setActiveTab, profil
                                 ? 'bg-primary/5 border-primary/20 shadow-[0_4px_20px_rgba(245,158,11,0.08)]'
                                 : 'bg-bg border-border/60 hover:bg-surface-light'}`}
                         >
-                            <div className="flex flex-col justify-between items-start relative z-10">
+                            <div className="flex flex-col justify-between items-start relative z-10 mb-[8px]">
                                 <span className="text-[12px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider">Hôm nay</span>
                                 <span className={`text-[15px] sm:text-[16px] font-black tracking-tight leading-none ${activeTab === 'staff' ? 'text-primary' : 'text-text'}`}>
                                     {dateOnly}
                                 </span>
                             </div>
-                            <div className={`w-full h-[1px] rounded-full relative z-10 my-[3px] ${activeTab === 'staff' ? 'bg-primary/20' : 'bg-border/60'}`} />
-                            <div className="flex items-center gap-1.5 relative z-10 mt-[6px]">
-                                <Users size={13} className={activeTab === 'staff' ? 'text-primary' : 'text-text-secondary'} />
-                                <span className={`text-[12px] sm:text-[13px] font-black uppercase tracking-wider ${activeTab === 'staff' ? 'text-primary' : 'text-text-secondary'}`}>
-                                    {staffCount} Nhân viên
-                                </span>
+                            <div className={`w-full h-[1px] rounded-full relative z-10 my-[2px]  ${activeTab === 'staff' ? 'bg-primary/20' : 'bg-border/60'}`} />
+                            <div className="flex flex-col justify-between items-start relative z-10 mt-[2px] w-full">
+                                <span className="text-[12px] sm:text-[13px] text-text-secondary font-black uppercase tracking-wider">Nhân sự</span>
+                                <div className="flex items-center gap-1.5">
+                                    <Users size={15} className={activeTab === 'staff' ? 'text-primary' : 'text-text-secondary'} />
+                                    <span className={`text-[14px] sm:text-[14px] font-black uppercase tracking-wider ${activeTab === 'staff' ? 'text-primary' : 'text-text-secondary'}`}>
+                                        {staffCount}
+                                    </span>
+                                </div>
                             </div>
                             {activeTab === 'staff' && (
                                 <div className="absolute bottom-0 right-0 w-20 h-20 bg-primary/10 rounded-full blur-2xl -mr-8 -mb-8 pointer-events-none" />

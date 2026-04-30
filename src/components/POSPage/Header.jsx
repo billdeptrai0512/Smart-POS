@@ -19,7 +19,6 @@ export default function Header({ isOnline, dayName, dateOnly, onOpenHistory, add
                         </div>
                     </div>
                     <div className="w-full h-[1px] bg-border/60 rounded-full relative z-10 my-[3px] mt-[4px]"></div>
-
                     <div className="flex flex-col justify-between items-start relative z-10 mt-[6px] w-full">
 
                         <span className="text-[12px] sm:text-[13px] text-text-secondary font-black uppercase tracking-wider">Địa chỉ</span>

@@ -1,7 +1,11 @@
 import { useRef, useState } from 'react'
 import {
     Pencil, Trash2, ClipboardCopy, ChevronRight,
-    Coffee, UserCircle2, Loader, FileText, DollarSign
+    Coffee, UserCircle2, Loader, FileText, DollarSign,
+    ArrowRight,
+    Users,
+    GlassWater,
+    Landmark
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import { formatVND } from '../../utils'
@@ -101,86 +105,87 @@ export default function BranchGrid({
                                         onClick={() => onSelect(addr)}
                                         className="flex-1 p-3.5 text-left hover:bg-surface-light active:bg-border/30 transition-colors min-w-0"
                                     >
-                                        <div className="flex items-center gap-2 mb-1.5">
-                                            <span className="text-text font-black text-sm group-hover:text-primary transition-colors line-clamp-2 leading-tight truncate">{addr.name}</span>
-                                            <ChevronRight size={14} className="text-text-secondary shrink-0 group-hover:text-primary transition-colors" />
+                                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                                            <span className="text-success font-black text-sm group-hover:text-primary transition-colors line-clamp-2 leading-tight truncate">{addr.name}</span>
+                                            <ArrowRight size={20} strokeWidth={2.5} className="text-text shrink-0" />
                                         </div>
-                                        {!statsLoading && (
-                                            <div className="flex flex-col gap-1 mt-1">
-                                                <span className="flex items-center gap-1 text-text-secondary text-xs">
-                                                    <Coffee size={11} />
-                                                    <span>{cups} ly</span>
+                                        {!statsLoading && ( // improved here
+                                            <div className="flex flex-col  gap-1 mt-2">
+                                                <span className="flex  items-center gap-1 text-text-secondary text-sm">
+                                                    Đã bán: <span className="font-bold">{cups}</span> ly
                                                 </span>
-                                                <span className="flex items-center gap-1 text-text-secondary text-xs">
-                                                    <DollarSign size={11} />
-                                                    <span>{formatVND(revenue)}</span>
+                                                <span className="flex items-center gap-1 text-text-secondary text-sm">
+                                                    Doanh thu: <span className="font-bold">{formatVND(revenue)}</span>
                                                 </span>
-                                                {staffNames.length > 0 && (
-                                                    <span className="flex items-center gap-1 text-text-secondary text-xs">
-                                                        <UserCircle2 size={11} />
-                                                        <span className="truncate">{staffNames.join(', ')}</span>
-                                                    </span>
-                                                )}
+
                                             </div>
                                         )}
                                     </button>
 
                                     {/* Action buttons */}
                                     {!isStaff && (
-                                        <div className="flex items-center justify-end border-t border-border/40 px-2 py-1.5 gap-0.5">
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); onBackup(addr) }}
-                                                className="p-1.5 text-text-secondary hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
-                                                title="Sao lưu cấu hình"
-                                            >
-                                                <ClipboardCopy size={14} />
-                                            </button>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    setEditingAddressId(addr.id)
-                                                    setEditName(addr.name)
-                                                    setDeletingAddressId(null)
-                                                    setError('')
-                                                }}
-                                                className="p-1.5 text-text-secondary hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
-                                                title="Đổi tên"
-                                            >
-                                                <Pencil size={14} />
-                                            </button>
-                                            {deletingAddressId === addr.id ? (
-                                                <div className="flex gap-1 ml-auto">
-                                                    <button
-                                                        onClick={async (e) => {
-                                                            e.stopPropagation()
-                                                            try {
-                                                                await onRemove(addr.id)
-                                                            } catch (err) {
-                                                                setError(err.message || 'Không thể xóa địa chỉ')
-                                                            } finally {
-                                                                setDeletingAddressId(null)
-                                                            }
-                                                        }}
-                                                        className="px-2 py-1 bg-danger text-white text-[10px] font-black rounded-md hover:bg-danger/90 transition-colors"
-                                                    >
-                                                        Xóa
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); setDeletingAddressId(null) }}
-                                                        className="px-2 py-1 bg-bg border border-border/60 text-text-secondary text-[10px] font-bold rounded-md hover:bg-surface-light transition-colors"
-                                                    >
-                                                        Hủy
-                                                    </button>
-                                                </div>
-                                            ) : (
+                                        <div className="flex items-center justify-between border-t border-border/40 px-3.5 py-1.5 gap-0.5">
+                                            <div className="flex text-text/70 items-center gap-1 text-sm  justify-start flex-1">
+                                                <Users size={13} />
+                                                {staffNames.length > 0 && (
+                                                    <span className="line-clamp-2">{staffNames.join(', ')}</span>
+                                                )}
+                                            </div>
+                                            <div className='flex gap-0.5 justify-end flex-1'>
                                                 <button
-                                                    onClick={(e) => { e.stopPropagation(); setDeletingAddressId(addr.id) }}
-                                                    className="p-1.5 text-text-secondary hover:text-danger transition-colors rounded-lg hover:bg-danger/10"
-                                                    title="Xóa"
+                                                    onClick={(e) => { e.stopPropagation(); onBackup(addr) }}
+                                                    className="p-1.5 text-text-secondary hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
+                                                    title="Sao lưu cấu hình"
                                                 >
-                                                    <Trash2 size={14} />
+                                                    <ClipboardCopy size={16} />
                                                 </button>
-                                            )}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        setEditingAddressId(addr.id)
+                                                        setEditName(addr.name)
+                                                        setDeletingAddressId(null)
+                                                        setError('')
+                                                    }}
+                                                    className="p-1.5 text-text-secondary hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
+                                                    title="Đổi tên"
+                                                >
+                                                    <Pencil size={16} />
+                                                </button>
+                                                {deletingAddressId === addr.id ? (
+                                                    <div className="flex gap-1 ml-auto">
+                                                        <button
+                                                            onClick={async (e) => {
+                                                                e.stopPropagation()
+                                                                try {
+                                                                    await onRemove(addr.id)
+                                                                } catch (err) {
+                                                                    setError(err.message || 'Không thể xóa địa chỉ')
+                                                                } finally {
+                                                                    setDeletingAddressId(null)
+                                                                }
+                                                            }}
+                                                            className="px-2 py-1 bg-danger text-white text-[10px] font-black rounded-md hover:bg-danger/90 transition-colors"
+                                                        >
+                                                            Xóa
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); setDeletingAddressId(null) }}
+                                                            className="px-2 py-1 bg-bg border border-border/60 text-text-secondary text-[10px] font-bold rounded-md hover:bg-surface-light transition-colors"
+                                                        >
+                                                            Hủy
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setDeletingAddressId(addr.id) }}
+                                                        className="p-1.5 text-text-secondary hover:text-danger transition-colors rounded-lg hover:bg-danger/10"
+                                                        title="Xóa"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                     )}
                                 </>
