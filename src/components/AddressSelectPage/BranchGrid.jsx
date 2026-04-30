@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import {
     Pencil, Trash2, ClipboardCopy, ChevronRight,
-    Coffee, UserCircle2, Plus, Loader, FileText, DollarSign
+    Coffee, UserCircle2, Loader, FileText, DollarSign
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import { formatVND } from '../../utils'
@@ -9,15 +9,12 @@ import { formatVND } from '../../utils'
 export default function BranchGrid({
     addresses, fetchError, cupsMap, revenueMap, sessionsMap, statsLoading,
     isStaff, isAdmin, error, setError,
-    onSelect, onBackup, onRename, onRemove, onCreateNew, onDefaultTemplate,
+    onSelect, onBackup, onRename, onRemove, onDefaultTemplate,
 }) {
     const [editingAddressId, setEditingAddressId] = useState(null)
     const [editName, setEditName] = useState('')
     const [renaming, setRenaming] = useState(false)
     const [deletingAddressId, setDeletingAddressId] = useState(null)
-    const [showForm, setShowForm] = useState(false)
-    const [newName, setNewName] = useState('')
-    const [creating, setCreating] = useState(false)
     const submitGuardRef = useRef(false)
 
     async function handleRename(e, addrId) {
@@ -38,36 +35,17 @@ export default function BranchGrid({
         }
     }
 
-    async function handleCreate(e) {
-        e.preventDefault()
-        if (!newName.trim()) return
-        if (submitGuardRef.current) return
-        submitGuardRef.current = true
-        setCreating(true)
-        setError('')
-        try {
-            await onCreateNew(newName.trim())
-            setNewName('')
-            setShowForm(false)
-        } catch (err) {
-            setError(err.message || 'Không thể tạo địa chỉ')
-        } finally {
-            setCreating(false)
-            submitGuardRef.current = false
-        }
-    }
-
     return (
         <>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-                {addresses.length === 0 && !showForm && (
+            <div className="grid grid-cols-1 gap-3 mb-4">
+                {addresses.length === 0 && (
                     fetchError ? (
-                        <div className="col-span-2 bg-surface border border-danger/40 rounded-[20px] p-6 text-center">
+                        <div className="bg-surface border border-danger/40 rounded-[20px] p-6 text-center">
                             <p className="text-danger text-sm font-bold mb-1">Không tải được danh sách địa chỉ</p>
                             <p className="text-text-secondary text-xs">{fetchError}</p>
                         </div>
                     ) : (
-                        <div className="col-span-2 bg-surface border border-border/60 rounded-[20px] p-6 text-center">
+                        <div className="bg-surface border border-border/60 rounded-[20px] p-6 text-center">
                             <Coffee size={24} className="text-text-secondary mx-auto mb-2" />
                             <p className="text-text-secondary text-sm">Chưa có địa chỉ nào. Tạo địa chỉ mới để bắt đầu!</p>
                         </div>
@@ -220,50 +198,7 @@ export default function BranchGrid({
                         <span className="text-text-secondary font-bold text-sm">Mẫu mặc định</span>
                     </button>
                 )}
-
-                {/* Thêm địa chỉ card */}
-                {!isStaff && !showForm && (
-                    <button
-                        onClick={() => setShowForm(true)}
-                        className="bg-primary/5 border border-dashed border-primary/30 rounded-[20px] overflow-hidden shadow-sm flex flex-col items-center justify-center p-4 gap-2 hover:bg-primary/10 active:bg-primary/15 transition-all min-h-[100px]"
-                    >
-                        <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
-                            <Plus size={18} className="text-primary" />
-                        </div>
-                        <span className="text-primary font-black text-sm">Thêm địa chỉ</span>
-                    </button>
-                )}
             </div>
-
-            {/* Create form — full width below grid */}
-            {!isStaff && showForm && (
-                <form onSubmit={handleCreate} className="bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm space-y-3 mb-4">
-                    <input
-                        type="text"
-                        value={newName}
-                        onChange={e => setNewName(e.target.value)}
-                        placeholder="Tên địa chỉ mới (vd: Quán Cầu Giấy)"
-                        autoFocus
-                        className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                    />
-                    <div className="flex gap-2">
-                        <button
-                            type="button"
-                            onClick={() => { setShowForm(false); setNewName(''); setError('') }}
-                            className="flex-1 py-2.5 rounded-[12px] bg-bg border border-border/60 text-text-secondary font-bold text-xs hover:bg-border/30 transition-colors"
-                        >
-                            Hủy
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={creating || !newName.trim()}
-                            className="flex-1 py-2.5 rounded-[12px] bg-primary text-black font-black text-xs hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
-                        >
-                            {creating ? <><Loader size={13} className="animate-spin" /> Đang tạo...</> : 'Tạo'}
-                        </button>
-                    </div>
-                </form>
-            )}
 
             <ErrorBanner message={error} small className="mb-3" />
         </>

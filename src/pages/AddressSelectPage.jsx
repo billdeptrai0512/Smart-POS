@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { fetchBranchTodayCups, fetchBranchTodayRevenue, fetchActiveSessions, fetchStaffByManager, createInviteToken } from '../services/authService'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { supabase } from '../lib/supabaseClient'
-import { LogOut } from 'lucide-react'
+import { LogOut, Loader } from 'lucide-react'
 import RealtimeNotification from '../components/POSPage/RealtimeNotification'
 import Skeleton from '../components/common/Skeleton'
 import BackupModal from '../components/AddressSelectPage/BackupModal'
@@ -26,6 +26,9 @@ export default function AddressSelectPage() {
     const [sessionsMap, setSessionsMap] = useState({})
     const [statsLoading, setStatsLoading] = useState(false)
     const [backupSource, setBackupSource] = useState(null)
+    const [newAddressName, setNewAddressName] = useState('')
+    const [creating, setCreating] = useState(false)
+    const createGuardRef = useRef(false)
 
     // Staff tab state
     const [staffList, setStaffList] = useState([])
@@ -153,6 +156,23 @@ export default function AddressSelectPage() {
         handleSelect(addr)
     }
 
+    async function handleCreateFromFooter() {
+        if (!newAddressName.trim()) return
+        if (createGuardRef.current) return
+        createGuardRef.current = true
+        setCreating(true)
+        setError('')
+        try {
+            await handleCreateNew(newAddressName.trim())
+            setNewAddressName('')
+        } catch (err) {
+            setError(err.message || 'Không thể tạo địa chỉ')
+        } finally {
+            setCreating(false)
+            createGuardRef.current = false
+        }
+    }
+
     async function handleGenerateInvite(role) {
         if (!profile?.id) return
         const isCoManager = role === 'co-manager'
@@ -190,17 +210,18 @@ export default function AddressSelectPage() {
                     </div>
                 </div>
                 <div className="px-4 pt-4 space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                        <Skeleton className="h-28 rounded-[20px]" />
-                        <Skeleton className="h-28 rounded-[20px]" />
-                    </div>
+                    <Skeleton className="h-24 rounded-[20px]" />
+                    <Skeleton className="h-24 rounded-[20px]" />
+                    <Skeleton className="h-24 rounded-[20px]" />
                 </div>
             </div>
         )
     }
 
+    const showCreateFooter = !isStaff && activeTab === 'branches'
+
     return (
-        <div className="flex flex-col h-full max-w-lg mx-auto bg-bg">
+        <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <AddressHeader
                 isStaff={isStaff}
                 activeTab={activeTab}
@@ -212,7 +233,7 @@ export default function AddressSelectPage() {
                 staffCount={staffList.length}
             />
 
-            <div className="flex-1 overflow-y-auto px-4 pt-4 pb-8 hide-scrollbar">
+            <div className={`flex-1 overflow-y-auto px-4 pt-4 hide-scrollbar ${showCreateFooter ? 'pb-40' : 'pb-8'}`}>
                 {/* ── BRANCHES TAB ── */}
                 {(activeTab === 'branches' || isStaff) && (
                     <BranchGrid
@@ -230,7 +251,6 @@ export default function AddressSelectPage() {
                         onBackup={setBackupSource}
                         onRename={renameAddress}
                         onRemove={removeAddress}
-                        onCreateNew={handleCreateNew}
                         onDefaultTemplate={() => {
                             setSelectedAddress({ id: null, name: 'Mẫu mặc định' })
                             navigate('/recipes')
@@ -263,6 +283,31 @@ export default function AddressSelectPage() {
                     Đăng xuất
                 </button>
             </div>
+
+            {/* Footer: Create new address */}
+            {showCreateFooter && (
+                <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-50">
+                    <div className="p-4 bg-surface border-t border-border/60 pointer-events-auto">
+                        <div className="flex flex-col gap-3">
+                            <input
+                                type="text"
+                                placeholder="Tên địa chỉ mới..."
+                                value={newAddressName}
+                                onChange={e => setNewAddressName(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateFromFooter() }}
+                                className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
+                            />
+                            <button
+                                onClick={handleCreateFromFooter}
+                                disabled={!newAddressName.trim() || creating}
+                                className="w-full py-3 rounded-[12px] bg-primary text-bg text-[14px] font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase flex items-center justify-center gap-1.5"
+                            >
+                                {creating ? <><Loader size={13} className="animate-spin" /> Đang tạo...</> : 'Tạo địa chỉ'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Backup Modal */}
             {backupSource && (
