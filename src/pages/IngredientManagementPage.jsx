@@ -29,6 +29,7 @@ export default function IngredientManagementPage() {
     // Sorting state
     const [isSorting, setIsSorting] = useState(false)
     const [sortedIngredients, setSortedIngredients] = useState([])
+    const [selectedSortIngredient, setSelectedSortIngredient] = useState(null)
 
     // Create ingredient state
     const [newIngredientName, setNewIngredientName] = useState('')
@@ -143,11 +144,13 @@ export default function IngredientManagementPage() {
     const enterSortMode = () => {
         setSortedIngredients([...allIngredients])
         setIsSorting(true)
+        setSelectedSortIngredient(null)
     }
 
     const cancelSortMode = () => {
         setIsSorting(false)
         setSortedIngredients([])
+        setSelectedSortIngredient(null)
     }
 
     const moveIngredient = (fromIndex, toIndex) => {
@@ -164,6 +167,7 @@ export default function IngredientManagementPage() {
         try {
             await updateSortOrder(selectedAddress.id, sortedIngredients)
             setIsSorting(false)
+            setSelectedSortIngredient(null)
         } catch (err) {
             showError(err, 'Lưu thứ tự nguyên liệu')
         } finally {
@@ -194,32 +198,43 @@ export default function IngredientManagementPage() {
             </header>
 
             {/* Main content */}
-            <main className="flex-1 overflow-y-auto px-4 py-4 pb-48 space-y-2 bg-bg">
+            <main className="flex-1 overflow-y-auto px-4 py-4 pb-48 bg-bg">
                 {isSorting ? (
                     <div className="space-y-1.5">
-                        <p className="text-[12px] text-text-dim mb-2">Dùng nút ▲ ▼ để sắp xếp thứ tự hiển thị nguyên liệu cho chi nhánh này.</p>
-                        {sortedIngredients.map((ingredient, index) => (
-                            <div key={ingredient} className="flex items-center gap-2 bg-surface border border-border/60 shadow-sm rounded-[12px] px-3 py-2">
-                                <span className="text-[11px] text-text-dim font-bold tabular-nums w-5 text-right">{index + 1}</span>
-                                <span className="flex-1 text-[13px] font-bold text-text truncate">{ingredientLabel(ingredient)}</span>
-                                <div className="flex border border-border/80 rounded-[8px] overflow-hidden">
-                                    <button
-                                        onClick={() => moveIngredient(index, index - 1)}
-                                        disabled={index === 0}
-                                        className="px-3 py-1.5 bg-surface-light text-text hover:bg-border/30 disabled:opacity-30 disabled:cursor-not-allowed border-r border-border/80 font-bold text-[10px]"
-                                    >▲</button>
-                                    <button
-                                        onClick={() => moveIngredient(index, index + 1)}
-                                        disabled={index === sortedIngredients.length - 1}
-                                        className="px-3 py-1.5 bg-surface-light text-text hover:bg-border/30 disabled:opacity-30 disabled:cursor-not-allowed font-bold text-[10px]"
-                                    >▼</button>
+                        {sortedIngredients.map((ingredient, index) => {
+                            const isSelected = selectedSortIngredient === ingredient
+                            return (
+                                <div
+                                    key={ingredient}
+                                    onClick={() => setSelectedSortIngredient(ingredient)}
+                                    className={`bg-surface border rounded-[14px] px-4 py-3 flex items-center gap-3 cursor-pointer transition-colors ${isSelected ? 'border-primary ring-1 ring-primary' : 'border-border/60 hover:bg-surface-light'}`}
+                                >
+                                    <span className="text-text-dim text-[13px] font-bold w-6 text-center shrink-0">{index + 1}</span>
+                                    <span className="flex-1 text-[14px] font-bold text-text truncate">{ingredientLabel(ingredient)}</span>
+                                    {isSelected && (
+                                        <div className="flex flex-row gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                                            <button
+                                                onClick={() => moveIngredient(index, index - 1)}
+                                                disabled={index === 0}
+                                                className="w-10 h-8 flex items-center justify-center rounded-lg bg-surface-light border border-border/40 text-text-secondary text-[14px] hover:bg-border/40 active:scale-95 transition-all disabled:opacity-20 disabled:pointer-events-none"
+                                            >
+                                                ▲
+                                            </button>
+                                            <button
+                                                onClick={() => moveIngredient(index, index + 1)}
+                                                disabled={index === sortedIngredients.length - 1}
+                                                className="w-10 h-8 flex items-center justify-center rounded-lg bg-surface-light border border-border/40 text-text-secondary text-[14px] hover:bg-border/40 active:scale-95 transition-all disabled:opacity-20 disabled:pointer-events-none"
+                                            >
+                                                ▼
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
-                        ))}
+                            )
+                        })}
                     </div>
                 ) : (
-                    <div className="space-y-2">
-                        <p className="text-[12px] text-text-dim mb-2">Giá mỗi đơn vị nguyên liệu (VNĐ). Nhấn vào giá để chỉnh sửa.</p>
+                    <div className="grid grid-cols-2 gap-2">
                         {allIngredients.map(ingredient => (
                             <IngredientCostItem
                                 key={ingredient}
@@ -245,7 +260,7 @@ export default function IngredientManagementPage() {
                             />
                         ))}
                         {allIngredients.length === 0 && (
-                            <p className="text-text-secondary text-[13px] text-center py-6">Chưa có nguyên liệu nào.</p>
+                            <p className="col-span-2 text-text-secondary text-[13px] text-center py-6">Chưa có nguyên liệu nào.</p>
                         )}
                     </div>
                 )}
