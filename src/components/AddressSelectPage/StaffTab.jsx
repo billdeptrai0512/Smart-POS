@@ -21,14 +21,14 @@ function InviteLink({ link, expiry }) {
                     readOnly
                     value={link}
                     onFocus={e => e.target.select()}
-                    className="flex-1 min-w-0 px-3 py-2.5 rounded-[10px] bg-bg border border-border/60 text-text-secondary text-xs font-medium focus:outline-none focus:border-primary/40 truncate"
+                    className="flex-1 min-w-0 px-2 py-1 rounded-[10px] bg-bg border border-border/60 text-text-secondary text-sm font-medium focus:outline-none focus:border-primary/40 truncate"
                 />
                 <button
                     onClick={handleCopy}
-                    className="px-3 py-2.5 bg-primary text-black text-xs font-black rounded-[10px] shrink-0 hover:bg-primary/90 active:scale-95 transition-all flex items-center gap-1.5"
+                    className="px-2 py-1 bg-primary text-black text-xs font-black rounded-[10px] shrink-0 hover:bg-primary/90 active:scale-95 transition-all flex items-center gap-1.5"
                     title="Sao chép link"
                 >
-                    {copied ? <Check size={14} /> : <Copy size={14} />}
+                    {copied ? <Check size={12} /> : <Copy size={12} />}
                 </button>
             </div>
             {expiry && (
@@ -126,28 +126,7 @@ export default function StaffTab({
             </div>
 
             {/* Invite section */}
-            <div className="bg-surface border border-border/60 rounded-[20px] p-4 space-y-3">
-                <div className="flex items-start gap-2.5">
-                    <div className={`w-9 h-9 rounded-[12px] flex items-center justify-center shrink-0 ${link ? 'bg-primary/10' : 'bg-bg border border-border/60'}`}>
-                        {link
-                            ? <LinkIcon size={16} className="text-primary" />
-                            : <ActiveIcon size={16} className="text-text-secondary" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <h3 className="text-text font-black text-sm leading-tight">
-                            {link
-                                ? 'Link mời đã sẵn sàng'
-                                : (isStaffTab ? 'Mời nhân viên mới' : 'Mời quản lý mới')}
-                        </h3>
-                        <p className="text-text-secondary text-xs mt-0.5 leading-snug">
-                            {link
-                                ? 'Sao chép và gửi link cho người được mời.'
-                                : (isStaffTab
-                                    ? 'Tạo link đăng ký để nhân viên tham gia.'
-                                    : 'Tạo link đăng ký cho quản lý cùng quyền.')}
-                        </p>
-                    </div>
-                </div>
+            <div className="bg-surface border border-border/60 rounded-[20px] p-2 space-y-3">
 
                 {link ? (
                     <InviteLink link={link} expiry={expiry} />
@@ -159,7 +138,9 @@ export default function StaffTab({
                     >
                         {generating
                             ? <><Loader size={14} className="animate-spin" /> Đang tạo...</>
-                            : <>+ Tạo link mời</>
+                            : isStaffTab
+                                ? 'Mời nhân viên'
+                                : 'Mời quản lý'
                         }
                     </button>
                 )}
