@@ -191,10 +191,11 @@ export default function RecipeIngredientPage() {
         if (!newExtraName.trim()) return
         setSaving(true)
         try {
+            const parsedPrice = parseInt(newExtraPrice)
             const newExtra = await insertProductExtra(
                 productId,
                 newExtraName.trim(),
-                parseInt(newExtraPrice) ?? 0,
+                Number.isFinite(parsedPrice) ? parsedPrice : 0,
                 selectedAddress?.id
             )
             setExtras(prev => [...prev, { id: newExtra.id, name: newExtra.name, price: newExtra.price }])
