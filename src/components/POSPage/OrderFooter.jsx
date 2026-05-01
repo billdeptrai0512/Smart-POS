@@ -1,5 +1,5 @@
 import { formatVND } from '../../utils'
-import { QUICK_EXTRAS } from '../../constants'
+
 import { Zap } from 'lucide-react'
 
 export default function OrderFooter({ cart, activeCartItemId, total, hasOrder, isSubmitting, onToggleExtra, onConfirm, productExtras, enabledStickyExtraIds = [], onToggleStickyExtra }) {
@@ -7,10 +7,7 @@ export default function OrderFooter({ cart, activeCartItemId, total, hasOrder, i
     const activeItem = cart.find(item => item.cartItemId === activeCartItemId) || cart[cart.length - 1]
     const activeProductId = activeItem?.productId
 
-    // Use per-product extras if available, otherwise fall back to global QUICK_EXTRAS
-    const extrasToShow = (activeProductId && productExtras?.[activeProductId]?.length > 0)
-        ? productExtras[activeProductId]
-        : QUICK_EXTRAS
+    const extrasToShow = productExtras?.[activeProductId] || []
 
     const stickyExtrasToShow = extrasToShow.filter(e => e.is_sticky)
     const normalExtrasToShow = extrasToShow.filter(e => !e.is_sticky)
@@ -22,7 +19,7 @@ export default function OrderFooter({ cart, activeCartItemId, total, hasOrder, i
         <footer className="shrink-0 bg-surface border-t border-border/80 shadow-[0_-4px_24px_rgba(0,0,0,0.02)] flex flex-col">
 
             {/* Quick Extras Bar */}
-            {cart.length > 0 && (
+            {cart.length > 0 && extrasToShow.length > 0 && (
                 <div className="w-full overflow-x-auto py-2.5 px-4 flex gap-2 items-center hide-scrollbar border-b border-border/40">
                     {/* Global Sticky Extras */}
                     {hasStickyExtras && (
