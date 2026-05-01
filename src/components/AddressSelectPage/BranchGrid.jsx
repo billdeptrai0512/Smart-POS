@@ -61,6 +61,10 @@ export default function BranchGrid({
                     const revenue = revenueMap[addr.id] || 0
                     const staffNames = sessionsMap[addr.id] || []
                     const isEditing = editingAddressId === addr.id
+                    // Stale-while-revalidate: only hide stats on initial load.
+                    // Once cupsMap has any value (incl. 0), keep rendering it
+                    // during background refreshes (visibilitychange refetch).
+                    const hasStats = cupsMap[addr.id] !== undefined
 
                     return (
                         <div
@@ -109,7 +113,7 @@ export default function BranchGrid({
                                             <span className="text-success font-black text-sm group-hover:text-primary transition-colors line-clamp-2 leading-tight truncate">{addr.name}</span>
                                             <ArrowRight size={20} strokeWidth={2.5} className="text-text shrink-0" />
                                         </div>
-                                        {!statsLoading && ( // improved here
+                                        {hasStats && (
                                             <div className="flex flex-col  gap-1 mt-2">
                                                 <span className="flex  items-center gap-1 text-text-secondary text-sm">
                                                     Đã bán: <span className="font-bold">{cups}</span> ly

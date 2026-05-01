@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { useAuth } from './AuthContext'
 import { useAddress } from './AddressContext'
@@ -89,31 +89,6 @@ export function ProductProvider() {
         load()
     }, [activeManagerId, selectedAddress?.id])
 
-    // Realtime: re-fetch when menu/recipe/cost/extras change on any device
-    const refreshTimerRef = useRef(null)
-    useEffect(() => {
-        if (!supabase || !selectedAddress?.id) return
-        const addressId = selectedAddress.id
-
-        const scheduleRefresh = () => {
-            clearTimeout(refreshTimerRef.current)
-            refreshTimerRef.current = setTimeout(() => refreshProducts(), 400)
-        }
-
-        const channel = supabase
-            .channel(`product-data-${addressId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, scheduleRefresh)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'recipes', filter: `address_id=eq.${addressId}` }, scheduleRefresh)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredient_costs', filter: `address_id=eq.${addressId}` }, scheduleRefresh)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'product_extras', filter: `address_id=eq.${addressId}` }, scheduleRefresh)
-            .subscribe()
-
-        return () => {
-            clearTimeout(refreshTimerRef.current)
-            supabase.removeChannel(channel)
-        }
-    }, [selectedAddress?.id])
-
     const refreshProducts = useCallback(async () => {
         const addressId = selectedAddress?.id
         const [prods, recs, costsResult, extras] = await Promise.all([
@@ -125,7 +100,23 @@ export function ProductProvider() {
         const extraIds = Object.values(extras).flat().map(e => e.id)
         const extraIngs = await fetchExtraIngredients(extraIds)
         applyData(prods, recs, costsResult, extras, extraIngs, addressId)
-    }, [activeManagerId, selectedAddress?.id])
+    }, [activeManagerId, selectedAddress?.id, applyData])
+
+    // Refresh menu/recipe/cost/extras when tab becomes visible again.
+    // Replaces a per-address realtime channel that previously held an open
+    // WebSocket subscription on 4 tables for every signed-in client. Product
+    // data changes infrequently, so an on-focus refetch is sufficient.
+    useEffect(() => {
+        if (!supabase || !selectedAddress?.id) return
+
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                refreshProducts().catch(() => { })
+            }
+        }
+        document.addEventListener('visibilitychange', handleVisibility)
+        return () => document.removeEventListener('visibilitychange', handleVisibility)
+    }, [selectedAddress?.id, refreshProducts])
 
     return (
         <ProductContext.Provider value={{

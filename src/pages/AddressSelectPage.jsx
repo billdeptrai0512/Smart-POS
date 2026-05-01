@@ -2,11 +2,9 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { fetchBranchTodayCups, fetchBranchTodayRevenue, fetchActiveSessions, fetchStaffByManager, createInviteToken } from '../services/authService'
+import { fetchBranchesTodayStats, fetchActiveSessions, fetchStaffByManager, createInviteToken } from '../services/authService'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
-import { supabase } from '../lib/supabaseClient'
 import { LogOut, Loader } from 'lucide-react'
-import RealtimeNotification from '../components/POSPage/RealtimeNotification'
 import Skeleton from '../components/common/Skeleton'
 import BackupModal from '../components/AddressSelectPage/BackupModal'
 import AddressHeader from '../components/AddressSelectPage/AddressHeader'
@@ -20,7 +18,6 @@ export default function AddressSelectPage() {
 
     const [activeTab, setActiveTab] = useState('branches')
     const [error, setError] = useState('')
-    const [realtimeNotification, setRealtimeNotification] = useState(null)
     const [cupsMap, setCupsMap] = useState({})
     const [revenueMap, setRevenueMap] = useState({})
     const [sessionsMap, setSessionsMap] = useState({})
@@ -39,41 +36,6 @@ export default function AddressSelectPage() {
     const [coManagerInviteLink, setCoManagerInviteLink] = useState('')
     const [coManagerInviteExpiry, setCoManagerInviteExpiry] = useState(null)
     const [generatingCoManagerLink, setGeneratingCoManagerLink] = useState(false)
-
-    // Keep a stable ref to addresses so the realtime channel below doesn't
-    // resubscribe on every create/rename/delete (which can drop INSERT events).
-    const addressesRef = useRef(addresses)
-    useEffect(() => { addressesRef.current = addresses }, [addresses])
-
-    // Listen for new orders if manager
-    useEffect(() => {
-        if (!supabase || isStaff) return
-
-        const ordersChannel = supabase
-            .channel('address-orders-realtime')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, async (payload) => {
-                const addressId = payload.new.address_id
-                const address = addressesRef.current.find(a => a.id === addressId)
-
-                const { data: items } = await supabase.from('order_items').select('quantity, products(count_as_cup)').eq('order_id', payload.new.id)
-                let qty = 0
-                if (items) qty = items.reduce((s, i) => i.products?.count_as_cup === false ? s : s + i.quantity, 0)
-
-                setRealtimeNotification({
-                    title: address ? address.name : 'Đơn mới',
-                    description: `Khách vừa mua (${qty} ly)`,
-                    total: payload.new.total
-                })
-
-                if (addressId) {
-                    setCupsMap(prev => ({ ...prev, [addressId]: (prev[addressId] || 0) + qty }))
-                    setRevenueMap(prev => ({ ...prev, [addressId]: (prev[addressId] || 0) + (payload.new.total || 0) }))
-                }
-            })
-            .subscribe()
-
-        return () => { supabase.removeChannel(ordersChannel) }
-    }, [isStaff])
 
     // Stable signature of address IDs — changes only when an address is added/removed,
     // not on rename. Avoids re-running the heavy prefetch + stats effects unnecessarily.
@@ -115,26 +77,55 @@ export default function AddressSelectPage() {
         })
     }, [addressIdsKey])
 
-    // Fetch branch stats — only when set of addresses changes, not on rename.
+    // Fetch branch stats — when address set changes, on mount, and when the
+    // tab becomes visible again (so /pos → /addresses or returning from
+    // another tab reflects fresh numbers without manual refresh).
     useEffect(() => {
-        if (!addresses.length) return
+        if (!addresses.length) {
+            setStatsLoading(false)
+            return
+        }
         const addrIds = addresses.map(a => a.id)
-        setStatsLoading(true)
+        let cancelled = false
 
-        Promise.all([
-            fetchBranchTodayCups(addrIds),
-            fetchBranchTodayRevenue(addrIds),
-            fetchActiveSessions(addrIds)
-        ]).then(([cups, revenue, sessions]) => {
-            setCupsMap(cups)
-            setRevenueMap(revenue)
-            const grouped = {}
-            sessions.forEach(s => {
-                if (!grouped[s.address_id]) grouped[s.address_id] = []
-                grouped[s.address_id].push(s.users?.name || 'Unknown')
+        const loadStats = () => {
+            setStatsLoading(true)
+            return Promise.all([
+                fetchBranchesTodayStats(addrIds),
+                fetchActiveSessions(addrIds)
+            ]).then(([{ cupsMap: cups, revenueMap: revenue }, sessions]) => {
+                if (cancelled) return
+                // Normalize: fill 0 for addresses with no orders today so each
+                // address always has a defined entry. BranchGrid relies on
+                // `cupsMap[addr.id] !== undefined` for stale-while-revalidate.
+                const filledCups = {}, filledRev = {}
+                addrIds.forEach(id => {
+                    filledCups[id] = cups[id] ?? 0
+                    filledRev[id] = revenue[id] ?? 0
+                })
+                setCupsMap(filledCups)
+                setRevenueMap(filledRev)
+                const grouped = {}
+                sessions.forEach(s => {
+                    if (!grouped[s.address_id]) grouped[s.address_id] = []
+                    grouped[s.address_id].push(s.users?.name || 'Unknown')
+                })
+                setSessionsMap(grouped)
+            }).finally(() => {
+                if (!cancelled) setStatsLoading(false)
             })
-            setSessionsMap(grouped)
-        }).finally(() => setStatsLoading(false))
+        }
+
+        loadStats()
+
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') loadStats()
+        }
+        document.addEventListener('visibilitychange', handleVisibility)
+        return () => {
+            cancelled = true
+            document.removeEventListener('visibilitychange', handleVisibility)
+        }
     }, [addressIdsKey])
 
     // Fetch staff list for manager (needed for header count + staff tab)
@@ -316,11 +307,6 @@ export default function AddressSelectPage() {
                     onClose={() => setBackupSource(null)}
                 />
             )}
-
-            <RealtimeNotification
-                notification={realtimeNotification}
-                onClose={() => setRealtimeNotification(null)}
-            />
         </div>
     )
 }

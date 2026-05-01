@@ -53,27 +53,45 @@ export async function updateProductCountAsCup(productId, countAsCup) {
     if (error) throw error
 }
 
-// Fetch today's revenue + cups (cups excludes products with count_as_cup=false)
+// Fetch today's revenue + cups (cups excludes products with count_as_cup=false).
+// Uses the get_today_stats RPC which aggregates in Postgres — payload is a
+// single row instead of every order joined to its items + products. Falls
+// back to the legacy client-side aggregation if the RPC isn't deployed yet
+// (so this code is safe to ship before the migration runs).
 export async function fetchTodayStats(addressId) {
     if (!supabase || !addressId) return { revenue: 0, cups: 0 }
+
+    const { data, error } = await supabase.rpc('get_today_stats', { p_address_id: addressId })
+    if (!error && data) {
+        const row = Array.isArray(data) ? data[0] : data
+        return {
+            revenue: Number(row?.revenue || 0),
+            cups: Number(row?.cups || 0)
+        }
+    }
+
+    // Fallback: function not deployed (PGRST202 / 42883). Use legacy query.
+    if (error && error.code !== 'PGRST202' && error.code !== '42883') {
+        console.error('fetchTodayStats RPC error:', error)
+    }
+
     const from = new Date()
     from.setHours(0, 0, 0, 0)
-
-    const { data, error } = await supabase
+    const { data: legacyData, error: legacyError } = await supabase
         .from('orders')
         .select('total, order_items(quantity, products(count_as_cup))')
         .eq('address_id', addressId)
         .gte('created_at', from.toISOString())
 
-    if (error) { console.error('fetchTodayStats error:', error); return { revenue: 0, cups: 0 } }
+    if (legacyError) { console.error('fetchTodayStats legacy error:', legacyError); return { revenue: 0, cups: 0 } }
 
     let revenue = 0, cups = 0
-        ; (data || []).forEach(o => {
-            revenue += Number(o.total || 0)
-                ; (o.order_items || []).forEach(i => {
-                    if (i.products?.count_as_cup !== false) cups += Number(i.quantity || 0)
-                })
+    ;(legacyData || []).forEach(o => {
+        revenue += Number(o.total || 0)
+        ;(o.order_items || []).forEach(i => {
+            if (i.products?.count_as_cup !== false) cups += Number(i.quantity || 0)
         })
+    })
     return { revenue, cups }
 }
 

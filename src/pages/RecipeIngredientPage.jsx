@@ -405,49 +405,37 @@ export default function RecipeIngredientPage() {
                         </div>
                     </div>
 
-                    <button
-                        onClick={async () => {
-                            const addrId = selectedAddress?.id || null;
-                            if (!addrId && !isAdmin) return; // Only Admin handling default menu can proceed without address_id
+                    {canEdit && (
+                        <button
+                            onClick={async () => {
+                                const addrId = selectedAddress?.id || null;
+                                if (!addrId && !isAdmin) return; // Only Admin handling default menu can proceed without address_id
 
-                            const targetName = addrId ? 'của chi nhánh này' : 'mặc định của hệ thống';
-                            if (!window.confirm(`Xóa "${product.name}" khỏi menu ${targetName}?`)) return
+                                const targetName = addrId ? 'của chi nhánh này' : 'mặc định của hệ thống';
+                                if (!window.confirm(`Xóa "${product.name}" khỏi menu ${targetName}?`)) return
 
-                            setSaving(true)
-                            try {
-                                await removeProductFromAddress(productId, addrId)
-                                refreshProducts?.()
-                                navigate('/recipes', { state: location.state })
-                            } catch (err) {
-                                showError(err, 'Xóa món khỏi menu')
-                            } finally {
-                                setSaving(false)
-                            }
-                        }}
-                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-danger/5 border border-danger/20 text-danger/70 hover:text-danger hover:bg-danger/10 transition-colors shadow-sm focus:outline-none shrink-0"
-                        title="Xóa món khỏi menu"
-                    >
-                        <Trash2 size={20} strokeWidth={2.5} />
-                    </button>
+                                setSaving(true)
+                                try {
+                                    await removeProductFromAddress(productId, addrId)
+                                    refreshProducts?.()
+                                    navigate('/recipes', { state: location.state })
+                                } catch (err) {
+                                    showError(err, 'Xóa món khỏi menu')
+                                } finally {
+                                    setSaving(false)
+                                }
+                            }}
+                            className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-danger/5 border border-danger/20 text-danger/70 hover:text-danger hover:bg-danger/10 transition-colors shadow-sm focus:outline-none shrink-0"
+                            title="Xóa món khỏi menu"
+                        >
+                            <Trash2 size={20} strokeWidth={2.5} />
+                        </button>
+                    )}
                 </div>
             </header>
 
             <main className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-bg">
-                {canEdit && (
-                    <label className="flex items-center justify-between gap-3 bg-surface border border-border/60 rounded-[14px] px-4 py-3 cursor-pointer select-none">
-                        <span className="flex flex-col min-w-0">
-                            <span className="text-[13px] font-bold text-text">Tính vào tổng số ly bán/ngày</span>
-                            <span className="text-[11px] text-text-secondary">Tắt cho món tặng kèm như Trà Đá</span>
-                        </span>
-                        <input
-                            type="checkbox"
-                            checked={product?.count_as_cup !== false}
-                            onChange={toggleCountAsCup}
-                            disabled={saving}
-                            className="w-5 h-5 accent-primary cursor-pointer shrink-0"
-                        />
-                    </label>
-                )}
+
                 <div className="space-y-2">
                     {prodRecipes.length === 0 && (
                         <p className="text-text-secondary text-[13px] text-center py-6">Chưa có nguyên liệu nào.</p>
@@ -502,7 +490,7 @@ export default function RecipeIngredientPage() {
 
                     {/* Add ingredient */}
                     {canEdit && (addingIngredient ? (
-                        <div className="flex flex-col gap-2 pt-1 border-t border-border/30 mt-2 bg-surface border border-border/60 rounded-[14px] px-4 py-3">
+                        <div className="flex flex-col gap-2 bg-bg/50 p-3 rounded-xl border border-border/60 mt-2">
                             <div className="flex items-center justify-between">
                                 <span className="text-[11px] text-text-dim font-bold uppercase">Thêm nguyên liệu</span>
                                 {selectedIngredients.size > 0 && (
@@ -534,8 +522,8 @@ export default function RecipeIngredientPage() {
                                 <div className="flex flex-wrap sm:flex-nowrap gap-1.5">
                                     <input
                                         type="text"
-                                        placeholder="Tên nguyên liệu..."
-                                        className="flex-1 w-0 min-w-[120px] bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[12px] text-text focus:outline-none focus:border-primary"
+                                        placeholder="Tên..."
+                                        className="flex-1 w-0 min-w-[80px] bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[12px] text-text focus:outline-none focus:border-primary"
                                         value={customIngredientName}
                                         onChange={e => setCustomIngredientName(e.target.value)}
                                     />
@@ -569,7 +557,7 @@ export default function RecipeIngredientPage() {
                                 <button
                                     onClick={handleAddMultipleIngredients}
                                     disabled={selectedIngredients.size === 0 && !customIngredientName.trim()}
-                                    className="flex-1 bg-primary text-bg px-3 py-2 rounded-lg text-[12px] font-bold disabled:opacity-50 transition-opacity"
+                                    className="flex-1 bg-primary text-bg px-3 py-1.5 rounded-lg text-[12px] font-bold disabled:opacity-50 transition-opacity"
                                 >
                                     {selectedIngredients.size > 0
                                         ? `Thêm ${selectedIngredients.size + (customIngredientName.trim() ? 1 : 0)} nguyên liệu`
@@ -577,7 +565,7 @@ export default function RecipeIngredientPage() {
                                 </button>
                                 <button
                                     onClick={() => { setAddingIngredient(false); setSelectedIngredients(new Set()); setCustomIngredientName(''); setCustomIngredientUnit('') }}
-                                    className="shrink-0 bg-surface-light border border-border/60 text-text px-3 py-2 rounded-lg text-[12px] font-bold"
+                                    className="shrink-0 bg-surface-light border border-border/60 text-text px-2 py-1.5 rounded-lg text-[12px] font-bold"
                                 >
                                     Hủy
                                 </button>
@@ -592,6 +580,23 @@ export default function RecipeIngredientPage() {
                         </button>
                     ))}
                 </div>
+
+                {canEdit && (
+                    <div className="mt-4 pt-4 border-t border-border/40">
+                        <label className="flex items-center justify-between gap-3 bg-surface border border-border/60 rounded-[14px] px-4 py-3 cursor-pointer select-none">
+                            <span className="flex flex-col min-w-0">
+                                <span className="text-[13px] font-bold text-text">Cộng vào tổng số ly bán/ngày</span>                            </span>
+                            <input
+                                type="checkbox"
+                                checked={product?.count_as_cup !== false}
+                                onChange={toggleCountAsCup}
+                                disabled={saving}
+                                className="w-5 h-5 accent-primary cursor-pointer shrink-0"
+                            />
+                        </label>
+                    </div>
+                )}
+
 
                 {/* ========== EXTRA OPTIONS SECTION ========== */}
                 <div className="mt-4 pt-4 border-t border-border/40">
@@ -659,21 +664,22 @@ export default function RecipeIngredientPage() {
                                         />
                                     ) : (
                                         <div className="flex-1 flex items-center gap-1 min-w-0">
+                                            {canEdit && (
+                                                <button
+                                                    onClick={() => handleToggleSticky(extra.id, extra.is_sticky)}
+                                                    className={`shrink-0 w-6 h-6 flex items-center text-[13px] justify-center rounded transition-colors ${extra.is_sticky ? 'text-warning' : 'text-text-dim/40 hover:text-text-dim'}`}
+                                                    title={extra.is_sticky ? 'Đang tự chọn — bấm để tắt' : 'Bấm để bật tự chọn'}
+                                                >
+                                                    {extra.is_sticky ? '🔒' : '🔓'}
+                                                </button>
+                                            )}
                                             <span
                                                 className={`text-[13px] font-bold text-text uppercase truncate ${canEdit ? 'cursor-pointer hover:text-primary' : ''}`}
                                                 onClick={() => canEdit && setEditingExtraName({ extraId: extra.id, value: extra.name })}
                                             >
                                                 {extra.name}
                                             </span>
-                                            {canEdit && (
-                                                <button
-                                                    onClick={() => setDuplicatingExtra({ id: extra.id, value: extra.name + ' (copy)' })}
-                                                    className="text-text-dim hover:text-primary text-[14px] shrink-0 w-6 h-6 flex items-center justify-center"
-                                                    title="Nhân bản"
-                                                >
-                                                    ⧉
-                                                </button>
-                                            )}
+
                                         </div>
                                     )}
                                     {editingExtraPrice?.extraId === extra.id ? (
@@ -702,13 +708,7 @@ export default function RecipeIngredientPage() {
                                     )}
                                     {canEdit && (
                                         <>
-                                            <button
-                                                onClick={() => handleToggleSticky(extra.id, extra.is_sticky)}
-                                                className={`shrink-0 w-6 h-6 flex items-center text-[13px] justify-center rounded transition-colors ${extra.is_sticky ? 'text-warning' : 'text-text-dim/40 hover:text-text-dim'}`}
-                                                title={extra.is_sticky ? 'Đang tự chọn — bấm để tắt' : 'Bấm để bật tự chọn'}
-                                            >
-                                                🔒
-                                            </button>
+
 
                                             <button
                                                 onClick={() => handleDeleteExtra(extra.id, extra.name)}
@@ -720,35 +720,7 @@ export default function RecipeIngredientPage() {
                                         </>
                                     )}
                                 </div>
-                                {duplicatingExtra?.id === extra.id && (
-                                    <div className="flex items-center gap-2 pt-1 border-t border-border/30">
-                                        <input
-                                            type="text"
-                                            autoFocus
-                                            placeholder="Tên bản sao..."
-                                            className="flex-1 bg-bg border border-primary/60 rounded-lg px-2 py-1 text-[12px] text-text focus:outline-none focus:border-primary"
-                                            value={duplicatingExtra.value}
-                                            onChange={e => setDuplicatingExtra(prev => ({ ...prev, value: e.target.value }))}
-                                            onKeyDown={e => {
-                                                if (e.key === 'Enter') handleDuplicateExtra(extra.id, duplicatingExtra.value)
-                                                if (e.key === 'Escape') setDuplicatingExtra(null)
-                                            }}
-                                        />
-                                        <button
-                                            onClick={() => handleDuplicateExtra(extra.id, duplicatingExtra.value)}
-                                            disabled={!duplicatingExtra.value.trim() || saving}
-                                            className="text-[11px] font-bold bg-primary text-bg px-2.5 py-1 rounded-lg disabled:opacity-50"
-                                        >
-                                            Nhân bản
-                                        </button>
-                                        <button
-                                            onClick={() => setDuplicatingExtra(null)}
-                                            className="text-[11px] text-text-dim hover:text-text"
-                                        >
-                                            Hủy
-                                        </button>
-                                    </div>
-                                )}
+
                                 <div className="border-t border-border/40 pt-2 flex flex-col gap-1.5">
                                     {(extraIngs[extra.id] || []).map(ei => {
                                         const isEditingExtra = editingExtraAmount?.extraId === extra.id && editingExtraAmount?.ingredient === ei.ingredient;
@@ -787,7 +759,7 @@ export default function RecipeIngredientPage() {
                                         )
                                     })}
 
-                                    {canEdit && (addingExtraIng === extra.id ? (
+                                    {canEdit && addingExtraIng === extra.id && (
                                         <div className="flex flex-col gap-2 bg-bg/50 p-3 rounded-xl border border-border/60 mt-2">
                                             <div className="flex items-center justify-between">
                                                 <span className="text-[11px] text-text-dim font-bold uppercase">Thêm nguyên liệu / tác động</span>
@@ -869,14 +841,60 @@ export default function RecipeIngredientPage() {
                                                 </button>
                                             </div>
                                         </div>
-                                    ) : (
-                                        <button
-                                            onClick={() => { setAddingExtraIng(extra.id); setSelectedExtraIngs(new Set()); setCustomExtraIngName(''); setCustomExtraIngUnit('') }}
-                                            className="text-[11px] text-primary hover:underline self-start font-medium mt-1"
-                                        >
-                                            + Thay đổi nguyên liệu
-                                        </button>
-                                    ))}
+                                    )}
+
+                                    {canEdit && duplicatingExtra?.id === extra.id && (
+                                        <div className="flex flex-col gap-1.5 mt-1 pt-2 border-t border-border/30">
+                                            <div className="flex flex-wrap sm:flex-nowrap gap-1.5">
+                                                <input
+                                                    type="text"
+                                                    autoFocus
+                                                    placeholder="Tên..."
+                                                    className="flex-1 bg-bg border border-primary/60 rounded-lg px-2 py-1 text-[12px] text-text focus:outline-none focus:border-primary"
+                                                    value={duplicatingExtra.value}
+                                                    onChange={e => setDuplicatingExtra(prev => ({ ...prev, value: e.target.value }))}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') handleDuplicateExtra(extra.id, duplicatingExtra.value)
+                                                        if (e.key === 'Escape') setDuplicatingExtra(null)
+                                                    }}
+                                                />
+                                                <div className="flex gap-2 mt-1">
+                                                    <button
+                                                        onClick={() => handleDuplicateExtra(extra.id, duplicatingExtra.value)}
+                                                        className="flex-1 bg-primary text-bg px-3 py-1.5 rounded-lg text-[12px] font-bold disabled:opacity-50 transition-opacity"
+                                                    >
+                                                        Nhân bản
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setDuplicatingExtra(null)}
+                                                        className="shrink-0 bg-surface-light border border-border/60 text-text px-2 py-1.5 rounded-lg text-[12px] font-bold"
+                                                    >
+                                                        Hủy
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {canEdit && (addingExtraIng !== extra.id) && (duplicatingExtra?.id !== extra.id) && (
+                                        <div className="flex justify-between gap-2 mt-1">
+                                            <button
+                                                onClick={() => { setAddingExtraIng(extra.id); setSelectedExtraIngs(new Set()); setCustomExtraIngName(''); setCustomExtraIngUnit('') }}
+                                                className="text-[11px] text-primary hover:underline self-start font-medium mt-1"
+                                            >
+                                                + Thêm nguyên liệu
+                                            </button>
+                                            <button
+                                                onClick={() => setDuplicatingExtra({ id: extra.id })}
+                                                className="text-text-dim hover:text-primary text-[14px] shrink-0 w-6 h-6 flex items-center justify-center"
+                                                title="Nhân bản"
+                                            >
+                                                ⧉
+                                            </button>
+
+                                        </div>
+                                    )}
+
                                 </div>
                             </div>
                         ))}
@@ -931,13 +949,14 @@ export default function RecipeIngredientPage() {
                 </div>
 
 
-            </main>
+            </main >
 
             {saving && (
                 <div className="fixed bottom-4 right-4 z-50 pointer-events-none">
                     <span className="text-text-secondary text-[11px] animate-pulse">Đang lưu...</span>
                 </div>
-            )}
-        </div>
+            )
+            }
+        </div >
     )
 }

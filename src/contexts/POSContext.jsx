@@ -132,44 +132,71 @@ export function POSProvider() {
     }, [addressId])
 
     // ---- Supabase realtime subscriptions ----
+    // Only subscribe to orders channel; only when tab is visible. Expenses are
+    // refetched on visibilitychange instead of via a dedicated realtime channel.
+    // fetchTodayStats is debounced to coalesce bursty INSERT events.
     useEffect(() => {
         if (!supabase || !addressId) return
 
-        const ordersChannel = supabase
-            .channel(`orders-realtime-${addressId}`)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
-                if (payload.new?.address_id === addressId) {
-                    fetchTodayStats(addressId).then(({ revenue, cups }) => { setRevenue(revenue); setCupsSold(cups) })
+        let ordersChannel = null
+        let statsTimer = null
 
-                    // Simple logic to detect if it's from another device
-                    if (!localOrderIds.current.has(payload.new.id)) {
-                        fetchLatestOrder(addressId).then(latest => {
-                            if (latest) setLastOrder(buildLastOrderFromDB(latest))
-                        })
-                    }
-                }
-            })
-            .subscribe()
+        const scheduleStatsRefresh = () => {
+            clearTimeout(statsTimer)
+            statsTimer = setTimeout(() => {
+                fetchTodayStats(addressId).then(({ revenue, cups }) => {
+                    setRevenue(revenue); setCupsSold(cups)
+                })
+            }, 2000)
+        }
 
-        const expensesChannel = supabase
-            .channel(`expenses-realtime-${addressId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, (payload) => {
-                if (payload.new?.address_id === addressId || payload.old?.address_id === addressId) {
-                    if (document.visibilityState === 'visible') {
-                        // Optimistically could refetch totalCost if we tracked it from DB, 
-                        // but totalCost is derived from orders + expenses. We'll simply let it update on load history.
-                        // Actually, to keep dashboard cost synced when other devices add expenses:
-                        fetchTodayExpenses(addressId).then(expenses => {
-                            setTodayExpenses(expenses)
-                        })
+        const subscribe = () => {
+            if (ordersChannel) return
+            ordersChannel = supabase
+                .channel(`orders-realtime-${addressId}`)
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+                    if (payload.new?.address_id === addressId) {
+                        scheduleStatsRefresh()
+
+                        // Detect if it's from another device
+                        if (!localOrderIds.current.has(payload.new.id)) {
+                            fetchLatestOrder(addressId).then(latest => {
+                                if (latest) setLastOrder(buildLastOrderFromDB(latest))
+                            })
+                        }
                     }
-                }
-            })
-            .subscribe()
+                })
+                .subscribe()
+        }
+
+        const unsubscribe = () => {
+            if (ordersChannel) {
+                supabase.removeChannel(ordersChannel)
+                ordersChannel = null
+            }
+        }
+
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                subscribe()
+                // Catch up on anything missed while tab was hidden
+                fetchTodayStats(addressId).then(({ revenue, cups }) => {
+                    setRevenue(revenue); setCupsSold(cups)
+                })
+                fetchTodayExpenses(addressId).then(setTodayExpenses).catch(() => { })
+            } else {
+                unsubscribe()
+            }
+        }
+
+        // Initial state
+        if (document.visibilityState === 'visible') subscribe()
+        document.addEventListener('visibilitychange', handleVisibility)
 
         return () => {
-            supabase.removeChannel(ordersChannel)
-            supabase.removeChannel(expensesChannel)
+            clearTimeout(statsTimer)
+            document.removeEventListener('visibilitychange', handleVisibility)
+            unsubscribe()
         }
     }, [addressId])
 
