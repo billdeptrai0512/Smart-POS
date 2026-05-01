@@ -12,10 +12,9 @@ export default function Header({ isOnline, dayName, dateOnly, onOpenHistory, add
                     className="cursor-pointer bg-bg hover:bg-surface active:bg-border/20 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-[20px] p-3 sm:p-3.5 border border-border/60 shadow-sm flex flex-col justify-center gap-[2px] relative overflow-hidden h-full"
                 >
                     <div className="flex flex-col justify-between items-start relative z-10">
-                        <span className="text-[12px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider">Trạng thái</span>
+                        <span className="text-[12px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider">Hôm nay</span>
                         <div className="flex items-center gap-1.5 mb-1">
-                            <span className={`w-2 h-2 rounded-full shadow-sm ${isOnline ? 'bg-success shadow-success/40' : 'bg-danger shadow-danger/40'}`} />
-                            <span className="text-[15px] sm:text-[16px] text-text font-black tracking-tight leading-none">{isOnline ? 'Online' : 'Offline'}</span>
+                            <span className="text-[15px] sm:text-[13px] text-text uppercase font-black tracking-tight">{dayName} • {dateOnly}</span>
                         </div>
                     </div>
                     <div className="w-full h-[1px] bg-border/60 rounded-full relative z-10 my-[3px] mt-[4px]"></div>
@@ -34,23 +33,23 @@ export default function Header({ isOnline, dayName, dateOnly, onOpenHistory, add
                     onClick={onOpenHistory}
                     role="button"
                     tabIndex={0}
-                    className="cursor-pointer bg-primary/5 rounded-[20px] p-3 sm:p-3.5 border border-primary/10 shadow-sm flex flex-col justify-center gap-[2px] relative overflow-hidden h-full hover:bg-primary/10 active:bg-primary/15 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    className="cursor-pointer bg-primary/5 rounded-[20px] p-3 sm:p-3.5 border border-primary/10 shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full hover:bg-primary/10 active:bg-primary/15 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
                 >
-                    <div className="flex flex-col justify-between relative z-10">
+                    {/* <div className="flex flex-col justify-between relative z-10">
                         <span className="text-[12px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider">{dayName}</span>
                         <span className="text-[15px] sm:text-[16px] text-text font-black tracking-tight">{dateOnly}</span>
                     </div>
 
-                    <div className="w-full h-[1px] bg-primary/15 rounded-full relative z-10 my-[3px]"></div>
+                    <div className="w-full h-[1px] bg-primary/15 rounded-full relative z-10 my-[3px]"></div> */}
 
-                    <div className="flex flex-col justify-between items-start relative z-10 mt-[6px] w-full">
+                    <div className="flex flex-col justify-between items-start relative z-10 w-full">
                         <div className="flex items-center justify-between w-full">
                             <span className="text-[12px] sm:text-[13px] text-text-secondary font-black uppercase tracking-wider">Nhật ký</span>
                             <ArrowRight size={20} strokeWidth={2.5} className="text-text shrink-0" />
                         </div>
-                        <div className="mt-0.5 w-full">
+                        <div className="w-full">
                             {lastOrder ? (
-                                <div className="text-[13px] font-bold text-primary leading-snug flex flex-col gap-0.5">
+                                <div className="text-[13px] font-bold text-primary uppercase tracking-tight leading-snug flex flex-col mt-1 gap-1">
                                     {lastOrder.items.map((item, i) => (
                                         <span key={i}>{item}</span>
                                     ))}

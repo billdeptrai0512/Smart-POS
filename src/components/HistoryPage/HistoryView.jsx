@@ -172,8 +172,6 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
 
                         </div>
 
-
-
                     </div>
 
                     <button onClick={() => navigate('/recipes')}
