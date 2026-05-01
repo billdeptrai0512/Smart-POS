@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, PackageCheck } from 'lucide-react'
+import { ArrowLeft, Check, CircleCheck, PackageCheck } from 'lucide-react'
 import { usePOS } from '../contexts/POSContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -297,12 +297,21 @@ export default function ShiftClosingPage() {
 
                     <div className="flex flex-row gap-2 flex-1">
                         <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
-                            <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Chốt Ca</span>
+                            <span className="text-[12px] font-black text-primary line-clamp-1">Chốt Ca</span>
                             <span className="text-[12px] font-bold text-primary/80 leading-none mt-1 tabular-nums">{formatVND(systemTotalRevenue)}</span>
                         </div>
                     </div>
+
+                    <button
+                        onClick={handleSubmit}
+                        disabled={isSubmitting || isLoadingHistory || isLoadingIngredients || isLoadingExisting}
+                        className="w-10 h-10 flex shrink-0 flex-col items-center justify-center rounded-[14px] bg-success/10 border-border/60 transition-colors shadow-sm focus:outline-none"
+                    >
+                        <Check size={20} className='text-success' strokeWidth={3} />
+                    </button>
                 </div>
             </header>
+
 
             {/* Main content */}
             <main className="flex-1 overflow-y-auto px-4 py-5 pb-28 space-y-5 bg-bg">
@@ -317,7 +326,7 @@ export default function ShiftClosingPage() {
                         <div>
                             <div className="flex items-center gap-3 py-1 mb-3 px-1">
                                 <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                                <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Doanh thu thực tế</span>
+                                <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Thực nhận</span>
                                 <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
                             </div>
 
@@ -378,7 +387,7 @@ export default function ShiftClosingPage() {
                             <div>
                                 <div className="flex items-center gap-3 py-1 mb-3 px-1">
                                     <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                                    <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Kiểm kê tồn kho</span>
+                                    <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Kiểm tồn kho</span>
                                     <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
                                 </div>
 
@@ -483,17 +492,7 @@ export default function ShiftClosingPage() {
                 )}
             </main>
 
-            {/* Fixed footer */}
-            <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-bg via-bg via-60% to-transparent pointer-events-none">
-                <button
-                    onClick={handleSubmit}
-                    disabled={isSubmitting || isLoadingHistory || isLoadingIngredients || isLoadingExisting}
-                    className="w-full py-3.5 rounded-[16px] bg-primary text-white text-[14px] font-black uppercase tracking-wide hover:bg-primary/90 active:bg-primary/80 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm pointer-events-auto flex items-center justify-center gap-2"
-                >
-                    <PackageCheck size={18} strokeWidth={2.5} />
-                    {isSubmitting ? 'Đang xử lý...' : existingClosing ? 'Cập nhật chốt ca' : 'Xác nhận chốt ca'}
-                </button>
-            </div>
+
         </div>
     )
 }

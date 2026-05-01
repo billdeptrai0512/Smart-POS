@@ -1,4 +1,4 @@
-import { ArrowLeft, Pencil, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Pencil, ChevronLeft, ChevronRight, FolderUp, PenLine, Pen } from 'lucide-react'
 
 const RANGES = [
     { key: 'day', label: 'Hôm nay' },
@@ -88,10 +88,11 @@ export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange
 
                 <button
                     onClick={onEditShiftClosing}
-                    className="w-10 h-10 flex shrink-0 flex-col items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none relative z-10"
+                    className="w-10 h-10 flex flex-col items-center justify-center rounded-[14px] bg-primary/10 border-border/60 text-primary text-[14px] font-black uppercase tracking-wide active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm pointer-events-auto flex items-center justify-center gap-2"
                     title="Cập nhật chốt ca"
                 >
-                    <Pencil size={16} className="text-text" strokeWidth={2.5} />
+                    <Pen size={18} strokeWidth={2.5} />
+
                 </button>
             </div>
 

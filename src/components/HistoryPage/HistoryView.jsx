@@ -316,20 +316,12 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                     </div>
 
                     <button
-                        onClick={() => {
-                            if (shiftClosed === null) return
-                            navigate(isStaff ? '/shift-closing' : '/daily-report')
-                        }}
-                        className={`border rounded-[16px] px-5 flex flex-col items-center justify-center gap-1 shadow-sm hover:bg-border/30 active:scale-95 transition-all group ${shiftClosed === null
-                            ? 'bg-surface-light border-border/60 opacity-60'
-                            : 'bg-success/10 border-success/60'
-                            }`}
-                        title={isStaff ? "Chốt ca / Cập nhật" : "Báo cáo"}
-                        disabled={shiftClosed === null}
+                        onClick={() => { navigate('/daily-report') }}
+                        className={`border rounded-[16px] px-5 flex flex-col items-center justify-center gap-1 shadow-sm hover:bg-border/30 active:scale-95 transition-all group bg-success/10 border-success/60`}
+                        title={"Báo cáo"}
                     >
-                        <span className={`text-[12px] font-black uppercase whitespace-nowrap transition-colors ${shiftClosed === null ? 'text-text-secondary' : 'text-success'
-                            }`}>
-                            {shiftClosed === null ? '...' : (isStaff ? (shiftClosed ? 'Cập nhật' : 'Chốt ca') : 'Báo cáo')}
+                        <span className={`text-[12px] font-black uppercase whitespace-nowrap transition-colors text-success`}>
+                            Báo cáo
                         </span>
                     </button>
                 </div>
