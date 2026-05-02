@@ -118,12 +118,17 @@ export default function AddressSelectPage() {
 
         loadStats()
 
+        const intervalId = setInterval(() => {
+            if (document.visibilityState === 'visible') loadStats()
+        }, 30_000)
+
         const handleVisibility = () => {
             if (document.visibilityState === 'visible') loadStats()
         }
         document.addEventListener('visibilitychange', handleVisibility)
         return () => {
             cancelled = true
+            clearInterval(intervalId)
             document.removeEventListener('visibilitychange', handleVisibility)
         }
     }, [addressIdsKey])
