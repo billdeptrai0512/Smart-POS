@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
@@ -27,6 +27,9 @@ export default function RecipeMenuPage() {
     const [newProductName, setNewProductName] = useState('')
     const [newProductPrice, setNewProductPrice] = useState('')
     const [saving, setSaving] = useState(false)
+
+    // Fetch fresh data on mount to avoid showing stale localStorage cache
+    useEffect(() => { refreshProducts?.() }, [])
 
     // Sort mode state
     const [isSorting, setIsSorting] = useState(false)

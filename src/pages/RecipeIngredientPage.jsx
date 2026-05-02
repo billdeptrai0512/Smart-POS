@@ -17,7 +17,9 @@ import {
     deleteProductExtra,
     removeProductFromAddress,
     upsertExtraIngredient,
-    deleteExtraIngredient
+    deleteExtraIngredient,
+    upsertIngredientCost,
+    deleteRecipeRow
 } from '../services/orderService'
 import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
 import { ArrowLeft, Trash2 } from 'lucide-react'
@@ -66,6 +68,9 @@ export default function RecipeIngredientPage() {
 
     const product = useMemo(() => products.find(p => p.id === productId), [products, productId])
 
+    // Fetch fresh data on mount to avoid showing stale localStorage cache
+    useEffect(() => { refreshProducts?.() }, [])
+
     // Sync from context when it updates
     useEffect(() => { setRecipes(allRecipes) }, [allRecipes])
     useEffect(() => { setIngredientCosts(contextCosts) }, [contextCosts])
@@ -83,6 +88,19 @@ export default function RecipeIngredientPage() {
     const baseIngredients = prodRecipes.map(r => r.ingredient)
     const availableBaseIngredients = dbIngredients.filter(i => !baseIngredients.includes(i))
 
+
+    async function handleDeleteRecipeIngredient(ingredient) {
+        if (!window.confirm(`Xóa "${ingredientLabel(ingredient)}" khỏi công thức?`)) return
+        setSaving(true)
+        try {
+            await deleteRecipeRow(productId, ingredient, selectedAddress?.id)
+            setRecipes(prev => prev.filter(r => !(r.product_id === productId && r.ingredient === ingredient)))
+        } catch (err) {
+            showError(err, 'Xóa nguyên liệu khỏi công thức')
+        } finally {
+            setSaving(false)
+        }
+    }
 
     async function saveAmount(ingredient, newAmount) {
         setSaving(true)
@@ -151,6 +169,10 @@ export default function RecipeIngredientPage() {
         try {
             for (const { key, unit } of toAdd) {
                 await upsertRecipe(productId, key, 0, selectedAddress?.id, unit)
+                // Register custom ingredients into ingredient_costs so they appear in /ingredients
+                if (unit !== null) {
+                    await upsertIngredientCost(key, 0, selectedAddress?.id, unit)
+                }
             }
             setRecipes(prev => [
                 ...prev,
@@ -160,6 +182,7 @@ export default function RecipeIngredientPage() {
             setSelectedIngredients(new Set())
             setCustomIngredientName('')
             setCustomIngredientUnit('')
+            refreshProducts?.()
         } catch (err) {
             showError(err, 'Thêm nguyên liệu vào công thức')
         } finally {
@@ -482,7 +505,15 @@ export default function RecipeIngredientPage() {
                                     {formatVND(lineCost)}
                                 </span>
 
-
+                                {canEdit && (
+                                    <button
+                                        onClick={() => handleDeleteRecipeIngredient(recipe.ingredient)}
+                                        className="opacity-0 group-hover:opacity-100 text-danger/60 hover:text-danger text-[14px] shrink-0 w-6 h-6 flex items-center justify-center transition-opacity"
+                                        title="Xóa nguyên liệu khỏi công thức"
+                                    >
+                                        ✕
+                                    </button>
+                                )}
 
                             </div>
                         )

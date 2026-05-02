@@ -13,7 +13,7 @@ import Toast from '../components/POSPage/Toast'
 
 export default function IngredientManagementPage() {
     const navigate = useNavigate()
-    const { ingredientCosts: contextCosts, ingredientUnits: contextUnits } = useProducts()
+    const { ingredientCosts: contextCosts, ingredientUnits: contextUnits, recipes: contextRecipes, refreshProducts } = useProducts()
     const { selectedAddress, updateSortOrder } = useAddress()
     const { isManager, isAdmin } = useAuth()
     const { toast, showError } = useToast()
@@ -35,6 +35,9 @@ export default function IngredientManagementPage() {
     const [newIngredientName, setNewIngredientName] = useState('')
     const [newIngredientUnit, setNewIngredientUnit] = useState('')
     const [newIngredientCost, setNewIngredientCost] = useState('')
+
+    // Fetch fresh data on mount to avoid showing stale localStorage cache
+    useEffect(() => { refreshProducts?.() }, [])
 
     // Sync from context when address changes or data refreshes
     useEffect(() => { setIngredientCosts(contextCosts) }, [contextCosts])
@@ -119,7 +122,12 @@ export default function IngredientManagementPage() {
     }
 
     async function handleDeleteIngredient(ingredient) {
-        if (!window.confirm(`Xóa nguyên liệu "${ingredientLabel(ingredient)}"?`)) return
+        const recipeCount = (contextRecipes || []).filter(r => r.ingredient === ingredient).length
+        const label = ingredientLabel(ingredient)
+        const warning = recipeCount > 0
+            ? `"${label}" đang được dùng trong ${recipeCount} công thức. Xóa sẽ gỡ nó khỏi tất cả công thức liên quan. Tiếp tục?`
+            : `Xóa nguyên liệu "${label}"?`
+        if (!window.confirm(warning)) return
         setSaving(true)
         try {
             await deleteIngredientCost(ingredient, selectedAddress?.id)
