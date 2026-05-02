@@ -110,8 +110,8 @@ export default function BranchGrid({
                                         className="flex-1 p-3.5 text-left hover:bg-surface-light active:bg-border/30 transition-colors min-w-0"
                                     >
                                         <div className="flex items-center justify-between gap-2 mb-1.5">
-                                            <span className="text-success font-black text-sm group-hover:text-primary transition-colors line-clamp-2 leading-tight truncate">{addr.name}</span>
-                                            <ArrowRight size={20} strokeWidth={2.5} className="text-text shrink-0" />
+                                            <span className="text-text font-black text-sm group-hover:text-primary transition-colors line-clamp-2 leading-tight truncate">{addr.name}</span>
+                                            <ArrowRight size={20} strokeWidth={2.5} className="text-success shrink-0" />
                                         </div>
                                         {hasStats && (
                                             <div className="flex flex-col  gap-1 mt-2">
@@ -128,14 +128,21 @@ export default function BranchGrid({
 
                                     {/* Action buttons */}
                                     {!isStaff && (
-                                        <div className="flex items-center justify-between border-t border-border/40 px-3.5 py-1.5 gap-0.5">
-                                            <div className="flex text-text/70 items-center gap-1 text-sm  justify-start flex-1">
-                                                <Users size={13} />
-                                                {staffNames.length > 0 && (
-                                                    <span className="line-clamp-2">{staffNames.join(', ')}</span>
-                                                )}
+                                        <div className="flex items-center justify-between border-t border-border/40 px-3.5 py-1.5 gap-2">
+                                            <div 
+                                                className="flex text-text-secondary items-center gap-1.5 text-xs justify-start flex-1 min-w-0"
+                                                title={staffNames.length > 0 ? staffNames.join(', ') : 'Không có nhân sự'}
+                                            >
+                                                <Users size={13} className="shrink-0" />
+                                                <span className="truncate font-medium">
+                                                    {staffNames.length === 0 
+                                                        ? '0 nhân sự' 
+                                                        : staffNames.length === 1 
+                                                            ? staffNames[0] 
+                                                            : `${staffNames[0]} +${staffNames.length - 1}`}
+                                                </span>
                                             </div>
-                                            <div className='flex gap-0.5 justify-end flex-1'>
+                                            <div className='flex gap-0.5 justify-end shrink-0'>
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); onBackup(addr) }}
                                                     className="p-1.5 text-text-secondary hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
