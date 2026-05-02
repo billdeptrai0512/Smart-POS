@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAddress } from '../contexts/AddressContext'
+import { useAddressStats } from '../contexts/AddressStatsContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { fetchBranchesTodayStats, fetchActiveSessions, fetchStaffByManager, createInviteToken } from '../services/authService'
+import { createInviteToken } from '../services/authService'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { LogOut, Loader } from 'lucide-react'
 import Skeleton from '../components/common/Skeleton'
@@ -13,23 +14,18 @@ import StaffTab from '../components/AddressSelectPage/StaffTab'
 
 export default function AddressSelectPage() {
     const { addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading, fetchError } = useAddress()
+    const { cupsMap, revenueMap, sessionsMap, staffList, staffLoading, statsLoading } = useAddressStats()
     const { signOut, profile, isStaff, isAdmin } = useAuth()
     const navigate = useNavigate()
 
     const [activeTab, setActiveTab] = useState('branches')
     const [error, setError] = useState('')
-    const [cupsMap, setCupsMap] = useState({})
-    const [revenueMap, setRevenueMap] = useState({})
-    const [sessionsMap, setSessionsMap] = useState({})
-    const [statsLoading, setStatsLoading] = useState(false)
     const [backupSource, setBackupSource] = useState(null)
     const [newAddressName, setNewAddressName] = useState('')
     const [creating, setCreating] = useState(false)
     const createGuardRef = useRef(false)
 
-    // Staff tab state
-    const [staffList, setStaffList] = useState([])
-    const [staffLoading, setStaffLoading] = useState(false)
+    // Staff tab invite state
     const [staffInviteLink, setStaffInviteLink] = useState('')
     const [staffInviteExpiry, setStaffInviteExpiry] = useState(null)
     const [generatingStaffLink, setGeneratingStaffLink] = useState(false)
@@ -76,71 +72,6 @@ export default function AddressSelectPage() {
             }
         })
     }, [addressIdsKey])
-
-    // Fetch branch stats — when address set changes, on mount, and when the
-    // tab becomes visible again (so /pos → /addresses or returning from
-    // another tab reflects fresh numbers without manual refresh).
-    useEffect(() => {
-        if (!addresses.length) {
-            setStatsLoading(false)
-            return
-        }
-        const addrIds = addresses.map(a => a.id)
-        let cancelled = false
-
-        const loadStats = () => {
-            setStatsLoading(true)
-            return Promise.all([
-                fetchBranchesTodayStats(addrIds),
-                fetchActiveSessions(addrIds)
-            ]).then(([{ cupsMap: cups, revenueMap: revenue }, sessions]) => {
-                if (cancelled) return
-                // Normalize: fill 0 for addresses with no orders today so each
-                // address always has a defined entry. BranchGrid relies on
-                // `cupsMap[addr.id] !== undefined` for stale-while-revalidate.
-                const filledCups = {}, filledRev = {}
-                addrIds.forEach(id => {
-                    filledCups[id] = cups[id] ?? 0
-                    filledRev[id] = revenue[id] ?? 0
-                })
-                setCupsMap(filledCups)
-                setRevenueMap(filledRev)
-                const grouped = {}
-                sessions.forEach(s => {
-                    if (!grouped[s.address_id]) grouped[s.address_id] = []
-                    grouped[s.address_id].push(s.users?.name || 'Unknown')
-                })
-                setSessionsMap(grouped)
-            }).finally(() => {
-                if (!cancelled) setStatsLoading(false)
-            })
-        }
-
-        loadStats()
-
-        const intervalId = setInterval(() => {
-            if (document.visibilityState === 'visible') loadStats()
-        }, 30_000)
-
-        const handleVisibility = () => {
-            if (document.visibilityState === 'visible') loadStats()
-        }
-        document.addEventListener('visibilitychange', handleVisibility)
-        return () => {
-            cancelled = true
-            clearInterval(intervalId)
-            document.removeEventListener('visibilitychange', handleVisibility)
-        }
-    }, [addressIdsKey])
-
-    // Fetch staff list for manager (needed for header count + staff tab)
-    useEffect(() => {
-        if (!profile?.id || isStaff) return
-        setStaffLoading(true)
-        fetchStaffByManager(profile.id)
-            .then(setStaffList)
-            .finally(() => setStaffLoading(false))
-    }, [profile?.id, isStaff])
 
     function handleSelect(addr) {
         setSelectedAddress(addr)

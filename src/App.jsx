@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AddressProvider, useAddress } from './contexts/AddressContext'
+import { AddressStatsProvider } from './contexts/AddressStatsContext'
 import { ProductProvider } from './contexts/ProductContext'
 import { POSProvider } from './contexts/POSContext'
 import ErrorBoundary from './components/common/ErrorBoundary'
@@ -69,20 +70,22 @@ export default function App() {
             <Route path="/signup/:token" element={<StaffInvitePage />} />
             <Route element={<ProtectedRoute />}>
               <Route element={<AddressProvider />}>
-                <Route path="/addresses" element={<AddressSelectPage />} />
-                <Route element={<RequireAddress />}>
-                  <Route element={<ProductProvider />}>
-                    <Route element={<POSProvider />}>
-                      <Route path="/pos" element={<POSPage />} />
-                      <Route path="/history" element={<HistoryPage />} />
-                      <Route path="/shift-closing" element={<ShiftClosingPage />} />
-                      <Route path="/daily-report" element={<DailyReportPage />} />
-                      <Route path="/range-report" element={<RangeReportPage />} />
-                      <Route path="/expenses" element={<ExpensePage />} />
-                      {/* Feature-level permission routes (anyone can view, managers can edit) */}
-                      <Route path="/recipes" element={<RecipeMenuPage />} />
-                      <Route path="/recipes/:productId" element={<RecipeIngredientPage />} />
-                      <Route path="/ingredients" element={<IngredientManagementPage />} />
+                <Route element={<AddressStatsProvider />}>
+                  <Route path="/addresses" element={<AddressSelectPage />} />
+                  <Route element={<RequireAddress />}>
+                    <Route element={<ProductProvider />}>
+                      <Route element={<POSProvider />}>
+                        <Route path="/pos" element={<POSPage />} />
+                        <Route path="/history" element={<HistoryPage />} />
+                        <Route path="/shift-closing" element={<ShiftClosingPage />} />
+                        <Route path="/daily-report" element={<DailyReportPage />} />
+                        <Route path="/range-report" element={<RangeReportPage />} />
+                        <Route path="/expenses" element={<ExpensePage />} />
+                        {/* Feature-level permission routes (anyone can view, managers can edit) */}
+                        <Route path="/recipes" element={<RecipeMenuPage />} />
+                        <Route path="/recipes/:productId" element={<RecipeIngredientPage />} />
+                        <Route path="/ingredients" element={<IngredientManagementPage />} />
+                      </Route>
                     </Route>
                   </Route>
                 </Route>
