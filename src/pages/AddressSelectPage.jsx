@@ -158,6 +158,7 @@ export default function AddressSelectPage() {
                 setError={setError}
                 addressCount={addresses.length}
                 staffCount={staffList.length}
+                managerCount={staffList.filter(s => s.role === 'manager' || s.role === 'co-manager').length}
             />
 
             <div className={`flex-1 overflow-y-auto px-4 pt-4 hide-scrollbar ${showCreateFooter ? 'pb-40' : 'pb-8'}`}>

@@ -90,7 +90,7 @@ export function AuthProvider({ children }) {
         return data
     }, [])
 
-    const isManager = profile?.role === 'manager'
+    const isManager = profile?.role === 'manager' || profile?.role === 'co-manager'
     const isStaff = profile?.role === 'staff'
     const isAdmin = profile?.role === 'admin'
 

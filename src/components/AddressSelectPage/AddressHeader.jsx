@@ -1,6 +1,6 @@
 import { Building2, Shield, Users } from 'lucide-react'
 
-export default function AddressHeader({ isStaff, activeTab, setActiveTab, profile, dateOnly, setError, addressCount, staffCount }) {
+export default function AddressHeader({ isStaff, activeTab, setActiveTab, profile, dateOnly, setError, addressCount, staffCount, managerCount }) {
     return (
         <header className="shrink-0 pt-6 pb-6 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)] relative z-20">
             <div className="px-6">
@@ -44,10 +44,13 @@ export default function AddressHeader({ isStaff, activeTab, setActiveTab, profil
                                 : 'bg-bg border-border/60 hover:bg-surface-light'}`}
                         >
                             <div className="flex flex-col justify-between items-start relative z-10 mb-[8px]">
-                                <span className="text-[12px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider">Hôm nay</span>
-                                <span className={`text-[15px] sm:text-[16px] font-black tracking-tight leading-none ${activeTab === 'staff' ? 'text-primary' : 'text-text'}`}>
-                                    {dateOnly}
-                                </span>
+                                <span className="text-[12px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider">Quản lý</span>
+                                <div className="flex items-center gap-1.5">
+                                    <Shield size={15} className={activeTab === 'staff' ? 'text-primary' : 'text-text-secondary'} />
+                                    <span className={`text-[14px] sm:text-[14px] font-black uppercase tracking-wider ${activeTab === 'staff' ? 'text-primary' : 'text-text-secondary'}`}>
+                                        {managerCount}
+                                    </span>
+                                </div>
                             </div>
                             <div className={`w-full h-[1px] rounded-full relative z-10 my-[2px]  ${activeTab === 'staff' ? 'bg-primary/20' : 'bg-border/60'}`} />
                             <div className="flex flex-col justify-between items-start relative z-10 mt-[2px] w-full">

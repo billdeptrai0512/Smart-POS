@@ -12,9 +12,9 @@ export default function Header({ isOnline, dayName, dateOnly, onOpenHistory, add
                     className="cursor-pointer bg-bg hover:bg-surface active:bg-border/20 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-[20px] p-3 sm:p-3.5 border border-border/60 shadow-sm flex flex-col justify-center gap-[2px] relative overflow-hidden h-full"
                 >
                     <div className="flex flex-col justify-between items-start relative z-10">
-                        <span className="text-[12px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider">Hôm nay</span>
+                        <span className="text-[13px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider">{dayName}</span>
                         <div className="flex items-center gap-1.5 mb-1">
-                            <span className="text-[15px] sm:text-[13px] text-text uppercase font-black tracking-tight">{dayName} • {dateOnly}</span>
+                            <span className="text-[14px] sm:text-[14px] text-text font-black uppercase tracking-tight">{dateOnly}</span>
                         </div>
                     </div>
                     <div className="w-full h-[1px] bg-border/60 rounded-full relative z-10 my-[3px] mt-[4px]"></div>
