@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS active_sessions (
 -- Shift closings (end-of-shift reports per address)
 CREATE TABLE IF NOT EXISTS shift_closings (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  address_id UUID REFERENCES addresses(id) NOT NULL,
+  address_id UUID REFERENCES addresses(id) ON DELETE CASCADE NOT NULL,
   closed_by UUID REFERENCES users(id),
   system_total_revenue BIGINT NOT NULL DEFAULT 0,
   actual_cash BIGINT NOT NULL DEFAULT 0,
