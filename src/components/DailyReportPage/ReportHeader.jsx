@@ -1,8 +1,8 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, Pen } from 'lucide-react'
 
 const RANGES = [
-    { key: 'day', label: 'Hôm nay' },
     { key: 'week', label: 'Tuần này' },
+    { key: 'day', label: 'Hôm nay' },
     { key: 'month', label: 'Tháng này' },
 ]
 

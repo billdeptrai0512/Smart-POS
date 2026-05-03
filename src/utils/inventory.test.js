@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown } from './inventory';
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateRefillTarget } from './inventory';
 
 const recipes = [
     { product_id: 'cf_den', ingredient: 'coffee_g', amount: 18 },
@@ -252,5 +252,75 @@ describe('calculateConsumptionBreakdown', () => {
         expect(result['coffee_g']['cf_sua|size_l'].qty).toBe(15);
         expect(result['coffee_g']['cf_sua|it_ngot'].name).toBe('Cà phê sữa (Ít ngọt)');
         expect(result['coffee_g']['cf_sua|it_ngot'].qty).toBe(10);
+    });
+});
+
+// ─── calculateRefillTarget ───────────────────────────────────────────────────
+
+describe('calculateRefillTarget', () => {
+    it('minStock floor: áp dụng minStock nếu rawTarget thấp hơn minStock', () => {
+        // dailyAvg = 35/7 = 5
+        // rawTarget = 5 * 1.1 = 5.5
+        // gap = 200 - 100 = 100
+        const result = calculateRefillTarget({
+            past7DaysUsed: 35,
+            currentStock: 100,
+            wastagePct: 10,
+            minStock: 200,
+            packSize: null
+        });
+        expect(result.effectiveTarget).toBe(200);
+        expect(result.isMinStockTriggered).toBe(true);
+        expect(result.finalRefill).toBe(100);
+    });
+
+    it('packSize round up: làm tròn theo gói', () => {
+        // gap = 385, packSize = 500
+        const result = calculateRefillTarget({
+            past7DaysUsed: 7000, // daily = 1000, rawTarget = 1000
+            currentStock: 615,
+            wastagePct: 0,
+            minStock: null,
+            packSize: 500
+        });
+        expect(result.packsNeeded).toBe(1);
+        expect(result.finalRefill).toBe(500); // ceil(385 / 500) = 1 => 500
+    });
+
+    it('packSize + gap=0: không cần mua', () => {
+        const result = calculateRefillTarget({
+            past7DaysUsed: 7000, // target = 1000
+            currentStock: 1200, // gap = 0
+            wastagePct: 0,
+            minStock: null,
+            packSize: 500
+        });
+        expect(result.packsNeeded).toBe(0);
+        expect(result.finalRefill).toBe(0);
+    });
+
+    it('packSize=null: giữ nguyên logic cũ, không làm tròn gói', () => {
+        // daily = 100, rawTarget = 110, current = 50, gap = 60
+        const result = calculateRefillTarget({
+            past7DaysUsed: 700,
+            currentStock: 50,
+            wastagePct: 10,
+            minStock: null,
+            packSize: null
+        });
+        expect(result.packsNeeded).toBe(0);
+        expect(result.finalRefill).toBe(60);
+    });
+
+    it('coverageDays NaN-safe: trả về Infinity nếu dailyAvg = 0', () => {
+        const result = calculateRefillTarget({
+            past7DaysUsed: 0,
+            currentStock: 100,
+            wastagePct: 10,
+            minStock: 200,
+            packSize: null
+        });
+        expect(result.finalRefill).toBe(100);
+        expect(result.coverageDays).toBe(Infinity);
     });
 });

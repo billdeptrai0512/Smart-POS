@@ -13,7 +13,7 @@ import Toast from '../components/POSPage/Toast'
 
 export default function IngredientManagementPage() {
     const navigate = useNavigate()
-    const { ingredientCosts: contextCosts, ingredientUnits: contextUnits, recipes: contextRecipes, refreshProducts } = useProducts()
+    const { ingredientCosts: contextCosts, ingredientUnits: contextUnits, recipes: contextRecipes, ingredientConfigs, refreshProducts } = useProducts()
     const { selectedAddress, updateSortOrder } = useAddress()
     const { isManager, isAdmin } = useAuth()
     const { toast, showError } = useToast()
@@ -98,6 +98,20 @@ export default function IngredientManagementPage() {
         } finally {
             setSaving(false)
             setEditingUnit(prev => prev?.ingredient === ingredient ? null : prev)
+        }
+    }
+
+    async function handleSaveAdvanced(ingredient, { packSize, packUnit, minStock }) {
+        setSaving(true)
+        try {
+            const cost = ingredientCosts[ingredient] || 0
+            const unit = ingredientUnits[ingredient] || 'đv'
+            await upsertIngredientCost(ingredient, cost, selectedAddress?.id, unit, { packSize, packUnit, minStock })
+            refreshProducts?.() // refresh configs to get the latest packSize/minStock into ProductContext
+        } catch (err) {
+            showError(err, 'Lưu cấu hình nâng cao')
+        } finally {
+            setSaving(false)
         }
     }
 
@@ -265,6 +279,10 @@ export default function IngredientManagementPage() {
                                 saveName={handleRenameIngredient}
                                 onDelete={canEdit ? handleDeleteIngredient : null}
                                 canEdit={canEdit}
+                                packSize={ingredientConfigs?.find(c => c.ingredient === ingredient)?.pack_size}
+                                packUnit={ingredientConfigs?.find(c => c.ingredient === ingredient)?.pack_unit}
+                                minStock={ingredientConfigs?.find(c => c.ingredient === ingredient)?.min_stock}
+                                onSaveAdvanced={handleSaveAdvanced}
                             />
                         ))}
                         {allIngredients.length === 0 && (

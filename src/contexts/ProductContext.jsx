@@ -31,17 +31,19 @@ export function ProductProvider() {
     const [recipes, setRecipes] = useState(() => readCache('recipes', []))
     const [ingredientCosts, setIngredientCosts] = useState(() => readCache('costs', {}))
     const [ingredientUnits, setIngredientUnits] = useState(() => readCache('units', {}))
+    const [ingredientConfigs, setIngredientConfigs] = useState(() => readCache('configs', []))
     const [productExtras, setProductExtras] = useState(() => readCache('extras', {}))
     const [extraIngredients, setExtraIngredients] = useState(() => readCache('extra_ingredients', {}))
     const [loading, setLoading] = useState(true)
     const [loadError, setLoadError] = useState(null)
 
     const applyData = useCallback((prods, recs, costsResult, extras, extraIngs, addressId) => {
-        const { costs, units } = costsResult
+        const { costs, units, rows } = costsResult
         setProducts(prods)
         setRecipes(recs)
         setIngredientCosts(costs)
         setIngredientUnits(units)
+        setIngredientConfigs(rows || [])
         setProductExtras(extras)
         setExtraIngredients(extraIngs)
         try {
@@ -50,6 +52,7 @@ export function ProductProvider() {
             localStorage.setItem(key('recipes'), JSON.stringify(recs))
             localStorage.setItem(key('costs'), JSON.stringify(costs))
             localStorage.setItem(key('units'), JSON.stringify(units))
+            localStorage.setItem(key('configs'), JSON.stringify(rows || []))
             localStorage.setItem(key('extras'), JSON.stringify(extras))
             localStorage.setItem(key('extra_ingredients'), JSON.stringify(extraIngs))
         } catch { /* ignore quota errors */ }
@@ -124,6 +127,7 @@ export function ProductProvider() {
             recipes,
             ingredientCosts,
             ingredientUnits,
+            ingredientConfigs,
             productExtras,
             extraIngredients,
             refreshProducts,

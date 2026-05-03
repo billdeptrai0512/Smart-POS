@@ -411,8 +411,8 @@ export function POSProvider() {
 
     async function handleDeleteOrder(orderId) {
         try {
-            await deleteOrder(orderId)
-            setTodayOrders(prev => prev.filter(o => o.id !== orderId))
+            await deleteOrder(orderId, profile?.name)
+            setTodayOrders(prev => prev.map(o => o.id === orderId ? { ...o, deleted_at: new Date().toISOString(), deleted_by: profile?.name } : o))
             if (addressId) {
                 const { revenue: rev, cups } = await fetchTodayStats(addressId)
                 setRevenue(rev)

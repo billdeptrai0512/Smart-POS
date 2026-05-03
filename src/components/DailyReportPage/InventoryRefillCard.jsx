@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown } from '../../utils/inventory';
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateRefillTarget } from '../../utils/inventory';
 import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils';
 import { fetchPastDaysOrderItems } from '../../services/orderService';
 import { Settings2, ChevronDown } from 'lucide-react';
+import { useProducts } from '../../contexts/ProductContext';
 
 export default function InventoryRefillCard({
     shiftClosing,
@@ -16,6 +17,7 @@ export default function InventoryRefillCard({
     productExtras = {},
     ingredientUnits = {}
 }) {
+    const { ingredientConfigs = [] } = useProducts() || {};
     const [wastageBuffer, setWastageBuffer] = useState(10);
     const [past7DaysItems, setPast7DaysItems] = useState([]);
     const [isLoadingPast, setIsLoadingPast] = useState(false);
@@ -174,11 +176,15 @@ export default function InventoryRefillCard({
                     }
 
                     const total7DayUsed = past7DaysConsumption[item.ingredient] || 0;
-                    const dailyAvgAvg = total7DayUsed / 7;
-                    const target = Math.round(dailyAvgAvg * (1 + wastageBuffer / 100) * 10) / 10;
-
-                    let refill = Math.round((target - actual) * 10) / 10;
-                    if (refill <= 0) refill = 0;
+                    
+                    const config = ingredientConfigs.find(c => c.ingredient === item.ingredient) || {};
+                    const { finalRefill, packsNeeded, isMinStockTriggered, rawTarget } = calculateRefillTarget({
+                        past7DaysUsed: total7DayUsed,
+                        currentStock: actual,
+                        wastagePct: wastageBuffer,
+                        minStock: config.min_stock,
+                        packSize: config.pack_size
+                    });
 
                     const isExpanded = !!expandedRows[item.ingredient];
                     const canExpand = activeTab === 'audit';
@@ -212,11 +218,23 @@ export default function InventoryRefillCard({
                                     <>
                                         <span className="w-[50px] text-[12px] font-bold text-text text-center tabular-nums">{actual}</span>
                                         <span className="w-[50px] text-[12px] font-bold text-text text-center tabular-nums">
-                                            {isLoadingPast ? '...' : target > 0 ? target : '—'}
+                                            {isLoadingPast ? '...' : rawTarget > 0 ? rawTarget : '—'}
                                         </span>
-                                        <span className={`w-[50px] text-[11px] font-black text-center tabular-nums ${refill > 0 ? 'text-warning' : 'text-success'}`}>
-                                            {isLoadingPast ? '...' : refill > 0 ? `+${refill}` : 'Ok'}
-                                        </span>
+                                        <div className={`w-[60px] text-[11px] font-black text-center flex items-center justify-center gap-0.5 ${finalRefill > 0 ? 'text-warning' : 'text-success'}`}>
+                                            {isLoadingPast ? '...' : finalRefill > 0 ? (
+                                                config.pack_size && config.pack_unit ? (
+                                                    <span className="flex flex-col leading-none items-center">
+                                                        <span>+{packsNeeded} {config.pack_unit}</span>
+                                                        {isMinStockTriggered && <span className="text-[9px] opacity-80">(ngưỡng kho)</span>}
+                                                    </span>
+                                                ) : (
+                                                    <span className="flex items-center gap-0.5">
+                                                        +{finalRefill}
+                                                        {isMinStockTriggered && <span className="bg-warning/20 text-warning text-[9px] rounded px-0.5" title="Kích hoạt bởi Tồn tối thiểu">min</span>}
+                                                    </span>
+                                                )
+                                            ) : 'Ok'}
+                                        </div>
                                     </>
                                 )}
                             </div>

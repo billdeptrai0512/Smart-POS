@@ -138,3 +138,66 @@ export function calculateConsumptionBreakdown(orderItems, recipes, extraIngredie
 
     return breakdown;
 }
+
+/**
+ * Tính toán số lượng cần nhập dựa trên lịch sử tiêu thụ và mức tồn kho.
+ * Hỗ trợ làm tròn theo quy cách đóng gói (pack size) và tồn tối thiểu (min stock).
+ *
+ * @param {Object} params
+ * @param {number} params.past7DaysUsed - Tổng số lượng tiêu hao trong 7 ngày qua
+ * @param {number} params.currentStock - Số lượng tồn kho hiện tại
+ * @param {number} params.wastagePct - Phần trăm hao hụt dự phòng (ví dụ 10 cho 10%)
+ * @param {number|null} params.minStock - Ngưỡng tồn kho tối thiểu
+ * @param {number|null} params.packSize - Quy cách đóng gói (ví dụ 500)
+ * @returns {Object} { packsNeeded, finalRefill, coverageDays, isMinStockTriggered, rawTarget }
+ */
+export function calculateRefillTarget({
+    past7DaysUsed,
+    currentStock,
+    wastagePct,
+    minStock = null,
+    packSize = null
+}) {
+    // 1. Tính mức tiêu thụ trung bình mỗi ngày
+    const dailyAvg = (past7DaysUsed || 0) / 7;
+
+    // 2. Tính số lượng mục tiêu thô cần có cho ngày tiếp theo (có tính hao hụt)
+    let rawTarget = Math.round(dailyAvg * (1 + (wastagePct || 0) / 100) * 10) / 10;
+
+    // 3. Áp dụng sàn tồn tối thiểu (minStock)
+    const effectiveTarget = Math.max(minStock ?? 0, rawTarget);
+    const isMinStockTriggered = minStock != null && minStock > rawTarget && currentStock < minStock;
+
+    // 4. Tính khoảng trống cần bù (gap)
+    let gap = effectiveTarget - currentStock;
+    if (gap < 0) gap = 0;
+
+    // 5. Làm tròn theo quy cách đóng gói (packSize)
+    let packsNeeded = 0;
+    let finalRefill = gap;
+
+    if (packSize && packSize > 0) {
+        if (gap > 0) {
+            packsNeeded = Math.ceil(gap / packSize);
+            finalRefill = packsNeeded * packSize;
+        } else {
+            packsNeeded = 0;
+            finalRefill = 0;
+        }
+    } else {
+        finalRefill = Math.round(finalRefill * 10) / 10; // Làm tròn 1 chữ số thập phân nếu không có packSize
+    }
+
+    // 6. Tính số ngày bao phủ (coverageDays)
+    const totalAfterRefill = currentStock + finalRefill;
+    const coverageDays = dailyAvg > 0 ? Math.round((totalAfterRefill / dailyAvg) * 10) / 10 : Infinity;
+
+    return {
+        packsNeeded,
+        finalRefill,
+        coverageDays,
+        isMinStockTriggered,
+        rawTarget,
+        effectiveTarget
+    };
+}

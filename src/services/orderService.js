@@ -109,6 +109,8 @@ export async function fetchTodayOrders(addressId) {
             total_cost,
             payment_method,
             created_at,
+            deleted_at,
+            deleted_by,
             order_items (
                 quantity,
                 options,
@@ -285,7 +287,7 @@ export async function fetchRecipes(productIds) {
 // Fetch ingredient costs + units in one query, return both shapes
 export async function fetchIngredientCostsAndUnits(addressId) {
     if (!supabase) return { costs: {}, units: {}, rows: [] }
-    let query = supabase.from('ingredient_costs').select('ingredient, unit_cost, unit, address_id')
+    let query = supabase.from('ingredient_costs').select('ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock')
 
     if (addressId) {
         query = query.or(`address_id.eq.${addressId},address_id.is.null`)
@@ -310,12 +312,12 @@ export async function fetchIngredientCostsAndUnits(addressId) {
     for (const d of defaultData) {
         costs[d.ingredient] = d.unit_cost
         units[d.ingredient] = d.unit || 'đv'
-        ingredientMap[d.ingredient] = { ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost }
+        ingredientMap[d.ingredient] = { ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, min_stock: d.min_stock }
     }
     for (const d of addressData) {
         costs[d.ingredient] = d.unit_cost
         units[d.ingredient] = d.unit || 'đv'
-        ingredientMap[d.ingredient] = { ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost }
+        ingredientMap[d.ingredient] = { ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, min_stock: d.min_stock }
     }
 
     return { costs, units, rows: Object.values(ingredientMap) }
@@ -359,12 +361,16 @@ export async function deleteRecipeRow(productId, ingredient, addressId = null) {
 }
 
 // Upsert an ingredient cost
-export async function upsertIngredientCost(ingredient, unitCost, addressId = null, unit = null) {
+export async function upsertIngredientCost(ingredient, unitCost, addressId = null, unit = null, opts = {}) {
     if (!supabase) throw new Error('No Supabase connection')
 
     const payload = { ingredient, unit_cost: unitCost }
     if (unit) payload.unit = unit
     if (addressId) payload.address_id = addressId
+    
+    if (opts.packSize !== undefined) payload.pack_size = opts.packSize || null
+    if (opts.packUnit !== undefined) payload.pack_unit = opts.packUnit || null
+    if (opts.minStock !== undefined) payload.min_stock = opts.minStock || null
 
     const { error } = await supabase
         .from('ingredient_costs')
@@ -697,21 +703,13 @@ export async function bulkSubmitOrders(ordersArray) {
     return true
 }
 
-// Delete an order and its items (for duplicate order cleanup)
-export async function deleteOrder(orderId) {
+// Soft Delete an order
+export async function deleteOrder(orderId, staffName = null) {
     if (!supabase) throw new Error('No Supabase connection')
-
-    // Delete order_items first (FK constraint)
-    const { error: itemsError } = await supabase
-        .from('order_items')
-        .delete()
-        .eq('order_id', orderId)
-
-    if (itemsError) throw itemsError
 
     const { error: orderError } = await supabase
         .from('orders')
-        .delete()
+        .update({ deleted_at: new Date().toISOString(), deleted_by: staffName })
         .eq('id', orderId)
 
     if (orderError) throw orderError
@@ -761,6 +759,7 @@ export async function fetchYesterdayOrders(addressId) {
             total,
             total_cost,
             staff_name,
+            deleted_at,
             order_items (
                 quantity,
                 product_id,
@@ -810,7 +809,7 @@ export async function fetchOrdersByRange(addressId, start, end) {
     if (!supabase) return []
     let query = supabase
         .from('orders')
-        .select(`id, total, total_cost, payment_method, staff_name, created_at,
+        .select(`id, total, total_cost, payment_method, staff_name, created_at, deleted_at, deleted_by,
             order_items(quantity, options, product_id, unit_cost, extra_ids, products(name))`)
         .gte('created_at', start.toISOString())
         .lte('created_at', end.toISOString())
@@ -855,7 +854,7 @@ export async function fetchLatestOrder(addressId) {
 
     let query = supabase
         .from('orders')
-        .select(`id, total, created_at, order_items(quantity, options, product_id, products(name))`)
+        .select(`id, total, created_at, deleted_at, deleted_by, order_items(quantity, options, product_id, products(name))`)
         .gte('created_at', today.toISOString())
 
     if (addressId) query = query.eq('address_id', addressId)

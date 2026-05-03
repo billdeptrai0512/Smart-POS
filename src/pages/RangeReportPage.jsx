@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
 import { usePOS } from '../contexts/POSContext'
 import { useAddress } from '../contexts/AddressContext'
+import { useAuth } from '../contexts/AuthContext'
 import { calculateProductCost, formatVND } from '../utils'
 import { fetchOrdersByRange, fetchExpensesByRange, fetchShiftClosingsByRange } from '../services/orderService'
 import ReportHeader, { getDateRange } from '../components/DailyReportPage/ReportHeader'
@@ -19,6 +20,7 @@ export default function RangeReportPage() {
     const { products, recipes, ingredientCosts, extraIngredients, productExtras } = useProducts()
     const { fixedCosts, handleLoadFixedCosts } = usePOS()
     const { selectedAddress } = useAddress()
+    const { isStaff } = useAuth()
 
     const [selectedProductId, setSelectedProductId] = useState('all')
     const [offset, setOffset] = useState(0)
@@ -105,7 +107,7 @@ export default function RangeReportPage() {
                 extraNameMap[e.id] = e.name || e.id
             })
         })
-        orders.forEach(o => {
+        orders.filter(o => !o.deleted_at).forEach(o => {
             totalRevenue += o.total
 
             // totalCups handled inside items loop
@@ -166,7 +168,7 @@ export default function RangeReportPage() {
     const prevStats = useMemo(() => {
         let revenue = 0, cups = 0, totalCOGS = 0
         const prevProductMap = new Map(products.map(p => [p.id, p]))
-        prevOrders.forEach(o => {
+        prevOrders.filter(o => !o.deleted_at).forEach(o => {
             revenue += o.total
 
             if (o.total_cost > 0) {
@@ -345,70 +347,74 @@ export default function RangeReportPage() {
                         <DayPerformanceChart orders={orders} range={range} start={periodStart} end={periodEnd} products={products} />
 
 
-                        <div className="flex items-center gap-3 py-1 px-4">
-                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                            <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tài chính</span>
-                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                        </div>
-
-                        {/* Finance cards */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
-                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Doanh thu</h3>
-                                <div className="flex items-center gap-2">
-                                    <div className="text-[18px] font-bold text-success tabular-nums">{formatVND(stats.totalRevenue)}</div>
+                        {!isStaff && (
+                            <>
+                                <div className="flex items-center gap-3 py-1 px-4">
+                                    <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                                    <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tài chính</span>
+                                    <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
                                 </div>
-                            </div>
-                            <div
-                                onClick={() => navigate('/recipes', { state: { from: '/range-report' } })}
-                                className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
-                            >
-                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Giá vốn</h3>
-                                <div className="text-[18px] font-bold text-warning tabular-nums">{formatVND(stats.totalCOGS)}</div>
-                            </div>
-                            <div
-                                onClick={() => navigate('/expenses', { state: { from: '/range-report', tab: 'daily' } })}
-                                className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
-                            >
-                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí ngày</h3>
-                                <div className="text-[18px] font-bold text-danger tabular-nums">{formatVND(stats.dailyExpense)}</div>
-                            </div>
-                            <div
-                                onClick={() => navigate('/expenses', { state: { from: '/range-report', tab: 'fixed' } })}
-                                className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
-                            >
-                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí cố định</h3>
-                                <div className="text-[18px] font-bold text-danger tabular-nums">{formatVND(stats.fixedExpense)}</div>
-                            </div>
 
-                            {/* Net profit */}
-                            {(() => {
-                                const profitDelta = stats.netProfit - prevStats.netProfit
-                                const isUpDelta = profitDelta >= 0
-
-                                return (
-                                    <div className="col-span-2 bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex items-center justify-between relative overflow-hidden group">
-
-                                        <div className="flex flex-col">
-                                            <h3 className="text-[11px] font-black text-text-secondary uppercase mb-1">Lợi nhuận ròng</h3>
-                                            <div className={`text-[18px] font-bold tabular-nums ${stats.netProfit >= 0 ? 'text-success' : 'text-danger'}`}>
-                                                {formatVND(stats.netProfit)}
-                                            </div>
+                                {/* Finance cards */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
+                                        <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Doanh thu</h3>
+                                        <div className="flex items-center gap-2">
+                                            <div className="text-[18px] font-bold text-success tabular-nums">{formatVND(stats.totalRevenue)}</div>
                                         </div>
-                                        {prevStats.netProfit !== undefined && (
-                                            <div className="flex flex-col items-center">
-                                                <span className="self-center text-[10px] font-black text-text-secondary uppercase mb-1 opacity-70">So với {range === 'week' ? 'tuần trước' : 'tháng trước'}</span>
-                                                <div className={`px-3 py-1 rounded-xl border ${isUpDelta ? 'bg-success/10 border-success/20 text-success' : 'bg-danger/10 border-danger/20 text-danger'}`}>
-                                                    <span className="text-[12px] font-black tabular-nums leading-none block">
-                                                        {formatVND(profitDelta)}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        )}
                                     </div>
-                                )
-                            })()}
-                        </div>
+                                    <div
+                                        onClick={() => navigate('/recipes', { state: { from: '/range-report' } })}
+                                        className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
+                                    >
+                                        <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Giá vốn</h3>
+                                        <div className="text-[18px] font-bold text-warning tabular-nums">{formatVND(stats.totalCOGS)}</div>
+                                    </div>
+                                    <div
+                                        onClick={() => navigate('/expenses', { state: { from: '/range-report', tab: 'daily' } })}
+                                        className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
+                                    >
+                                        <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí ngày</h3>
+                                        <div className="text-[18px] font-bold text-danger tabular-nums">{formatVND(stats.dailyExpense)}</div>
+                                    </div>
+                                    <div
+                                        onClick={() => navigate('/expenses', { state: { from: '/range-report', tab: 'fixed' } })}
+                                        className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
+                                    >
+                                        <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí cố định</h3>
+                                        <div className="text-[18px] font-bold text-danger tabular-nums">{formatVND(stats.fixedExpense)}</div>
+                                    </div>
+
+                                    {/* Net profit */}
+                                    {(() => {
+                                        const profitDelta = stats.netProfit - prevStats.netProfit
+                                        const isUpDelta = profitDelta >= 0
+
+                                        return (
+                                            <div className="col-span-2 bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex items-center justify-between relative overflow-hidden group">
+
+                                                <div className="flex flex-col">
+                                                    <h3 className="text-[11px] font-black text-text-secondary uppercase mb-1">Lợi nhuận ròng</h3>
+                                                    <div className={`text-[18px] font-bold tabular-nums ${stats.netProfit >= 0 ? 'text-success' : 'text-danger'}`}>
+                                                        {formatVND(stats.netProfit)}
+                                                    </div>
+                                                </div>
+                                                {prevStats.netProfit !== undefined && (
+                                                    <div className="flex flex-col items-center">
+                                                        <span className="self-center text-[10px] font-black text-text-secondary uppercase mb-1 opacity-70">So với {range === 'week' ? 'tuần trước' : 'tháng trước'}</span>
+                                                        <div className={`px-3 py-1 rounded-xl border ${isUpDelta ? 'bg-success/10 border-success/20 text-success' : 'bg-danger/10 border-danger/20 text-danger'}`}>
+                                                            <span className="text-[12px] font-black tabular-nums leading-none block">
+                                                                {formatVND(profitDelta)}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    })()}
+                                </div>
+                            </>
+                        )}
 
 
 

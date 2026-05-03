@@ -63,6 +63,8 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
             cost,
             createdAt: o.created_at,
             staffName: o.staff_name,
+            deletedAt: o.deleted_at,
+            deletedBy: o.deleted_by,
             isOffline: false,
             paymentMethod: o.payment_method || null,
             items: o.order_items ? o.order_items.map(i => {
@@ -134,7 +136,7 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
     const totalExpenseAmount = formattedExpenses.reduce((sum, e) => sum + e.cost, 0)
     const productCountMap = new Map((products || []).map(p => [p.id, p.count_as_cup !== false]))
     const totalCups = allOrders.reduce((sum, o) => {
-        if (o.isExpense || !o.items) return sum;
+        if (o.isExpense || !o.items || o.deletedAt) return sum;
         return sum + o.items.reduce((itemSum, item) => {
             if (item.productId && productCountMap.get(item.productId) === false) return itemSum
             return itemSum + (item.quantity || 0)
@@ -146,7 +148,7 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
     const runningTotals = new Map()
     let cumulative = 0
     for (const order of chronological) {
-        if (!order.isExpense) {
+        if (!order.isExpense && !order.deletedAt) {
             cumulative += order.total
         }
         runningTotals.set(order.id, cumulative)
@@ -212,8 +214,13 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                         const time = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
 
                         return (
-                            <div key={order.id} className={`bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden ${order.isExpense ? 'opacity-90' : ''}`}>
-                                {order.isOffline && !order.isExpense && (
+                            <div key={order.id} className={`bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden ${order.isExpense ? 'opacity-90' : ''} ${order.deletedAt ? 'opacity-50 grayscale select-none' : ''}`}>
+                                {order.deletedAt && (
+                                    <div className="absolute top-0 left-0 bg-danger/20 text-danger text-[10px] font-black px-3 py-1 rounded-br-[14px] uppercase tracking-wider z-10">
+                                        ĐÃ XÓA {order.deletedBy ? `BỞI ${order.deletedBy.toUpperCase()}` : ''}
+                                    </div>
+                                )}
+                                {order.isOffline && !order.isExpense && !order.deletedAt && (
                                     <div className="absolute top-0 right-0 bg-warning/20 text-warning text-[10px] font-black px-2 py-1 rounded-bl-[14px] uppercase tracking-wider">
                                         Offline
                                     </div>
@@ -231,7 +238,7 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                                             <span className="font-black text-[14px] text-danger">- {formatVND(order.cost)}</span>
                                         )}
                                     </div>
-                                    {!order.isExpense ? (
+                                    {!order.isExpense && !order.deletedAt ? (
                                         <span className="text-success leading-none text-[14px] mt-1 font-bold tabular-nums">
                                             {formatVND(runningTotals.get(order.id) || 0)}
                                         </span>
@@ -243,7 +250,7 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                                             {order.items?.length > 0 ? (
                                                 order.items.map((item, idx) => (
                                                     <div key={idx} className="flex flex-row gap-2 items-start w-full">
-                                                        <span className={`text-[14px] leading-snug font-medium max-w-[85%] whitespace-pre-wrap text-text`}>{item.text}</span>
+                                                        <span className={`text-[14px] leading-snug font-medium max-w-[85%] whitespace-pre-wrap text-text ${order.deletedAt ? 'line-through' : ''}`}>{item.text}</span>
                                                     </div>
                                                 ))
                                             ) : (
@@ -257,7 +264,11 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                                         )}
                                     </div>
                                     <div className="flex flex-col justify-end items-end gap-2 shrink-0 mt-0.5">
-                                        {!order.isOffline ? (
+                                        {order.deletedAt ? (
+                                            <div className="flex flex-col items-end gap-1 mt-auto">
+                                                <span className="text-text-secondary/50 text-[14px] font-bold leading-none">{time}</span>
+                                            </div>
+                                        ) : !order.isOffline ? (
                                             <div className="flex flex-col items-end gap-1 mt-auto">
                                                 <span
                                                     className="text-text-secondary text-[14px] text-end font-bold cursor-pointer underline decoration-dashed decoration-text-secondary/50 underline-offset-4 hover:text-danger hover:decoration-danger active:text-danger/80 transition-all select-none disabled:opacity-40 leading-none"

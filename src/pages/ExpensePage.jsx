@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { formatVND, formatVNDInput, parseVNDInput } from '../utils'
 import { usePOS } from '../contexts/POSContext'
+import { useAuth } from '../contexts/AuthContext'
 import { ArrowLeft } from 'lucide-react'
 
 export default function ExpensePage() {
@@ -9,9 +10,12 @@ export default function ExpensePage() {
     const location = useLocation()
     const { todayExpenses, isLoadingHistory, handleAddExpense, handleDeleteExpense, handleLoadHistory, fixedCosts, handleAddFixedCost, handleUpdateFixedCost, handleDeleteFixedCost, userRole } = usePOS()
 
+    const { isStaff } = useAuth()
+
     const isManager = userRole === 'manager' || userRole === 'admin'
     const backTo = location.state?.from || '/history'
-    const [activeTab, setActiveTab] = useState(location.state?.tab || 'daily')
+    const initialTab = location.state?.tab || 'daily'
+    const [activeTab, setActiveTab] = useState((isStaff && initialTab === 'fixed') ? 'daily' : initialTab)
 
     const [costName, setCostName] = useState('')
     const [costAmount, setCostAmount] = useState('')
@@ -106,16 +110,18 @@ export default function ExpensePage() {
                             <span className="text-[12px] font-bold text-danger/80 leading-none mt-1 tabular-nums">{formatVND(totalExpense)}</span>
                         </div>
 
-                        <div
-                            onClick={() => setActiveTab('fixed')}
-                            className={`flex-1 border shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${activeTab === 'fixed'
-                                ? 'bg-warning/10 border-warning/30'
-                                : 'bg-surface-light border-border/60 opacity-60 hover:opacity-100'
-                                }`}
-                        >
-                            <span className="text-[12px] font-black text-warning uppercase line-clamp-1">Cố định</span>
-                            <span className="text-[12px] font-bold text-warning/80 leading-none mt-1 tabular-nums">{formatVND(totalFixed)}</span>
-                        </div>
+                        {!isStaff && (
+                            <div
+                                onClick={() => setActiveTab('fixed')}
+                                className={`flex-1 border shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${activeTab === 'fixed'
+                                    ? 'bg-warning/10 border-warning/30'
+                                    : 'bg-surface-light border-border/60 opacity-60 hover:opacity-100'
+                                    }`}
+                            >
+                                <span className="text-[12px] font-black text-warning uppercase line-clamp-1">Cố định</span>
+                                <span className="text-[12px] font-bold text-warning/80 leading-none mt-1 tabular-nums">{formatVND(totalFixed)}</span>
+                            </div>
+                        )}
                     </div>
                 </div>
             </header>
@@ -217,7 +223,7 @@ export default function ExpensePage() {
             )}
 
             {/* ===== Fixed costs tab ===== */}
-            {activeTab === 'fixed' && (
+            {!isStaff && activeTab === 'fixed' && (
                 <>
                     <main className="flex-1 overflow-y-auto p-4 space-y-3">
 

@@ -11,11 +11,13 @@ import RevenueChart from '../components/DailyReportPage/RevenueChart'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
 import { fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchYesterdayOrders, fetchYesterdayExpenses } from '../services/orderService'
 import { useAddress } from '../contexts/AddressContext'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function DailyReportPage() {
     const navigate = useNavigate()
     const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits } = useProducts()
     const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, fixedCosts } = usePOS()
+    const { isStaff } = useAuth()
 
     useEffect(() => {
         if (todayOrders.length === 0 && !isLoadingHistory) handleLoadHistory()
@@ -118,7 +120,7 @@ export default function DailyReportPage() {
             })
         }
 
-        todayOrders.forEach(o => processOrder(o, false))
+        todayOrders.filter(o => !o.deleted_at).forEach(o => processOrder(o, false))
         offlineToday.forEach(o => processOrder(o, true))
 
         const hourRange = []
@@ -141,8 +143,8 @@ export default function DailyReportPage() {
     const totalCups = useMemo(() => {
         let cups = 0
         const isExcluded = (pid) => productMap.get(pid)?.count_as_cup === false
-        todayOrders.forEach(o => {
-            ;(o.order_items || []).forEach(i => {
+        todayOrders.filter(o => !o.deleted_at).forEach(o => {
+            ; (o.order_items || []).forEach(i => {
                 if (selectedProductId === 'all') {
                     if (!isExcluded(i.product_id)) cups += i.quantity || 1
                 } else if (selectedProductId === i.product_id) {
@@ -151,7 +153,7 @@ export default function DailyReportPage() {
             })
         })
         offlineToday.forEach(o => {
-            ;(o.cart || o.orderItems || []).forEach(i => {
+            ; (o.cart || o.orderItems || []).forEach(i => {
                 if (selectedProductId === 'all') {
                     if (!isExcluded(i.productId)) cups += i.quantity || 1
                 } else if (selectedProductId === i.productId) {
@@ -174,12 +176,12 @@ export default function DailyReportPage() {
 
     const yesterdayNetProfit = useMemo(() => {
         let rev = 0, cogs = 0
-        yesterdayOrders.forEach(o => {
+        yesterdayOrders.filter(o => !o.deleted_at).forEach(o => {
             rev += o.total
             if (o.total_cost > 0) {
                 cogs += o.total_cost
             } else {
-                ;(o.order_items || []).forEach(i => {
+                ; (o.order_items || []).forEach(i => {
                     const qty = i.quantity || 1
                     const cost = i.unit_cost > 0 ? i.unit_cost : calculateProductCost(i.product_id, [], recipes, extraIngredients, ingredientCosts)
                     cogs += cost * qty
@@ -231,23 +233,29 @@ export default function DailyReportPage() {
 
                         <RevenueChart lineChartData={lineChartData} />
 
-                        <div className="flex items-center gap-3 py-1 my-1 px-4">
-                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                            <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tài chính</span>
-                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                        </div>
+                        {/* only for manage */}
+                        {!isStaff && (
+                            <>
+                                <div className="flex items-center gap-3 py-1 my-1 px-4">
+                                    <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                                    <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tài chính</span>
+                                    <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                                </div>
 
-                        <FinanceCards
-                            totalRevenue={totalRevenue}
-                            totalCOGS={totalCOGS}
-                            dailyExpense={dailyExpense}
-                            fixedExpense={fixedExpense}
-                            netProfit={netProfit}
-                            onRecipesClick={() => navigate('/recipes', { state: { from: '/daily-report' } })}
-                            onDailyExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'daily' } })}
-                            onFixedExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'fixed' } })}
-                            yesterdayNetProfit={yesterdayNetProfit}
-                        />
+                                <FinanceCards
+                                    totalRevenue={totalRevenue}
+                                    totalCOGS={totalCOGS}
+                                    dailyExpense={dailyExpense}
+                                    fixedExpense={fixedExpense}
+                                    netProfit={netProfit}
+                                    onRecipesClick={() => navigate('/recipes', { state: { from: '/daily-report' } })}
+                                    onDailyExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'daily' } })}
+                                    onFixedExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'fixed' } })}
+                                    yesterdayNetProfit={yesterdayNetProfit}
+                                />
+                            </>
+                        )}
+                        {/* only for manager  */}
 
                         <InventoryRefillCard
                             shiftClosing={shiftClosing}
