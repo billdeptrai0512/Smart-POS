@@ -29,12 +29,26 @@ export default function InventoryRefillCard({
     };
 
     useEffect(() => {
-        if (selectedAddress?.id) {
-            setIsLoadingPast(true);
-            fetchPastDaysOrderItems(selectedAddress.id, 7).then(items => {
-                setPast7DaysItems(items || []);
-            }).finally(() => setIsLoadingPast(false));
+        if (!selectedAddress?.id) return
+
+        // Cache key: address + today's date — 7-day history doesn't change during the day
+        const today = new Date().toISOString().split('T')[0]
+        const cacheKey = `past7days_${selectedAddress.id}_${today}`
+        const cached = sessionStorage.getItem(cacheKey)
+
+        if (cached) {
+            try {
+                setPast7DaysItems(JSON.parse(cached))
+                return
+            } catch { /* ignore parse errors, re-fetch */ }
         }
+
+        setIsLoadingPast(true)
+        fetchPastDaysOrderItems(selectedAddress.id, 7).then(items => {
+            const result = items || []
+            setPast7DaysItems(result)
+            try { sessionStorage.setItem(cacheKey, JSON.stringify(result)) } catch { /* storage full, skip */ }
+        }).finally(() => setIsLoadingPast(false))
     }, [selectedAddress?.id]);
 
     // All useMemo hooks BEFORE early return (React rules of hooks)

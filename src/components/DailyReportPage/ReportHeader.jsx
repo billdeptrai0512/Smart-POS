@@ -52,7 +52,7 @@ export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange
     const { isStaff } = useAuth()
     const subtitle = getSubtitle(selectedRange, offset)
     const canGoForward = offset < 0
-    
+
     // Format customDate or today for input value
     const todayISO = new Date().toISOString().split('T')[0]
     const inputValue = customDate || todayISO
@@ -73,8 +73,8 @@ export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange
                     <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Báo cáo</span>
                     {selectedRange === 'day' ? (
                         !isStaff ? (
-                            <div className="relative mt-1">
-                                <input 
+                            <div className="relative">
+                                <input
                                     type="date"
                                     value={inputValue}
                                     onChange={(e) => {
@@ -89,7 +89,7 @@ export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange
                                 </span>
                             </div>
                         ) : (
-                            <span className="text-[12px] font-bold text-text/80 leading-none mt-1 tabular-nums">{subtitle}</span>
+                            <span className="text-[12px] font-bold text-text/80 leading-none tabular-nums">{subtitle}</span>
                         )
                     ) : (
                         <div className="flex items-center gap-1 pointer-events-auto mt-0.5">
@@ -99,7 +99,7 @@ export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange
                             >
                                 <ChevronLeft size={14} strokeWidth={2.5} />
                             </button>
-                            <span className="text-[12px] font-bold text-text/80 leading-none mt-0.5 tabular-nums">{subtitle}</span>
+                            <span className="text-[12px] font-bold text-text/80 leading-none tabular-nums">{subtitle}</span>
                             <button
                                 onClick={() => canGoForward && onOffsetChange?.(offset + 1)}
                                 className={`w-5 h-5 flex items-center justify-center rounded-full transition-colors ${canGoForward ? 'text-text-secondary hover:text-primary active:text-primary' : 'text-text-dim opacity-30 cursor-default'}`}

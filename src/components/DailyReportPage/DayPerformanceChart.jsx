@@ -19,7 +19,7 @@ function buildWeekData(orders, start, countMap) {
     })
     orders.forEach(o => {
         const d = new Date(o.created_at)
-        const diff = Math.floor((d - start) / 86400000)
+        const diff = (d.getDay() + 6) % 7 // 0=Mon, 1=Tue... 6=Sun
         if (diff >= 0 && diff < 7) {
             slots[diff].cups += countableQty(o.order_items, countMap)
             slots[diff].revenue += o.total
@@ -35,8 +35,10 @@ function buildMonthData(orders, start, end, countMap) {
     while (wStart <= end) {
         const wEnd = new Date(wStart)
         wEnd.setDate(wStart.getDate() + 6)
+        wEnd.setHours(23, 59, 59, 999) // Bao trọn ngày thứ 7 của tuần
         slots.push({ label: `T${wNum}`, wStart: new Date(wStart), wEnd: new Date(Math.min(wEnd.getTime(), end.getTime())), cups: 0, revenue: 0 })
         wStart.setDate(wStart.getDate() + 7)
+        wStart.setHours(0, 0, 0, 0)
         wNum++
     }
     orders.forEach(o => {

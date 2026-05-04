@@ -5,10 +5,12 @@ import { usePOS } from '../contexts/POSContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { calculateProductCost, formatVND } from '../utils'
-import { fetchOrdersByRange, fetchExpensesByRange, fetchShiftClosingsByRange } from '../services/orderService'
+import { supabase } from '../lib/supabaseClient'
 import ReportHeader, { getDateRange } from '../components/DailyReportPage/ReportHeader'
 import DayPerformanceChart from '../components/DailyReportPage/DayPerformanceChart'
-import { Banknote, ArrowRight, MinusCircle, ArrowUp, ArrowDown, TrendingUp, Filter } from 'lucide-react'
+import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
+import FinanceCards from '../components/DailyReportPage/FinanceCards'
+import { Filter } from 'lucide-react'
 
 const RANGE_LABEL = { week: 'Tuần này', month: 'Tháng này' }
 
@@ -52,18 +54,15 @@ export default function RangeReportPage() {
     useEffect(() => {
         if (!selectedAddress?.id) return
         const key = `${selectedAddress.id}_${range}_${offset}`
-        const prevKey = `${selectedAddress.id}_${range}_${offset - 1}`
-
         const cached = fetchCache.current[key]
-        const prevCached = fetchCache.current[prevKey]
 
         if (cached) {
             setOrders(cached.orders)
             setExpenses(cached.expenses)
             setShiftClosings(cached.shiftClosings)
-            setPrevOrders(prevCached ? prevCached.orders : [])
-            setPrevExpenses(prevCached ? prevCached.expenses : [])
-            setPrevShiftClosings(prevCached ? prevCached.shiftClosings : [])
+            setPrevOrders(cached.prevOrders)
+            setPrevExpenses(cached.prevExpenses)
+            setPrevShiftClosings(cached.prevShiftClosings)
             setIsLoading(false)
             return
         }
@@ -72,22 +71,35 @@ export default function RangeReportPage() {
         const { start, end } = getDateRange(range, offset)
         const { start: prevStart, end: prevEnd } = getDateRange(range, offset - 1)
 
-        Promise.all([
-            fetchOrdersByRange(selectedAddress.id, start, end),
-            prevCached ? Promise.resolve(prevCached.orders) : fetchOrdersByRange(selectedAddress.id, prevStart, prevEnd),
-            fetchExpensesByRange(selectedAddress.id, start, end),
-            prevCached ? Promise.resolve(prevCached.expenses) : fetchExpensesByRange(selectedAddress.id, prevStart, prevEnd),
-            fetchShiftClosingsByRange(selectedAddress.id, start, end),
-            prevCached ? Promise.resolve(prevCached.shiftClosings) : fetchShiftClosingsByRange(selectedAddress.id, prevStart, prevEnd),
-        ]).then(([ords, prevOrds, exps, prevExps, closings, prevClosings]) => {
-            fetchCache.current[key] = { orders: ords, expenses: exps, shiftClosings: closings }
-            if (!prevCached) fetchCache.current[prevKey] = { orders: prevOrds, expenses: prevExps, shiftClosings: prevClosings }
+        supabase.rpc('get_report_by_range', {
+            p_address_id: selectedAddress.id,
+            p_target_start: start.toISOString(),
+            p_target_end: end.toISOString(),
+            p_prev_start: prevStart.toISOString(),
+            p_prev_end: prevEnd.toISOString()
+        }).then(({ data, error }) => {
+            if (error) {
+                console.error('get_report_by_range error:', error)
+                return
+            }
+            const ords = data.target_orders || []
+            const exps = data.target_expenses || []
+            const closings = data.target_shift_closings || []
+            const pOrds = data.prev_orders || []
+            const pExps = data.prev_expenses || []
+            const pClosings = data.prev_shift_closings || []
+
+            fetchCache.current[key] = { 
+                orders: ords, expenses: exps, shiftClosings: closings,
+                prevOrders: pOrds, prevExpenses: pExps, prevShiftClosings: pClosings
+            }
+            
             setOrders(ords)
-            setPrevOrders(prevOrds)
             setExpenses(exps)
-            setPrevExpenses(prevExps)
             setShiftClosings(closings)
-            setPrevShiftClosings(prevClosings)
+            setPrevOrders(pOrds)
+            setPrevExpenses(pExps)
+            setPrevShiftClosings(pClosings)
         }).finally(() => setIsLoading(false))
     }, [selectedAddress?.id, range, offset])
 
@@ -109,8 +121,6 @@ export default function RangeReportPage() {
         })
         orders.filter(o => !o.deleted_at).forEach(o => {
             totalRevenue += o.total
-
-            // totalCups handled inside items loop
 
             if (o.total_cost > 0) {
                 totalCOGS += o.total_cost
@@ -156,24 +166,22 @@ export default function RangeReportPage() {
         const transferRevenue = shiftClosings.reduce((s, sc) => s + (sc.actual_transfer || 0), 0)
 
         // Split expenses: dailyExpense (in-shift, vào netProfit) vs refill (cash flow, KHÔNG vào netProfit)
-        let dailyExpense = 0, refillCash = 0, refillTransfer = 0
+        let dailyExpense = 0, refillTotal = 0
         for (const e of expenses) {
             if (e.is_fixed) continue
             if (e.is_refill) {
-                if (e.payment_method === 'transfer') refillTransfer += e.amount
-                else refillCash += e.amount
+                refillTotal += e.amount
             } else {
                 dailyExpense += e.amount
             }
         }
-        const refillTotal = refillCash + refillTransfer
 
         const daysToCalculate = days > 0 ? days : 1
         const fixedExpense = (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0) * daysToCalculate
 
         const netProfit = totalRevenue - totalCOGS - dailyExpense - fixedExpense
 
-        return { totalRevenue, totalCOGS, totalCups, cashRevenue, transferRevenue, dailyExpense, refillCash, refillTransfer, refillTotal, fixedExpense, netProfit, productStats, soldProducts }
+        return { totalRevenue, totalCOGS, totalCups, cashRevenue, transferRevenue, dailyExpense, refillTotal, fixedExpense, netProfit, productStats, soldProducts }
     }, [orders, expenses, shiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, productExtras, products, selectedProductId, days])
 
     const prevStats = useMemo(() => {
@@ -213,23 +221,6 @@ export default function RangeReportPage() {
         return { revenue, cups, netProfit }
     }, [prevOrders, prevExpenses, prevShiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, selectedProductId, prevDays, products])
 
-    const delta = (curr, prev) => {
-        if (!prev) return null
-        const pct = Math.round((curr - prev) / prev * 100)
-        return pct
-    }
-
-    const DeltaBadge = ({ curr, prev }) => {
-        const pct = delta(curr, prev)
-        if (pct === null) return null
-        const up = pct >= 0
-        return (
-            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${up ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger'}`}>
-                {up ? '▲' : '▼'} {Math.abs(pct)}%
-            </span>
-        )
-    }
-
     const avg = (v) => days > 0 ? Math.round(v / days) : v
 
     const handleNavigateRange = (r) => {
@@ -237,9 +228,9 @@ export default function RangeReportPage() {
         else navigate(`/range-report?range=${r}`)
     }
 
-    const selectedProduct = selectedProductId !== 'all' ? products.find(p => p.id === selectedProductId) : null;
-    const singleStats = selectedProduct && stats.productStats?.[selectedProductId] ? stats.productStats[selectedProductId] : null;
-    const displayRevenue = singleStats ? singleStats.revenue : stats.totalRevenue;
+    const selectedProduct = selectedProductId !== 'all' ? products.find(p => p.id === selectedProductId) : null
+    const singleStats = selectedProduct && stats.productStats?.[selectedProductId] ? stats.productStats[selectedProductId] : null
+    const displayRevenue = singleStats ? singleStats.revenue : stats.totalRevenue
 
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
@@ -256,6 +247,8 @@ export default function RangeReportPage() {
                 {isLoading ? (
                     <div className="flex flex-col gap-4 animate-pulse">
                         <div className="bg-surface-light rounded-[24px] h-[72px]" />
+                        <div className="bg-surface-light rounded-[24px] h-[140px]" />
+                        <div className="bg-surface-light rounded-[24px] h-[72px]" />
                         <div className="grid grid-cols-2 gap-3">
                             {[...Array(4)].map((_, i) => <div key={i} className="bg-surface-light rounded-[24px] h-[72px]" />)}
                             <div className="col-span-2 bg-surface-light rounded-[24px] h-[72px]" />
@@ -263,59 +256,8 @@ export default function RangeReportPage() {
                     </div>
                 ) : (
                     <div className="flex flex-col gap-4 animate-fade-in">
-                        {/* Cash / Transfer */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center">
-                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Tiền mặt </h3>
-                                <div className="text-[18px] font-bold text-primary tabular-nums">{formatVND((stats.cashRevenue))}</div>
-                            </div>
-                            <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center">
-                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chuyển khoản </h3>
-                                <div className="text-[18px] font-bold text-primary tabular-nums">{formatVND(stats.transferRevenue)}</div>
-                            </div>
-                        </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all">
-                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí ca</h3>
-                                <div className="text-[18px] font-bold text-danger tabular-nums">{formatVND(stats.dailyExpense)}</div>
-                            </div>
-                            <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all">
-                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Thực nhận </h3>
-                                <div className="text-[18px] font-bold text-success tabular-nums">{formatVND(stats.cashRevenue + stats.transferRevenue + stats.dailyExpense + stats.refillTotal)}</div>
-                            </div>
-                        </div>
-
-                        {/* Refill + Cầm về thực — chỉ hiển thị khi kỳ có phát sinh refill */}
-                        {stats.refillTotal > 0 && (() => {
-                            const takeHomeCash = Math.max(0, stats.cashRevenue - stats.refillCash)
-                            const takeHomeTransfer = Math.max(0, stats.transferRevenue - stats.refillTransfer)
-                            const takeHome = takeHomeCash + takeHomeTransfer
-                            return (
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center">
-                                        <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Mua NVL</h3>
-                                        <div className="text-[18px] font-bold text-primary tabular-nums">{formatVND(stats.refillTotal)}</div>
-                                        {stats.refillCash > 0 && stats.refillTransfer > 0 && (
-                                            <div className="text-[10px] font-bold text-text-secondary tabular-nums mt-0.5">
-                                                TM {formatVND(stats.refillCash)} · CK {formatVND(stats.refillTransfer)}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center">
-                                        <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Cầm về thực</h3>
-                                        <div className="text-[18px] font-bold text-success tabular-nums">{formatVND(takeHome)}</div>
-                                        {stats.refillCash > 0 && stats.refillTransfer > 0 && (
-                                            <div className="text-[10px] font-bold text-text-secondary tabular-nums mt-0.5">
-                                                TM {formatVND(takeHomeCash)} · CK {formatVND(takeHomeTransfer)}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )
-                        })()}
-
-                        {/* Summary card */}
+                        {/* Section 1: Kết quả kinh doanh */}
                         <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 relative overflow-hidden">
                             <div className="flex items-start justify-between">
                                 <div className="flex flex-col min-w-0 flex-1">
@@ -344,7 +286,7 @@ export default function RangeReportPage() {
                                     <div className="flex items-center gap-2 mb-1">
                                         <span className="text-[11px] font-black text-text-secondary uppercase">Doanh thu</span>
                                         <div className="relative flex items-center justify-center w-5 h-5 bg-surface-light rounded-full border border-border/40 text-text-secondary hover:text-primary transition-colors cursor-pointer">
-                                            <Filter size={10} className={selectedProductId !== 'all' ? "text-primary" : ""} />
+                                            <Filter size={10} className={selectedProductId !== 'all' ? 'text-primary' : ''} />
                                             <select
                                                 value={selectedProductId}
                                                 onChange={(e) => setSelectedProductId(e.target.value)}
@@ -364,7 +306,6 @@ export default function RangeReportPage() {
                                     </div>
                                 </div>
                             </div>
-
                             {singleStats && (
                                 <div className="mt-3 pt-3 border-t border-border/30">
                                     <div className="flex items-center justify-between mb-1.5">
@@ -377,86 +318,48 @@ export default function RangeReportPage() {
                                         <div
                                             className="h-full rounded-full bg-primary transition-all duration-300"
                                             style={{ width: `${stats.totalRevenue > 0 ? Math.max(2, (singleStats.revenue / stats.totalRevenue) * 100) : 0}%` }}
-                                        ></div>
+                                        />
                                     </div>
                                 </div>
                             )}
                         </div>
 
-                        {/* Performance chart */}
                         <DayPerformanceChart orders={orders} range={range} start={periodStart} end={periodEnd} products={products} />
 
+                        {/* Section 2: Dòng tiền */}
+                        <CashFlowCard
+                            cash={stats.cashRevenue}
+                            transfer={stats.transferRevenue}
+                            dailyExpense={stats.dailyExpense}
+                            refillTotal={stats.refillTotal}
+                            totalRevenue={stats.totalRevenue}
+                            onDailyExpenseClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'daily', expensesToView: expenses, isReadOnly: true } })}
+                            onRefillClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'refill', expensesToView: expenses, isReadOnly: true } })}
+                        />
 
+                        {/* Section 3: Tài chính (manager only) */}
                         {!isStaff && (
                             <>
-                                <div className="flex items-center gap-3 py-1 px-4">
+                                <div className="flex items-center gap-3 py-1 my-1 px-4">
                                     <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
                                     <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tài chính</span>
                                     <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
                                 </div>
 
-                                {/* Finance cards */}
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
-                                        <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Doanh thu</h3>
-                                        <div className="flex items-center gap-2">
-                                            <div className="text-[18px] font-bold text-success tabular-nums">{formatVND(stats.totalRevenue)}</div>
-                                        </div>
-                                    </div>
-                                    <div
-                                        onClick={() => navigate('/recipes', { state: { from: '/range-report' } })}
-                                        className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
-                                    >
-                                        <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Giá vốn</h3>
-                                        <div className="text-[18px] font-bold text-warning tabular-nums">{formatVND(stats.totalCOGS)}</div>
-                                    </div>
-                                    <div
-                                        onClick={() => navigate('/expenses', { state: { from: '/range-report', tab: 'daily' } })}
-                                        className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
-                                    >
-                                        <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí ngày</h3>
-                                        <div className="text-[18px] font-bold text-danger tabular-nums">{formatVND(stats.dailyExpense)}</div>
-                                    </div>
-                                    <div
-                                        onClick={() => navigate('/expenses', { state: { from: '/range-report', tab: 'fixed' } })}
-                                        className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
-                                    >
-                                        <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí cố định</h3>
-                                        <div className="text-[18px] font-bold text-danger tabular-nums">{formatVND(stats.fixedExpense)}</div>
-                                    </div>
-
-                                    {/* Net profit */}
-                                    {(() => {
-                                        const profitDelta = stats.netProfit - prevStats.netProfit
-                                        const isUpDelta = profitDelta >= 0
-
-                                        return (
-                                            <div className="col-span-2 bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex items-center justify-between relative overflow-hidden group">
-
-                                                <div className="flex flex-col">
-                                                    <h3 className="text-[11px] font-black text-text-secondary uppercase mb-1">Lợi nhuận ròng</h3>
-                                                    <div className={`text-[18px] font-bold tabular-nums ${stats.netProfit >= 0 ? 'text-success' : 'text-danger'}`}>
-                                                        {formatVND(stats.netProfit)}
-                                                    </div>
-                                                </div>
-                                                {prevStats.netProfit !== undefined && (
-                                                    <div className="flex flex-col items-center">
-                                                        <span className="self-center text-[10px] font-black text-text-secondary uppercase mb-1 opacity-70">So với {range === 'week' ? 'tuần trước' : 'tháng trước'}</span>
-                                                        <div className={`px-3 py-1 rounded-xl border ${isUpDelta ? 'bg-success/10 border-success/20 text-success' : 'bg-danger/10 border-danger/20 text-danger'}`}>
-                                                            <span className="text-[12px] font-black tabular-nums leading-none block">
-                                                                {formatVND(profitDelta)}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )
-                                    })()}
-                                </div>
+                                <FinanceCards
+                                    totalRevenue={stats.totalRevenue}
+                                    totalCOGS={stats.totalCOGS}
+                                    dailyExpense={stats.dailyExpense}
+                                    fixedExpense={stats.fixedExpense}
+                                    netProfit={stats.netProfit}
+                                    onRecipesClick={() => navigate('/recipes', { state: { from: '/range-report' } })}
+                                    onDailyExpenseClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'daily', expensesToView: expenses, isReadOnly: true } })}
+                                    onFixedExpenseClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'fixed', isReadOnly: true } })}
+                                    yesterdayNetProfit={prevStats.netProfit}
+                                    compareLabel={`So với ${range === 'week' ? 'tuần trước' : 'tháng trước'}`}
+                                />
                             </>
                         )}
-
-
 
                         <div className="flex flex-col items-center justify-center py-8 mt-4">
                             <a href="https://github.com/billdeptrai0512" target="_blank" rel="noopener noreferrer"

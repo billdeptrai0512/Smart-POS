@@ -1,18 +1,15 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { usePOS } from '../contexts/POSContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useNavigate } from 'react-router-dom'
 import { calculateProductCost } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import ReportHeader from '../components/DailyReportPage/ReportHeader'
-import ProfitCard from '../components/DailyReportPage/ProfitCard'
+import SalesCard from '../components/DailyReportPage/SalesCard'
+import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
-import RevenueChart from '../components/DailyReportPage/RevenueChart'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
-import {
-    fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchYesterdayOrders, fetchYesterdayExpenses,
-    fetchOrdersByRange, fetchExpensesByRange, fetchShiftClosingsByRange
-} from '../services/orderService'
+import { supabase } from '../lib/supabaseClient'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -30,6 +27,15 @@ export default function DailyReportPage() {
     const [selectedProductId, setSelectedProductId] = useState('all')
     const { selectedAddress } = useAddress()
     const [customDate, setCustomDate] = useState(null)
+    // debouncedDate: the date we actually fetch for (delayed 400ms after user stops picking)
+    const [debouncedDate, setDebouncedDate] = useState(null)
+    const debounceRef = useRef(null)
+
+    const handleCustomDateChange = (date) => {
+        setCustomDate(date) // update UI immediately
+        clearTimeout(debounceRef.current)
+        debounceRef.current = setTimeout(() => setDebouncedDate(date), 400)
+    }
     const [shiftClosing, setShiftClosing] = useState(null)
     const [yesterdayClosing, setYesterdayClosing] = useState(null)
     const [yesterdayOrders, setYesterdayOrders] = useState([])
@@ -39,42 +45,39 @@ export default function DailyReportPage() {
     const [apiExpenses, setApiExpenses] = useState([])
 
     // Computed display data
-    const displayOrders = customDate ? apiOrders : todayOrders
-    const displayExpenses = customDate ? apiExpenses : todayExpenses
+    const displayOrders = debouncedDate ? apiOrders : todayOrders
+    const displayExpenses = debouncedDate ? apiExpenses : todayExpenses
 
     useEffect(() => {
         if (!selectedAddress?.id) return
 
         setIsAsyncReady(false)
-        if (!customDate) {
-            Promise.all([
-                fetchTodayShiftClosing(selectedAddress.id).then(setShiftClosing),
-                fetchYesterdayShiftClosing(selectedAddress.id).then(setYesterdayClosing),
-                fetchYesterdayOrders(selectedAddress.id).then(setYesterdayOrders),
-                fetchYesterdayExpenses(selectedAddress.id).then(setYesterdayExpensesData),
-            ]).finally(() => setIsAsyncReady(true))
+        if (!debouncedDate) {
+            // Today view: 1 RPC instead of 4 calls
+            supabase.rpc('get_daily_report_context', { p_address_id: selectedAddress.id })
+                .then(({ data, error }) => {
+                    if (error) { console.error('get_daily_report_context error:', error); return }
+                    setShiftClosing(data?.shift_closing || null)
+                    setYesterdayClosing(data?.yesterday_closing || null)
+                    setYesterdayOrders(data?.yesterday_orders || [])
+                    setYesterdayExpensesData(data?.yesterday_expenses || [])
+                })
+                .finally(() => setIsAsyncReady(true))
         } else {
-            // customDate is a string 'YYYY-MM-DD'
-            const targetDate = new Date(customDate)
-            targetDate.setHours(0, 0, 0, 0)
-            const targetEnd = new Date(targetDate)
-            targetEnd.setHours(23, 59, 59, 999)
-
-            const prevDate = new Date(targetDate)
-            prevDate.setDate(prevDate.getDate() - 1)
-            const prevEnd = new Date(prevDate)
-            prevEnd.setHours(23, 59, 59, 999)
-
-            Promise.all([
-                fetchShiftClosingsByRange(selectedAddress.id, targetDate, targetEnd).then(res => setShiftClosing(res[0] || null)),
-                fetchShiftClosingsByRange(selectedAddress.id, prevDate, prevEnd).then(res => setYesterdayClosing(res[0] || null)),
-                fetchOrdersByRange(selectedAddress.id, prevDate, prevEnd).then(setYesterdayOrders),
-                fetchExpensesByRange(selectedAddress.id, prevDate, prevEnd).then(setYesterdayExpensesData),
-                fetchOrdersByRange(selectedAddress.id, targetDate, targetEnd).then(setApiOrders),
-                fetchExpensesByRange(selectedAddress.id, targetDate, targetEnd).then(setApiExpenses)
-            ]).finally(() => setIsAsyncReady(true))
+            // Custom date view: 1 RPC instead of 6 calls
+            supabase.rpc('get_report_by_date', { p_address_id: selectedAddress.id, p_date: debouncedDate })
+                .then(({ data, error }) => {
+                    if (error) { console.error('get_report_by_date error:', error); return }
+                    setShiftClosing(data?.shift_closing || null)
+                    setYesterdayClosing(data?.yesterday_closing || null)
+                    setYesterdayOrders(data?.yesterday_orders || [])
+                    setYesterdayExpensesData(data?.yesterday_expenses || [])
+                    setApiOrders(data?.target_orders || [])
+                    setApiExpenses(data?.target_expenses || [])
+                })
+                .finally(() => setIsAsyncReady(true))
         }
-    }, [selectedAddress?.id, customDate])
+    }, [selectedAddress?.id, debouncedDate])
 
     const isReady = !isLoadingHistory && isAsyncReady
 
@@ -196,23 +199,18 @@ export default function DailyReportPage() {
         return cups
     }, [displayOrders, offlineToday, selectedProductId, productMap])
 
-    // Daily expenses split into 3 buckets:
-    // - dailyExpense: in-shift cash spent (excluded refill) — trừ vào netProfit
-    // - refillCash: refill paid in cash — trừ vào quỹ TM (cash flow), KHÔNG trừ netProfit (COGS đã đại diện)
-    // - refillTransfer: refill paid via transfer — trừ vào CK (cash flow), KHÔNG trừ netProfit
-    const { dailyExpense, refillCash, refillTransfer } = useMemo(() => {
+    const { dailyExpense, refillTotal } = useMemo(() => {
         const list = todayExpenses || []
-        let daily = 0, rCash = 0, rTransfer = 0
+        let daily = 0, refill = 0
         for (const e of list) {
             if (e.is_fixed) continue
             if (e.is_refill) {
-                if (e.payment_method === 'transfer') rTransfer += e.amount
-                else rCash += e.amount
+                refill += e.amount
             } else {
                 daily += e.amount
             }
         }
-        return { dailyExpense: daily, refillCash: rCash, refillTransfer: rTransfer }
+        return { dailyExpense: daily, refillTotal: refill }
     }, [todayExpenses])
     const fixedExpense = useMemo(() =>
         (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0),
@@ -249,7 +247,7 @@ export default function DailyReportPage() {
                     if (range !== 'day') navigate(`/range-report?range=${range}`)
                 }}
                 customDate={customDate}
-                onCustomDateChange={setCustomDate}
+                onCustomDateChange={handleCustomDateChange}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-6 pb-24 space-y-4 bg-bg">
@@ -267,21 +265,25 @@ export default function DailyReportPage() {
                     </div>
                 ) : (
                     <div className="flex flex-col gap-4 animate-fade-in">
-                        <ProfitCard
+                        <SalesCard
                             totalCups={totalCups}
                             selectedProductId={selectedProductId}
                             onFilterChange={setSelectedProductId}
                             products={products}
                             soldProducts={soldProducts}
                             totalRevenue={totalRevenue}
-                            dailyExpense={dailyExpense}
-                            refillCash={refillCash}
-                            refillTransfer={refillTransfer}
-                            shiftClosing={shiftClosing}
                             productStats={productStats}
+                            lineChartData={lineChartData}
                         />
 
-                        <RevenueChart lineChartData={lineChartData} />
+                        <CashFlowCard
+                            shiftClosing={shiftClosing}
+                            dailyExpense={dailyExpense}
+                            refillTotal={refillTotal}
+                            totalRevenue={totalRevenue}
+                            onDailyExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                            onRefillClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'refill', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                        />
 
                         {/* only for manage */}
                         {!isStaff && (
@@ -299,8 +301,8 @@ export default function DailyReportPage() {
                                     fixedExpense={fixedExpense}
                                     netProfit={netProfit}
                                     onRecipesClick={() => navigate('/recipes', { state: { from: '/daily-report' } })}
-                                    onDailyExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'daily' } })}
-                                    onFixedExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'fixed' } })}
+                                    onDailyExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                                    onFixedExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'fixed', isReadOnly: !!customDate } })}
                                     yesterdayNetProfit={yesterdayNetProfit}
                                 />
                             </>

@@ -1,7 +1,7 @@
 import { Banknote, ArrowRight, MinusCircle, ArrowUp, ArrowDown } from 'lucide-react'
 import { formatVND } from '../../utils'
 
-export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, fixedExpense, netProfit, onRecipesClick, onDailyExpenseClick, onFixedExpenseClick, yesterdayNetProfit }) {
+export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, fixedExpense, netProfit, onRecipesClick, onDailyExpenseClick, onFixedExpenseClick, yesterdayNetProfit, compareLabel = 'So với hôm qua' }) {
     return (
         <div className="grid grid-cols-2 gap-3">
             <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
@@ -57,7 +57,7 @@ export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, fi
                         </div>
                         {hasYesterday && (
                             <div className="flex flex-col items-center">
-                                <span className="self-center text-[10px] font-black text-text-secondary uppercase mb-1 opacity-70">So với hôm qua</span>
+                                <span className="self-center text-[10px] font-black text-text-secondary uppercase mb-1 opacity-70">{compareLabel}</span>
                                 <div className={`px-3 py-1 rounded-xl border ${isUp ? 'bg-success/10 border-success/20 text-success' : 'bg-danger/10 border-danger/20 text-danger'}`}>
                                     <span className="text-[12px] font-black tabular-nums leading-none block">
                                         {formatVND(delta)}
