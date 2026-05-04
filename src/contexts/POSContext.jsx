@@ -424,16 +424,16 @@ export function POSProvider() {
         }
     }
 
-    async function handleAddExpense(name, amount) {
+    async function handleAddExpense(name, amount, isRefill = false, paymentMethod = 'cash') {
         if (!addressId) return
         try {
-            const expense = await insertExpense(name, amount, addressId, false, profile?.name)
+            const expense = await insertExpense(name, amount, addressId, false, profile?.name, isRefill, paymentMethod)
             setTodayExpenses(prev => [expense, ...prev])
             setTotalCost(prev => prev + amount)
-            showToast('Đã thêm chi phí', 'success')
+            showToast(isRefill ? 'Đã thêm khoản mua nguyên vật liệu' : 'Đã thêm chi phí', 'success')
             return expense
         } catch (err) {
-            showError(err, 'Thêm chi phí')
+            showError(err, isRefill ? 'Thêm mua nguyên vật liệu' : 'Thêm chi phí')
             throw err
         }
     }

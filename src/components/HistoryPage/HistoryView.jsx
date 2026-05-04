@@ -126,6 +126,8 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
         staffName: e.staff_name,
         isOffline: false,
         isExpense: true,
+        isRefill: !!e.is_refill,
+        paymentMethod: e.payment_method || 'cash',
         items: [{ text: `${e.name}`, cost: e.amount }]
     }))
 
@@ -226,8 +228,8 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                                     </div>
                                 )}
                                 {order.isExpense && (
-                                    <div className="absolute top-0 right-0 bg-danger/10 text-danger text-[10px] font-black px-2 py-1 rounded-bl-[14px] uppercase tracking-wider">
-                                        Chi phí
+                                    <div className={`absolute top-0 right-0 text-[10px] font-black px-2 py-1 rounded-bl-[14px] uppercase tracking-wider ${order.isRefill ? 'bg-primary/10 text-primary' : 'bg-danger/10 text-danger'}`}>
+                                        {order.isRefill ? 'Mua NVL' : 'Chi phí'}
                                     </div>
                                 )}
                                 <div className="flex justify-between items-center mb-1">
@@ -235,7 +237,12 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                                         {!order.isExpense ? (
                                             <span className="font-black text-[14px] text-primary">+ {formatVND(order.total)}</span>
                                         ) : (
-                                            <span className="font-black text-[14px] text-danger">- {formatVND(order.cost)}</span>
+                                            <span className={`font-black text-[14px] ${order.isRefill ? 'text-primary' : 'text-danger'}`}>
+                                                - {formatVND(order.cost)}
+                                                {order.isRefill && order.paymentMethod === 'transfer' && (
+                                                    <span className="ml-1 text-[10px] font-bold text-text-secondary uppercase tracking-wide">CK</span>
+                                                )}
+                                            </span>
                                         )}
                                     </div>
                                     {!order.isExpense && !order.deletedAt ? (
@@ -276,7 +283,8 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                                                         if (deletingId === order.id) return
                                                         const text = order.items?.map(i => i.text).join(', ') || ''
                                                         if (order.isExpense) {
-                                                            if (window.confirm(`Xóa chi phí ${text}?\n\nHành động này không thể hoàn tác!`)) {
+                                                            const label = order.isRefill ? 'mua nguyên vật liệu' : 'chi phí'
+                                                            if (window.confirm(`Xóa khoản ${label} ${text}?\n\nHành động này không thể hoàn tác!`)) {
                                                                 setDeletingId(order.id)
                                                                 onDeleteExpense(order.id, order.cost).finally(() => setDeletingId(null))
                                                             }
