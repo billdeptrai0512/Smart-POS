@@ -9,7 +9,7 @@ import ProfitCard from '../components/DailyReportPage/ProfitCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import RevenueChart from '../components/DailyReportPage/RevenueChart'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
-import { 
+import {
     fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchYesterdayOrders, fetchYesterdayExpenses,
     fetchOrdersByRange, fetchExpensesByRange, fetchShiftClosingsByRange
 } from '../services/orderService'
@@ -44,7 +44,7 @@ export default function DailyReportPage() {
 
     useEffect(() => {
         if (!selectedAddress?.id) return
-        
+
         setIsAsyncReady(false)
         if (!customDate) {
             Promise.all([
@@ -197,8 +197,8 @@ export default function DailyReportPage() {
     }, [displayOrders, offlineToday, selectedProductId, productMap])
 
     const dailyExpense = useMemo(() =>
-        (displayExpenses || []).filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0),
-        [displayExpenses]
+        (todayExpenses || []).filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0),
+        [todayExpenses]
     )
     const fixedExpense = useMemo(() =>
         (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0),
@@ -221,7 +221,7 @@ export default function DailyReportPage() {
             }
         })
         return (rev - cogs)
-            - yesterdayExpensesData.filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0)
+            - yesterdayExpensesData.filter(e => !e.is_fixed && !e.is_refill).reduce((s, e) => s + e.amount, 0)
             - yesterdayExpensesData.filter(e => e.is_fixed).reduce((s, e) => s + e.amount, 0)
     }, [yesterdayOrders, yesterdayExpensesData, recipes, extraIngredients, ingredientCosts])
 
@@ -261,6 +261,8 @@ export default function DailyReportPage() {
                             soldProducts={soldProducts}
                             totalRevenue={totalRevenue}
                             dailyExpense={dailyExpense}
+                            refillCash={refillCash}
+                            refillTransfer={refillTransfer}
                             shiftClosing={shiftClosing}
                             productStats={productStats}
                         />

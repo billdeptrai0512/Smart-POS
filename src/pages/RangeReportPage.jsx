@@ -155,7 +155,8 @@ export default function RangeReportPage() {
         const cashRevenue = shiftClosings.reduce((s, sc) => s + (sc.actual_cash || 0), 0)
         const transferRevenue = shiftClosings.reduce((s, sc) => s + (sc.actual_transfer || 0), 0)
 
-        const dailyExpense = expenses.filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0)
+        // Exclude refill (Mua NVL) khỏi dailyExpense vì COGS đã đại diện cho nguyên liệu — tránh double count trong netProfit
+        const dailyExpense = expenses.filter(e => !e.is_fixed && !e.is_refill).reduce((s, e) => s + e.amount, 0)
 
         const daysToCalculate = days > 0 ? days : 1
         const fixedExpense = (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0) * daysToCalculate
@@ -192,7 +193,7 @@ export default function RangeReportPage() {
             })
         })
 
-        const dailyExpense = prevExpenses.filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0)
+        const dailyExpense = prevExpenses.filter(e => !e.is_fixed && !e.is_refill).reduce((s, e) => s + e.amount, 0)
 
         const daysToCalculate = prevDays > 0 ? prevDays : 1
         const fixedExpense = (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0) * daysToCalculate

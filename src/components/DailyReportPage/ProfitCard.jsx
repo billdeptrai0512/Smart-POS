@@ -1,10 +1,18 @@
 import { Filter } from "lucide-react";
 import { formatVND } from "../../utils";
 
-export default function ProfitCard({ totalCups, selectedProductId, onFilterChange, products, soldProducts, totalRevenue, dailyExpense, shiftClosing, productStats }) {
+export default function ProfitCard({ totalCups, selectedProductId, onFilterChange, products, soldProducts, totalRevenue, dailyExpense, refillCash = 0, refillTransfer = 0, shiftClosing, productStats }) {
     const selectedProduct = selectedProductId !== 'all' ? products.find(p => p.id === selectedProductId) : null;
 
-    const actualTotal = (shiftClosing?.actual_cash || 0) + (shiftClosing?.actual_transfer || 0) + (dailyExpense || 0);
+    const actualCash = shiftClosing?.actual_cash || 0;
+    const actualTransfer = shiftClosing?.actual_transfer || 0;
+    const refillTotal = refillCash + refillTransfer;
+    // Đối soát: tổng các nơi tiền có thể "ra" từ doanh thu = TM còn két + CK + chi phí ca đã tiêu + refill đã tiêu
+    const actualTotal = actualCash + actualTransfer + (dailyExpense || 0) + refillTotal;
+    // Tiền cầm về thực: số dư sau khi refill đã rút từ TM/CK
+    const takeHomeCash = Math.max(0, actualCash - refillCash);
+    const takeHomeTransfer = Math.max(0, actualTransfer - refillTransfer);
+    const takeHome = takeHomeCash + takeHomeTransfer;
     const systemTotal = shiftClosing?.system_total_revenue || 0;
     const difference = actualTotal - systemTotal;
 
@@ -29,7 +37,7 @@ export default function ProfitCard({ totalCups, selectedProductId, onFilterChang
 
             <div className="grid grid-cols-2 gap-3">
                 <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center">
-                    <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí ngày</h3>
+                    <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí ca</h3>
                     <div className="text-[18px] font-bold text-danger tabular-nums">{formatVND(dailyExpense || 0)}</div>
                 </div>
                 <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center">
@@ -37,6 +45,30 @@ export default function ProfitCard({ totalCups, selectedProductId, onFilterChang
                     <div className="text-[18px] font-bold text-success tabular-nums">{formatVND(actualTotal || 0)}</div>
                 </div>
             </div>
+
+            {/* Refill + Tiền cầm về thực — chỉ hiển thị khi có refill phát sinh */}
+            {refillTotal > 0 && (
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center">
+                        <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Mua NVL</h3>
+                        <div className="text-[18px] font-bold text-primary tabular-nums">{formatVND(refillTotal)}</div>
+                        {refillCash > 0 && refillTransfer > 0 && (
+                            <div className="text-[10px] font-bold text-text-secondary tabular-nums mt-0.5">
+                                TM {formatVND(refillCash)} · CK {formatVND(refillTransfer)}
+                            </div>
+                        )}
+                    </div>
+                    <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center">
+                        <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Cầm về thực</h3>
+                        <div className="text-[18px] font-bold text-success tabular-nums">{formatVND(takeHome)}</div>
+                        {refillCash > 0 && refillTransfer > 0 && (
+                            <div className="text-[10px] font-bold text-text-secondary tabular-nums mt-0.5">
+                                TM {formatVND(takeHomeCash)} · CK {formatVND(takeHomeTransfer)}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 relative overflow-hidden">
                 <div className="flex items-start justify-between">
