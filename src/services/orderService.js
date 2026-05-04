@@ -930,6 +930,7 @@ export async function fetchPastDaysOrderItems(addressId, days = 7) {
                 extra_ids
             )
         `)
+        .is('deleted_at', null)
         .gte('created_at', startDate.toISOString())
         .lt('created_at', endDate.toISOString())
 
