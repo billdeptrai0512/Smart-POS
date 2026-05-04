@@ -56,7 +56,7 @@ export default function InventoryRefillCard({
 
     const todayOrderItems = useMemo(() => {
         const items = [];
-        todayOrders.forEach(o => {
+        todayOrders.filter(o => !o.deleted_at).forEach(o => {
             (o.order_items || []).forEach(i => items.push({
                 productId: i.product_id, qty: i.quantity || 1,
                 extras: (i.extra_ids || []).map(id => ({ id }))

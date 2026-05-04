@@ -12,12 +12,6 @@ const getLatestCommitMessage = () => {
   }
 }
 
-// Allow extra dev hosts (e.g. cloudflare tunnel) via VITE_DEV_ALLOWED_HOSTS=host1,host2
-const devAllowedHosts = (process.env.VITE_DEV_ALLOWED_HOSTS || '')
-  .split(',')
-  .map(h => h.trim())
-  .filter(Boolean)
-
 export default defineConfig({
   test: {
     environment: 'node',
@@ -85,6 +79,6 @@ export default defineConfig({
     })
   ],
   server: {
-    allowedHosts: devAllowedHosts
+    allowedHosts: ["touring-ruled-integrity-paying.trycloudflare.com"]
   }
 })

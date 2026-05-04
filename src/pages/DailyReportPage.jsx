@@ -9,7 +9,10 @@ import ProfitCard from '../components/DailyReportPage/ProfitCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import RevenueChart from '../components/DailyReportPage/RevenueChart'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
-import { fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchYesterdayOrders, fetchYesterdayExpenses } from '../services/orderService'
+import {
+    fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchYesterdayOrders, fetchYesterdayExpenses,
+    fetchOrdersByRange, fetchExpensesByRange, fetchShiftClosingsByRange
+} from '../services/orderService'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -26,23 +29,52 @@ export default function DailyReportPage() {
 
     const [selectedProductId, setSelectedProductId] = useState('all')
     const { selectedAddress } = useAddress()
+    const [customDate, setCustomDate] = useState(null)
     const [shiftClosing, setShiftClosing] = useState(null)
     const [yesterdayClosing, setYesterdayClosing] = useState(null)
     const [yesterdayOrders, setYesterdayOrders] = useState([])
     const [yesterdayExpensesData, setYesterdayExpensesData] = useState([])
     const [isAsyncReady, setIsAsyncReady] = useState(false)
+    const [apiOrders, setApiOrders] = useState([])
+    const [apiExpenses, setApiExpenses] = useState([])
+
+    // Computed display data
+    const displayOrders = customDate ? apiOrders : todayOrders
+    const displayExpenses = customDate ? apiExpenses : todayExpenses
 
     useEffect(() => {
-        if (selectedAddress?.id) {
-            setIsAsyncReady(false)
+        if (!selectedAddress?.id) return
+
+        setIsAsyncReady(false)
+        if (!customDate) {
             Promise.all([
                 fetchTodayShiftClosing(selectedAddress.id).then(setShiftClosing),
                 fetchYesterdayShiftClosing(selectedAddress.id).then(setYesterdayClosing),
                 fetchYesterdayOrders(selectedAddress.id).then(setYesterdayOrders),
                 fetchYesterdayExpenses(selectedAddress.id).then(setYesterdayExpensesData),
             ]).finally(() => setIsAsyncReady(true))
+        } else {
+            // customDate is a string 'YYYY-MM-DD'
+            const targetDate = new Date(customDate)
+            targetDate.setHours(0, 0, 0, 0)
+            const targetEnd = new Date(targetDate)
+            targetEnd.setHours(23, 59, 59, 999)
+
+            const prevDate = new Date(targetDate)
+            prevDate.setDate(prevDate.getDate() - 1)
+            const prevEnd = new Date(prevDate)
+            prevEnd.setHours(23, 59, 59, 999)
+
+            Promise.all([
+                fetchShiftClosingsByRange(selectedAddress.id, targetDate, targetEnd).then(res => setShiftClosing(res[0] || null)),
+                fetchShiftClosingsByRange(selectedAddress.id, prevDate, prevEnd).then(res => setYesterdayClosing(res[0] || null)),
+                fetchOrdersByRange(selectedAddress.id, prevDate, prevEnd).then(setYesterdayOrders),
+                fetchExpensesByRange(selectedAddress.id, prevDate, prevEnd).then(setYesterdayExpensesData),
+                fetchOrdersByRange(selectedAddress.id, targetDate, targetEnd).then(setApiOrders),
+                fetchExpensesByRange(selectedAddress.id, targetDate, targetEnd).then(setApiExpenses)
+            ]).finally(() => setIsAsyncReady(true))
         }
-    }, [selectedAddress?.id])
+    }, [selectedAddress?.id, customDate])
 
     const isReady = !isLoadingHistory && isAsyncReady
 
@@ -65,7 +97,7 @@ export default function DailyReportPage() {
     const { totalRevenue, totalCOGS, productStats, soldProducts, lineChartData, offlineToday } = useMemo(() => {
         const { priceMap: extraPriceMap, nameMap: extraNameMap } = extraMaps
 
-        const pending = getPendingOrders()
+        const pending = customDate ? [] : getPendingOrders()
         const todayStr = new Date().toDateString()
         const offlineToday = pending.filter(o => new Date(o.createdAt).toDateString() === todayStr)
 
@@ -120,7 +152,7 @@ export default function DailyReportPage() {
             })
         }
 
-        todayOrders.filter(o => !o.deleted_at).forEach(o => processOrder(o, false))
+        displayOrders.filter(o => !o.deleted_at).forEach(o => processOrder(o, false))
         offlineToday.forEach(o => processOrder(o, true))
 
         const hourRange = []
@@ -136,14 +168,14 @@ export default function DailyReportPage() {
         })
 
         return { totalRevenue, totalCOGS, productStats, soldProducts, lineChartData, offlineToday }
-    }, [todayOrders, productMap, extraMaps, recipes, extraIngredients, ingredientCosts])
+    }, [displayOrders, productMap, extraMaps, recipes, extraIngredients, ingredientCosts, customDate])
 
     // totalCups separated: only reruns when filter or orders change, not on other UI state
     // When 'all' filter, products with count_as_cup=false are excluded; when filtering a specific product, always count it.
     const totalCups = useMemo(() => {
         let cups = 0
         const isExcluded = (pid) => productMap.get(pid)?.count_as_cup === false
-        todayOrders.filter(o => !o.deleted_at).forEach(o => {
+        displayOrders.filter(o => !o.deleted_at).forEach(o => {
             ; (o.order_items || []).forEach(i => {
                 if (selectedProductId === 'all') {
                     if (!isExcluded(i.product_id)) cups += i.quantity || 1
@@ -162,7 +194,7 @@ export default function DailyReportPage() {
             })
         })
         return cups
-    }, [todayOrders, offlineToday, selectedProductId, productMap])
+    }, [displayOrders, offlineToday, selectedProductId, productMap])
 
     // Daily expenses split into 3 buckets:
     // - dailyExpense: in-shift cash spent (excluded refill) — trừ vào netProfit
@@ -182,7 +214,6 @@ export default function DailyReportPage() {
         }
         return { dailyExpense: daily, refillCash: rCash, refillTransfer: rTransfer }
     }, [todayExpenses])
-
     const fixedExpense = useMemo(() =>
         (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0),
         [fixedCosts]
@@ -217,6 +248,8 @@ export default function DailyReportPage() {
                 onNavigateRange={(range) => {
                     if (range !== 'day') navigate(`/range-report?range=${range}`)
                 }}
+                customDate={customDate}
+                onCustomDateChange={setCustomDate}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-6 pb-24 space-y-4 bg-bg">

@@ -155,15 +155,25 @@ export default function RangeReportPage() {
         const cashRevenue = shiftClosings.reduce((s, sc) => s + (sc.actual_cash || 0), 0)
         const transferRevenue = shiftClosings.reduce((s, sc) => s + (sc.actual_transfer || 0), 0)
 
-        // Exclude refill (Mua NVL) khỏi dailyExpense vì COGS đã đại diện cho nguyên liệu — tránh double count trong netProfit
-        const dailyExpense = expenses.filter(e => !e.is_fixed && !e.is_refill).reduce((s, e) => s + e.amount, 0)
+        // Split expenses: dailyExpense (in-shift, vào netProfit) vs refill (cash flow, KHÔNG vào netProfit)
+        let dailyExpense = 0, refillCash = 0, refillTransfer = 0
+        for (const e of expenses) {
+            if (e.is_fixed) continue
+            if (e.is_refill) {
+                if (e.payment_method === 'transfer') refillTransfer += e.amount
+                else refillCash += e.amount
+            } else {
+                dailyExpense += e.amount
+            }
+        }
+        const refillTotal = refillCash + refillTransfer
 
         const daysToCalculate = days > 0 ? days : 1
         const fixedExpense = (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0) * daysToCalculate
 
         const netProfit = totalRevenue - totalCOGS - dailyExpense - fixedExpense
 
-        return { totalRevenue, totalCOGS, totalCups, cashRevenue, transferRevenue, dailyExpense, fixedExpense, netProfit, productStats, soldProducts }
+        return { totalRevenue, totalCOGS, totalCups, cashRevenue, transferRevenue, dailyExpense, refillCash, refillTransfer, refillTotal, fixedExpense, netProfit, productStats, soldProducts }
     }, [orders, expenses, shiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, productExtras, products, selectedProductId, days])
 
     const prevStats = useMemo(() => {
@@ -267,14 +277,43 @@ export default function RangeReportPage() {
 
                         <div className="grid grid-cols-2 gap-3">
                             <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all">
-                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí ngày</h3>
+                                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí ca</h3>
                                 <div className="text-[18px] font-bold text-danger tabular-nums">{formatVND(stats.dailyExpense)}</div>
                             </div>
                             <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all">
                                 <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Thực nhận </h3>
-                                <div className="text-[18px] font-bold text-success tabular-nums">{formatVND(stats.cashRevenue + stats.transferRevenue + stats.dailyExpense)}</div>
+                                <div className="text-[18px] font-bold text-success tabular-nums">{formatVND(stats.cashRevenue + stats.transferRevenue + stats.dailyExpense + stats.refillTotal)}</div>
                             </div>
                         </div>
+
+                        {/* Refill + Cầm về thực — chỉ hiển thị khi kỳ có phát sinh refill */}
+                        {stats.refillTotal > 0 && (() => {
+                            const takeHomeCash = Math.max(0, stats.cashRevenue - stats.refillCash)
+                            const takeHomeTransfer = Math.max(0, stats.transferRevenue - stats.refillTransfer)
+                            const takeHome = takeHomeCash + takeHomeTransfer
+                            return (
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center">
+                                        <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Mua NVL</h3>
+                                        <div className="text-[18px] font-bold text-primary tabular-nums">{formatVND(stats.refillTotal)}</div>
+                                        {stats.refillCash > 0 && stats.refillTransfer > 0 && (
+                                            <div className="text-[10px] font-bold text-text-secondary tabular-nums mt-0.5">
+                                                TM {formatVND(stats.refillCash)} · CK {formatVND(stats.refillTransfer)}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center">
+                                        <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Cầm về thực</h3>
+                                        <div className="text-[18px] font-bold text-success tabular-nums">{formatVND(takeHome)}</div>
+                                        {stats.refillCash > 0 && stats.refillTransfer > 0 && (
+                                            <div className="text-[10px] font-bold text-text-secondary tabular-nums mt-0.5">
+                                                TM {formatVND(takeHomeCash)} · CK {formatVND(takeHomeTransfer)}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )
+                        })()}
 
                         {/* Summary card */}
                         <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 relative overflow-hidden">

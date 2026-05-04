@@ -1,4 +1,5 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, Pen } from 'lucide-react'
+import { useAuth } from '../../contexts/AuthContext'
 
 const RANGES = [
     { key: 'week', label: 'Tuần này' },
@@ -47,9 +48,14 @@ function getSubtitle(range, offset) {
     return `${fmt(start)} – ${fmt(end)}`
 }
 
-export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange = 'day', onNavigateRange, offset = 0, onOffsetChange }) {
+export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange = 'day', onNavigateRange, offset = 0, onOffsetChange, customDate, onCustomDateChange }) {
+    const { isStaff } = useAuth()
     const subtitle = getSubtitle(selectedRange, offset)
     const canGoForward = offset < 0
+    
+    // Format customDate or today for input value
+    const todayISO = new Date().toISOString().split('T')[0]
+    const inputValue = customDate || todayISO
 
     return (
         <header className="shrink-0 pt-6 pb-3 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col gap-3 px-4">
@@ -66,7 +72,25 @@ export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange
                 <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
                     <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Báo cáo</span>
                     {selectedRange === 'day' ? (
-                        <span className="text-[12px] font-bold text-text/80 leading-none mt-1 tabular-nums">{subtitle}</span>
+                        !isStaff ? (
+                            <div className="relative mt-1">
+                                <input 
+                                    type="date"
+                                    value={inputValue}
+                                    onChange={(e) => {
+                                        if (e.target.value === todayISO) onCustomDateChange?.(null)
+                                        else onCustomDateChange?.(e.target.value)
+                                    }}
+                                    max={todayISO}
+                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                                />
+                                <span className="text-[12px] font-bold text-text/80 leading-none tabular-nums underline decoration-dashed decoration-primary/40 underline-offset-4 relative z-0 pointer-events-none">
+                                    {customDate ? `${customDate.split('-')[2]}/${customDate.split('-')[1]}/${customDate.split('-')[0]}` : subtitle}
+                                </span>
+                            </div>
+                        ) : (
+                            <span className="text-[12px] font-bold text-text/80 leading-none mt-1 tabular-nums">{subtitle}</span>
+                        )
                     ) : (
                         <div className="flex items-center gap-1 pointer-events-auto mt-0.5">
                             <button
