@@ -196,10 +196,24 @@ export default function DailyReportPage() {
         return cups
     }, [displayOrders, offlineToday, selectedProductId, productMap])
 
-    const dailyExpense = useMemo(() =>
-        (todayExpenses || []).filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0),
-        [todayExpenses]
-    )
+    // Daily expenses split into 3 buckets:
+    // - dailyExpense: in-shift cash spent (excluded refill) — trừ vào netProfit
+    // - refillCash: refill paid in cash — trừ vào quỹ TM (cash flow), KHÔNG trừ netProfit (COGS đã đại diện)
+    // - refillTransfer: refill paid via transfer — trừ vào CK (cash flow), KHÔNG trừ netProfit
+    const { dailyExpense, refillCash, refillTransfer } = useMemo(() => {
+        const list = todayExpenses || []
+        let daily = 0, rCash = 0, rTransfer = 0
+        for (const e of list) {
+            if (e.is_fixed) continue
+            if (e.is_refill) {
+                if (e.payment_method === 'transfer') rTransfer += e.amount
+                else rCash += e.amount
+            } else {
+                daily += e.amount
+            }
+        }
+        return { dailyExpense: daily, refillCash: rCash, refillTransfer: rTransfer }
+    }, [todayExpenses])
     const fixedExpense = useMemo(() =>
         (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0),
         [fixedCosts]
