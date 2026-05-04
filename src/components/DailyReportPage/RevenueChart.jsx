@@ -1,11 +1,25 @@
 import { useState, useEffect, useRef } from 'react'
 import { TrendingUp } from 'lucide-react'
-import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis } from 'recharts'
+import { LineChart, Line, CartesianGrid, XAxis } from 'recharts'
 import { formatVND } from '../../utils'
+
+const CHART_HEIGHT = 220
 
 export default function RevenueChart({ lineChartData }) {
     const [activePoint, setActivePoint] = useState(null)
+    const [chartWidth, setChartWidth] = useState(0)
     const wrapperRef = useRef(null)
+
+    // Measure container width manually (Recharts 3.x ResponsiveContainer fires width=-1 on first render
+    // and emits a noisy console warning; passing numeric width avoids that)
+    useEffect(() => {
+        if (!wrapperRef.current) return
+        const ro = new ResizeObserver(([entry]) => {
+            setChartWidth(entry.contentRect.width)
+        })
+        ro.observe(wrapperRef.current)
+        return () => ro.disconnect()
+    }, [])
 
     useEffect(() => {
         const handleClickOutside = (e) => {
@@ -121,8 +135,8 @@ export default function RevenueChart({ lineChartData }) {
                             </div>
                         </div>
                     )}
-                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                        <LineChart data={lineChartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                    {chartWidth > 0 && (
+                        <LineChart width={chartWidth} height={CHART_HEIGHT} data={lineChartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#44403c" vertical={false} />
                             <XAxis dataKey="hour" tick={{ fontSize: 10, fill: '#a8a29e' }} axisLine={false} tickLine={false} tickMargin={10} />
                             <Line
@@ -134,7 +148,7 @@ export default function RevenueChart({ lineChartData }) {
                                 activeDot={false}
                             />
                         </LineChart>
-                    </ResponsiveContainer>
+                    )}
                 </div>
             ) : (
                 <div className="text-center text-text-secondary text-[12px] py-4 bg-surface-light rounded-xl border border-border/40">
