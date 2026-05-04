@@ -144,7 +144,7 @@ export async function fetchTodayExpenses(addressId) {
 
     let query = supabase
         .from('expenses')
-        .select('id, name, amount, staff_name, is_fixed, created_at')
+        .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, created_at')
         .gte('created_at', today.toISOString())
 
     if (addressId) query = query.eq('address_id', addressId)
@@ -161,10 +161,14 @@ export async function fetchTodayExpenses(addressId) {
     return data
 }
 
-// Insert an expense (supports is_fixed flag for auto-injected fixed costs)
-export async function insertExpense(name, amount, addressId = null, isFixed = false, staffName = null) {
+// Insert an expense
+// - isFixed: auto-injected fixed costs (rent, salary, etc.) — excluded from cash flow
+// - isRefill: "Mua nguyên vật liệu" — excluded from netProfit (COGS already covers it),
+//   but counted in cash flow / đối soát
+// - paymentMethod: 'cash' | 'transfer' — determines which pot the refill came from
+export async function insertExpense(name, amount, addressId = null, isFixed = false, staffName = null, isRefill = false, paymentMethod = 'cash') {
     if (!supabase) throw new Error('No Supabase connection')
-    const payload = { name, amount, is_fixed: isFixed }
+    const payload = { name, amount, is_fixed: isFixed, is_refill: isRefill, payment_method: paymentMethod }
     if (addressId) payload.address_id = addressId
     if (staffName) payload.staff_name = staffName
 
@@ -790,7 +794,7 @@ export async function fetchYesterdayExpenses(addressId) {
 
     let query = supabase
         .from('expenses')
-        .select('id, name, amount, staff_name, is_fixed, created_at, address_id')
+        .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, created_at, address_id')
         .gte('created_at', yesterday.toISOString())
         .lt('created_at', today.toISOString())
 
@@ -824,7 +828,7 @@ export async function fetchExpensesByRange(addressId, start, end) {
     if (!supabase) return []
     let query = supabase
         .from('expenses')
-        .select('id, name, amount, staff_name, is_fixed, created_at, address_id')
+        .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, created_at, address_id')
         .gte('created_at', start.toISOString())
         .lte('created_at', end.toISOString())
     if (addressId) query = query.eq('address_id', addressId)

@@ -19,6 +19,8 @@ export default function ExpensePage() {
 
     const [costName, setCostName] = useState('')
     const [costAmount, setCostAmount] = useState('')
+    const [expenseKind, setExpenseKind] = useState('daily') // 'daily' | 'refill'
+    const [paymentMethod, setPaymentMethod] = useState('cash') // 'cash' | 'transfer' (only for refill)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [deletingId, setDeletingId] = useState(null)
 
@@ -42,7 +44,8 @@ export default function ExpensePage() {
         if (!costName.trim() || !costAmount || isNaN(costAmount) || Number(costAmount) <= 0) return
         setIsSubmitting(true)
         try {
-            await handleAddExpense(costName.trim(), Number(costAmount) * 1000)
+            const isRefill = expenseKind === 'refill'
+            await handleAddExpense(costName.trim(), Number(costAmount) * 1000, isRefill, isRefill ? paymentMethod : 'cash')
             setCostName('')
             setCostAmount('')
         } catch {
@@ -142,15 +145,20 @@ export default function ExpensePage() {
                         ) : (
                             [...dailyExpenses].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).map(expense => {
                                 const time = `${new Date(expense.created_at).getHours().toString().padStart(2, '0')}:${new Date(expense.created_at).getMinutes().toString().padStart(2, '0')}`
+                                const isRefill = !!expense.is_refill
+                                const badgeClass = isRefill ? 'bg-primary/10 text-primary' : (expense.is_fixed ? 'bg-warning/10 text-warning' : 'bg-danger/10 text-danger')
+                                const badgeLabel = isRefill ? 'Mua NVL' : (expense.is_fixed ? 'Cố định' : 'Chi phí')
                                 return (
                                     <div key={expense.id} className="bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden opacity-90">
-                                        <div className={`absolute top-0 right-0 text-[10px] font-black px-2 py-1 rounded-bl-[14px] uppercase tracking-wider ${expense.is_fixed ? 'bg-warning/10 text-warning' : 'bg-danger/10 text-danger'
-                                            }`}>
-                                            {expense.is_fixed ? 'Cố định' : 'Chi phí'}
+                                        <div className={`absolute top-0 right-0 text-[10px] font-black px-2 py-1 rounded-bl-[14px] uppercase tracking-wider ${badgeClass}`}>
+                                            {badgeLabel}
                                         </div>
                                         <div className="flex justify-between items-center mb-1">
                                             <div className="flex items-center gap-2 mt-1">
-                                                <span className="font-black text-[14px] text-danger">- {formatVND(expense.amount)}</span>
+                                                <span className={`font-black text-[14px] ${isRefill ? 'text-primary' : 'text-danger'}`}>- {formatVND(expense.amount)}</span>
+                                                {isRefill && expense.payment_method === 'transfer' && (
+                                                    <span className="text-[10px] font-bold text-text-secondary uppercase tracking-wide">CK</span>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="flex justify-between items-stretch mb-1 border-t border-border/40 pt-2">
@@ -186,12 +194,12 @@ export default function ExpensePage() {
                         <div className="flex gap-2">
                             <input
                                 type="text"
-                                placeholder="Tên chi phí..."
+                                placeholder={expenseKind === 'refill' ? 'Tên nguyên vật liệu...' : 'Tên chi phí...'}
                                 value={costName}
                                 onChange={e => setCostName(e.target.value)}
-                                className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-danger/40 transition-colors"
+                                className={`flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none transition-colors ${expenseKind === 'refill' ? 'focus:border-primary/40' : 'focus:border-danger/40'}`}
                             />
-                            <div className="relative shrink-0 flex items-center w-[125px] bg-surface-light border border-border/60 rounded-[12px] focus-within:border-danger/40 transition-colors overflow-hidden">
+                            <div className={`relative shrink-0 flex items-center w-[125px] bg-surface-light border border-border/60 rounded-[12px] transition-colors overflow-hidden ${expenseKind === 'refill' ? 'focus-within:border-primary/40' : 'focus-within:border-danger/40'}`}>
                                 <input
                                     type="number"
                                     placeholder="Số tiền..."
@@ -211,10 +219,44 @@ export default function ExpensePage() {
                             </div>
                         </div>
 
+                        {/* Type segmented: Chi phí ca / Mua nguyên vật liệu */}
+                        <div className="flex gap-1 p-0.5 bg-surface-light rounded-[12px] border border-border/40">
+                            <button
+                                onClick={() => setExpenseKind('daily')}
+                                className={`flex-1 py-2 rounded-[10px] text-[12px] font-black uppercase tracking-wider transition-all ${expenseKind === 'daily' ? 'bg-danger/10 text-danger shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                            >
+                                Chi phí ca
+                            </button>
+                            <button
+                                onClick={() => setExpenseKind('refill')}
+                                className={`flex-1 py-2 rounded-[10px] text-[12px] font-black uppercase tracking-wider transition-all ${expenseKind === 'refill' ? 'bg-primary/10 text-primary shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                            >
+                                Mua nguyên vật liệu
+                            </button>
+                        </div>
+
+                        {/* Payment method (only for refill) */}
+                        {expenseKind === 'refill' && (
+                            <div className="flex gap-1 p-0.5 bg-surface-light rounded-[12px] border border-border/40">
+                                <button
+                                    onClick={() => setPaymentMethod('cash')}
+                                    className={`flex-1 py-1.5 rounded-[10px] text-[11px] font-bold uppercase tracking-wider transition-all ${paymentMethod === 'cash' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                                >
+                                    Tiền mặt
+                                </button>
+                                <button
+                                    onClick={() => setPaymentMethod('transfer')}
+                                    className={`flex-1 py-1.5 rounded-[10px] text-[11px] font-bold uppercase tracking-wider transition-all ${paymentMethod === 'transfer' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                                >
+                                    Chuyển khoản
+                                </button>
+                            </div>
+                        )}
+
                         <button
                             onClick={submitExpense}
                             disabled={!costName.trim() || !costAmount || isNaN(costAmount) || Number(costAmount) <= 0 || isSubmitting}
-                            className="w-full py-3 rounded-[12px] bg-danger text-white text-[14px] font-black hover:bg-danger/90 active:bg-danger/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className={`w-full py-3 rounded-[12px] text-white text-[14px] font-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${expenseKind === 'refill' ? 'bg-primary hover:bg-primary/90 active:bg-primary/80' : 'bg-danger hover:bg-danger/90 active:bg-danger/80'}`}
                         >
                             {isSubmitting ? 'Đang thêm...' : 'Tạo'}
                         </button>

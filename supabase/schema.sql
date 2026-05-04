@@ -111,6 +111,8 @@ CREATE TABLE IF NOT EXISTS expenses (
   amount INTEGER NOT NULL, -- cost in VND
   staff_name TEXT,
   is_fixed BOOLEAN DEFAULT false,
+  is_refill BOOLEAN NOT NULL DEFAULT false,
+  payment_method TEXT NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'transfer')),
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
