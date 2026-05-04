@@ -225,7 +225,8 @@ export default function ShiftClosingPage() {
                 .filter(ing => {
                     const hasRemaining = inventoryInputs[ing.ingredient] !== undefined && inventoryInputs[ing.ingredient] !== ''
                     const hasRestock = restockInputs[ing.ingredient] !== undefined && restockInputs[ing.ingredient] !== ''
-                    return hasRemaining || hasRestock
+                    const hasOpening = openingInputs[ing.ingredient] !== undefined && openingInputs[ing.ingredient] !== ''
+                    return hasRemaining || hasRestock || hasOpening
                 })
                 .map(ing => {
                     return {
