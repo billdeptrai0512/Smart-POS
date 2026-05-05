@@ -955,3 +955,47 @@ export async function fetchPastDaysOrderItems(addressId, days = 7) {
     })
     return allItems
 }
+
+// Fetch order items for exactly "same day last week" (for tomorrow's prediction, so 6 days ago)
+export async function fetchLastWeekSameDayOrderItems(addressId) {
+    if (!supabase) return []
+    // If today is Tuesday, tomorrow is Wednesday. We want to predict tomorrow using Today and Last Wednesday.
+    // Last Wednesday is Today - 6 days.
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    const targetDate = new Date(today)
+    targetDate.setDate(targetDate.getDate() - 6)
+    
+    const nextDate = new Date(targetDate)
+    nextDate.setDate(nextDate.getDate() + 1)
+
+    let query = supabase
+        .from('orders')
+        .select(`
+            order_items (
+                quantity,
+                product_id,
+                extra_ids
+            )
+        `)
+        .is('deleted_at', null)
+        .gte('created_at', targetDate.toISOString())
+        .lt('created_at', nextDate.toISOString())
+
+    if (addressId) query = query.eq('address_id', addressId)
+
+    const { data, error } = await query
+    if (error) {
+        console.error('fetchLastWeekSameDayOrderItems error:', error)
+        return []
+    }
+
+    const allItems = []
+    data.forEach(o => {
+        if (o.order_items) {
+            o.order_items.forEach(i => allItems.push(i))
+        }
+    })
+    return allItems
+}

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateRefillTarget } from '../../utils/inventory';
 import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils';
-import { fetchPastDaysOrderItems } from '../../services/orderService';
-import { Settings2, ChevronDown } from 'lucide-react';
+import { fetchLastWeekSameDayOrderItems } from '../../services/orderService';
+import { ChevronDown, Copy, Check } from 'lucide-react';
 import { useProducts } from '../../contexts/ProductContext';
+import { formatVND } from '../../utils';
 
 export default function InventoryRefillCard({
     shiftClosing,
@@ -18,40 +19,39 @@ export default function InventoryRefillCard({
     ingredientUnits = {}
 }) {
     const { ingredientConfigs = [] } = useProducts() || {};
-    const [wastageBuffer, setWastageBuffer] = useState(10);
-    const [past7DaysItems, setPast7DaysItems] = useState([]);
+    const [lastWeekItems, setLastWeekItems] = useState([]);
     const [isLoadingPast, setIsLoadingPast] = useState(false);
     const [activeTab, setActiveTab] = useState('audit');
     const [expandedRows, setExpandedRows] = useState({});
+    const [isLossExpanded, setIsLossExpanded] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     const toggleRow = (ingredient) => {
         setExpandedRows(prev => ({ ...prev, [ingredient]: !prev[ingredient] }));
     };
 
     useEffect(() => {
-        if (!selectedAddress?.id) return
+        if (!selectedAddress?.id) return;
 
-        // Cache key: address + today's date — 7-day history doesn't change during the day
-        const today = new Date().toISOString().split('T')[0]
-        const cacheKey = `past7days_${selectedAddress.id}_${today}`
-        const cached = sessionStorage.getItem(cacheKey)
+        // Cache key for exactly last week same day
+        const today = new Date().toISOString().split('T')[0];
+        const cacheKey = `lastWeekSameDay_${selectedAddress.id}_${today}`;
+        const cached = sessionStorage.getItem(cacheKey);
 
         if (cached) {
             try {
-                setPast7DaysItems(JSON.parse(cached))
-                return
+                setLastWeekItems(JSON.parse(cached));
+                return;
             } catch { /* ignore parse errors, re-fetch */ }
         }
 
-        setIsLoadingPast(true)
-        fetchPastDaysOrderItems(selectedAddress.id, 7).then(items => {
-            const result = items || []
-            setPast7DaysItems(result)
-            try { sessionStorage.setItem(cacheKey, JSON.stringify(result)) } catch { /* storage full, skip */ }
-        }).finally(() => setIsLoadingPast(false))
+        setIsLoadingPast(true);
+        fetchLastWeekSameDayOrderItems(selectedAddress.id).then(items => {
+            const result = items || [];
+            setLastWeekItems(result);
+            try { sessionStorage.setItem(cacheKey, JSON.stringify(result)); } catch { /* storage full, skip */ }
+        }).finally(() => setIsLoadingPast(false));
     }, [selectedAddress?.id]);
-
-    // All useMemo hooks BEFORE early return (React rules of hooks)
 
     const openingMap = useMemo(() => {
         const map = {};
@@ -96,215 +96,314 @@ export default function InventoryRefillCard({
     );
 
     const mappedPastItems = useMemo(() =>
-        past7DaysItems.map(i => ({
+        lastWeekItems.map(i => ({
             productId: i.product_id, qty: i.quantity,
             extras: (i.extra_ids || []).map(id => ({ id }))
         })),
-        [past7DaysItems]
+        [lastWeekItems]
     );
 
-    const past7DaysConsumption = useMemo(() =>
+    const lastWeekConsumption = useMemo(() =>
         calculateEstimatedConsumption(mappedPastItems, recipes, extraIngredients),
         [mappedPastItems, recipes, extraIngredients]
     );
+
+    // Calculate aggregated audit data
+    const auditData = useMemo(() => {
+        if (!shiftClosing?.inventory_report) return [];
+        let totalLossValue = 0;
+
+        const rows = shiftClosing.inventory_report.map(item => {
+            const config = ingredientConfigs.find(c => c.ingredient === item.ingredient) || {};
+            const unitCost = config.unit_cost || 0; // assuming unit_cost is available in config, else 0
+
+            const opening = openingMap[item.ingredient] ?? 0;
+            const restock = item.restock || 0;
+            const used = Math.round((todayEstimatedConsumption[item.ingredient] || 0) * 10) / 10;
+
+            const theoretical = Math.round((opening + restock - used) * 10) / 10;
+            const actual = item.remaining || 0;
+            const diff = Math.round((actual - theoretical) * 10) / 10;
+
+            const diffValue = diff * unitCost;
+            if (diffValue < 0) totalLossValue += Math.abs(diffValue);
+
+            const unit = getIngredientUnit(item.ingredient, item.unit, ingredientUnits);
+
+            let diffText, diffColor, diffBg;
+            if (diff < 0) {
+                diffText = `Hụt ${Math.abs(diff)} ${unit}`;
+                diffColor = 'text-danger';
+                diffBg = 'bg-danger/10';
+            } else if (diff > 0) {
+                diffText = `Dư ${diff} ${unit}`;
+                diffColor = 'text-warning';
+                diffBg = 'bg-warning/10';
+            } else {
+                diffText = 'Khớp';
+                diffColor = 'text-success';
+                diffBg = 'bg-success/10';
+            }
+
+            return {
+                ...item, config, opening, restock, used, theoretical, actual, diff, diffValue,
+                diffText, diffColor, diffBg, unitCost, unit
+            };
+        });
+
+        return { rows, totalLossValue };
+    }, [shiftClosing, openingMap, todayEstimatedConsumption, ingredientConfigs]);
+
+    // Calculate aggregated refill data
+    const refillData = useMemo(() => {
+        if (!shiftClosing?.inventory_report) return [];
+
+        return shiftClosing.inventory_report.map(item => {
+            const config = ingredientConfigs.find(c => c.ingredient === item.ingredient) || {};
+            const todayUsed = Math.round((todayEstimatedConsumption[item.ingredient] || 0) * 10) / 10;
+            const lastWeekUsed = Math.round((lastWeekConsumption[item.ingredient] || 0) * 10) / 10;
+
+            // Smart Forecast: Max of today or same day last week
+            const rawTarget = Math.max(todayUsed, lastWeekUsed);
+
+            const actual = item.remaining || 0;
+            const minStock = config.min_stock || 0;
+
+            // Refill logic: if actual is less than target, we buy the difference. 
+            // Also consider min_stock to trigger purchase if low.
+            let finalRefill = 0;
+            if (actual < minStock || actual < rawTarget) {
+                finalRefill = Math.max(minStock - actual, rawTarget - actual);
+                finalRefill = Math.round(finalRefill * 10) / 10;
+            }
+
+            let packsNeeded = 0;
+            if (finalRefill > 0 && config.pack_size && config.pack_size > 0) {
+                packsNeeded = Math.ceil(finalRefill / config.pack_size);
+            }
+
+            return {
+                ...item, config, todayUsed, lastWeekUsed, rawTarget, actual, finalRefill, packsNeeded, minStock
+            };
+        }).filter(item => item.finalRefill > 0);
+    }, [shiftClosing, todayEstimatedConsumption, lastWeekConsumption, ingredientConfigs]);
+
+    const handleCopyRefill = () => {
+        if (!refillData.length) return;
+        let text = '*DANH SÁCH ĐI CHỢ NGÀY MAI*\n\n';
+        refillData.forEach(item => {
+            const unit = getIngredientUnit(item.ingredient, item.unit, ingredientUnits);
+            if (item.packsNeeded > 0) {
+                text += `- ${ingredientLabel(item.ingredient)}: ${item.packsNeeded} ${item.config.pack_unit || 'hộp/gói'} (${item.finalRefill} ${unit})\n`;
+            } else {
+                text += `- ${ingredientLabel(item.ingredient)}: ${item.finalRefill} ${unit}\n`;
+            }
+        });
+
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
 
     if (!shiftClosing?.inventory_report?.length) return null;
 
     return (
         <div className="bg-surface rounded-[20px] p-4 border border-border/60 shadow-sm flex flex-col gap-3">
             {/* Header & Tabs */}
-            <div className="flex flex-col gap-3 border-b border-border/40 pb-2">
-                <div className="flex items-center justify-between">
-                    <div className="flex p-0.5 bg-surface-light rounded-[12px] gap-1 shrink-0">
-                        <button
-                            onClick={() => setActiveTab('audit')}
-                            className={`px-3 py-1.5 rounded-[10px] text-[11px] font-bold transition-all ${activeTab === 'audit' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
-                        >
-                            Tồn kho
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('refill')}
-                            className={`px-3 py-1.5 rounded-[10px] text-[11px] font-bold transition-all flex items-center justify-center gap-1 ${activeTab === 'refill' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
-                        >
-                            Đi chợ
-                        </button>
-                    </div>
-
-                    {activeTab === 'refill' && (
-                        <div className="flex items-center gap-1.5 bg-surface-light px-2 py-1.5 rounded-[10px] border border-border/40 shrink-0">
-                            <Settings2 size={12} className="text-text-secondary" />
-                            <span className="text-[10px] font-bold text-text-secondary uppercase">Hao hụt:</span>
-                            <select
-                                value={wastageBuffer}
-                                onChange={(e) => setWastageBuffer(Number(e.target.value))}
-                                className="bg-transparent text-[11px] font-black text-primary focus:outline-none cursor-pointer appearance-none text-right"
-                            >
-                                <option value={0}>0%</option>
-                                <option value={5}>5%</option>
-                                <option value={10}>10%</option>
-                                <option value={15}>15%</option>
-                                <option value={20}>20%</option>
-                                <option value={30}>30%</option>
-                            </select>
-                        </div>
-                    )}
+            <div className="flex flex-col gap-3 border-b border-border/40 pb-3">
+                <div className="flex p-1 bg-surface-light rounded-[12px] gap-1 w-full">
+                    <button
+                        onClick={() => setActiveTab('audit')}
+                        className={`flex-1 py-2.5 rounded-[10px] text-[13px] font-bold transition-all ${activeTab === 'audit' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                    >
+                        Tồn kho
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('refill')}
+                        className={`flex-1 py-2.5 rounded-[10px] text-[13px] font-bold transition-all flex items-center justify-center gap-1 ${activeTab === 'refill' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                    >
+                        Đi chợ
+                    </button>
                 </div>
-
-                {activeTab === 'audit' ? (
-                    <div className="flex items-center gap-1 mt-1 px-1">
-                        <span className="flex-1 text-[10px] font-black text-text-dim uppercase">Nguyên liệu</span>
-                        <span className="w-[52px] text-[10px] font-black text-text-dim uppercase text-center" title="Lý thuyết hôm nay">Lý.T</span>
-                        <span className="w-[52px] text-[10px] font-black text-text-dim uppercase text-center" title="Thực tế hôm nay">T.Tế</span>
-                        <span className="w-[56px] text-[10px] font-black text-text-dim uppercase text-center" title="Lệch">Lệch</span>
-                    </div>
-                ) : (
-                    <div className="flex items-center gap-1 mt-1 px-1">
-                        <span className="flex-1 text-[10px] font-black text-text-dim uppercase">Nguyên liệu</span>
-                        <span className="w-[50px] text-[10px] font-black text-text-dim uppercase text-center">Tồn</span>
-                        <span className="w-[50px] text-[10px] font-black text-text-dim uppercase text-center" title={`Mục tiêu ngày mai (Kèm ${wastageBuffer}% hao hụt)`}>Sử dụng</span>
-                        <span className="w-[50px] text-[10px] font-black text-text-dim uppercase text-center" title="Số lượng cần mua thêm">Mua</span>
-                    </div>
-                )}
             </div>
 
-            <div className="space-y-1">
-                {shiftClosing.inventory_report.map(item => {
-                    const opening = openingMap[item.ingredient] ?? 0;
-                    const restock = item.restock || 0;
-                    const used = Math.round((todayEstimatedConsumption[item.ingredient] || 0) * 10) / 10;
+            {/* Audit Tab */}
+            {activeTab === 'audit' && (
+                <div className="flex flex-col">
+                    <div className="space-y-3 pb-3">
+                        {auditData.rows.map(item => {
+                            const isExpanded = !!expandedRows[item.ingredient];
 
-                    const theoretical = Math.round((opening + restock - used) * 10) / 10;
-                    const actual = item.remaining || 0;
-                    const diff = Math.round((actual - theoretical) * 10) / 10;
+                            return (
+                                <div key={item.ingredient} className="flex flex-col border-b border-border/20 last:border-0 pb-3 last:pb-0">
+                                    <div
+                                        className="flex items-start justify-between cursor-pointer group"
+                                        onClick={() => toggleRow(item.ingredient)}
+                                    >
+                                        <div className="flex flex-col flex-1 pr-2">
+                                            <div className="flex items-center gap-1 mb-0.5">
+                                                <span className="text-[14px] font-bold text-text leading-tight">
+                                                    {ingredientLabel(item.ingredient)}
+                                                </span>
+                                                <ChevronDown size={14} className={`text-text-dim shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                                            </div>
+                                            <span className="text-[11px] font-medium text-text-secondary">
+                                                <span className="mx-1 text-border">•</span> Lý thuyết: {item.theoretical}
+                                            </span>
+                                            <span className="text-[11px] font-medium text-text-secondary">
+                                                <span className="mx-1 text-border">•</span> Thực tế: {item.actual}
+                                            </span>
 
-                    let diffText, diffColor;
-                    if (diff < 0) {
-                        diffText = `Hụt ${Math.abs(diff)}`;
-                        diffColor = 'text-danger';
-                    } else if (diff > 0) {
-                        diffText = `Dư ${diff}`;
-                        diffColor = 'text-warning';
-                    } else {
-                        diffText = 'Khớp';
-                        diffColor = 'text-success';
-                    }
-
-                    const total7DayUsed = past7DaysConsumption[item.ingredient] || 0;
-                    
-                    const config = ingredientConfigs.find(c => c.ingredient === item.ingredient) || {};
-                    const { finalRefill, packsNeeded, isMinStockTriggered, rawTarget } = calculateRefillTarget({
-                        past7DaysUsed: total7DayUsed,
-                        currentStock: actual,
-                        wastagePct: wastageBuffer,
-                        minStock: config.min_stock,
-                        packSize: config.pack_size
-                    });
-
-                    const isExpanded = !!expandedRows[item.ingredient];
-                    const canExpand = activeTab === 'audit';
-
-                    return (
-                        <div key={item.ingredient} className="border-b border-border/20 last:border-0">
-                            <div
-                                className={`flex items-center gap-1 py-2 rounded-lg transition-colors px-1 ${canExpand ? 'cursor-pointer active:bg-surface-light' : ''} ${isExpanded ? 'bg-surface-light' : 'hover:bg-surface-light'}`}
-                                onClick={canExpand ? () => toggleRow(item.ingredient) : undefined}
-                            >
-                                <div className="flex-1 min-w-0 pr-1 flex items-center gap-1">
-                                    <span className="text-[12px] font-bold text-text truncate">
-                                        {ingredientLabel(item.ingredient)}
-                                        <span className="text-[10px] font-normal text-text-dim ml-1">({getIngredientUnit(item.ingredient, item.unit, ingredientUnits)})</span>
-                                    </span>
-                                    {canExpand && (
-                                        <ChevronDown
-                                            size={12}
-                                            className={`text-text-dim shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
-                                        />
-                                    )}
-                                </div>
-
-                                {activeTab === 'audit' ? (
-                                    <>
-                                        <span className="w-[52px] text-[12px] font-bold text-text text-center tabular-nums">{theoretical}</span>
-                                        <span className="w-[52px] text-[12px] font-bold text-text text-center tabular-nums">{actual}</span>
-                                        <span className={`w-[56px] text-[11px] font-black text-center tabular-nums ${diffColor}`}>{diffText}</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <span className="w-[50px] text-[12px] font-bold text-text text-center tabular-nums">{actual}</span>
-                                        <span className="w-[50px] text-[12px] font-bold text-text text-center tabular-nums">
-                                            {isLoadingPast ? '...' : rawTarget > 0 ? rawTarget : '—'}
-                                        </span>
-                                        <div className={`w-[60px] text-[11px] font-black text-center flex items-center justify-center gap-0.5 ${finalRefill > 0 ? 'text-warning' : 'text-success'}`}>
-                                            {isLoadingPast ? '...' : finalRefill > 0 ? (
-                                                config.pack_size && config.pack_unit ? (
-                                                    <span className="flex flex-col leading-none items-center">
-                                                        <span>+{packsNeeded} {config.pack_unit}</span>
-                                                        {isMinStockTriggered && <span className="text-[9px] opacity-80">(ngưỡng kho)</span>}
-                                                    </span>
-                                                ) : (
-                                                    <span className="flex items-center gap-0.5">
-                                                        +{finalRefill}
-                                                        {isMinStockTriggered && <span className="bg-warning/20 text-warning text-[9px] rounded px-0.5" title="Kích hoạt bởi Tồn tối thiểu">min</span>}
-                                                    </span>
-                                                )
-                                            ) : 'Ok'}
                                         </div>
-                                    </>
-                                )}
-                            </div>
 
-                            {isExpanded && activeTab === 'audit' && (
-                                <div className="mx-1 mb-2 px-3 py-2.5 bg-surface rounded-[10px] border border-border/40 flex flex-col gap-2.5">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                            <div className="flex flex-col items-center">
-                                                <span className="text-[13px] font-black text-text tabular-nums">{opening}</span>
-                                                <span className="text-[9px] font-bold text-text-dim uppercase mt-0.5">Đầu kỳ</span>
+                                        <div className="flex flex-col items-end shrink-0">
+                                            <div className={`px-2 py-0.5 rounded border border-transparent ${item.diff !== 0 ? item.diffBg + ' border-' + item.diffColor.replace('text-', '') + '/20' : ''}`}>
+                                                <span className={`text-[11px] font-black tabular-nums ${item.diffColor}`}>
+                                                    {item.diffText}
+                                                </span>
                                             </div>
-                                            <span className="text-[11px] font-black text-text-dim">+</span>
-                                            <div className="flex flex-col items-center">
-                                                <span className="text-[13px] font-black text-text tabular-nums">{restock}</span>
-                                                <span className="text-[9px] font-bold text-text-dim uppercase mt-0.5">Nhập</span>
-                                            </div>
-                                            <span className="text-[11px] font-black text-text-dim">−</span>
-                                            <div className="flex flex-col items-center">
-                                                <span className="text-[13px] font-black text-text tabular-nums">{used}</span>
-                                                <span className="text-[9px] font-bold text-text-dim uppercase mt-0.5">Tiêu CT</span>
-                                            </div>
-                                            <span className="text-[11px] font-black text-text-dim">=</span>
-                                            <div className="flex flex-col items-center">
-                                                <span className="text-[13px] font-black text-text tabular-nums">{theoretical}</span>
-                                                <span className="text-[9px] font-bold text-text-dim uppercase mt-0.5">Lý.T</span>
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-col items-center shrink-0">
-                                            <span className={`text-[13px] font-black tabular-nums ${diffColor}`}>{actual}</span>
-                                            <span className="text-[9px] font-bold text-text-dim uppercase mt-0.5">T.Tế</span>
                                         </div>
                                     </div>
 
-                                    {consumptionBreakdown[item.ingredient] && Object.keys(consumptionBreakdown[item.ingredient]).length > 0 && (
-                                        <div className="border-t border-border/30 pt-2 flex flex-col gap-1">
-                                            <span className="text-[9px] font-black text-text-dim uppercase mb-0.5">Chi tiết Tiêu CT</span>
-                                            {Object.values(consumptionBreakdown[item.ingredient])
-                                                .sort((a, b) => b.totalAmount - a.totalAmount)
-                                                .map((entry, i) => (
-                                                    <div key={i} className="flex items-center justify-between">
-                                                        <span className="text-[11px] text-text-secondary truncate flex-1">{entry.name}</span>
-                                                        <span className="text-[11px] font-bold text-text-dim tabular-nums shrink-0 ml-2">
-                                                            {entry.qty} ly × {Math.round(entry.totalAmount / entry.qty * 10) / 10} = <span className="text-text font-black">{entry.totalAmount}</span>
-                                                        </span>
+                                    {isExpanded && (
+                                        <div className="mt-3 px-3 py-2.5 bg-surface-light rounded-[12px] border border-border/40 flex flex-col gap-2.5">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    <div className="flex flex-col items-center">
+                                                        <span className="text-[13px] font-black text-text tabular-nums">{item.opening}</span>
+                                                        <span className="text-[9px] font-bold text-text-dim uppercase mt-0.5">Đầu kỳ</span>
                                                     </div>
-                                                ))
-                                            }
+                                                    <span className="text-[11px] font-black text-text-dim">+</span>
+                                                    <div className="flex flex-col items-center">
+                                                        <span className="text-[13px] font-black text-text tabular-nums">{item.restock}</span>
+                                                        <span className="text-[9px] font-bold text-text-dim uppercase mt-0.5">Nhập</span>
+                                                    </div>
+                                                    <span className="text-[11px] font-black text-text-dim">−</span>
+                                                    <div className="flex flex-col items-center">
+                                                        <span className="text-[13px] font-black text-text tabular-nums">{item.used}</span>
+                                                        <span className="text-[9px] font-bold text-text-dim uppercase mt-0.5">Tiêu CT</span>
+                                                    </div>
+                                                    <span className="text-[11px] font-black text-text-dim">=</span>
+                                                    <div className="flex flex-col items-center">
+                                                        <span className="text-[13px] font-black text-text tabular-nums">{item.theoretical}</span>
+                                                        <span className="text-[9px] font-bold text-text-dim uppercase mt-0.5">Lý.T</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {consumptionBreakdown[item.ingredient] && Object.keys(consumptionBreakdown[item.ingredient]).length > 0 && (
+                                                <div className="border-t border-border/30 pt-2 flex flex-col gap-1">
+                                                    <span className="text-[9px] font-black text-text-dim uppercase mb-0.5">Chi tiết Tiêu CT</span>
+                                                    {Object.values(consumptionBreakdown[item.ingredient])
+                                                        .sort((a, b) => b.totalAmount - a.totalAmount)
+                                                        .map((entry, i) => (
+                                                            <div key={i} className="flex items-center justify-between">
+                                                                <span className="text-[11px] text-text-secondary truncate flex-1">{entry.name}</span>
+                                                                <span className="text-[11px] font-bold text-text-dim tabular-nums shrink-0 ml-2">
+                                                                    {entry.qty} ly × {Math.round(entry.totalAmount / entry.qty * 10) / 10} = <span className="text-text font-black">{entry.totalAmount}</span>
+                                                                </span>
+                                                            </div>
+                                                        ))
+                                                    }
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
+                            );
+                        })}
+                    </div>
+
+                    {auditData.totalLossValue > 0 && (
+                        <div className="mt-2 flex flex-col">
+                            <div
+                                className="pt-3 border-t border-border/40 flex items-center justify-between cursor-pointer"
+                                onClick={() => setIsLossExpanded(!isLossExpanded)}
+                            >
+                                <div className="flex items-center gap-1">
+                                    <span className="text-[12px] font-bold text-text-secondary">Tổng thất thoát ca:</span>
+                                    <ChevronDown size={14} className={`text-text-dim transition-transform duration-200 ${isLossExpanded ? 'rotate-180' : ''}`} />
+                                </div>
+                                <span className="text-[14px] font-black text-danger tabular-nums">-{formatVND(auditData.totalLossValue)}</span>
+                            </div>
+
+                            {isLossExpanded && (
+                                <div className="mt-3 px-3 py-2.5 bg-danger/5 rounded-[12px] border border-danger/10 flex flex-col gap-2">
+                                    {auditData.rows.filter(r => r.diffValue < 0).map((r, i) => (
+                                        <div key={i} className="flex items-center justify-between">
+                                            <span className="text-[11px] font-medium text-text-secondary">{ingredientLabel(r.ingredient)}</span>
+                                            <span className="text-[11px] font-bold text-danger tabular-nums">
+                                                {r.diffText} = {formatVND(Math.abs(r.diffValue))}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
                             )}
                         </div>
-                    );
-                })}
-            </div>
+                    )}
+                </div>
+            )}
+
+            {/* Refill Tab */}
+            {activeTab === 'refill' && (
+                <div className="flex flex-col">
+                    {isLoadingPast ? (
+                        <div className="py-4 text-center text-text-dim text-[12px] animate-pulse">Đang dự báo AI...</div>
+                    ) : refillData.length === 0 ? (
+                        <div className="py-4 text-center flex flex-col items-center gap-1">
+                            <span className="text-[14px] font-bold text-success">Kho đủ dùng!</span>
+                            <span className="text-[12px] text-text-secondary">Không cần đi chợ thêm cho ngày mai.</span>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {refillData.map(item => {
+                                const unit = getIngredientUnit(item.ingredient, item.unit, ingredientUnits);
+                                return (
+                                    <div key={item.ingredient} className="flex items-start justify-between border-b border-border/20 pb-3 last:border-0 last:pb-0">
+                                        <div className="flex flex-col flex-1 pr-2 gap-0.5">
+                                            <span className="text-[14px] font-bold text-text leading-tight mb-0.5">
+                                                {ingredientLabel(item.ingredient)}
+                                            </span>
+                                            <span className="text-[11px] font-medium text-text-secondary">
+                                                Tồn: {item.actual} {unit}
+                                            </span>
+                                            <span className="text-[11px] font-medium text-text-secondary">
+                                                Dự báo tiêu thụ: {item.rawTarget} {unit}
+                                            </span>
+                                        </div>
+
+                                        <div className="flex flex-col items-end shrink-0 ">
+                                            {item.packsNeeded > 0 ? (
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-[14px] font-black text-warning leading-none mb-1">
+                                                        +{item.packsNeeded} <span className="text-[11px] font-bold">{item.config.pack_unit || 'hộp'}</span>
+                                                    </span>
+                                                    <span className="text-[9px] font-bold text-text-dim">
+                                                        ({item.finalRefill} {unit})
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-[14px] font-black text-warning">
+                                                    +{item.finalRefill} <span className="text-[11px] font-bold">{unit}</span>
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            <div className="mt-4 pt-2">
+                                <button
+                                    onClick={handleCopyRefill}
+                                    className="flex items-center justify-center gap-2 bg-primary/10 hover:bg-primary/20 active:scale-[0.98] transition-all px-4 py-3 rounded-[12px] w-full text-primary"
+                                >
+                                    {copied ? <Check size={18} /> : <Copy size={18} />}
+                                    <span className="text-[13px] font-bold uppercase tracking-wide">{copied ? 'Đã copy danh sách' : 'Copy danh sách đi chợ'}</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
