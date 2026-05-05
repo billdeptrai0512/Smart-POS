@@ -12,6 +12,16 @@ export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, fi
                 </div>
             </div>
             <div
+                onClick={onDailyExpenseClick}
+                className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
+            >
+
+                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi tiêu</h3>
+                <div className="text-[18px] font-bold text-danger tabular-nums">
+                    - {formatVND(dailyExpense)}
+                </div>
+            </div>
+            <div
                 onClick={onRecipesClick}
                 className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
             >
@@ -19,16 +29,6 @@ export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, fi
                 <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Giá vốn</h3>
                 <div className="text-[18px] font-bold text-warning tabular-nums">
                     - {formatVND(totalCOGS)}
-                </div>
-            </div>
-            <div
-                onClick={onDailyExpenseClick}
-                className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
-            >
-
-                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí ngày</h3>
-                <div className="text-[18px] font-bold text-danger tabular-nums">
-                    - {formatVND(dailyExpense)}
                 </div>
             </div>
             <div

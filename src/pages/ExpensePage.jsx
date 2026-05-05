@@ -117,7 +117,7 @@ export default function ExpensePage() {
                                 : 'bg-surface-light border-border/60 opacity-60 hover:opacity-100'
                                 }`}
                         >
-                            <span className="text-[11px] font-black text-danger uppercase line-clamp-1">Chi phí</span>
+                            <span className="text-[11px] font-black text-danger uppercase line-clamp-1">Chi tiêu</span>
                             <span className="text-[11px] font-bold text-danger/80 leading-none mt-1 tabular-nums">{formatVND(totalDaily)}</span>
                         </div>
 
@@ -128,7 +128,7 @@ export default function ExpensePage() {
                                 : 'bg-surface-light border-border/60 opacity-60 hover:opacity-100'
                                 }`}
                         >
-                            <span className="text-[11px] font-black text-primary uppercase line-clamp-1">NVL</span>
+                            <span className="text-[11px] font-black text-primary uppercase line-clamp-1">Đi chợ</span>
                             <span className="text-[11px] font-bold text-primary/80 leading-none mt-1 tabular-nums">{formatVND(totalRefill)}</span>
                         </div>
 

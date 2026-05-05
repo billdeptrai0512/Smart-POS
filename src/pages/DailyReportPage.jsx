@@ -200,7 +200,7 @@ export default function DailyReportPage() {
     }, [displayOrders, offlineToday, selectedProductId, productMap])
 
     const { dailyExpense, refillTotal } = useMemo(() => {
-        const list = todayExpenses || []
+        const list = displayExpenses || []
         let daily = 0, refill = 0
         for (const e of list) {
             if (e.is_fixed) continue
@@ -211,7 +211,7 @@ export default function DailyReportPage() {
             }
         }
         return { dailyExpense: daily, refillTotal: refill }
-    }, [todayExpenses])
+    }, [displayExpenses])
     const fixedExpense = useMemo(() =>
         (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0),
         [fixedCosts]
@@ -236,6 +236,14 @@ export default function DailyReportPage() {
             - yesterdayExpensesData.filter(e => !e.is_fixed && !e.is_refill).reduce((s, e) => s + e.amount, 0)
             - yesterdayExpensesData.filter(e => e.is_fixed).reduce((s, e) => s + e.amount, 0)
     }, [yesterdayOrders, yesterdayExpensesData, recipes, extraIngredients, ingredientCosts])
+
+    const yesterdayTakeHome = useMemo(() => {
+        if (!yesterdayClosing) return null
+        const yCash = yesterdayClosing.actual_cash || 0
+        const yTransfer = yesterdayClosing.actual_transfer || 0
+        const yRefill = yesterdayExpensesData.filter(e => e.is_refill).reduce((s, e) => s + e.amount, 0)
+        return yCash + yTransfer - yRefill
+    }, [yesterdayClosing, yesterdayExpensesData])
 
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
@@ -281,6 +289,7 @@ export default function DailyReportPage() {
                             dailyExpense={dailyExpense}
                             refillTotal={refillTotal}
                             totalRevenue={totalRevenue}
+                            yesterdayTakeHome={yesterdayTakeHome}
                             onDailyExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
                             onRefillClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'refill', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
                         />

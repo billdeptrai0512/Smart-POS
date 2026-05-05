@@ -157,7 +157,7 @@ export default function AddressSelectPage() {
                 dateOnly={dateOnly}
                 setError={setError}
                 addressCount={addresses.length}
-                staffCount={staffList.length}
+                staffCount={staffList.filter(s => s.role === 'staff').length}
                 managerCount={staffList.filter(s => s.role === 'manager' || s.role === 'co-manager').length}
             />
 

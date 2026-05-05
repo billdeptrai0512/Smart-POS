@@ -89,11 +89,11 @@ export default function RangeReportPage() {
             const pExps = data.prev_expenses || []
             const pClosings = data.prev_shift_closings || []
 
-            fetchCache.current[key] = { 
+            fetchCache.current[key] = {
                 orders: ords, expenses: exps, shiftClosings: closings,
                 prevOrders: pOrds, prevExpenses: pExps, prevShiftClosings: pClosings
             }
-            
+
             setOrders(ords)
             setExpenses(exps)
             setShiftClosings(closings)
@@ -212,13 +212,21 @@ export default function RangeReportPage() {
         })
 
         const dailyExpense = prevExpenses.filter(e => !e.is_fixed && !e.is_refill).reduce((s, e) => s + e.amount, 0)
+        const refillTotal = prevExpenses.filter(e => e.is_refill).reduce((s, e) => s + e.amount, 0)
 
         const daysToCalculate = prevDays > 0 ? prevDays : 1
         const fixedExpense = (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0) * daysToCalculate
 
         const netProfit = revenue - totalCOGS - dailyExpense - fixedExpense
 
-        return { revenue, cups, netProfit }
+        const prevCash = prevShiftClosings.reduce((s, sc) => s + (sc.actual_cash || 0), 0)
+        const prevTransfer = prevShiftClosings.reduce((s, sc) => s + (sc.actual_transfer || 0), 0)
+        const prevTakeHomeCash = Math.max(0, prevCash - refillTotal)
+        const prevRemainingRefill = Math.max(0, refillTotal - prevCash)
+        const prevTakeHomeTransfer = Math.max(0, prevTransfer - prevRemainingRefill)
+        const takeHome = prevTakeHomeCash + prevTakeHomeTransfer
+
+        return { revenue, cups, netProfit, takeHome }
     }, [prevOrders, prevExpenses, prevShiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, selectedProductId, prevDays, products])
 
     const avg = (v) => days > 0 ? Math.round(v / days) : v
@@ -333,6 +341,8 @@ export default function RangeReportPage() {
                             dailyExpense={stats.dailyExpense}
                             refillTotal={stats.refillTotal}
                             totalRevenue={stats.totalRevenue}
+                            yesterdayTakeHome={prevStats.takeHome}
+                            compareLabel={`So với ${range === 'week' ? 'tuần trước' : 'tháng trước'}`}
                             onDailyExpenseClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'daily', expensesToView: expenses, isReadOnly: true } })}
                             onRefillClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'refill', expensesToView: expenses, isReadOnly: true } })}
                         />
