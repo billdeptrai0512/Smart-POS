@@ -18,7 +18,7 @@ export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, fi
 
                 <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi tiêu</h3>
                 <div className="text-[18px] font-bold text-danger tabular-nums">
-                    - {formatVND(dailyExpense)}
+                    -{formatVND(dailyExpense)}
                 </div>
             </div>
             <div
@@ -28,7 +28,7 @@ export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, fi
 
                 <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Giá vốn</h3>
                 <div className="text-[18px] font-bold text-warning tabular-nums">
-                    - {formatVND(totalCOGS)}
+                    -{formatVND(totalCOGS)}
                 </div>
             </div>
             <div
@@ -38,7 +38,7 @@ export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, fi
 
                 <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí cố định</h3>
                 <div className="text-[18px] font-bold text-danger tabular-nums">
-                    - {formatVND(fixedExpense)}
+                    -{formatVND(fixedExpense)}
                 </div>
             </div>
             {/* Net Profit — full width */}
