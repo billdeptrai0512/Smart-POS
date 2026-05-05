@@ -242,7 +242,12 @@ export default function DailyReportPage() {
         const yCash = yesterdayClosing.actual_cash || 0
         const yTransfer = yesterdayClosing.actual_transfer || 0
         const yRefill = yesterdayExpensesData.filter(e => e.is_refill).reduce((s, e) => s + e.amount, 0)
-        return yCash + yTransfer - yRefill
+        
+        const yTakeHomeCash = Math.max(0, yCash - yRefill)
+        const yRemainingRefill = Math.max(0, yRefill - yCash)
+        const yTakeHomeTransfer = Math.max(0, yTransfer - yRemainingRefill)
+        
+        return yTakeHomeCash + yTakeHomeTransfer
     }, [yesterdayClosing, yesterdayExpensesData])
 
     return (
