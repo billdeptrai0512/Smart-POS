@@ -129,6 +129,21 @@ body {
   animation: badge-pop 200ms ease-out;
 }
 
+/* ====== Modal slide-up ====== */
+@keyframes slide-up {
+  0% {
+    transform: translateY(100%);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 250ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 /* ====== Toast slide-in ====== */
 @keyframes toast-in {
   0% {

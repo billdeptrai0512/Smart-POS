@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { formatVND } from '../../utils'
+import { Plus } from 'lucide-react'
 
 function keyToLabel(key) {
     const name = key.replace(/_/g, ' ')
@@ -12,9 +14,12 @@ export default function IngredientCostItem({
     storedUnit, isEditingUnit, editingUnit, setEditingUnit, saveUnit,
     isEditingName, editingName, setEditingName, saveName,
     onDelete, canEdit = true,
-    packSize, packUnit, minStock, onSaveAdvanced
+    packSize, packUnit, minStock, onSaveAdvanced,
+    // New props for stock display
+    stockData, todayRestocked, onRestock
 }) {
     const displayUnit = getIngredientUnit(ingredient, storedUnit)
+    const navigate = useNavigate()
     const nameCancelledRef = useRef(false)
     const [isEditingPack, setIsEditingPack] = useState(false)
     const [isEditingMin, setIsEditingMin] = useState(false)
@@ -31,8 +36,10 @@ export default function IngredientCostItem({
             packUnit: advForm.packUnit ? advForm.packUnit.trim() : null,
             minStock: advForm.minStock ? Number(advForm.minStock) : null
         })
-        // Hiệu ứng UX: có thể hiện tick xanh hoặc đóng, nhưng cứ để mở cho thân thiện
     }
+
+    const currentStock = stockData?.current_stock ?? null
+    const restockedToday = todayRestocked ?? stockData?.restocked_qty ?? 0
 
     return (
         <div className="bg-surface border border-border/60 rounded-[14px] p-3 flex flex-col gap-2.5 min-w-0">
@@ -56,8 +63,8 @@ export default function IngredientCostItem({
                     />
                 ) : (
                     <span
-                        className={`flex-1 min-w-0 text-[15px] font-black text-text leading-tight line-clamp-2 break-words ${canEdit ? 'cursor-pointer hover:text-primary' : ''}`}
-                        onClick={() => canEdit && setEditingName({ ingredient, value: keyToLabel(ingredient) })}
+                        className={`flex-1 min-w-0 text-[15px] font-black text-text leading-tight line-clamp-2 break-words cursor-pointer hover:text-primary`}
+                        onClick={() => navigate(`/ingredients/${ingredient}`)}
                     >
                         {ingredientLabel(ingredient)}
                     </span>
@@ -73,38 +80,17 @@ export default function IngredientCostItem({
                 )}
             </div>
 
-            {/* Stats group (separated by subtle divider) */}
-            <div className="border-t border-border/40 pt-2 flex flex-col gap-1.5 mt-auto">
-                {/* Giá row (SECONDARY — key info) */}
+            {/* Stock info (visible to all) */}
+            <div className="border-t border-border/40 pt-2 flex flex-col gap-1.5">
+                {/* Tồn kho hiện tại */}
                 <div className="flex items-baseline justify-between gap-2 min-w-0">
-                    <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider shrink-0">Giá</span>
-                    {isEditing ? (
-                        <div className="flex items-baseline gap-1 flex-1 min-w-0 justify-end">
-                            <input
-                                type="number"
-                                autoFocus
-                                className="w-[65px] bg-primary/10 border border-primary/30 rounded-md px-1.5 py-0.5 text-[14px] font-black text-primary text-right focus:outline-none focus:border-primary focus:bg-primary/15 transition-all shadow-inner [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                value={editingCost.value}
-                                onChange={e => setEditingCost(prev => ({ ...prev, value: e.target.value }))}
-                                onKeyDown={e => {
-                                    if (e.key === 'Enter') saveCost(ingredient, parseInt(editingCost.value) || 0)
-                                    if (e.key === 'Escape') setEditingCost(null)
-                                }}
-                                onBlur={() => saveCost(ingredient, parseInt(editingCost.value) || 0)}
-                            />
-                            <span className="text-[10px] text-text-dim shrink-0">đ</span>
-                        </div>
-                    ) : (
-                        <span
-                            className={`text-[14px] font-black text-primary tabular-nums leading-none truncate ${canEdit ? 'cursor-pointer underline decoration-primary/30 underline-offset-[3px] hover:decoration-primary' : ''}`}
-                            onClick={() => canEdit && setEditingCost({ ingredient, value: cost.toString() })}
-                        >
-                            {formatVND(cost)}
-                        </span>
-                    )}
+                    <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider shrink-0">Tồn kho</span>
+                    <span className={`text-[14px] font-black tabular-nums leading-none ${currentStock !== null && currentStock <= (minStock || 0) ? 'text-danger' : 'text-text'}`}>
+                        {currentStock !== null ? `${Math.round(currentStock * 10) / 10} ${displayUnit}` : '—'}
+                    </span>
                 </div>
 
-                {/* Đơn vị row (TERTIARY — supporting context) */}
+                {/* Đơn vị */}
                 <div className="flex items-baseline justify-between gap-2 min-w-0">
                     <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider shrink-0">Đơn vị</span>
                     {isEditingUnit ? (
@@ -130,84 +116,51 @@ export default function IngredientCostItem({
                     )}
                 </div>
 
-                {canEdit && (
-                    <div className="border-t border-border/40 pt-1.5 mt-0.5 flex flex-col gap-1.5">
-                        {/* Tồn tối thiểu */}
-                        <div className="flex items-baseline justify-between gap-2 min-w-0">
-                            <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider shrink-0">Tồn tối thiểu</span>
-                            {isEditingMin ? (
-                                <div className="flex items-baseline gap-1 flex-1 min-w-0 justify-end">
-                                    <input
-                                        type="number"
-                                        autoFocus
-                                        placeholder="Ngưỡng"
-                                        className="w-[55px] bg-primary/10 border border-primary/30 rounded-md px-1.5 py-0.5 text-[12px] font-bold text-primary text-right focus:outline-none focus:border-primary focus:bg-primary/15 transition-all shadow-inner placeholder:text-primary/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                        value={advForm.minStock}
-                                        onChange={e => setAdvForm(p => ({ ...p, minStock: e.target.value }))}
-                                        onKeyDown={e => {
-                                            if (e.key === 'Enter') { handleSaveAdvanced(); setIsEditingMin(false); }
-                                            if (e.key === 'Escape') { setAdvForm(p => ({ ...p, minStock: minStock || '' })); setIsEditingMin(false); }
-                                        }}
-                                        onBlur={() => { handleSaveAdvanced(); setIsEditingMin(false); }}
-                                    />
-                                    <span className="text-[10px] text-text-dim shrink-0">{displayUnit}</span>
-                                </div>
-                            ) : (
-                                <span
-                                    className={`text-[12px] font-bold text-primary leading-none truncate tabular-nums ${canEdit ? 'cursor-pointer underline decoration-primary/30 underline-offset-[3px] hover:decoration-primary' : ''}`}
-                                    onClick={() => canEdit && setIsEditingMin(true)}
-                                >
-                                    {minStock != null ? `${minStock} ${displayUnit}` : '—'}
-                                </span>
-                            )}
-                        </div>
-
-                        {/* Nhập mỗi lần */}
-                        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 min-w-0">
-                            <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider shrink-0">Nhập mỗi lần</span>
-                            {isEditingPack ? (
-                                <div className="flex items-stretch bg-primary/10 border border-primary/30 rounded-md overflow-hidden min-w-0 ml-auto justify-end focus-within:border-primary focus-within:bg-primary/15 focus-within:ring-2 focus-within:ring-primary/20 transition-all shadow-inner">
-                                    <input
-                                        type="number"
-                                        autoFocus
-                                        placeholder="Lượng"
-                                        className="w-[42px] bg-transparent px-1 py-0.5 text-[12px] font-black text-primary text-center focus:outline-none placeholder:text-primary/40 placeholder:font-medium [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                        value={advForm.packSize}
-                                        onChange={e => setAdvForm(p => ({ ...p, packSize: e.target.value }))}
-                                        onKeyDown={e => {
-                                            if (e.key === 'Enter') { handleSaveAdvanced(); setIsEditingPack(false); }
-                                            if (e.key === 'Escape') { setAdvForm(p => ({ ...p, packSize: packSize || '', packUnit: packUnit || '' })); setIsEditingPack(false); }
-                                        }}
-                                        onBlur={() => { handleSaveAdvanced(); setIsEditingPack(false); }}
-                                    />
-                                    <div className="flex items-center px-1 bg-black/5 dark:bg-white/5 border-x border-primary/20">
-                                        <span className="text-[10px] font-bold text-primary/70">{displayUnit}/</span>
-                                    </div>
-                                    <input
-                                        type="text"
-                                        placeholder="gói"
-                                        className="w-[45px] bg-transparent px-1 py-0.5 text-[12px] font-black text-primary text-center focus:outline-none placeholder:text-primary/40 placeholder:font-medium"
-                                        value={advForm.packUnit}
-                                        onChange={e => setAdvForm(p => ({ ...p, packUnit: e.target.value }))}
-                                        onKeyDown={e => {
-                                            if (e.key === 'Enter') { handleSaveAdvanced(); setIsEditingPack(false); }
-                                            if (e.key === 'Escape') { setAdvForm(p => ({ ...p, packSize: packSize || '', packUnit: packUnit || '' })); setIsEditingPack(false); }
-                                        }}
-                                        onBlur={() => { handleSaveAdvanced(); setIsEditingPack(false); }}
-                                    />
-                                </div>
-                            ) : (
-                                <span
-                                    className={`text-[12px] font-bold text-primary leading-none truncate ${canEdit ? 'cursor-pointer underline decoration-primary/30 underline-offset-[3px] hover:decoration-primary' : ''}`}
-                                    onClick={() => canEdit && setIsEditingPack(true)}
-                                >
-                                    {packSize ? `${packSize}${displayUnit}${packUnit ? ` / ${packUnit}` : ''}` : '—'}
-                                </span>
-                            )}
-                        </div>
-                    </div>
+                {/* Nút Nhập kho */}
+                {onRestock && (
+                    <button
+                        onClick={() => onRestock(ingredient)}
+                        className="mt-1 w-full flex items-center justify-center gap-1.5 py-2 rounded-[10px] bg-primary/10 border border-primary/20 text-primary text-[12px] font-black uppercase tracking-wide hover:bg-primary/20 active:scale-[0.97] transition-all"
+                    >
+                        <Plus size={14} strokeWidth={3} />
+                        Nhập kho
+                    </button>
                 )}
             </div>
+
+            {/* Manager-only section: Giá vốn + Config */}
+            {canEdit && (
+                <div className="border-t border-border/40 pt-2 flex flex-col gap-1.5">
+                    {/* Giá vốn */}
+                    <div className="flex items-baseline justify-between gap-2 min-w-0">
+                        <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider shrink-0">Giá vốn</span>
+                        {isEditing ? (
+                            <div className="flex items-baseline gap-1 flex-1 min-w-0 justify-end">
+                                <input
+                                    type="number"
+                                    autoFocus
+                                    className="w-[65px] bg-primary/10 border border-primary/30 rounded-md px-1.5 py-0.5 text-[14px] font-black text-primary text-right focus:outline-none focus:border-primary focus:bg-primary/15 transition-all shadow-inner [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    value={editingCost.value}
+                                    onChange={e => setEditingCost(prev => ({ ...prev, value: e.target.value }))}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') saveCost(ingredient, parseInt(editingCost.value) || 0)
+                                        if (e.key === 'Escape') setEditingCost(null)
+                                    }}
+                                    onBlur={() => saveCost(ingredient, parseInt(editingCost.value) || 0)}
+                                />
+                                <span className="text-[10px] text-text-dim shrink-0">đ/{displayUnit}</span>
+                            </div>
+                        ) : (
+                            <span
+                                className="text-[14px] font-black text-primary tabular-nums leading-none truncate cursor-pointer underline decoration-primary/30 underline-offset-[3px] hover:decoration-primary"
+                                onClick={() => setEditingCost({ ingredient, value: cost.toString() })}
+                            >
+                                {formatVND(cost)}/{displayUnit}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

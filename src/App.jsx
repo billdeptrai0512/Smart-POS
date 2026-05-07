@@ -22,6 +22,7 @@ const RangeReportPage = lazy(() => import('./pages/RangeReportPage'))
 const ExpensePage = lazy(() => import('./pages/ExpensePage'))
 const ShiftClosingPage = lazy(() => import('./pages/ShiftClosingPage'))
 const IngredientManagementPage = lazy(() => import('./pages/IngredientManagementPage'))
+const IngredientDetailPage = lazy(() => import('./pages/IngredientDetailPage'))
 
 function PageLoading() {
   return (
@@ -85,6 +86,7 @@ export default function App() {
                         <Route path="/recipes" element={<RecipeMenuPage />} />
                         <Route path="/recipes/:productId" element={<RecipeIngredientPage />} />
                         <Route path="/ingredients" element={<IngredientManagementPage />} />
+                        <Route path="/ingredients/:ingredientKey" element={<IngredientDetailPage />} />
                       </Route>
                     </Route>
                   </Route>

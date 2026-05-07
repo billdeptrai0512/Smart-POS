@@ -344,7 +344,7 @@ export default function RangeReportPage() {
                             yesterdayTakeHome={prevStats.takeHome}
                             compareLabel={`So với ${range === 'week' ? 'tuần trước' : 'tháng trước'}`}
                             onDailyExpenseClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'daily', expensesToView: expenses, isReadOnly: true } })}
-                            onRefillClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'refill', expensesToView: expenses, isReadOnly: true } })}
+                            onRefillClick={() => navigate('/ingredients', { state: { from: `/range-report?range=${range}`, tab: 'refill', refillScope: range } })}
                         />
 
                         {/* Section 3: Tài chính (manager only) */}

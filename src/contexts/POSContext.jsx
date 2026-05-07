@@ -424,10 +424,10 @@ export function POSProvider() {
         }
     }
 
-    async function handleAddExpense(name, amount, isRefill = false, paymentMethod = 'cash') {
+    async function handleAddExpense(name, amount, isRefill = false, paymentMethod = 'cash', metadata = {}) {
         if (!addressId) return
         try {
-            const expense = await insertExpense(name, amount, addressId, false, profile?.name, isRefill, paymentMethod)
+            const expense = await insertExpense(name, amount, addressId, false, profile?.name, isRefill, paymentMethod, metadata)
             setTodayExpenses(prev => [expense, ...prev])
             setTotalCost(prev => prev + amount)
             showToast(isRefill ? 'Đã thêm khoản mua nguyên vật liệu' : 'Đã thêm chi phí', 'success')
@@ -446,6 +446,17 @@ export function POSProvider() {
             showToast('Đã xóa chi phí', 'success')
         } catch (err) {
             showError(err, 'Xóa chi phí')
+        }
+    }
+
+    // Re-fetch today expenses (e.g. after restock RPC bypasses handleAddExpense)
+    async function refreshTodayExpenses() {
+        if (!addressId) return
+        try {
+            const expenses = await fetchTodayExpenses(addressId)
+            setTodayExpenses(expenses)
+        } catch (err) {
+            showError(err, 'Tải lại chi phí')
         }
     }
 
@@ -505,7 +516,7 @@ export function POSProvider() {
             // Dashboard
             revenue, totalCost, cupsSold, inventory, isOnline,
             // History
-            todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, handleDeleteOrder, handleAddExpense, handleDeleteExpense,
+            todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, handleDeleteOrder, handleAddExpense, handleDeleteExpense, refreshTodayExpenses,
             lastOrder,
             // Fixed Costs
             fixedCosts, handleLoadFixedCosts, handleAddFixedCost, handleUpdateFixedCost, handleDeleteFixedCost,

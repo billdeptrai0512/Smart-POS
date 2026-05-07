@@ -144,7 +144,7 @@ export async function fetchTodayExpenses(addressId) {
 
     let query = supabase
         .from('expenses')
-        .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, created_at')
+        .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, metadata, created_at')
         .gte('created_at', today.toISOString())
 
     if (addressId) query = query.eq('address_id', addressId)
@@ -166,9 +166,10 @@ export async function fetchTodayExpenses(addressId) {
 // - isRefill: "Mua nguyên vật liệu" — excluded from netProfit (COGS already covers it),
 //   but counted in cash flow / đối soát
 // - paymentMethod: 'cash' | 'transfer' — determines which pot the refill came from
-export async function insertExpense(name, amount, addressId = null, isFixed = false, staffName = null, isRefill = false, paymentMethod = 'cash') {
+// - metadata: JSONB object for structured data like `{ items: [{ingredient, qty, price}] }`
+export async function insertExpense(name, amount, addressId = null, isFixed = false, staffName = null, isRefill = false, paymentMethod = 'cash', metadata = {}) {
     if (!supabase) throw new Error('No Supabase connection')
-    const payload = { name, amount, is_fixed: isFixed, is_refill: isRefill, payment_method: paymentMethod }
+    const payload = { name, amount, is_fixed: isFixed, is_refill: isRefill, payment_method: paymentMethod, metadata }
     if (addressId) payload.address_id = addressId
     if (staffName) payload.staff_name = staffName
 
@@ -998,4 +999,140 @@ export async function fetchLastWeekSameDayOrderItems(addressId) {
         }
     })
     return allItems
+}
+
+// ---- Ingredient Stock (warehouse + counter) ----
+
+// current_stock = warehouse_stock + counter_stock, trong đó:
+//   warehouse_stock = Σ refill (đi chợ qua /ingredient) − Σ restock chỉ tính từ shift_closings xảy ra
+//                     SAU lần refill đầu tiên của nguyên liệu đó (restock trước đó là tồn pre-system, bỏ qua).
+//   counter_stock   = remaining từ shift_closing gần nhất.
+// Nếu chưa có refill nào → warehouse=0; chưa có shift_closing → counter=0.
+export async function fetchIngredientStocks(addressId) {
+    if (!supabase || !addressId) return []
+
+    const [latestRes, allClosingsRes, refillsRes] = await Promise.all([
+        supabase
+            .from('shift_closings')
+            .select('inventory_report')
+            .eq('address_id', addressId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        supabase
+            .from('shift_closings')
+            .select('created_at, inventory_report')
+            .eq('address_id', addressId),
+        supabase
+            .from('expenses')
+            .select('created_at, metadata')
+            .eq('address_id', addressId)
+            .eq('is_refill', true)
+    ])
+
+    const counter = {}
+    const todayRestock = {}
+    const latestReport = Array.isArray(latestRes.data?.inventory_report) ? latestRes.data.inventory_report : []
+    latestReport.forEach(item => {
+        counter[item.ingredient] = Number(item.remaining) || 0
+        todayRestock[item.ingredient] = Number(item.restock) || 0
+    })
+
+    // First refill timestamp + total refill per ingredient
+    const totalRefill = {}
+    const firstRefillAt = {}
+    ;(refillsRes.data || []).forEach(e => {
+        const ing = e.metadata?.ingredient
+        if (!ing) return
+        totalRefill[ing] = (totalRefill[ing] || 0) + (Number(e.metadata?.qty) || 0)
+        const t = new Date(e.created_at).getTime()
+        if (firstRefillAt[ing] === undefined || t < firstRefillAt[ing]) {
+            firstRefillAt[ing] = t
+        }
+    })
+
+    // Total restock per ingredient — only count restocks AFTER first refill of that ingredient
+    const totalRestock = {}
+    ;(allClosingsRes.data || []).forEach(closing => {
+        const report = Array.isArray(closing.inventory_report) ? closing.inventory_report : []
+        const closingTime = new Date(closing.created_at).getTime()
+        report.forEach(item => {
+            const ing = item.ingredient
+            if (!ing) return
+            const refillStart = firstRefillAt[ing]
+            if (refillStart === undefined || closingTime < refillStart) return
+            totalRestock[ing] = (totalRestock[ing] || 0) + (Number(item.restock) || 0)
+        })
+    })
+
+    const keys = new Set([
+        ...Object.keys(counter),
+        ...Object.keys(totalRestock),
+        ...Object.keys(totalRefill)
+    ])
+    return Array.from(keys).map(ingredient => {
+        const warehouseRaw = (totalRefill[ingredient] || 0) - (totalRestock[ingredient] || 0)
+        const warehouse = Math.max(0, warehouseRaw)
+        const counterStock = counter[ingredient] || 0
+        return {
+            ingredient,
+            current_stock: warehouse + counterStock,
+            restocked_qty: todayRestock[ingredient] || 0,
+            warehouse_stock: warehouse,
+            counter_stock: counterStock
+        }
+    })
+}
+
+// Process a restock: updates COGS, creates expense, returns result
+export async function processIngredientRestock(addressId, ingredient, qty, totalCost, staffName) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { data, error } = await supabase.rpc('process_ingredient_restock', {
+        p_address_id: addressId,
+        p_ingredient: ingredient,
+        p_qty: qty,
+        p_total_cost: totalCost,
+        p_staff_name: staffName
+    })
+    if (error) throw error
+    return data
+}
+
+// Fetch all refill expenses (đi chợ) within a date range, all ingredients
+export async function fetchRefillExpensesInRange(addressId, fromDate, toDate) {
+    if (!supabase || !addressId) return []
+    const { data, error } = await supabase
+        .from('expenses')
+        .select('id, name, amount, staff_name, metadata, created_at')
+        .eq('address_id', addressId)
+        .eq('is_refill', true)
+        .gte('created_at', fromDate)
+        .lte('created_at', toDate)
+        .order('created_at', { ascending: false })
+
+    if (error) {
+        console.error('fetchRefillExpensesInRange error:', error)
+        return []
+    }
+    return data || []
+}
+
+// Fetch restock history for a specific ingredient within a date range
+export async function fetchIngredientRestockHistory(addressId, ingredient, fromDate, toDate) {
+    if (!supabase || !addressId) return []
+    const { data, error } = await supabase
+        .from('expenses')
+        .select('id, name, amount, staff_name, metadata, created_at')
+        .eq('address_id', addressId)
+        .eq('is_refill', true)
+        .gte('created_at', fromDate)
+        .lte('created_at', toDate)
+        .order('created_at', { ascending: false })
+
+    if (error) {
+        console.error('fetchIngredientRestockHistory error:', error)
+        return []
+    }
+    // Filter by ingredient in metadata (client-side, since Supabase JSONB filter syntax varies)
+    return (data || []).filter(e => e.metadata?.ingredient === ingredient)
 }

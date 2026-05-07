@@ -79,6 +79,6 @@ export default defineConfig({
     })
   ],
   server: {
-    allowedHosts: ["touring-ruled-integrity-paying.trycloudflare.com"]
+    allowedHosts: ["friends-bloggers-share-colors.trycloudflare.com"]
   }
 })

@@ -296,7 +296,7 @@ export default function DailyReportPage() {
                             totalRevenue={totalRevenue}
                             yesterdayTakeHome={yesterdayTakeHome}
                             onDailyExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
-                            onRefillClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'refill', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                            onRefillClick={() => navigate('/ingredients', { state: { from: '/daily-report', tab: 'refill', refillScope: 'day' } })}
                         />
 
                         {/* only for manage */}

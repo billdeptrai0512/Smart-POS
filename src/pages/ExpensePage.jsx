@@ -15,7 +15,17 @@ export default function ExpensePage() {
     const isManager = userRole === 'manager' || userRole === 'admin'
     const backTo = location.state?.from || '/history'
     const initialTab = location.state?.tab || 'daily'
-    const [activeTab, setActiveTab] = useState((isStaff && initialTab === 'fixed') ? 'daily' : initialTab)
+
+    // Backward compat: tab=refill → redirect sang /ingredients (tab Đi chợ đã chuyển qua đó)
+    useEffect(() => {
+        if (initialTab === 'refill') {
+            navigate('/ingredients', { state: { ...location.state, tab: 'refill' }, replace: true })
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    const safeInitialTab = (isStaff && initialTab === 'fixed') ? 'daily' : (initialTab === 'refill' ? 'daily' : initialTab)
+    const [activeTab, setActiveTab] = useState(safeInitialTab)
 
     const [costName, setCostName] = useState('')
     const [costAmount, setCostAmount] = useState('')
@@ -39,11 +49,12 @@ export default function ExpensePage() {
     }, [])
 
     const submitExpense = async () => {
-        if (!costName.trim() || !costAmount || isNaN(costAmount) || Number(costAmount) <= 0) return
+        if (!costAmount || isNaN(costAmount) || Number(costAmount) <= 0) return
+        if (!costName.trim()) return
+
         setIsSubmitting(true)
         try {
-            const isRefill = activeTab === 'refill'
-            await handleAddExpense(costName.trim(), Number(costAmount) * 1000, isRefill, 'cash')
+            await handleAddExpense(costName.trim(), Number(costAmount) * 1000, false, 'cash', {})
             setCostName('')
             setCostAmount('')
         } catch {
@@ -89,13 +100,10 @@ export default function ExpensePage() {
     const baseExpenses = expensesToView || todayExpenses
 
     const dailyExpenses = (baseExpenses || []).filter(e => !e.is_fixed && !e.is_refill)
-    const refillExpenses = (baseExpenses || []).filter(e => e.is_refill)
     const totalDaily = dailyExpenses.reduce((sum, e) => sum + (e.amount || 0), 0)
-    const totalRefill = refillExpenses.reduce((sum, e) => sum + (e.amount || 0), 0)
     const totalFixed = (fixedCosts || []).reduce((sum, fc) => sum + (fc.amount || 0), 0)
 
-    const activeExpenses = activeTab === 'daily' ? dailyExpenses : activeTab === 'refill' ? refillExpenses : []
-    const isRefillTab = activeTab === 'refill'
+    const activeExpenses = activeTab === 'daily' ? dailyExpenses : []
 
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
@@ -121,17 +129,6 @@ export default function ExpensePage() {
                             <span className="text-[11px] font-bold text-danger/80 leading-none mt-1 tabular-nums">{formatVND(totalDaily)}</span>
                         </div>
 
-                        <div
-                            onClick={() => { setActiveTab('refill'); setCostName(''); setCostAmount('') }}
-                            className={`flex-1 border shadow-sm rounded-[14px] px-1 py-2 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${activeTab === 'refill'
-                                ? 'bg-primary/10 border-primary/30'
-                                : 'bg-surface-light border-border/60 opacity-60 hover:opacity-100'
-                                }`}
-                        >
-                            <span className="text-[11px] font-black text-primary uppercase line-clamp-1">Đi chợ</span>
-                            <span className="text-[11px] font-bold text-primary/80 leading-none mt-1 tabular-nums">{formatVND(totalRefill)}</span>
-                        </div>
-
                         {!isStaff && (
                             <div
                                 onClick={() => setActiveTab('fixed')}
@@ -148,8 +145,8 @@ export default function ExpensePage() {
                 </div>
             </header>
 
-            {/* ===== Daily & Refill tab ===== */}
-            {(activeTab === 'daily' || activeTab === 'refill') && (
+            {/* ===== Daily tab ===== */}
+            {activeTab === 'daily' && (
                 <>
                     <main className="flex-1 overflow-y-auto p-4 space-y-3">
                         {isLoadingHistory ? (
@@ -159,22 +156,20 @@ export default function ExpensePage() {
                             </div>
                         ) : (activeExpenses.length === 0) ? (
                             <div className="text-center text-text-secondary text-[13px] py-10 bg-surface-light rounded-xl border border-border/40">
-                                Chưa có {isRefillTab ? 'phiếu nhập nguyên vật liệu' : 'chi phí'} nào.
+                                Chưa có chi phí nào.
                             </div>
                         ) : (
                             [...activeExpenses].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).map(expense => {
                                 const d = new Date(expense.created_at)
                                 const time = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
-                                const badgeClass = isRefillTab ? 'bg-primary/10 text-primary' : 'bg-danger/10 text-danger'
-                                const badgeLabel = isRefillTab ? 'Mua NVL' : 'Chi phí'
                                 return (
                                     <div key={expense.id} className="bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden opacity-90">
-                                        <div className={`absolute top-0 right-0 text-[10px] font-black px-2 py-1 rounded-bl-[14px] uppercase tracking-wider ${badgeClass}`}>
-                                            {badgeLabel}
+                                        <div className="absolute top-0 right-0 text-[10px] font-black px-2 py-1 rounded-bl-[14px] uppercase tracking-wider bg-danger/10 text-danger">
+                                            Chi phí
                                         </div>
                                         <div className="flex justify-between items-center mb-1">
                                             <div className="flex items-center gap-2 mt-1">
-                                                <span className={`font-black text-[14px] ${isRefillTab ? 'text-primary' : 'text-danger'}`}>- {formatVND(expense.amount)}</span>
+                                                <span className="font-black text-[14px] text-danger">- {formatVND(expense.amount)}</span>
                                             </div>
                                         </div>
                                         <div className="flex justify-between items-stretch mb-1 border-t border-border/40 pt-2">
@@ -189,7 +184,7 @@ export default function ExpensePage() {
                                                         className="text-text-secondary text-[14px] text-end font-bold cursor-pointer underline decoration-dashed decoration-text-secondary/50 underline-offset-4 hover:text-danger hover:decoration-danger active:text-danger/80 transition-all select-none disabled:opacity-40"
                                                         onClick={() => {
                                                             if (deletingId === expense.id) return
-                                                            if (window.confirm(`Xóa ${isRefillTab ? 'phiếu nhập' : 'chi phí'} ${expense.name}?\n\nHành động này không thể hoàn tác!`)) {
+                                                            if (window.confirm(`Xóa chi phí ${expense.name}?\n\nHành động này không thể hoàn tác!`)) {
                                                                 setDeletingId(expense.id)
                                                                 handleDeleteExpense(expense.id, expense.amount).finally(() => setDeletingId(null))
                                                             }
@@ -211,12 +206,12 @@ export default function ExpensePage() {
                             <div className="flex gap-2">
                                 <input
                                     type="text"
-                                    placeholder={isRefillTab ? 'Tên nguyên vật liệu...' : 'Tên chi phí...'}
+                                    placeholder="Tên chi phí..."
                                     value={costName}
                                     onChange={e => setCostName(e.target.value)}
-                                    className={`flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none transition-colors ${isRefillTab ? 'focus:border-primary/40' : 'focus:border-danger/40'}`}
+                                    className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none transition-colors focus:border-danger/40"
                                 />
-                                <div className={`relative shrink-0 flex items-center w-[125px] bg-surface-light border border-border/60 rounded-[12px] transition-colors overflow-hidden ${isRefillTab ? 'focus-within:border-primary/40' : 'focus-within:border-danger/40'}`}>
+                                <div className="relative shrink-0 flex items-center w-[125px] bg-surface-light border border-border/60 rounded-[12px] transition-colors overflow-hidden focus-within:border-danger/40">
                                     <input
                                         type="number"
                                         placeholder="Số tiền..."
@@ -238,8 +233,8 @@ export default function ExpensePage() {
 
                             <button
                                 onClick={submitExpense}
-                                disabled={!costName.trim() || !costAmount || isNaN(costAmount) || Number(costAmount) <= 0 || isSubmitting}
-                                className={`w-full py-3 rounded-[12px] text-white text-[14px] font-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isRefillTab ? 'bg-primary hover:bg-primary/90 active:bg-primary/80' : 'bg-danger hover:bg-danger/90 active:bg-danger/80'}`}
+                                disabled={!costAmount || isNaN(costAmount) || Number(costAmount) <= 0 || isSubmitting || !costName.trim()}
+                                className="w-full py-3 rounded-[12px] text-white text-[14px] font-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-danger hover:bg-danger/90 active:bg-danger/80"
                             >
                                 {isSubmitting ? 'Đang thêm...' : 'Thêm'}
                             </button>

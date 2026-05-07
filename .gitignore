@@ -31,3 +31,7 @@ dist-ssr
 
 CLAUDE.md
 PROJECT.md
+
+# Claude Code session state (per-machine)
+.claude/worktrees/
+.claude/settings.local.json
