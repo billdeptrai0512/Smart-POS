@@ -216,13 +216,13 @@ export default function InventoryRefillCard({
                         onClick={() => setActiveTab('audit')}
                         className={`flex-1 py-2.5 rounded-[10px] text-[13px] font-bold transition-all ${activeTab === 'audit' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
                     >
-                        Tồn kho
+                        Chênh lệch
                     </button>
                     <button
                         onClick={() => setActiveTab('refill')}
                         className={`flex-1 py-2.5 rounded-[10px] text-[13px] font-bold transition-all flex items-center justify-center gap-1 ${activeTab === 'refill' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
                     >
-                        Đi chợ
+                        Cần mua
                     </button>
                 </div>
             </div>

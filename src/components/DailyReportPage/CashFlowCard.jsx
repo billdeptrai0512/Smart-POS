@@ -69,7 +69,7 @@ export default function CashFlowCard({ shiftClosing, cash: cashProp, transfer: t
             {/* DIVIDER BƯỚC 2 */}
             <div className="flex items-center gap-3 py-0.5 px-4">
                 <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Sau chốt ca</span>
+                <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Dòng tiền</span>
                 <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
             </div>
 

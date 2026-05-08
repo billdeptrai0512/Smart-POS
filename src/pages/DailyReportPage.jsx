@@ -242,11 +242,11 @@ export default function DailyReportPage() {
         const yCash = yesterdayClosing.actual_cash || 0
         const yTransfer = yesterdayClosing.actual_transfer || 0
         const yRefill = yesterdayExpensesData.filter(e => e.is_refill).reduce((s, e) => s + e.amount, 0)
-        
+
         const yTakeHomeCash = Math.max(0, yCash - yRefill)
         const yRemainingRefill = Math.max(0, yRefill - yCash)
         const yTakeHomeTransfer = Math.max(0, yTransfer - yRemainingRefill)
-        
+
         return yTakeHomeCash + yTakeHomeTransfer
     }, [yesterdayClosing, yesterdayExpensesData])
 
@@ -299,6 +299,25 @@ export default function DailyReportPage() {
                             onRefillClick={() => navigate('/ingredients', { state: { from: '/daily-report', tab: 'refill', refillScope: 'day' } })}
                         />
 
+                        <div className="flex items-center gap-3 py-1 my-1 px-4">
+                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                            <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tồn kho</span>
+                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                        </div>
+
+                        <InventoryRefillCard
+                            shiftClosing={shiftClosing}
+                            yesterdayClosing={yesterdayClosing}
+                            todayOrders={todayOrders}
+                            offlineToday={offlineToday}
+                            recipes={recipes}
+                            extraIngredients={extraIngredients}
+                            selectedAddress={selectedAddress}
+                            products={products}
+                            productExtras={productExtras}
+                            ingredientUnits={ingredientUnits}
+                        />
+
                         {/* only for manage */}
                         {!isStaff && (
                             <>
@@ -323,18 +342,6 @@ export default function DailyReportPage() {
                         )}
                         {/* only for manager  */}
 
-                        <InventoryRefillCard
-                            shiftClosing={shiftClosing}
-                            yesterdayClosing={yesterdayClosing}
-                            todayOrders={todayOrders}
-                            offlineToday={offlineToday}
-                            recipes={recipes}
-                            extraIngredients={extraIngredients}
-                            selectedAddress={selectedAddress}
-                            products={products}
-                            productExtras={productExtras}
-                            ingredientUnits={ingredientUnits}
-                        />
 
                         <div className="flex flex-col items-center justify-center py-8 mt-4">
                             <a href="https://github.com/billdeptrai0512" target="_blank" rel="noopener noreferrer"

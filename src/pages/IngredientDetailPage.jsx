@@ -148,7 +148,7 @@ export default function IngredientDetailPage() {
             </header>
 
             {/* Main content */}
-            <main className="flex-1 overflow-y-auto px-4 py-4 pb-32 bg-bg space-y-4">
+            <main className="flex-1 overflow-y-auto px-4 py-4 bg-bg space-y-4">
                 {/* Summary card */}
                 {!loading && summary.count > 0 && (
                     <div className="bg-surface rounded-[16px] border border-border/60 p-4 grid grid-cols-3 gap-3">
@@ -214,17 +214,8 @@ export default function IngredientDetailPage() {
                 )}
             </main>
 
-            {/* Footer: Restock button */}
-            <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto p-4 bg-surface border-t border-border/60 z-50">
-                <button
-                    onClick={() => setShowRestock(true)}
-                    className="w-full py-3.5 rounded-[14px] bg-primary text-white text-[15px] font-black uppercase tracking-wide hover:bg-primary/90 active:bg-primary/80 active:scale-[0.98] transition-all shadow-lg shadow-primary/20"
-                >
-                    + Nhập kho {ingredientLabel(ingredientKey)}
-                </button>
-            </div>
-
-            {/* Restock Modal */}
+            {/* Restock Modal — giữ lại trong code phòng khi cần (không có nút trigger ở page này nữa,
+                 nhập kho được thực hiện từ card ở /ingredients) */}
             {showRestock && (
                 <RestockModal
                     ingredient={ingredientKey}
