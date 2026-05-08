@@ -5,7 +5,7 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { usePOS } from '../contexts/POSContext'
 
-import { upsertIngredientCost, deleteIngredientCost, renameIngredient, fetchIngredientStocks, processIngredientRestock, fetchRefillExpensesInRange } from '../services/orderService'
+import { upsertIngredientCost, deleteIngredientCost, renameIngredient, fetchIngredientStocks, processIngredientRestock, fetchRefillExpensesInRange, adjustIngredientStock } from '../services/orderService'
 import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
@@ -33,6 +33,7 @@ export default function IngredientManagementPage() {
     const [editingCost, setEditingCost] = useState(null)
     const [editingUnit, setEditingUnit] = useState(null)
     const [editingName, setEditingName] = useState(null)
+    const [editingStock, setEditingStock] = useState(null)
     const [saving, setSaving] = useState(false)
 
     // Sorting state
@@ -55,7 +56,8 @@ export default function IngredientManagementPage() {
         ? location.state.refillScope
         : 'month'
     const [scope, setScope] = useState(initialScope)
-    const [monthOffset, setMonthOffset] = useState(0)
+    // Offset áp dụng cho mọi scope: day=offset days, week=offset weeks, month=offset months.
+    const [offset, setOffset] = useState(0)
     const [refills, setRefills] = useState([])
     const [isLoadingRefills, setIsLoadingRefills] = useState(false)
     const [deletingId, setDeletingId] = useState(null)
@@ -68,11 +70,11 @@ export default function IngredientManagementPage() {
 
     // Load today's expenses if not loaded yet (needed for scope=day — reuse from POSContext, no extra query)
     useEffect(() => {
-        if (activeTab === 'refill' && scope === 'day' && monthOffset === 0 && !todayExpenses?.length && !isLoadingHistory) {
+        if (activeTab === 'refill' && scope === 'day' && offset === 0 && !todayExpenses?.length && !isLoadingHistory) {
             handleLoadHistory()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeTab, scope, monthOffset])
+    }, [activeTab, scope, offset])
 
     // Fetch real-time stock on mount & when address changes
     const loadStocks = async () => {
@@ -93,35 +95,35 @@ export default function IngredientManagementPage() {
     }, [ingredientCosts, selectedAddress?.ingredient_sort_order])
 
     // ---- Refill (Đi chợ) data ----
-    // Past month forces scope=month (day/week is current-relative)
-    const effectiveScope = monthOffset === 0 ? scope : 'month'
-
-    // Date range for the active scope. Reuses the same getDateRange used by reports
-    // → tổng "Đi chợ" trên tab này khớp 100% với card "Đi chợ" trên Daily/Range report.
+    // Date range follow scope + offset. Lưu ý: getDateRange('day', offset) không dùng offset,
+    // nên compute manually cho 'day'. 'week' và 'month' tận dụng helper sẵn có.
     const { rangeStart, rangeEnd, rangeLabel } = useMemo(() => {
-        if (effectiveScope === 'day') {
-            const { start, end } = getDateRange('day', 0)
-            return { rangeStart: start, rangeEnd: end, rangeLabel: 'Hôm nay' }
+        const fmt = (d) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+        if (scope === 'day') {
+            const target = new Date()
+            target.setDate(target.getDate() + offset)
+            const start = new Date(target); start.setHours(0, 0, 0, 0)
+            const end = new Date(target); end.setHours(23, 59, 59, 999)
+            const label = offset === 0
+                ? `${fmt(start)}/${start.getFullYear()}`
+                : `${fmt(start)}/${start.getFullYear()}`
+            return { rangeStart: start, rangeEnd: end, rangeLabel: label }
         }
-        if (effectiveScope === 'week') {
-            const { start, end } = getDateRange('week', 0)
-            return { rangeStart: start, rangeEnd: end, rangeLabel: 'Tuần này' }
-        }
-        // month (current or past)
-        const now = new Date()
-        const target = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
-        const start = new Date(target.getFullYear(), target.getMonth(), 1, 0, 0, 0, 0)
-        const end = new Date(target.getFullYear(), target.getMonth() + 1, 0, 23, 59, 59, 999)
-        const label = target.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })
+        const { start, end } = getDateRange(scope, offset)
+        // week và month đều dùng range format DD/MM – DD/MM (đồng bộ với RangeReport).
+        // month offset=0: 01/M – ngày hiện tại; month offset<0: 01/M – cuối-tháng-M.
+        const label = `${fmt(start)} – ${fmt(end)}`
         return { rangeStart: start, rangeEnd: end, rangeLabel: label }
-    }, [effectiveScope, monthOffset])
+    }, [scope, offset])
 
-    // Reuse todayExpenses for scope=day → 0 query thêm.
+    const canGoForward = offset < 0
+
+    // Reuse todayExpenses for scope=day offset=0 → 0 query thêm.
     // Other scopes: fetch with cache (key by address + range bounds).
     useEffect(() => {
         if (activeTab !== 'refill' || !selectedAddress?.id) return
 
-        if (effectiveScope === 'day' && monthOffset === 0) {
+        if (scope === 'day' && offset === 0) {
             const today = (todayExpenses || [])
                 .filter(e => e.is_refill)
                 .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
@@ -144,11 +146,13 @@ export default function IngredientManagementPage() {
                 setRefills(data)
             })
             .finally(() => setIsLoadingRefills(false))
-    }, [activeTab, effectiveScope, monthOffset, selectedAddress?.id, rangeStart, rangeEnd, todayExpenses])
+    }, [activeTab, scope, offset, selectedAddress?.id, rangeStart, rangeEnd, todayExpenses])
 
+    // Adjustments (`metadata.adjustment=true`) là hiệu chỉnh tồn, không phải đi chợ thật → bỏ khỏi tab.
     const refillsByIngredient = useMemo(() => {
         const map = {}
         refills.forEach(e => {
+            if (e.metadata?.adjustment) return
             const ing = e.metadata?.ingredient
             if (!ing) return
             if (!map[ing]) map[ing] = { ingredient: ing, count: 0, totalQty: 0, totalSpent: 0 }
@@ -160,7 +164,7 @@ export default function IngredientManagementPage() {
     }, [refills])
 
     const rangeTotal = useMemo(
-        () => refills.reduce((s, e) => s + (Number(e.amount) || 0), 0),
+        () => refills.reduce((s, e) => e.metadata?.adjustment ? s : s + (Number(e.amount) || 0), 0),
         [refills]
     )
 
@@ -245,6 +249,24 @@ export default function IngredientManagementPage() {
             setNewIngredientCost('')
         } catch (err) {
             showError(err, 'Tạo nguyên liệu mới')
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    async function saveStock(ingredient, newTotalRaw, currentTotal) {
+        setEditingStock(null)
+        const newTotal = Number(newTotalRaw)
+        if (!Number.isFinite(newTotal) || newTotal < 0) return
+        const delta = newTotal - currentTotal
+        if (delta === 0) return
+        setSaving(true)
+        try {
+            await adjustIngredientStock(selectedAddress?.id, ingredient, delta, profile?.name)
+            refillCacheRef.current.clear()
+            await Promise.all([loadStocks(), refreshTodayExpenses?.()])
+        } catch (err) {
+            showError(err, 'Hiệu chỉnh tồn')
         } finally {
             setSaving(false)
         }
@@ -355,13 +377,50 @@ export default function IngredientManagementPage() {
                                     }`}
                             >
                                 <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Đi chợ</span>
-                                <span className="text-[12px] font-bold text-primary/80 leading-none mt-1 tabular-nums">
-                                    {formatVND(rangeTotal)}
-                                </span>
+                                {activeTab === 'refill' && (
+                                    <div className="flex items-center gap-1 mt-0.5" onClick={e => e.stopPropagation()}>
+                                        <button
+                                            onClick={() => setOffset(p => p - 1)}
+                                            className="w-5 h-5 flex items-center justify-center rounded-full text-text-secondary hover:text-primary transition-colors"
+                                        >
+                                            <ChevronLeft size={14} strokeWidth={2.5} />
+                                        </button>
+                                        <span className="text-[12px] font-bold text-text/80 leading-none tabular-nums capitalize">{rangeLabel}</span>
+                                        <button
+                                            onClick={() => canGoForward && setOffset(p => p + 1)}
+                                            disabled={!canGoForward}
+                                            className={`w-5 h-5 flex items-center justify-center rounded-full transition-colors ${canGoForward ? 'text-text-secondary hover:text-primary' : 'text-text-dim opacity-30 cursor-default'}`}
+                                        >
+                                            <ChevronRight size={14} strokeWidth={2.5} />
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
                 </div>
+
+                {/* Đi chợ: range selector dưới tab strip */}
+                {!isSorting && activeTab === 'refill' && (
+                    <div className="grid grid-cols-3 gap-2">
+                        {[
+                            { key: 'week', label: 'Tuần này' },
+                            { key: 'day', label: 'Hôm nay' },
+                            { key: 'month', label: 'Tháng này' }
+                        ].map(s => (
+                            <button
+                                key={s.key}
+                                onClick={() => { setScope(s.key); setOffset(0) }}
+                                className={`py-2 rounded-[12px] text-[12px] font-black border transition-colors ${scope === s.key
+                                    ? 'bg-primary/10 border-primary/40 text-primary'
+                                    : 'bg-surface-light border-border/60 text-text-secondary hover:bg-border/30'
+                                    }`}
+                            >
+                                {s.label}
+                            </button>
+                        ))}
+                    </div>
+                )}
             </header>
 
             {/* Main content */}
@@ -434,6 +493,10 @@ export default function IngredientManagementPage() {
                                     onSaveAdvanced={handleSaveAdvanced}
                                     stockData={stockRow}
                                     onRestock={() => setRestockIngredient(ingredient)}
+                                    isEditingStock={editingStock?.ingredient === ingredient}
+                                    editingStock={editingStock}
+                                    setEditingStock={setEditingStock}
+                                    saveStock={saveStock}
                                 />
                             )
                         })}
@@ -442,46 +505,8 @@ export default function IngredientManagementPage() {
                         )}
                     </div>
                 ) : (
-                    /* ===== Tab Đi chợ ===== */
+                    /* ===== Tab Đi chợ ===== (scope/offset đã ở trên header) */
                     <div className="flex flex-col gap-3">
-                        {/* Scope chips: only when viewing current month (offset=0).
-                            Past month forces scope=month, hides chips. */}
-                        {monthOffset === 0 && (
-                            <div className="flex p-1 bg-surface-light rounded-[12px] gap-1 w-full">
-                                {[
-                                    { key: 'day', label: 'Hôm nay' },
-                                    { key: 'week', label: 'Tuần này' },
-                                    { key: 'month', label: 'Tháng này' }
-                                ].map(s => (
-                                    <button
-                                        key={s.key}
-                                        onClick={() => setScope(s.key)}
-                                        className={`flex-1 py-2 rounded-[10px] text-[12px] font-bold transition-all ${scope === s.key ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
-                                    >
-                                        {s.label}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* Month picker — luôn hiện. Lùi tháng → scope auto = 'month' (past) */}
-                        <div className="flex items-center justify-between bg-surface-light rounded-[12px] px-1 py-1">
-                            <button
-                                onClick={() => setMonthOffset(p => p - 1)}
-                                className="w-9 h-9 flex items-center justify-center rounded-[10px] text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all"
-                            >
-                                <ChevronLeft size={18} />
-                            </button>
-                            <span className="text-[13px] font-black text-text capitalize">{rangeLabel}</span>
-                            <button
-                                onClick={() => setMonthOffset(p => Math.min(0, p + 1))}
-                                disabled={monthOffset >= 0}
-                                className="w-9 h-9 flex items-center justify-center rounded-[10px] text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all disabled:opacity-20"
-                            >
-                                <ChevronRight size={18} />
-                            </button>
-                        </div>
-
                         <div className="bg-surface rounded-[16px] border border-border/60 p-4 grid grid-cols-2 gap-3">
                             <div className="flex flex-col items-center">
                                 <span className="text-[10px] font-black text-text-secondary uppercase tracking-wider">Tổng đi chợ</span>
@@ -493,7 +518,7 @@ export default function IngredientManagementPage() {
                             </div>
                         </div>
 
-                        {isLoadingRefills || (effectiveScope === 'day' && monthOffset === 0 && isLoadingHistory && refills.length === 0) ? (
+                        {isLoadingRefills || (scope === 'day' && offset === 0 && isLoadingHistory && refills.length === 0) ? (
                             <div className="flex flex-col gap-2 animate-pulse">
                                 {[1, 2, 3].map(i => <div key={i} className="bg-surface-light rounded-[14px] h-16" />)}
                             </div>

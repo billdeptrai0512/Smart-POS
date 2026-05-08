@@ -1008,9 +1008,28 @@ export async function fetchLastWeekSameDayOrderItems(addressId) {
 //                     SAU lần refill đầu tiên của nguyên liệu đó (restock trước đó là tồn pre-system, bỏ qua).
 //   counter_stock   = remaining từ shift_closing gần nhất.
 // Nếu chưa có refill nào → warehouse=0; chưa có shift_closing → counter=0.
+//
+// Path nhanh: RPC `get_ingredient_stocks_v2` aggregate server-side (1 round-trip).
+// Fallback: legacy 3-query JS aggregate khi RPC chưa deploy (PGRST202 / 42883).
 export async function fetchIngredientStocks(addressId) {
     if (!supabase || !addressId) return []
 
+    // Fast path
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_ingredient_stocks_v2', { p_address_id: addressId })
+    if (!rpcError && rpcData) {
+        return rpcData.map(row => ({
+            ingredient: row.ingredient,
+            current_stock: Number(row.current_stock) || 0,
+            restocked_qty: Number(row.restocked_qty) || 0,
+            warehouse_stock: Number(row.warehouse_stock) || 0,
+            counter_stock: Number(row.counter_stock) || 0
+        }))
+    }
+    if (rpcError && rpcError.code !== 'PGRST202' && rpcError.code !== '42883') {
+        console.error('get_ingredient_stocks_v2 RPC error:', rpcError)
+    }
+
+    // Fallback: legacy JS aggregate (chạy 3 queries song song).
     const [latestRes, allClosingsRes, refillsRes] = await Promise.all([
         supabase
             .from('shift_closings')
@@ -1082,6 +1101,26 @@ export async function fetchIngredientStocks(addressId) {
             counter_stock: counterStock
         }
     })
+}
+
+// Manual stock adjustment (kiểm kê / hao hụt / seed initial).
+// Tạo 1 expense `is_refill=true, amount=0, metadata.adjustment=true, qty=delta` —
+// được sum vào Σrefill_qty của fetchIngredientStocks → warehouse +delta.
+// Không động unit_cost (giá vốn giữ nguyên). Filter `metadata.adjustment` ra khỏi tab Đi chợ ở client.
+export async function adjustIngredientStock(addressId, ingredient, delta, staffName) {
+    if (!supabase) throw new Error('No Supabase connection')
+    if (!Number.isFinite(delta) || delta === 0) return null
+    const displayName = `Hiệu chỉnh tồn ${ingredient}`
+    return await insertExpense(
+        displayName,
+        0,
+        addressId,
+        false,
+        staffName,
+        true,
+        'cash',
+        { ingredient, qty: delta, adjustment: true }
+    )
 }
 
 // Process a restock: updates COGS, creates expense, returns result

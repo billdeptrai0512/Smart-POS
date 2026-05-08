@@ -4,10 +4,10 @@ import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { usePOS } from '../contexts/POSContext'
-import { fetchIngredientRestockHistory, fetchIngredientStocks } from '../services/orderService'
+import { fetchIngredientRestockHistory, fetchIngredientStocks, deleteIngredientCost } from '../services/orderService'
 import { ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
 import { formatVND } from '../utils'
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import { processIngredientRestock } from '../services/orderService'
 
@@ -69,6 +69,18 @@ export default function IngredientDetailPage() {
         return { totalSpent, totalQty, avgPrice, count: history.length }
     }, [history])
 
+    const handleDelete = async () => {
+        const label = ingredientLabel(ingredientKey)
+        if (!window.confirm(`Xóa nguyên liệu "${label}"? Hành động này sẽ gỡ nó khỏi tất cả công thức liên quan.`)) return
+        try {
+            await deleteIngredientCost(ingredientKey, selectedAddress?.id)
+            refreshProducts?.()
+            navigate('/ingredients')
+        } catch (err) {
+            window.alert(`Lỗi xóa: ${err?.message || 'không rõ'}`)
+        }
+    }
+
     const handleRestock = async ({ ingredient, qty, totalCost }) => {
         const result = await processIngredientRestock(
             selectedAddress?.id, ingredient, qty, totalCost, profile?.name
@@ -105,6 +117,15 @@ export default function IngredientDetailPage() {
                             {canEdit && ` · Giá vốn: ${formatVND(cost)}/${unit}`}
                         </span>
                     </div>
+                    {canEdit && (
+                        <button
+                            onClick={handleDelete}
+                            className="shrink-0 w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-danger/70 hover:text-danger hover:bg-danger/10 active:scale-95 transition-all"
+                            title="Xóa nguyên liệu"
+                        >
+                            <Trash2 size={18} strokeWidth={2.5} />
+                        </button>
+                    )}
                 </div>
 
                 {/* Month picker */}
