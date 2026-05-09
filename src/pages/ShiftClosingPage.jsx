@@ -71,11 +71,13 @@ export default function ShiftClosingPage() {
                             const openings = {}
                             const locked = {}
                             parsed.forEach(item => {
-                                inputs[item.ingredient] = String(item.remaining)
-                                if (item.restock !== undefined && item.restock !== null) {
+                                if (typeof item.remaining === 'number') {
+                                    inputs[item.ingredient] = String(item.remaining)
+                                }
+                                if (typeof item.restock === 'number') {
                                     restocks[item.ingredient] = String(item.restock)
                                 }
-                                if (item.opening !== undefined && item.opening !== null) {
+                                if (typeof item.opening === 'number') {
                                     openings[item.ingredient] = String(item.opening)
                                 }
                                 if (item.opening_locked) {
@@ -105,8 +107,10 @@ export default function ShiftClosingPage() {
                     const stock = {}
                     const openings = {}
                     data.inventory_report.forEach(item => {
-                        stock[item.ingredient] = item.remaining || 0
-                        openings[item.ingredient] = String(item.remaining || 0)
+                        if (typeof item.remaining === 'number') {
+                            stock[item.ingredient] = item.remaining
+                            openings[item.ingredient] = String(item.remaining)
+                        }
                     })
                     setOpeningStock(stock)
                     // Seed openingInputs from yesterday only if today's closing hasn't set them yet
@@ -427,7 +431,7 @@ export default function ShiftClosingPage() {
                                                         <div className={`flex items-center rounded-[10px] overflow-hidden transition-all gap-1 ${isLocked ? 'bg-primary/8 border border-primary/30' : 'bg-surface-light border border-border/60 focus-within:border-primary/40'}`}>
                                                             <input
                                                                 type="number"
-                                                                placeholder="0"
+                                                                placeholder="-"
                                                                 value={openingInputs[ing.ingredient] ?? (opening !== undefined && opening !== null ? String(opening) : '')}
                                                                 onChange={e => handleOpeningChange(ing.ingredient, e.target.value)}
                                                                 disabled={isLocked}
@@ -443,7 +447,7 @@ export default function ShiftClosingPage() {
                                                         <div className="flex items-center gap-1 bg-surface-light border border-border/60 rounded-[10px] overflow-hidden focus-within:border-primary/40 transition-colors">
                                                             <input
                                                                 type="number"
-                                                                placeholder="0"
+                                                                placeholder="-"
                                                                 value={restockInputs[ing.ingredient] || ''}
                                                                 onChange={e => handleRestockChange(ing.ingredient, e.target.value)}
                                                                 className="flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-medium text-text text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -458,7 +462,7 @@ export default function ShiftClosingPage() {
                                                         <div className="flex items-center gap-1 bg-surface-light border border-border/60 rounded-[10px] overflow-hidden focus-within:border-primary/40 transition-colors">
                                                             <input
                                                                 type="number"
-                                                                placeholder="0"
+                                                                placeholder="-"
                                                                 value={inventoryInputs[ing.ingredient] || ''}
                                                                 onChange={e => handleInventoryChange(ing.ingredient, e.target.value)}
                                                                 className="flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-medium text-text text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"

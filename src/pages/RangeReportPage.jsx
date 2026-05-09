@@ -10,6 +10,7 @@ import ReportHeader, { getDateRange } from '../components/DailyReportPage/Report
 import DayPerformanceChart from '../components/DailyReportPage/DayPerformanceChart'
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
+import FinancialFlow from '../components/DailyReportPage/FinancialFlow'
 import { Filter } from 'lucide-react'
 
 const RANGE_LABEL = { week: 'Tuần này', month: 'Tháng này' }
@@ -225,8 +226,9 @@ export default function RangeReportPage() {
         const prevRemainingRefill = Math.max(0, refillTotal - prevCash)
         const prevTakeHomeTransfer = Math.max(0, prevTransfer - prevRemainingRefill)
         const takeHome = prevTakeHomeCash + prevTakeHomeTransfer
+        const actualTotal = prevCash + prevTransfer + dailyExpense
 
-        return { revenue, cups, netProfit, takeHome }
+        return { revenue, cups, netProfit, takeHome, actualTotal }
     }, [prevOrders, prevExpenses, prevShiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, selectedProductId, prevDays, products])
 
     const avg = (v) => days > 0 ? Math.round(v / days) : v
@@ -251,7 +253,7 @@ export default function RangeReportPage() {
                 onOffsetChange={setOffset}
             />
 
-            <main className="flex-1 overflow-y-auto px-4 py-6 pb-24 space-y-4 bg-bg">
+            <main className="flex-1 overflow-y-auto px-4 py-6 pb-6 space-y-4 bg-bg">
                 {isLoading ? (
                     <div className="flex flex-col gap-4 animate-pulse">
                         <div className="bg-surface-light rounded-[24px] h-[72px]" />
@@ -339,8 +341,14 @@ export default function RangeReportPage() {
                             cash={stats.cashRevenue}
                             transfer={stats.transferRevenue}
                             dailyExpense={stats.dailyExpense}
+                            onDailyExpenseClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'daily', expensesToView: expenses, isReadOnly: true } })}
+                        />
+                        <FinancialFlow
+                            actualCash={stats.cashRevenue}
+                            actualTransfer={stats.transferRevenue}
+                            dailyExpense={stats.dailyExpense}
                             refillTotal={stats.refillTotal}
-                            totalRevenue={stats.totalRevenue}
+                            yesterdayActualTotal={prevStats.actualTotal}
                             yesterdayTakeHome={prevStats.takeHome}
                             compareLabel={`So với ${range === 'week' ? 'tuần trước' : 'tháng trước'}`}
                             onDailyExpenseClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'daily', expensesToView: expenses, isReadOnly: true } })}

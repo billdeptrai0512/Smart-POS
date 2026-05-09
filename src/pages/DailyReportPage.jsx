@@ -9,6 +9,7 @@ import SalesCard from '../components/DailyReportPage/SalesCard'
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
+import FinancialFlow from '../components/DailyReportPage/FinancialFlow'
 import { supabase } from '../lib/supabaseClient'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -237,6 +238,14 @@ export default function DailyReportPage() {
             - yesterdayExpensesData.filter(e => e.is_fixed).reduce((s, e) => s + e.amount, 0)
     }, [yesterdayOrders, yesterdayExpensesData, recipes, extraIngredients, ingredientCosts])
 
+    const yesterdayActualTotal = useMemo(() => {
+        if (!yesterdayClosing) return null
+        const yCash = yesterdayClosing.actual_cash || 0
+        const yTransfer = yesterdayClosing.actual_transfer || 0
+        const yDailyExpense = yesterdayExpensesData.filter(e => !e.is_fixed && !e.is_refill).reduce((s, e) => s + e.amount, 0)
+        return yCash + yTransfer + yDailyExpense
+    }, [yesterdayClosing, yesterdayExpensesData])
+
     const yesterdayTakeHome = useMemo(() => {
         if (!yesterdayClosing) return null
         const yCash = yesterdayClosing.actual_cash || 0
@@ -263,7 +272,7 @@ export default function DailyReportPage() {
                 onCustomDateChange={handleCustomDateChange}
             />
 
-            <main className="flex-1 overflow-y-auto px-4 py-6 pb-24 space-y-4 bg-bg">
+            <main className="flex-1 overflow-y-auto px-4 py-6 pb-6 space-y-4 bg-bg">
                 {!isReady ? (
                     <div className="flex flex-col gap-4 animate-pulse">
                         <div className="grid grid-cols-2 gap-3">
@@ -292,12 +301,9 @@ export default function DailyReportPage() {
                         <CashFlowCard
                             shiftClosing={shiftClosing}
                             dailyExpense={dailyExpense}
-                            refillTotal={refillTotal}
-                            totalRevenue={totalRevenue}
-                            yesterdayTakeHome={yesterdayTakeHome}
                             onDailyExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
-                            onRefillClick={() => navigate('/ingredients', { state: { from: '/daily-report', tab: 'refill', refillScope: 'day' } })}
                         />
+
 
                         <div className="flex items-center gap-3 py-1 my-1 px-4">
                             <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
@@ -316,6 +322,17 @@ export default function DailyReportPage() {
                             products={products}
                             productExtras={productExtras}
                             ingredientUnits={ingredientUnits}
+                        />
+
+                        <FinancialFlow
+                            actualCash={shiftClosing?.actual_cash || 0}
+                            actualTransfer={shiftClosing?.actual_transfer || 0}
+                            dailyExpense={dailyExpense}
+                            refillTotal={refillTotal}
+                            yesterdayActualTotal={yesterdayActualTotal}
+                            yesterdayTakeHome={yesterdayTakeHome}
+                            onDailyExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                            onRefillClick={() => navigate('/ingredients', { state: { from: '/daily-report', tab: 'refill', refillScope: 'day' } })}
                         />
 
                         {/* only for manage */}

@@ -57,6 +57,29 @@ export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange
     const todayISO = new Date().toISOString().split('T')[0]
     const inputValue = customDate || todayISO
 
+    const handlePrevDay = () => {
+        if (!onCustomDateChange) return
+        const d = new Date(inputValue)
+        d.setDate(d.getDate() - 1)
+        const prevISO = d.toISOString().split('T')[0]
+        onCustomDateChange(prevISO)
+    }
+
+    const handleNextDay = () => {
+        if (!onCustomDateChange) return
+        if (inputValue >= todayISO) return
+        const d = new Date(inputValue)
+        d.setDate(d.getDate() + 1)
+        const nextISO = d.toISOString().split('T')[0]
+        if (nextISO >= todayISO) {
+            onCustomDateChange(null)
+        } else {
+            onCustomDateChange(nextISO)
+        }
+    }
+
+    const canGoForwardDay = inputValue < todayISO
+
     return (
         <header className="shrink-0 pt-6 pb-3 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col gap-3 px-4">
             {/* Row 1: Back / Title+Nav / Shift closing */}
@@ -73,20 +96,34 @@ export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange
                     <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Báo cáo</span>
                     {selectedRange === 'day' ? (
                         !isStaff ? (
-                            <div className="relative">
-                                <input
-                                    type="date"
-                                    value={inputValue}
-                                    onChange={(e) => {
-                                        if (e.target.value === todayISO) onCustomDateChange?.(null)
-                                        else onCustomDateChange?.(e.target.value)
-                                    }}
-                                    max={todayISO}
-                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                                />
-                                <span className="text-[12px] font-bold text-text/80 leading-none tabular-nums underline decoration-dashed decoration-primary/40 underline-offset-4 relative z-0 pointer-events-none">
-                                    {customDate ? `${customDate.split('-')[2]}/${customDate.split('-')[1]}/${customDate.split('-')[0]}` : subtitle}
-                                </span>
+                            <div className="flex items-center gap-1 pointer-events-auto mt-0.5">
+                                <button
+                                    onClick={handlePrevDay}
+                                    className="w-5 h-5 flex items-center justify-center rounded-full text-text-secondary hover:text-primary active:text-primary transition-colors"
+                                >
+                                    <ChevronLeft size={14} strokeWidth={2.5} />
+                                </button>
+                                <div className="relative flex items-center justify-center px-1">
+                                    <input
+                                        type="date"
+                                        value={inputValue}
+                                        onChange={(e) => {
+                                            if (e.target.value >= todayISO) onCustomDateChange?.(null)
+                                            else onCustomDateChange?.(e.target.value)
+                                        }}
+                                        max={todayISO}
+                                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                                    />
+                                    <span className="text-[12px] font-bold text-text/80 leading-none tabular-nums underline decoration-dashed decoration-primary/40 underline-offset-4 relative z-0 pointer-events-none">
+                                        {customDate ? `${customDate.split('-')[2]}/${customDate.split('-')[1]}/${customDate.split('-')[0]}` : subtitle}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={handleNextDay}
+                                    className={`w-5 h-5 flex items-center justify-center rounded-full transition-colors ${canGoForwardDay ? 'text-text-secondary hover:text-primary active:text-primary' : 'text-text-dim opacity-30 cursor-default'}`}
+                                >
+                                    <ChevronRight size={14} strokeWidth={2.5} />
+                                </button>
                             </div>
                         ) : (
                             <span className="text-[12px] font-bold text-text/80 leading-none tabular-nums">{subtitle}</span>

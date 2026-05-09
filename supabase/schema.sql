@@ -68,12 +68,6 @@ CREATE TABLE IF NOT EXISTS recipes (
   UNIQUE NULLS NOT DISTINCT (product_id, ingredient, address_id)
 );
 
--- Inventory (current stock)
-CREATE TABLE IF NOT EXISTS inventory (
-  ingredient TEXT PRIMARY KEY,
-  stock REAL NOT NULL DEFAULT 0
-);
-
 -- Ingredient costs (unit cost per ingredient, address_id NULL = global default)
 CREATE TABLE IF NOT EXISTS ingredient_costs (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
