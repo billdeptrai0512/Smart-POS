@@ -21,7 +21,7 @@ export default function InventoryRefillCard({
     const { ingredientConfigs = [] } = useProducts() || {};
     const [lastWeekItems, setLastWeekItems] = useState([]);
     const [isLoadingPast, setIsLoadingPast] = useState(false);
-    const [activeTab, setActiveTab] = useState('audit');
+    const [activeTab, setActiveTab] = useState('refill');
     const [expandedRows, setExpandedRows] = useState({});
     const [isLossExpanded, setIsLossExpanded] = useState(false);
     const [copied, setCopied] = useState(false);
@@ -213,16 +213,16 @@ export default function InventoryRefillCard({
             <div className="flex flex-col gap-3 border-b border-border/40 pb-3">
                 <div className="flex p-1 bg-surface-light rounded-[12px] gap-1 w-full">
                     <button
+                        onClick={() => setActiveTab('refill')}
+                        className={`flex-1 py-2.5 rounded-[10px] text-[13px] font-bold transition-all flex items-center justify-center gap-1 ${activeTab === 'refill' ? 'bg-primary/70 text-white shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                    >
+                        Cần bổ sung
+                    </button>
+                    <button
                         onClick={() => setActiveTab('audit')}
                         className={`flex-1 py-2.5 rounded-[10px] text-[13px] font-bold transition-all ${activeTab === 'audit' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
                     >
-                        Chênh lệch
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('refill')}
-                        className={`flex-1 py-2.5 rounded-[10px] text-[13px] font-bold transition-all flex items-center justify-center gap-1 ${activeTab === 'refill' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
-                    >
-                        Cần mua
+                        Thất thoát
                     </button>
                 </div>
             </div>
