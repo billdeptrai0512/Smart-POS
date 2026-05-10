@@ -96,6 +96,33 @@ export default function InventoryRefillCard({
         [todayOrderItems, recipes, extraIngredients, products, productExtras]
     );
 
+    const ingredientToProduct = useMemo(() => {
+        const sales = {};
+        todayOrderItems.forEach(i => {
+            sales[i.productId] = (sales[i.productId] || 0) + (i.qty || 1);
+        });
+
+        const map = {};
+        (recipes || []).forEach(r => {
+            if (!r.amount || r.amount <= 0) return;
+            const s = sales[r.product_id] || 0;
+            const cur = map[r.ingredient];
+            if (!cur || s > cur.sales) {
+                map[r.ingredient] = { productId: r.product_id, amountPerCup: r.amount, sales: s };
+            }
+        });
+        for (const ing of Object.keys(map)) {
+            const ref = map[ing];
+            const p = products.find(pp => pp.id === ref.productId);
+            if (!p?.name || ref.amountPerCup === 1) {
+                delete map[ing];
+                continue;
+            }
+            ref.productName = p.name.toLowerCase();
+        }
+        return map;
+    }, [recipes, products, todayOrderItems]);
+
     const mappedPastItems = useMemo(() =>
         lastWeekItems.map(i => ({
             productId: i.product_id, qty: i.quantity,
@@ -146,14 +173,33 @@ export default function InventoryRefillCard({
                 diffBg = 'bg-success/10';
             }
 
+            const ref = ingredientToProduct[item.ingredient];
+            let equivText = null;
+            if (ref && ref.amountPerCup > 0 && diff < 0) {
+                const cups = Math.round(Math.abs(diff) / ref.amountPerCup);
+                if (cups > 0) equivText = `≈ ${cups} ly ${ref.productName}`;
+            }
+
             return {
                 ...item, config, opening, restock, used, theoretical, actual, diff, diffValue,
-                diffText, diffColor, diffBg, unitCost, unit
+                diffText, diffColor, diffBg, unitCost, unit, equivText
             };
         });
 
+        rows.sort((a, b) => {
+            const getPriority = (diff) => {
+                if (diff === 0) return 1;
+                if (diff > 0) return 2;
+                return 3;
+            };
+            const pA = getPriority(a.diff);
+            const pB = getPriority(b.diff);
+            if (pA !== pB) return pA - pB;
+            return Math.abs(b.diffValue) - Math.abs(a.diffValue);
+        });
+
         return { rows, totalLossValue };
-    }, [shiftClosing, openingMap, todayEstimatedConsumption, ingredientConfigs]);
+    }, [shiftClosing, openingMap, todayEstimatedConsumption, ingredientConfigs, ingredientToProduct, ingredientUnits]);
 
     // Calculate aggregated refill data
     const refillData = useMemo(() => {
@@ -262,20 +308,23 @@ export default function InventoryRefillCard({
                                             <span className="text-[11px] font-medium text-text-secondary">
                                                 <span className="mx-1 text-border">•</span> Thực tế: {item.actual}
                                             </span>
+                                            <span className="text-[11px] font-bold text-danger/80">
+                                                {item.equivText && <span>{item.equivText}</span>}
+                                            </span>
 
                                         </div>
 
                                         <div className="flex flex-col items-end shrink-0 gap-1">
-                                            {Math.abs(item.diffValue) >= 1 && (
-                                                <span className={`text-[12px] font-black tabular-nums ${item.diffColor}`}>
-                                                    {item.diffValue < 0 ? '-' : '+'}{formatVND(Math.abs(item.diffValue))}
-                                                </span>
-                                            )}
                                             <div className={`px-2 py-0.5 rounded border border-transparent ${item.diff !== 0 ? item.diffBg + ' border-' + item.diffColor.replace('text-', '') + '/20' : ''}`}>
                                                 <span className={`text-[11px] font-black tabular-nums ${item.diffColor}`}>
                                                     {item.diffText}
                                                 </span>
                                             </div>
+                                            {Math.abs(item.diffValue) >= 1 && item.diffValue < 0 && (
+                                                <span className={`text-[11px] font-black tabular-nums ${item.diffColor}`}>
+                                                    -{formatVND(Math.abs(item.diffValue))}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
 
@@ -335,7 +384,7 @@ export default function InventoryRefillCard({
                                 onClick={() => setIsLossExpanded(!isLossExpanded)}
                             >
                                 <div className="flex items-center gap-1">
-                                    <span className="text-[12px] font-bold text-text-secondary">Tổng thất thoát ca:</span>
+                                    <span className="text-[12px] font-bold text-text-secondary">Tổng thất thoát ước tính:</span>
                                     <ChevronDown size={14} className={`text-text-dim transition-transform duration-200 ${isLossExpanded ? 'rotate-180' : ''}`} />
                                 </div>
                                 <span className="text-[14px] font-black text-danger tabular-nums">-{formatVND(auditData.totalLossValue)}</span>

@@ -275,23 +275,21 @@ export default function RangeLossCard({
                                         </span>
                                         <ChevronDown size={12} className={`text-text-dim shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
                                     </div>
-                                    {item.equivText && (
-                                        <span className="text-[10px] font-medium text-text-dim leading-tight truncate">
-                                            {item.equivText}
-                                        </span>
-                                    )}
+                                    <span className={`text-[11px] font-black tabular-nums mt-1 ${item.diffColor}`}>
+                                        {item.equivText && <span className="opacity-80 font-medium text-[10px]">{item.equivText}</span>}
+                                    </span>
                                 </div>
                                 <div className="flex flex-col items-end shrink-0 gap-1">
-                                    {moneyVal >= 1 && (
-                                        <span className={`text-[12px] font-black tabular-nums ${item.diffColor}`}>
-                                            {item.diffValue < 0 ? '-' : '+'}{formatVND(moneyVal)}
-                                        </span>
-                                    )}
                                     <div className={`px-2 py-0.5 rounded border border-transparent ${item.diffBg} border-${item.diffColor.replace('text-', '')}/20`}>
                                         <span className={`text-[11px] font-black tabular-nums ${item.diffColor}`}>
                                             {item.diffText}
                                         </span>
                                     </div>
+                                    {moneyVal >= 1 && item.diffValue < 0 && (
+                                        <span className={`text-[11px] font-black tabular-nums ${item.diffColor}`}>
+                                            -{formatVND(moneyVal)}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 
@@ -303,9 +301,9 @@ export default function RangeLossCard({
                                             <span className="text-[11px] font-medium text-text-secondary tabular-nums">{d.dateLabel}</span>
                                             <div className="flex items-center gap-2">
                                                 <span className={`text-[11px] font-bold tabular-nums ${d.dColor}`}>{d.dText}</span>
-                                                {Math.abs(d.diffValue) >= 1 && (
+                                                {Math.abs(d.diffValue) >= 1 && d.diffValue < 0 && (
                                                     <span className={`text-[11px] font-black tabular-nums ${d.dColor} min-w-[60px] text-right`}>
-                                                        {d.diffValue < 0 ? '-' : '+'}{formatVND(Math.abs(d.diffValue))}
+                                                        -{formatVND(Math.abs(d.diffValue))}
                                                     </span>
                                                 )}
                                             </div>

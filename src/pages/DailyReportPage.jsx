@@ -305,6 +305,19 @@ export default function DailyReportPage() {
                         />
 
 
+
+
+                        <FinancialFlow
+                            actualCash={shiftClosing?.actual_cash || 0}
+                            actualTransfer={shiftClosing?.actual_transfer || 0}
+                            dailyExpense={dailyExpense}
+                            refillTotal={refillTotal}
+                            yesterdayActualTotal={yesterdayActualTotal}
+                            yesterdayTakeHome={yesterdayTakeHome}
+                            onDailyExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                            onRefillClick={() => navigate('/ingredients', { state: { from: '/daily-report', tab: 'refill', refillScope: 'day' } })}
+                        />
+
                         <div className="flex items-center gap-3 py-1 my-1 px-4">
                             <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
                             <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tồn kho</span>
@@ -323,17 +336,6 @@ export default function DailyReportPage() {
                             productExtras={productExtras}
                             ingredientUnits={ingredientUnits}
                             isPastDate={!!customDate && new Date(customDate).toDateString() !== new Date().toDateString()}
-                        />
-
-                        <FinancialFlow
-                            actualCash={shiftClosing?.actual_cash || 0}
-                            actualTransfer={shiftClosing?.actual_transfer || 0}
-                            dailyExpense={dailyExpense}
-                            refillTotal={refillTotal}
-                            yesterdayActualTotal={yesterdayActualTotal}
-                            yesterdayTakeHome={yesterdayTakeHome}
-                            onDailyExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
-                            onRefillClick={() => navigate('/ingredients', { state: { from: '/daily-report', tab: 'refill', refillScope: 'day' } })}
                         />
 
                         {/* only for manage */}
