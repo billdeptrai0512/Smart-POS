@@ -265,7 +265,12 @@ export default function InventoryRefillCard({
 
                                         </div>
 
-                                        <div className="flex flex-col items-end shrink-0">
+                                        <div className="flex flex-col items-end shrink-0 gap-1">
+                                            {Math.abs(item.diffValue) >= 1 && (
+                                                <span className={`text-[12px] font-black tabular-nums ${item.diffColor}`}>
+                                                    {item.diffValue < 0 ? '-' : '+'}{formatVND(Math.abs(item.diffValue))}
+                                                </span>
+                                            )}
                                             <div className={`px-2 py-0.5 rounded border border-transparent ${item.diff !== 0 ? item.diffBg + ' border-' + item.diffColor.replace('text-', '') + '/20' : ''}`}>
                                                 <span className={`text-[11px] font-black tabular-nums ${item.diffColor}`}>
                                                     {item.diffText}

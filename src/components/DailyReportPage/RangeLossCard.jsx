@@ -28,8 +28,47 @@ export default function RangeLossCard({
     extraIngredients,
     ingredientUnits = {}
 }) {
-    const { ingredientConfigs = [] } = useProducts() || {};
-    const [isLossExpanded, setIsLossExpanded] = useState(false);
+    const { ingredientConfigs = [], products = [] } = useProducts() || {};
+    const [expandedRows, setExpandedRows] = useState({});
+    const toggleRow = (ingredient) => {
+        setExpandedRows(prev => ({ ...prev, [ingredient]: !prev[ingredient] }));
+    };
+
+    // For each ingredient, pick a "reference product" = sản phẩm bán chạy nhất
+    // có dùng nguyên liệu đó. Dùng để quy đổi hụt/dư → số ly tương đương,
+    // giúp user hình dung magnitude (vd: "≈ 33 ly cà phê sữa").
+    const ingredientToProduct = useMemo(() => {
+        const sales = {};
+        orders.forEach(o => {
+            if (o.deleted_at) return;
+            (o.order_items || []).forEach(i => {
+                sales[i.product_id] = (sales[i.product_id] || 0) + (i.quantity || 1);
+            });
+        });
+
+        const map = {};
+        (recipes || []).forEach(r => {
+            if (!r.amount || r.amount <= 0) return;
+            const s = sales[r.product_id] || 0;
+            const cur = map[r.ingredient];
+            // Prefer best-seller; fall back to first-seen recipe
+            if (!cur || s > cur.sales) {
+                map[r.ingredient] = { productId: r.product_id, amountPerCup: r.amount, sales: s };
+            }
+        });
+        // Resolve product names; drop entries whose product không tìm thấy hoặc 1:1 ratio
+        // (vd: nắp/ly — "≈ 220 ly cà phê sữa" cho "Dư 220 cái" không thêm thông tin)
+        for (const ing of Object.keys(map)) {
+            const ref = map[ing];
+            const p = products.find(pp => pp.id === ref.productId);
+            if (!p?.name || ref.amountPerCup === 1) {
+                delete map[ing];
+                continue;
+            }
+            ref.productName = p.name.toLowerCase();
+        }
+        return map;
+    }, [recipes, products, orders]);
 
     const auditData = useMemo(() => {
         if (!shiftClosings || shiftClosings.length === 0) return { rows: [], totalLossValue: 0 };
@@ -54,8 +93,19 @@ export default function RangeLossCard({
             dailyConsumption[dayStr] = calculateEstimatedConsumption(items, recipes, extraIngredients);
         }
 
-        // --- Step 2: Sort closings oldest → newest ---
-        const sortedClosings = [...shiftClosings].sort(
+        // --- Step 2: Keep only the LAST closing per calendar day, oldest → newest.
+        // Mỗi ngày có thể có nhiều ca (sáng/tối). dailyConsumption là tổng cả ngày,
+        // nếu audit từng ca sẽ bị đếm trùng tiêu hao. Daily audit (RPC LIMIT 1) cũng
+        // chỉ dùng ca cuối ngày — range giữ đúng convention đó để tổng = tổng daily.
+        const lastClosingPerDay = {};
+        for (const c of shiftClosings) {
+            const dayStr = new Date(c.closed_at).toLocaleDateString('sv-SE');
+            const prev = lastClosingPerDay[dayStr];
+            if (!prev || new Date(c.closed_at) > new Date(prev.closed_at)) {
+                lastClosingPerDay[dayStr] = c;
+            }
+        }
+        const sortedClosings = Object.values(lastClosingPerDay).sort(
             (a, b) => new Date(a.closed_at) - new Date(b.closed_at)
         );
 
@@ -120,109 +170,152 @@ export default function RangeLossCard({
                 const diffValue = diff * unitCost;
 
                 if (!totalLossPerIngredient[item.ingredient]) {
-                    totalLossPerIngredient[item.ingredient] = { diff: 0, diffValue: 0 };
+                    totalLossPerIngredient[item.ingredient] = { diff: 0, diffValue: 0, daily: [] };
                 }
 
                 totalLossPerIngredient[item.ingredient].diff += diff;
                 totalLossPerIngredient[item.ingredient].diffValue += diffValue;
+                totalLossPerIngredient[item.ingredient].daily.push({ dayStr, diff, diffValue });
 
                 if (diffValue < 0) totalLossValue += Math.abs(diffValue);
             });
         });
 
         // --- Step 5: Build display rows ---
+        // Card này chỉ quan tâm thất thoát (hụt). Bỏ row có net dư.
+        // Giữ row "Bù trừ" (net ≈ 0) nếu có ngày hụt — ngày hụt là anomaly thật.
         const rows = Object.entries(totalLossPerIngredient)
-            .filter(([_, data]) => Math.abs(data.diff) > 0.05)
+            .filter(([_, data]) => data.diff <= 0.05 && data.daily.some(d => d.diff < -0.05))
             .map(([ingredient, data]) => {
                 const unit = getIngredientUnit(ingredient, '', ingredientUnits);
                 const diff = Math.round(data.diff * 10) / 10;
+                const hasAnomaly = data.daily.some(d => Math.abs(d.diff) > 0.05);
                 let diffText, diffColor, diffBg;
 
-                if (diff < 0) {
+                if (diff < -0.05) {
                     diffText = `Hụt ${Math.abs(diff)} ${unit}`;
                     diffColor = 'text-danger';
                     diffBg = 'bg-danger/10';
-                } else if (diff > 0) {
+                } else if (diff > 0.05) {
                     diffText = `Dư ${diff} ${unit}`;
                     diffColor = 'text-warning';
                     diffBg = 'bg-warning/10';
+                } else if (hasAnomaly) {
+                    diffText = 'Bù trừ';
+                    diffColor = 'text-text-secondary';
+                    diffBg = 'bg-surface-light';
                 } else {
                     diffText = 'Khớp';
                     diffColor = 'text-success';
                     diffBg = 'bg-success/10';
                 }
 
+                // Sort daily entries chronologically, only keep anomalous days
+                const dailyAnomalies = data.daily
+                    .filter(d => Math.abs(d.diff) > 0.05)
+                    .sort((a, b) => a.dayStr.localeCompare(b.dayStr))
+                    .map(d => {
+                        let dText, dColor;
+                        if (d.diff < 0) {
+                            dText = `Hụt ${Math.abs(d.diff)} ${unit}`;
+                            dColor = 'text-danger';
+                        } else {
+                            dText = `Dư ${d.diff} ${unit}`;
+                            dColor = 'text-warning';
+                        }
+                        const [y, m, day] = d.dayStr.split('-');
+                        return { ...d, dateLabel: `${day}/${m}`, dText, dColor };
+                    });
+
+                // Quy đổi sang số ly tương đương dựa trên best-seller dùng nguyên liệu này
+                const ref = ingredientToProduct[ingredient];
+                let equivText = null;
+                if (ref && ref.amountPerCup > 0) {
+                    const cups = Math.round(Math.abs(diff) / ref.amountPerCup);
+                    if (cups > 0) equivText = `≈ ${cups} ly ${ref.productName}`;
+                }
+
                 return {
                     ingredient, diff,
                     diffValue: data.diffValue,
-                    diffText, diffColor, diffBg, unit
+                    diffText, diffColor, diffBg, unit,
+                    dailyAnomalies,
+                    equivText
                 };
             }).sort((a, b) => a.diffValue - b.diffValue);
 
         return { rows, totalLossValue };
-    }, [shiftClosings, prevShiftClosings, orders, recipes, extraIngredients, ingredientConfigs, ingredientUnits]);
+    }, [shiftClosings, prevShiftClosings, orders, recipes, extraIngredients, ingredientConfigs, ingredientUnits, ingredientToProduct]);
 
     if (!auditData.rows.length && auditData.totalLossValue === 0) return null;
 
     return (
-        <div className="bg-surface rounded-[20px] p-4 border border-border/60 shadow-sm flex flex-col gap-3">
-            <div className="flex flex-col gap-3 border-b border-border/40 pb-3">
-                <div className="flex items-center justify-center w-full">
-                    <span className="text-[13px] font-bold text-text uppercase tracking-widest opacity-80">Thất thoát trong kỳ</span>
-                </div>
+        <div className="bg-surface rounded-[20px] p-4 border border-border/60 shadow-sm flex flex-col gap-2.5">
+            <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
+                <span className="text-[12px] font-bold text-text uppercase tracking-widest opacity-80">Thất thoát trong kỳ</span>
+                {auditData.totalLossValue > 0 && (
+                    <span className="text-[14px] font-black text-danger tabular-nums">-{formatVND(auditData.totalLossValue)}</span>
+                )}
             </div>
 
-            <div className="flex flex-col">
-                <div className="space-y-3 pb-3">
-                    {auditData.rows.map(item => (
-                        <div key={item.ingredient} className="flex flex-col border-b border-border/20 last:border-0 pb-3 last:pb-0">
-                            <div className="flex items-start justify-between group">
-                                <div className="flex flex-col flex-1 pr-2">
-                                    <div className="flex items-center gap-1 mb-0.5">
-                                        <span className="text-[14px] font-bold text-text leading-tight">
+            <div className="flex flex-col space-y-2">
+                {auditData.rows.map(item => {
+                    const isExpanded = !!expandedRows[item.ingredient];
+                    const moneyVal = Math.abs(item.diffValue);
+                    return (
+                        <div key={item.ingredient} className="flex flex-col border-b border-border/20 last:border-0 pb-2 last:pb-0">
+                            <div
+                                className="flex items-center justify-between cursor-pointer group"
+                                onClick={() => toggleRow(item.ingredient)}
+                            >
+                                <div className="flex flex-col flex-1 pr-2 min-w-0">
+                                    <div className="flex items-center gap-1">
+                                        <span className="text-[13px] font-bold text-text leading-tight truncate">
                                             {ingredientLabel(item.ingredient)}
                                         </span>
+                                        <ChevronDown size={12} className={`text-text-dim shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
                                     </div>
+                                    {item.equivText && (
+                                        <span className="text-[10px] font-medium text-text-dim leading-tight truncate">
+                                            {item.equivText}
+                                        </span>
+                                    )}
                                 </div>
-                                <div className="flex flex-col items-end shrink-0">
-                                    <div className={`px-2 py-0.5 rounded border border-transparent ${item.diff !== 0 ? item.diffBg + ' border-' + item.diffColor.replace('text-', '') + '/20' : ''}`}>
+                                <div className="flex flex-col items-end shrink-0 gap-1">
+                                    {moneyVal >= 1 && (
+                                        <span className={`text-[12px] font-black tabular-nums ${item.diffColor}`}>
+                                            {item.diffValue < 0 ? '-' : '+'}{formatVND(moneyVal)}
+                                        </span>
+                                    )}
+                                    <div className={`px-2 py-0.5 rounded border border-transparent ${item.diffBg} border-${item.diffColor.replace('text-', '')}/20`}>
                                         <span className={`text-[11px] font-black tabular-nums ${item.diffColor}`}>
                                             {item.diffText}
                                         </span>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
-                </div>
 
-                {auditData.totalLossValue > 0 && (
-                    <div className="mt-2 flex flex-col">
-                        <div
-                            className="pt-3 border-t border-border/40 flex items-center justify-between cursor-pointer"
-                            onClick={() => setIsLossExpanded(!isLossExpanded)}
-                        >
-                            <div className="flex items-center gap-1">
-                                <span className="text-[12px] font-bold text-text-secondary">Tổng thất thoát trong kỳ:</span>
-                                <ChevronDown size={14} className={`text-text-dim transition-transform duration-200 ${isLossExpanded ? 'rotate-180' : ''}`} />
-                            </div>
-                            <span className="text-[14px] font-black text-danger tabular-nums">-{formatVND(auditData.totalLossValue)}</span>
+                            {isExpanded && item.dailyAnomalies.length > 0 && (
+                                <div className="mt-2 px-3 py-2 bg-surface-light rounded-[10px] border border-border/40 flex flex-col gap-1">
+                                    <span className="text-[9px] font-black text-text-dim uppercase mb-0.5">Chi tiết theo ngày</span>
+                                    {item.dailyAnomalies.map(d => (
+                                        <div key={d.dayStr} className="flex items-center justify-between">
+                                            <span className="text-[11px] font-medium text-text-secondary tabular-nums">{d.dateLabel}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`text-[11px] font-bold tabular-nums ${d.dColor}`}>{d.dText}</span>
+                                                {Math.abs(d.diffValue) >= 1 && (
+                                                    <span className={`text-[11px] font-black tabular-nums ${d.dColor} min-w-[60px] text-right`}>
+                                                        {d.diffValue < 0 ? '-' : '+'}{formatVND(Math.abs(d.diffValue))}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
-
-                        {isLossExpanded && (
-                            <div className="mt-3 px-3 py-2.5 bg-danger/5 rounded-[12px] border border-danger/10 flex flex-col gap-2">
-                                {auditData.rows.filter(r => r.diffValue < 0).map((r, i) => (
-                                    <div key={i} className="flex items-center justify-between">
-                                        <span className="text-[11px] font-medium text-text-secondary">{ingredientLabel(r.ingredient)}</span>
-                                        <span className="text-[11px] font-bold text-danger tabular-nums">
-                                            {r.diffText} = {formatVND(Math.abs(r.diffValue))}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                )}
+                    );
+                })}
             </div>
         </div>
     );
