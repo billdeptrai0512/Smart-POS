@@ -118,7 +118,7 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                 }) : []
         }))
 
-    const formattedExpenses = (todayExpenses || []).filter(e => !e.is_fixed).map(e => ({
+    const formattedExpenses = (todayExpenses || []).filter(e => !e.is_fixed && !e.is_refill).map(e => ({
         id: e.id,
         total: 0,
         cost: e.amount,

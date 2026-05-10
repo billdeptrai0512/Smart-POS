@@ -61,11 +61,16 @@ export default function IngredientDetailPage() {
     // Summary
     const summary = useMemo(() => {
         let totalSpent = 0, totalQty = 0
+        let qtyForAvg = 0
         history.forEach(e => {
             totalSpent += e.amount || 0
-            totalQty += e.metadata?.qty || 0
+            const qty = e.metadata?.qty || 0
+            totalQty += qty
+            if (!e.metadata?.adjustment) {
+                qtyForAvg += qty
+            }
         })
-        const avgPrice = totalQty > 0 ? Math.round(totalSpent / totalQty) : 0
+        const avgPrice = qtyForAvg > 0 ? Math.round(totalSpent / qtyForAvg) : 0
         return { totalSpent, totalQty, avgPrice, count: history.length }
     }, [history])
 
@@ -195,17 +200,17 @@ export default function IngredientDetailPage() {
 
                                     {/* Details */}
                                     <div className="flex flex-col flex-1 min-w-0">
-                                        <span className="text-[13px] font-bold text-text">
-                                            +{qty} {unit}
+                                        <span className={`text-[13px] font-bold ${qty > 0 ? 'text-success' : qty < 0 ? 'text-danger' : 'text-text'}`}>
+                                            {qty > 0 ? '+' : ''}{qty} {unit}
                                         </span>
                                         <span className="text-[11px] text-text-secondary truncate">
-                                            {entry.staff_name || 'Không rõ'} · {formatVND(unitPrice)}/{unit}
+                                            {entry.staff_name || 'Không rõ'} · {entry.metadata?.adjustment ? 'Hiệu chỉnh' : `${formatVND(unitPrice)}/${unit}`}
                                         </span>
                                     </div>
 
                                     {/* Amount */}
-                                    <span className="text-[14px] font-black text-danger tabular-nums shrink-0">
-                                        -{formatVND(entry.amount)}
+                                    <span className={`text-[14px] font-black tabular-nums shrink-0 ${entry.metadata?.adjustment ? 'text-text-secondary' : 'text-danger'}`}>
+                                        {entry.metadata?.adjustment ? '0đ' : `-${formatVND(entry.amount)}`}
                                     </span>
                                 </div>
                             )

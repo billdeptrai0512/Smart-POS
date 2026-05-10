@@ -148,11 +148,9 @@ export default function IngredientManagementPage() {
             .finally(() => setIsLoadingRefills(false))
     }, [activeTab, scope, offset, selectedAddress?.id, rangeStart, rangeEnd, todayExpenses])
 
-    // Adjustments (`metadata.adjustment=true`) là hiệu chỉnh tồn, không phải đi chợ thật → bỏ khỏi tab.
     const refillsByIngredient = useMemo(() => {
         const map = {}
         refills.forEach(e => {
-            if (e.metadata?.adjustment) return
             const ing = e.metadata?.ingredient
             if (!ing) return
             if (!map[ing]) map[ing] = { ingredient: ing, count: 0, totalQty: 0, totalSpent: 0 }
@@ -164,7 +162,7 @@ export default function IngredientManagementPage() {
     }, [refills])
 
     const rangeTotal = useMemo(
-        () => refills.reduce((s, e) => e.metadata?.adjustment ? s : s + (Number(e.amount) || 0), 0),
+        () => refills.reduce((s, e) => s + (Number(e.amount) || 0), 0),
         [refills]
     )
 
@@ -376,25 +374,8 @@ export default function IngredientManagementPage() {
                                     : 'bg-surface-light border-border/60 opacity-60 hover:opacity-100'
                                     }`}
                             >
-                                <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Đi chợ</span>
-                                {activeTab === 'refill' && (
-                                    <div className="flex items-center gap-1 mt-0.5" onClick={e => e.stopPropagation()}>
-                                        <button
-                                            onClick={() => setOffset(p => p - 1)}
-                                            className="w-5 h-5 flex items-center justify-center rounded-full text-text-secondary hover:text-primary transition-colors"
-                                        >
-                                            <ChevronLeft size={14} strokeWidth={2.5} />
-                                        </button>
-                                        <span className="text-[12px] font-bold text-text/80 leading-none tabular-nums capitalize">{rangeLabel}</span>
-                                        <button
-                                            onClick={() => canGoForward && setOffset(p => p + 1)}
-                                            disabled={!canGoForward}
-                                            className={`w-5 h-5 flex items-center justify-center rounded-full transition-colors ${canGoForward ? 'text-text-secondary hover:text-primary' : 'text-text-dim opacity-30 cursor-default'}`}
-                                        >
-                                            <ChevronRight size={14} strokeWidth={2.5} />
-                                        </button>
-                                    </div>
-                                )}
+                                <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Nhật ký</span>
+                                {/* <span className="text-[12px] font-bold text-text/80 leading-none mt-1 tabular-nums">Biến động kho</span> */}
                             </div>
                         </div>
                     )}
@@ -402,23 +383,41 @@ export default function IngredientManagementPage() {
 
                 {/* Đi chợ: range selector dưới tab strip */}
                 {!isSorting && activeTab === 'refill' && (
-                    <div className="grid grid-cols-3 gap-2">
-                        {[
-                            { key: 'week', label: 'Tuần này' },
-                            { key: 'day', label: 'Hôm nay' },
-                            { key: 'month', label: 'Tháng này' }
-                        ].map(s => (
+                    <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between bg-surface-light border border-border/60 rounded-[12px] px-1 py-1">
                             <button
-                                key={s.key}
-                                onClick={() => { setScope(s.key); setOffset(0) }}
-                                className={`py-2 rounded-[12px] text-[12px] font-black border transition-colors ${scope === s.key
-                                    ? 'bg-primary/10 border-primary/40 text-primary'
-                                    : 'bg-surface-light border-border/60 text-text-secondary hover:bg-border/30'
-                                    }`}
+                                onClick={() => setOffset(p => p - 1)}
+                                className="w-9 h-9 flex items-center justify-center rounded-[10px] text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all"
                             >
-                                {s.label}
+                                <ChevronLeft size={18} />
                             </button>
-                        ))}
+                            <span className="text-[13px] font-black text-text capitalize">{rangeLabel}</span>
+                            <button
+                                onClick={() => canGoForward && setOffset(p => p + 1)}
+                                disabled={!canGoForward}
+                                className={`w-9 h-9 flex items-center justify-center rounded-[10px] text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all disabled:opacity-20`}
+                            >
+                                <ChevronRight size={18} />
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                            {[
+                                { key: 'week', label: 'Tuần này' },
+                                { key: 'day', label: 'Hôm nay' },
+                                { key: 'month', label: 'Tháng này' }
+                            ].map(s => (
+                                <button
+                                    key={s.key}
+                                    onClick={() => { setScope(s.key); setOffset(0) }}
+                                    className={`py-2 rounded-[12px] text-[12px] font-black border transition-colors ${scope === s.key
+                                        ? 'bg-primary/10 border-primary/40 text-primary'
+                                        : 'bg-surface-light border-border/60 text-text-secondary hover:bg-border/30'
+                                        }`}
+                                >
+                                    {s.label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 )}
             </header>
@@ -509,13 +508,15 @@ export default function IngredientManagementPage() {
                     <div className="flex flex-col gap-3">
                         <div className="bg-surface rounded-[16px] border border-border/60 p-4 grid grid-cols-2 gap-3">
                             <div className="flex flex-col items-center">
-                                <span className="text-[10px] font-black text-text-secondary uppercase tracking-wider">Tổng đi chợ</span>
+                                <span className="text-[10px] font-black text-text-secondary uppercase tracking-wider">Cập nhật</span>
+                                <span className="text-[16px] font-black text-text tabular-nums mt-1">{refills.length} lần</span>
+                            </div>
+
+                            <div className="flex flex-col items-center">
+                                <span className="text-[10px] font-black text-text-secondary uppercase tracking-wider">Tổng cộng</span>
                                 <span className="text-[16px] font-black text-primary tabular-nums mt-1">{formatVND(rangeTotal)}</span>
                             </div>
-                            <div className="flex flex-col items-center">
-                                <span className="text-[10px] font-black text-text-secondary uppercase tracking-wider">Số lần</span>
-                                <span className="text-[16px] font-black text-text tabular-nums mt-1">{refills.length}</span>
-                            </div>
+
                         </div>
 
                         {isLoadingRefills || (scope === 'day' && offset === 0 && isLoadingHistory && refills.length === 0) ? (
@@ -552,6 +553,7 @@ export default function IngredientManagementPage() {
                                 })}
                             </div>
                         )}
+
                     </div>
                 )}
             </main>
