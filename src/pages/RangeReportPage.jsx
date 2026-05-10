@@ -11,6 +11,7 @@ import DayPerformanceChart from '../components/DailyReportPage/DayPerformanceCha
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import FinancialFlow from '../components/DailyReportPage/FinancialFlow'
+import RangeLossCard from '../components/DailyReportPage/RangeLossCard'
 import { Filter } from 'lucide-react'
 
 const RANGE_LABEL = { week: 'Tuần này', month: 'Tháng này' }
@@ -20,7 +21,7 @@ export default function RangeReportPage() {
     const [searchParams] = useSearchParams()
     const range = searchParams.get('range') || 'week'
 
-    const { products, recipes, ingredientCosts, extraIngredients, productExtras } = useProducts()
+    const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits } = useProducts()
     const { fixedCosts, handleLoadFixedCosts } = usePOS()
     const { selectedAddress } = useAddress()
     const { isStaff } = useAuth()
@@ -343,6 +344,22 @@ export default function RangeReportPage() {
                             dailyExpense={stats.dailyExpense}
                             onDailyExpenseClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'daily', expensesToView: expenses, isReadOnly: true } })}
                         />
+
+                        <div className="flex items-center gap-3 py-1 my-1 px-4">
+                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                            <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tồn kho</span>
+                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                        </div>
+
+                        <RangeLossCard
+                            orders={orders}
+                            shiftClosings={shiftClosings}
+                            prevShiftClosings={prevShiftClosings}
+                            recipes={recipes}
+                            extraIngredients={extraIngredients}
+                            ingredientUnits={ingredientUnits}
+                        />
+
                         <FinancialFlow
                             actualCash={stats.cashRevenue}
                             actualTransfer={stats.transferRevenue}

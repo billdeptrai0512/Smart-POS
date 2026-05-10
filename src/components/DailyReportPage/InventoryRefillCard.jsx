@@ -16,12 +16,13 @@ export default function InventoryRefillCard({
     selectedAddress,
     products = [],
     productExtras = {},
-    ingredientUnits = {}
+    ingredientUnits = {},
+    isPastDate = false
 }) {
     const { ingredientConfigs = [] } = useProducts() || {};
     const [lastWeekItems, setLastWeekItems] = useState([]);
     const [isLoadingPast, setIsLoadingPast] = useState(false);
-    const [activeTab, setActiveTab] = useState('refill');
+    const [activeTab, setActiveTab] = useState(isPastDate ? 'audit' : 'refill');
     const [expandedRows, setExpandedRows] = useState({});
     const [isLossExpanded, setIsLossExpanded] = useState(false);
     const [copied, setCopied] = useState(false);
@@ -31,7 +32,7 @@ export default function InventoryRefillCard({
     };
 
     useEffect(() => {
-        if (!selectedAddress?.id) return;
+        if (!selectedAddress?.id || isPastDate) return;
 
         // Cache key for exactly last week same day
         const today = new Date().toISOString().split('T')[0];
@@ -210,22 +211,30 @@ export default function InventoryRefillCard({
     return (
         <div className="bg-surface rounded-[20px] p-4 border border-border/60 shadow-sm flex flex-col gap-3">
             {/* Header & Tabs */}
-            <div className="flex flex-col gap-3 border-b border-border/40 pb-3">
-                <div className="flex p-1 bg-surface-light rounded-[12px] gap-1 w-full">
-                    <button
-                        onClick={() => setActiveTab('refill')}
-                        className={`flex-1 py-2.5 rounded-[10px] text-[13px] font-bold transition-all flex items-center justify-center gap-1 ${activeTab === 'refill' ? 'bg-primary/70 text-white shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
-                    >
-                        Cần bổ sung
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('audit')}
-                        className={`flex-1 py-2.5 rounded-[10px] text-[13px] font-bold transition-all ${activeTab === 'audit' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
-                    >
-                        Thất thoát
-                    </button>
+            {!isPastDate ? (
+                <div className="flex flex-col gap-3 border-b border-border/40 pb-3">
+                    <div className="flex p-1 bg-surface-light rounded-[12px] gap-1 w-full">
+                        <button
+                            onClick={() => setActiveTab('refill')}
+                            className={`flex-1 py-2.5 rounded-[10px] text-[13px] font-bold transition-all flex items-center justify-center gap-1 ${activeTab === 'refill' ? 'bg-primary/70 text-white shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                        >
+                            Cần bổ sung
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('audit')}
+                            className={`flex-1 py-2.5 rounded-[10px] text-[13px] font-bold transition-all ${activeTab === 'audit' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                        >
+                            Thất thoát
+                        </button>
+                    </div>
                 </div>
-            </div>
+            ) : (
+                <div className="flex flex-col gap-3 border-b border-border/40 pb-3">
+                    <div className="flex items-center justify-center w-full">
+                        <span className="text-[13px] font-bold text-text uppercase tracking-widest opacity-80">Thất thoát ca này</span>
+                    </div>
+                </div>
+            )}
 
             {/* Audit Tab */}
             {activeTab === 'audit' && (

@@ -314,14 +314,15 @@ export default function DailyReportPage() {
                         <InventoryRefillCard
                             shiftClosing={shiftClosing}
                             yesterdayClosing={yesterdayClosing}
-                            todayOrders={todayOrders}
-                            offlineToday={offlineToday}
+                            todayOrders={displayOrders}
+                            offlineToday={customDate ? [] : offlineToday}
                             recipes={recipes}
                             extraIngredients={extraIngredients}
                             selectedAddress={selectedAddress}
                             products={products}
                             productExtras={productExtras}
                             ingredientUnits={ingredientUnits}
+                            isPastDate={!!customDate && new Date(customDate).toDateString() !== new Date().toDateString()}
                         />
 
                         <FinancialFlow
