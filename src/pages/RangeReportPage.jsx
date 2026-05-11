@@ -345,6 +345,18 @@ export default function RangeReportPage() {
                             onDailyExpenseClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'daily', expensesToView: expenses, isReadOnly: true } })}
                         />
 
+                        <FinancialFlow
+                            actualCash={stats.cashRevenue}
+                            actualTransfer={stats.transferRevenue}
+                            dailyExpense={stats.dailyExpense}
+                            refillTotal={stats.refillTotal}
+                            yesterdayActualTotal={prevStats.actualTotal}
+                            yesterdayTakeHome={prevStats.takeHome}
+                            compareLabel={`So với ${range === 'week' ? 'tuần trước' : 'tháng trước'}`}
+                            onDailyExpenseClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'daily', expensesToView: expenses, isReadOnly: true } })}
+                            onRefillClick={() => navigate('/ingredients', { state: { from: `/range-report?range=${range}`, tab: 'refill', refillScope: range } })}
+                        />
+
                         <div className="flex items-center gap-3 py-1 my-1 px-4">
                             <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
                             <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tồn kho</span>
@@ -360,17 +372,7 @@ export default function RangeReportPage() {
                             ingredientUnits={ingredientUnits}
                         />
 
-                        <FinancialFlow
-                            actualCash={stats.cashRevenue}
-                            actualTransfer={stats.transferRevenue}
-                            dailyExpense={stats.dailyExpense}
-                            refillTotal={stats.refillTotal}
-                            yesterdayActualTotal={prevStats.actualTotal}
-                            yesterdayTakeHome={prevStats.takeHome}
-                            compareLabel={`So với ${range === 'week' ? 'tuần trước' : 'tháng trước'}`}
-                            onDailyExpenseClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'daily', expensesToView: expenses, isReadOnly: true } })}
-                            onRefillClick={() => navigate('/ingredients', { state: { from: `/range-report?range=${range}`, tab: 'refill', refillScope: range } })}
-                        />
+
 
                         {/* Section 3: Tài chính (manager only) */}
                         {!isStaff && (

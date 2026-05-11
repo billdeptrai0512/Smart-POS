@@ -304,9 +304,6 @@ export default function DailyReportPage() {
                             onDailyExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
                         />
 
-
-
-
                         <FinancialFlow
                             actualCash={shiftClosing?.actual_cash || 0}
                             actualTransfer={shiftClosing?.actual_transfer || 0}

@@ -251,11 +251,9 @@ export default function RangeLossCard({
 
     return (
         <div className="bg-surface rounded-[20px] p-4 border border-border/60 shadow-sm flex flex-col gap-2.5">
-            <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
+            <div className="flex items-center justify-center border-b border-border/40 pb-2.5">
                 <span className="text-[12px] font-bold text-text uppercase tracking-widest opacity-80">Thất thoát trong kỳ</span>
-                {auditData.totalLossValue > 0 && (
-                    <span className="text-[14px] font-black text-danger tabular-nums">-{formatVND(auditData.totalLossValue)}</span>
-                )}
+
             </div>
 
             <div className="flex flex-col space-y-2">
@@ -314,6 +312,18 @@ export default function RangeLossCard({
                         </div>
                     );
                 })}
+            </div>
+
+            <div className="mt-2 flex flex-col">
+                <div
+                    className="pt-3 border-t border-border/40 flex items-center justify-between cursor-pointer"
+                >
+                    <div className="flex items-center gap-1">
+                        <span className="text-[14px] font-bold text-text-secondary">Tổng cộng:</span>
+                    </div>
+                    <span className="text-[14px] font-black text-danger tabular-nums">-{formatVND(auditData.totalLossValue)}</span>
+                </div>
+
             </div>
         </div>
     );
