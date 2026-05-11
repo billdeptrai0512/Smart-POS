@@ -323,33 +323,107 @@ serve(async (req) => {
 | 4 | **Chỉ cho upgrade** (`null` → `basic` → `pro`), không downgrade giữa kỳ | Pro mid-period: pro-rate phần addon theo ngày còn lại của Basic |
 | 5 | **Status banner ở address card** (xem §6.C) — không banner header trên main app | KH thấy ngay từ Address Select |
 | 6 | **Admin override**: RPC `admin_set_subscription(address_id, tier, valid_to)` + UI riêng cho admin role | v1 cũng cần cho support thủ công |
+| 7 | **Mặc định OFF** — monetization controlled bằng global flag (xem §9). Build infra trước, bật khi đủ signal | Tránh charge user khi chưa đủ ổn |
 
 ---
 
-## 9. Implementation order
+## 9. Feature flag (rollout control)
+
+Monetization được wrap trong 1 **global kill switch**. Mặc định **OFF** trong toàn bộ
+giai đoạn build + soft testing. Khi ON, toàn bộ logic gate/trial/payment kích hoạt.
+
+### Behavior
+
+| Flag | `useEntitlement()` trả về | UI behavior |
+|---|---|---|
+| **OFF** (mặc định) | `{ tier: 'pro', validTo: '2099-12-31' }` cho mọi address | Mọi feature mở; không render UpsellPage/Sheet/banner; payment flow ẩn |
+| **ON** | Query DB như bình thường | Đầy đủ gate + trial + payment |
+
+Mục tiêu: dev/test feature trong môi trường giả lập "ai cũng Pro" — không cần CK,
+không cần OTP signup mỗi lần test. Khi flip ON, **chỉ thay đổi entitlement source**,
+không đụng feature code.
+
+### Implementation
+
+**Client** — env var build-time:
+```sh
+# .env.production / .env.local
+VITE_MONETIZATION_ENABLED=false
+```
+
+```js
+// src/hooks/useEntitlement.js
+const ENABLED = import.meta.env.VITE_MONETIZATION_ENABLED === 'true';
+
+export function useEntitlement() {
+    if (!ENABLED) {
+        return { tier: 'pro', validTo: '2099-12-31', loading: false };
+    }
+    // ... real query
+}
+```
+
+**Server** — DB config row (để admin flip không cần redeploy):
+```sql
+CREATE TABLE app_config (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+INSERT INTO app_config(key, value) VALUES ('monetization_enabled', 'false');
+```
+
+RPC `confirm_payment` check `app_config` đầu function — nếu OFF, từ chối với
+message "Monetization chưa được kích hoạt". Tránh data rác từ test webhook lẫn vào prod.
+
+### Rollout phases
+
+| Phase | Client flag | Server flag | Whitelist | Mô tả |
+|---|---|---|---|---|
+| **0 — Dev** (giờ) | OFF | OFF | — | Build infra, không charge ai |
+| **1 — Internal test** | ON | OFF | Owner's addresses | Owner test full flow với CK giả/admin override; webhook tắt |
+| **2 — Soft launch** | ON | ON | 3-5 trusted quán (admin grant Pro manual) | Thu phí thực, hỗ trợ thủ công, payment webhook live |
+| **3 — Public** | ON | ON | Toàn bộ | Mở tự đăng ký, marketing |
+
+Flip phase = đổi 1 env var (client) + 1 row trong `app_config` (server). Rollback nếu cần.
+
+### Signals để flip
+
+Phase 0 → 1: Implementation step 1-11 xong, owner test sub flow OK end-to-end.
+
+Phase 1 → 2: hit các signal ở "Khi nào charge" — core stable ≥ 6 tuần + 1 trong 3 validation signals (retention / WOM / demand pull).
+
+Phase 2 → 3: soft launch ≥ 1 tháng, conversion ≥ 50% trial→paid, churn < 20%/tháng.
+
+---
+
+## 10. Implementation order
 
 Tất cả thuộc cùng 1 đợt monetization rollout. Phone OTP và subscription đi cùng nhau —
 không có OTP thì không chống được trial abuse.
 
+**Build với flag OFF** (xem §9) — không user nào bị charge cho tới khi explicitly flip.
+
 | Bước | Nội dung | Phụ thuộc |
 |---|---|---|
-| **1** | Setup Twilio + Supabase Phone Auth, đổi signup flow sang phone OTP | — |
-| **2** | Schema: `trial_grants`, `address_subscriptions`, `payment_intents` + RPC tương ứng | 1 |
-| **3** | RPC `create_address` mở rộng: insert trial sub nếu phone chưa có trial_grant | 2 |
-| **4** | `useEntitlement` hook + `hasFeature` helper | 2 |
-| **5** | Component `<UpsellPage>` (full-screen) + `<UpsellSheet>` (bottom sheet) | 4 |
-| **6** | Status banner ở mỗi address card (AddressSelectPage) | 4 |
-| **7** | Gate Daily/Range report pages bằng `<UpsellPage>` cho `tier=null` | 5 |
-| **8** | Gate RangeLossCard + InventoryRefillCard audit tab bằng `<UpsellSheet>` cho `tier=basic` | 5 |
-| **9** | SePay Edge Function webhook + RPC `confirm_payment` atomic | 2 |
-| **10** | QR generation client-side + polling/realtime trên `payment_intents` | 9 |
-| **11** | Admin RPC + UI cho `admin_set_subscription` | 2 |
-| **12** | Migrate Twilio → eSMS/Stringee qua Edge Function (khi OTP volume > 100/tháng) | 1 |
+| **1** | Feature flag infra: env var `VITE_MONETIZATION_ENABLED` + `app_config` table + bypass logic trong `useEntitlement` | — |
+| **2** | Setup Twilio + Supabase Phone Auth, đổi signup flow sang phone OTP | — |
+| **3** | Schema: `trial_grants`, `address_subscriptions`, `payment_intents` + RPC tương ứng | 2 |
+| **4** | RPC `create_address` mở rộng: insert trial sub nếu phone chưa có trial_grant | 3 |
+| **5** | `useEntitlement` hook (đã có bypass từ bước 1) + `hasFeature` helper | 1, 3 |
+| **6** | Component `<UpsellPage>` (full-screen) + `<UpsellSheet>` (bottom sheet) | 5 |
+| **7** | Status banner ở mỗi address card (AddressSelectPage) | 5 |
+| **8** | Gate Daily/Range report pages bằng `<UpsellPage>` cho `tier=null` | 6 |
+| **9** | Gate RangeLossCard + InventoryRefillCard audit tab bằng `<UpsellSheet>` cho `tier=basic` | 6 |
+| **10** | SePay Edge Function webhook + RPC `confirm_payment` atomic (check `app_config`) | 3 |
+| **11** | QR generation client-side + polling/realtime trên `payment_intents` | 10 |
+| **12** | Admin RPC + UI cho `admin_set_subscription` | 3 |
+| **13** | Migrate Twilio → eSMS/Stringee qua Edge Function (khi OTP volume > 100/tháng) | 2 |
 
 Mỗi bước commit độc lập, có thể rollback nếu cần.
 
-**Bước 1-3 là nền móng** — không thể skip vì entitlement + trial đều phụ thuộc auth phone.
-Bước 12 là optimization sau scale.
+**Bước 1 đầu tiên** — đảm bảo mọi bước sau có bypass sẵn, không break dev experience.
+**Bước 2-4 là nền móng** — entitlement + trial đều phụ thuộc auth phone.
+**Bước 13** là optimization sau scale.
 
 ---
 
