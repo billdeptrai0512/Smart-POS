@@ -310,7 +310,7 @@ export default function ShiftClosingPage() {
             
             {showPaywall ? (
                 <div className="absolute inset-0 z-50 bg-bg">
-                    <UpsellPage backTo="/history" />
+                    <UpsellPage backTo="/history" successMessage="Dữ liệu chốt ca đã được lưu thành công!" />
                 </div>
             ) : (
                 <>

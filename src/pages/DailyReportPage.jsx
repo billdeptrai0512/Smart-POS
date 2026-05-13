@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { usePOS } from '../contexts/POSContext'
 import { useProducts } from '../contexts/ProductContext'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { calculateProductCost } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import { fetchDailyReportContext, fetchReportByDate } from '../services/orderService'
@@ -19,6 +19,8 @@ import UpsellPage from '../components/common/UpsellPage'
 
 export default function DailyReportPage() {
     const navigate = useNavigate()
+    const location = useLocation()
+    const backTo = location.state?.from || '/history'
     const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits } = useProducts()
     const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, fixedCosts } = usePOS()
     const { isStaff } = useAuth()
@@ -263,10 +265,14 @@ export default function DailyReportPage() {
         return yTakeHomeCash + yTakeHomeTransfer
     }, [yesterdayClosing, yesterdayExpensesData])
 
+    if (!entitlementLoading && !hasFeature(activeModules, 'reports')) {
+        return <UpsellPage required="basic" backTo="/history" />
+    }
+
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
             <ReportHeader
-                onBack={() => navigate('/history')}
+                onBack={() => navigate(backTo)}
                 onEditShiftClosing={() => navigate('/shift-closing')}
                 selectedRange="day"
                 onNavigateRange={(range) => {

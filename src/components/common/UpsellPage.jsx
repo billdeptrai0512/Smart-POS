@@ -13,7 +13,7 @@ import { supabase } from '../../lib/supabaseClient'
  *   required: 'basic' | 'pro'
  *   backTo:   path để nút Back navigate về (default: '/history')
  */
-export default function UpsellPage({ required = 'basic', backTo = '/history' }) {
+export default function UpsellPage({ required = 'basic', backTo = '/history', successMessage }) {
     const navigate = useNavigate()
     const { isAdmin } = useAuth()
     const { selectedAddress } = useAddress()
@@ -70,6 +70,13 @@ export default function UpsellPage({ required = 'basic', backTo = '/history' }) 
                     Nâng cấp
                 </span>
             </div>
+
+            {successMessage && (
+                <div className="mx-5 mb-2 bg-success/10 border border-success/20 rounded-xl px-4 py-3 flex items-start gap-3">
+                    <ShieldCheck size={20} className="text-success shrink-0 mt-0.5" />
+                    <span className="text-[13px] font-bold text-success leading-snug">{successMessage}</span>
+                </div>
+            )}
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-5 pb-32">

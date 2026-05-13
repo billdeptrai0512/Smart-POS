@@ -395,35 +395,16 @@ export default function RangeReportPage() {
                             <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
                         </div>
 
-                        {/* RangeLossCard — Pro only */}
-                        {hasFeature(activeModules, 'lossAudit') ? (
-                            <RangeLossCard
-                                orders={orders}
-                                shiftClosings={shiftClosings}
-                                prevShiftClosings={prevShiftClosings}
-                                recipes={recipes}
-                                extraIngredients={extraIngredients}
-                                ingredientUnits={ingredientUnits}
-                            />
-                        ) : (
-                            <button
-                                id="range-loss-upsell-card"
-                                onClick={() => setShowLossUpsell(true)}
-                                className="w-full bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 text-left hover:border-primary/30 active:scale-[0.99] transition-all"
-                            >
-                                <div className="flex items-center gap-3 mb-2">
-                                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
-                                        <Lock size={13} className="text-primary" />
-                                    </div>
-                                    <span className="text-[13px] font-black text-text">Kiểm kê thất thoát</span>
-                                    <span className="ml-auto text-[10px] font-black text-primary bg-primary/10 px-2 py-0.5 rounded-full">PRO</span>
-                                </div>
-                                <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    Theo dõi nguyên liệu thất thoát theo tuần/tháng. Nâng cấp Pro để mở khoá.
-                                </p>
-                                <p className="text-[12px] font-black text-primary mt-2">Nâng cấp Pro →</p>
-                            </button>
-                        )}
+                        <RangeLossCard
+                            orders={orders}
+                            shiftClosings={shiftClosings}
+                            prevShiftClosings={prevShiftClosings}
+                            recipes={recipes}
+                            extraIngredients={extraIngredients}
+                            ingredientUnits={ingredientUnits}
+                            isLocked={!hasFeature(activeModules, 'lossAudit')}
+                            onUnlockClick={() => setShowLossUpsell(true)}
+                        />
 
                         <UpsellSheet
                             open={showLossUpsell}

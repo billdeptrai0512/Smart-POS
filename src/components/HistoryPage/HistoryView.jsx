@@ -173,17 +173,6 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                             <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Nhật ký</span>
                             <span className="text-[12px] font-bold text-text/80 leading-none mt-1 tabular-nums">{totalCups} ly</span>
                         </div>
-
-                        {!isStaff && (
-                            <button
-                                onClick={() => navigate('/daily-report')}
-                                className="bg-success/5 border border-success/20 shadow-sm rounded-[14px] px-3 flex flex-col items-center justify-center gap-0.5 hover:bg-success/10 transition-all group"
-                                title="Xem báo cáo"
-                            >
-                                <BarChart2 size={16} className="text-success opacity-80 group-hover:opacity-100" />
-                                <span className="text-[9px] font-black text-success uppercase leading-none opacity-80 group-hover:opacity-100">Báo cáo</span>
-                            </button>
-                        )}
                     </div>
 
                     <button onClick={() => navigate('/recipes')}

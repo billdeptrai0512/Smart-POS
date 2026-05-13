@@ -78,6 +78,11 @@ export default function AddressSelectPage() {
         navigate('/pos', { replace: true })
     }
 
+    function handleSelectReport(addr) {
+        setSelectedAddress(addr)
+        navigate('/daily-report', { state: { from: '/addresses' } })
+    }
+
     async function handleCreateNew(name) {
         const addr = await createNewAddress(name)
         handleSelect(addr)
@@ -177,6 +182,7 @@ export default function AddressSelectPage() {
                         error={error}
                         setError={setError}
                         onSelect={handleSelect}
+                        onSelectReport={handleSelectReport}
                         onBackup={setBackupSource}
                         onRename={renameAddress}
                         onRemove={removeAddress}

@@ -26,7 +26,9 @@ export default function RangeLossCard({
     prevShiftClosings,
     recipes,
     extraIngredients,
-    ingredientUnits = {}
+    ingredientUnits = {},
+    isLocked = false,
+    onUnlockClick
 }) {
     const { ingredientConfigs = [], products = [] } = useProducts() || {};
     const [expandedRows, setExpandedRows] = useState({});
@@ -248,6 +250,32 @@ export default function RangeLossCard({
     }, [shiftClosings, prevShiftClosings, orders, recipes, extraIngredients, ingredientConfigs, ingredientUnits, ingredientToProduct]);
 
     if (!auditData.rows.length && auditData.totalLossValue === 0) return null;
+
+    if (isLocked) {
+        return (
+            <button
+                id="range-loss-upsell-card"
+                onClick={onUnlockClick}
+                className="w-full bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 text-left hover:border-primary/30 active:scale-[0.99] transition-all"
+            >
+                <div className="flex items-center gap-3 mb-2">
+                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Lock size={13} className="text-primary" />
+                    </div>
+                    <span className="text-[13px] font-black text-text">Kiểm kê thất thoát</span>
+                    <span className="ml-auto text-[10px] font-black text-primary bg-primary/10 px-2 py-0.5 rounded-full">PRO</span>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-border/40 mb-3">
+                    <span className="text-[13px] font-bold text-text">Tổng giá trị hao hụt ước tính</span>
+                    <span className="text-[16px] font-black text-danger tabular-nums">-{formatVND(auditData.totalLossValue)}</span>
+                </div>
+                <p className="text-[12px] text-text-secondary leading-relaxed">
+                    Theo dõi chi tiết nguyên liệu thất thoát theo từng ngày trong kỳ. Nâng cấp Pro để mở khoá.
+                </p>
+                <p className="text-[12px] font-black text-primary mt-2">Nâng cấp Pro →</p>
+            </button>
+        );
+    }
 
     return (
         <div className="bg-surface rounded-[20px] p-4 border border-border/60 shadow-sm flex flex-col gap-2.5">
