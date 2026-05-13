@@ -15,7 +15,7 @@ import StaffTab from '../components/AddressSelectPage/StaffTab'
 export default function AddressSelectPage() {
     const { addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading, fetchError } = useAddress()
     const { cupsMap, revenueMap, sessionsMap, staffList, staffLoading, statsLoading } = useAddressStats()
-    const { signOut, profile, isStaff, isAdmin } = useAuth()
+    const { signOut, profile, isStaff, isAdmin, isGuest } = useAuth()
     const navigate = useNavigate()
 
     const [activeTab, setActiveTab] = useState('branches')
@@ -151,6 +151,7 @@ export default function AddressSelectPage() {
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <AddressHeader
                 isStaff={isStaff}
+                isGuest={isGuest}
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
                 profile={profile}
@@ -187,7 +188,7 @@ export default function AddressSelectPage() {
                 )}
 
                 {/* ── STAFF TAB ── */}
-                {activeTab === 'staff' && !isStaff && (
+                {activeTab === 'staff' && !isStaff && !isGuest && (
                     <StaffTab
                         staffList={staffList}
                         staffLoading={staffLoading}

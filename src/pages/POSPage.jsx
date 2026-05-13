@@ -1,6 +1,7 @@
 import { usePOS } from '../contexts/POSContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
+import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { DAY_NAMES } from '../constants'
 
@@ -12,6 +13,7 @@ import Toast from '../components/POSPage/Toast'
 
 export default function POSPage() {
     const navigate = useNavigate()
+    const { isGuest } = useAuth()
     const { products, productExtras } = useProducts()
     const { selectedAddress } = useAddress()
     const {
@@ -42,7 +44,7 @@ export default function POSPage() {
                 dateOnly={dateOnly}
                 onOpenHistory={handleOpenHistory}
                 addressName={selectedAddress?.name}
-                onAddressClick={() => navigate('/addresses')}
+                onAddressClick={() => navigate(isGuest ? '/login' : '/addresses')}
                 lastOrder={lastOrder}
             />
 

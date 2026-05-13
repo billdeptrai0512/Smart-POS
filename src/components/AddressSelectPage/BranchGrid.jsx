@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import { formatVND } from '../../utils'
+import SubscriptionBadge from './SubscriptionBadge'
+import UpsellSheet from '../common/UpsellSheet'
 
 export default function BranchGrid({
     addresses, fetchError, cupsMap, revenueMap, sessionsMap, statsLoading,
@@ -19,6 +21,7 @@ export default function BranchGrid({
     const [editName, setEditName] = useState('')
     const [renaming, setRenaming] = useState(false)
     const [deletingAddressId, setDeletingAddressId] = useState(null)
+    const [upsellForAddress, setUpsellForAddress] = useState(null)  // address.id khi click gia hạn
     const submitGuardRef = useRef(false)
 
     async function handleRename(e, addrId) {
@@ -113,6 +116,11 @@ export default function BranchGrid({
                                             <span className="text-text font-black text-sm group-hover:text-primary transition-colors line-clamp-2 leading-tight truncate">{addr.name}</span>
                                             <ArrowRight size={20} strokeWidth={2.5} className="text-success shrink-0" />
                                         </div>
+                                        {/* Subscription status badge */}
+                                        <SubscriptionBadge
+                                            addressId={addr.id}
+                                            onRenewClick={() => setUpsellForAddress(addr.id)}
+                                        />
                                         {hasStats && (
                                             <div className="flex flex-col  gap-1 mt-2">
                                                 <span className="flex  items-center gap-1 text-text-secondary text-sm">
@@ -217,6 +225,13 @@ export default function BranchGrid({
             </div>
 
             <ErrorBanner message={error} small className="mb-3" />
+
+            {/* UpsellSheet — opens when user clicks a subscription banner */}
+            <UpsellSheet
+                open={!!upsellForAddress}
+                onClose={() => setUpsellForAddress(null)}
+                required="basic"
+            />
         </>
     )
 }

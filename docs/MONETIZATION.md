@@ -14,20 +14,20 @@ Một owner có nhiều xe (address) → mỗi xe trả phí riêng biệt.
 
 | Tier   | Giá / address / tháng | Bao gồm                                                          |
 |--------|----------------------:|------------------------------------------------------------------|
-| `null` | 0đ                    | POS + Shift closing (luôn hoạt động — kể cả khi quá hạn)         |
-| basic  | 88,888đ               | + Báo cáo: dòng tiền, tài chính, P&L, biểu đồ — KHÔNG có thất thoát |
-| pro    | 177,776đ              | + Module thất thoát (daily/range)                                |
+| `null` | 0đ                    | POS, Lịch sử, Menu, Công thức, Kho, Chốt ca                      |
+| basic  | 88,888đ               | + Báo cáo: số ly bán, dòng tiền, tài chính, bổ sung tồn kho      |
+| pro    | 88,888đ               | + Module báo cáo hao hụt (Loss Audit). Yêu cầu phải có Basic.    |
 
-**Pro = Basic + Addon thất thoát.** Không thể mua Addon mà không có Basic.
-Trong DB lưu duy nhất `tier ∈ ('basic','pro')` cho gọn — Pro implies Basic.
+**Pro là Addon của Basic.** Không thể mua gói Pro (hao hụt) nếu không mua gói Basic. Tổng chi phí nếu dùng Full là 177.776đ/tháng.
+Trong DB, người dùng có thể thanh toán riêng lẻ từng gói, nhưng UI sẽ block việc mua Pro nếu không có Basic.
 
-**Không có "Free tier" vĩnh viễn.** Khi sub hết hạn, app rớt về `tier = null` —
-mọi báo cáo bị khoá nhưng POS/chốt ca vẫn chạy (đảm bảo không gián đoạn vận hành).
+**Không có "Free tier" vĩnh viễn cho báo cáo.** Khi sub hết hạn, app rớt về `tier = null` —
+mọi báo cáo bị khoá nhưng các tính năng vận hành cốt lõi (POS, chốt ca, kho, công thức) vẫn chạy bình thường.
 
 ### Trial
 
-- **Mỗi phone (verified OTP) = 1 trial lifetime** = 7 ngày Pro miễn phí.
-- Trial gắn vào address ĐẦU TIÊN owner tạo. Address thứ 2 trở đi của cùng owner: full price ngay.
+- **Trial tự động 3 ngày** full tính năng (Basic + Pro) ngay khi tạo địa chỉ đầu tiên.
+- Không bind vào phone.
 - Hết trial: app rớt về `tier = null` cho tới khi user thanh toán.
 - Chống abuse: phone OTP bắt buộc lúc signup (xem §3).
 
@@ -95,11 +95,9 @@ User signup → verify OTP → INSERT auth.users với phone confirmed
 User tạo address đầu tiên
   ↓
 RPC create_address():
-    IF NOT EXISTS (SELECT 1 FROM trial_grants WHERE phone = user.phone) THEN
-        INSERT trial_grants(phone, address_id, expires_at = now() + interval '7 days');
-        INSERT address_subscriptions(tier='pro', valid_from=today, valid_to=today+7,
-                                      amount_paid=0, payment_intent_id=NULL);
-    END IF;
+    INSERT trial_grants(address_id, expires_at = now() + interval '3 days');
+    INSERT address_subscriptions(tier='basic', valid_from=today, valid_to=today+3, amount_paid=0);
+    INSERT address_subscriptions(tier='pro', valid_from=today, valid_to=today+3, amount_paid=0);
 ```
 
 **Edge case**: user xoá address rồi tạo lại — `trial_grants.phone` đã tồn tại, không trial lại.
@@ -167,14 +165,12 @@ Ngắn (~10 ký tự), gõ tay được, không trùng lẫn 0/O, l/I.
 CREATE OR REPLACE FUNCTION get_address_entitlement(p_address_id UUID)
 RETURNS TABLE(tier TEXT, valid_to DATE)
 LANGUAGE sql STABLE SECURITY INVOKER AS $$
-    SELECT tier, valid_to
+    SELECT tier, MAX(valid_to) as valid_to
     FROM address_subscriptions
     WHERE address_id = p_address_id
       AND valid_from <= CURRENT_DATE
       AND valid_to   >= CURRENT_DATE
-    ORDER BY (CASE tier WHEN 'pro' THEN 2 WHEN 'basic' THEN 1 END) DESC,
-             valid_to DESC
-    LIMIT 1;
+    GROUP BY tier;
 $$;
 ```
 
@@ -186,27 +182,30 @@ Trả NULL row khi không có sub active.
 // src/hooks/useEntitlement.js
 export function useEntitlement() {
     const { selectedAddress } = useAddress();
-    const [state, setState] = useState({ tier: null, validTo: null, loading: true });
+    const [state, setState] = useState({ activeModules: [], validToByModule: {}, loading: true });
 
     useEffect(() => {
         if (!selectedAddress?.id) return;
         supabase.rpc('get_address_entitlement', { p_address_id: selectedAddress.id })
-            .then(({ data }) => setState({
-                tier: data?.[0]?.tier || null,
-                validTo: data?.[0]?.valid_to || null,
-                loading: false
-            }));
+            .then(({ data }) => {
+                const rows = Array.isArray(data) ? data : (data ? [data] : []);
+                setState({
+                    activeModules: rows.map(r => r.tier),
+                    validToByModule: rows.reduce((acc, r) => ({ ...acc, [r.tier]: r.valid_to }), {}),
+                    loading: false
+                });
+            });
     }, [selectedAddress?.id]);
 
     return state;
 }
 
-export function hasFeature(tier, feature) {
+export function hasFeature(activeModules, feature) {
     const matrix = {
-        reports:    ['basic', 'pro'],
+        reports:    ['basic'],
         lossAudit:  ['pro'],
     };
-    return matrix[feature]?.includes(tier) || false;
+    return matrix[feature]?.some(t => activeModules.includes(t)) || false;
 }
 ```
 
@@ -396,34 +395,66 @@ Phase 2 → 3: soft launch ≥ 1 tháng, conversion ≥ 50% trial→paid, churn 
 
 ---
 
-## 10. Implementation order
+## 10. Implementation order & Tracker
 
-Tất cả thuộc cùng 1 đợt monetization rollout. Phone OTP và subscription đi cùng nhau —
-không có OTP thì không chống được trial abuse.
+Hoàn toàn khả thi để bắt đầu làm Feature Flag, Schema, Trial grant và UI Gate trước. Lúc này, do chưa có Phone OTP, việc cấp trial có thể tạm móc vào user ID hiện tại (sẽ refactor ở Phase 2). Hướng tiếp cận này giúp hoàn thiện được UX/UI và ra mắt nội bộ sớm.
 
-**Build với flag OFF** (xem §9) — không user nào bị charge cho tới khi explicitly flip.
+**Quy tắc cho Agent:** Đánh dấu `[x]` vào các task đã hoàn thành và commit cập nhật tài liệu này để các agent sau có thể tiếp nối dễ dàng.
 
-| Bước | Nội dung | Phụ thuộc |
-|---|---|---|
-| **1** | Feature flag infra: env var `VITE_MONETIZATION_ENABLED` + `app_config` table + bypass logic trong `useEntitlement` | — |
-| **2** | Setup Twilio + Supabase Phone Auth, đổi signup flow sang phone OTP | — |
-| **3** | Schema: `trial_grants`, `address_subscriptions`, `payment_intents` + RPC tương ứng | 2 |
-| **4** | RPC `create_address` mở rộng: insert trial sub nếu phone chưa có trial_grant | 3 |
-| **5** | `useEntitlement` hook (đã có bypass từ bước 1) + `hasFeature` helper | 1, 3 |
-| **6** | Component `<UpsellPage>` (full-screen) + `<UpsellSheet>` (bottom sheet) | 5 |
-| **7** | Status banner ở mỗi address card (AddressSelectPage) | 5 |
-| **8** | Gate Daily/Range report pages bằng `<UpsellPage>` cho `tier=null` | 6 |
-| **9** | Gate RangeLossCard + InventoryRefillCard audit tab bằng `<UpsellSheet>` cho `tier=basic` | 6 |
-| **10** | SePay Edge Function webhook + RPC `confirm_payment` atomic (check `app_config`) | 3 |
-| **11** | QR generation client-side + polling/realtime trên `payment_intents` | 10 |
-| **12** | Admin RPC + UI cho `admin_set_subscription` | 3 |
-| **13** | Migrate Twilio → eSMS/Stringee qua Edge Function (khi OTP volume > 100/tháng) | 2 |
+### Phase 1: Core Foundation & UI Gates
+*Mục tiêu: Xây dựng nền tảng DB, cấp quyền (dùng auth hiện tại tạm thời) và hoàn thiện các UI blocks.*
 
-Mỗi bước commit độc lập, có thể rollback nếu cần.
+- [x] **Bước 1 (Feature flag):** Thiết lập env var `VITE_MONETIZATION_ENABLED`, tạo table `app_config`, và thêm bypass logic mặc định OFF cho toàn app.
+  - `.env` → `VITE_MONETIZATION_ENABLED=false`
+  - `src/hooks/useEntitlement.js` → bypass: khi OFF trả `{ tier: 'pro', validTo: '2099-12-31', loading: false, enabled: false }`
+  - Migration: `supabase/migrations/20260511_monetization_phase1.sql`
 
-**Bước 1 đầu tiên** — đảm bảo mọi bước sau có bypass sẵn, không break dev experience.
-**Bước 2-4 là nền móng** — entitlement + trial đều phụ thuộc auth phone.
-**Bước 13** là optimization sau scale.
+- [x] **Bước 2 (Schema DB):** Tạo bảng `trial_grants`, `address_subscriptions`, `payment_intents` và RPC `get_address_entitlement`.
+  - File: `supabase/migrations/20260511_monetization_phase1.sql`
+  - RLS đã setup cho cả 4 bảng mới
+
+- [x] **Bước 3 (Trial grant & Hook):** Custom hook `useEntitlement` + helper `hasFeature` đã hoàn thiện.
+  - File: `src/hooks/useEntitlement.js`
+  - ⚠️ Trial grant RPC `create_address` chưa implement (cần Phase 2 — Phone OTP) — sẽ cấp trial thủ công qua `admin_set_subscription` ở Phase 3
+
+- [x] **Bước 4 (Gate Components):** Xây dựng component dùng chung: `<UpsellPage>` (full-screen) và `<UpsellSheet>` (bottom sheet).
+  - `src/components/common/UpsellPage.jsx` — full-screen gate, hỗ trợ `required='basic'|'pro'`
+  - `src/components/common/UpsellSheet.jsx` — bottom sheet gate, animate slide-up
+  - CTA thanh toán là placeholder; sẽ connect Phase 3 (QR + SePay)
+
+- [x] **Bước 5 (Gate Pages & Cards):**
+  - `DailyReportPage` → gate toàn trang bằng `<UpsellPage required="basic">` khi `tier=null`
+  - `RangeReportPage` → gate toàn trang tương tự; `RangeLossCard` bị ẩn/khóa khi `tier=basic` (Pro-only card placeholder)
+  - `InventoryRefillCard` → audit tab bị khóa khi `tier=basic`; click → `<UpsellSheet required="pro">`
+  - Prop `canAccessAudit` truyền từ DailyReportPage xuống InventoryRefillCard
+
+- [x] **Bước 6 (Status Banner):** Hiển thị Banner trạng thái gói cước ở AddressSelectPage.
+  - `src/components/AddressSelectPage/SubscriptionBadge.jsx` — badge per-address
+  - Tích hợp vào `BranchGrid.jsx`; click → `<UpsellSheet>` mở tại AddressSelectPage
+  - Khi `MONETIZATION_ENABLED=false` → badge hoàn toàn ẩn (zero render)
+
+**⚡ Trạng thái Phase 1: HOÀN THÀNH** — Tất cả UI gates hoạt động với flag OFF (mọi user = Pro), sẵn sàng flip ON khi cần.
+**📋 Cần làm tiếp (Phase 2):** Phone OTP → bind trial vào SĐT thật; sau đó Phase 3 → SePay webhook + QR payment.
+
+---
+
+*Cập nhật: 2026-05-11 (Phase 1 hoàn thành). Sửa khi mô hình thay đổi — KHÔNG để doc này lệch với code.*
+
+
+- [ ] **Bước 7 (Phone OTP):** Setup Twilio + Supabase Phone Auth. Chuyển đổi signup sang xác thực SĐT.
+- [ ] **Bước 8 (Bind Trial to Phone):** Cập nhật lại logic `create_address` ở Bước 3 để bind trial chặt vào `phone` thay vì account (đảm bảo 1 SĐT = 1 trial duy nhất).
+
+### Phase 3: Payment Automation (SePay) & Admin
+*Mục tiêu: Tự động hóa thanh toán, gia hạn, và công cụ quản trị tay.*
+
+- [ ] **Bước 9 (Webhook):** Setup SePay Edge Function webhook + RPC `confirm_payment` atomic (nhớ logic check `app_config` để an toàn test).
+- [ ] **Bước 10 (QR & Polling):** Sinh QR chuyển khoản phía client, tạo UI đợi thanh toán và thiết lập polling/realtime sub trên `payment_intents`.
+- [ ] **Bước 11 (Admin Control):** Viết RPC `admin_set_subscription` và tạo trang UI đơn giản cho Admin can thiệp gói cước thủ công.
+
+### Phase 4: Optimization
+*Mục tiêu: Tối ưu chi phí khi có lượng người dùng lớn.*
+
+- [ ] **Bước 12 (Migrate OTP Provider):** Chuyển từ Twilio sang eSMS/Stringee qua Edge Function khi OTP volume vượt mốc cần tối ưu.
 
 ---
 

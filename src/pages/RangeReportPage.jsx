@@ -6,13 +6,17 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { calculateProductCost, formatVND } from '../utils'
 import { supabase } from '../lib/supabaseClient'
+import { fetchReportByRange } from '../services/orderService'
 import ReportHeader, { getDateRange } from '../components/DailyReportPage/ReportHeader'
 import DayPerformanceChart from '../components/DailyReportPage/DayPerformanceChart'
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import FinancialFlow from '../components/DailyReportPage/FinancialFlow'
 import RangeLossCard from '../components/DailyReportPage/RangeLossCard'
-import { Filter } from 'lucide-react'
+import { Filter, Lock } from 'lucide-react'
+import { useEntitlement, hasFeature } from '../hooks/useEntitlement'
+import UpsellPage from '../components/common/UpsellPage'
+import UpsellSheet from '../components/common/UpsellSheet'
 
 const RANGE_LABEL = { week: 'Tuần này', month: 'Tháng này' }
 
@@ -25,7 +29,10 @@ export default function RangeReportPage() {
     const { fixedCosts, handleLoadFixedCosts } = usePOS()
     const { selectedAddress } = useAddress()
     const { isStaff } = useAuth()
+    const { activeModules, loading: entitlementLoading } = useEntitlement()
 
+    // ── All hooks must be declared before any conditional return ─────────────
+    const [showLossUpsell, setShowLossUpsell] = useState(false)
     const [selectedProductId, setSelectedProductId] = useState('all')
     const [offset, setOffset] = useState(0)
     const [orders, setOrders] = useState([])
@@ -49,12 +56,16 @@ export default function RangeReportPage() {
     // Cache fetched periods so navigating back doesn't re-fetch
     const fetchCache = useRef({})
 
+    // ── Gate: sau khi tất cả hooks đã khai báo ─────────────────────────────
+    // Moved to the bottom to respect Rules of Hooks
+
     useEffect(() => {
         if (selectedAddress?.id && fixedCosts.length === 0) handleLoadFixedCosts()
     }, [selectedAddress?.id])
 
     useEffect(() => {
         if (!selectedAddress?.id) return
+        if (!entitlementLoading && !hasFeature(activeModules, 'reports')) return // Prevent fetching if not entitled
         const key = `${selectedAddress.id}_${range}_${offset}`
         const cached = fetchCache.current[key]
 
@@ -73,17 +84,8 @@ export default function RangeReportPage() {
         const { start, end } = getDateRange(range, offset)
         const { start: prevStart, end: prevEnd } = getDateRange(range, offset - 1)
 
-        supabase.rpc('get_report_by_range', {
-            p_address_id: selectedAddress.id,
-            p_target_start: start.toISOString(),
-            p_target_end: end.toISOString(),
-            p_prev_start: prevStart.toISOString(),
-            p_prev_end: prevEnd.toISOString()
-        }).then(({ data, error }) => {
-            if (error) {
-                console.error('get_report_by_range error:', error)
-                return
-            }
+        fetchReportByRange(selectedAddress.id, start.toISOString(), end.toISOString(), prevStart.toISOString(), prevEnd.toISOString())
+        .then((data) => {
             const ords = data.target_orders || []
             const exps = data.target_expenses || []
             const closings = data.target_shift_closings || []
@@ -102,8 +104,10 @@ export default function RangeReportPage() {
             setPrevOrders(pOrds)
             setPrevExpenses(pExps)
             setPrevShiftClosings(pClosings)
-        }).finally(() => setIsLoading(false))
-    }, [selectedAddress?.id, range, offset])
+        })
+        .catch((error) => console.error('fetchReportByRange error:', error))
+        .finally(() => setIsLoading(false))
+    }, [selectedAddress?.id, range, offset, activeModules, entitlementLoading])
 
     const { days, start: periodStart, end: periodEnd } = useMemo(() => getDateRange(range, offset), [range, offset])
     const { days: prevDays } = useMemo(() => getDateRange(range, offset - 1), [range, offset])
@@ -243,6 +247,10 @@ export default function RangeReportPage() {
     const singleStats = selectedProduct && stats.productStats?.[selectedProductId] ? stats.productStats[selectedProductId] : null
     const displayRevenue = singleStats ? singleStats.revenue : stats.totalRevenue
 
+    if (!entitlementLoading && !hasFeature(activeModules, 'reports')) {
+        return <UpsellPage required="basic" backTo="/daily-report" />
+    }
+
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
             <ReportHeader
@@ -357,23 +365,6 @@ export default function RangeReportPage() {
                             onRefillClick={() => navigate('/ingredients', { state: { from: `/range-report?range=${range}`, tab: 'refill', refillScope: range } })}
                         />
 
-                        <div className="flex items-center gap-3 py-1 my-1 px-4">
-                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                            <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tồn kho</span>
-                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                        </div>
-
-                        <RangeLossCard
-                            orders={orders}
-                            shiftClosings={shiftClosings}
-                            prevShiftClosings={prevShiftClosings}
-                            recipes={recipes}
-                            extraIngredients={extraIngredients}
-                            ingredientUnits={ingredientUnits}
-                        />
-
-
-
                         {/* Section 3: Tài chính (manager only) */}
                         {!isStaff && (
                             <>
@@ -397,6 +388,51 @@ export default function RangeReportPage() {
                                 />
                             </>
                         )}
+
+                        <div className="flex items-center gap-3 py-1 my-1 px-4">
+                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                            <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tồn kho</span>
+                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                        </div>
+
+                        {/* RangeLossCard — Pro only */}
+                        {hasFeature(activeModules, 'lossAudit') ? (
+                            <RangeLossCard
+                                orders={orders}
+                                shiftClosings={shiftClosings}
+                                prevShiftClosings={prevShiftClosings}
+                                recipes={recipes}
+                                extraIngredients={extraIngredients}
+                                ingredientUnits={ingredientUnits}
+                            />
+                        ) : (
+                            <button
+                                id="range-loss-upsell-card"
+                                onClick={() => setShowLossUpsell(true)}
+                                className="w-full bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 text-left hover:border-primary/30 active:scale-[0.99] transition-all"
+                            >
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                                        <Lock size={13} className="text-primary" />
+                                    </div>
+                                    <span className="text-[13px] font-black text-text">Kiểm kê thất thoát</span>
+                                    <span className="ml-auto text-[10px] font-black text-primary bg-primary/10 px-2 py-0.5 rounded-full">PRO</span>
+                                </div>
+                                <p className="text-[12px] text-text-secondary leading-relaxed">
+                                    Theo dõi nguyên liệu thất thoát theo tuần/tháng. Nâng cấp Pro để mở khoá.
+                                </p>
+                                <p className="text-[12px] font-black text-primary mt-2">Nâng cấp Pro →</p>
+                            </button>
+                        )}
+
+                        <UpsellSheet
+                            open={showLossUpsell}
+                            onClose={() => setShowLossUpsell(false)}
+                            required="pro"
+                        />
+
+
+
 
                         <div className="flex flex-col items-center justify-center py-8 mt-4">
                             <a href="https://github.com/billdeptrai0512" target="_blank" rel="noopener noreferrer"

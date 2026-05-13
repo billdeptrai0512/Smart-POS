@@ -252,7 +252,7 @@ export default function RangeLossCard({
     return (
         <div className="bg-surface rounded-[20px] p-4 border border-border/60 shadow-sm flex flex-col gap-2.5">
             <div className="flex items-center justify-center border-b border-border/40 pb-2.5">
-                <span className="text-[12px] font-bold text-text uppercase tracking-widest opacity-80">Thất thoát trong kỳ</span>
+                <span className="text-[12px] font-bold text-text uppercase tracking-widest opacity-80">Hao hụt trong kỳ</span>
 
             </div>
 

@@ -11,7 +11,9 @@ import { insertShiftClosing, updateShiftClosing, fetchTodayShiftClosing, fetchYe
 import { supabase } from '../lib/supabaseClient'
 import { ingredientLabel, sortIngredients } from '../components/common/recipeUtils'
 import { useToast } from '../hooks/useToast'
+import { useEntitlement, hasFeature } from '../hooks/useEntitlement'
 import Toast from '../components/POSPage/Toast'
+import UpsellPage from '../components/common/UpsellPage'
 
 export default function ShiftClosingPage() {
     const navigate = useNavigate()
@@ -20,6 +22,7 @@ export default function ShiftClosingPage() {
     const { selectedAddress } = useAddress()
     const { toast, showError } = useToast()
     const { profile, isManager, isAdmin } = useAuth()
+    const { activeModules } = useEntitlement()
     const canUnlock = isManager || isAdmin
 
     // Load history if not loaded
@@ -35,6 +38,8 @@ export default function ShiftClosingPage() {
     const [actualTransfer, setActualTransfer] = useState('')
     const [note, setNote] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [isDirty, setIsDirty] = useState(false)
+    const [showPaywall, setShowPaywall] = useState(false)
     const [existingClosing, setExistingClosing] = useState(null)
     const [isLoadingExisting, setIsLoadingExisting] = useState(true)
 
@@ -181,12 +186,17 @@ export default function ShiftClosingPage() {
     const offlineToday = pending.filter(o => new Date(o.createdAt).toDateString() === todayStr)
 
     let systemTotalRevenue = 0
-    todayOrders.forEach(o => { systemTotalRevenue += o.total })
-    offlineToday.forEach(o => { systemTotalRevenue += o.total })
+    todayOrders.forEach(o => { 
+        if (!o.deleted_at && !o.deletedAt) systemTotalRevenue += o.total 
+    })
+    offlineToday.forEach(o => { 
+        if (!o.deleted_at && !o.deletedAt) systemTotalRevenue += o.total 
+    })
 
     // --- Note: estimatedConsumption calculation is intentionally removed here as the shift closing process relies on manual actuals.
 
     const handleOpeningChange = (ingredient, value) => {
+        setIsDirty(true)
         setOpeningInputs(prev => ({ ...prev, [ingredient]: value }))
         channelRef.current?.send({
             type: 'broadcast', event: 'sync-state',
@@ -195,6 +205,7 @@ export default function ShiftClosingPage() {
     }
 
     const handleOpeningLock = (ingredient, locked) => {
+        setIsDirty(true)
         setOpeningLocked(prev => ({ ...prev, [ingredient]: locked }))
         channelRef.current?.send({
             type: 'broadcast', event: 'sync-state',
@@ -203,6 +214,7 @@ export default function ShiftClosingPage() {
     }
 
     const handleInventoryChange = (ingredient, value) => {
+        setIsDirty(true)
         setInventoryInputs(prev => ({ ...prev, [ingredient]: value }))
         channelRef.current?.send({
             type: 'broadcast',
@@ -212,6 +224,7 @@ export default function ShiftClosingPage() {
     }
 
     const handleRestockChange = (ingredient, value) => {
+        setIsDirty(true)
         setRestockInputs(prev => ({ ...prev, [ingredient]: value }))
         channelRef.current?.send({
             type: 'broadcast',
@@ -278,7 +291,12 @@ export default function ShiftClosingPage() {
                 }
             }
 
-            navigate('/daily-report')
+            setIsDirty(false) // reset dirty state on successful save
+            if (hasFeature(activeModules, 'reports')) {
+                navigate('/daily-report', { replace: true })
+            } else {
+                setShowPaywall(true)
+            }
         } catch (err) {
             showError(err, 'Chốt ca')
         } finally {
@@ -289,23 +307,28 @@ export default function ShiftClosingPage() {
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
-            {/* Header */}
-            <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
+            
+            {showPaywall ? (
+                <div className="absolute inset-0 z-50 bg-bg">
+                    <UpsellPage backTo="/history" />
+                </div>
+            ) : (
+                <>
+                    {/* Header */}
+                    <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
                 <div className="flex items-center gap-3">
-                    {/* <button
-                        onClick={() => navigate('/history')}
+                    <button
+                        onClick={() => {
+                            if (isDirty) {
+                                if (!window.confirm('Bạn có thay đổi chưa lưu. Trở về sẽ làm mất các dữ liệu này. Tiếp tục?')) return;
+                            }
+                            window.history.length > 2 ? navigate(-1) : navigate('/history')
+                        }}
                         className="w-10 h-10 flex flex-col items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
                         title="Trở về"
                     >
                         <ArrowLeft size={20} strokeWidth={2.5} />
-                    </button> */}
-
-                    {/* <div className="flex flex-row gap-2 flex-1">
-                        <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
-                            <span className="text-[12px] font-black text-primary line-clamp-1">Chốt Ca</span>
-                            <span className="text-[12px] font-bold text-primary/80 leading-none mt-1 tabular-nums">{formatVND(systemTotalRevenue)}</span>
-                        </div>
-                    </div> */}
+                    </button>
 
                     <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
                         <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Chốt ca</span>
@@ -317,7 +340,11 @@ export default function ShiftClosingPage() {
                         disabled={isSubmitting || isLoadingHistory || isLoadingIngredients || isLoadingExisting}
                         className="w-10 h-10 flex shrink-0 flex-col items-center justify-center rounded-[14px] bg-success/10 border-border/60 transition-colors shadow-sm focus:outline-none"
                     >
-                        <Check size={20} className='text-success' strokeWidth={3} />
+                        {isSubmitting ? (
+                            <div className="w-5 h-5 border-2 border-success border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                            <Check size={20} className='text-success' strokeWidth={3} />
+                        )}
                     </button>
                 </div>
             </header>
@@ -352,10 +379,12 @@ export default function ShiftClosingPage() {
                                             value={actualCash}
                                             onChange={e => {
                                                 const val = formatVNDInput(e.target.value);
+                                                setIsDirty(true);
                                                 setActualCash(val);
                                                 channelRef.current?.send({ type: 'broadcast', event: 'sync-state', payload: { type: 'actualCash', value: val } }).catch(() => { });
                                             }}
-                                            className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none"
+                                            disabled={isSubmitting}
+                                            className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                                         />
                                         {actualCash && (
                                             <span className="text-[14px] font-medium text-text-secondary pr-3 shrink-0 pointer-events-none">đ</span>
@@ -374,10 +403,12 @@ export default function ShiftClosingPage() {
                                             value={actualTransfer}
                                             onChange={e => {
                                                 const val = formatVNDInput(e.target.value);
+                                                setIsDirty(true);
                                                 setActualTransfer(val);
                                                 channelRef.current?.send({ type: 'broadcast', event: 'sync-state', payload: { type: 'actualTransfer', value: val } }).catch(() => { });
                                             }}
-                                            className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none"
+                                            disabled={isSubmitting}
+                                            className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                                         />
                                         {actualTransfer && (
                                             <span className="text-[14px] font-medium text-text-secondary pr-3 shrink-0 pointer-events-none">đ</span>
@@ -421,8 +452,9 @@ export default function ShiftClosingPage() {
                                                             {showLockBtn && (
                                                                 <button
                                                                     type="button"
+                                                                    disabled={isSubmitting}
                                                                     onClick={() => handleOpeningLock(ing.ingredient, !isLocked)}
-                                                                    className={`transition-colors ${isLocked ? 'text-primary' : 'text-text-dim hover:text-primary'}`}
+                                                                    className={`transition-colors disabled:opacity-50 ${isLocked ? 'text-primary' : 'text-text-dim hover:text-primary'}`}
                                                                 >
                                                                     {isLocked ? <Lock size={10} strokeWidth={2.5} /> : <Unlock size={10} strokeWidth={2} />}
                                                                 </button>
@@ -434,8 +466,8 @@ export default function ShiftClosingPage() {
                                                                 placeholder="-"
                                                                 value={openingInputs[ing.ingredient] ?? (opening !== undefined && opening !== null ? String(opening) : '')}
                                                                 onChange={e => handleOpeningChange(ing.ingredient, e.target.value)}
-                                                                disabled={isLocked}
-                                                                className={`flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-bold text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isLocked ? 'text-primary cursor-not-allowed' : 'text-text'}`}
+                                                                disabled={isLocked || isSubmitting}
+                                                                className={`flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-bold text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isLocked ? 'text-primary cursor-not-allowed' : 'text-text'} disabled:opacity-50`}
                                                             />
                                                             <span className={`pr-1.5 text-[10px] font-medium shrink-0 ${isLocked ? 'text-primary/70' : 'text-text-dim'}`}>{unit}</span>
                                                         </div>
@@ -450,7 +482,8 @@ export default function ShiftClosingPage() {
                                                                 placeholder="-"
                                                                 value={restockInputs[ing.ingredient] || ''}
                                                                 onChange={e => handleRestockChange(ing.ingredient, e.target.value)}
-                                                                className="flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-medium text-text text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                disabled={isSubmitting}
+                                                                className="flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-medium text-text text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
                                                             />
                                                             <span className="pr-1.5 text-[10px] font-medium text-text-dim shrink-0">{unit}</span>
                                                         </div>
@@ -465,7 +498,8 @@ export default function ShiftClosingPage() {
                                                                 placeholder="-"
                                                                 value={inventoryInputs[ing.ingredient] || ''}
                                                                 onChange={e => handleInventoryChange(ing.ingredient, e.target.value)}
-                                                                className="flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-medium text-text text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                disabled={isSubmitting}
+                                                                className="flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-medium text-text text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
                                                             />
                                                             <span className="pr-1.5 text-[10px] font-medium text-text-dim shrink-0">{unit}</span>
                                                         </div>
@@ -491,18 +525,20 @@ export default function ShiftClosingPage() {
                                 value={note}
                                 onChange={e => {
                                     const val = e.target.value;
+                                    setIsDirty(true);
                                     setNote(val);
                                     channelRef.current?.send({ type: 'broadcast', event: 'sync-state', payload: { type: 'note', value: val } }).catch(() => { });
                                 }}
+                                disabled={isSubmitting}
                                 rows={3}
-                                className="w-full bg-surface border border-border/60 rounded-[20px] px-4 py-3 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors resize-none shadow-sm"
+                                className="w-full bg-surface border border-border/60 rounded-[20px] px-4 py-3 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors resize-none shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                             />
                         </div>
                     </>
                 )}
             </main>
-
-
+                </>
+            )}
         </div>
     )
 }

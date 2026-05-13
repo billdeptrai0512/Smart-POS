@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { useAuth } from './AuthContext'
 import { fetchAddresses, createAddress as apiCreateAddress, updateAddress as apiUpdateAddress, deleteAddress as apiDeleteAddress, upsertSession, updateAddressIngredientSort as apiUpdateAddressIngredientSort } from '../services/authService'
+import { getDemoAddress } from '../services/localRepository'
 import { Outlet } from 'react-router-dom'
 
 const AddressContext = createContext(null)
@@ -15,7 +16,7 @@ export function useAddress() {
 const normalizeName = (s) => (s || '').trim().replace(/\s+/g, ' ').toLowerCase()
 
 export function AddressProvider() {
-    const { profile } = useAuth()
+    const { profile, isGuest } = useAuth()
     const [addresses, setAddresses] = useState([])
     const [selectedAddress, setSelectedAddressState] = useState(null)
     const [loading, setLoading] = useState(true)
@@ -23,6 +24,14 @@ export function AddressProvider() {
 
     // Load addresses when profile is available
     useEffect(() => {
+        if (isGuest) {
+            const demo = getDemoAddress()
+            setAddresses([demo])
+            setSelectedAddressState(demo)
+            setLoading(false)
+            return
+        }
+
         if (!profile?.id) {
             setAddresses([])
             setLoading(false)
@@ -85,6 +94,7 @@ export function AddressProvider() {
     }, [profile])
 
     const createNewAddress = useCallback(async (name) => {
+        if (isGuest) throw new Error('Vui lòng đăng ký tài khoản để tạo quán mới!')
         if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể tạo địa chỉ')
         const cleanName = (name || '').trim().replace(/\s+/g, ' ')
         if (!cleanName) throw new Error('Tên địa chỉ không được để trống')
@@ -100,6 +110,7 @@ export function AddressProvider() {
     }, [profile, addresses])
 
     const renameAddress = useCallback(async (addressId, newName) => {
+        if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
         if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể sửa địa chỉ')
         const cleanName = (newName || '').trim().replace(/\s+/g, ' ')
         if (!cleanName) throw new Error('Tên địa chỉ không được để trống')
@@ -116,6 +127,7 @@ export function AddressProvider() {
     }, [profile, selectedAddress, addresses])
 
     const removeAddress = useCallback(async (addressId) => {
+        if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
         if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể xóa địa chỉ')
         await apiDeleteAddress(addressId)
         setAddresses(prev => prev.filter(a => a.id !== addressId))

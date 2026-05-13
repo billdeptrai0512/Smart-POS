@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CircleMinus, ArrowLeft, ArrowRight } from 'lucide-react'
+import { CircleMinus, ArrowLeft, ArrowRight, BarChart2 } from 'lucide-react'
 import { formatVND, calculateProductCost } from '../../utils'
 import { getPendingOrders, removePendingOrder } from '../../hooks/useOfflineSync'
 import { fetchTodayShiftClosing } from '../../services/orderService'
@@ -169,13 +169,21 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                     </button>
 
                     <div className="flex flex-row gap-2 flex-1">
-
-                        <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm  rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
+                        <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
                             <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Nhật ký</span>
                             <span className="text-[12px] font-bold text-text/80 leading-none mt-1 tabular-nums">{totalCups} ly</span>
-
                         </div>
 
+                        {!isStaff && (
+                            <button
+                                onClick={() => navigate('/daily-report')}
+                                className="bg-success/5 border border-success/20 shadow-sm rounded-[14px] px-3 flex flex-col items-center justify-center gap-0.5 hover:bg-success/10 transition-all group"
+                                title="Xem báo cáo"
+                            >
+                                <BarChart2 size={16} className="text-success opacity-80 group-hover:opacity-100" />
+                                <span className="text-[9px] font-black text-success uppercase leading-none opacity-80 group-hover:opacity-100">Báo cáo</span>
+                            </button>
+                        )}
                     </div>
 
                     <button onClick={() => navigate('/recipes')}
@@ -333,12 +341,12 @@ export default function HistoryView({ todayOrders, todayExpenses, recipes, produ
                     </div>
 
                     <button
-                        onClick={() => { navigate('/daily-report') }}
-                        className={`border rounded-[16px] px-5 flex flex-col items-center justify-center gap-1 shadow-sm hover:bg-border/30 active:scale-95 transition-all group bg-success/10 border-success/60`}
-                        title={"Báo cáo"}
+                        onClick={() => { navigate('/shift-closing') }}
+                        className={`border rounded-[16px] px-8 flex flex-col items-center justify-center gap-1 shadow-sm hover:bg-border/30 active:scale-95 transition-all group bg-primary/10 border-primary/60`}
+                        title={"Chốt ca"}
                     >
-                        <span className={`text-[12px] font-black uppercase whitespace-nowrap transition-colors text-success`}>
-                            Báo cáo
+                        <span className={`text-[12px] font-black uppercase whitespace-nowrap transition-colors text-primary`}>
+                            Chốt ca
                         </span>
                     </button>
                 </div>

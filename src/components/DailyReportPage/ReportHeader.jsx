@@ -54,23 +54,31 @@ export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange
     const canGoForward = offset < 0
 
     // Format customDate or today for input value
-    const todayISO = new Date().toISOString().split('T')[0]
+    const getLocalISO = (date = new Date()) => {
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    }
+    const todayISO = getLocalISO(new Date())
     const inputValue = customDate || todayISO
 
     const handlePrevDay = () => {
         if (!onCustomDateChange) return
-        const d = new Date(inputValue)
+        const parts = inputValue.split('-')
+        const d = new Date(parts[0], parts[1] - 1, parts[2])
         d.setDate(d.getDate() - 1)
-        const prevISO = d.toISOString().split('T')[0]
+        const prevISO = getLocalISO(d)
         onCustomDateChange(prevISO)
     }
 
     const handleNextDay = () => {
         if (!onCustomDateChange) return
         if (inputValue >= todayISO) return
-        const d = new Date(inputValue)
+        const parts = inputValue.split('-')
+        const d = new Date(parts[0], parts[1] - 1, parts[2])
         d.setDate(d.getDate() + 1)
-        const nextISO = d.toISOString().split('T')[0]
+        const nextISO = getLocalISO(d)
         if (nextISO >= todayISO) {
             onCustomDateChange(null)
         } else {

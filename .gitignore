@@ -35,3 +35,4 @@ PROJECT.md
 # Claude Code session state (per-machine)
 .claude/worktrees/
 .claude/settings.local.json
+.env*.local

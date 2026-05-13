@@ -4,7 +4,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import ErrorBanner from '../components/common/ErrorBanner'
 
 export default function LoginPage() {
-    const { signIn } = useAuth()
+    const { signIn, initGuestMode } = useAuth()
     const navigate = useNavigate()
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
@@ -12,6 +12,13 @@ export default function LoginPage() {
     const [isPasswordVerified, setIsPasswordVerified] = useState(false)
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
+    const [guestLoading, setGuestLoading] = useState(false)
+
+    async function handleGuest() {
+        setGuestLoading(true)
+        await initGuestMode()
+        navigate('/pos')
+    }
 
     async function handleSubmit(e) {
         e.preventDefault()
@@ -108,6 +115,25 @@ export default function LoginPage() {
                         {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
                     </button>
                 </form>
+
+                <div className="mt-6 relative flex items-center">
+                    <div className="flex-grow border-t border-border/40" />
+                    <span className="mx-3 text-xs text-text-secondary">hoặc</span>
+                    <div className="flex-grow border-t border-border/40" />
+                </div>
+
+                <button
+                    id="guest-mode-btn"
+                    type="button"
+                    onClick={handleGuest}
+                    disabled={guestLoading}
+                    className="mt-4 w-full py-3 rounded-[14px] border border-border/60 bg-surface text-text text-sm font-semibold hover:bg-surface-light active:bg-surface transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {guestLoading ? 'Đang tải thực đơn mẫu...' : '✨ Dùng thử miễn phí (Guest)'}
+                </button>
+                <p className="text-center text-text-secondary text-xs mt-2">
+                    Không cần đăng ký · Dữ liệu lưu trên thiết bị của bạn
+                </p>
 
 
 

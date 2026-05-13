@@ -1,10 +1,12 @@
 import { Building2, Shield, Users } from 'lucide-react'
 
-export default function AddressHeader({ isStaff, activeTab, setActiveTab, profile, dateOnly, setError, addressCount, staffCount, managerCount }) {
+export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTab, profile, dateOnly, setError, addressCount, staffCount, managerCount }) {
+    const showTabs = !isStaff && !isGuest;
+
     return (
         <header className="shrink-0 pt-6 pb-6 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)] relative z-20">
             <div className="px-6">
-                {!isStaff ? (
+                {showTabs ? (
                     <div className="grid grid-cols-2 gap-3">
                         {/* Card trái: user + Cơ sở tab */}
                         <button

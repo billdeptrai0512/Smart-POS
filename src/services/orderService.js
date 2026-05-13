@@ -1,9 +1,11 @@
 import { supabase } from '../lib/supabaseClient'
+import * as localRepo from './localRepository'
 
 
 
 // Fetch all products for the menu (purely branch isolated)
 export async function fetchProducts(addressId) {
+    if (localRepo.isGuest()) return localRepo.fetchLocalProducts(addressId)
     if (!supabase) return []
 
     let query = supabase.from('products').select('id, name, price, is_active, owner_address_id, sort_order, count_as_cup').eq('is_active', true)
@@ -35,6 +37,7 @@ export async function fetchProducts(addressId) {
 
 // Update product price directly (isolated clone architecture)
 export async function upsertProductPrice(productId, addressId, price) {
+    if (localRepo.isGuest()) return localRepo.updateLocalProductPrice(productId, price)
     if (!supabase) return
     const { error } = await supabase
         .from('products')
@@ -45,6 +48,7 @@ export async function upsertProductPrice(productId, addressId, price) {
 
 // Toggle whether a product counts toward daily cup total
 export async function updateProductCountAsCup(productId, countAsCup) {
+    if (localRepo.isGuest()) return localRepo.updateLocalProductCountAsCup(productId, countAsCup)
     if (!supabase) return
     const { error } = await supabase
         .from('products')
@@ -59,6 +63,21 @@ export async function updateProductCountAsCup(productId, countAsCup) {
 // back to the legacy client-side aggregation if the RPC isn't deployed yet
 // (so this code is safe to ship before the migration runs).
 export async function fetchTodayStats(addressId) {
+    if (localRepo.isGuest()) {
+        const orders = localRepo.fetchLocalOrders(addressId)
+        let revenue = 0, cups = 0
+        orders.forEach(o => {
+            if (!o.deleted_at) revenue += Number(o.total || 0)
+            const items = o.order_items || o.items || []
+            items.forEach(i => {
+                // In local mode, we don't have the products table join easily, 
+                // so we assume everything is a cup unless specified in seeding.
+                // For demo, this is fine.
+                cups += Number(i.quantity || 0)
+            })
+        })
+        return { revenue, cups }
+    }
     if (!supabase || !addressId) return { revenue: 0, cups: 0 }
 
     const { data, error } = await supabase.rpc('get_today_stats', { p_address_id: addressId })
@@ -97,6 +116,7 @@ export async function fetchTodayStats(addressId) {
 
 // Fetch all orders for today, newest first (optionally scoped by address)
 export async function fetchTodayOrders(addressId) {
+    if (localRepo.isGuest()) return localRepo.fetchLocalOrders(addressId)
     if (!supabase) return []
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -138,6 +158,7 @@ export async function fetchTodayOrders(addressId) {
 
 // Fetch today's expenses, newest first (optionally scoped by address)
 export async function fetchTodayExpenses(addressId) {
+    if (localRepo.isGuest()) return localRepo.fetchLocalExpenses(addressId)
     if (!supabase) return []
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -168,6 +189,7 @@ export async function fetchTodayExpenses(addressId) {
 // - paymentMethod: 'cash' | 'transfer' — determines which pot the refill came from
 // - metadata: JSONB object for structured data like `{ items: [{ingredient, qty, price}] }`
 export async function insertExpense(name, amount, addressId = null, isFixed = false, staffName = null, isRefill = false, paymentMethod = 'cash', metadata = {}) {
+    if (localRepo.isGuest()) return localRepo.insertLocalExpense({ name, amount, address_id: addressId, is_fixed: isFixed, staff_name: staffName, is_refill: isRefill, payment_method: paymentMethod, metadata })
     if (!supabase) throw new Error('No Supabase connection')
     const payload = { name, amount, is_fixed: isFixed, is_refill: isRefill, payment_method: paymentMethod, metadata }
     if (addressId) payload.address_id = addressId
@@ -184,6 +206,7 @@ export async function insertExpense(name, amount, addressId = null, isFixed = fa
 
 // Delete an expense
 export async function deleteExpense(expenseId) {
+    if (localRepo.isGuest()) return localRepo.deleteLocalExpense(expenseId)
     if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
         .from('expenses')
@@ -197,6 +220,7 @@ export async function deleteExpense(expenseId) {
 
 // Fetch all active fixed costs for an address
 export async function fetchFixedCosts(addressId) {
+    if (localRepo.isGuest()) return localRepo.fetchLocalFixedCosts(addressId)
     if (!supabase) return []
     const { data, error } = await supabase
         .from('fixed_costs')
@@ -213,6 +237,7 @@ export async function fetchFixedCosts(addressId) {
 
 // Insert a new fixed cost
 export async function insertFixedCost(name, amount, addressId) {
+    if (localRepo.isGuest()) return localRepo.insertLocalFixedCost({ name, amount, address_id: addressId })
     if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase
         .from('fixed_costs')
@@ -225,6 +250,7 @@ export async function insertFixedCost(name, amount, addressId) {
 
 // Update a fixed cost (name and/or amount)
 export async function updateFixedCost(id, updates) {
+    if (localRepo.isGuest()) return localRepo.updateLocalFixedCost(id, updates)
     if (!supabase) throw new Error('No Supabase connection')
     const payload = { updated_at: new Date().toISOString() }
     if (updates.name !== undefined) payload.name = updates.name
@@ -241,6 +267,7 @@ export async function updateFixedCost(id, updates) {
 
 // Soft-delete a fixed cost
 export async function deleteFixedCost(id) {
+    if (localRepo.isGuest()) return localRepo.deleteLocalFixedCost(id)
     if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
         .from('fixed_costs')
@@ -257,6 +284,7 @@ export async function fetchInventory() {
 
 // Fetch all recipes from Supabase (Pure isolated by address)
 export async function fetchAllRecipes(addressId) {
+    if (localRepo.isGuest()) return localRepo.fetchLocalRecipes(addressId)
     if (!supabase) return []
     let query = supabase.from('recipes').select('product_id, ingredient, amount, unit, address_id')
 
@@ -291,6 +319,15 @@ export async function fetchRecipes(productIds) {
 
 // Fetch ingredient costs + units in one query, return both shapes
 export async function fetchIngredientCostsAndUnits(addressId) {
+    if (localRepo.isGuest()) {
+        const rows = localRepo.fetchLocalIngredientCosts(addressId)
+        const costs = {}, units = {}
+        rows.forEach(r => {
+            costs[r.ingredient] = r.unit_cost
+            units[r.ingredient] = r.unit
+        })
+        return { costs, units, rows }
+    }
     if (!supabase) return { costs: {}, units: {}, rows: [] }
     let query = supabase.from('ingredient_costs').select('ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock')
 
@@ -336,6 +373,7 @@ export async function fetchIngredientCosts(addressId) {
 
 // Upsert a recipe row (insert or update ingredient amount for a product)
 export async function upsertRecipe(productId, ingredient, amount, addressId = null, unit = null) {
+    if (localRepo.isGuest()) return localRepo.upsertLocalRecipe({ product_id: productId, ingredient, amount, address_id: addressId, unit })
     if (!supabase) throw new Error('No Supabase connection')
 
     const payload = { product_id: productId, ingredient, amount }
@@ -350,6 +388,7 @@ export async function upsertRecipe(productId, ingredient, amount, addressId = nu
 
 // Delete a recipe row
 export async function deleteRecipeRow(productId, ingredient, addressId = null) {
+    if (localRepo.isGuest()) return localRepo.deleteLocalRecipeRow(productId, ingredient)
     if (!supabase) throw new Error('No Supabase connection')
 
     let query = supabase
@@ -367,6 +406,7 @@ export async function deleteRecipeRow(productId, ingredient, addressId = null) {
 
 // Upsert an ingredient cost
 export async function upsertIngredientCost(ingredient, unitCost, addressId = null, unit = null, opts = {}) {
+    if (localRepo.isGuest()) return localRepo.upsertLocalIngredientCost({ ingredient, unit_cost: unitCost, address_id: addressId, unit, ...opts })
     if (!supabase) throw new Error('No Supabase connection')
 
     const payload = { ingredient, unit_cost: unitCost }
@@ -385,15 +425,16 @@ export async function upsertIngredientCost(ingredient, unitCost, addressId = nul
 
 // Rename an ingredient key across all tables
 export async function renameIngredient(oldKey, newKey) {
+    if (localRepo.isGuest()) return localRepo.renameLocalIngredient(oldKey, newKey)
     if (!supabase) throw new Error('No Supabase connection')
     if (oldKey === newKey) return
-    await supabase.from('ingredient_costs').update({ ingredient: newKey }).eq('ingredient', oldKey)
-    await supabase.from('recipes').update({ ingredient: newKey }).eq('ingredient', oldKey)
-    await supabase.from('extra_ingredients').update({ ingredient: newKey }).eq('ingredient', oldKey)
+    const { error } = await supabase.rpc('rename_ingredient', { old_key: oldKey, new_key: newKey })
+    if (error) throw error
 }
 
 // Delete an ingredient cost entry (removes all rows for this ingredient)
 export async function deleteIngredientCost(ingredient, addressId = null) {
+    if (localRepo.isGuest()) return localRepo.deleteLocalIngredientCost(ingredient)
     if (!supabase) throw new Error('No Supabase connection')
     // Delete address-specific row if exists
     if (addressId) {
@@ -410,6 +451,7 @@ export async function deleteIngredientCost(ingredient, addressId = null) {
 
 // Create a new product and link to the current address
 export async function insertProduct(name, price, addressId = null) {
+    if (localRepo.isGuest()) return localRepo.insertLocalProduct({ name, price, owner_address_id: addressId })
     if (!supabase) throw new Error('No Supabase connection')
 
     const payload = { name, price }
@@ -436,6 +478,15 @@ export async function insertProduct(name, price, addressId = null) {
 // addressId kept for call-site clarity / future RLS scoping; today it's not
 // used because each address owns its own product rows.
 export async function removeProductFromAddress(productId, _addressId) {
+    if (localRepo.isGuest()) {
+        const products = localRepo.getGuestDataForSync().products;
+        const idx = products.findIndex(p => p.id === productId);
+        if (idx >= 0) {
+            products[idx].is_active = false;
+            localStorage.setItem('guest_products', JSON.stringify(products));
+        }
+        return true;
+    }
     if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase.from('products').update({ is_active: false }).eq('id', productId)
     if (error) throw error
@@ -444,6 +495,7 @@ export async function removeProductFromAddress(productId, _addressId) {
 
 // Update sort order for products at an address
 export async function updateProductSortOrder(addressId, orderedProductIds) {
+    if (localRepo.isGuest()) return localRepo.updateLocalProductSortOrder(orderedProductIds)
     if (!supabase) throw new Error('No Supabase connection')
     // Directly update native sort_order in products table
     const updates = orderedProductIds.map((productId, index) =>
@@ -459,6 +511,7 @@ export async function updateProductSortOrder(addressId, orderedProductIds) {
 
 // Fetch all product extras (Pure isolated)
 export async function fetchProductExtras(addressId) {
+    if (localRepo.isGuest()) return localRepo.fetchLocalProductExtras(addressId)
     if (!supabase) return {}
     let query = supabase.from('product_extras').select('id, product_id, name, price, address_id, sort_order, is_sticky').order('sort_order', { ascending: true, nullsFirst: false })
 
@@ -486,6 +539,7 @@ export async function fetchProductExtras(addressId) {
 
 // Add a new product extra
 export async function insertProductExtra(productId, name, price, addressId = null) {
+    if (localRepo.isGuest()) return localRepo.insertLocalProductExtra({ product_id: productId, name, price, address_id: addressId })
     if (!supabase) throw new Error('No Supabase connection')
     const payload = { product_id: productId, name, price }
     if (addressId) payload.address_id = addressId
@@ -511,6 +565,7 @@ export async function insertProductExtra(productId, name, price, addressId = nul
 
 // Update a product extra's name
 export async function updateProductExtraName(extraId, name) {
+    if (localRepo.isGuest()) return localRepo.updateLocalProductExtraName(extraId, name)
     if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
         .from('product_extras')
@@ -521,6 +576,7 @@ export async function updateProductExtraName(extraId, name) {
 
 // Update a product extra's price
 export async function updateProductExtraPrice(extraId, price) {
+    if (localRepo.isGuest()) return localRepo.updateLocalProductExtraPrice(extraId, price)
     if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
         .from('product_extras')
@@ -531,6 +587,7 @@ export async function updateProductExtraPrice(extraId, price) {
 
 // Duplicate a product extra (copy extra + all its extra_ingredients) with a new name
 export async function duplicateProductExtra(extraId, newName, addressId = null) {
+    if (localRepo.isGuest()) return localRepo.duplicateLocalProductExtra(extraId, newName, addressId)
     if (!supabase) throw new Error('No Supabase connection')
 
     const { data: src, error: e1 } = await supabase
@@ -566,6 +623,7 @@ export async function duplicateProductExtra(extraId, newName, addressId = null) 
 
 // Update sort_order for a list of extras
 export async function updateExtrasSortOrder(orderedExtraIds) {
+    if (localRepo.isGuest()) return localRepo.updateLocalExtrasSortOrder(orderedExtraIds)
     if (!supabase) throw new Error('No Supabase connection')
     const results = await Promise.all(
         orderedExtraIds.map((id, index) =>
@@ -578,6 +636,7 @@ export async function updateExtrasSortOrder(orderedExtraIds) {
 
 // Delete a product extra
 export async function updateProductExtraSticky(extraId, isSticky) {
+    if (localRepo.isGuest()) return localRepo.updateLocalProductExtraSticky(extraId, isSticky)
     if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
         .from('product_extras')
@@ -587,6 +646,7 @@ export async function updateProductExtraSticky(extraId, isSticky) {
 }
 
 export async function deleteProductExtra(extraId) {
+    if (localRepo.isGuest()) return localRepo.deleteLocalProductExtra(extraId)
     if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
         .from('product_extras')
@@ -600,6 +660,7 @@ export async function deleteProductExtra(extraId) {
 
 // Fetch extra ingredients scoped to a set of extra IDs (pass [] to skip, null to fetch all)
 export async function fetchExtraIngredients(extraIds = null) {
+    if (localRepo.isGuest()) return localRepo.fetchLocalExtraIngredients(extraIds)
     if (!supabase) return {}
     if (Array.isArray(extraIds) && extraIds.length === 0) return {}
 
@@ -621,6 +682,7 @@ export async function fetchExtraIngredients(extraIds = null) {
 
 // Upsert extra ingredient
 export async function upsertExtraIngredient(extraId, ingredient, amount, unit = null) {
+    if (localRepo.isGuest()) return localRepo.upsertLocalExtraIngredient({ extra_id: extraId, ingredient, amount, unit })
     if (!supabase) throw new Error('No Supabase connection')
     const payload = { extra_id: extraId, ingredient, amount }
     if (unit) payload.unit = unit
@@ -632,6 +694,7 @@ export async function upsertExtraIngredient(extraId, ingredient, amount, unit = 
 
 // Delete extra ingredient
 export async function deleteExtraIngredient(extraId, ingredient) {
+    if (localRepo.isGuest()) return localRepo.deleteLocalExtraIngredient(extraId, ingredient)
     if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
         .from('extra_ingredients')
@@ -646,6 +709,21 @@ export async function deleteExtraIngredient(extraId, ingredient) {
 // totalCost: tổng giá vốn của bill (snapshot)
 // costPerItem: Map<cartItemId, unitCost> giá vốn mỗi dòng (snapshot)
 export async function submitOrder(cart, total, paymentMethod = null, addressId = null, totalCost = 0, costPerItem = {}, staffName = null) {
+    if (localRepo.isGuest()) {
+        return localRepo.submitLocalOrder({
+            total,
+            total_cost: Math.round(totalCost),
+            payment_method: paymentMethod,
+            address_id: addressId,
+            staff_name: staffName,
+            order_items: cart.map(item => ({
+                product_id: item.productId,
+                quantity: item.quantity,
+                options: item.extras?.length > 0 ? item.extras.map(e => e.name).join(', ') : null,
+                unit_cost: Math.round(costPerItem[item.cartItemId] || 0)
+            }))
+        })
+    }
     if (!supabase) throw new Error('No Supabase connection')
 
     const orderPayload = {
@@ -678,6 +756,10 @@ export async function submitOrder(cart, total, paymentMethod = null, addressId =
 
 // Bulk submit offline orders in ONE HTTP Request
 export async function bulkSubmitOrders(ordersArray) {
+    if (localRepo.isGuest()) {
+        ordersArray.forEach(o => localRepo.submitLocalOrder(o))
+        return true
+    }
     if (!supabase) throw new Error('No Supabase connection')
 
     const payload = ordersArray.map(o => ({
@@ -710,6 +792,7 @@ export async function bulkSubmitOrders(ordersArray) {
 
 // Soft Delete an order
 export async function deleteOrder(orderId, staffName = null) {
+    if (localRepo.isGuest()) return localRepo.deleteLocalOrder(orderId, staffName)
     if (!supabase) throw new Error('No Supabase connection')
 
     const { error: orderError } = await supabase
@@ -726,6 +809,7 @@ export async function deleteOrder(orderId, staffName = null) {
 
 // Insert a shift closing record
 export async function insertShiftClosing(data) {
+    if (localRepo.isGuest()) return localRepo.upsertLocalShiftClosing(data)
     if (!supabase) throw new Error('No Supabase connection')
     const { data: row, error } = await supabase
         .from('shift_closings')
@@ -738,6 +822,7 @@ export async function insertShiftClosing(data) {
 
 // Update an existing shift closing record
 export async function updateShiftClosing(id, data) {
+    if (localRepo.isGuest()) return localRepo.upsertLocalShiftClosing(data)
     if (!supabase) throw new Error('No Supabase connection')
     const { data: row, error } = await supabase
         .from('shift_closings')
@@ -751,6 +836,11 @@ export async function updateShiftClosing(id, data) {
 
 // Fetch all orders for yesterday (start of yesterday to start of today), scoped by address
 export async function fetchYesterdayOrders(addressId) {
+    if (localRepo.isGuest()) {
+        const yesterday = new Date()
+        yesterday.setDate(yesterday.getDate() - 1)
+        return localRepo.fetchLocalOrders(addressId, yesterday.toISOString())
+    }
     if (!supabase) return []
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -787,6 +877,11 @@ export async function fetchYesterdayOrders(addressId) {
 
 // Fetch yesterday's expenses, scoped by address
 export async function fetchYesterdayExpenses(addressId) {
+    if (localRepo.isGuest()) {
+        const yesterday = new Date()
+        yesterday.setDate(yesterday.getDate() - 1)
+        return localRepo.fetchLocalExpenses(addressId, yesterday.toISOString())
+    }
     if (!supabase) return []
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -871,6 +966,7 @@ export async function fetchLatestOrder(addressId) {
 
 // Fetch today's shift closing for an address (latest one)
 export async function fetchTodayShiftClosing(addressId) {
+    if (localRepo.isGuest()) return localRepo.fetchLocalShiftClosing(addressId, new Date().toISOString())
     if (!supabase) return null
     const startOfDay = new Date()
     startOfDay.setHours(0, 0, 0, 0)
@@ -892,6 +988,7 @@ export async function fetchTodayShiftClosing(addressId) {
 
 // Fetch the most recent shift closing BEFORE today (for opening stock)
 export async function fetchYesterdayShiftClosing(addressId) {
+    if (localRepo.isGuest()) return localRepo.fetchLocalYesterdayShiftClosing(addressId)
     if (!supabase) return null
     const startOfDay = new Date()
     startOfDay.setHours(0, 0, 0, 0)
@@ -1012,6 +1109,7 @@ export async function fetchLastWeekSameDayOrderItems(addressId) {
 // Path nhanh: RPC `get_ingredient_stocks_v2` aggregate server-side (1 round-trip).
 // Fallback: legacy 3-query JS aggregate khi RPC chưa deploy (PGRST202 / 42883).
 export async function fetchIngredientStocks(addressId) {
+    if (localRepo.isGuest()) return localRepo.fetchLocalIngredientStocks(addressId)
     if (!supabase || !addressId) return []
 
     // Fast path
@@ -1108,6 +1206,10 @@ export async function fetchIngredientStocks(addressId) {
 // được sum vào Σrefill_qty của fetchIngredientStocks → warehouse +delta.
 // Không động unit_cost (giá vốn giữ nguyên). Filter `metadata.adjustment` ra khỏi tab Đi chợ ở client.
 export async function adjustIngredientStock(addressId, ingredient, delta, staffName) {
+    if (localRepo.isGuest()) {
+        const displayName = `Hiệu chỉnh tồn ${ingredient}`
+        return await insertExpense(displayName, 0, addressId, false, staffName, true, 'cash', { ingredient, qty: delta, adjustment: true })
+    }
     if (!supabase) throw new Error('No Supabase connection')
     if (!Number.isFinite(delta) || delta === 0) return null
     const displayName = `Hiệu chỉnh tồn ${ingredient}`
@@ -1125,6 +1227,14 @@ export async function adjustIngredientStock(addressId, ingredient, delta, staffN
 
 // Process a restock: updates COGS, creates expense, returns result
 export async function processIngredientRestock(addressId, ingredient, qty, totalCost, staffName) {
+    if (localRepo.isGuest()) {
+        // 1. Update unit cost
+        const unitCost = Number(qty) > 0 ? Math.round(Number(totalCost) / Number(qty)) : 0
+        await upsertIngredientCost(ingredient, unitCost, addressId)
+        // 2. Insert expense
+        const displayName = `Đi chợ: ${ingredient}`
+        return await insertExpense(displayName, totalCost, addressId, false, staffName, true, 'cash', { ingredient, qty, totalCost })
+    }
     if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase.rpc('process_ingredient_restock', {
         p_address_id: addressId,
@@ -1139,6 +1249,7 @@ export async function processIngredientRestock(addressId, ingredient, qty, total
 
 // Fetch all refill expenses (đi chợ) within a date range, all ingredients
 export async function fetchRefillExpensesInRange(addressId, fromDate, toDate) {
+    if (localRepo.isGuest()) return localRepo.fetchLocalExpenses(addressId, fromDate) // Simple mapping for now
     if (!supabase || !addressId) return []
     const { data, error } = await supabase
         .from('expenses')
@@ -1174,4 +1285,86 @@ export async function fetchIngredientRestockHistory(addressId, ingredient, fromD
     }
     // Filter by ingredient in metadata (client-side, since Supabase JSONB filter syntax varies)
     return (data || []).filter(e => e.metadata?.ingredient === ingredient)
+}
+
+// ---- Reports (Daily / Range) ----
+export async function fetchDailyReportContext(addressId) {
+    if (localRepo.isGuest()) {
+        const todayStr = new Date().toDateString()
+        const yesterday = new Date()
+        yesterday.setDate(yesterday.getDate() - 1)
+        const yesterdayStr = yesterday.toDateString()
+
+        return {
+            shift_closing: localRepo.fetchLocalShiftClosing(addressId, todayStr) || null,
+            yesterday_closing: localRepo.fetchLocalShiftClosing(addressId, yesterdayStr) || localRepo.fetchLocalYesterdayShiftClosing(addressId) || null,
+            yesterday_orders: localRepo.fetchLocalOrders(addressId, yesterdayStr),
+            yesterday_expenses: localRepo.fetchLocalExpenses(addressId, yesterdayStr)
+        }
+    }
+    if (!supabase) return {}
+    const { data, error } = await supabase.rpc('get_daily_report_context', { p_address_id: addressId })
+    if (error) throw error
+    return data || {}
+}
+
+export async function fetchReportByDate(addressId, dateStr) {
+    if (localRepo.isGuest()) {
+        const targetDateStr = new Date(dateStr).toDateString()
+        const targetDate = new Date(targetDateStr)
+        
+        const yesterday = new Date(targetDate)
+        yesterday.setDate(yesterday.getDate() - 1)
+        const yesterdayStr = yesterday.toDateString()
+
+        return {
+            shift_closing: localRepo.fetchLocalShiftClosing(addressId, targetDateStr) || null,
+            yesterday_closing: localRepo.fetchLocalShiftClosing(addressId, yesterdayStr) || null,
+            yesterday_orders: localRepo.fetchLocalOrders(addressId, yesterdayStr),
+            yesterday_expenses: localRepo.fetchLocalExpenses(addressId, yesterdayStr),
+            target_orders: localRepo.fetchLocalOrders(addressId, targetDateStr),
+            target_expenses: localRepo.fetchLocalExpenses(addressId, targetDateStr)
+        }
+    }
+    if (!supabase) return {}
+    const { data, error } = await supabase.rpc('get_report_by_date', { p_address_id: addressId, p_date: dateStr })
+    if (error) throw error
+    return data || {}
+}
+
+export async function fetchReportByRange(addressId, targetStart, targetEnd, prevStart, prevEnd) {
+    if (localRepo.isGuest()) {
+        const allOrders = localRepo.fetchAllLocalOrders(addressId)
+        const allExpenses = localRepo.fetchAllLocalExpenses(addressId)
+        const allClosings = localRepo.fetchAllLocalShiftClosings(addressId)
+        
+        const tS = new Date(targetStart).getTime()
+        const tE = new Date(targetEnd).getTime()
+        const pS = new Date(prevStart).getTime()
+        const pE = new Date(prevEnd).getTime()
+
+        const filterRange = (list, start, end) => list.filter(x => {
+            const t = new Date(x.created_at).getTime()
+            return t >= start && t <= end && x.address_id === addressId
+        })
+
+        return {
+            target_orders: filterRange(allOrders, tS, tE),
+            target_expenses: filterRange(allExpenses, tS, tE),
+            target_shift_closings: filterRange(allClosings, tS, tE),
+            prev_orders: filterRange(allOrders, pS, pE),
+            prev_expenses: filterRange(allExpenses, pS, pE),
+            prev_shift_closings: filterRange(allClosings, pS, pE)
+        }
+    }
+    if (!supabase) return {}
+    const { data, error } = await supabase.rpc('get_report_by_range', {
+        p_address_id: addressId,
+        p_target_start: targetStart,
+        p_target_end: targetEnd,
+        p_prev_start: prevStart,
+        p_prev_end: prevEnd
+    })
+    if (error) throw error
+    return data || {}
 }

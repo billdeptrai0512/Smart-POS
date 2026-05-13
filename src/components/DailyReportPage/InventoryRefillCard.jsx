@@ -2,9 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateRefillTarget } from '../../utils/inventory';
 import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils';
 import { fetchLastWeekSameDayOrderItems } from '../../services/orderService';
-import { ChevronDown, Copy, Check } from 'lucide-react';
+import { ChevronDown, Copy, Check, Lock } from 'lucide-react';
 import { useProducts } from '../../contexts/ProductContext';
 import { formatVND } from '../../utils';
+import UpsellSheet from '../common/UpsellSheet';
 
 export default function InventoryRefillCard({
     shiftClosing,
@@ -17,7 +18,8 @@ export default function InventoryRefillCard({
     products = [],
     productExtras = {},
     ingredientUnits = {},
-    isPastDate = false
+    isPastDate = false,
+    canAccessAudit = true,   // false khi tier === 'basic' (Pro feature)
 }) {
     const { ingredientConfigs = [] } = useProducts() || {};
     const [lastWeekItems, setLastWeekItems] = useState([]);
@@ -26,6 +28,7 @@ export default function InventoryRefillCard({
     const [expandedRows, setExpandedRows] = useState({});
     const [isLossExpanded, setIsLossExpanded] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [showAuditUpsell, setShowAuditUpsell] = useState(false);
 
     const toggleRow = (ingredient) => {
         setExpandedRows(prev => ({ ...prev, [ingredient]: !prev[ingredient] }));
@@ -188,9 +191,9 @@ export default function InventoryRefillCard({
 
         rows.sort((a, b) => {
             const getPriority = (diff) => {
-                if (diff === 0) return 1;
-                if (diff > 0) return 2;
-                return 3;
+                if (diff === 0) return 0;
+                if (diff > 0) return 1;
+                return 2;
             };
             const pA = getPriority(a.diff);
             const pB = getPriority(b.diff);
@@ -262,22 +265,34 @@ export default function InventoryRefillCard({
                     <div className="flex p-1 bg-surface-light rounded-[12px] gap-1 w-full">
                         <button
                             onClick={() => setActiveTab('refill')}
-                            className={`flex-1 py-2.5 rounded-[10px] text-[13px] font-bold transition-all flex items-center justify-center gap-1 ${activeTab === 'refill' ? 'bg-primary/70 text-white shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                            className={`flex-1 py-2.5 rounded-[10px] uppercase text-[13px] font-bold transition-all flex items-center justify-center gap-1 ${activeTab === 'refill' ? 'bg-primary/70 text-white shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
                         >
-                            Cần bổ sung
+                            Bổ sung
                         </button>
-                        <button
-                            onClick={() => setActiveTab('audit')}
-                            className={`flex-1 py-2.5 rounded-[10px] text-[13px] font-bold transition-all ${activeTab === 'audit' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
-                        >
-                            Thất thoát
-                        </button>
+                        {/* Audit tab — Pro only */}
+                        {canAccessAudit ? (
+                            <button
+                                onClick={() => setActiveTab('audit')}
+                                className={`flex-1 py-2.5 rounded-[10px] uppercase text-[13px] font-bold transition-all ${activeTab === 'audit' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                            >
+                                Hao hụt
+                            </button>
+                        ) : (
+                            <button
+                                id="audit-tab-upsell-btn"
+                                onClick={() => setShowAuditUpsell(true)}
+                                className="flex-1 py-2.5 rounded-[10px] uppercase text-[13px] font-bold transition-all text-text-secondary/50 flex items-center justify-center gap-1.5 hover:text-primary/70"
+                            >
+                                <Lock size={11} className="text-primary/60" />
+                                Hao hụt
+                            </button>
+                        )}
                     </div>
                 </div>
             ) : (
                 <div className="flex flex-col gap-3 border-b border-border/40 pb-3">
                     <div className="flex items-center justify-center w-full">
-                        <span className="text-[13px] font-bold text-text uppercase tracking-widest opacity-80">Thất thoát ca này</span>
+                        <span className="text-[13px] font-bold text-text uppercase tracking-widest opacity-80">Hao hụt trong ngày</span>
                     </div>
                 </div>
             )}
@@ -286,7 +301,12 @@ export default function InventoryRefillCard({
             {activeTab === 'audit' && (
                 <div className="flex flex-col">
                     <div className="space-y-3 pb-3">
-                        {auditData.rows.map(item => {
+                        {auditData.rows.length === 0 ? (
+                            <div className="py-4 text-center flex flex-col items-center gap-1">
+                                <span className="text-[14px] font-bold text-success">Tuyệt vời!</span>
+                                <span className="text-[12px] text-text-secondary">Chưa có dữ liệu tồn kho để đối chiếu.</span>
+                            </div>
+                        ) : auditData.rows.map(item => {
                             const isExpanded = !!expandedRows[item.ingredient];
 
                             return (
@@ -384,7 +404,7 @@ export default function InventoryRefillCard({
                                 onClick={() => setIsLossExpanded(!isLossExpanded)}
                             >
                                 <div className="flex items-center gap-1">
-                                    <span className="text-[12px] font-bold text-text-secondary">Tổng thất thoát ước tính:</span>
+                                    <span className="text-[12px] font-bold text-text-secondary">Tổng giá trị ước tính:</span>
                                     <ChevronDown size={14} className={`text-text-dim transition-transform duration-200 ${isLossExpanded ? 'rotate-180' : ''}`} />
                                 </div>
                                 <span className="text-[14px] font-black text-danger tabular-nums">-{formatVND(auditData.totalLossValue)}</span>
@@ -406,6 +426,13 @@ export default function InventoryRefillCard({
                     )}
                 </div>
             )}
+
+            {/* UpsellSheet for audit tab */}
+            <UpsellSheet
+                open={showAuditUpsell}
+                onClose={() => setShowAuditUpsell(false)}
+                required="pro"
+            />
 
             {/* Refill Tab */}
             {activeTab === 'refill' && (

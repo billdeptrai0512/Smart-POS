@@ -4,6 +4,7 @@ import { useProducts } from '../contexts/ProductContext'
 import { useNavigate } from 'react-router-dom'
 import { calculateProductCost } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
+import { fetchDailyReportContext, fetchReportByDate } from '../services/orderService'
 import ReportHeader from '../components/DailyReportPage/ReportHeader'
 import SalesCard from '../components/DailyReportPage/SalesCard'
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
@@ -13,30 +14,22 @@ import FinancialFlow from '../components/DailyReportPage/FinancialFlow'
 import { supabase } from '../lib/supabaseClient'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useEntitlement, hasFeature } from '../hooks/useEntitlement'
+import UpsellPage from '../components/common/UpsellPage'
 
 export default function DailyReportPage() {
     const navigate = useNavigate()
     const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits } = useProducts()
     const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, fixedCosts } = usePOS()
     const { isStaff } = useAuth()
+    const { activeModules, loading: entitlementLoading } = useEntitlement()
 
-    useEffect(() => {
-        if (todayOrders.length === 0 && !isLoadingHistory) handleLoadHistory()
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
-
+    // ── All hooks unconditional (Rules of Hooks) ──────────────────────────────
     const [selectedProductId, setSelectedProductId] = useState('all')
     const { selectedAddress } = useAddress()
     const [customDate, setCustomDate] = useState(null)
-    // debouncedDate: the date we actually fetch for (delayed 400ms after user stops picking)
     const [debouncedDate, setDebouncedDate] = useState(null)
     const debounceRef = useRef(null)
-
-    const handleCustomDateChange = (date) => {
-        setCustomDate(date) // update UI immediately
-        clearTimeout(debounceRef.current)
-        debounceRef.current = setTimeout(() => setDebouncedDate(date), 400)
-    }
     const [shiftClosing, setShiftClosing] = useState(null)
     const [yesterdayClosing, setYesterdayClosing] = useState(null)
     const [yesterdayOrders, setYesterdayOrders] = useState([])
@@ -44,6 +37,17 @@ export default function DailyReportPage() {
     const [isAsyncReady, setIsAsyncReady] = useState(false)
     const [apiOrders, setApiOrders] = useState([])
     const [apiExpenses, setApiExpenses] = useState([])
+
+    useEffect(() => {
+        if (todayOrders.length === 0 && !isLoadingHistory) handleLoadHistory()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    const handleCustomDateChange = (date) => {
+        setCustomDate(date)
+        clearTimeout(debounceRef.current)
+        debounceRef.current = setTimeout(() => setDebouncedDate(date), 400)
+    }
 
     // Computed display data
     const displayOrders = debouncedDate ? apiOrders : todayOrders
@@ -55,20 +59,19 @@ export default function DailyReportPage() {
         setIsAsyncReady(false)
         if (!debouncedDate) {
             // Today view: 1 RPC instead of 4 calls
-            supabase.rpc('get_daily_report_context', { p_address_id: selectedAddress.id })
-                .then(({ data, error }) => {
-                    if (error) { console.error('get_daily_report_context error:', error); return }
+            fetchDailyReportContext(selectedAddress.id)
+                .then((data) => {
                     setShiftClosing(data?.shift_closing || null)
                     setYesterdayClosing(data?.yesterday_closing || null)
                     setYesterdayOrders(data?.yesterday_orders || [])
                     setYesterdayExpensesData(data?.yesterday_expenses || [])
                 })
+                .catch((error) => console.error('fetchDailyReportContext error:', error))
                 .finally(() => setIsAsyncReady(true))
         } else {
             // Custom date view: 1 RPC instead of 6 calls
-            supabase.rpc('get_report_by_date', { p_address_id: selectedAddress.id, p_date: debouncedDate })
-                .then(({ data, error }) => {
-                    if (error) { console.error('get_report_by_date error:', error); return }
+            fetchReportByDate(selectedAddress.id, debouncedDate)
+                .then((data) => {
                     setShiftClosing(data?.shift_closing || null)
                     setYesterdayClosing(data?.yesterday_closing || null)
                     setYesterdayOrders(data?.yesterday_orders || [])
@@ -76,6 +79,7 @@ export default function DailyReportPage() {
                     setApiOrders(data?.target_orders || [])
                     setApiExpenses(data?.target_expenses || [])
                 })
+                .catch((error) => console.error('fetchReportByDate error:', error))
                 .finally(() => setIsAsyncReady(true))
         }
     }, [selectedAddress?.id, debouncedDate])
@@ -315,26 +319,6 @@ export default function DailyReportPage() {
                             onRefillClick={() => navigate('/ingredients', { state: { from: '/daily-report', tab: 'refill', refillScope: 'day' } })}
                         />
 
-                        <div className="flex items-center gap-3 py-1 my-1 px-4">
-                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                            <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tồn kho</span>
-                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                        </div>
-
-                        <InventoryRefillCard
-                            shiftClosing={shiftClosing}
-                            yesterdayClosing={yesterdayClosing}
-                            todayOrders={displayOrders}
-                            offlineToday={customDate ? [] : offlineToday}
-                            recipes={recipes}
-                            extraIngredients={extraIngredients}
-                            selectedAddress={selectedAddress}
-                            products={products}
-                            productExtras={productExtras}
-                            ingredientUnits={ingredientUnits}
-                            isPastDate={!!customDate && new Date(customDate).toDateString() !== new Date().toDateString()}
-                        />
-
                         {/* only for manage */}
                         {!isStaff && (
                             <>
@@ -357,6 +341,29 @@ export default function DailyReportPage() {
                                 />
                             </>
                         )}
+
+                        <div className="flex items-center gap-3 py-1 my-1 px-4">
+                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                            <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tồn kho</span>
+                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                        </div>
+
+                        <InventoryRefillCard
+                            shiftClosing={shiftClosing}
+                            yesterdayClosing={yesterdayClosing}
+                            todayOrders={displayOrders}
+                            offlineToday={customDate ? [] : offlineToday}
+                            recipes={recipes}
+                            extraIngredients={extraIngredients}
+                            selectedAddress={selectedAddress}
+                            products={products}
+                            productExtras={productExtras}
+                            ingredientUnits={ingredientUnits}
+                            isPastDate={!!customDate && new Date(customDate).toDateString() !== new Date().toDateString()}
+                            canAccessAudit={hasFeature(activeModules, 'lossAudit')}
+                        />
+
+
                         {/* only for manager  */}
 
 

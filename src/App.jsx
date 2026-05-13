@@ -36,11 +36,11 @@ function PageLoading() {
   )
 }
 
-// Protected route: redirects to /login if not authenticated
+// Protected route: allows both authenticated users and active guest sessions
 function ProtectedRoute() {
-  const { user, loading } = useAuth()
+  const { user, isGuest, loading } = useAuth()
   if (loading) return <PageLoading />
-  if (!user) return <Navigate to="/login" replace />
+  if (!user && !isGuest) return <Navigate to="/login" replace />
   return <Outlet />
 }
 
