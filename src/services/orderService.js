@@ -924,7 +924,7 @@ export async function fetchExpensesByRange(addressId, start, end) {
     if (!supabase) return []
     let query = supabase
         .from('expenses')
-        .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, created_at, address_id')
+        .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, metadata, created_at, address_id')
         .gte('created_at', start.toISOString())
         .lte('created_at', end.toISOString())
     if (addressId) query = query.eq('address_id', addressId)
@@ -1107,7 +1107,8 @@ export async function fetchLastWeekSameDayOrderItems(addressId) {
 // Nếu chưa có refill nào → warehouse=0; chưa có shift_closing → counter=0.
 //
 // Path nhanh: RPC `get_ingredient_stocks_v2` aggregate server-side (1 round-trip).
-// Fallback: legacy 3-query JS aggregate khi RPC chưa deploy (PGRST202 / 42883).
+// Fallback: smart 2-step JS aggregate khi RPC chưa deploy (PGRST202 / 42883).
+let _warnedFetchStocksFallback = false
 export async function fetchIngredientStocks(addressId) {
     if (localRepo.isGuest()) return localRepo.fetchLocalIngredientStocks(addressId)
     if (!supabase || !addressId) return []
@@ -1125,10 +1126,13 @@ export async function fetchIngredientStocks(addressId) {
     }
     if (rpcError && rpcError.code !== 'PGRST202' && rpcError.code !== '42883') {
         console.error('get_ingredient_stocks_v2 RPC error:', rpcError)
+    } else if (!_warnedFetchStocksFallback) {
+        _warnedFetchStocksFallback = true
+        console.warn('[fetchIngredientStocks] RPC missing — using slow fallback. Deploy migration 20260516_rpc_ingredient_stocks_v2.sql for ~20× speedup.')
     }
 
-    // Fallback: legacy JS aggregate (chạy 3 queries song song).
-    const [latestRes, allClosingsRes, refillsRes] = await Promise.all([
+    // Fallback step 1: latest closing + all refills (parallel, both small)
+    const [latestRes, refillsRes] = await Promise.all([
         supabase
             .from('shift_closings')
             .select('inventory_report')
@@ -1136,10 +1140,6 @@ export async function fetchIngredientStocks(addressId) {
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle(),
-        supabase
-            .from('shift_closings')
-            .select('created_at, inventory_report')
-            .eq('address_id', addressId),
         supabase
             .from('expenses')
             .select('created_at, metadata')
@@ -1168,19 +1168,31 @@ export async function fetchIngredientStocks(addressId) {
         }
     })
 
-    // Total restock per ingredient — only count restocks AFTER first refill of that ingredient
+    // Fallback step 2: shift_closings bounded by earliest first_refill_at.
+    // Older closings can't contribute restock (JS aggregator filters them out anyway),
+    // so we skip fetching them entirely. Skip the query if no refills exist yet.
     const totalRestock = {}
-    ;(allClosingsRes.data || []).forEach(closing => {
-        const report = Array.isArray(closing.inventory_report) ? closing.inventory_report : []
-        const closingTime = new Date(closing.created_at).getTime()
-        report.forEach(item => {
-            const ing = item.ingredient
-            if (!ing) return
-            const refillStart = firstRefillAt[ing]
-            if (refillStart === undefined || closingTime < refillStart) return
-            totalRestock[ing] = (totalRestock[ing] || 0) + (Number(item.restock) || 0)
+    const refillTimes = Object.values(firstRefillAt)
+    if (refillTimes.length > 0) {
+        const earliestRefillISO = new Date(Math.min(...refillTimes)).toISOString()
+        const { data: closingsData } = await supabase
+            .from('shift_closings')
+            .select('created_at, inventory_report')
+            .eq('address_id', addressId)
+            .gte('created_at', earliestRefillISO)
+
+        ;(closingsData || []).forEach(closing => {
+            const report = Array.isArray(closing.inventory_report) ? closing.inventory_report : []
+            const closingTime = new Date(closing.created_at).getTime()
+            report.forEach(item => {
+                const ing = item.ingredient
+                if (!ing) return
+                const refillStart = firstRefillAt[ing]
+                if (refillStart === undefined || closingTime < refillStart) return
+                totalRestock[ing] = (totalRestock[ing] || 0) + (Number(item.restock) || 0)
+            })
         })
-    })
+    }
 
     const keys = new Set([
         ...Object.keys(counter),

@@ -19,7 +19,6 @@ const RecipeMenuPage = lazy(() => import('./pages/RecipeMenuPage'))
 const RecipeIngredientPage = lazy(() => import('./pages/RecipeIngredientPage'))
 const DailyReportPage = lazy(() => import('./pages/DailyReportPage'))
 const RangeReportPage = lazy(() => import('./pages/RangeReportPage'))
-const ExpensePage = lazy(() => import('./pages/ExpensePage'))
 const ShiftClosingPage = lazy(() => import('./pages/ShiftClosingPage'))
 const IngredientManagementPage = lazy(() => import('./pages/IngredientManagementPage'))
 const IngredientDetailPage = lazy(() => import('./pages/IngredientDetailPage'))
@@ -81,7 +80,7 @@ export default function App() {
                         <Route path="/shift-closing" element={<ShiftClosingPage />} />
                         <Route path="/daily-report" element={<DailyReportPage />} />
                         <Route path="/range-report" element={<RangeReportPage />} />
-                        <Route path="/expenses" element={<ExpensePage />} />
+                        <Route path="/expenses" element={<Navigate to="/history" replace />} />
                         {/* Feature-level permission routes (anyone can view, managers can edit) */}
                         <Route path="/recipes" element={<RecipeMenuPage />} />
                         <Route path="/recipes/:productId" element={<RecipeIngredientPage />} />

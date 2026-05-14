@@ -2,10 +2,23 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateRefillTarget } from '../../utils/inventory';
 import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils';
 import { fetchLastWeekSameDayOrderItems } from '../../services/orderService';
-import { ChevronDown, Copy, Check, Lock } from 'lucide-react';
+import { ChevronDown, Check, Lock } from 'lucide-react';
 import { useProducts } from '../../contexts/ProductContext';
 import { formatVND } from '../../utils';
 import UpsellSheet from '../common/UpsellSheet';
+
+// Fallback: if exact ingredient key has no consumption, try matching by display label.
+// This handles the case where recipes use 'condensed_milk_ml' but inventory tracks 'sữa_đặc'
+// — both display as "Sữa đặc" via ingredientLabel(), causing Tiêu CT = 0 with exact lookup.
+function lookupByLabel(ingredient, estimatedMap) {
+    const exact = estimatedMap[ingredient]
+    if (exact) return exact
+    const label = ingredientLabel(ingredient).toLowerCase()
+    for (const [key, val] of Object.entries(estimatedMap)) {
+        if (key !== ingredient && ingredientLabel(key).toLowerCase() === label) return val
+    }
+    return 0
+}
 
 export default function InventoryRefillCard({
     shiftClosing,
@@ -27,8 +40,12 @@ export default function InventoryRefillCard({
     const [activeTab, setActiveTab] = useState(isPastDate ? 'audit' : 'refill');
     const [expandedRows, setExpandedRows] = useState({});
     const [isLossExpanded, setIsLossExpanded] = useState(false);
-    const [copied, setCopied] = useState(false);
     const [showAuditUpsell, setShowAuditUpsell] = useState(false);
+    const [isFinalized, setIsFinalized] = useState(() => {
+        if (!selectedAddress?.id || isPastDate) return false
+        const today = new Date().toISOString().split('T')[0]
+        return !!localStorage.getItem(`shift_finalized_${selectedAddress.id}_${today}`)
+    });
 
     const toggleRow = (ingredient) => {
         setExpandedRows(prev => ({ ...prev, [ingredient]: !prev[ingredient] }));
@@ -76,8 +93,8 @@ export default function InventoryRefillCard({
         const items = [];
         todayOrders.filter(o => !o.deleted_at).forEach(o => {
             (o.order_items || []).forEach(i => items.push({
-                productId: i.product_id, qty: i.quantity || 1,
-                extras: (i.extra_ids || []).map(id => ({ id }))
+                productId: i.product_id || i.productId, qty: i.quantity || i.qty || 1,
+                extras: i.extra_ids ? i.extra_ids.map(id => ({ id })) : (i.extras || [])
             }));
         });
         offlineToday.forEach(o => {
@@ -150,7 +167,7 @@ export default function InventoryRefillCard({
 
             const opening = openingMap[item.ingredient] ?? 0;
             const restock = item.restock || 0;
-            const used = Math.round((todayEstimatedConsumption[item.ingredient] || 0) * 10) / 10;
+            const used = Math.round(lookupByLabel(item.ingredient, todayEstimatedConsumption) * 10) / 10;
 
             const theoretical = Math.round((opening + restock - used) * 10) / 10;
             const actual = item.remaining || 0;
@@ -183,9 +200,16 @@ export default function InventoryRefillCard({
                 if (cups > 0) equivText = `≈ ${cups} ly ${ref.productName}`;
             }
 
+            const labelLower = ingredientLabel(item.ingredient).toLowerCase()
+            const bd = consumptionBreakdown[item.ingredient]
+                || Object.entries(consumptionBreakdown).find(([k]) =>
+                    k !== item.ingredient && ingredientLabel(k).toLowerCase() === labelLower
+                )?.[1]
+                || {}
+
             return {
                 ...item, config, opening, restock, used, theoretical, actual, diff, diffValue,
-                diffText, diffColor, diffBg, unitCost, unit, equivText
+                diffText, diffColor, diffBg, unitCost, unit, equivText, bd
             };
         });
 
@@ -202,7 +226,7 @@ export default function InventoryRefillCard({
         });
 
         return { rows, totalLossValue };
-    }, [shiftClosing, openingMap, todayEstimatedConsumption, ingredientConfigs, ingredientToProduct, ingredientUnits]);
+    }, [shiftClosing, openingMap, todayEstimatedConsumption, consumptionBreakdown, ingredientConfigs, ingredientToProduct, ingredientUnits]);
 
     // Calculate aggregated refill data
     const refillData = useMemo(() => {
@@ -210,8 +234,8 @@ export default function InventoryRefillCard({
 
         return shiftClosing.inventory_report.map(item => {
             const config = ingredientConfigs.find(c => c.ingredient === item.ingredient) || {};
-            const todayUsed = Math.round((todayEstimatedConsumption[item.ingredient] || 0) * 10) / 10;
-            const lastWeekUsed = Math.round((lastWeekConsumption[item.ingredient] || 0) * 10) / 10;
+            const todayUsed = Math.round(lookupByLabel(item.ingredient, todayEstimatedConsumption) * 10) / 10;
+            const lastWeekUsed = Math.round(lookupByLabel(item.ingredient, lastWeekConsumption) * 10) / 10;
 
             // Smart Forecast: Max of today or same day last week
             const rawTarget = Math.max(todayUsed, lastWeekUsed);
@@ -238,21 +262,11 @@ export default function InventoryRefillCard({
         }).filter(item => item.finalRefill > 0);
     }, [shiftClosing, todayEstimatedConsumption, lastWeekConsumption, ingredientConfigs]);
 
-    const handleCopyRefill = () => {
-        if (!refillData.length) return;
-        let text = '*DANH SÁCH ĐI CHỢ NGÀY MAI*\n\n';
-        refillData.forEach(item => {
-            const unit = getIngredientUnit(item.ingredient, item.unit, ingredientUnits);
-            if (item.packsNeeded > 0) {
-                text += `- ${ingredientLabel(item.ingredient)}: ${item.packsNeeded} ${item.config.pack_unit || 'hộp/gói'} (${item.finalRefill} ${unit})\n`;
-            } else {
-                text += `- ${ingredientLabel(item.ingredient)}: ${item.finalRefill} ${unit}\n`;
-            }
-        });
-
-        navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+    const handleFinalizeShift = () => {
+        if (!selectedAddress?.id) return
+        const today = new Date().toISOString().split('T')[0]
+        localStorage.setItem(`shift_finalized_${selectedAddress.id}_${today}`, Date.now().toString())
+        setIsFinalized(true)
     };
 
     if (!shiftClosing?.inventory_report?.length) return null;
@@ -374,10 +388,10 @@ export default function InventoryRefillCard({
                                                 </div>
                                             </div>
 
-                                            {consumptionBreakdown[item.ingredient] && Object.keys(consumptionBreakdown[item.ingredient]).length > 0 && (
+                                            {Object.keys(item.bd || {}).length > 0 && (
                                                 <div className="border-t border-border/30 pt-2 flex flex-col gap-1">
                                                     <span className="text-[9px] font-black text-text-dim uppercase mb-0.5">Chi tiết Tiêu CT</span>
-                                                    {Object.values(consumptionBreakdown[item.ingredient])
+                                                    {Object.values(item.bd)
                                                         .sort((a, b) => b.totalAmount - a.totalAmount)
                                                         .map((entry, i) => (
                                                             <div key={i} className="flex items-center justify-between">
@@ -482,13 +496,19 @@ export default function InventoryRefillCard({
                                 );
                             })}
                             <div className="mt-4 pt-2">
-                                <button
-                                    onClick={handleCopyRefill}
-                                    className="flex items-center justify-center gap-2 bg-primary/10 hover:bg-primary/20 active:scale-[0.98] transition-all px-4 py-3 rounded-[12px] w-full text-primary"
-                                >
-                                    {copied ? <Check size={18} /> : <Copy size={18} />}
-                                    <span className="text-[13px] font-bold uppercase tracking-wide">{copied ? 'Đã copy danh sách' : 'Copy danh sách đi chợ'}</span>
-                                </button>
+                                {isFinalized ? (
+                                    <div className="flex items-center justify-center gap-2 bg-success/10 border border-success/20 px-4 py-3 rounded-[12px] w-full text-success">
+                                        <Check size={18} />
+                                        <span className="text-[13px] font-bold uppercase tracking-wide">Đã hoàn tất ca hôm nay</span>
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={handleFinalizeShift}
+                                        className="flex items-center justify-center gap-2 bg-primary/10 hover:bg-primary/20 active:scale-[0.98] transition-all px-4 py-3 rounded-[12px] w-full text-primary"
+                                    >
+                                        <span className="text-[13px] font-bold uppercase tracking-wide">Xác nhận chốt ca</span>
+                                    </button>
+                                )}
                             </div>
                         </div>
                     )}

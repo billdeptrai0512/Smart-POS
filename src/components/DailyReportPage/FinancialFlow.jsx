@@ -6,6 +6,8 @@ export default function FinancialFlow({
     actualTransfer = 0,
     dailyExpense = 0,
     refillTotal = 0,
+    refillNvl = 0,
+    refillFreeForm = 0,
     yesterdayActualTotal,
     yesterdayTakeHome,
     compareLabel = 'So với hôm qua',
@@ -72,6 +74,9 @@ export default function FinancialFlow({
                     value={refillTotal}
                     valueClass='text-danger'
                     prefix={refillTotal > 0 ? '-' : ''}
+                    sub={refillNvl > 0 && refillFreeForm > 0
+                        ? `🛒 ${formatVND(refillNvl)} · 📦 ${formatVND(refillFreeForm)}`
+                        : null}
                     onClick={onRefillClick}
                     alignRight
                 />

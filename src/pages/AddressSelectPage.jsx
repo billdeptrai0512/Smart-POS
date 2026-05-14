@@ -83,6 +83,16 @@ export default function AddressSelectPage() {
         navigate('/daily-report', { state: { from: '/addresses' } })
     }
 
+    function handleSelectHistory(addr) {
+        setSelectedAddress(addr)
+        navigate('/history', { state: { from: '/addresses' } })
+    }
+
+    function handleSelectIngredients(addr) {
+        setSelectedAddress(addr)
+        navigate('/ingredients', { state: { from: '/addresses' } })
+    }
+
     async function handleCreateNew(name) {
         const addr = await createNewAddress(name)
         handleSelect(addr)
@@ -183,6 +193,8 @@ export default function AddressSelectPage() {
                         setError={setError}
                         onSelect={handleSelect}
                         onSelectReport={handleSelectReport}
+                        onSelectHistory={handleSelectHistory}
+                        onSelectIngredients={handleSelectIngredients}
                         onBackup={setBackupSource}
                         onRename={renameAddress}
                         onRemove={removeAddress}

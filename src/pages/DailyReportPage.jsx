@@ -124,10 +124,11 @@ export default function DailyReportPage() {
             hourlyRevenue[hour] = (hourlyRevenue[hour] || 0) + o.total
             totalRevenue += o.total
 
-            const items = isOffline ? (o.cart || o.orderItems || []) : (o.order_items || [])
-            items.forEach(i => {
-                const productId = isOffline ? i.productId : i.product_id
-                const qty = i.quantity || 1
+            const orderItems = (isOffline ? (o.cart || o.orderItems) : o.order_items) || []
+            orderItems.forEach(i => {
+                const qty = i.quantity || i.qty || 1
+                const productId = i.product_id || i.productId
+
                 const prodDef = productMap.get(productId)
                 const name = prodDef?.name || (isOffline ? i.name : i.products?.name) || '?'
                 if (!hourlyOrders[hour]) hourlyOrders[hour] = {}
@@ -187,10 +188,11 @@ export default function DailyReportPage() {
         const isExcluded = (pid) => productMap.get(pid)?.count_as_cup === false
         displayOrders.filter(o => !o.deleted_at).forEach(o => {
             ; (o.order_items || []).forEach(i => {
+                const pid = i.product_id || i.productId
                 if (selectedProductId === 'all') {
-                    if (!isExcluded(i.product_id)) cups += i.quantity || 1
-                } else if (selectedProductId === i.product_id) {
-                    cups += i.quantity || 1
+                    if (!isExcluded(pid)) cups += i.quantity || i.qty || 1
+                } else if (selectedProductId === pid) {
+                    cups += i.quantity || i.qty || 1
                 }
             })
         })
@@ -206,24 +208,26 @@ export default function DailyReportPage() {
         return cups
     }, [displayOrders, offlineToday, selectedProductId, productMap])
 
-    const { dailyExpense, refillTotal } = useMemo(() => {
+    const { dailyExpense, refillTotal, refillNvl, refillFreeForm } = useMemo(() => {
         const list = displayExpenses || []
-        let daily = 0, refill = 0
+        let daily = 0, nvl = 0, freeForm = 0
         for (const e of list) {
             if (e.is_fixed) continue
             if (e.is_refill) {
-                refill += e.amount
+                if (e.metadata?.free_form) freeForm += e.amount
+                else nvl += e.amount
             } else {
                 daily += e.amount
             }
         }
-        return { dailyExpense: daily, refillTotal: refill }
+        return { dailyExpense: daily, refillTotal: nvl + freeForm, refillNvl: nvl, refillFreeForm: freeForm }
     }, [displayExpenses])
     const fixedExpense = useMemo(() =>
         (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0),
         [fixedCosts]
     )
-    const netProfit = totalRevenue - totalCOGS - dailyExpense - fixedExpense
+    // P&L = Revenue - COGS - SUM(Loại 1 + 2 + 3 + 4) per TASK.md
+    const netProfit = totalRevenue - totalCOGS - dailyExpense - refillTotal - fixedExpense
 
     const yesterdayNetProfit = useMemo(() => {
         let rev = 0, cogs = 0
@@ -233,15 +237,16 @@ export default function DailyReportPage() {
                 cogs += o.total_cost
             } else {
                 ; (o.order_items || []).forEach(i => {
-                    const qty = i.quantity || 1
-                    const cost = i.unit_cost > 0 ? i.unit_cost : calculateProductCost(i.product_id, [], recipes, extraIngredients, ingredientCosts)
+                    const qty = i.quantity || i.qty || 1
+                    const pid = i.product_id || i.productId
+                    const cost = i.unit_cost > 0 ? i.unit_cost : calculateProductCost(pid, [], recipes, extraIngredients, ingredientCosts)
                     cogs += cost * qty
                 })
             }
         })
-        return (rev - cogs)
-            - yesterdayExpensesData.filter(e => !e.is_fixed && !e.is_refill).reduce((s, e) => s + e.amount, 0)
-            - yesterdayExpensesData.filter(e => e.is_fixed).reduce((s, e) => s + e.amount, 0)
+        const nonFixedSum = yesterdayExpensesData.filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0)
+        const fixedSum = yesterdayExpensesData.filter(e => e.is_fixed).reduce((s, e) => s + e.amount, 0)
+        return (rev - cogs) - nonFixedSum - fixedSum
     }, [yesterdayOrders, yesterdayExpensesData, recipes, extraIngredients, ingredientCosts])
 
     const yesterdayActualTotal = useMemo(() => {
@@ -311,7 +316,7 @@ export default function DailyReportPage() {
                         <CashFlowCard
                             shiftClosing={shiftClosing}
                             dailyExpense={dailyExpense}
-                            onDailyExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                            onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
                         />
 
                         <FinancialFlow
@@ -319,10 +324,12 @@ export default function DailyReportPage() {
                             actualTransfer={shiftClosing?.actual_transfer || 0}
                             dailyExpense={dailyExpense}
                             refillTotal={refillTotal}
+                            refillNvl={refillNvl}
+                            refillFreeForm={refillFreeForm}
                             yesterdayActualTotal={yesterdayActualTotal}
                             yesterdayTakeHome={yesterdayTakeHome}
-                            onDailyExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
-                            onRefillClick={() => navigate('/ingredients', { state: { from: '/daily-report', tab: 'refill', refillScope: 'day' } })}
+                            onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                            onRefillClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'nvl', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
                         />
 
                         {/* only for manage */}
@@ -338,11 +345,15 @@ export default function DailyReportPage() {
                                     totalRevenue={totalRevenue}
                                     totalCOGS={totalCOGS}
                                     dailyExpense={dailyExpense}
+                                    refillNvl={refillNvl}
+                                    refillFreeForm={refillFreeForm}
                                     fixedExpense={fixedExpense}
                                     netProfit={netProfit}
                                     onRecipesClick={() => navigate('/recipes', { state: { from: '/daily-report' } })}
-                                    onDailyExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
-                                    onFixedExpenseClick={() => navigate('/expenses', { state: { from: '/daily-report', tab: 'fixed', isReadOnly: !!customDate } })}
+                                    onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                                    onRefillNvlClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'nvl', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                                    onRefillFreeFormClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'after', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                                    onFixedExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'fixed', isReadOnly: !!customDate } })}
                                     yesterdayNetProfit={yesterdayNetProfit}
                                 />
                             </>

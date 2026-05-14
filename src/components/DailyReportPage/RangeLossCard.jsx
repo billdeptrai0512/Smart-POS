@@ -44,7 +44,8 @@ export default function RangeLossCard({
         orders.forEach(o => {
             if (o.deleted_at) return;
             (o.order_items || []).forEach(i => {
-                sales[i.product_id] = (sales[i.product_id] || 0) + (i.quantity || 1);
+                const pid = i.product_id || i.productId;
+                sales[pid] = (sales[pid] || 0) + (i.quantity || i.qty || 1);
             });
         });
 
@@ -84,8 +85,8 @@ export default function RangeLossCard({
             if (!dailyOrderItems[dayStr]) dailyOrderItems[dayStr] = [];
 
             (o.order_items || []).forEach(i => dailyOrderItems[dayStr].push({
-                productId: i.product_id, qty: i.quantity || 1,
-                extras: (i.extra_ids || []).map(id => ({ id }))
+                productId: i.product_id || i.productId, qty: i.quantity || i.qty || 1,
+                extras: i.extra_ids ? i.extra_ids.map(id => ({ id })) : (i.extras || [])
             }));
         });
 

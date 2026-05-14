@@ -16,7 +16,7 @@ import UpsellSheet from '../common/UpsellSheet'
 export default function BranchGrid({
     addresses, fetchError, cupsMap, revenueMap, sessionsMap, statsLoading,
     isStaff, isAdmin, error, setError,
-    onSelect, onSelectReport, onBackup, onRename, onRemove, onDefaultTemplate,
+    onSelect, onSelectReport, onSelectHistory, onSelectIngredients, onBackup, onRename, onRemove, onDefaultTemplate,
 }) {
     const [editingAddressId, setEditingAddressId] = useState(null)
     const [editName, setEditName] = useState('')
@@ -114,7 +114,7 @@ export default function BranchGrid({
                                         className="flex-1 p-3.5 text-left hover:bg-surface-light active:bg-border/30 transition-colors min-w-0"
                                     >
                                         <div className="flex items-center justify-between gap-2 mb-1.5">
-                                            <span className="text-text font-black text-sm group-hover:text-primary transition-colors line-clamp-2 leading-tight truncate">{addr.name}</span>
+                                            <span className="text-text font-black text-sm transition-colors line-clamp-2 leading-tight truncate">{addr.name}</span>
                                             <ArrowRight size={20} strokeWidth={2.5} className="text-text shrink-0" />
                                         </div>
 
@@ -126,11 +126,15 @@ export default function BranchGrid({
                                         />
                                         {hasStats && (
                                             <div className="flex flex-col  gap-1 mt-2">
+
                                                 <span className="flex  items-center gap-1 text-text-secondary text-sm">
                                                     Đã bán: <span className="font-bold">{cups}</span> ly
                                                 </span>
                                                 <span className="flex items-center gap-1 text-text-secondary text-sm">
                                                     Doanh thu: <span className="font-bold">{formatVND(revenue)}</span>
+                                                </span>
+                                                <span className="flex items-center gap-1 text-text-secondary text-sm">
+                                                    Nhân viên: <span className="font-bold truncate">{staffNames}</span>
                                                 </span>
 
                                             </div>
@@ -140,30 +144,36 @@ export default function BranchGrid({
                                     {/* Action buttons */}
                                     {!isStaff && (
                                         <div className="flex items-center justify-between border-t border-border/40 px-3.5 py-1.5 gap-2">
-                                            {/* Report button — manager only */}
+                                            {/* Report buttons — manager only */}
                                             {onSelectReport && (
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); onSelectReport(addr) }}
-                                                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-success/5 border border-success/20 hover:bg-success/15 transition-all group"
-                                                    title="Xem báo cáo ngày"
-                                                >
-                                                    <BarChart size={13} className="text-success opacity-80 group-hover:opacity-100 shrink-0" />
-                                                    <span className="text-[10px] font-black text-success uppercase leading-none opacity-80 group-hover:opacity-100">Báo cáo</span>
-                                                </button>
+                                                <div className='flex gap-2'>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); onSelectHistory?.(addr) }}
+                                                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-primary/5 border border-primary/20 hover:bg-primary/15 transition-all group"
+                                                        title="Xem nhật ký"
+                                                    >
+                                                        <span className="text-[10px] font-black text-primary uppercase leading-none opacity-80 group-hover:opacity-100">Nhật ký</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); onSelectIngredients?.(addr) }}
+                                                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-primary/5 border border-primary/20 hover:bg-primary/15 transition-all group"
+                                                        title="Xem tồn kho"
+                                                    >
+                                                        <span className="text-[10px] font-black text-primary uppercase leading-none opacity-80 group-hover:opacity-100">Tồn kho</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); onSelectReport(addr) }}
+                                                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-success/5 border border-success/20 hover:bg-success/15 transition-all group"
+                                                        title="Xem báo cáo ngày"
+                                                    >
+                                                        <span className="text-[10px] font-black text-success uppercase leading-none opacity-80 group-hover:opacity-100">Báo cáo</span>
+                                                    </button>
+
+                                                </div>
+
                                             )}
-                                            <div
-                                                className="flex text-text-secondary items-center gap-1.5 text-xs justify-start flex-1 min-w-0"
-                                                title={staffNames.length > 0 ? staffNames.join(', ') : 'Không có nhân sự'}
-                                            >
-                                                <Users size={13} className="shrink-0" />
-                                                <span className="truncate font-medium">
-                                                    {staffNames.length === 0
-                                                        ? '0 nhân sự'
-                                                        : staffNames.length === 1
-                                                            ? staffNames[0]
-                                                            : `${staffNames[0]} +${staffNames.length - 1}`}
-                                                </span>
-                                            </div>
+
+
                                             <div className='flex gap-0.5 justify-end shrink-0'>
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); onBackup(addr) }}

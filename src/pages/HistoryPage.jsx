@@ -2,14 +2,16 @@ import { useEffect } from 'react'
 import { usePOS } from '../contexts/POSContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useAuth } from '../contexts/AuthContext'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 
 import HistoryView from '../components/HistoryPage/HistoryView'
 
 export default function HistoryPage() {
     const navigate = useNavigate()
+    const location = useLocation()
+    const backTo = location.state?.from || '/pos'
     const { products, recipes, ingredientCosts, extraIngredients } = useProducts()
-    const { todayOrders, todayExpenses, isLoadingHistory, handleDeleteOrder, handleAddExpense, handleDeleteExpense, handleLoadHistory, retrySync } = usePOS()
+    const { todayOrders, todayExpenses, isLoadingHistory, handleDeleteOrder, handleAddExpense, handleDeleteExpense, handleLoadHistory, retrySync, fixedCosts, handleAddFixedCost, handleUpdateFixedCost, handleDeleteFixedCost } = usePOS()
     const { isManager, isAdmin } = useAuth()
 
     useEffect(() => {
@@ -28,12 +30,16 @@ export default function HistoryPage() {
             ingredientCosts={ingredientCosts}
             extraIngredients={extraIngredients}
             isLoadingHistory={isLoadingHistory}
-            onBack={() => navigate('/pos')}
+            onBack={() => navigate(backTo)}
             onDeleteOrder={handleDeleteOrder}
-            onOpenRecipeManager={(isManager || isAdmin) ? () => navigate('/recipes') : null}
             onAddExpense={handleAddExpense}
             onDeleteExpense={handleDeleteExpense}
             onRetrySync={retrySync}
+            fixedCosts={fixedCosts}
+            handleAddFixedCost={handleAddFixedCost}
+            handleUpdateFixedCost={handleUpdateFixedCost}
+            handleDeleteFixedCost={handleDeleteFixedCost}
+            isManager={isManager || isAdmin}
         />
     )
 }

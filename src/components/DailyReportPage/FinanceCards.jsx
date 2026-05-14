@@ -1,7 +1,7 @@
 import { Banknote, ArrowRight, MinusCircle, ArrowUp, ArrowDown } from 'lucide-react'
 import { formatVND } from '../../utils'
 
-export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, fixedExpense, netProfit, onRecipesClick, onDailyExpenseClick, onFixedExpenseClick, yesterdayNetProfit, compareLabel = 'So với hôm qua' }) {
+export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, refillNvl = 0, refillFreeForm = 0, fixedExpense, netProfit, onRecipesClick, onDailyExpenseClick, onRefillNvlClick, onRefillFreeFormClick, onFixedExpenseClick, yesterdayNetProfit, compareLabel = 'So với hôm qua' }) {
     return (
         <div className="grid grid-cols-2 gap-3">
             <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
@@ -26,18 +26,35 @@ export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, fi
                 className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center  relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
             >
 
-                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi tiêu</h3>
+                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">🔴 Trong ca</h3>
                 <div className="text-[18px] font-bold text-danger tabular-nums">
                     -{formatVND(dailyExpense)}
                 </div>
             </div>
-
+            <div
+                onClick={onRefillNvlClick}
+                className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center items-end text-right relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
+            >
+                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">🛒 Mua NVL</h3>
+                <div className="text-[18px] font-bold text-danger tabular-nums">
+                    -{formatVND(refillNvl)}
+                </div>
+            </div>
+            <div
+                onClick={onRefillFreeFormClick}
+                className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
+            >
+                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">🟠 Sau ca</h3>
+                <div className="text-[18px] font-bold text-danger tabular-nums">
+                    -{formatVND(refillFreeForm)}
+                </div>
+            </div>
             <div
                 onClick={onFixedExpenseClick}
                 className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center items-end text-right relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
             >
 
-                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Chi phí cố định</h3>
+                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">📌 Cố định</h3>
                 <div className="text-[18px] font-bold text-danger tabular-nums">
                     -{formatVND(fixedExpense)}
                 </div>

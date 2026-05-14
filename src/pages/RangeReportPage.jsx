@@ -134,8 +134,8 @@ export default function RangeReportPage() {
 
             const orderItems = o.order_items || []
             orderItems.forEach(i => {
-                const qty = i.quantity || 1
-                const productId = i.product_id
+                const qty = i.quantity || i.qty || 1
+                const productId = i.product_id || i.productId
 
                 const prodDef = productMap.get(productId)
                 if (selectedProductId === 'all') {
@@ -171,23 +171,26 @@ export default function RangeReportPage() {
         const cashRevenue = shiftClosings.reduce((s, sc) => s + (sc.actual_cash || 0), 0)
         const transferRevenue = shiftClosings.reduce((s, sc) => s + (sc.actual_transfer || 0), 0)
 
-        // Split expenses: dailyExpense (in-shift, vào netProfit) vs refill (cash flow, KHÔNG vào netProfit)
-        let dailyExpense = 0, refillTotal = 0
+        // Split expenses by 4 types per TASK.md
+        let dailyExpense = 0, refillNvl = 0, refillFreeForm = 0
         for (const e of expenses) {
             if (e.is_fixed) continue
             if (e.is_refill) {
-                refillTotal += e.amount
+                if (e.metadata?.free_form) refillFreeForm += e.amount
+                else refillNvl += e.amount
             } else {
                 dailyExpense += e.amount
             }
         }
+        const refillTotal = refillNvl + refillFreeForm
 
         const daysToCalculate = days > 0 ? days : 1
         const fixedExpense = (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0) * daysToCalculate
 
-        const netProfit = totalRevenue - totalCOGS - dailyExpense - fixedExpense
+        // P&L = Revenue - COGS - SUM(Loại 1 + 2 + 3 + 4) per TASK.md
+        const netProfit = totalRevenue - totalCOGS - dailyExpense - refillTotal - fixedExpense
 
-        return { totalRevenue, totalCOGS, totalCups, cashRevenue, transferRevenue, dailyExpense, refillTotal, fixedExpense, netProfit, productStats, soldProducts }
+        return { totalRevenue, totalCOGS, totalCups, cashRevenue, transferRevenue, dailyExpense, refillTotal, refillNvl, refillFreeForm, fixedExpense, netProfit, productStats, soldProducts }
     }, [orders, expenses, shiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, productExtras, products, selectedProductId, days])
 
     const prevStats = useMemo(() => {
@@ -202,8 +205,8 @@ export default function RangeReportPage() {
 
             const orderItems = o.order_items || []
             orderItems.forEach(i => {
-                const qty = i.quantity || 1
-                const productId = i.product_id
+                const qty = i.quantity || i.qty || 1
+                const productId = i.product_id || i.productId
                 if (selectedProductId === 'all') {
                     if (prevProductMap.get(productId)?.count_as_cup !== false) cups += qty
                 } else if (selectedProductId === productId) {
@@ -218,12 +221,12 @@ export default function RangeReportPage() {
         })
 
         const dailyExpense = prevExpenses.filter(e => !e.is_fixed && !e.is_refill).reduce((s, e) => s + e.amount, 0)
-        const refillTotal = prevExpenses.filter(e => e.is_refill).reduce((s, e) => s + e.amount, 0)
+        const refillTotal = prevExpenses.filter(e => !e.is_fixed && e.is_refill).reduce((s, e) => s + e.amount, 0)
 
         const daysToCalculate = prevDays > 0 ? prevDays : 1
         const fixedExpense = (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0) * daysToCalculate
 
-        const netProfit = revenue - totalCOGS - dailyExpense - fixedExpense
+        const netProfit = revenue - totalCOGS - dailyExpense - refillTotal - fixedExpense
 
         const prevCash = prevShiftClosings.reduce((s, sc) => s + (sc.actual_cash || 0), 0)
         const prevTransfer = prevShiftClosings.reduce((s, sc) => s + (sc.actual_transfer || 0), 0)
@@ -350,7 +353,7 @@ export default function RangeReportPage() {
                             cash={stats.cashRevenue}
                             transfer={stats.transferRevenue}
                             dailyExpense={stats.dailyExpense}
-                            onDailyExpenseClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'daily', expensesToView: expenses, isReadOnly: true } })}
+                            onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'daily', expensesToView: expenses, isReadOnly: true } })}
                         />
 
                         <FinancialFlow
@@ -358,11 +361,13 @@ export default function RangeReportPage() {
                             actualTransfer={stats.transferRevenue}
                             dailyExpense={stats.dailyExpense}
                             refillTotal={stats.refillTotal}
+                            refillNvl={stats.refillNvl}
+                            refillFreeForm={stats.refillFreeForm}
                             yesterdayActualTotal={prevStats.actualTotal}
                             yesterdayTakeHome={prevStats.takeHome}
                             compareLabel={`So với ${range === 'week' ? 'tuần trước' : 'tháng trước'}`}
-                            onDailyExpenseClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'daily', expensesToView: expenses, isReadOnly: true } })}
-                            onRefillClick={() => navigate('/ingredients', { state: { from: `/range-report?range=${range}`, tab: 'refill', refillScope: range } })}
+                            onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'daily', expensesToView: expenses, isReadOnly: true } })}
+                            onRefillClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'nvl', expensesToView: expenses, isReadOnly: true } })}
                         />
 
                         {/* Section 3: Tài chính (manager only) */}
@@ -378,11 +383,15 @@ export default function RangeReportPage() {
                                     totalRevenue={stats.totalRevenue}
                                     totalCOGS={stats.totalCOGS}
                                     dailyExpense={stats.dailyExpense}
+                                    refillNvl={stats.refillNvl}
+                                    refillFreeForm={stats.refillFreeForm}
                                     fixedExpense={stats.fixedExpense}
                                     netProfit={stats.netProfit}
                                     onRecipesClick={() => navigate('/recipes', { state: { from: '/range-report' } })}
-                                    onDailyExpenseClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'daily', expensesToView: expenses, isReadOnly: true } })}
-                                    onFixedExpenseClick={() => navigate('/expenses', { state: { from: `/range-report?range=${range}`, tab: 'fixed', isReadOnly: true } })}
+                                    onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'daily', expensesToView: expenses, isReadOnly: true } })}
+                                    onRefillNvlClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'nvl', expensesToView: expenses, isReadOnly: true } })}
+                                    onRefillFreeFormClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'after', expensesToView: expenses, isReadOnly: true } })}
+                                    onFixedExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'fixed', isReadOnly: true } })}
                                     yesterdayNetProfit={prevStats.netProfit}
                                     compareLabel={`So với ${range === 'week' ? 'tuần trước' : 'tháng trước'}`}
                                 />
