@@ -424,16 +424,16 @@ export function POSProvider() {
         }
     }
 
-    async function handleAddExpense(name, amount, isRefill = false, paymentMethod = 'cash', metadata = {}) {
+    async function handleAddExpense(name, amount, isRefill = false, paymentMethod = 'cash', metadata = {}, isFixed = false) {
         if (!addressId) return
         try {
-            const expense = await insertExpense(name, amount, addressId, false, profile?.name, isRefill, paymentMethod, metadata)
+            const expense = await insertExpense(name, amount, addressId, isFixed, profile?.name, isRefill, paymentMethod, metadata)
             setTodayExpenses(prev => [expense, ...prev])
-            setTotalCost(prev => prev + amount)
-            showToast(isRefill ? 'Đã thêm khoản mua nguyên vật liệu' : 'Đã thêm chi phí', 'success')
+            if (!isFixed) setTotalCost(prev => prev + amount)
+            showToast(isFixed ? 'Đã ghi nhận thực chi cố định' : isRefill ? 'Đã thêm khoản mua nguyên vật liệu' : 'Đã thêm chi phí', 'success')
             return expense
         } catch (err) {
-            showError(err, isRefill ? 'Thêm mua nguyên vật liệu' : 'Thêm chi phí')
+            showError(err, isFixed ? 'Ghi nhận thực chi cố định' : isRefill ? 'Thêm mua nguyên vật liệu' : 'Thêm chi phí')
             throw err
         }
     }
@@ -441,8 +441,9 @@ export function POSProvider() {
     async function handleDeleteExpense(expenseId, amount) {
         try {
             await deleteExpense(expenseId)
+            const wasFixed = todayExpenses.find(e => e.id === expenseId)?.is_fixed
             setTodayExpenses(prev => prev.filter(e => e.id !== expenseId))
-            setTotalCost(prev => Math.max(0, prev - amount))
+            if (!wasFixed) setTotalCost(prev => Math.max(0, prev - amount))
             showToast('Đã xóa chi phí', 'success')
         } catch (err) {
             showError(err, 'Xóa chi phí')

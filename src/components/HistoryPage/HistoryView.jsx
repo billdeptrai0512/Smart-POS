@@ -44,6 +44,17 @@ export default function HistoryView({
     const [deletingExpId, setDeletingExpId] = useState(null)
     const [showAddModal, setShowAddModal] = useState(false)
     const [showFilterMenu, setShowFilterMenu] = useState(false)
+    const [fixedSubMode, setFixedSubMode] = useState('setup') // 'setup' | 'actual'
+
+    // Reset modal form state on close (avoid stale values when reopened)
+    useEffect(() => {
+        if (!showAddModal) {
+            setCostName('')
+            setCostAmount('')
+            setFixedSubMode('setup')
+            setExpenseCategory('expense')
+        }
+    }, [showAddModal])
 
     // Date range — shared across orders/expense tabs
     const [scope, setScope] = useState('day')
@@ -227,6 +238,7 @@ export default function HistoryView({
     }, [expensesToView, scope, offset, todayExpenses, rangeExpenses])
 
     const nonFixedExpenses = useMemo(() => baseExpenses.filter(e => !e.is_fixed), [baseExpenses])
+    const fixedPayments = useMemo(() => baseExpenses.filter(e => e.is_fixed).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)), [baseExpenses])
 
     // Header pill always shows today total regardless of selected range
     const totalNonFixedToday = useMemo(
@@ -280,8 +292,10 @@ export default function HistoryView({
         setIsSubmitting(true)
         try {
             const amount = Number(costAmount) * 1000
-            if (expenseCategory === 'fixed') {
+            if (expenseCategory === 'fixed' && fixedSubMode === 'setup') {
                 await handleAddFixedCost(costName.trim(), amount)
+            } else if (expenseCategory === 'fixed' && fixedSubMode === 'actual') {
+                await onAddExpense(costName.trim(), amount, false, 'cash', {}, true)
             } else if (expenseCategory === 'nvl') {
                 await onAddExpense(costName.trim(), amount, true, 'cash', {})
             } else {
@@ -594,6 +608,53 @@ export default function HistoryView({
                         </div>
                     )}
 
+                    {/* Fixed payments — actual paid records (excluded from P&L since allocation handles it) */}
+                    {expenseFilter === 'fixed' && fixedPayments.length > 0 && (
+                        <div className="flex flex-col gap-2">
+                            <span className="text-[11px] font-black text-text-secondary uppercase tracking-wider px-1">Đã thanh toán trong kỳ</span>
+                            {fixedPayments.map(expense => {
+                                const d = new Date(expense.created_at)
+                                const time = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+                                return (
+                                    <div key={expense.id} className="bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden opacity-90">
+                                        <div className="absolute top-0 right-0 px-2 py-1 rounded-bl-[14px] flex flex-col items-end leading-tight bg-warning/10 text-warning">
+                                            <span className="text-[10px] font-black uppercase tracking-wider">Cố định</span>
+                                            <span className="text-[9px] font-medium opacity-70 normal-case">Thực chi</span>
+                                        </div>
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="font-black text-[14px] mt-1 text-warning">-{formatVND(expense.amount)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-stretch mb-1 border-t border-border/40 pt-2">
+                                            <div className="flex flex-col flex-1 gap-1.5 mt-0.5 mr-2">
+                                                <span className="text-[14px] leading-snug font-medium max-w-[85%] whitespace-pre-wrap text-text">{expense.name}</span>
+                                                <span className="text-text-dim text-[10px] italic leading-tight">Đã phân bổ hàng ngày — không trừ kép vào lợi nhuận</span>
+                                                {expense.staff_name && <span className="text-text-secondary/70 text-[12px] font-bold leading-none">{expense.staff_name}</span>}
+                                            </div>
+                                            <div className="flex flex-col justify-end items-end gap-2 shrink-0 mt-0.5">
+                                                {isReadOnly ? (
+                                                    <span className="text-text-dim text-[14px] font-bold">{time}</span>
+                                                ) : (
+                                                    <span
+                                                        className="text-text-secondary text-[14px] text-end font-bold cursor-pointer underline decoration-dashed decoration-text-secondary/50 underline-offset-4 hover:text-danger hover:decoration-danger active:text-danger/80 transition-all select-none leading-none"
+                                                        onClick={() => {
+                                                            if (deletingExpId === expense.id) return
+                                                            if (window.confirm(`Xóa ghi nhận thực chi "${expense.name}"?\n\nHành động này không thể hoàn tác!`)) {
+                                                                setDeletingExpId(expense.id)
+                                                                onDeleteExpense(expense.id, expense.amount).finally(() => setDeletingExpId(null))
+                                                            }
+                                                        }}
+                                                    >
+                                                        {deletingExpId === expense.id ? '⏳' : time}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    )}
+
                     {/* Expense cards */}
                     {isLoadingExpenses ? (
                         <div className="flex flex-col gap-3 animate-pulse">
@@ -695,6 +756,19 @@ export default function HistoryView({
                             <button onClick={() => setExpenseCategory('nvl')} className={`flex-1 py-1.5 rounded-[10px] text-[12px] font-black uppercase transition-all ${expenseCategory === 'nvl' ? 'bg-primary/80 text-white shadow-sm' : 'text-text-secondary hover:text-text'}`}>Tồn kho</button>
                             <button onClick={() => setExpenseCategory('fixed')} className={`flex-1 py-1.5 rounded-[10px] text-[12px] font-black uppercase transition-all ${expenseCategory === 'fixed' ? 'bg-warning/80 text-white shadow-sm' : 'text-text-secondary hover:text-text'}`}>Cố định</button>
                         </div>
+                        {expenseCategory === 'fixed' && (
+                            <div className="flex flex-col gap-1.5">
+                                <div className="flex bg-surface-light border border-border/60 rounded-[10px] p-0.5">
+                                    <button onClick={() => setFixedSubMode('setup')} className={`flex-1 py-1 rounded-[8px] text-[11px] font-bold transition-all ${fixedSubMode === 'setup' ? 'bg-warning/20 text-warning' : 'text-text-secondary hover:text-text'}`}>Setup hằng tháng</button>
+                                    <button onClick={() => setFixedSubMode('actual')} className={`flex-1 py-1 rounded-[8px] text-[11px] font-bold transition-all ${fixedSubMode === 'actual' ? 'bg-warning/20 text-warning' : 'text-text-secondary hover:text-text'}`}>Ghi thực chi</button>
+                                </div>
+                                <span className="text-[10px] text-text-dim leading-tight px-1">
+                                    {fixedSubMode === 'setup'
+                                        ? 'Khoản định kỳ — hệ thống tự chia đều mỗi ngày vào lợi nhuận.'
+                                        : 'Ghi nhận đã thanh toán — không trừ kép vì đã phân bổ hàng ngày.'}
+                                </span>
+                            </div>
+                        )}
                         <input
                             type="text"
                             autoFocus
@@ -727,23 +801,6 @@ export default function HistoryView({
 
             {/* Shared footer tab bar */}
             <div className="shrink-0 bg-surface border-t border-border/60 flex gap-1.5 px-3 py-2">
-
-
-                <button
-                    onClick={() => setActiveTab('orders')}
-                    className={`flex-1 flex flex-col items-center py-1.5 rounded-[10px] transition-all ${activeTab === 'orders' ? 'bg-primary/10' : 'hover:bg-border/20'}`}
-                >
-                    <span className={`text-[12px] font-black uppercase ${activeTab === 'orders' ? 'text-primary' : 'text-text-secondary'}`}>Thu nhập</span>
-                    <span className={`text-[12px] font-bold tabular-nums mt-0.5 ${activeTab === 'orders' ? 'text-text/80' : 'text-text-dim'}`}>{totalCups} ly</span>
-                </button>
-                <button
-                    onClick={() => setActiveTab('expense')}
-                    className={`flex-1 flex flex-col items-center py-1.5 rounded-[10px] transition-all ${activeTab === 'expense' ? 'bg-danger/10' : 'hover:bg-border/20'}`}
-                >
-                    <span className={`text-[12px] font-black uppercase ${activeTab === 'expense' ? 'text-danger' : 'text-text-secondary'}`}>Chi phí</span>
-                    <span className={`text-[12px] font-bold tabular-nums mt-0.5 ${activeTab === 'expense' ? 'text-text/80' : 'text-text-dim'}`}>-{formatVND(totalNonFixedRange)}</span>
-                </button>
-
                 <button
                     onClick={() => {
                         if (scope === 'week' || scope === 'month') {
@@ -759,6 +816,21 @@ export default function HistoryView({
                     className="flex flex-col items-center justify-center px-4 py-1.5 rounded-[10px] bg-success/10 hover:bg-success/20 transition-all"
                 >
                     <span className="text-[12px] font-black text-success uppercase">Báo cáo</span>
+                </button>
+
+                <button
+                    onClick={() => setActiveTab('orders')}
+                    className={`flex-1 flex flex-col items-center py-1.5 rounded-[10px] transition-all ${activeTab === 'orders' ? 'bg-primary/10' : 'hover:bg-border/20'}`}
+                >
+                    <span className={`text-[12px] font-black uppercase ${activeTab === 'orders' ? 'text-primary' : 'text-text-secondary'}`}>Thu nhập</span>
+                    <span className={`text-[12px] font-bold tabular-nums mt-0.5 ${activeTab === 'orders' ? 'text-text/80' : 'text-text-dim'}`}>{totalCups} ly</span>
+                </button>
+                <button
+                    onClick={() => setActiveTab('expense')}
+                    className={`flex-1 flex flex-col items-center py-1.5 rounded-[10px] transition-all ${activeTab === 'expense' ? 'bg-danger/10' : 'hover:bg-border/20'}`}
+                >
+                    <span className={`text-[12px] font-black uppercase ${activeTab === 'expense' ? 'text-danger' : 'text-text-secondary'}`}>Chi phí</span>
+                    <span className={`text-[12px] font-bold tabular-nums mt-0.5 ${activeTab === 'expense' ? 'text-text/80' : 'text-text-dim'}`}>-{formatVND(totalNonFixedRange)}</span>
                 </button>
 
             </div>

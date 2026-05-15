@@ -326,42 +326,47 @@ export default function InventoryRefillCard({
                             return (
                                 <div key={item.ingredient} className="flex flex-col border-b border-border/20 last:border-0 pb-3 last:pb-0">
                                     <div
-                                        className="flex items-start justify-between cursor-pointer group"
+                                        className="flex flex-col cursor-pointer group"
                                         onClick={() => toggleRow(item.ingredient)}
                                     >
-                                        <div className="flex flex-col flex-1 pr-2">
-                                            <div className="flex items-center gap-1 mb-0.5">
-                                                <span className="text-[14px] font-bold text-text leading-tight">
-                                                    {ingredientLabel(item.ingredient)}
+
+                                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                                            <span className="text-[14px] font-bold text-text leading-tight">
+                                                {ingredientLabel(item.ingredient)}
+                                            </span>
+                                            <ChevronDown size={14} className={`text-text-dim shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                                        </div>
+
+                                        <div className='flex justify-between w-full'>
+                                            <div className="flex flex-col flex-1 pr-2">
+                                                <span className="text-[11px] font-medium text-text-secondary">
+                                                    <span className="mx-1 text-border">•</span> Đầu kỳ: {item.opening}
                                                 </span>
-                                                <ChevronDown size={14} className={`text-text-dim shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                                                <span className="text-[11px] font-medium text-text-secondary">
+                                                    <span className="mx-1 text-border">•</span> Nhập thêm: {item.restock}
+                                                </span>
+                                                <span className="text-[11px] font-medium text-text-secondary">
+                                                    <span className="mx-1 text-border">•</span> Sử dụng: {item.used}
+                                                </span>
                                             </div>
-                                            <span className="text-[11px] font-medium text-text-secondary">
-                                                <span className="mx-1 text-border">•</span> Đầu kỳ: {item.opening}
-                                            </span>
-                                            <span className="text-[11px] font-medium text-text-secondary">
-                                                <span className="mx-1 text-border">•</span> Nhập thêm: {item.restock}
-                                            </span>
-                                            <span className="text-[11px] font-medium text-text-secondary">
-                                                <span className="mx-1 text-border">•</span> Sử dụng: {item.used}
-                                            </span>
+
+                                            <div className="flex flex-col flex-1 items-end">
+
+                                                <span className="text-[11px] font-medium text-text-secondary">
+                                                    <span className="mx-1 text-border">•</span> Lý thuyết: {item.theoretical}
+                                                </span>
+                                                <span className="text-[11px] font-medium text-text-secondary">
+                                                    <span className="mx-1 text-border">•</span> Tồn kho: {item.actual}
+                                                </span>
+                                                <span className={`text-[11px] font-black tabular-nums ${item.diffColor}`}>
+                                                    <span className="mx-1 text-border">•</span> {item.diffText}
+                                                </span>
+                                                {item.equivText && (
+                                                    <span className="text-[11px] font-bold text-danger/80 text-right">{item.equivText}</span>
+                                                )}
+                                            </div>
                                         </div>
 
-                                        <div className="flex flex-col items-end shrink-0 gap-1">
-
-                                            <span className="text-[11px] font-medium text-text-secondary">
-                                                <span className="mx-1 text-border">•</span> Lý thuyết: {item.theoretical}
-                                            </span>
-                                            <span className="text-[11px] font-medium text-text-secondary">
-                                                <span className="mx-1 text-border">•</span> Tồn kho: {item.actual}
-                                            </span>
-                                            <span className={`text-[11px] font-black tabular-nums ${item.diffColor}`}>
-                                                <span className="mx-1 text-border">•</span> {item.diffText}
-                                            </span>
-                                            {item.equivText && (
-                                                <span className="text-[11px] font-bold text-danger/80 text-right">{item.equivText}</span>
-                                            )}
-                                        </div>
                                     </div>
 
                                     {isExpanded && (
@@ -397,7 +402,7 @@ export default function InventoryRefillCard({
                                 onClick={() => setIsLossExpanded(!isLossExpanded)}
                             >
                                 <div className="flex items-center gap-1">
-                                    <span className="text-[12px] font-bold text-text-secondary">Tổng giá trị ước tính:</span>
+                                    <span className="text-[12px] font-bold text-text-secondary">Tổng giá trị hao hụt:</span>
                                     <ChevronDown size={14} className={`text-text-dim transition-transform duration-200 ${isLossExpanded ? 'rotate-180' : ''}`} />
                                 </div>
                                 <span className="text-[14px] font-black text-danger tabular-nums">-{formatVND(auditData.totalLossValue)}</span>
@@ -459,10 +464,10 @@ export default function InventoryRefillCard({
                                             {item.packsNeeded > 0 ? (
                                                 <div className="flex flex-col items-end">
                                                     <span className="text-[14px] font-black text-warning leading-none mb-1">
-                                                        +{item.packsNeeded} <span className="text-[11px] font-bold">{item.config.pack_unit || 'hộp'}</span>
+                                                        + {item.finalRefill} {unit}
                                                     </span>
-                                                    <span className="text-[9px] font-bold text-text-dim">
-                                                        ({item.finalRefill} {unit})
+                                                    <span className="text-[10px] font-bold text-text-dim">
+                                                        {item.packsNeeded} {item.config.pack_unit || " "} {ingredientLabel(item.ingredient).toLowerCase()}
                                                     </span>
                                                 </div>
                                             ) : (
