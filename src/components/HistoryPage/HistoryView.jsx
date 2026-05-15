@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, ChevronDown, Plus, X } from 'lucide-react'
 import { formatVND, formatVNDInput, parseVNDInput, calculateProductCost } from '../../utils'
 import { getPendingOrders, removePendingOrder } from '../../hooks/useOfflineSync'
 import { fetchTodayShiftClosing, fetchExpensesByRange, fetchOrdersByRange } from '../../services/orderService'
@@ -42,6 +42,8 @@ export default function HistoryView({
     const [costAmount, setCostAmount] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [deletingExpId, setDeletingExpId] = useState(null)
+    const [showAddModal, setShowAddModal] = useState(false)
+    const [showFilterMenu, setShowFilterMenu] = useState(false)
 
     // Date range — shared across orders/expense tabs
     const [scope, setScope] = useState('day')
@@ -238,7 +240,9 @@ export default function HistoryView({
         let list = nonFixedExpenses
         if (expenseFilter === 'daily') list = list.filter(e => !e.is_refill)
         else if (expenseFilter === 'after') list = list.filter(e => e.is_refill && e.metadata?.free_form)
+        else if (expenseFilter === 'operation') list = list.filter(e => !e.is_refill || (e.is_refill && e.metadata?.free_form))
         else if (expenseFilter === 'nvl') list = list.filter(e => e.is_refill && !e.metadata?.free_form)
+        else if (expenseFilter === 'fixed') list = []
         return [...list].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     }, [nonFixedExpenses, expenseFilter])
 
@@ -264,9 +268,9 @@ export default function HistoryView({
     const totalNonFixedRange = nonFixedExpenses.reduce((s, e) => s + (e.amount || 0), 0)
 
     const getExpenseBadge = (e) => {
-        if (e.is_refill && !e.metadata?.free_form) return { label: 'Tồn kho', cls: 'bg-primary/10 text-primary' }
-        if (e.is_refill && e.metadata?.free_form) return { label: 'Sau ca', cls: 'bg-warning/10 text-warning' }
-        return { label: 'Trong ca', cls: 'bg-danger/10 text-danger' }
+        if (e.is_refill && !e.metadata?.free_form) return { main: 'Tồn kho', sub: null, cls: 'bg-primary/10 text-primary' }
+        if (e.is_refill && e.metadata?.free_form) return { main: 'Vận hành', sub: 'Sau ca', cls: 'bg-danger/10 text-danger' }
+        return { main: 'Vận hành', sub: 'Trong ca', cls: 'bg-danger/10 text-danger' }
     }
 
     // ─── Expense form handlers ────────────────────────────────────────
@@ -292,6 +296,7 @@ export default function HistoryView({
             }
             setCostName('')
             setCostAmount('')
+            setShowAddModal(false)
         } catch { }
         finally { setIsSubmitting(false) }
     }
@@ -480,25 +485,50 @@ export default function HistoryView({
             {/* ═════ EXPENSE TAB ═════ */}
             {activeTab === 'expense' && (
                 <main className="flex-1 overflow-y-auto px-4 py-4 pb-4 space-y-3 bg-bg">
-                    {/* Filter chips */}
-                    <div className="flex gap-2 overflow-x-auto pb-0.5 no-scrollbar">
-                        {[
-                            { key: 'all', label: 'Tất cả' },
-                            { key: 'daily', label: 'Trong ca' },
-                            { key: 'after', label: 'Sau ca' },
-                            { key: 'nvl', label: 'Tồn kho' },
-                            { key: 'fixed', label: 'Cố định' },
-                        ].map(f => (
+                    {/* Filter dropdown + Add button */}
+                    <div className="flex items-center justify-between gap-2">
+                        <div className='relative'>
+                            {!isReadOnly && (
+                                <button
+                                    onClick={() => setShowAddModal(true)}
+                                    className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-full text-[12px] uppercase font-bold bg-danger/10 text-danger border border-danger/20 hover:bg-danger/20 transition-all"
+                                >
+                                    <Plus size={12} strokeWidth={3} /> Thêm
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="relative">
                             <button
-                                key={f.key}
-                                onClick={() => setExpenseFilter(f.key)}
-                                className={`px-3 py-1.5 rounded-full text-[11px] font-bold border transition-all whitespace-nowrap ${expenseFilter === f.key
-                                    ? 'bg-text text-bg border-text'
-                                    : 'bg-surface-light border-border/60 text-text-secondary hover:text-text'}`}
+                                onClick={() => setShowFilterMenu(v => !v)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] uppercase font-bold border bg-surface-light border-border/60 text-text-secondary hover:text-text transition-all"
                             >
-                                {f.label}
+                                {({ all: 'Tất cả', operation: 'Vận hành', daily: 'Trong ca', after: 'Sau ca', nvl: 'Tồn kho', fixed: 'Cố định' })[expenseFilter]}
+                                <ChevronDown size={12} className={`transition-transform ${showFilterMenu ? 'rotate-180' : ''}`} />
                             </button>
-                        ))}
+                            {showFilterMenu && (
+                                <>
+                                    <div className="fixed inset-0 z-10" onClick={() => setShowFilterMenu(false)} />
+                                    <div className="absolute right-0 top-full mt-1 z-20 bg-surface border border-border/60 rounded-[12px] shadow-xl overflow-hidden min-w-[120px]">
+                                        {[
+                                            { key: 'all', label: 'Tất cả' },
+                                            { key: 'operation', label: 'Vận hành' },
+                                            { key: 'nvl', label: 'Tồn kho' },
+                                            { key: 'fixed', label: 'Cố định' },
+                                        ].map(f => (
+                                            <button
+                                                key={f.key}
+                                                onClick={() => { setExpenseFilter(f.key); setShowFilterMenu(false) }}
+                                                className={`w-full text-left px-3 py-2 text-[12px] uppercase font-bold transition-colors ${expenseFilter === f.key ? 'text-text bg-primary/10' : 'text-text-secondary hover:text-text hover:bg-surface-light'}`}
+                                            >
+                                                {f.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
                     </div>
 
                     {/* Fixed costs sub-section (manager only) */}
@@ -571,9 +601,11 @@ export default function HistoryView({
                             <div className="bg-surface-light rounded-[20px] h-20 w-full" />
                         </div>
                     ) : filteredExpenses.length === 0 ? (
-                        <div className="text-center text-text-secondary text-[13px] py-10 bg-surface-light rounded-xl border border-border/40">
-                            Chưa có chi phí nào.
-                        </div>
+                        expenseFilter !== 'fixed' && (
+                            <div className="text-center text-text-secondary text-[13px] py-10 bg-surface-light rounded-xl border border-border/40">
+                                Chưa có chi phí nào.
+                            </div>
+                        )
                     ) : (
                         filteredExpenses.map(expense => {
                             const badge = getExpenseBadge(expense)
@@ -586,8 +618,9 @@ export default function HistoryView({
                             const snap = isNvlWithMeta ? nvlStockSnapshot.get(expense.id) : null
                             return (
                                 <div key={expense.id} className="bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden opacity-90">
-                                    <div className={`absolute top-0 right-0 text-[10px] font-black px-2 py-1 rounded-bl-[14px] uppercase tracking-wider ${badge.cls}`}>
-                                        {badge.label}
+                                    <div className={`absolute top-0 right-0 px-2 py-1 rounded-bl-[14px] flex flex-col items-end leading-tight ${badge.cls}`}>
+                                        <span className="text-[10px] font-black uppercase tracking-wider">{badge.main}</span>
+                                        {badge.sub && <span className="text-[9px] font-medium opacity-70 normal-case">{badge.sub}</span>}
                                     </div>
                                     <div className="flex justify-between items-center mb-1">
                                         <span className={`font-black text-[14px] mt-1 ${expense.is_refill ? 'text-warning' : 'text-danger'}`}>
@@ -643,56 +676,50 @@ export default function HistoryView({
                 </main>
             )}
 
-            {/* Expense add form — scan order: type → name → amount → add */}
-            {activeTab === 'expense' && !isReadOnly && (
-                <div className="shrink-0 bg-surface border-t border-border/60 px-4 pt-3 pb-2 flex flex-col gap-2">
-                    {/* Row 1: Type selector (full-width segmented) */}
-                    <div className="flex bg-surface-light border border-border/60 rounded-[12px] p-0.5">
-                        <button
-                            onClick={() => setExpenseCategory('expense')}
-                            className={`flex-1 py-1.5 rounded-[10px] text-[12px] font-black uppercase transition-all ${expenseCategory === 'expense' ? 'bg-danger/80 text-white shadow-sm' : 'text-text-secondary hover:text-text'}`}
-                        >Vận hành</button>
-                        <button
-                            onClick={() => setExpenseCategory('nvl')}
-                            className={`flex-1 py-1.5 rounded-[10px] text-[12px] font-black uppercase transition-all ${expenseCategory === 'nvl' ? 'bg-primary/80 text-white shadow-sm' : 'text-text-secondary hover:text-text'}`}
-                        >Tồn kho</button>
-                        <button
-                            onClick={() => setExpenseCategory('fixed')}
-                            className={`flex-1 py-1.5 rounded-[10px] text-[12px] font-black uppercase transition-all ${expenseCategory === 'fixed' ? 'bg-warning/80 text-white shadow-sm' : 'text-text-secondary hover:text-text'}`}
-                        >Cố định</button>
-                    </div>
-
-                    {/* Row 2: Name + Amount + Add */}
-                    <div className="flex gap-2">
+            {/* Add expense modal */}
+            {showAddModal && (
+                <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={() => setShowAddModal(false)}>
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+                    <div
+                        className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between">
+                            <span className="text-[16px] font-black text-text">Thêm chi phí</span>
+                            <button onClick={() => setShowAddModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all">
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <div className="flex bg-surface-light border border-border/60 rounded-[12px] p-0.5">
+                            <button onClick={() => setExpenseCategory('expense')} className={`flex-1 py-1.5 rounded-[10px] text-[12px] font-black uppercase transition-all ${expenseCategory === 'expense' ? 'bg-danger/80 text-white shadow-sm' : 'text-text-secondary hover:text-text'}`}>Vận hành</button>
+                            <button onClick={() => setExpenseCategory('nvl')} className={`flex-1 py-1.5 rounded-[10px] text-[12px] font-black uppercase transition-all ${expenseCategory === 'nvl' ? 'bg-primary/80 text-white shadow-sm' : 'text-text-secondary hover:text-text'}`}>Tồn kho</button>
+                            <button onClick={() => setExpenseCategory('fixed')} className={`flex-1 py-1.5 rounded-[10px] text-[12px] font-black uppercase transition-all ${expenseCategory === 'fixed' ? 'bg-warning/80 text-white shadow-sm' : 'text-text-secondary hover:text-text'}`}>Cố định</button>
+                        </div>
                         <input
                             type="text"
+                            autoFocus
                             placeholder="Tên chi phí..."
                             value={costName}
                             onChange={e => setCostName(e.target.value)}
-                            className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40"
+                            className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[15px] font-medium text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary/50"
                         />
-                        <div className="relative flex items-center bg-surface-light border border-border/60 rounded-[12px] overflow-hidden focus-within:border-primary/40 w-[96px] shrink-0">
+                        <div className="relative flex items-center bg-surface-light border border-border/60 rounded-[12px] overflow-hidden focus-within:border-primary/50">
                             <input
                                 type="number"
-                                placeholder="000đ"
+                                placeholder="0"
                                 value={costAmount}
                                 onChange={e => setCostAmount(e.target.value)}
                                 onKeyDown={e => { if (e.key === 'Enter') submitExpense() }}
-                                className="w-full bg-transparent px-2 py-2 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none z-10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                className="w-full bg-transparent px-4 py-3 text-[15px] font-medium text-text placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
-                            {costAmount && (
-                                <div className="absolute inset-0 pointer-events-none px-2 py-2 flex items-center whitespace-pre z-0">
-                                    <span className="text-[14px] font-medium text-transparent">{costAmount}</span>
-                                    <span className="text-[14px] font-medium text-text">k</span>
-                                </div>
-                            )}
+                            {costAmount && <span className="absolute right-4 text-[15px] font-medium text-text-secondary pointer-events-none">.000đ</span>}
                         </div>
                         <button
                             onClick={submitExpense}
                             disabled={!costAmount || isNaN(costAmount) || Number(costAmount) <= 0 || isSubmitting || !costName.trim()}
-                            className={`px-4 py-2 rounded-[12px] text-white text-[14px] font-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ${expenseCategory === 'nvl' ? 'bg-primary' : expenseCategory === 'fixed' ? 'bg-warning' : 'bg-danger'}`}
+                            className={`w-full py-3.5 rounded-[14px] text-white text-[15px] font-black uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed ${expenseCategory === 'nvl' ? 'bg-primary' : expenseCategory === 'fixed' ? 'bg-warning' : 'bg-danger'}`}
                         >
-                            {isSubmitting ? '...' : 'Thêm'}
+                            {isSubmitting ? 'Đang lưu...' : 'Xác nhận'}
                         </button>
                     </div>
                 </div>
@@ -706,7 +733,7 @@ export default function HistoryView({
                     onClick={() => setActiveTab('orders')}
                     className={`flex-1 flex flex-col items-center py-1.5 rounded-[10px] transition-all ${activeTab === 'orders' ? 'bg-primary/10' : 'hover:bg-border/20'}`}
                 >
-                    <span className={`text-[12px] font-black uppercase ${activeTab === 'orders' ? 'text-primary' : 'text-text-secondary'}`}>Tổng cộng</span>
+                    <span className={`text-[12px] font-black uppercase ${activeTab === 'orders' ? 'text-primary' : 'text-text-secondary'}`}>Thu nhập</span>
                     <span className={`text-[12px] font-bold tabular-nums mt-0.5 ${activeTab === 'orders' ? 'text-text/80' : 'text-text-dim'}`}>{totalCups} ly</span>
                 </button>
                 <button
