@@ -26,13 +26,14 @@ export default function CashFlowCard({ shiftClosing, cash: cashProp, transfer: t
         <div className="flex flex-col gap-4">
             {/* PHẦN 1: TỔNG THU TRONG CA */}
             <div className="grid grid-cols-2 gap-3">
-                <Card label="Tiền mặt" value={actualCash} />
-                <Card label="Chuyển khoản" value={actualTransfer} alignRight />
+                <Card label="Tiền mặt" value={actualCash} prefix='+' />
+                <Card label="Chuyển khoản" value={actualTransfer} prefix='+' alignRight />
 
                 <Card
                     label="Vận hành"
                     value={dailyExpense || 0}
                     valueClass="text-primary"
+                    prefix='+'
                     onClick={onDailyExpenseClick}
                 />
 

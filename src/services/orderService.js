@@ -1261,24 +1261,28 @@ export async function adjustIngredientStock(addressId, ingredient, delta, staffN
 
 // Process a restock: updates COGS, creates expense, returns result
 export async function processIngredientRestock(addressId, ingredient, qty, totalCost, staffName) {
+    let result
     if (localRepo.isGuest()) {
         // 1. Update unit cost
         const unitCost = Number(qty) > 0 ? Math.round(Number(totalCost) / Number(qty)) : 0
         await upsertIngredientCost(ingredient, unitCost, addressId)
         // 2. Insert expense
         const displayName = `Đi chợ: ${ingredient}`
-        return await insertExpense(displayName, totalCost, addressId, false, staffName, true, 'cash', { ingredient, qty, totalCost })
+        result = await insertExpense(displayName, totalCost, addressId, false, staffName, true, 'cash', { ingredient, qty, totalCost })
+    } else {
+        if (!supabase) throw new Error('No Supabase connection')
+        const { data, error } = await supabase.rpc('process_ingredient_restock', {
+            p_address_id: addressId,
+            p_ingredient: ingredient,
+            p_qty: qty,
+            p_total_cost: totalCost,
+            p_staff_name: staffName
+        })
+        if (error) throw error
+        result = data
     }
-    if (!supabase) throw new Error('No Supabase connection')
-    const { data, error } = await supabase.rpc('process_ingredient_restock', {
-        p_address_id: addressId,
-        p_ingredient: ingredient,
-        p_qty: qty,
-        p_total_cost: totalCost,
-        p_staff_name: staffName
-    })
-    if (error) throw error
-    return data
+    invalidateDailyContext(addressId)
+    return result
 }
 
 // Fetch all refill expenses (đi chợ) within a date range, all ingredients
@@ -1322,24 +1326,47 @@ export async function fetchIngredientRestockHistory(addressId, ingredient, fromD
 }
 
 // ---- Reports (Daily / Range) ----
+// In-memory TTL cache: spares the RPC when the manager toggles between Báo cáo / Nhật ký
+// tabs (shared footer). 30 s is short enough that user-driven changes appear soon, long
+// enough that quick tab toggles feel instant. Invalidated explicitly when relevant state
+// mutates (shift_closing insert/update, expense add/delete) via invalidateDailyContext().
+const _dailyContextCache = new Map() // addressId → { data, t }
+const DAILY_CONTEXT_TTL_MS = 30_000
+
+export function invalidateDailyContext(addressId) {
+    if (addressId) _dailyContextCache.delete(addressId)
+    else _dailyContextCache.clear()
+}
+
 export async function fetchDailyReportContext(addressId) {
+    if (!addressId) return {}
+    const cached = _dailyContextCache.get(addressId)
+    if (cached && Date.now() - cached.t < DAILY_CONTEXT_TTL_MS) {
+        return cached.data
+    }
+
+    let data
     if (localRepo.isGuest()) {
         const todayStr = new Date().toDateString()
         const yesterday = new Date()
         yesterday.setDate(yesterday.getDate() - 1)
         const yesterdayStr = yesterday.toDateString()
 
-        return {
+        data = {
             shift_closing: localRepo.fetchLocalShiftClosing(addressId, todayStr) || null,
             yesterday_closing: localRepo.fetchLocalShiftClosing(addressId, yesterdayStr) || localRepo.fetchLocalYesterdayShiftClosing(addressId) || null,
             yesterday_orders: localRepo.fetchLocalOrders(addressId, yesterdayStr),
             yesterday_expenses: localRepo.fetchLocalExpenses(addressId, yesterdayStr)
         }
+    } else if (!supabase) {
+        data = {}
+    } else {
+        const { data: rpcData, error } = await supabase.rpc('get_daily_report_context', { p_address_id: addressId })
+        if (error) throw error
+        data = rpcData || {}
     }
-    if (!supabase) return {}
-    const { data, error } = await supabase.rpc('get_daily_report_context', { p_address_id: addressId })
-    if (error) throw error
-    return data || {}
+    _dailyContextCache.set(addressId, { data, t: Date.now() })
+    return data
 }
 
 export async function fetchReportByDate(addressId, dateStr) {

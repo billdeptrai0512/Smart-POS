@@ -49,7 +49,7 @@ export default function Header({ isOnline, dayName, dateOnly, onOpenHistory, add
                         </div>
                         <div className="w-full">
                             {lastOrder ? (
-                                <div className="text-[13px] font-bold text-primary uppercase tracking-tight leading-snug flex flex-col mt-1 gap-1">
+                                <div className="text-[12px] font-bold text-primary uppercase tracking-tight leading-snug flex flex-col mt-1 gap-1">
                                     {lastOrder.items.map((item, i) => (
                                         <span key={i}>{item}</span>
                                     ))}

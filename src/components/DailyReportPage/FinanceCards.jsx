@@ -1,7 +1,6 @@
-import { Banknote, ArrowRight, MinusCircle, ArrowUp, ArrowDown } from 'lucide-react'
 import { formatVND } from '../../utils'
 
-export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, refillNvl = 0, refillFreeForm = 0, fixedExpense, netProfit, onRecipesClick, onDailyExpenseClick, onRefillNvlClick, onRefillFreeFormClick, onFixedExpenseClick, yesterdayNetProfit, compareLabel = 'So với hôm qua' }) {
+export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, fixedExpense, netProfit, onRecipesClick, onDailyExpenseClick, onFixedExpenseClick, yesterdayNetProfit, compareLabel = 'So với hôm qua' }) {
     return (
         <div className="grid grid-cols-2 gap-3">
             <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">

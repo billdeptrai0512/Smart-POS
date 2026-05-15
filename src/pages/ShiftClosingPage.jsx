@@ -1,19 +1,22 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, CircleCheck, PackageCheck } from 'lucide-react'
 import { usePOS } from '../contexts/POSContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
-import { Lock, Unlock } from 'lucide-react'
-import { formatVND, formatVNDInput, parseVNDInput } from '../utils'
+import { formatVNDInput, parseVNDInput } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
-import { insertShiftClosing, updateShiftClosing, fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchIngredientCostsWithUnits, fetchFixedCosts, insertExpense, fetchTodayExpenses } from '../services/orderService'
+import { insertShiftClosing, updateShiftClosing, fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchIngredientCostsWithUnits, fetchFixedCosts, insertExpense, fetchTodayExpenses, invalidateDailyContext } from '../services/orderService'
 import { supabase } from '../lib/supabaseClient'
-import { ingredientLabel, sortIngredients } from '../components/common/recipeUtils'
+import { sortIngredients } from '../components/common/recipeUtils'
 import { useToast } from '../hooks/useToast'
 import { useEntitlement, hasFeature } from '../hooks/useEntitlement'
 import Toast from '../components/POSPage/Toast'
 import UpsellPage from '../components/common/UpsellPage'
+import ShiftClosingHeader from '../components/ShiftClosingPage/ShiftClosingHeader'
+import RevenueInputCard from '../components/ShiftClosingPage/RevenueInputCard'
+import InventoryReportCard from '../components/ShiftClosingPage/InventoryReportCard'
+import NoteCard from '../components/ShiftClosingPage/NoteCard'
+import ShiftClosingFooter from '../components/ShiftClosingPage/ShiftClosingFooter'
 
 export default function ShiftClosingPage() {
     const navigate = useNavigate()
@@ -25,13 +28,12 @@ export default function ShiftClosingPage() {
     const { activeModules } = useEntitlement()
     const canUnlock = isManager || isAdmin
 
-    // Load history if not loaded
     useEffect(() => {
-        if (todayOrders.length === 0 && !isLoadingHistory) {
-            handleLoadHistory()
-        }
+        if (todayOrders.length === 0 && !isLoadingHistory) handleLoadHistory()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
+
+    const [activeTab, setActiveTab] = useState('inventory') // 'inventory' | 'revenue' | 'note'
 
     // --- Revenue inputs ---
     const [actualCash, setActualCash] = useState('')
@@ -52,191 +54,144 @@ export default function ShiftClosingPage() {
     const [openingInputs, setOpeningInputs] = useState({})
     const [openingLocked, setOpeningLocked] = useState({})
 
-    // Load existing shift closing data (for editing)
+    // Load existing shift closing (for editing)
     useEffect(() => {
-        if (selectedAddress?.id) {
-            setIsLoadingExisting(true)
-            fetchTodayShiftClosing(selectedAddress.id).then(data => {
-                if (data) {
-                    setExistingClosing(data)
-                    setActualCash(data.actual_cash !== null && data.actual_cash !== undefined ? formatVNDInput(data.actual_cash) : '')
-                    setActualTransfer(data.actual_transfer !== null && data.actual_transfer !== undefined ? formatVNDInput(data.actual_transfer) : '')
-                    setNote(data.note || '')
-                    // Pre-fill inventory inputs
-                    if (data.inventory_report) {
-                        let parsed = data.inventory_report
-                        if (typeof parsed === 'string') {
-                            try { parsed = JSON.parse(parsed) } catch {
-                                console.warn('Could not parse inventory_report JSON, ignoring')
-                            }
-                        }
-                        if (Array.isArray(parsed)) {
-                            const inputs = {}
-                            const restocks = {}
-                            const openings = {}
-                            const locked = {}
-                            parsed.forEach(item => {
-                                if (typeof item.remaining === 'number') {
-                                    inputs[item.ingredient] = String(item.remaining)
-                                }
-                                if (typeof item.restock === 'number') {
-                                    restocks[item.ingredient] = String(item.restock)
-                                }
-                                if (typeof item.opening === 'number') {
-                                    openings[item.ingredient] = String(item.opening)
-                                }
-                                if (item.opening_locked) {
-                                    locked[item.ingredient] = true
-                                }
-                            })
-                            setInventoryInputs(inputs)
-                            setRestockInputs(restocks)
-                            if (Object.keys(openings).length) setOpeningInputs(openings)
-                            if (Object.keys(locked).length) setOpeningLocked(locked)
-                        }
-                    }
-                }
-            }).finally(() => {
-                setIsLoadingExisting(false)
+        if (!selectedAddress?.id) { setIsLoadingExisting(false); return }
+        setIsLoadingExisting(true)
+        fetchTodayShiftClosing(selectedAddress.id).then(data => {
+            if (!data) return
+            setExistingClosing(data)
+            setActualCash(data.actual_cash != null ? formatVNDInput(data.actual_cash) : '')
+            setActualTransfer(data.actual_transfer != null ? formatVNDInput(data.actual_transfer) : '')
+            setNote(data.note || '')
+
+            let parsed = data.inventory_report
+            if (typeof parsed === 'string') {
+                try { parsed = JSON.parse(parsed) } catch { console.warn('Could not parse inventory_report JSON, ignoring') }
+            }
+            if (!Array.isArray(parsed)) return
+
+            const inputs = {}, restocks = {}, openings = {}, locked = {}
+            parsed.forEach(item => {
+                if (typeof item.remaining === 'number') inputs[item.ingredient] = String(item.remaining)
+                if (typeof item.restock === 'number') restocks[item.ingredient] = String(item.restock)
+                if (typeof item.opening === 'number') openings[item.ingredient] = String(item.opening)
+                if (item.opening_locked) locked[item.ingredient] = true
             })
-        } else {
-            setIsLoadingExisting(false)
-        }
+            setInventoryInputs(inputs)
+            setRestockInputs(restocks)
+            if (Object.keys(openings).length) setOpeningInputs(openings)
+            if (Object.keys(locked).length) setOpeningLocked(locked)
+        }).finally(() => setIsLoadingExisting(false))
     }, [selectedAddress?.id])
 
-    // Load yesterday's shift closing for opening stock
+    // Load yesterday's opening stock
     useEffect(() => {
-        if (selectedAddress?.id) {
-            fetchYesterdayShiftClosing(selectedAddress.id).then(data => {
-                if (data?.inventory_report && Array.isArray(data.inventory_report)) {
-                    const stock = {}
-                    const openings = {}
-                    data.inventory_report.forEach(item => {
-                        if (typeof item.remaining === 'number') {
-                            stock[item.ingredient] = item.remaining
-                            openings[item.ingredient] = String(item.remaining)
-                        }
-                    })
-                    setOpeningStock(stock)
-                    // Seed openingInputs from yesterday only if today's closing hasn't set them yet
-                    setOpeningInputs(prev => {
-                        if (Object.keys(prev).length > 0) return prev
-                        return openings
-                    })
+        if (!selectedAddress?.id) return
+        fetchYesterdayShiftClosing(selectedAddress.id).then(data => {
+            if (!data?.inventory_report || !Array.isArray(data.inventory_report)) return
+            const stock = {}, openings = {}
+            data.inventory_report.forEach(item => {
+                if (typeof item.remaining === 'number') {
+                    stock[item.ingredient] = item.remaining
+                    openings[item.ingredient] = String(item.remaining)
                 }
             })
-        }
+            setOpeningStock(stock)
+            // Seed only if today's closing hasn't set them yet
+            setOpeningInputs(prev => Object.keys(prev).length > 0 ? prev : openings)
+        })
     }, [selectedAddress?.id])
 
     useEffect(() => {
-        if (selectedAddress?.id) {
-            setIsLoadingIngredients(true)
-            fetchIngredientCostsWithUnits(selectedAddress.id).then(list => {
-                const sortedList = [...list].sort((a, b) => sortIngredients(a.ingredient, b.ingredient, selectedAddress?.ingredient_sort_order))
-                setIngredientsList(sortedList)
-            }).finally(() => {
-                setIsLoadingIngredients(false)
-            })
-        } else {
-            setIsLoadingIngredients(false)
-        }
+        if (!selectedAddress?.id) { setIsLoadingIngredients(false); return }
+        setIsLoadingIngredients(true)
+        fetchIngredientCostsWithUnits(selectedAddress.id).then(list => {
+            const sorted = [...list].sort((a, b) => sortIngredients(a.ingredient, b.ingredient, selectedAddress?.ingredient_sort_order))
+            setIngredientsList(sorted)
+        }).finally(() => setIsLoadingIngredients(false))
     }, [selectedAddress?.id, selectedAddress?.ingredient_sort_order])
 
     // --- Supabase Realtime Broadcast ---
     useEffect(() => {
-        if (!selectedAddress?.id) return;
+        if (!selectedAddress?.id) return
 
-        const channelName = `shift-closing-${selectedAddress.id}`
-        const channel = supabase.channel(channelName, {
-            config: {
-                broadcast: { self: false } // don't receive our own messages
-            }
+        const channel = supabase.channel(`shift-closing-${selectedAddress.id}`, {
+            config: { broadcast: { self: false } }
         })
 
         channel
             .on('broadcast', { event: 'sync-state' }, ({ payload }) => {
-                if (payload.type === 'actualCash') setActualCash(payload.value);
-                if (payload.type === 'actualTransfer') setActualTransfer(payload.value);
-                if (payload.type === 'note') setNote(payload.value);
-                if (payload.type === 'inventory') {
-                    setInventoryInputs(prev => ({ ...prev, [payload.ingredient]: payload.value }));
-                }
-                if (payload.type === 'restock') {
-                    setRestockInputs(prev => ({ ...prev, [payload.ingredient]: payload.value }));
-                }
-                if (payload.type === 'opening') {
-                    setOpeningInputs(prev => ({ ...prev, [payload.ingredient]: payload.value }));
-                }
-                if (payload.type === 'openingLocked') {
-                    setOpeningLocked(prev => ({ ...prev, [payload.ingredient]: payload.value }));
-                }
+                if (payload.type === 'actualCash') setActualCash(payload.value)
+                if (payload.type === 'actualTransfer') setActualTransfer(payload.value)
+                if (payload.type === 'note') setNote(payload.value)
+                if (payload.type === 'inventory') setInventoryInputs(prev => ({ ...prev, [payload.ingredient]: payload.value }))
+                if (payload.type === 'restock') setRestockInputs(prev => ({ ...prev, [payload.ingredient]: payload.value }))
+                if (payload.type === 'opening') setOpeningInputs(prev => ({ ...prev, [payload.ingredient]: payload.value }))
+                if (payload.type === 'openingLocked') setOpeningLocked(prev => ({ ...prev, [payload.ingredient]: payload.value }))
             })
             .subscribe()
 
         channelRef.current = channel
-
-        return () => {
-            supabase.removeChannel(channel)
-        }
+        return () => { supabase.removeChannel(channel) }
     }, [selectedAddress?.id])
 
-    // --- Calculate system total revenue ---
+    const broadcast = (payload) => {
+        channelRef.current?.send({ type: 'broadcast', event: 'sync-state', payload }).catch(() => { })
+    }
+
+    // --- System total revenue ---
     const pending = getPendingOrders()
     const todayStr = new Date().toDateString()
     const offlineToday = pending.filter(o => new Date(o.createdAt).toDateString() === todayStr)
-
     let systemTotalRevenue = 0
-    todayOrders.forEach(o => { 
-        if (!o.deleted_at && !o.deletedAt) systemTotalRevenue += o.total 
-    })
-    offlineToday.forEach(o => { 
-        if (!o.deleted_at && !o.deletedAt) systemTotalRevenue += o.total 
-    })
+    todayOrders.forEach(o => { if (!o.deleted_at && !o.deletedAt) systemTotalRevenue += o.total })
+    offlineToday.forEach(o => { if (!o.deleted_at && !o.deletedAt) systemTotalRevenue += o.total })
 
-    // --- Note: estimatedConsumption calculation is intentionally removed here as the shift closing process relies on manual actuals.
-
+    // --- Change handlers ---
+    const handleCashChange = (raw) => {
+        const val = formatVNDInput(raw)
+        setIsDirty(true); setActualCash(val)
+        broadcast({ type: 'actualCash', value: val })
+    }
+    const handleTransferChange = (raw) => {
+        const val = formatVNDInput(raw)
+        setIsDirty(true); setActualTransfer(val)
+        broadcast({ type: 'actualTransfer', value: val })
+    }
+    const handleNoteChange = (val) => {
+        setIsDirty(true); setNote(val)
+        broadcast({ type: 'note', value: val })
+    }
     const handleOpeningChange = (ingredient, value) => {
         setIsDirty(true)
         setOpeningInputs(prev => ({ ...prev, [ingredient]: value }))
-        channelRef.current?.send({
-            type: 'broadcast', event: 'sync-state',
-            payload: { type: 'opening', ingredient, value }
-        }).catch(() => { })
+        broadcast({ type: 'opening', ingredient, value })
     }
-
     const handleOpeningLock = (ingredient, locked) => {
         setIsDirty(true)
         setOpeningLocked(prev => ({ ...prev, [ingredient]: locked }))
-        channelRef.current?.send({
-            type: 'broadcast', event: 'sync-state',
-            payload: { type: 'openingLocked', ingredient, value: locked }
-        }).catch(() => { })
+        broadcast({ type: 'openingLocked', ingredient, value: locked })
     }
-
     const handleInventoryChange = (ingredient, value) => {
         setIsDirty(true)
         setInventoryInputs(prev => ({ ...prev, [ingredient]: value }))
-        channelRef.current?.send({
-            type: 'broadcast',
-            event: 'sync-state',
-            payload: { type: 'inventory', ingredient, value }
-        }).catch(() => { })
+        broadcast({ type: 'inventory', ingredient, value })
     }
-
     const handleRestockChange = (ingredient, value) => {
         setIsDirty(true)
         setRestockInputs(prev => ({ ...prev, [ingredient]: value }))
-        channelRef.current?.send({
-            type: 'broadcast',
-            event: 'sync-state',
-            payload: { type: 'restock', ingredient, value }
-        }).catch(() => { })
+        broadcast({ type: 'restock', ingredient, value })
+    }
+
+    const handleBack = () => {
+        if (isDirty && !window.confirm('Bạn có thay đổi chưa lưu. Trở về sẽ làm mất các dữ liệu này. Tiếp tục?')) return
+        window.history.length > 2 ? navigate(-1) : navigate('/history')
     }
 
     const handleSubmit = async () => {
         if (isSubmitting) return
         setIsSubmitting(true)
-
         try {
             const inventoryReport = ingredientsList
                 .filter(ing => {
@@ -245,16 +200,14 @@ export default function ShiftClosingPage() {
                     const hasOpening = openingInputs[ing.ingredient] !== undefined && openingInputs[ing.ingredient] !== ''
                     return hasRemaining || hasRestock || hasOpening
                 })
-                .map(ing => {
-                    return {
-                        ingredient: ing.ingredient,
-                        unit: ing.unit || 'đv',
-                        opening: openingInputs[ing.ingredient] !== undefined ? Number(openingInputs[ing.ingredient]) : null,
-                        opening_locked: openingLocked[ing.ingredient] || false,
-                        remaining: Number(inventoryInputs[ing.ingredient]) || 0,
-                        restock: Number(restockInputs[ing.ingredient]) || 0
-                    }
-                })
+                .map(ing => ({
+                    ingredient: ing.ingredient,
+                    unit: ing.unit || 'đv',
+                    opening: openingInputs[ing.ingredient] !== undefined ? Number(openingInputs[ing.ingredient]) : null,
+                    opening_locked: openingLocked[ing.ingredient] || false,
+                    remaining: Number(inventoryInputs[ing.ingredient]) || 0,
+                    restock: Number(restockInputs[ing.ingredient]) || 0
+                }))
 
             const payload = {
                 address_id: selectedAddress?.id,
@@ -270,19 +223,15 @@ export default function ShiftClosingPage() {
                 await updateShiftClosing(existingClosing.id, payload)
             } else {
                 await insertShiftClosing(payload)
-
                 // Auto-inject fixed costs as expenses (only for first-time shift close)
                 try {
                     const fixedCosts = await fetchFixedCosts(selectedAddress?.id)
                     if (fixedCosts.length > 0) {
-                        // Check if fixed expenses were already injected today
                         const todayExpenses = await fetchTodayExpenses(selectedAddress?.id)
                         const alreadyInjected = todayExpenses.some(e => e.is_fixed === true)
                         if (!alreadyInjected) {
                             await Promise.all(
-                                fixedCosts.map(fc =>
-                                    insertExpense(`[CĐ] ${fc.name}`, fc.amount, selectedAddress?.id, true)
-                                )
+                                fixedCosts.map(fc => insertExpense(`[CĐ] ${fc.name}`, fc.amount, selectedAddress?.id, true))
                             )
                         }
                     }
@@ -290,8 +239,9 @@ export default function ShiftClosingPage() {
                     showError(fixedErr, 'Ghi chi phí cố định vào ca')
                 }
             }
+            invalidateDailyContext(selectedAddress?.id)
 
-            setIsDirty(false) // reset dirty state on successful save
+            setIsDirty(false)
             if (hasFeature(activeModules, 'reports')) {
                 navigate('/daily-report', { replace: true })
             } else {
@@ -307,236 +257,69 @@ export default function ShiftClosingPage() {
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
-            
+
             {showPaywall ? (
                 <div className="absolute inset-0 z-50 bg-bg">
                     <UpsellPage backTo="/history" successMessage="Dữ liệu chốt ca đã được lưu thành công!" />
                 </div>
             ) : (
                 <>
-                    {/* Header */}
-                    <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => {
-                            if (isDirty) {
-                                if (!window.confirm('Bạn có thay đổi chưa lưu. Trở về sẽ làm mất các dữ liệu này. Tiếp tục?')) return;
-                            }
-                            window.history.length > 2 ? navigate(-1) : navigate('/history')
-                        }}
-                        className="w-10 h-10 flex flex-col items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
-                        title="Trở về"
-                    >
-                        <ArrowLeft size={20} strokeWidth={2.5} />
-                    </button>
+                    <ShiftClosingHeader
+                        systemTotalRevenue={systemTotalRevenue}
+                        isSubmitting={isSubmitting}
+                        isDisabled={isSubmitting || isLoadingHistory || isLoadingIngredients || isLoadingExisting}
+                        onBack={handleBack}
+                        onSubmit={handleSubmit}
+                    />
 
-                    <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
-                        <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Chốt ca</span>
-                        <span className="text-[12px] font-bold text-text/80 leading-none mt-1 tabular-nums">{formatVND(systemTotalRevenue)}</span>
-                    </div>
-
-                    <button
-                        onClick={handleSubmit}
-                        disabled={isSubmitting || isLoadingHistory || isLoadingIngredients || isLoadingExisting}
-                        className="w-10 h-10 flex shrink-0 flex-col items-center justify-center rounded-[14px] bg-success/10 border-border/60 transition-colors shadow-sm focus:outline-none"
-                    >
-                        {isSubmitting ? (
-                            <div className="w-5 h-5 border-2 border-success border-t-transparent rounded-full animate-spin" />
+                    <main className="flex-1 overflow-y-auto px-4 py-5 pb-28 space-y-5 bg-bg">
+                        {isLoadingHistory ? (
+                            <div className="flex flex-col gap-3 animate-pulse">
+                                <div className="bg-surface-light rounded-[20px] h-24 w-full" />
+                                <div className="bg-surface-light rounded-[20px] h-40 w-full" />
+                            </div>
                         ) : (
-                            <Check size={20} className='text-success' strokeWidth={3} />
+                            <>
+                                {activeTab === 'inventory' && (
+                                    <InventoryReportCard
+                                        ingredientsList={ingredientsList}
+                                        isLoading={isLoadingIngredients}
+                                        openingStock={openingStock}
+                                        openingInputs={openingInputs}
+                                        openingLocked={openingLocked}
+                                        restockInputs={restockInputs}
+                                        inventoryInputs={inventoryInputs}
+                                        canUnlock={canUnlock}
+                                        isSubmitting={isSubmitting}
+                                        onOpeningChange={handleOpeningChange}
+                                        onOpeningLock={handleOpeningLock}
+                                        onRestockChange={handleRestockChange}
+                                        onInventoryChange={handleInventoryChange}
+                                    />
+                                )}
+
+                                {activeTab === 'revenue' && (
+                                    <RevenueInputCard
+                                        actualCash={actualCash}
+                                        actualTransfer={actualTransfer}
+                                        isSubmitting={isSubmitting}
+                                        onCashChange={handleCashChange}
+                                        onTransferChange={handleTransferChange}
+                                    />
+                                )}
+
+                                {activeTab === 'note' && (
+                                    <NoteCard
+                                        note={note}
+                                        isSubmitting={isSubmitting}
+                                        onChange={handleNoteChange}
+                                    />
+                                )}
+                            </>
                         )}
-                    </button>
-                </div>
-            </header>
+                    </main>
 
-
-            {/* Main content */}
-            <main className="flex-1 overflow-y-auto px-4 py-5 pb-28 space-y-5 bg-bg">
-                {isLoadingHistory ? (
-                    <div className="flex flex-col gap-3 animate-pulse">
-                        <div className="bg-surface-light rounded-[20px] h-24 w-full" />
-                        <div className="bg-surface-light rounded-[20px] h-40 w-full" />
-                    </div>
-                ) : (
-                    <>
-                        {/* Section 1: Revenue Input */}
-                        <div>
-                            <div className="flex items-center gap-3 py-1 mb-3 px-1">
-                                <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                                <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Thực nhận</span>
-                                <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                            </div>
-
-                            <div className="bg-surface rounded-[20px] p-4 border border-border/60 shadow-sm space-y-3">
-                                {/* Cash input */}
-                                <div className="flex items-center gap-3">
-                                    <span className="text-[13px] font-bold text-text w-[110px] shrink-0">Tiền mặt</span>
-                                    <div className="relative flex-1 flex items-center bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden">
-                                        <input
-                                            type="text"
-                                            inputMode="numeric"
-                                            placeholder="Số tiền..."
-                                            value={actualCash}
-                                            onChange={e => {
-                                                const val = formatVNDInput(e.target.value);
-                                                setIsDirty(true);
-                                                setActualCash(val);
-                                                channelRef.current?.send({ type: 'broadcast', event: 'sync-state', payload: { type: 'actualCash', value: val } }).catch(() => { });
-                                            }}
-                                            disabled={isSubmitting}
-                                            className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                                        />
-                                        {actualCash && (
-                                            <span className="text-[14px] font-medium text-text-secondary pr-3 shrink-0 pointer-events-none">đ</span>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Transfer input */}
-                                <div className="flex items-center gap-3">
-                                    <span className="text-[13px] font-bold text-text w-[110px] shrink-0">Chuyển khoản</span>
-                                    <div className="relative flex-1 flex items-center bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden">
-                                        <input
-                                            type="text"
-                                            inputMode="numeric"
-                                            placeholder="Số tiền..."
-                                            value={actualTransfer}
-                                            onChange={e => {
-                                                const val = formatVNDInput(e.target.value);
-                                                setIsDirty(true);
-                                                setActualTransfer(val);
-                                                channelRef.current?.send({ type: 'broadcast', event: 'sync-state', payload: { type: 'actualTransfer', value: val } }).catch(() => { });
-                                            }}
-                                            disabled={isSubmitting}
-                                            className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                                        />
-                                        {actualTransfer && (
-                                            <span className="text-[14px] font-medium text-text-secondary pr-3 shrink-0 pointer-events-none">đ</span>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Section 2: Inventory Report */}
-                        {isLoadingIngredients ? (
-                            <div className="flex flex-col gap-3 py-4 animate-pulse">
-                                <div className="bg-surface-light rounded-[12px] h-8 w-1/3 mb-2" />
-                                <div className="bg-surface-light rounded-[20px] h-32 w-full" />
-                            </div>
-                        ) : ingredientsList.length > 0 && (
-                            <div>
-                                <div className="flex items-center gap-3 py-1 mb-3 px-1">
-                                    <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                                    <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Kiểm tồn kho</span>
-                                    <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                                </div>
-
-                                <div className="bg-surface rounded-[20px] p-3 border border-border/60 shadow-sm space-y-3">
-                                    {ingredientsList.map(ing => {
-                                        const unit = ing.unit || 'đv'
-                                        const opening = openingStock[ing.ingredient]
-                                        const isLocked = openingLocked[ing.ingredient]
-                                        const showLockBtn = !isLocked || canUnlock
-                                        return (
-                                            <div key={ing.ingredient} className="border-b border-border/20 last:border-0 pb-2.5 last:pb-0">
-                                                {/* Row 1: name */}
-                                                <span className="text-[12px] font-bold text-text block mb-1.5">{ingredientLabel(ing.ingredient)}</span>
-
-                                                {/* Row 2: 3 columns */}
-                                                <div className="grid grid-cols-3 gap-2">
-                                                    {/* Tồn đầu */}
-                                                    <div className="flex flex-col">
-                                                        <div className="flex items-center justify-between mb-1">
-                                                            <span className="text-[9px] font-black text-text-dim uppercase">Tồn đầu</span>
-                                                            {showLockBtn && (
-                                                                <button
-                                                                    type="button"
-                                                                    disabled={isSubmitting}
-                                                                    onClick={() => handleOpeningLock(ing.ingredient, !isLocked)}
-                                                                    className={`transition-colors disabled:opacity-50 ${isLocked ? 'text-primary' : 'text-text-dim hover:text-primary'}`}
-                                                                >
-                                                                    {isLocked ? <Lock size={10} strokeWidth={2.5} /> : <Unlock size={10} strokeWidth={2} />}
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                        <div className={`flex items-center rounded-[10px] overflow-hidden transition-all gap-1 ${isLocked ? 'bg-primary/8 border border-primary/30' : 'bg-surface-light border border-border/60 focus-within:border-primary/40'}`}>
-                                                            <input
-                                                                type="number"
-                                                                placeholder="-"
-                                                                value={openingInputs[ing.ingredient] ?? (opening !== undefined && opening !== null ? String(opening) : '')}
-                                                                onChange={e => handleOpeningChange(ing.ingredient, e.target.value)}
-                                                                disabled={isLocked || isSubmitting}
-                                                                className={`flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-bold text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isLocked ? 'text-primary cursor-not-allowed' : 'text-text'} disabled:opacity-50`}
-                                                            />
-                                                            <span className={`pr-1.5 text-[10px] font-medium shrink-0 ${isLocked ? 'text-primary/70' : 'text-text-dim'}`}>{unit}</span>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Nhập thêm */}
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[9px] font-black text-text-dim uppercase mb-1">Nhập thêm</span>
-                                                        <div className="flex items-center gap-1 bg-surface-light border border-border/60 rounded-[10px] overflow-hidden focus-within:border-primary/40 transition-colors">
-                                                            <input
-                                                                type="number"
-                                                                placeholder="-"
-                                                                value={restockInputs[ing.ingredient] || ''}
-                                                                onChange={e => handleRestockChange(ing.ingredient, e.target.value)}
-                                                                disabled={isSubmitting}
-                                                                className="flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-medium text-text text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
-                                                            />
-                                                            <span className="pr-1.5 text-[10px] font-medium text-text-dim shrink-0">{unit}</span>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Tồn cuối */}
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[9px] font-black text-text-dim uppercase mb-1">Tồn cuối</span>
-                                                        <div className="flex items-center gap-1 bg-surface-light border border-border/60 rounded-[10px] overflow-hidden focus-within:border-primary/40 transition-colors">
-                                                            <input
-                                                                type="number"
-                                                                placeholder="-"
-                                                                value={inventoryInputs[ing.ingredient] || ''}
-                                                                onChange={e => handleInventoryChange(ing.ingredient, e.target.value)}
-                                                                disabled={isSubmitting}
-                                                                className="flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-medium text-text text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
-                                                            />
-                                                            <span className="pr-1.5 text-[10px] font-medium text-text-dim shrink-0">{unit}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Section 3: Note */}
-                        <div>
-                            <div className="flex items-center gap-3 py-1 mb-3 px-1">
-                                <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                                <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Ghi chú</span>
-                                <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                            </div>
-
-                            <textarea
-                                placeholder="Ghi chú thêm (tùy chọn)..."
-                                value={note}
-                                onChange={e => {
-                                    const val = e.target.value;
-                                    setIsDirty(true);
-                                    setNote(val);
-                                    channelRef.current?.send({ type: 'broadcast', event: 'sync-state', payload: { type: 'note', value: val } }).catch(() => { });
-                                }}
-                                disabled={isSubmitting}
-                                rows={3}
-                                className="w-full bg-surface border border-border/60 rounded-[20px] px-4 py-3 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors resize-none shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                            />
-                        </div>
-                    </>
-                )}
-            </main>
+                    <ShiftClosingFooter activeTab={activeTab} onSelect={setActiveTab} />
                 </>
             )}
         </div>

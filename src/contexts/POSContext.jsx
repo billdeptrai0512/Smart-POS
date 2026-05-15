@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { fetchTodayStats, fetchInventory, submitOrder, fetchTodayOrders, deleteOrder, fetchTodayExpenses, insertExpense, deleteExpense, fetchFixedCosts, insertFixedCost, updateFixedCost, deleteFixedCost, fetchLatestOrder } from '../services/orderService'
+import { fetchTodayStats, fetchInventory, submitOrder, fetchTodayOrders, deleteOrder, fetchTodayExpenses, insertExpense, deleteExpense, fetchFixedCosts, insertFixedCost, updateFixedCost, deleteFixedCost, fetchLatestOrder, invalidateDailyContext } from '../services/orderService'
 import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder } from '../hooks/useOfflineSync'
 import { calculateProductCost } from '../utils'
@@ -417,6 +417,7 @@ export function POSProvider() {
                 const { revenue: rev, cups } = await fetchTodayStats(addressId)
                 setRevenue(rev)
                 setCupsSold(cups)
+                invalidateDailyContext(addressId)
             }
             showToast('Đã xóa đơn hàng', 'success')
         } catch (err) {
@@ -430,6 +431,7 @@ export function POSProvider() {
             const expense = await insertExpense(name, amount, addressId, isFixed, profile?.name, isRefill, paymentMethod, metadata)
             setTodayExpenses(prev => [expense, ...prev])
             if (!isFixed) setTotalCost(prev => prev + amount)
+            invalidateDailyContext(addressId)
             showToast(isFixed ? 'Đã ghi nhận thực chi cố định' : isRefill ? 'Đã thêm khoản mua nguyên vật liệu' : 'Đã thêm chi phí', 'success')
             return expense
         } catch (err) {
@@ -444,6 +446,7 @@ export function POSProvider() {
             const wasFixed = todayExpenses.find(e => e.id === expenseId)?.is_fixed
             setTodayExpenses(prev => prev.filter(e => e.id !== expenseId))
             if (!wasFixed) setTotalCost(prev => Math.max(0, prev - amount))
+            invalidateDailyContext(addressId)
             showToast('Đã xóa chi phí', 'success')
         } catch (err) {
             showError(err, 'Xóa chi phí')

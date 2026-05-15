@@ -3,6 +3,7 @@ import { usePOS } from '../contexts/POSContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { calculateProductCost } from '../utils'
+import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses, sumFixedCosts } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import { fetchDailyReportContext, fetchReportByDate } from '../services/orderService'
 import ReportHeader from '../components/DailyReportPage/ReportHeader'
@@ -11,6 +12,7 @@ import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
 import FinancialFlow from '../components/DailyReportPage/FinancialFlow'
+import HistoryFooter from '../components/HistoryPage/HistoryFooter'
 import { supabase } from '../lib/supabaseClient'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -93,93 +95,31 @@ export default function DailyReportPage() {
     const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products])
 
     // Extra maps — rebuilt only when productExtras changes
-    const extraMaps = useMemo(() => {
-        const priceMap = {}, nameMap = {}
-        Object.values(productExtras || {}).forEach(extras => {
-            extras.forEach(e => {
-                priceMap[e.id] = e.price || 0
-                nameMap[e.id] = e.name || e.id
-            })
-        })
-        return { priceMap, nameMap }
-    }, [productExtras])
+    const extraMaps = useMemo(() => buildExtraMaps(productExtras), [productExtras])
 
     // All heavy stats: only reruns when orders/recipes/products change, NOT on UI state changes
     const { totalRevenue, totalCOGS, productStats, soldProducts, lineChartData, offlineToday } = useMemo(() => {
-        const { priceMap: extraPriceMap, nameMap: extraNameMap } = extraMaps
-
         const pending = customDate ? [] : getPendingOrders()
         const todayStr = new Date().toDateString()
         const offlineToday = pending.filter(o => new Date(o.createdAt).toDateString() === todayStr)
 
-        let totalRevenue = 0, totalCOGS = 0
-        const hourlyRevenue = {}, hourlyOrders = {}, productStats = {}
-        const activeHours = new Set(), soldProducts = new Set()
-
-        const processOrder = (o, isOffline) => {
-            const createdAt = isOffline ? o.createdAt : o.created_at
-            if (!createdAt) return
-            const d = new Date(createdAt)
-            const hour = d.getHours()
-            activeHours.add(hour)
-            hourlyRevenue[hour] = (hourlyRevenue[hour] || 0) + o.total
-            totalRevenue += o.total
-
-            const orderItems = (isOffline ? (o.cart || o.orderItems) : o.order_items) || []
-            orderItems.forEach(i => {
-                const qty = i.quantity || i.qty || 1
-                const productId = i.product_id || i.productId
-
-                const prodDef = productMap.get(productId)
-                const name = prodDef?.name || (isOffline ? i.name : i.products?.name) || '?'
-                if (!hourlyOrders[hour]) hourlyOrders[hour] = {}
-                hourlyOrders[hour][name] = (hourlyOrders[hour][name] || 0) + qty
-
-                soldProducts.add(productId)
-
-                const snapshotCost = isOffline ? (i.unitCost || 0) : (i.unit_cost || 0)
-                const cost = snapshotCost > 0
-                    ? snapshotCost
-                    : calculateProductCost(productId, i.extras || [], recipes, extraIngredients, ingredientCosts)
-                totalCOGS += cost * qty
-
-                const basePrice = prodDef?.price || 0
-                const extrasPrice = isOffline
-                    ? (i.extras || []).reduce((sum, e) => sum + (e.price || 0), 0)
-                    : (i.extra_ids || []).reduce((sum, id) => sum + (extraPriceMap[id] || 0), 0)
-                const unitRevenue = basePrice + extrasPrice
-
-                const extraNames = isOffline
-                    ? (i.extras || []).map(e => e.name).filter(Boolean)
-                    : (i.extra_ids || []).map(id => extraNameMap[id]).filter(Boolean)
-                const variantLabel = extraNames.length > 0
-                    ? [...extraNames].sort((a, b) => a.trim().toLowerCase().localeCompare(b.trim().toLowerCase(), 'vi')).join(' + ')
-                    : 'Thường'
-
-                if (!productStats[productId]) productStats[productId] = { qty: 0, revenue: 0, cost: 0, variants: {} }
-                productStats[productId].qty += qty
-                productStats[productId].revenue += unitRevenue * qty
-                productStats[productId].cost += cost * qty
-                productStats[productId].variants[variantLabel] = (productStats[productId].variants[variantLabel] || 0) + qty
-            })
-        }
-
-        displayOrders.filter(o => !o.deleted_at).forEach(o => processOrder(o, false))
-        offlineToday.forEach(o => processOrder(o, true))
-
-        const hourRange = []
-        if (activeHours.size > 0) {
-            const minH = Math.min(...activeHours), maxH = Math.max(...activeHours)
-            for (let h = minH; h <= maxH; h++) hourRange.push(h)
-        }
-        let cumulative = 0
-        const lineChartData = hourRange.map(h => {
-            cumulative += (hourlyRevenue[h] || 0)
-            const items = Object.entries(hourlyOrders[h] || {}).map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty)
-            return { hour: `${h}h`, revenue: cumulative, hourRevenue: hourlyRevenue[h] || 0, items }
+        const agg = aggregateOrderStats({
+            orders: [...displayOrders, ...offlineToday],
+            productMap,
+            extraPriceMap: extraMaps.priceMap,
+            extraNameMap: extraMaps.nameMap,
+            recipes, extraIngredients, ingredientCosts,
+            selectedProductId: 'all',
         })
 
-        return { totalRevenue, totalCOGS, productStats, soldProducts, lineChartData, offlineToday }
+        return {
+            totalRevenue: agg.totalRevenue,
+            totalCOGS: agg.totalCOGS,
+            productStats: agg.productStats,
+            soldProducts: agg.soldProducts,
+            lineChartData: buildHourlyLineChart(agg),
+            offlineToday,
+        }
     }, [displayOrders, productMap, extraMaps, recipes, extraIngredients, ingredientCosts, customDate])
 
     // totalCups separated: only reruns when filter or orders change, not on other UI state
@@ -209,26 +149,13 @@ export default function DailyReportPage() {
         return cups
     }, [displayOrders, offlineToday, selectedProductId, productMap])
 
-    const { dailyExpense, refillTotal, refillNvl, refillFreeForm } = useMemo(() => {
-        const list = displayExpenses || []
-        let daily = 0, nvl = 0, freeForm = 0
-        for (const e of list) {
-            if (e.is_fixed) continue
-            if (e.is_refill) {
-                if (e.metadata?.free_form) freeForm += e.amount
-                else nvl += e.amount
-            } else {
-                daily += e.amount
-            }
-        }
-        return { dailyExpense: daily, refillTotal: nvl + freeForm, refillNvl: nvl, refillFreeForm: freeForm }
-    }, [displayExpenses])
-    const fixedExpense = useMemo(() =>
-        (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0),
-        [fixedCosts]
+    const { dailyExpense, refillTotal, refillNvl, refillFreeForm } = useMemo(
+        () => splitExpenses(displayExpenses),
+        [displayExpenses]
     )
+    const fixedExpense = useMemo(() => sumFixedCosts(fixedCosts), [fixedCosts])
     // P&L = Revenue - COGS - SUM(Loại 1 + 2 + 3 + 4) per TASK.md
-    const netProfit = totalRevenue - totalCOGS - dailyExpense - refillTotal - fixedExpense
+    const netProfit = totalRevenue - totalCOGS - dailyExpense - fixedExpense
 
     const yesterdayNetProfit = useMemo(() => {
         let rev = 0, cogs = 0
@@ -314,6 +241,33 @@ export default function DailyReportPage() {
                             lineChartData={lineChartData}
                         />
 
+                        {!isStaff && (
+
+
+                            <FinanceCards
+                                totalRevenue={totalRevenue}
+                                totalCOGS={totalCOGS}
+                                dailyExpense={dailyExpense}
+                                refillNvl={refillNvl}
+                                refillFreeForm={refillFreeForm}
+                                fixedExpense={fixedExpense}
+                                netProfit={netProfit}
+                                onRecipesClick={() => navigate('/recipes', { state: { from: '/daily-report' } })}
+                                onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                                onRefillNvlClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'nvl', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                                onRefillFreeFormClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'after', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                                onFixedExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'fixed', isReadOnly: !!customDate } })}
+                                yesterdayNetProfit={yesterdayNetProfit}
+                            />
+
+                        )}
+
+                        <div className="flex items-center gap-3 py-1 my-1 px-4">
+                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                            <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Dòng tiền</span>
+                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                        </div>
+
                         <CashFlowCard
                             shiftClosing={shiftClosing}
                             dailyExpense={dailyExpense}
@@ -333,32 +287,10 @@ export default function DailyReportPage() {
                             onRefillClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'nvl', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
                         />
 
-                        {/* only for manage */}
-                        {!isStaff && (
-                            <>
-                                <div className="flex items-center gap-3 py-1 my-1 px-4">
-                                    <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                                    <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tài chính</span>
-                                    <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                                </div>
 
-                                <FinanceCards
-                                    totalRevenue={totalRevenue}
-                                    totalCOGS={totalCOGS}
-                                    dailyExpense={dailyExpense}
-                                    refillNvl={refillNvl}
-                                    refillFreeForm={refillFreeForm}
-                                    fixedExpense={fixedExpense}
-                                    netProfit={netProfit}
-                                    onRecipesClick={() => navigate('/recipes', { state: { from: '/daily-report' } })}
-                                    onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
-                                    onRefillNvlClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'nvl', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
-                                    onRefillFreeFormClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'after', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
-                                    onFixedExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'fixed', isReadOnly: !!customDate } })}
-                                    yesterdayNetProfit={yesterdayNetProfit}
-                                />
-                            </>
-                        )}
+
+                        {/* only for manage */}
+
 
                         <div className="flex items-center gap-3 py-1 my-1 px-4">
                             <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
@@ -397,6 +329,15 @@ export default function DailyReportPage() {
                     </div>
                 )}
             </main>
+
+            <HistoryFooter
+                activeTab="report"
+                onSelect={(tab) => {
+                    if (tab === 'report') return
+                    // Tab-switch within shared dashboard → replace to preserve entry point in history stack
+                    navigate('/history', { replace: true, state: { from: backTo, tab: tab === 'orders' ? 'orders' : 'expense' } })
+                }}
+            />
         </div>
     )
 }

@@ -4,7 +4,8 @@ import { useProducts } from '../contexts/ProductContext'
 import { usePOS } from '../contexts/POSContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
-import { calculateProductCost, formatVND } from '../utils'
+import { formatVND } from '../utils'
+import { aggregateOrderStats, buildExtraMaps, splitExpenses, sumFixedCosts } from '../utils/reportStats'
 import { supabase } from '../lib/supabaseClient'
 import { fetchReportByRange } from '../services/orderService'
 import ReportHeader, { getDateRange } from '../components/DailyReportPage/ReportHeader'
@@ -114,120 +115,54 @@ export default function RangeReportPage() {
     const { days: prevDays } = useMemo(() => getDateRange(range, offset - 1), [range, offset])
 
     const stats = useMemo(() => {
-        let totalRevenue = 0, totalCOGS = 0, totalCups = 0
-        const productStats = {}
-        const soldProducts = new Set()
-
         const productMap = new Map(products.map(p => [p.id, p]))
-        const extraPriceMap = {}, extraNameMap = {}
-        Object.values(productExtras || {}).forEach(extras => {
-            extras.forEach(e => {
-                extraPriceMap[e.id] = e.price || 0
-                extraNameMap[e.id] = e.name || e.id
-            })
-        })
-        orders.filter(o => !o.deleted_at).forEach(o => {
-            totalRevenue += o.total
+        const { priceMap: extraPriceMap, nameMap: extraNameMap } = buildExtraMaps(productExtras)
 
-            if (o.total_cost > 0) {
-                totalCOGS += o.total_cost
-            }
-
-            const orderItems = o.order_items || []
-            orderItems.forEach(i => {
-                const qty = i.quantity || i.qty || 1
-                const productId = i.product_id || i.productId
-
-                const prodDef = productMap.get(productId)
-                if (selectedProductId === 'all') {
-                    if (prodDef?.count_as_cup !== false) totalCups += qty
-                } else if (selectedProductId === productId) {
-                    totalCups += qty
-                }
-                soldProducts.add(productId)
-
-                let cost = 0;
-                if (!(o.total_cost > 0)) {
-                    cost = i.unit_cost > 0 ? i.unit_cost : calculateProductCost(productId, [], recipes, extraIngredients, ingredientCosts)
-                    totalCOGS += cost * qty
-                }
-
-                const basePrice = prodDef?.price || 0
-                const extrasPrice = (i.extra_ids || []).reduce((sum, id) => sum + (extraPriceMap[id] || 0), 0)
-                const unitRevenue = basePrice + extrasPrice
-
-                const extraNames = (i.extra_ids || []).map(id => extraNameMap[id]).filter(Boolean)
-                const variantLabel = extraNames.length > 0
-                    ? [...extraNames].sort((a, b) => a.trim().toLowerCase().localeCompare(b.trim().toLowerCase(), 'vi')).join(' + ')
-                    : 'Thường'
-
-                if (!productStats[productId]) productStats[productId] = { qty: 0, revenue: 0, cost: 0, variants: {} }
-                productStats[productId].qty += qty
-                productStats[productId].revenue += unitRevenue * qty
-                productStats[productId].cost += cost * qty
-                productStats[productId].variants[variantLabel] = (productStats[productId].variants[variantLabel] || 0) + qty
-            })
+        const agg = aggregateOrderStats({
+            orders,
+            productMap, extraPriceMap, extraNameMap,
+            recipes, extraIngredients, ingredientCosts,
+            selectedProductId,
+            useTotalCostShortcut: true,
         })
 
         const cashRevenue = shiftClosings.reduce((s, sc) => s + (sc.actual_cash || 0), 0)
         const transferRevenue = shiftClosings.reduce((s, sc) => s + (sc.actual_transfer || 0), 0)
 
-        // Split expenses by 4 types per TASK.md
-        let dailyExpense = 0, refillNvl = 0, refillFreeForm = 0
-        for (const e of expenses) {
-            if (e.is_fixed) continue
-            if (e.is_refill) {
-                if (e.metadata?.free_form) refillFreeForm += e.amount
-                else refillNvl += e.amount
-            } else {
-                dailyExpense += e.amount
-            }
-        }
-        const refillTotal = refillNvl + refillFreeForm
-
-        const daysToCalculate = days > 0 ? days : 1
-        const fixedExpense = (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0) * daysToCalculate
+        const { dailyExpense, refillNvl, refillFreeForm, refillTotal } = splitExpenses(expenses)
+        const fixedExpense = sumFixedCosts(fixedCosts, days)
 
         // P&L = Revenue - COGS - SUM(Loại 1 + 2 + 3 + 4) per TASK.md
-        const netProfit = totalRevenue - totalCOGS - dailyExpense - refillTotal - fixedExpense
+        const netProfit = agg.totalRevenue - agg.totalCOGS - dailyExpense - refillTotal - fixedExpense
 
-        return { totalRevenue, totalCOGS, totalCups, cashRevenue, transferRevenue, dailyExpense, refillTotal, refillNvl, refillFreeForm, fixedExpense, netProfit, productStats, soldProducts }
+        return {
+            totalRevenue: agg.totalRevenue,
+            totalCOGS: agg.totalCOGS,
+            totalCups: agg.totalCups,
+            productStats: agg.productStats,
+            soldProducts: agg.soldProducts,
+            cashRevenue, transferRevenue,
+            dailyExpense, refillTotal, refillNvl, refillFreeForm,
+            fixedExpense, netProfit,
+        }
     }, [orders, expenses, shiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, productExtras, products, selectedProductId, days])
 
     const prevStats = useMemo(() => {
-        let revenue = 0, cups = 0, totalCOGS = 0
         const prevProductMap = new Map(products.map(p => [p.id, p]))
-        prevOrders.filter(o => !o.deleted_at).forEach(o => {
-            revenue += o.total
 
-            if (o.total_cost > 0) {
-                totalCOGS += o.total_cost
-            }
-
-            const orderItems = o.order_items || []
-            orderItems.forEach(i => {
-                const qty = i.quantity || i.qty || 1
-                const productId = i.product_id || i.productId
-                if (selectedProductId === 'all') {
-                    if (prevProductMap.get(productId)?.count_as_cup !== false) cups += qty
-                } else if (selectedProductId === productId) {
-                    cups += qty
-                }
-
-                if (!(o.total_cost > 0)) {
-                    const cost = i.unit_cost > 0 ? i.unit_cost : calculateProductCost(productId, [], recipes, extraIngredients, ingredientCosts)
-                    totalCOGS += cost * qty
-                }
-            })
+        const agg = aggregateOrderStats({
+            orders: prevOrders,
+            productMap: prevProductMap,
+            extraPriceMap: {}, extraNameMap: {},
+            recipes, extraIngredients, ingredientCosts,
+            selectedProductId,
+            useTotalCostShortcut: true,
         })
 
-        const dailyExpense = prevExpenses.filter(e => !e.is_fixed && !e.is_refill).reduce((s, e) => s + e.amount, 0)
-        const refillTotal = prevExpenses.filter(e => !e.is_fixed && e.is_refill).reduce((s, e) => s + e.amount, 0)
+        const { dailyExpense, refillTotal } = splitExpenses(prevExpenses)
+        const fixedExpense = sumFixedCosts(fixedCosts, prevDays)
 
-        const daysToCalculate = prevDays > 0 ? prevDays : 1
-        const fixedExpense = (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0) * daysToCalculate
-
-        const netProfit = revenue - totalCOGS - dailyExpense - refillTotal - fixedExpense
+        const netProfit = agg.totalRevenue - agg.totalCOGS - dailyExpense - refillTotal - fixedExpense
 
         const prevCash = prevShiftClosings.reduce((s, sc) => s + (sc.actual_cash || 0), 0)
         const prevTransfer = prevShiftClosings.reduce((s, sc) => s + (sc.actual_transfer || 0), 0)
@@ -237,7 +172,7 @@ export default function RangeReportPage() {
         const takeHome = prevTakeHomeCash + prevTakeHomeTransfer
         const actualTotal = prevCash + prevTransfer + dailyExpense
 
-        return { revenue, cups, netProfit, takeHome, actualTotal }
+        return { revenue: agg.totalRevenue, cups: agg.totalCups, netProfit, takeHome, actualTotal }
     }, [prevOrders, prevExpenses, prevShiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, selectedProductId, prevDays, products])
 
     const avg = (v) => days > 0 ? Math.round(v / days) : v

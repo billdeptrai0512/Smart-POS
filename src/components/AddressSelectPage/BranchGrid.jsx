@@ -134,15 +134,16 @@ export default function BranchGrid({
                                                     Doanh thu: <span className="font-bold">{formatVND(revenue)}</span>
                                                 </span>
                                                 {staffNames.length > 0 && (
-                                                    <div className="flex flex-col gap-1">
-                                                        <span className="text-text-secondary text-sm">Nhân viên:</span>
-                                                        <div className="flex flex-wrap gap-1">
-                                                            {staffNames.map((name, i) => (
-                                                                <span key={i} className="text-[11px] font-bold bg-surface-light border border-border/60 rounded-full px-2 py-0.5 text-text leading-none">
-                                                                    {name}
-                                                                </span>
-                                                            ))}
-                                                        </div>
+                                                    <div className="flex items-center gap-1 min-w-0">
+                                                        <span className="text-text-secondary text-sm shrink-0">Nhân viên:</span>
+                                                        <span className="text-[11px] font-bold bg-surface-light border border-border/60 rounded-full px-2 py-0.5 text-text leading-none truncate">
+                                                            {staffNames[0]}
+                                                        </span>
+                                                        {staffNames.length > 1 && (
+                                                            <span className="text-[11px] font-bold bg-surface-light border border-border/60 rounded-full px-2 py-0.5 text-text leading-none shrink-0">
+                                                                +{staffNames.length - 1}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 )}
 
@@ -157,20 +158,6 @@ export default function BranchGrid({
                                             {onSelectReport && (
                                                 <div className='flex gap-2'>
                                                     <button
-                                                        onClick={(e) => { e.stopPropagation(); onSelectHistory?.(addr) }}
-                                                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-primary/5 border border-primary/20 hover:bg-primary/15 transition-all group"
-                                                        title="Xem nhật ký"
-                                                    >
-                                                        <span className="text-[10px] font-black text-primary uppercase leading-none opacity-80 group-hover:opacity-100">Nhật ký</span>
-                                                    </button>
-                                                    {/* <button
-                                                        onClick={(e) => { e.stopPropagation(); onSelectIngredients?.(addr) }}
-                                                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-primary/5 border border-primary/20 hover:bg-primary/15 transition-all group"
-                                                        title="Xem tồn kho"
-                                                    >
-                                                        <span className="text-[10px] font-black text-primary uppercase leading-none opacity-80 group-hover:opacity-100">Tồn kho</span>
-                                                    </button> */}
-                                                    <button
                                                         onClick={(e) => { e.stopPropagation(); onSelectReport(addr) }}
                                                         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-success/5 border border-success/20 hover:bg-success/15 transition-all group"
                                                         title="Xem báo cáo ngày"
@@ -178,8 +165,14 @@ export default function BranchGrid({
                                                         <span className="text-[10px] font-black text-success uppercase leading-none opacity-80 group-hover:opacity-100">Báo cáo</span>
                                                     </button>
 
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); onSelectIngredients?.(addr) }}
+                                                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-primary/5 border border-primary/20 hover:bg-primary/15 transition-all group"
+                                                        title="Xem tồn kho"
+                                                    >
+                                                        <span className="text-[10px] font-black text-primary uppercase leading-none opacity-80 group-hover:opacity-100">Tồn kho</span>
+                                                    </button>
                                                 </div>
-
                                             )}
 
 

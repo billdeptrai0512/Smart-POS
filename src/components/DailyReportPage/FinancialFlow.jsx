@@ -33,13 +33,12 @@ export default function FinancialFlow({
     const isTakeHomeUp = takeHomeDelta >= 0
 
     return (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 mt-3">
             {/* DIVIDER BƯỚC 2 */}
-            <div className="flex items-center gap-3 py-0.5 px-4">
+            {/* <div className="flex items-center gap-3 py-0.5 px-4">
                 <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Dòng tiền</span>
                 <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-            </div>
+            </div> */}
 
             <div className="col-span-2 bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex items-center justify-between relative overflow-hidden group">
                 <div className="flex flex-col flex-1 items-start text-left">
