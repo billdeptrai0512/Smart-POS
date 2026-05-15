@@ -26,27 +26,9 @@ export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, re
                 className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center  relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
             >
 
-                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">🔴 Trong ca</h3>
+                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Vận hành</h3>
                 <div className="text-[18px] font-bold text-danger tabular-nums">
                     -{formatVND(dailyExpense)}
-                </div>
-            </div>
-            <div
-                onClick={onRefillNvlClick}
-                className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center items-end text-right relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
-            >
-                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">🛒 Mua NVL</h3>
-                <div className="text-[18px] font-bold text-danger tabular-nums">
-                    -{formatVND(refillNvl)}
-                </div>
-            </div>
-            <div
-                onClick={onRefillFreeFormClick}
-                className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
-            >
-                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">🟠 Sau ca</h3>
-                <div className="text-[18px] font-bold text-danger tabular-nums">
-                    -{formatVND(refillFreeForm)}
                 </div>
             </div>
             <div
@@ -54,7 +36,7 @@ export default function FinanceCards({ totalRevenue, totalCOGS, dailyExpense, re
                 className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center items-end text-right relative overflow-hidden group cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all"
             >
 
-                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">📌 Cố định</h3>
+                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Cố định</h3>
                 <div className="text-[18px] font-bold text-danger tabular-nums">
                     -{formatVND(fixedExpense)}
                 </div>

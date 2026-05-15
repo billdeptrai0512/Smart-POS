@@ -30,7 +30,7 @@ export default function CashFlowCard({ shiftClosing, cash: cashProp, transfer: t
                 <Card label="Chuyển khoản" value={actualTransfer} alignRight />
 
                 <Card
-                    label="Chi tiêu"
+                    label="Vận hành"
                     value={dailyExpense || 0}
                     valueClass="text-primary"
                     onClick={onDailyExpenseClick}

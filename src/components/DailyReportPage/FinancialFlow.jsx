@@ -63,14 +63,14 @@ export default function FinancialFlow({
             {/* PHẦN 2: ĐI CHỢ & MANG VỀ */}
             <div className="grid grid-cols-2 gap-3">
                 <Card
-                    label="Chi tiêu"
+                    label="Vận hành"
                     value={dailyExpense || 0}
                     valueClass="text-danger"
                     prefix={dailyExpense > 0 ? '-' : ''}
                     onClick={onDailyExpenseClick}
                 />
                 <Card
-                    label="Đi chợ"
+                    label="Tồn kho"
                     value={refillTotal}
                     valueClass='text-danger'
                     prefix={refillTotal > 0 ? '-' : ''}
