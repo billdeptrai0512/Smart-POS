@@ -3,12 +3,30 @@ import { useNavigate } from 'react-router-dom'
 import { formatVND } from '../../utils'
 import { Plus } from 'lucide-react'
 
+/**
+ * Compact 2-line ingredient card:
+ *   ┌──────────────────────────┐
+ *   │ Cà phê             [+]   │  ← name + restock button
+ *   │ 9180 g                   │  ← hero number (large, color-coded for low stock)
+ *   │ 248đ/g · 1 bịch=1000g    │  ← meta line (manager only): unit cost + pack config
+ *   └──────────────────────────┘
+ *
+ * Click handlers (all stopPropagation to prevent card-level navigate):
+ *   - name → rename
+ *   - hero number → edit stock
+ *   - unit suffix → edit unit
+ *   - meta pack span → open PackConfigModal
+ *   - [+] → onRestock
+ *   - card body (outside above) → navigate to /ingredients/[key] detail
+ */
 export default function IngredientCostItem({
     ingredientLabel, getIngredientUnit, ingredient, cost,
     storedUnit, isEditingUnit, editingUnit, setEditingUnit, saveUnit,
     isEditingName, editingName, setEditingName, saveName,
     canEdit = true,
     minStock,
+    // Pack config (quy cách đóng gói)
+    packSize, packUnit, onConfigurePack,
     // Stock display
     stockData, onRestock,
     isEditingStock, editingStock, setEditingStock, saveStock
@@ -19,16 +37,16 @@ export default function IngredientCostItem({
 
     const currentStock = stockData?.current_stock ?? null
     const isLowStock = currentStock !== null && currentStock <= (minStock || 0)
+    const hasPack = !!(packSize && packUnit)
 
-    // Helper: prevent card click khi tương tác với inner control
     const stop = (e) => e.stopPropagation()
 
     return (
         <div
-            className="bg-surface border border-border/60 rounded-[14px] pt-3 px-3 flex flex-col gap-1.5 min-w-0 cursor-pointer hover:bg-surface-light/40 transition-colors"
+            className={`bg-surface border rounded-[14px] p-3 flex flex-col gap-2 min-w-0 cursor-pointer hover:bg-surface-light/40 transition-colors ${isLowStock ? 'border-danger/40' : 'border-border/60'}`}
             onClick={() => navigate(`/ingredients/${ingredient}`)}
         >
-            {/* Header: Tên (click → edit) + Nhập kho button */}
+            {/* Row 1: name + restock button */}
             <div className="flex items-start gap-1.5 min-w-0">
                 {isEditingName ? (
                     <input
@@ -70,105 +88,93 @@ export default function IngredientCostItem({
                 )}
             </div>
 
-            {/* Stock — primary focal info, inline label/value */}
-            <div className="border-t border-border/40 pt-3 flex items-baseline justify-between gap-2 min-w-0">
-                <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider shrink-0">Đơn vị</span>
-                <div className="flex items-baseline gap-1 min-w-0">
-                    {isEditingUnit ? (
-                        <input
-                            type="text"
-                            autoFocus
-                            onClick={stop}
-                            className="w-[50px] bg-primary/10 border border-primary/30 rounded-md px-1.5 py-0.5 text-[12px] font-bold text-primary focus:outline-none focus:border-primary focus:bg-primary/15 transition-all shadow-inner"
-                            value={editingUnit.value}
-                            onChange={e => setEditingUnit(prev => ({ ...prev, value: e.target.value }))}
-                            onKeyDown={e => {
-                                if (e.key === 'Enter') saveUnit(ingredient, editingUnit.value.trim() || 'đv', cost)
-                                if (e.key === 'Escape') setEditingUnit(null)
-                            }}
-                            onBlur={() => saveUnit(ingredient, editingUnit.value.trim() || 'đv', cost)}
-                        />
-                    ) : (
-                        <span
-                            className={`text-[12px] font-bold text-primary leading-none truncate ${canEdit ? 'cursor-pointer underline decoration-primary/30 underline-offset-[3px] hover:decoration-primary' : ''}`}
-                            onClick={(e) => {
-                                if (!canEdit) return
-                                e.stopPropagation()
-                                setEditingUnit({ ingredient, value: displayUnit })
-                            }}
-                        >
-                            {displayUnit}
-                        </span>
-                    )}
-                </div>
+            {/* Row 2: hero — tồn kho number + unit */}
+            <div className="flex items-baseline gap-1 min-w-0 -mt-0.5">
+                {isEditingStock ? (
+                    <input
+                        type="number"
+                        autoFocus
+                        onClick={stop}
+                        className="w-[70px] bg-primary/10 border border-primary/30 rounded-md px-1.5 py-0.5 text-[17px] font-black text-primary focus:outline-none focus:border-primary focus:bg-primary/15 transition-all shadow-inner tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        value={editingStock.value}
+                        onChange={e => setEditingStock(prev => ({ ...prev, value: e.target.value }))}
+                        onKeyDown={e => {
+                            if (e.key === 'Enter') saveStock(ingredient, editingStock.value, editingStock.original)
+                            if (e.key === 'Escape') setEditingStock(null)
+                        }}
+                        onBlur={() => saveStock(ingredient, editingStock.value, editingStock.original)}
+                    />
+                ) : (
+                    <span
+                        className={`text-[17px] font-black tabular-nums leading-none ${isLowStock ? 'text-danger' : 'text-text'} ${saveStock ? 'cursor-pointer' : ''}`}
+                        onClick={(e) => {
+                            if (!saveStock) return
+                            e.stopPropagation()
+                            const v = currentStock !== null ? Math.round(currentStock * 10) / 10 : 0
+                            setEditingStock({ ingredient, value: String(v), original: v })
+                        }}
+                        title={saveStock ? 'Hiệu chỉnh tồn' : undefined}
+                    >
+                        {currentStock !== null ? Math.round(currentStock * 10) / 10 : '—'}
+                    </span>
+                )}
+                {isEditingUnit ? (
+                    <input
+                        type="text"
+                        autoFocus
+                        onClick={stop}
+                        className="w-[40px] bg-primary/10 border border-primary/30 rounded-md px-1 py-0.5 text-[13px] font-bold text-primary focus:outline-none focus:border-primary focus:bg-primary/15 transition-all"
+                        value={editingUnit.value}
+                        onChange={e => setEditingUnit(prev => ({ ...prev, value: e.target.value }))}
+                        onKeyDown={e => {
+                            if (e.key === 'Enter') saveUnit(ingredient, editingUnit.value.trim() || 'đv', cost)
+                            if (e.key === 'Escape') setEditingUnit(null)
+                        }}
+                        onBlur={() => saveUnit(ingredient, editingUnit.value.trim() || 'đv', cost)}
+                    />
+                ) : (
+                    <span
+                        className={`text-[13px] font-bold text-text-secondary leading-none ${canEdit ? 'cursor-pointer hover:text-primary' : ''}`}
+                        onClick={(e) => {
+                            if (!canEdit) return
+                            e.stopPropagation()
+                            setEditingUnit({ ingredient, value: displayUnit })
+                        }}
+                        title={canEdit ? 'Sửa đơn vị' : undefined}
+                    >
+                        {displayUnit}
+                    </span>
+                )}
+                {isLowStock && (
+                    <span className="ml-auto text-[10px] font-black text-danger uppercase tracking-wide">Sắp hết</span>
+                )}
             </div>
 
-            {/* Stock — primary focal info, inline label/value */}
-            <div className="flex items-baseline justify-between pt-2 pb-1 gap-2 min-w-0">
-                <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider shrink-0">Tồn kho</span>
-                <div className="flex items-baseline gap-0.5 min-w-0">
-                    {isEditingStock ? (
-                        <input
-                            type="number"
-                            autoFocus
-                            onClick={stop}
-                            className="w-[50px] bg-primary/10 border border-primary/30 rounded-md px-1.5 py-0.5 text-[13px] font-black text-primary text-right focus:outline-none focus:border-primary focus:bg-primary/15 transition-all shadow-inner [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            value={editingStock.value}
-                            onChange={e => setEditingStock(prev => ({ ...prev, value: e.target.value }))}
-                            onKeyDown={e => {
-                                if (e.key === 'Enter') saveStock(ingredient, editingStock.value, editingStock.original)
-                                if (e.key === 'Escape') setEditingStock(null)
-                            }}
-                            onBlur={() => saveStock(ingredient, editingStock.value, editingStock.original)}
-                        />
-                    ) : (
-                        <>
-                            <span
-                                className={`text-[13px] font-black tabular-nums leading-none ${isLowStock ? 'text-danger' : 'text-primary'} ${saveStock ? 'cursor-pointer underline decoration-primary/30 underline-offset-[3px] hover:decoration-primary' : ''}`}
-                                onClick={(e) => {
-                                    if (!saveStock) return
-                                    e.stopPropagation()
-                                    const v = currentStock !== null ? Math.round(currentStock * 10) / 10 : 0
-                                    setEditingStock({ ingredient, value: String(v), original: v })
-                                }}
-                                title={saveStock ? 'Hiệu chỉnh tồn (kiểm kê / hao hụt)' : undefined}
-                            >
-                                {currentStock !== null ? Math.round(currentStock * 10) / 10 : '—'}
-                            </span>
-                            <span
-                                className={`text-[12px] font-black tabular-nums leading-none text-text `}
-                            >
-                                {displayUnit}
-                            </span>
-                        </>
-                    )}
-
-                </div>
-            </div>
-
-            {/* Manager-only: Giá vốn (read-only, auto-updated by Weighted Average) */}
+            {/* Row 3: meta line — manager only */}
             {canEdit && (
-                <div className="border-t border-border/40 pt-2 pb-2 flex flex-col gap-0.5">
-                    <div className="flex items-baseline justify-between gap-2 min-w-0">
-                        <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider shrink-0">Giá vốn</span>
-                        <span className="text-[13px] font-black text-text tabular-nums leading-none truncate">
-                            {formatVND(cost)}
+                <div className="flex flex-col gap-0.5 -mt-1">
+                    <div className="flex items-center text-[11px] min-w-0">
+                        <span className="text-text-secondary font-bold tabular-nums shrink-0">
+                            {formatVND(cost)}<span className="text-text-dim font-medium">/{displayUnit}</span>
                         </span>
                     </div>
-                    {/* <span className="text-[9px] text-text-dim leading-none mt-0.5 text-right">TB tự cập nhật</span> */}
+                    {onConfigurePack && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onConfigurePack(ingredient) }}
+                            className="text-left text-[11px] font-bold tabular-nums hover:text-primary transition-colors w-fit"
+                            title={hasPack ? 'Sửa quy cách đóng gói' : 'Thêm quy cách đóng gói'}
+                        >
+                            {hasPack ? (
+                                <span className="text-text-secondary">
+                                    1 {packUnit} = {packSize} {displayUnit}
+                                </span>
+                            ) : (
+                                <span className="text-text-dim italic font-medium">+ quy cách</span>
+                            )}
+                        </button>
+                    )}
                 </div>
             )}
-
-            {/* Action: Nhập kho (đáy card, tách khỏi data zone) */}
-            {/* {onRestock && (
-                <button
-                    onClick={() => onRestock(ingredient)}
-                    className="mt-1  w-full flex items-center justify-center gap-1.5 py-2 rounded-[10px] bg-primary/10 border border-primary/20 text-primary text-[12px] font-black uppercase tracking-wide hover:bg-primary/20 active:scale-[0.97] transition-all"
-                >
-                    <Plus size={14} strokeWidth={3} />
-                    Nhập kho
-                </button>
-            )} */}
         </div>
     )
 }

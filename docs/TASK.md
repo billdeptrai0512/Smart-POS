@@ -1,0 +1,1 @@
+[x] ingredient có đơn vị để kiểm kê tồn, nhưng có thể đơn vị mà manager sẽ set up cho mỗi lần mua về -> số lượng cho 1 lượt nhập ( 1 hộp = 1234gr, 1 gói = 400gr,...). manager được tùy chỉnh tên chi 1 ___ = 1234 {đơn vị của ingredient}. Thông tin này được set up bên trong /ingredient ở mỗi card.

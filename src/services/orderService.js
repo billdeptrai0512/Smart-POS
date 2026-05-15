@@ -423,13 +423,35 @@ export async function upsertIngredientCost(ingredient, unitCost, addressId = nul
     if (error) throw error
 }
 
-// Rename an ingredient key across all tables
-export async function renameIngredient(oldKey, newKey) {
-    if (localRepo.isGuest()) return localRepo.renameLocalIngredient(oldKey, newKey)
+// Sync (rename or merge) an ingredient key across ingredient_costs, recipes,
+// shift_closings.inventory_report (JSONB), and expenses.metadata (JSONB).
+// Always-merge mode: if newKey already exists in ingredient_costs for this address,
+// the oldKey row is deleted (newKey kept as canonical). See migration 20260519.
+//
+// Returns: { recipes_updated, closings_updated, expenses_updated, costs_action }
+//   costs_action ∈ 'renamed' | 'merged' | 'none' | 'noop'
+export async function syncIngredientKey(addressId, oldKey, newKey) {
+    if (localRepo.isGuest()) {
+        await localRepo.renameLocalIngredient(oldKey, newKey)
+        return { recipes_updated: 0, closings_updated: 0, expenses_updated: 0, costs_action: 'renamed' }
+    }
     if (!supabase) throw new Error('No Supabase connection')
-    if (oldKey === newKey) return
-    const { error } = await supabase.rpc('rename_ingredient', { old_key: oldKey, new_key: newKey })
+    if (!addressId) throw new Error('addressId required for syncIngredientKey')
+    if (oldKey === newKey) return { recipes_updated: 0, closings_updated: 0, expenses_updated: 0, costs_action: 'noop' }
+    const { data, error } = await supabase.rpc('sync_ingredient_key', {
+        p_address_id: addressId,
+        p_old_key: oldKey,
+        p_new_key: newKey
+    })
     if (error) throw error
+    return data
+}
+
+// Backwards-compat shim — old callers used `renameIngredient(oldKey, newKey)` without addressId.
+// The old `rename_ingredient` RPC was never deployed, so this path was broken.
+// Now delegates to syncIngredientKey. AddressId must be passed explicitly going forward.
+export async function renameIngredient(oldKey, newKey, addressId) {
+    return await syncIngredientKey(addressId, oldKey, newKey)
 }
 
 // Delete an ingredient cost entry (removes all rows for this ingredient)

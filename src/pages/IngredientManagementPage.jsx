@@ -9,7 +9,10 @@ import { upsertIngredientCost, deleteIngredientCost, renameIngredient, fetchIngr
 import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
-import { ArrowLeft } from 'lucide-react'
+import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
+import PackConfigModal from '../components/IngredientManagementPage/PackConfigModal'
+import { detectKeyMismatches } from '../utils/ingredientKeySync'
+import { ArrowLeft, AlertTriangle, X } from 'lucide-react'
 import { useToast } from '../hooks/useToast'
 import Toast from '../components/POSPage/Toast'
 import { formatVND } from '../utils'
@@ -17,7 +20,7 @@ import { formatVND } from '../utils'
 export default function IngredientManagementPage() {
     const navigate = useNavigate()
     const location = useLocation()
-    const { ingredientCosts: contextCosts, ingredientUnits: contextUnits, recipes: contextRecipes, ingredientConfigs, refreshProducts } = useProducts()
+    const { ingredientCosts: contextCosts, ingredientUnits: contextUnits, recipes: contextRecipes, products: contextProducts, ingredientConfigs, refreshProducts } = useProducts()
     const { selectedAddress, updateSortOrder } = useAddress()
     const { isManager, isAdmin, profile } = useAuth()
     const { refreshTodayExpenses } = usePOS()
@@ -45,6 +48,63 @@ export default function IngredientManagementPage() {
     // Stock & Restock state
     const [ingredientStocks, setIngredientStocks] = useState([])
     const [restockIngredient, setRestockIngredient] = useState(null)
+
+    // Pack-config modal state (quy cách đóng gói: 1 hộp = X đơn vị)
+    const [packConfigIngredient, setPackConfigIngredient] = useState(null)
+
+    // Key-sync modal state
+    const [showKeySync, setShowKeySync] = useState(false)
+    const [dismissedSig, setDismissedSig] = useState('')
+
+    // Filter recipes to only those referencing currently active products.
+    // Without this, dead recipes for soft-deleted products (is_active=false) show as false-positive
+    // orphans — vd: chi nhánh có 191 recipes nhưng 14 cái thuộc products đã ngừng bán.
+    const liveRecipes = useMemo(() => {
+        const activeIds = new Set((contextProducts || []).map(p => p.id))
+        return (contextRecipes || []).filter(r => activeIds.has(r.product_id))
+    }, [contextRecipes, contextProducts])
+
+    // Detect ingredient-key mismatches across recipes / ingredient_costs / inventory.
+    // Uses ingredientStocks (superset of latest inventory_report keys) as proxy for inventory.
+    const keyMismatches = useMemo(
+        () => detectKeyMismatches({
+            recipes: liveRecipes,
+            ingredientCosts,
+            inventoryReport: ingredientStocks
+        }),
+        [liveRecipes, ingredientCosts, ingredientStocks]
+    )
+
+    // Signature of current mismatches — used to detect when dismissed warning should re-surface
+    // (vd: user dismiss `[cup, Đá]`, sau đó thêm orphan `Đường` → signature đổi → banner hiện lại)
+    const mismatchSig = useMemo(() => {
+        if (!keyMismatches.hasIssues) return ''
+        const parts = [
+            ...keyMismatches.orphanRecipeKeys.map(k => `r:${k}`),
+            ...keyMismatches.orphanInventoryKeys.map(k => `i:${k}`),
+            ...keyMismatches.labelCollisions.map(c => `c:${c.keys.join('|')}`)
+        ]
+        return parts.sort().join(',')
+    }, [keyMismatches])
+
+    // Load dismissed signature for current address from localStorage
+    useEffect(() => {
+        if (!selectedAddress?.id) { setDismissedSig(''); return }
+        try {
+            setDismissedSig(localStorage.getItem(`key_sync_dismissed_${selectedAddress.id}`) || '')
+        } catch { setDismissedSig('') }
+    }, [selectedAddress?.id])
+
+    const isDismissed = mismatchSig !== '' && dismissedSig === mismatchSig
+
+    const handleDismissBanner = (e) => {
+        e.stopPropagation()
+        if (!selectedAddress?.id || !mismatchSig) return
+        try {
+            localStorage.setItem(`key_sync_dismissed_${selectedAddress.id}`, mismatchSig)
+            setDismissedSig(mismatchSig)
+        } catch { /* localStorage may be full or disabled */ }
+    }
 
     // Fetch fresh data on mount to avoid showing stale localStorage cache
     useEffect(() => { refreshProducts?.() }, [])
@@ -85,7 +145,7 @@ export default function IngredientManagementPage() {
         if (!newKey || newKey === oldKey) { setEditingName(null); return }
         setSaving(true)
         try {
-            await renameIngredient(oldKey, newKey)
+            await renameIngredient(oldKey, newKey, selectedAddress?.id)
             setIngredientCosts(prev => {
                 const next = { ...prev }
                 next[newKey] = next[oldKey]
@@ -269,6 +329,34 @@ export default function IngredientManagementPage() {
 
             {/* Main content */}
             <main className="flex-1 overflow-y-auto px-4 py-4 pb-48 bg-bg">
+                {/* Key-sync banner — shown when mismatches detected and not dismissed */}
+                {canEdit && !isSorting && keyMismatches.hasIssues && !isDismissed && (
+                    <div className="w-full mb-3 bg-warning/5 border border-warning/40 rounded-[14px] flex items-stretch overflow-hidden">
+                        <button
+                            onClick={() => setShowKeySync(true)}
+                            className="flex-1 min-w-0 px-3 py-2.5 flex items-center gap-2.5 text-left hover:bg-warning/10 active:scale-[0.99] transition-all"
+                        >
+                            <AlertTriangle size={16} className="text-warning shrink-0" />
+                            <div className="flex-1 min-w-0">
+                                <p className="text-text font-black text-[12px] leading-tight">
+                                    {keyMismatches.labelCollisions.length > 0
+                                        ? `${keyMismatches.labelCollisions.length} nguyên liệu chưa đồng bộ keys`
+                                        : 'Phát hiện keys không khớp giữa công thức và tồn kho'}
+                                </p>
+                                <p className="text-text-secondary text-[10px] mt-0.5">Có thể gây sai Tiêu CT trong báo cáo hao hụt. Bấm để xem & sửa.</p>
+                            </div>
+                            <span className="text-warning text-[11px] font-black shrink-0">Xem →</span>
+                        </button>
+                        <button
+                            onClick={handleDismissBanner}
+                            className="px-3 flex items-center justify-center text-text-secondary hover:text-text hover:bg-warning/10 border-l border-warning/30 transition-colors"
+                            title="Bỏ qua cảnh báo này"
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
+                )}
+
                 {/* ===== Sort mode (Nguyên liệu only) ===== */}
                 {isSorting ? (
                     <div className="space-y-1.5">
@@ -335,6 +423,7 @@ export default function IngredientManagementPage() {
                                     packUnit={ingredientConfigs?.find(c => c.ingredient === ingredient)?.pack_unit}
                                     minStock={ingredientConfigs?.find(c => c.ingredient === ingredient)?.min_stock}
                                     onSaveAdvanced={handleSaveAdvanced}
+                                    onConfigurePack={canEdit ? setPackConfigIngredient : null}
                                     stockData={stockRow}
                                     onRestock={() => setRestockIngredient(ingredient)}
                                     isEditingStock={editingStock?.ingredient === ingredient}
@@ -442,6 +531,8 @@ export default function IngredientManagementPage() {
                 <RestockModal
                     ingredient={restockIngredient}
                     unit={getIngredientUnit(restockIngredient, ingredientUnits[restockIngredient])}
+                    packSize={ingredientConfigs?.find(c => c.ingredient === restockIngredient)?.pack_size}
+                    packUnit={ingredientConfigs?.find(c => c.ingredient === restockIngredient)?.pack_unit}
                     onClose={() => setRestockIngredient(null)}
                     onConfirm={async ({ ingredient: ing, qty, totalCost }) => {
                         const result = await processIngredientRestock(
@@ -461,6 +552,43 @@ export default function IngredientManagementPage() {
                     }}
                 />
             )}
+
+            {/* Pack Config Modal — quy cách đóng gói */}
+            {packConfigIngredient && (() => {
+                const cfg = ingredientConfigs?.find(c => c.ingredient === packConfigIngredient) || {}
+                const baseUnit = getIngredientUnit(packConfigIngredient, ingredientUnits[packConfigIngredient])
+                return (
+                    <PackConfigModal
+                        open={true}
+                        onClose={() => setPackConfigIngredient(null)}
+                        ingredientLabel={ingredientLabel(packConfigIngredient)}
+                        baseUnit={baseUnit}
+                        currentPackSize={cfg.pack_size}
+                        currentPackUnit={cfg.pack_unit}
+                        onSave={async ({ packSize, packUnit }) => {
+                            await handleSaveAdvanced(packConfigIngredient, {
+                                packSize,
+                                packUnit,
+                                minStock: cfg.min_stock
+                            })
+                        }}
+                    />
+                )
+            })()}
+
+            {/* Key Sync Modal */}
+            <KeySyncModal
+                open={showKeySync}
+                onClose={() => setShowKeySync(false)}
+                mismatches={keyMismatches}
+                recipes={liveRecipes}
+                products={contextProducts || []}
+                ingredientCosts={ingredientCosts}
+                addressId={selectedAddress?.id}
+                onComplete={async () => {
+                    await Promise.all([loadStocks(), refreshProducts?.()])
+                }}
+            />
         </div>
     )
 }
