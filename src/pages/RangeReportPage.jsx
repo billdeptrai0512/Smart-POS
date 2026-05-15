@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
 import { usePOS } from '../contexts/POSContext'
 import { useAddress } from '../contexts/AddressContext'
@@ -23,6 +23,7 @@ const RANGE_LABEL = { week: 'Tuần này', month: 'Tháng này' }
 export default function RangeReportPage() {
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
+    const location = useLocation()
     const range = searchParams.get('range') || 'week'
 
     const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits } = useProducts()
@@ -34,7 +35,7 @@ export default function RangeReportPage() {
     // ── All hooks must be declared before any conditional return ─────────────
     const [showLossUpsell, setShowLossUpsell] = useState(false)
     const [selectedProductId, setSelectedProductId] = useState('all')
-    const [offset, setOffset] = useState(0)
+    const [offset, setOffset] = useState(location.state?.offset ?? 0)
     const [orders, setOrders] = useState([])
     const [prevOrders, setPrevOrders] = useState([])
     const [expenses, setExpenses] = useState([])
@@ -257,7 +258,7 @@ export default function RangeReportPage() {
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
             <ReportHeader
-                onBack={() => navigate('/daily-report')}
+                onBack={() => navigate(location.state?.from || '/daily-report')}
                 onEditShiftClosing={() => navigate('/shift-closing')}
                 selectedRange={range}
                 onNavigateRange={handleNavigateRange}

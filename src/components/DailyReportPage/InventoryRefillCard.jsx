@@ -337,60 +337,39 @@ export default function InventoryRefillCard({
                                                 <ChevronDown size={14} className={`text-text-dim shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
                                             </div>
                                             <span className="text-[11px] font-medium text-text-secondary">
-                                                <span className="mx-1 text-border">•</span> Lý thuyết: {item.theoretical}
+                                                <span className="mx-1 text-border">•</span> Đầu kỳ: {item.opening}
                                             </span>
                                             <span className="text-[11px] font-medium text-text-secondary">
-                                                <span className="mx-1 text-border">•</span> Thực tế: {item.actual}
+                                                <span className="mx-1 text-border">•</span> Nhập thêm: {item.restock}
                                             </span>
-                                            <span className="text-[11px] font-bold text-danger/80">
-                                                {item.equivText && <span>{item.equivText}</span>}
+                                            <span className="text-[11px] font-medium text-text-secondary">
+                                                <span className="mx-1 text-border">•</span> Sử dụng: {item.used}
                                             </span>
-
                                         </div>
 
                                         <div className="flex flex-col items-end shrink-0 gap-1">
-                                            <div className={`px-2 py-0.5 rounded border border-transparent ${item.diff !== 0 ? item.diffBg + ' border-' + item.diffColor.replace('text-', '') + '/20' : ''}`}>
-                                                <span className={`text-[11px] font-black tabular-nums ${item.diffColor}`}>
-                                                    {item.diffText}
-                                                </span>
-                                            </div>
-                                            {Math.abs(item.diffValue) >= 1 && item.diffValue < 0 && (
-                                                <span className={`text-[11px] font-black tabular-nums ${item.diffColor}`}>
-                                                    -{formatVND(Math.abs(item.diffValue))}
-                                                </span>
+
+                                            <span className="text-[11px] font-medium text-text-secondary">
+                                                <span className="mx-1 text-border">•</span> Lý thuyết: {item.theoretical}
+                                            </span>
+                                            <span className="text-[11px] font-medium text-text-secondary">
+                                                <span className="mx-1 text-border">•</span> Tồn kho: {item.actual}
+                                            </span>
+                                            <span className={`text-[11px] font-black tabular-nums ${item.diffColor}`}>
+                                                <span className="mx-1 text-border">•</span> {item.diffText}
+                                            </span>
+                                            {item.equivText && (
+                                                <span className="text-[11px] font-bold text-danger/80 text-right">{item.equivText}</span>
                                             )}
                                         </div>
                                     </div>
 
                                     {isExpanded && (
                                         <div className="mt-3 px-3 py-2.5 bg-surface-light rounded-[12px] border border-border/40 flex flex-col gap-2.5">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <div className="flex items-center gap-1.5 flex-wrap">
-                                                    <div className="flex flex-col items-center">
-                                                        <span className="text-[13px] font-black text-text tabular-nums">{item.opening}</span>
-                                                        <span className="text-[9px] font-bold text-text-dim uppercase mt-0.5">Đầu kỳ</span>
-                                                    </div>
-                                                    <span className="text-[11px] font-black text-text-dim">+</span>
-                                                    <div className="flex flex-col items-center">
-                                                        <span className="text-[13px] font-black text-text tabular-nums">{item.restock}</span>
-                                                        <span className="text-[9px] font-bold text-text-dim uppercase mt-0.5">Nhập</span>
-                                                    </div>
-                                                    <span className="text-[11px] font-black text-text-dim">−</span>
-                                                    <div className="flex flex-col items-center">
-                                                        <span className="text-[13px] font-black text-text tabular-nums">{item.used}</span>
-                                                        <span className="text-[9px] font-bold text-text-dim uppercase mt-0.5">Tiêu CT</span>
-                                                    </div>
-                                                    <span className="text-[11px] font-black text-text-dim">=</span>
-                                                    <div className="flex flex-col items-center">
-                                                        <span className="text-[13px] font-black text-text tabular-nums">{item.theoretical}</span>
-                                                        <span className="text-[9px] font-bold text-text-dim uppercase mt-0.5">Lý.T</span>
-                                                    </div>
-                                                </div>
-                                            </div>
 
                                             {Object.keys(item.bd || {}).length > 0 && (
-                                                <div className="border-t border-border/30 pt-2 flex flex-col gap-1">
-                                                    <span className="text-[9px] font-black text-text-dim uppercase mb-0.5">Chi tiết Tiêu CT</span>
+                                                <div className=" flex flex-col gap-1">
+                                                    {/* <span className="text-[9px] font-black text-text-dim uppercase mb-0.5">Chi tiết sử dụng</span> */}
                                                     {Object.values(item.bd)
                                                         .sort((a, b) => b.totalAmount - a.totalAmount)
                                                         .map((entry, i) => (

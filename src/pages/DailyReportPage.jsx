@@ -29,8 +29,9 @@ export default function DailyReportPage() {
     // ── All hooks unconditional (Rules of Hooks) ──────────────────────────────
     const [selectedProductId, setSelectedProductId] = useState('all')
     const { selectedAddress } = useAddress()
-    const [customDate, setCustomDate] = useState(null)
-    const [debouncedDate, setDebouncedDate] = useState(null)
+    const initialDate = location.state?.initialDate || null
+    const [customDate, setCustomDate] = useState(initialDate)
+    const [debouncedDate, setDebouncedDate] = useState(initialDate)
     const debounceRef = useRef(null)
     const [shiftClosing, setShiftClosing] = useState(null)
     const [yesterdayClosing, setYesterdayClosing] = useState(null)

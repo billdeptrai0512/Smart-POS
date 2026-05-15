@@ -357,7 +357,7 @@ export default function HistoryView({
 
                 {!isReadOnly && (
                     <div className="grid grid-cols-3 gap-2">
-                        {[{ key: 'day', label: 'Ngày' }, { key: 'week', label: 'Tuần' }, { key: 'month', label: 'Tháng' }].map(s => (
+                        {[{ key: 'week', label: 'Tuần này' }, { key: 'day', label: 'Hôm nay' }, { key: 'month', label: 'Tháng này' }].map(s => (
                             <button
                                 key={s.key}
                                 onClick={() => { setScope(s.key); setOffset(0) }}
@@ -700,12 +700,7 @@ export default function HistoryView({
 
             {/* Shared footer tab bar */}
             <div className="shrink-0 bg-surface border-t border-border/60 flex gap-1.5 px-3 py-2">
-                <button
-                    onClick={() => navigate('/shift-closing')}
-                    className="flex flex-col items-center justify-center px-4 py-1.5 rounded-[10px] bg-success/10 hover:bg-success/20 transition-all"
-                >
-                    <span className="text-[12px] font-black text-success uppercase">Chốt ca</span>
-                </button>
+
 
                 <button
                     onClick={() => setActiveTab('orders')}
@@ -720,6 +715,23 @@ export default function HistoryView({
                 >
                     <span className={`text-[12px] font-black uppercase ${activeTab === 'expense' ? 'text-danger' : 'text-text-secondary'}`}>Chi phí</span>
                     <span className={`text-[12px] font-bold tabular-nums mt-0.5 ${activeTab === 'expense' ? 'text-text/80' : 'text-text-dim'}`}>-{formatVND(totalNonFixedRange)}</span>
+                </button>
+
+                <button
+                    onClick={() => {
+                        if (scope === 'week' || scope === 'month') {
+                            navigate(`/range-report?range=${scope}`, { state: { offset, from: '/history' } })
+                        } else if (offset !== 0) {
+                            const d = new Date()
+                            d.setDate(d.getDate() + offset)
+                            navigate('/daily-report', { state: { initialDate: d.toISOString().split('T')[0] } })
+                        } else {
+                            navigate('/daily-report')
+                        }
+                    }}
+                    className="flex flex-col items-center justify-center px-4 py-1.5 rounded-[10px] bg-success/10 hover:bg-success/20 transition-all"
+                >
+                    <span className="text-[12px] font-black text-success uppercase">Báo cáo</span>
                 </button>
 
             </div>
