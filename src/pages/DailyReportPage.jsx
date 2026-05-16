@@ -12,6 +12,7 @@ import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
 import FinancialFlow from '../components/DailyReportPage/FinancialFlow'
+import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY } from '../components/DailyReportPage/ReportViewFilter'
 import HistoryFooter from '../components/HistoryPage/HistoryFooter'
 import { supabase } from '../lib/supabaseClient'
 import { useAddress } from '../contexts/AddressContext'
@@ -29,6 +30,7 @@ export default function DailyReportPage() {
     const { activeModules, loading: entitlementLoading } = useEntitlement()
 
     // ── All hooks unconditional (Rules of Hooks) ──────────────────────────────
+    const [view, setView] = useState(VIEW_ALL)
     const [selectedProductId, setSelectedProductId] = useState('all')
     const { selectedAddress } = useAddress()
     const initialDate = location.state?.initialDate || null
@@ -154,8 +156,10 @@ export default function DailyReportPage() {
         [displayExpenses]
     )
     const fixedExpense = useMemo(() => sumFixedCosts(fixedCosts), [fixedCosts])
-    // P&L = Revenue - COGS - SUM(Loại 1 + 2 + 3 + 4) per TASK.md
-    const netProfit = totalRevenue - totalCOGS - dailyExpense - fixedExpense
+    // Vận hành tổng = trong ca + free-form sau ca (sau ca vẫn là vận hành, không phải NVL).
+    const operationalExpense = dailyExpense + refillFreeForm
+    // P&L = Revenue - COGS - Vận hành - Cố định. NVL không trừ (đã nằm trong COGS).
+    const netProfit = totalRevenue - totalCOGS - operationalExpense - fixedExpense
 
     const yesterdayNetProfit = useMemo(() => {
         let rev = 0, cogs = 0
@@ -230,24 +234,26 @@ export default function DailyReportPage() {
                     </div>
                 ) : (
                     <div className="flex flex-col gap-4 animate-fade-in">
-                        <SalesCard
-                            totalCups={totalCups}
-                            selectedProductId={selectedProductId}
-                            onFilterChange={setSelectedProductId}
-                            products={products}
-                            soldProducts={soldProducts}
-                            totalRevenue={totalRevenue}
-                            productStats={productStats}
-                            lineChartData={lineChartData}
-                        />
+                        <ReportViewFilter value={view} onChange={setView} />
 
-                        {!isStaff && (
+                        {(view === VIEW_ALL || view === VIEW_PROFIT) && (
+                            <SalesCard
+                                totalCups={totalCups}
+                                selectedProductId={selectedProductId}
+                                onFilterChange={setSelectedProductId}
+                                products={products}
+                                soldProducts={soldProducts}
+                                totalRevenue={totalRevenue}
+                                productStats={productStats}
+                                lineChartData={lineChartData}
+                            />
+                        )}
 
-
+                        {(view === VIEW_ALL || view === VIEW_PROFIT) && !isStaff && (
                             <FinanceCards
                                 totalRevenue={totalRevenue}
                                 totalCOGS={totalCOGS}
-                                dailyExpense={dailyExpense}
+                                dailyExpense={operationalExpense}
                                 refillNvl={refillNvl}
                                 refillFreeForm={refillFreeForm}
                                 fixedExpense={fixedExpense}
@@ -259,59 +265,65 @@ export default function DailyReportPage() {
                                 onFixedExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'fixed', isReadOnly: !!customDate } })}
                                 yesterdayNetProfit={yesterdayNetProfit}
                             />
-
                         )}
 
-                        <div className="flex items-center gap-3 py-1 my-1 px-4">
-                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                            <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Dòng tiền</span>
-                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                        </div>
+                        {(view === VIEW_ALL || view === VIEW_CASHFLOW) && (
+                            <>
+                                {view === VIEW_ALL && (
+                                    <div className="flex items-center gap-3 py-1 my-1 px-4">
+                                        <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                                        <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Dòng tiền</span>
+                                        <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                                    </div>
+                                )}
 
-                        <CashFlowCard
-                            shiftClosing={shiftClosing}
-                            dailyExpense={dailyExpense}
-                            onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
-                        />
+                                <CashFlowCard
+                                    shiftClosing={shiftClosing}
+                                    dailyExpense={dailyExpense}
+                                    onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                                />
 
-                        <FinancialFlow
-                            actualCash={shiftClosing?.actual_cash || 0}
-                            actualTransfer={shiftClosing?.actual_transfer || 0}
-                            dailyExpense={dailyExpense}
-                            refillTotal={refillTotal}
-                            refillNvl={refillNvl}
-                            refillFreeForm={refillFreeForm}
-                            yesterdayActualTotal={yesterdayActualTotal}
-                            yesterdayTakeHome={yesterdayTakeHome}
-                            onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
-                            onRefillClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'nvl', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
-                        />
+                                <FinancialFlow
+                                    actualCash={shiftClosing?.actual_cash || 0}
+                                    actualTransfer={shiftClosing?.actual_transfer || 0}
+                                    dailyExpense={dailyExpense}
+                                    refillTotal={refillTotal}
+                                    refillNvl={refillNvl}
+                                    refillFreeForm={refillFreeForm}
+                                    yesterdayActualTotal={yesterdayActualTotal}
+                                    yesterdayTakeHome={yesterdayTakeHome}
+                                    onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                                    onRefillClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'nvl', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                                />
+                            </>
+                        )}
 
+                        {(view === VIEW_ALL || view === VIEW_INVENTORY) && (
+                            <>
+                                {view === VIEW_ALL && (
+                                    <div className="flex items-center gap-3 py-1 my-1 px-4">
+                                        <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                                        <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tồn kho</span>
+                                        <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                                    </div>
+                                )}
 
-
-                        {/* only for manage */}
-
-
-                        <div className="flex items-center gap-3 py-1 my-1 px-4">
-                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                            <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tồn kho</span>
-                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                        </div>
-
-                        <InventoryRefillCard
-                            shiftClosing={shiftClosing}
-                            yesterdayClosing={yesterdayClosing}
-                            todayOrders={displayOrders}
-                            offlineToday={customDate ? [] : offlineToday}
-                            recipes={recipes}
-                            extraIngredients={extraIngredients}
-                            selectedAddress={selectedAddress}
-                            products={products}
-                            productExtras={productExtras}
-                            ingredientUnits={ingredientUnits}
-                            isPastDate={!!customDate && new Date(customDate).toDateString() !== new Date().toDateString()}
-                            canAccessAudit={hasFeature(activeModules, 'lossAudit')}
-                        />
+                                <InventoryRefillCard
+                                    shiftClosing={shiftClosing}
+                                    yesterdayClosing={yesterdayClosing}
+                                    todayOrders={displayOrders}
+                                    offlineToday={customDate ? [] : offlineToday}
+                                    recipes={recipes}
+                                    extraIngredients={extraIngredients}
+                                    selectedAddress={selectedAddress}
+                                    products={products}
+                                    productExtras={productExtras}
+                                    ingredientUnits={ingredientUnits}
+                                    isPastDate={!!customDate && new Date(customDate).toDateString() !== new Date().toDateString()}
+                                    canAccessAudit={hasFeature(activeModules, 'lossAudit')}
+                                />
+                            </>
+                        )}
 
 
                         {/* only for manager  */}

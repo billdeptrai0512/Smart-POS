@@ -13,6 +13,7 @@ import DayPerformanceChart from '../components/DailyReportPage/DayPerformanceCha
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import FinancialFlow from '../components/DailyReportPage/FinancialFlow'
+import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY } from '../components/DailyReportPage/ReportViewFilter'
 import RangeLossCard from '../components/DailyReportPage/RangeLossCard'
 import HistoryFooter from '../components/HistoryPage/HistoryFooter'
 import { Filter, Lock } from 'lucide-react'
@@ -35,6 +36,7 @@ export default function RangeReportPage() {
     const { activeModules, loading: entitlementLoading } = useEntitlement()
 
     // ── All hooks must be declared before any conditional return ─────────────
+    const [view, setView] = useState(VIEW_ALL)
     const [showLossUpsell, setShowLossUpsell] = useState(false)
     const [selectedProductId, setSelectedProductId] = useState('all')
     const [offset, setOffset] = useState(location.state?.offset ?? 0)
@@ -132,9 +134,10 @@ export default function RangeReportPage() {
 
         const { dailyExpense, refillNvl, refillFreeForm, refillTotal } = splitExpenses(expenses)
         const fixedExpense = sumFixedCosts(fixedCosts, days)
-
-        // P&L = Revenue - COGS - SUM(Loại 1 + 2 + 3 + 4) per TASK.md
-        const netProfit = agg.totalRevenue - agg.totalCOGS - dailyExpense - refillTotal - fixedExpense
+        // Vận hành tổng = trong ca + free-form sau ca.
+        const operationalExpense = dailyExpense + refillFreeForm
+        // P&L = Revenue - COGS - Vận hành - Cố định. NVL không trừ (đã nằm trong COGS).
+        const netProfit = agg.totalRevenue - agg.totalCOGS - operationalExpense - fixedExpense
 
         return {
             totalRevenue: agg.totalRevenue,
@@ -144,6 +147,7 @@ export default function RangeReportPage() {
             soldProducts: agg.soldProducts,
             cashRevenue, transferRevenue,
             dailyExpense, refillTotal, refillNvl, refillFreeForm,
+            operationalExpense,
             fixedExpense, netProfit,
         }
     }, [orders, expenses, shiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, productExtras, products, selectedProductId, days])
@@ -160,10 +164,10 @@ export default function RangeReportPage() {
             useTotalCostShortcut: true,
         })
 
-        const { dailyExpense, refillTotal } = splitExpenses(prevExpenses)
+        const { dailyExpense, refillTotal, refillFreeForm } = splitExpenses(prevExpenses)
         const fixedExpense = sumFixedCosts(fixedCosts, prevDays)
-
-        const netProfit = agg.totalRevenue - agg.totalCOGS - dailyExpense - refillTotal - fixedExpense
+        const operationalExpense = dailyExpense + refillFreeForm
+        const netProfit = agg.totalRevenue - agg.totalCOGS - operationalExpense - fixedExpense
 
         const prevCash = prevShiftClosings.reduce((s, sc) => s + (sc.actual_cash || 0), 0)
         const prevTransfer = prevShiftClosings.reduce((s, sc) => s + (sc.actual_transfer || 0), 0)
@@ -215,8 +219,10 @@ export default function RangeReportPage() {
                     </div>
                 ) : (
                     <div className="flex flex-col gap-4 animate-fade-in">
+                        <ReportViewFilter value={view} onChange={setView} />
 
                         {/* Section 1: Kết quả kinh doanh */}
+                        {(view === VIEW_ALL || view === VIEW_PROFIT) && (
                         <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 relative overflow-hidden">
                             <div className="flex items-start justify-between">
                                 <div className="flex flex-col min-w-0 flex-1">
@@ -282,44 +288,18 @@ export default function RangeReportPage() {
                                 </div>
                             )}
                         </div>
+                        )}
 
-                        <DayPerformanceChart orders={orders} range={range} start={periodStart} end={periodEnd} products={products} />
+                        {(view === VIEW_ALL || view === VIEW_PROFIT) && (
+                            <DayPerformanceChart orders={orders} range={range} start={periodStart} end={periodEnd} products={products} />
+                        )}
 
-                        {/* Section 2: Dòng tiền */}
-                        <CashFlowCard
-                            cash={stats.cashRevenue}
-                            transfer={stats.transferRevenue}
-                            dailyExpense={stats.dailyExpense}
-                            onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'daily', expensesToView: expenses, isReadOnly: true } })}
-                        />
-
-                        <FinancialFlow
-                            actualCash={stats.cashRevenue}
-                            actualTransfer={stats.transferRevenue}
-                            dailyExpense={stats.dailyExpense}
-                            refillTotal={stats.refillTotal}
-                            refillNvl={stats.refillNvl}
-                            refillFreeForm={stats.refillFreeForm}
-                            yesterdayActualTotal={prevStats.actualTotal}
-                            yesterdayTakeHome={prevStats.takeHome}
-                            compareLabel={`So với ${range === 'week' ? 'tuần trước' : 'tháng trước'}`}
-                            onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'daily', expensesToView: expenses, isReadOnly: true } })}
-                            onRefillClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'nvl', expensesToView: expenses, isReadOnly: true } })}
-                        />
-
-                        {/* Section 3: Tài chính (manager only) */}
-                        {!isStaff && (
+                        {(view === VIEW_ALL || view === VIEW_PROFIT) && !isStaff && (
                             <>
-                                <div className="flex items-center gap-3 py-1 my-1 px-4">
-                                    <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                                    <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tài chính</span>
-                                    <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                                </div>
-
                                 <FinanceCards
                                     totalRevenue={stats.totalRevenue}
                                     totalCOGS={stats.totalCOGS}
-                                    dailyExpense={stats.dailyExpense}
+                                    dailyExpense={stats.operationalExpense}
                                     refillNvl={stats.refillNvl}
                                     refillFreeForm={stats.refillFreeForm}
                                     fixedExpense={stats.fixedExpense}
@@ -335,22 +315,61 @@ export default function RangeReportPage() {
                             </>
                         )}
 
-                        <div className="flex items-center gap-3 py-1 my-1 px-4">
-                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                            <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tồn kho</span>
-                            <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                        </div>
+                        {(view === VIEW_ALL || view === VIEW_CASHFLOW) && (
+                            <>
+                                {view === VIEW_ALL && (
+                                    <div className="flex items-center gap-3 py-1 my-1 px-4">
+                                        <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                                        <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Dòng tiền</span>
+                                        <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                                    </div>
+                                )}
 
-                        <RangeLossCard
-                            orders={orders}
-                            shiftClosings={shiftClosings}
-                            prevShiftClosings={prevShiftClosings}
-                            recipes={recipes}
-                            extraIngredients={extraIngredients}
-                            ingredientUnits={ingredientUnits}
-                            isLocked={!hasFeature(activeModules, 'lossAudit')}
-                            onUnlockClick={() => setShowLossUpsell(true)}
-                        />
+                                <CashFlowCard
+                                    cash={stats.cashRevenue}
+                                    transfer={stats.transferRevenue}
+                                    dailyExpense={stats.dailyExpense}
+                                    onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'daily', expensesToView: expenses, isReadOnly: true } })}
+                                />
+
+                                <FinancialFlow
+                                    actualCash={stats.cashRevenue}
+                                    actualTransfer={stats.transferRevenue}
+                                    dailyExpense={stats.dailyExpense}
+                                    refillTotal={stats.refillTotal}
+                                    refillNvl={stats.refillNvl}
+                                    refillFreeForm={stats.refillFreeForm}
+                                    yesterdayActualTotal={prevStats.actualTotal}
+                                    yesterdayTakeHome={prevStats.takeHome}
+                                    compareLabel={`So với ${range === 'week' ? 'tuần trước' : 'tháng trước'}`}
+                                    onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'daily', expensesToView: expenses, isReadOnly: true } })}
+                                    onRefillClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'nvl', expensesToView: expenses, isReadOnly: true } })}
+                                />
+                            </>
+                        )}
+
+                        {(view === VIEW_ALL || view === VIEW_INVENTORY) && (
+                            <>
+                                {view === VIEW_ALL && (
+                                    <div className="flex items-center gap-3 py-1 my-1 px-4">
+                                        <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                                        <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tồn kho</span>
+                                        <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
+                                    </div>
+                                )}
+
+                                <RangeLossCard
+                                    orders={orders}
+                                    shiftClosings={shiftClosings}
+                                    prevShiftClosings={prevShiftClosings}
+                                    recipes={recipes}
+                                    extraIngredients={extraIngredients}
+                                    ingredientUnits={ingredientUnits}
+                                    isLocked={!hasFeature(activeModules, 'lossAudit')}
+                                    onUnlockClick={() => setShowLossUpsell(true)}
+                                />
+                            </>
+                        )}
 
                         <UpsellSheet
                             open={showLossUpsell}

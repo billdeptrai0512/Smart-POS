@@ -14,7 +14,11 @@ export default function FinancialFlow({
     onDailyExpenseClick,
     onRefillClick
 }) {
-    // Thực nhận = TM + CK + chi phí ca (không bao gồm mua NVL vì NVL mua sau khi chốt ca)
+    // Vận hành = chi phí ca + free-form refill (sau ca nhưng vẫn là vận hành, không phải NVL).
+    const operationalExpense = (dailyExpense || 0) + (refillFreeForm || 0)
+
+    // Thực thu = TM + CK + chi phí ca trong ca (refill sau ca không cộng vào,
+    // vì cash đã được đếm trước khi xảy ra refill — không cần "trả về" gross).
     const actualTotal = actualCash + actualTransfer + (dailyExpense || 0)
 
     // Cầm về thực = TM + CK - mua NVL (tiền thực trong túi sau khi trừ NVL đã mua)
@@ -60,22 +64,21 @@ export default function FinancialFlow({
             </div>
 
             {/* PHẦN 2: ĐI CHỢ & MANG VỀ */}
+            {/* Vận hành = chi phí trong ca + free-form sau ca (vận hành ≠ timing). */}
+            {/* Tồn kho = chỉ tiền mua NVL thực (refillNvl). */}
             <div className="grid grid-cols-2 gap-3">
                 <Card
                     label="Vận hành"
-                    value={dailyExpense || 0}
+                    value={operationalExpense}
                     valueClass="text-danger"
-                    prefix={dailyExpense > 0 ? '-' : ''}
+                    prefix={operationalExpense > 0 ? '-' : ''}
                     onClick={onDailyExpenseClick}
                 />
                 <Card
                     label="Tồn kho"
-                    value={refillTotal}
+                    value={refillNvl}
                     valueClass='text-danger'
-                    prefix={refillTotal > 0 ? '-' : ''}
-                    sub={refillNvl > 0 && refillFreeForm > 0
-                        ? `🛒 ${formatVND(refillNvl)} · 📦 ${formatVND(refillFreeForm)}`
-                        : null}
+                    prefix={refillNvl > 0 ? '-' : ''}
                     onClick={onRefillClick}
                     alignRight
                 />
