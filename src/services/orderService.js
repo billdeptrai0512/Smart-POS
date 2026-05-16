@@ -520,16 +520,22 @@ export async function removeProductFromAddress(productId, _addressId) {
     return true
 }
 
-// Update sort order for products at an address
+// Update sort order for products at an address.
+// Single RPC writes all rows in one statement — N parallel UPDATEs would each pay
+// PostgREST overhead (auth + RLS + lock). Falls back to legacy parallel updates
+// if the RPC isn't deployed yet.
 export async function updateProductSortOrder(addressId, orderedProductIds) {
     if (localRepo.isGuest()) return localRepo.updateLocalProductSortOrder(orderedProductIds)
     if (!supabase) throw new Error('No Supabase connection')
-    // Directly update native sort_order in products table
+    if (!orderedProductIds?.length) return
+
+    const { error } = await supabase.rpc('update_products_sort_order', { p_ids: orderedProductIds })
+    if (!error) return
+    if (error.code !== 'PGRST202' && error.code !== '42883') throw error
+
+    // Fallback: parallel per-row updates (pre-migration codepath)
     const updates = orderedProductIds.map((productId, index) =>
-        supabase
-            .from('products')
-            .update({ sort_order: index })
-            .eq('id', productId)
+        supabase.from('products').update({ sort_order: index }).eq('id', productId)
     )
     await Promise.all(updates)
 }
@@ -648,10 +654,18 @@ export async function duplicateProductExtra(extraId, newName, addressId = null) 
     return newExtra
 }
 
-// Update sort_order for a list of extras
+// Update sort_order for a list of extras — see updateProductSortOrder for the
+// reasoning behind the single-RPC pattern.
 export async function updateExtrasSortOrder(orderedExtraIds) {
     if (localRepo.isGuest()) return localRepo.updateLocalExtrasSortOrder(orderedExtraIds)
     if (!supabase) throw new Error('No Supabase connection')
+    if (!orderedExtraIds?.length) return
+
+    const { error } = await supabase.rpc('update_extras_sort_order', { p_ids: orderedExtraIds })
+    if (!error) return
+    if (error.code !== 'PGRST202' && error.code !== '42883') throw error
+
+    // Fallback: parallel per-row updates (pre-migration codepath)
     const results = await Promise.all(
         orderedExtraIds.map((id, index) =>
             supabase.from('product_extras').update({ sort_order: index }).eq('id', id)

@@ -352,30 +352,25 @@ export async function fetchBranchesTodayStats(addressIds) {
         console.error('fetchBranchesTodayStats RPC error:', error)
     }
 
-    // Fallback: two legacy queries
+    // Fallback: single query selecting both total + order_items (was two parallel
+    // queries hitting the same orders rows with overlapping filters).
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    const [{ data: cupsData }, { data: revData }] = await Promise.all([
-        supabase
-            .from('orders')
-            .select('address_id, order_items(quantity, products(count_as_cup))')
-            .in('address_id', addressIds)
-            .gte('created_at', today.toISOString()),
-        supabase
-            .from('orders')
-            .select('address_id, total')
-            .in('address_id', addressIds)
-            .gte('created_at', today.toISOString())
-    ])
+    const { data: ordersData } = await supabase
+        .from('orders')
+        .select('address_id, total, order_items(quantity, products(count_as_cup))')
+        .in('address_id', addressIds)
+        .gte('created_at', today.toISOString())
 
     const cupsMap = {}, revenueMap = {}
-    ;(cupsData || []).forEach(order => {
+    ;(ordersData || []).forEach(order => {
         const qty = (order.order_items || []).reduce((s, i) => {
             if (i.products?.count_as_cup === false) return s
             return s + i.quantity
         }, 0)
         cupsMap[order.address_id] = (cupsMap[order.address_id] || 0) + qty
+        revenueMap[order.address_id] = (revenueMap[order.address_id] || 0) + (order.total || 0)
     })
     ;(revData || []).forEach(order => {
         revenueMap[order.address_id] = (revenueMap[order.address_id] || 0) + (order.total || 0)

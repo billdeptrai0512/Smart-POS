@@ -223,11 +223,14 @@ export default function ShiftClosingPage() {
                 await updateShiftClosing(existingClosing.id, payload)
             } else {
                 await insertShiftClosing(payload)
-                // Auto-inject fixed costs as expenses (only for first-time shift close)
+                // Auto-inject fixed costs as expenses (only for first-time shift close).
+                // Parallel fetch — fixedCosts + todayExpenses are independent, both needed.
                 try {
-                    const fixedCosts = await fetchFixedCosts(selectedAddress?.id)
+                    const [fixedCosts, todayExpenses] = await Promise.all([
+                        fetchFixedCosts(selectedAddress?.id),
+                        fetchTodayExpenses(selectedAddress?.id),
+                    ])
                     if (fixedCosts.length > 0) {
-                        const todayExpenses = await fetchTodayExpenses(selectedAddress?.id)
                         const alreadyInjected = todayExpenses.some(e => e.is_fixed === true)
                         if (!alreadyInjected) {
                             await Promise.all(
