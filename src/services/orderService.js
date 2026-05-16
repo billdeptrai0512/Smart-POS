@@ -454,20 +454,25 @@ export async function renameIngredient(oldKey, newKey, addressId) {
     return await syncIngredientKey(addressId, oldKey, newKey)
 }
 
-// Delete an ingredient cost entry (removes all rows for this ingredient)
+// Delete an ingredient cost entry — also cleans recipes + extra_ingredients for this address.
+// Uses the delete_ingredient RPC for atomic cleanup across all tables.
 export async function deleteIngredientCost(ingredient, addressId = null) {
     if (localRepo.isGuest()) return localRepo.deleteLocalIngredientCost(ingredient)
     if (!supabase) throw new Error('No Supabase connection')
-    // Delete address-specific row if exists
+
     if (addressId) {
+        // Use RPC for full cleanup (ingredient_costs + recipes + extra_ingredients)
+        const { error } = await supabase.rpc('delete_ingredient', {
+            p_address_id: addressId,
+            p_ingredient: ingredient
+        })
+        if (error) throw error
+    } else {
+        // Fallback: global default row only (no address scoping available)
         await supabase.from('ingredient_costs').delete()
             .eq('ingredient', ingredient)
-            .eq('address_id', addressId)
+            .is('address_id', null)
     }
-    // Also delete the default (null) row
-    await supabase.from('ingredient_costs').delete()
-        .eq('ingredient', ingredient)
-        .is('address_id', null)
     return true
 }
 
