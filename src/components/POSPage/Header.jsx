@@ -44,12 +44,12 @@ export default function Header({ isOnline, dayName, dateOnly, onOpenHistory, add
 
                     <div className="flex flex-col justify-between items-start relative z-10 w-full">
                         <div className="flex items-center justify-between w-full">
-                            <span className="text-[12px] sm:text-[13px] text-text-secondary font-black uppercase tracking-wider">Nhật ký</span>
+                            <span className="text-[12px] sm:text-[13px] text-primary font-black uppercase tracking-wider">Nhật ký</span>
                             <ArrowRight size={20} strokeWidth={2.5} className="text-text shrink-0" />
                         </div>
                         <div className="w-full">
                             {lastOrder ? (
-                                <div className="text-[12px] font-bold text-primary uppercase tracking-tight leading-snug flex flex-col mt-1 gap-1">
+                                <div className="text-[12px] font-bold text-text-primary uppercase tracking-tight leading-snug flex flex-col mt-1 gap-1">
                                     {lastOrder.items.map((item, i) => (
                                         <span key={i}>{item}</span>
                                     ))}

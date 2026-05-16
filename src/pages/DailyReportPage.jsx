@@ -30,7 +30,7 @@ export default function DailyReportPage() {
     const { activeModules, loading: entitlementLoading } = useEntitlement()
 
     // ── All hooks unconditional (Rules of Hooks) ──────────────────────────────
-    const [view, setView] = useState(VIEW_ALL)
+    const [view, setView] = useState(VIEW_PROFIT)
     const [selectedProductId, setSelectedProductId] = useState('all')
     const { selectedAddress } = useAddress()
     const initialDate = location.state?.initialDate || null
@@ -210,13 +210,15 @@ export default function DailyReportPage() {
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
             <ReportHeader
                 onBack={() => navigate(backTo)}
-                onEditShiftClosing={() => navigate('/shift-closing')}
+                onForward={() => navigate('/recipes')}
                 selectedRange="day"
-                onNavigateRange={(range) => {
-                    if (range !== 'day') navigate(`/range-report?range=${range}`)
-                }}
                 customDate={customDate}
                 onCustomDateChange={handleCustomDateChange}
+                activeTab="report"
+                onTabSelect={(tab) => {
+                    if (tab === 'report') return
+                    navigate('/history', { replace: true, state: { from: backTo, tab: tab === 'orders' ? 'orders' : 'expense' } })
+                }}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-6 pb-6 space-y-4 bg-bg">
@@ -259,7 +261,7 @@ export default function DailyReportPage() {
                                 fixedExpense={fixedExpense}
                                 netProfit={netProfit}
                                 onRecipesClick={() => navigate('/recipes', { state: { from: '/daily-report' } })}
-                                onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                                onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'operation', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
                                 onRefillNvlClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'nvl', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
                                 onRefillFreeFormClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'after', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
                                 onFixedExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'fixed', isReadOnly: !!customDate } })}
@@ -280,7 +282,7 @@ export default function DailyReportPage() {
                                 <CashFlowCard
                                     shiftClosing={shiftClosing}
                                     dailyExpense={dailyExpense}
-                                    onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                                    onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'operation', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
                                 />
 
                                 <FinancialFlow
@@ -292,7 +294,7 @@ export default function DailyReportPage() {
                                     refillFreeForm={refillFreeForm}
                                     yesterdayActualTotal={yesterdayActualTotal}
                                     yesterdayTakeHome={yesterdayTakeHome}
-                                    onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'daily', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
+                                    onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'operation', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
                                     onRefillClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'nvl', expensesToView: customDate ? apiExpenses : undefined, isReadOnly: !!customDate } })}
                                 />
                             </>
@@ -329,7 +331,7 @@ export default function DailyReportPage() {
                         {/* only for manager  */}
 
 
-                        <div className="flex flex-col items-center justify-center py-8 mt-4">
+                        <div className="flex flex-col items-center justify-center p-3">
                             <a href="https://github.com/billdeptrai0512" target="_blank" rel="noopener noreferrer"
                                 className="flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-surface-light border border-border/50 hover:border-[#c8956c]/40 hover:bg-[#c8956c]/5 transition-all duration-300">
                                 <span className="text-[10px] font-black uppercase tracking-[0.2em] whitespace-nowrap mt-[1px] bg-clip-text text-transparent"
@@ -342,12 +344,22 @@ export default function DailyReportPage() {
                 )}
             </main>
 
+            {/* FAB: Cập nhật báo cáo — same style as "+ Thêm chi phí" in ExpensePanel */}
+            <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
+                <div className="flex justify-end px-4 mb-[72px] pointer-events-auto">
+                    <button
+                        onClick={() => navigate('/shift-closing')}
+                        className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
+                    >
+                        Cập nhật báo cáo
+                    </button>
+                </div>
+            </div>
+
             <HistoryFooter
-                activeTab="report"
-                onSelect={(tab) => {
-                    if (tab === 'report') return
-                    // Tab-switch within shared dashboard → replace to preserve entry point in history stack
-                    navigate('/history', { replace: true, state: { from: backTo, tab: tab === 'orders' ? 'orders' : 'expense' } })
+                scope="day"
+                onScopeChange={(range) => {
+                    if (range !== 'day') navigate(`/range-report?range=${range}`)
                 }}
             />
         </div>

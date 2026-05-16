@@ -1,11 +1,6 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, Pen } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-
-const RANGES = [
-    { key: 'week', label: 'Tuần này' },
-    { key: 'day', label: 'Hôm nay' },
-    { key: 'month', label: 'Tháng này' },
-]
+import HistoryTabsBar from '../HistoryPage/HistoryTabsBar'
 
 const fmt = (d) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
 
@@ -48,7 +43,7 @@ function getSubtitle(range, offset) {
     return `${fmt(start)} – ${fmt(end)}`
 }
 
-export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange = 'day', onNavigateRange, offset = 0, onOffsetChange, customDate, onCustomDateChange }) {
+export default function ReportHeader({ onBack, onForward, selectedRange = 'day', offset = 0, onOffsetChange, customDate, onCustomDateChange, activeTab = 'report', onTabSelect }) {
     const { isStaff } = useAuth()
     const subtitle = getSubtitle(selectedRange, offset)
     const canGoForward = offset < 0
@@ -156,30 +151,16 @@ export default function ReportHeader({ onBack, onEditShiftClosing, selectedRange
                 </div>
 
                 <button
-                    onClick={onEditShiftClosing}
-                    className="w-10 h-10 flex flex-col items-center justify-center rounded-[14px] bg-primary/10 border-border/60 text-primary text-[14px] font-black uppercase tracking-wide active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm pointer-events-auto flex items-center justify-center gap-2"
-                    title="Cập nhật chốt ca"
+                    onClick={onForward}
+                    className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
+                    title="Tiếp theo"
                 >
-                    <Pen size={18} strokeWidth={2.5} />
-
+                    <ArrowRight size={20} strokeWidth={2.5} />
                 </button>
             </div>
 
-            {/* Row 2: Range tabs */}
-            <div className="grid grid-cols-3 gap-2">
-                {RANGES.map(r => (
-                    <button
-                        key={r.key}
-                        onClick={() => onNavigateRange?.(r.key)}
-                        className={`py-2 rounded-[12px] text-[12px] font-black border transition-colors ${selectedRange === r.key
-                            ? 'bg-primary/10 border-primary/40 text-primary'
-                            : 'bg-surface-light border-border/60 text-text-secondary hover:bg-border/30'
-                            }`}
-                    >
-                        {r.label}
-                    </button>
-                ))}
-            </div>
+            {/* Row 2: Tabs (Thu nhập / Chi phí / Báo cáo) */}
+            <HistoryTabsBar activeTab={activeTab} onSelect={onTabSelect} />
         </header>
     )
 }

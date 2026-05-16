@@ -36,7 +36,7 @@ export default function RangeReportPage() {
     const { activeModules, loading: entitlementLoading } = useEntitlement()
 
     // ── All hooks must be declared before any conditional return ─────────────
-    const [view, setView] = useState(VIEW_ALL)
+    const [view, setView] = useState(VIEW_PROFIT)
     const [showLossUpsell, setShowLossUpsell] = useState(false)
     const [selectedProductId, setSelectedProductId] = useState('all')
     const [offset, setOffset] = useState(location.state?.offset ?? 0)
@@ -199,11 +199,23 @@ export default function RangeReportPage() {
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
             <ReportHeader
                 onBack={() => navigate(location.state?.from || '/daily-report')}
-                onEditShiftClosing={() => navigate('/shift-closing')}
+                onForward={() => navigate('/recipes')}
                 selectedRange={range}
-                onNavigateRange={handleNavigateRange}
                 offset={offset}
                 onOffsetChange={setOffset}
+                activeTab="report"
+                onTabSelect={(tab) => {
+                    if (tab === 'report') return
+                    navigate('/history', {
+                        replace: true,
+                        state: {
+                            from: location.state?.from || '/addresses',
+                            tab: tab === 'orders' ? 'orders' : 'expense',
+                            scope: range,
+                            offset,
+                        },
+                    })
+                }}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-6 pb-6 space-y-4 bg-bg">
@@ -305,7 +317,7 @@ export default function RangeReportPage() {
                                     fixedExpense={stats.fixedExpense}
                                     netProfit={stats.netProfit}
                                     onRecipesClick={() => navigate('/recipes', { state: { from: '/range-report' } })}
-                                    onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'daily', expensesToView: expenses, isReadOnly: true } })}
+                                    onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'operation', expensesToView: expenses, isReadOnly: true } })}
                                     onRefillNvlClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'nvl', expensesToView: expenses, isReadOnly: true } })}
                                     onRefillFreeFormClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'after', expensesToView: expenses, isReadOnly: true } })}
                                     onFixedExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'fixed', isReadOnly: true } })}
@@ -329,7 +341,7 @@ export default function RangeReportPage() {
                                     cash={stats.cashRevenue}
                                     transfer={stats.transferRevenue}
                                     dailyExpense={stats.dailyExpense}
-                                    onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'daily', expensesToView: expenses, isReadOnly: true } })}
+                                    onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'operation', expensesToView: expenses, isReadOnly: true } })}
                                 />
 
                                 <FinancialFlow
@@ -342,7 +354,7 @@ export default function RangeReportPage() {
                                     yesterdayActualTotal={prevStats.actualTotal}
                                     yesterdayTakeHome={prevStats.takeHome}
                                     compareLabel={`So với ${range === 'week' ? 'tuần trước' : 'tháng trước'}`}
-                                    onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'daily', expensesToView: expenses, isReadOnly: true } })}
+                                    onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'operation', expensesToView: expenses, isReadOnly: true } })}
                                     onRefillClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'nvl', expensesToView: expenses, isReadOnly: true } })}
                                 />
                             </>
@@ -393,21 +405,21 @@ export default function RangeReportPage() {
                 )}
             </main>
 
+            {/* FAB: Cập nhật báo cáo — same style as "+ Thêm chi phí" in ExpensePanel */}
+            <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
+                <div className="flex justify-end px-4 mb-[72px] pointer-events-auto">
+                    <button
+                        onClick={() => navigate('/shift-closing')}
+                        className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
+                    >
+                        Cập nhật báo cáo
+                    </button>
+                </div>
+            </div>
+
             <HistoryFooter
-                activeTab="report"
-                onSelect={(tab) => {
-                    if (tab === 'report') return
-                    // Hand-off current scope+offset to /history so the date window survives the tab swap
-                    navigate('/history', {
-                        replace: true,
-                        state: {
-                            from: location.state?.from || '/addresses',
-                            tab: tab === 'orders' ? 'orders' : 'expense',
-                            scope: range,
-                            offset,
-                        },
-                    })
-                }}
+                scope={range}
+                onScopeChange={handleNavigateRange}
             />
         </div>
     )

@@ -144,7 +144,7 @@ export default function RecipeMenuPage() {
                         <div className="flex justify-end px-4 mb-2 pointer-events-auto">
                             <button
                                 onClick={enterSortMode}
-                                className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center justify-center text-[13px] font-bold text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
+                                className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center justify-center text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
                             >
                                 ↕ Sắp xếp
                             </button>

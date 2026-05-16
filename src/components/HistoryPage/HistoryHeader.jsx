@@ -1,14 +1,11 @@
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
-
-const SCOPE_OPTIONS = [
-    { key: 'week', label: 'Tuần này' },
-    { key: 'day', label: 'Hôm nay' },
-    { key: 'month', label: 'Tháng này' },
-]
+import HistoryTabsBar from './HistoryTabsBar'
 
 export default function HistoryHeader({
     rangeLabel, totalCups, scope, isReadOnly,
-    onBack, onForward, onScopeChange,
+    onBack, onForward,
+    // Tabs row (moved from footer)
+    activeTab, onTabSelect,
     // Week/month mode
     canGoForward, onOffsetPrev, onOffsetNext,
     // Day mode (picker)
@@ -71,22 +68,7 @@ export default function HistoryHeader({
                 </button>
             </div>
 
-            {!isReadOnly && (
-                <div className="grid grid-cols-3 gap-2">
-                    {SCOPE_OPTIONS.map(s => (
-                        <button
-                            key={s.key}
-                            onClick={() => onScopeChange(s.key)}
-                            className={`py-2 rounded-[12px] text-[12px] font-black border transition-colors ${scope === s.key
-                                ? 'bg-primary/10 border-primary/40 text-primary'
-                                : 'bg-surface-light border-border/60 text-text-secondary hover:bg-border/30'
-                                }`}
-                        >
-                            {s.label}
-                        </button>
-                    ))}
-                </div>
-            )}
+            <HistoryTabsBar activeTab={activeTab} onSelect={onTabSelect} />
         </header>
     )
 }

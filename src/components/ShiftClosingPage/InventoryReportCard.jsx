@@ -1,6 +1,5 @@
 import { Lock, Unlock } from 'lucide-react'
 import { ingredientLabel } from '../common/recipeUtils'
-import SectionDivider from './SectionDivider'
 
 export default function InventoryReportCard({
     ingredientsList, isLoading,
@@ -20,10 +19,8 @@ export default function InventoryReportCard({
     if (!ingredientsList.length) return null
 
     return (
-        <div>
-            <SectionDivider label="Kiểm tồn kho" />
-            <div className="bg-surface rounded-[20px] p-3 border border-border/60 shadow-sm space-y-3">
-                {ingredientsList.map(ing => (
+        <div className="bg-surface rounded-[20px] p-3 border border-border/60 shadow-sm space-y-3">
+            {ingredientsList.map(ing => (
                     <IngredientRow
                         key={ing.ingredient}
                         ing={ing}
@@ -38,9 +35,8 @@ export default function InventoryReportCard({
                         onOpeningLock={onOpeningLock}
                         onRestockChange={onRestockChange}
                         onInventoryChange={onInventoryChange}
-                    />
-                ))}
-            </div>
+                />
+            ))}
         </div>
     )
 }

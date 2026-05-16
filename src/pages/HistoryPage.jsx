@@ -41,7 +41,7 @@ export default function HistoryPage() {
 
     // ─── Navigation state ─────────────────────────────────────────────
     const initialTab = location.state?.tab === 'expense' ? 'expense' : 'orders'
-    const initialFilter = location.state?.filter || 'all'
+    const initialFilter = location.state?.filter || 'operation'
     const expensesToView = location.state?.expensesToView  // read-only past date list
     const isReadOnly = location.state?.isReadOnly || false
     const backTo = location.state?.from || '/pos'
@@ -53,7 +53,6 @@ export default function HistoryPage() {
     // ─── UI state ─────────────────────────────────────────────────────
     const [activeTab, setActiveTab] = useState(initialTab)
     const [expenseFilter, setExpenseFilter] = useState(initialFilter)
-    const [showFilterMenu, setShowFilterMenu] = useState(false)
     const [showAddModal, setShowAddModal] = useState(false)
 
     const [scope, setScope] = useState(initialScope)
@@ -496,7 +495,11 @@ export default function HistoryPage() {
                 canGoForward={canGoForward}
                 onBack={() => navigate(backTo)}
                 onForward={() => navigate('/recipes')}
-                onScopeChange={handleScopeChange}
+                activeTab={activeTab}
+                onTabSelect={(tab) => {
+                    if (tab === 'report') handleReportNav()
+                    else setActiveTab(tab)
+                }}
                 onOffsetPrev={() => setOffset(p => p - 1)}
                 onOffsetNext={() => setOffset(p => p + 1)}
                 dayInputValue={dayInputValue}
@@ -534,10 +537,7 @@ export default function HistoryPage() {
                     isReadOnly={isReadOnly}
                     isLoading={isLoadingExpenses}
                     expenseFilter={expenseFilter}
-                    showFilterMenu={showFilterMenu}
-                    onToggleFilterMenu={() => setShowFilterMenu(v => !v)}
-                    onSelectFilter={(f) => { setExpenseFilter(f); setShowFilterMenu(false) }}
-                    onShowAddModal={() => setShowAddModal(true)}
+                    onSelectFilter={(f) => setExpenseFilter(f)}
                     isManager={isManager}
                     fixedCosts={fixedCosts}
                     editingFixedId={editingFixedId}
@@ -559,6 +559,20 @@ export default function HistoryPage() {
                 />
             )}
 
+            {/* FAB: Add expense — floating bottom-right, same style as sort button in /recipes */}
+            {activeTab === 'expense' && !isReadOnly && (
+                <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
+                    <div className="flex justify-end px-4 mb-[72px] pointer-events-auto">
+                        <button
+                            onClick={() => setShowAddModal(true)}
+                            className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
+                        >
+                            + Thêm chi phí
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {showAddModal && (
                 <AddExpenseModal
                     expenseCategory={expenseCategory}
@@ -578,11 +592,9 @@ export default function HistoryPage() {
             )}
 
             <HistoryFooter
-                activeTab={activeTab}
-                onSelect={(tab) => {
-                    if (tab === 'report') handleReportNav()
-                    else setActiveTab(tab)
-                }}
+                scope={scope}
+                isReadOnly={isReadOnly}
+                onScopeChange={handleScopeChange}
             />
         </div>
     )

@@ -1,10 +1,8 @@
-import { ChevronDown, Plus } from 'lucide-react'
+import { useMemo } from 'react'
 import { formatVND, formatVNDInput } from '../../utils'
 import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils'
 
-const FILTER_LABELS = { all: 'Tất cả', operation: 'Vận hành', daily: 'Trong ca', after: 'Sau ca', nvl: 'Tồn kho', fixed: 'Cố định' }
 const FILTER_MENU = [
-    { key: 'all', label: 'Tất cả' },
     { key: 'operation', label: 'Vận hành' },
     { key: 'nvl', label: 'Tồn kho' },
     { key: 'fixed', label: 'Cố định' },
@@ -23,7 +21,7 @@ function formatTime(iso) {
 
 export default function ExpensePanel({
     isReadOnly, isLoading,
-    expenseFilter, showFilterMenu, onToggleFilterMenu, onSelectFilter, onShowAddModal,
+    expenseFilter, onSelectFilter,
     isManager, fixedCosts,
     editingFixedId, editFixedName, editFixedAmount, deletingFixedId,
     onStartEditFixed, onCancelEditFixed, onSubmitEditFixed,
@@ -33,43 +31,25 @@ export default function ExpensePanel({
 }) {
     return (
         <main className="flex-1 overflow-y-auto px-4 py-4 pb-4 space-y-3 bg-bg">
-            <div className="flex items-center justify-between gap-2">
-                <div className='relative'>
-                    {!isReadOnly && (
+            {/* Pill tab filter — same style as ReportViewFilter */}
+            <div className="bg-surface border border-border/60 rounded-[14px] p-1 shadow-sm flex gap-1">
+                {FILTER_MENU.map(f => {
+                    const active = expenseFilter === f.key
+                    return (
                         <button
-                            onClick={onShowAddModal}
-                            className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-full text-[12px] uppercase font-bold bg-danger/10 text-danger border border-danger/20 hover:bg-danger/20 transition-all"
+                            key={f.key}
+                            type="button"
+                            onClick={() => onSelectFilter(f.key)}
+                            className={`flex-1 py-2 rounded-[10px] text-[11px] font-black uppercase tracking-wider transition-all duration-150
+                                ${active
+                                    ? 'bg-danger text-bg font-bold shadow-sm'
+                                    : 'text-text-secondary hover:text-text hover:bg-surface-light'
+                                }`}
                         >
-                            <Plus size={12} strokeWidth={3} /> Thêm
+                            {f.label}
                         </button>
-                    )}
-                </div>
-
-                <div className="relative">
-                    <button
-                        onClick={onToggleFilterMenu}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] uppercase font-bold border bg-surface-light border-border/60 text-text-secondary hover:text-text transition-all"
-                    >
-                        {FILTER_LABELS[expenseFilter]}
-                        <ChevronDown size={12} className={`transition-transform ${showFilterMenu ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showFilterMenu && (
-                        <>
-                            <div className="fixed inset-0 z-10" onClick={onToggleFilterMenu} />
-                            <div className="absolute right-0 top-full mt-1 z-20 bg-surface border border-border/60 rounded-[12px] shadow-xl overflow-hidden min-w-[120px]">
-                                {FILTER_MENU.map(f => (
-                                    <button
-                                        key={f.key}
-                                        onClick={() => onSelectFilter(f.key)}
-                                        className={`w-full text-left px-3 py-2 text-[12px] uppercase font-bold transition-colors ${expenseFilter === f.key ? 'text-text bg-primary/10' : 'text-text-secondary hover:text-text hover:bg-surface-light'}`}
-                                    >
-                                        {f.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </>
-                    )}
-                </div>
+                    )
+                })}
             </div>
 
             {isManager && expenseFilter === 'fixed' && (
@@ -110,17 +90,15 @@ export default function ExpensePanel({
                     </div>
                 )
             ) : (
-                filteredExpenses.map(expense => (
-                    <ExpenseCard
-                        key={expense.id}
-                        expense={expense}
-                        isReadOnly={isReadOnly}
-                        ingredientUnits={ingredientUnits}
-                        snap={nvlStockSnapshot.get(expense.id)}
-                        deletingExpId={deletingExpId}
-                        onDelete={onDeleteExpense}
-                    />
-                ))
+                <ExpenseList
+                    expenses={filteredExpenses}
+                    showRunning={expenseFilter === 'operation' || expenseFilter === 'nvl'}
+                    isReadOnly={isReadOnly}
+                    ingredientUnits={ingredientUnits}
+                    nvlStockSnapshot={nvlStockSnapshot}
+                    deletingExpId={deletingExpId}
+                    onDeleteExpense={onDeleteExpense}
+                />
             )}
         </main>
     )
@@ -239,7 +217,39 @@ function FixedPaymentsSection({ payments, isReadOnly, deletingExpId, onDelete })
     )
 }
 
-function ExpenseCard({ expense, isReadOnly, ingredientUnits, snap, deletingExpId, onDelete }) {
+// Subcomponent that owns the running-total computation so it
+// doesn't rerun when unrelated state changes in ExpensePanel.
+function ExpenseList({ expenses, showRunning, isReadOnly, ingredientUnits, nvlStockSnapshot, deletingExpId, onDeleteExpense }) {
+    // Walk oldest → newest (expenses are sorted newest-first) to accumulate
+    const runningMap = useMemo(() => {
+        const map = new Map()
+        let cum = 0
+        for (let i = expenses.length - 1; i >= 0; i--) {
+            cum += expenses[i].amount || 0
+            map.set(expenses[i].id, cum)
+        }
+        return map
+    }, [expenses])
+
+    return (
+        <>
+            {expenses.map(expense => (
+                <ExpenseCard
+                    key={expense.id}
+                    expense={expense}
+                    isReadOnly={isReadOnly}
+                    ingredientUnits={ingredientUnits}
+                    snap={nvlStockSnapshot.get(expense.id)}
+                    runningTotal={showRunning ? runningMap.get(expense.id) : null}
+                    deletingExpId={deletingExpId}
+                    onDelete={onDeleteExpense}
+                />
+            ))}
+        </>
+    )
+}
+
+function ExpenseCard({ expense, isReadOnly, ingredientUnits, snap, runningTotal, deletingExpId, onDelete }) {
     const badge = getExpenseBadge(expense)
     const time = formatTime(expense.created_at)
     const isNvlWithMeta = expense.is_refill && !expense.metadata?.free_form && expense.metadata?.ingredient
@@ -249,14 +259,19 @@ function ExpenseCard({ expense, isReadOnly, ingredientUnits, snap, deletingExpId
 
     return (
         <div className="bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden opacity-90">
-            <div className={`absolute top-0 right-0 px-2 py-1 rounded-bl-[14px] flex flex-col items-end leading-tight ${badge.cls}`}>
-                <span className="text-[10px] font-black uppercase tracking-wider">{badge.main}</span>
+            {/* <div className={`absolute top-0 right-0 px-2 py-1 rounded-bl-[14px] flex flex-col items-end leading-tight ${badge.cls}`}>
+                <span className="text-[10px] font-black uppercase tracking-wider">{badge.sub}</span>
                 {badge.sub && <span className="text-[9px] font-medium opacity-70 normal-case">{badge.sub}</span>}
-            </div>
+            </div> */}
             <div className="flex justify-between items-center mb-1">
-                <span className={`font-black text-[14px] mt-1 ${expense.is_refill ? 'text-warning' : 'text-danger'}`}>
+                <span className="font-black text-[14px] mt-1 text-warning">
                     -{formatVND(expense.amount)}
                 </span>
+                {runningTotal != null && (
+                    <span className="text-danger leading-none text-[14px] font-bold tabular-nums">
+                        -{formatVND(runningTotal)}
+                    </span>
+                )}
             </div>
             <div className="flex justify-between items-stretch mb-1 border-t border-border/40 pt-2">
                 <div className="flex flex-col flex-1 gap-1.5 mt-0.5">
@@ -277,9 +292,14 @@ function ExpenseCard({ expense, isReadOnly, ingredientUnits, snap, deletingExpId
                         <span className="text-text-secondary/70 text-[12px] font-bold leading-none mt-2">{expense.staff_name}</span>
                     )}
                 </div>
-                <div className="flex flex-col justify-end items-end gap-2 shrink-0 mt-0.5">
+                <div className="flex flex-col justify-end items-end gap-1 shrink-0 mt-0.5">
+                    {/* {runningTotal != null && (
+                        <span className="text-danger leading-none text-[14px] font-bold tabular-nums">
+                            -{formatVND(runningTotal)}
+                        </span>
+                    )} */}
                     {isReadOnly ? (
-                        <span className="text-text-dim text-[14px] font-bold">{time}</span>
+                        <span className="text-text-dim text-[14px] font-bold leading-none">{time}</span>
                     ) : (
                         <span
                             className="text-text-secondary text-[14px] text-end font-bold cursor-pointer underline decoration-dashed decoration-text-secondary/50 underline-offset-4 hover:text-danger hover:decoration-danger active:text-danger/80 transition-all select-none leading-none"

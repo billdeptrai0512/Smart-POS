@@ -1,16 +1,11 @@
-import SectionDivider from './SectionDivider'
-
 export default function RevenueInputCard({
     actualCash, actualTransfer, isSubmitting,
     onCashChange, onTransferChange,
 }) {
     return (
-        <div>
-            <SectionDivider label="Thực nhận" />
-            <div className="bg-surface rounded-[20px] p-4 border border-border/60 shadow-sm space-y-3">
-                <MoneyRow label="Tiền mặt" value={actualCash} disabled={isSubmitting} onChange={onCashChange} />
-                <MoneyRow label="Chuyển khoản" value={actualTransfer} disabled={isSubmitting} onChange={onTransferChange} />
-            </div>
+        <div className="bg-surface rounded-[20px] p-4 border border-border/60 shadow-sm space-y-3">
+            <MoneyRow label="Tiền mặt" value={actualCash} disabled={isSubmitting} onChange={onCashChange} />
+            <MoneyRow label="Chuyển khoản" value={actualTransfer} disabled={isSubmitting} onChange={onTransferChange} />
         </div>
     )
 }
