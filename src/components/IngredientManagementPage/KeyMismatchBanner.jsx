@@ -12,7 +12,7 @@ export default function KeyMismatchBanner({ mismatches, onView, onDismiss }) {
                     <p className="text-text font-black text-[12px] leading-tight">
                         {mismatches.labelCollisions.length > 0
                             ? `${mismatches.labelCollisions.length} nguyên liệu chưa đồng bộ keys`
-                            : 'Phát hiện keys không khớp giữa công thức và tồn kho'}
+                            : 'Phát hiện keys không khớp giữa công thức, tùy chọn và tồn kho'}
                     </p>
                     <p className="text-text-secondary text-[10px] mt-0.5">Có thể gây sai Tiêu CT trong báo cáo hao hụt. Bấm để xem &amp; sửa.</p>
                 </div>

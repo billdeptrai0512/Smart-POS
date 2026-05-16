@@ -18,9 +18,11 @@ import { suggestCanonical } from '../../utils/ingredientKeySync'
 export default function KeySyncModal({
     open,
     onClose,
-    mismatches,            // { orphanRecipeKeys, orphanInventoryKeys, labelCollisions }
+    mismatches,            // { orphanRecipeKeys, orphanInventoryKeys, orphanExtraIngredientKeys, labelCollisions }
     recipes = [],
     products = [],
+    productExtras = {},    // { [productId]: [{ id, name }] } — used to attribute orphan extra-ingredients
+    extraIngredients = {}, // { [extraId]: [{ ingredient, ... }] }
     ingredientCosts = {},
     addressId,
     onComplete,            // called after successful sync to refresh data
@@ -67,11 +69,38 @@ export default function KeySyncModal({
 
     const costKeys = useMemo(() => new Set(Object.keys(ingredientCosts || {})), [ingredientCosts])
 
+    // Map ingredient_key → [{ extraName, productName }] for orphan-extra-ingredient context.
+    // Helps user trace "topping_dau is referenced in extra 'Trân châu' of product 'Trà sữa'".
+    const extrasByIngredient = useMemo(() => {
+        // First: build extraId → { extraName, productName }
+        const productByExtraId = new Map()
+        for (const [productId, exList] of Object.entries(productExtras || {})) {
+            const prodName = products.find(p => p.id === productId)?.name
+            if (!prodName) continue
+            for (const ex of exList || []) {
+                productByExtraId.set(ex.id, { extraName: ex.name, productName: prodName })
+            }
+        }
+        // Then: for each extra-ingredient row, accumulate by ingredient key
+        const result = {}
+        for (const [extraId, list] of Object.entries(extraIngredients || {})) {
+            const meta = productByExtraId.get(extraId)
+            if (!meta) continue
+            for (const ei of list || []) {
+                if (!ei?.ingredient) continue
+                if (!result[ei.ingredient]) result[ei.ingredient] = []
+                result[ei.ingredient].push(meta)
+            }
+        }
+        return result
+    }, [productExtras, extraIngredients, products])
+
     if (!open) return null
 
     const collisions = mismatches?.labelCollisions || []
     const orphanRecipe = mismatches?.orphanRecipeKeys || []
     const orphanInv   = mismatches?.orphanInventoryKeys || []
+    const orphanExtra = mismatches?.orphanExtraIngredientKeys || []
 
     const handleSync = async () => {
         if (!addressId) { setError('Chưa chọn chi nhánh'); return }
@@ -192,7 +221,7 @@ export default function KeySyncModal({
                             )}
 
                             {/* Orphan info */}
-                            {(orphanRecipe.length > 0 || orphanInv.length > 0) && (
+                            {(orphanRecipe.length > 0 || orphanInv.length > 0 || orphanExtra.length > 0) && (
                                 <div className="bg-bg border border-border/40 rounded-[14px] p-3 space-y-3">
                                     <p className="text-[11px] font-black text-text-secondary uppercase tracking-wider">Cảnh báo khác</p>
                                     {orphanRecipe.length > 0 && (
@@ -219,6 +248,38 @@ export default function KeySyncModal({
                                             </div>
                                         </div>
                                     )}
+                                    {orphanExtra.length > 0 && (
+                                        <div className="space-y-2">
+                                            <p className="text-[11px] font-bold text-warning">
+                                                {orphanExtra.length} nguyên liệu được gán vào tùy chọn (extra) nhưng chưa khai báo — báo cáo hao hụt sẽ bị thiếu, dự báo bổ sung sẽ sai:
+                                            </p>
+                                            <div className="space-y-1.5">
+                                                {orphanExtra.map(k => {
+                                                    const usages = extrasByIngredient[k] || []
+                                                    return (
+                                                        <div key={k} className="bg-surface-light rounded-[8px] px-2.5 py-1.5">
+                                                            <p className="text-[11px] font-mono font-bold text-text">{k}</p>
+                                                            {usages.length > 0 ? (
+                                                                <p className="text-[10px] text-text-secondary mt-0.5">
+                                                                    Trong tùy chọn:{' '}
+                                                                    <span className="text-text-dim">
+                                                                        {usages.map((u, i) => (
+                                                                            <span key={i}>
+                                                                                {i > 0 && ', '}
+                                                                                {u.extraName} <span className="opacity-60">({u.productName})</span>
+                                                                            </span>
+                                                                        ))}
+                                                                    </span>
+                                                                </p>
+                                                            ) : (
+                                                                <p className="text-[10px] text-text-dim italic mt-0.5">Không tìm thấy tùy chọn tham chiếu</p>
+                                                            )}
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
                                     {orphanInv.length > 0 && (
                                         <div className="space-y-1">
                                             <p className="text-[11px] font-bold text-text-secondary">
@@ -228,12 +289,12 @@ export default function KeySyncModal({
                                         </div>
                                     )}
                                     <p className="text-[10px] text-text-dim italic">
-                                        Cách sửa: vào /recipes đổi nguyên liệu trong công thức sang key đã có sẵn, HOẶC vào /ingredients tạo nguyên liệu mới với đúng key này.
+                                        Cách sửa: vào /recipes đổi nguyên liệu trong công thức/tùy chọn sang key đã có sẵn, HOẶC vào /ingredients tạo nguyên liệu mới với đúng key này.
                                     </p>
                                 </div>
                             )}
 
-                            {collisions.length === 0 && orphanRecipe.length === 0 && orphanInv.length === 0 && (
+                            {collisions.length === 0 && orphanRecipe.length === 0 && orphanInv.length === 0 && orphanExtra.length === 0 && (
                                 <div className="py-6 text-center">
                                     <p className="text-text font-bold">Không có mismatch nào</p>
                                     <p className="text-text-secondary text-xs mt-1">Tất cả nguyên liệu đã đồng bộ.</p>

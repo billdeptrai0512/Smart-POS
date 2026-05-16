@@ -29,6 +29,7 @@ export default function IngredientManagementPage() {
     const {
         ingredientCosts: contextCosts, ingredientUnits: contextUnits,
         recipes: contextRecipes, products: contextProducts, ingredientConfigs,
+        productExtras: contextProductExtras, extraIngredients: contextExtraIngs,
         refreshProducts,
     } = useProducts()
     const { selectedAddress, updateSortOrder } = useAddress()
@@ -69,13 +70,29 @@ export default function IngredientManagementPage() {
         return (contextRecipes || []).filter(r => activeIds.has(r.product_id))
     }, [contextRecipes, contextProducts])
 
+    // Filter extra-ingredients to only those owned by extras of CURRENTLY ACTIVE products.
+    // Soft-deleted products may keep their extras + extra_ingredients rows; we shouldn't flag
+    // those as user-fixable orphans (they're effectively dead data).
+    const liveExtraIngredients = useMemo(() => {
+        const activeExtraIds = new Set()
+        for (const list of Object.values(contextProductExtras || {})) {
+            for (const e of list || []) activeExtraIds.add(e.id)
+        }
+        const filtered = {}
+        for (const [extraId, list] of Object.entries(contextExtraIngs || {})) {
+            if (activeExtraIds.has(extraId)) filtered[extraId] = list
+        }
+        return filtered
+    }, [contextProductExtras, contextExtraIngs])
+
     const keyMismatches = useMemo(
         () => detectKeyMismatches({
             recipes: liveRecipes,
             ingredientCosts,
             inventoryReport: ingredientStocks,
+            extraIngredients: liveExtraIngredients,
         }),
-        [liveRecipes, ingredientCosts, ingredientStocks]
+        [liveRecipes, ingredientCosts, ingredientStocks, liveExtraIngredients]
     )
 
     // Signature of current mismatches — used to detect when dismissed warning should re-surface.
@@ -84,6 +101,7 @@ export default function IngredientManagementPage() {
         const parts = [
             ...keyMismatches.orphanRecipeKeys.map(k => `r:${k}`),
             ...keyMismatches.orphanInventoryKeys.map(k => `i:${k}`),
+            ...(keyMismatches.orphanExtraIngredientKeys || []).map(k => `e:${k}`),
             ...keyMismatches.labelCollisions.map(c => `c:${c.keys.join('|')}`),
         ]
         return parts.sort().join(',')
@@ -462,6 +480,8 @@ export default function IngredientManagementPage() {
                 mismatches={keyMismatches}
                 recipes={liveRecipes}
                 products={contextProducts || []}
+                productExtras={contextProductExtras || {}}
+                extraIngredients={liveExtraIngredients}
                 ingredientCosts={ingredientCosts}
                 addressId={selectedAddress?.id}
                 onComplete={async () => {

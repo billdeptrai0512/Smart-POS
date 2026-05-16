@@ -56,11 +56,23 @@ export async function signUp(username, password, name, email) {
 }
 
 // Validate an invite token — returns { valid, tokenId, managerId, managerName, role, error }
+//
+// IMPORTANT: invitee opens this URL while UNAUTHENTICATED. The previous version
+// embedded `users(name)` into the invite_tokens select to fetch the inviting
+// manager's name. That join hits RLS on `users`, which calls `is_admin_auth()` —
+// a function whose EXECUTE was revoked from `anon` in migration 20260505. Result:
+// every anonymous signup link returned "permission denied for function
+// is_admin_auth" → UI showed "Link không hợp lệ". Bug affected BOTH staff and
+// co-manager invites (same code path).
+//
+// Fix: query invite_tokens alone (RLS permits anon `invite_read USING (true)`),
+// then attempt to read the manager name in a separate query and SWALLOW any
+// permission error — name is purely cosmetic.
 export async function validateInviteToken(token) {
     if (!supabase) return { valid: false, error: 'No connection' }
     const { data, error } = await supabase
         .from('invite_tokens')
-        .select('id, manager_id, role, expires_at, used_at, users(name)')
+        .select('id, manager_id, role, expires_at, used_at')
         .eq('token', token)
         .maybeSingle()
 
@@ -68,7 +80,19 @@ export async function validateInviteToken(token) {
     if (data.used_at) return { valid: false, error: 'Link này đã được sử dụng' }
     if (new Date(data.expires_at) < new Date()) return { valid: false, error: 'Link đã hết hạn' }
 
-    return { valid: true, tokenId: data.id, managerId: data.manager_id, managerName: data.users?.name, role: data.role || 'staff' }
+    // Best-effort fetch of manager name. Anonymous role can't read users (RLS calls
+    // is_admin_auth which anon lacks EXECUTE on); we ignore that failure.
+    let managerName
+    try {
+        const { data: managerRow } = await supabase
+            .from('users')
+            .select('name')
+            .eq('id', data.manager_id)
+            .maybeSingle()
+        managerName = managerRow?.name
+    } catch { /* RLS blocked — leave name undefined */ }
+
+    return { valid: true, tokenId: data.id, managerId: data.manager_id, managerName, role: data.role || 'staff' }
 }
 
 // Create an invite token for a manager (role = 'staff' | 'co-manager')
@@ -164,21 +188,6 @@ export async function fetchProfileByAuthId(authId) {
     if (error) {
         console.error('fetchProfileByAuthId error:', error)
         return null
-    }
-    return data
-}
-
-// Fetch all managers (for staff signup selection)
-export async function fetchManagers() {
-    if (!supabase) return []
-    const { data, error } = await supabase
-        .from('users')
-        .select('id, name')
-        .eq('role', 'manager')
-        .order('name')
-    if (error) {
-        console.error('fetchManagers error:', error)
-        return []
     }
     return data
 }
@@ -282,20 +291,44 @@ export async function removeSession(userId) {
     if (error) console.error('removeSession error:', error)
 }
 
-// Fetch active sessions for a list of address IDs (last_seen within 10 minutes)
+// Fetch active sessions for a list of address IDs (last_seen within 10 minutes).
+//
+// Avoid the embedded `users(name)` join — it triggers RLS on users which calls
+// is_admin_auth, a function whose EXECUTE was revoked from anon in migration
+// 20260505. If this ever gets reached from an unauthenticated context (e.g.
+// future guest/demo mode), the join would fail with `permission denied`.
+// Same root cause as the invite-link bug — see validateInviteToken.
+//
+// Fix: fetch sessions alone, then resolve names in a separate best-effort query.
 export async function fetchActiveSessions(addressIds) {
     if (!supabase || !addressIds?.length) return []
     const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString()
     const { data, error } = await supabase
         .from('active_sessions')
-        .select('user_id, address_id, last_seen, users(name)')
+        .select('user_id, address_id, last_seen')
         .in('address_id', addressIds)
         .gte('last_seen', cutoff)
     if (error) {
         console.error('fetchActiveSessions error:', error)
         return []
     }
-    return data
+    if (!data?.length) return []
+
+    // Best-effort name lookup. Authenticated managers/staff can read users via RLS;
+    // anonymous contexts can't and we silently degrade to undefined names.
+    const userIds = [...new Set(data.map(s => s.user_id))]
+    let nameById = {}
+    try {
+        const { data: usersData } = await supabase
+            .from('users')
+            .select('id, name')
+            .in('id', userIds)
+        if (usersData) {
+            for (const u of usersData) nameById[u.id] = u.name
+        }
+    } catch { /* RLS blocked — leave names undefined */ }
+
+    return data.map(s => ({ ...s, users: { name: nameById[s.user_id] } }))
 }
 
 // Fetch today's cup count + revenue for multiple addresses in one RPC call.

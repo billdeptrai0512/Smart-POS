@@ -1,12 +1,8 @@
 import { useRef, useState } from 'react'
 import {
-    Pencil, Trash2, ClipboardCopy, ChevronRight,
-    Coffee, UserCircle2, Loader, FileText, DollarSign,
+    Pencil, Trash2, ClipboardCopy, MoreHorizontal, X,
+    Coffee, Loader, FileText,
     ArrowRight,
-    Users,
-    GlassWater,
-    Landmark,
-    BarChart
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import { formatVND } from '../../utils'
@@ -22,7 +18,8 @@ export default function BranchGrid({
     const [editName, setEditName] = useState('')
     const [renaming, setRenaming] = useState(false)
     const [deletingAddressId, setDeletingAddressId] = useState(null)
-    const [upsellForAddress, setUpsellForAddress] = useState(null)  // address.id khi click gia hạn
+    const [expandedActionsId, setExpandedActionsId] = useState(null) // which card has the 3-action menu open
+    const [upsellForAddress, setUpsellForAddress] = useState(null)
     const submitGuardRef = useRef(false)
 
     async function handleRename(e, addrId) {
@@ -153,84 +150,104 @@ export default function BranchGrid({
 
                                     {/* Action buttons */}
                                     {!isStaff && (
-                                        <div className="flex items-center justify-between border-t border-border/40 px-3.5 py-1.5 gap-2">
-                                            {/* Report buttons — manager only */}
-                                            {onSelectReport && (
-                                                <div className='flex gap-2'>
+                                        <div className="border-t border-border/40 px-2 py-1.5">
+                                            {deletingAddressId === addr.id ? (
+                                                /* Delete-confirm: full-width 2-col grid so tap targets are clear on small screens */
+                                                <div className="grid grid-cols-2 gap-1.5">
                                                     <button
-                                                        onClick={(e) => { e.stopPropagation(); onSelectReport(addr) }}
-                                                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-success/5 border border-success/20 hover:bg-success/15 transition-all group"
-                                                        title="Xem báo cáo ngày"
+                                                        onClick={(e) => { e.stopPropagation(); setDeletingAddressId(null) }}
+                                                        className="py-2 bg-bg border border-border/60 text-text-secondary text-[12px] font-bold rounded-[10px] hover:bg-surface-light transition-colors"
                                                     >
-                                                        <span className="text-[10px] font-black text-success uppercase leading-none opacity-80 group-hover:opacity-100">Báo cáo</span>
+                                                        Hủy
                                                     </button>
-
                                                     <button
-                                                        onClick={(e) => { e.stopPropagation(); onSelectIngredients?.(addr) }}
-                                                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-primary/5 border border-primary/20 hover:bg-primary/15 transition-all group"
-                                                        title="Xem tồn kho"
+                                                        onClick={async (e) => {
+                                                            e.stopPropagation()
+                                                            try {
+                                                                await onRemove(addr.id)
+                                                            } catch (err) {
+                                                                setError(err.message || 'Không thể xóa địa chỉ')
+                                                            } finally {
+                                                                setDeletingAddressId(null)
+                                                            }
+                                                        }}
+                                                        className="py-2 bg-danger text-white text-[12px] font-black rounded-[10px] hover:bg-danger/90 transition-colors"
                                                     >
-                                                        <span className="text-[10px] font-black text-primary uppercase leading-none opacity-80 group-hover:opacity-100">Tồn kho</span>
+                                                        Xác nhận xóa
+                                                    </button>
+                                                </div>
+                                            ) : expandedActionsId === addr.id ? (
+                                                /* Expanded: equal-width grid takes over full row. Báo cáo/Tồn kho temporarily hidden
+                                                   to free space on small screens. Each cell has icon+label for discoverability and
+                                                   ~44px tap target. */
+                                                <div className="grid grid-cols-4 gap-1">
+                                                    <ActionCell
+                                                        icon={<ClipboardCopy size={16} />}
+                                                        label="Sao lưu"
+                                                        color="text-primary"
+                                                        bg="hover:bg-primary/10 active:bg-primary/15"
+                                                        onClick={(e) => { e.stopPropagation(); onBackup(addr); setExpandedActionsId(null) }}
+                                                    />
+                                                    <ActionCell
+                                                        icon={<Pencil size={16} />}
+                                                        label="Đổi tên"
+                                                        color="text-primary"
+                                                        bg="hover:bg-primary/10 active:bg-primary/15"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            setEditingAddressId(addr.id)
+                                                            setEditName(addr.name)
+                                                            setDeletingAddressId(null)
+                                                            setExpandedActionsId(null)
+                                                            setError('')
+                                                        }}
+                                                    />
+                                                    <ActionCell
+                                                        icon={<Trash2 size={16} />}
+                                                        label="Xóa"
+                                                        color="text-danger"
+                                                        bg="hover:bg-danger/10 active:bg-danger/15"
+                                                        onClick={(e) => { e.stopPropagation(); setDeletingAddressId(addr.id); setExpandedActionsId(null) }}
+                                                    />
+                                                    <ActionCell
+                                                        icon={<X size={16} />}
+                                                        label="Đóng"
+                                                        color="text-text-secondary"
+                                                        bg="hover:bg-surface-light active:bg-border/30"
+                                                        onClick={(e) => { e.stopPropagation(); setExpandedActionsId(null) }}
+                                                    />
+                                                </div>
+                                            ) : (
+                                                /* Default: Báo cáo / Tồn kho on left, MoreHorizontal on right */
+                                                <div className="flex items-center justify-between gap-2 px-1.5">
+                                                    {onSelectReport && (
+                                                        <div className='flex gap-2'>
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); onSelectReport(addr) }}
+                                                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-success/5 border border-success/20 hover:bg-success/15 transition-all group"
+                                                                title="Xem báo cáo ngày"
+                                                            >
+                                                                <span className="text-[10px] font-black text-success uppercase leading-none opacity-80 group-hover:opacity-100">Báo cáo</span>
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); onSelectIngredients?.(addr) }}
+                                                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-primary/5 border border-primary/20 hover:bg-primary/15 transition-all group"
+                                                                title="Xem tồn kho"
+                                                            >
+                                                                <span className="text-[10px] font-black text-primary uppercase leading-none opacity-80 group-hover:opacity-100">Tồn kho</span>
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setExpandedActionsId(addr.id) }}
+                                                        className="w-9 h-9 flex items-center justify-center text-text-secondary hover:text-text transition-colors rounded-lg hover:bg-surface-light active:bg-border/30 shrink-0"
+                                                        title="Thao tác khác"
+                                                        aria-label="Mở menu thao tác"
+                                                    >
+                                                        <MoreHorizontal size={18} />
                                                     </button>
                                                 </div>
                                             )}
-
-
-                                            <div className='flex gap-0.5 justify-end shrink-0'>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); onBackup(addr) }}
-                                                    className="p-1.5 text-text-secondary hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
-                                                    title="Sao lưu cấu hình"
-                                                >
-                                                    <ClipboardCopy size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        setEditingAddressId(addr.id)
-                                                        setEditName(addr.name)
-                                                        setDeletingAddressId(null)
-                                                        setError('')
-                                                    }}
-                                                    className="p-1.5 text-text-secondary hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
-                                                    title="Đổi tên"
-                                                >
-                                                    <Pencil size={16} />
-                                                </button>
-                                                {deletingAddressId === addr.id ? (
-                                                    <div className="flex gap-1 ml-auto">
-                                                        <button
-                                                            onClick={async (e) => {
-                                                                e.stopPropagation()
-                                                                try {
-                                                                    await onRemove(addr.id)
-                                                                } catch (err) {
-                                                                    setError(err.message || 'Không thể xóa địa chỉ')
-                                                                } finally {
-                                                                    setDeletingAddressId(null)
-                                                                }
-                                                            }}
-                                                            className="px-2 py-1 bg-danger text-white text-[10px] font-black rounded-md hover:bg-danger/90 transition-colors"
-                                                        >
-                                                            Xóa
-                                                        </button>
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); setDeletingAddressId(null) }}
-                                                            className="px-2 py-1 bg-bg border border-border/60 text-text-secondary text-[10px] font-bold rounded-md hover:bg-surface-light transition-colors"
-                                                        >
-                                                            Hủy
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); setDeletingAddressId(addr.id) }}
-                                                        className="p-1.5 text-text-secondary hover:text-danger transition-colors rounded-lg hover:bg-danger/10"
-                                                        title="Xóa"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                )}
-                                            </div>
                                         </div>
                                     )}
                                 </>
@@ -259,5 +276,19 @@ export default function BranchGrid({
                 required="basic"
             />
         </>
+    )
+}
+
+// Equal-width action cell used in expanded mode. Mobile-friendly tap target (≥44px) with
+// icon + label stacked so users immediately know each action without relying on title attr.
+function ActionCell({ icon, label, color, bg, onClick }) {
+    return (
+        <button
+            onClick={onClick}
+            className={`min-h-[44px] flex flex-col items-center justify-center gap-0.5 rounded-[10px] transition-colors ${bg}`}
+        >
+            <span className={color}>{icon}</span>
+            <span className={`text-[10px] font-bold leading-none ${color}`}>{label}</span>
+        </button>
     )
 }
