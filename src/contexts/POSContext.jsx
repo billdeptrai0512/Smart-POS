@@ -219,12 +219,19 @@ export function POSProvider() {
     }, [addressId])
 
     // ---- Autosave Daemon ----
+    // PERF: debounce 5 synchronous localStorage writes that were firing on every
+    // keystroke/cart change. localStorage is sync I/O — on slower devices this caused
+    // visible jank. 400ms debounce coalesces bursts (typing, rapid add-to-cart) into
+    // a single write per quiet period.
     useEffect(() => {
-        localStorage.setItem('pos_cart', JSON.stringify(cart))
-        localStorage.setItem('pos_revenue', revenue.toString())
-        localStorage.setItem('pos_total_cost', totalCost.toString())
-        localStorage.setItem('pos_cups', cupsSold.toString())
-        localStorage.setItem('pos_inventory', JSON.stringify(inventory))
+        const t = setTimeout(() => {
+            localStorage.setItem('pos_cart', JSON.stringify(cart))
+            localStorage.setItem('pos_revenue', revenue.toString())
+            localStorage.setItem('pos_total_cost', totalCost.toString())
+            localStorage.setItem('pos_cups', cupsSold.toString())
+            localStorage.setItem('pos_inventory', JSON.stringify(inventory))
+        }, 400)
+        return () => clearTimeout(t)
     }, [cart, revenue, totalCost, cupsSold, inventory])
 
     // ---- Last order helpers ----

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { formatVND } from '../../utils'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -8,6 +9,16 @@ export default function MenuGrid({ products, cart, onAddItem }) {
     const { isManager, isAdmin } = useAuth()
     const { loading, loadError } = useProducts()
     const canSetup = isManager || isAdmin
+
+    // PERF: index cart qty by productId once per cart change.
+    // Was: cart.filter().reduce() called per product per render — O(N×M).
+    const cartQtyMap = useMemo(() => {
+        const map = new Map()
+        for (const item of cart) {
+            map.set(item.productId, (map.get(item.productId) || 0) + item.quantity)
+        }
+        return map
+    }, [cart])
 
     if (products.length === 0) {
         const isLoading = loading
@@ -57,7 +68,7 @@ export default function MenuGrid({ products, cart, onAddItem }) {
         <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-6 pb-6 pt-5">
             <div className="grid grid-cols-2 gap-4 pt-1">
                 {products.map(product => {
-                    const qty = cart.filter(item => item.productId === product.id).reduce((sum, item) => sum + item.quantity, 0)
+                    const qty = cartQtyMap.get(product.id) || 0
                     return (
                         <div
                             key={product.id}

@@ -37,6 +37,16 @@ export default function AddressSelectPage() {
     // not on rename. Avoids re-running the heavy prefetch + stats effects unnecessarily.
     const addressIdsKey = useMemo(() => addresses.map(a => a.id).join('|'), [addresses])
 
+    // PERF: count by role in a single pass instead of two .filter() walks per render.
+    const { staffCount, managerCount } = useMemo(() => {
+        let s = 0, m = 0
+        for (const u of staffList) {
+            if (u.role === 'staff') s++
+            else if (u.role === 'manager' || u.role === 'co-manager') m++
+        }
+        return { staffCount: s, managerCount: m }
+    }, [staffList])
+
     // Track which IDs we've already prefetched so renames/new addresses don't refetch all.
     const prefetchedIdsRef = useRef(new Set())
 
@@ -173,8 +183,8 @@ export default function AddressSelectPage() {
                 dateOnly={dateOnly}
                 setError={setError}
                 addressCount={addresses.length}
-                staffCount={staffList.filter(s => s.role === 'staff').length}
-                managerCount={staffList.filter(s => s.role === 'manager' || s.role === 'co-manager').length}
+                staffCount={staffCount}
+                managerCount={managerCount}
             />
 
             <div className={`flex-1 overflow-y-auto px-4 pt-4 hide-scrollbar ${showCreateFooter ? 'pb-40' : 'pb-8'}`}>

@@ -41,13 +41,20 @@ function buildMonthData(orders, start, end, countMap) {
         wStart.setHours(0, 0, 0, 0)
         wNum++
     }
+    // PERF: bin orders by week-index O(1) instead of slots.find() O(M) per order.
+    // baseMs = midnight of week 1's start day; week index = floor((d - baseMs) / 7d).
+    const WEEK_MS = 7 * 86400000
+    const baseDay = new Date(slots[0]?.wStart || start)
+    baseDay.setHours(0, 0, 0, 0)
+    const baseMs = baseDay.getTime()
     orders.forEach(o => {
         const d = new Date(o.created_at)
-        const slot = slots.find(w => d >= w.wStart && d <= w.wEnd)
-        if (slot) {
-            slot.cups += countableQty(o.order_items, countMap)
-            slot.revenue += o.total
-        }
+        const idx = Math.floor((d.getTime() - baseMs) / WEEK_MS)
+        if (idx < 0 || idx >= slots.length) return
+        const slot = slots[idx]
+        if (d < slot.wStart || d > slot.wEnd) return // boundary guard for partial-week clamping
+        slot.cups += countableQty(o.order_items, countMap)
+        slot.revenue += o.total
     })
     return slots
 }

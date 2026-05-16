@@ -14,6 +14,7 @@ import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import FinancialFlow from '../components/DailyReportPage/FinancialFlow'
 import RangeLossCard from '../components/DailyReportPage/RangeLossCard'
+import HistoryFooter from '../components/HistoryPage/HistoryFooter'
 import { Filter, Lock } from 'lucide-react'
 import { useEntitlement, hasFeature } from '../hooks/useEntitlement'
 import UpsellPage from '../components/common/UpsellPage'
@@ -372,6 +373,23 @@ export default function RangeReportPage() {
                     </div>
                 )}
             </main>
+
+            <HistoryFooter
+                activeTab="report"
+                onSelect={(tab) => {
+                    if (tab === 'report') return
+                    // Hand-off current scope+offset to /history so the date window survives the tab swap
+                    navigate('/history', {
+                        replace: true,
+                        state: {
+                            from: location.state?.from || '/addresses',
+                            tab: tab === 'orders' ? 'orders' : 'expense',
+                            scope: range,
+                            offset,
+                        },
+                    })
+                }}
+            />
         </div>
     )
 }

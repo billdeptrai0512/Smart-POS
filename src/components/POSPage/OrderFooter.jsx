@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { formatVND } from '../../utils'
 
 import { Zap } from 'lucide-react'
@@ -9,11 +10,18 @@ export default function OrderFooter({ cart, activeCartItemId, total, hasOrder, i
 
     const extrasToShow = productExtras?.[activeProductId] || []
 
-    const stickyExtrasToShow = extrasToShow.filter(e => e.is_sticky)
-    const normalExtrasToShow = extrasToShow.filter(e => !e.is_sticky)
+    // PERF: split extras into sticky/normal once per extras change instead of 2x per render.
+    const { stickyExtrasToShow, normalExtrasToShow } = useMemo(() => {
+        const sticky = [], normal = []
+        for (const e of extrasToShow) (e.is_sticky ? sticky : normal).push(e)
+        return { stickyExtrasToShow: sticky, normalExtrasToShow: normal }
+    }, [extrasToShow])
 
     // Show promo toggle only if any product has sticky extras
-    const hasStickyExtras = Object.values(productExtras || {}).some(extras => extras.some(e => e.is_sticky))
+    const hasStickyExtras = useMemo(
+        () => Object.values(productExtras || {}).some(extras => extras.some(e => e.is_sticky)),
+        [productExtras]
+    )
 
     return (
         <footer className="shrink-0 bg-surface border-t border-border/80 shadow-[0_-4px_24px_rgba(0,0,0,0.02)] flex flex-col">
