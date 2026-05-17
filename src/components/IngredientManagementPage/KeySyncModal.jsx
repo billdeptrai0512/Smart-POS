@@ -1,8 +1,18 @@
 import { useState, useMemo } from 'react'
-import { X, Check, Loader, AlertTriangle, ChevronRight } from 'lucide-react'
+import { X, Check, Loader, AlertTriangle, ChevronRight, Plus } from 'lucide-react'
 import { ingredientLabel } from '../common/recipeUtils'
-import { syncIngredientKey } from '../../services/orderService'
+import { syncIngredientKey, upsertIngredientCost } from '../../services/orderService'
 import { suggestCanonical } from '../../utils/ingredientKeySync'
+
+// Tiny heuristic: guess a sensible default unit from the orphan key so users
+// rarely have to retype it. Falls back to 'đv' for anything unrecognized.
+function guessUnit(key) {
+    const k = String(key || '').toLowerCase()
+    if (/(cup|ly|lid|nắp|nap|ống|ong|que|stick|straw|bag|túi|tui|cái|cai)/.test(k)) return 'cái'
+    if (/(sữa|sua|milk|syrup|sốt|sot|sauce|nước|nuoc|water|juice|ml)/.test(k)) return 'ml'
+    if (/(bột|bot|đường|duong|sugar|muối|muoi|salt|kem|cream|powder|topping|cacao|matcha|trà|tra|cà phê|cafe|coffee|g)/.test(k)) return 'g'
+    return 'đv'
+}
 
 /**
  * Modal cho user xem & đồng bộ ingredient keys bị mismatch.
@@ -39,6 +49,23 @@ export default function KeySyncModal({
     const [error, setError]   = useState('')
     const [done, setDone]     = useState(false)
     const [summary, setSummary] = useState(null)
+
+    // Unit input per orphan key. Initialized from a key-name heuristic so the
+    // common case ("cup" → "cái", "syrup" → "ml") is one click instead of typing.
+    const allOrphanKeys = useMemo(() => {
+        const set = new Set()
+        ;(mismatches?.orphanRecipeKeys || []).forEach(k => set.add(k))
+        ;(mismatches?.orphanExtraIngredientKeys || []).forEach(k => set.add(k))
+        ;(mismatches?.orphanInventoryKeys || []).forEach(k => set.add(k))
+        return Array.from(set)
+    }, [mismatches])
+    const [orphanUnits, setOrphanUnits] = useState(() => {
+        const init = {}
+        for (const k of allOrphanKeys) init[k] = guessUnit(k)
+        return init
+    })
+    const [creatingOrphans, setCreatingOrphans] = useState(false)
+    const [orphansCreated, setOrphansCreated] = useState(0)
 
     // Count usage per key — helps user pick canonical
     const recipeCountByKey = useMemo(() => {
@@ -129,9 +156,30 @@ export default function KeySyncModal({
     }
 
     const handleClose = () => {
-        if (syncing) return
-        if (done) onComplete?.()
+        if (syncing || creatingOrphans) return
+        if (done || orphansCreated > 0) onComplete?.()
         onClose()
+    }
+
+    const handleCreateOrphans = async () => {
+        if (creatingOrphans || allOrphanKeys.length === 0) return
+        setCreatingOrphans(true); setError('')
+        let created = 0
+        try {
+            for (const k of allOrphanKeys) {
+                const unit = (orphanUnits[k] || 'đv').trim() || 'đv'
+                await upsertIngredientCost(k, 0, addressId ?? null, unit)
+                created++
+            }
+            setOrphansCreated(created)
+            // If no collisions either, close-button below will read 'Xong' and run onComplete on click.
+            // If collisions remain, the user can keep working in the same modal.
+            onComplete?.()
+        } catch (err) {
+            setError(err?.message || 'Tạo nguyên liệu thất bại')
+        } finally {
+            setCreatingOrphans(false)
+        }
     }
 
     return (
@@ -220,77 +268,78 @@ export default function KeySyncModal({
                                 </div>
                             )}
 
-                            {/* Orphan info */}
+                            {/* Orphan info — with auto-create */}
                             {(orphanRecipe.length > 0 || orphanInv.length > 0 || orphanExtra.length > 0) && (
                                 <div className="bg-bg border border-border/40 rounded-[14px] p-3 space-y-3">
-                                    <p className="text-[11px] font-black text-text-secondary uppercase tracking-wider">Cảnh báo khác</p>
-                                    {orphanRecipe.length > 0 && (
-                                        <div className="space-y-2">
-                                            <p className="text-[11px] font-bold text-text-secondary">
-                                                {orphanRecipe.length} nguyên liệu được dùng trong công thức nhưng chưa khai báo trong /ingredients (giá vốn sẽ bằng 0):
-                                            </p>
-                                            <div className="space-y-1.5">
-                                                {orphanRecipe.map(k => {
-                                                    const usedIn = productsByIngredient[k] || []
-                                                    return (
-                                                        <div key={k} className="bg-surface-light rounded-[8px] px-2.5 py-1.5">
-                                                            <p className="text-[11px] font-mono font-bold text-text">{k}</p>
-                                                            {usedIn.length > 0 ? (
-                                                                <p className="text-[10px] text-text-secondary mt-0.5">
-                                                                    Dùng trong: <span className="text-text-dim">{usedIn.join(', ')}</span>
-                                                                </p>
-                                                            ) : (
-                                                                <p className="text-[10px] text-text-dim italic mt-0.5">Không tìm thấy sản phẩm tham chiếu</p>
-                                                            )}
-                                                        </div>
-                                                    )
-                                                })}
-                                            </div>
-                                        </div>
-                                    )}
-                                    {orphanExtra.length > 0 && (
-                                        <div className="space-y-2">
-                                            <p className="text-[11px] font-bold text-warning">
-                                                {orphanExtra.length} nguyên liệu được gán vào tùy chọn (extra) nhưng chưa khai báo — báo cáo hao hụt sẽ bị thiếu, dự báo bổ sung sẽ sai:
-                                            </p>
-                                            <div className="space-y-1.5">
-                                                {orphanExtra.map(k => {
-                                                    const usages = extrasByIngredient[k] || []
-                                                    return (
-                                                        <div key={k} className="bg-surface-light rounded-[8px] px-2.5 py-1.5">
-                                                            <p className="text-[11px] font-mono font-bold text-text">{k}</p>
-                                                            {usages.length > 0 ? (
-                                                                <p className="text-[10px] text-text-secondary mt-0.5">
-                                                                    Trong tùy chọn:{' '}
-                                                                    <span className="text-text-dim">
-                                                                        {usages.map((u, i) => (
-                                                                            <span key={i}>
-                                                                                {i > 0 && ', '}
-                                                                                {u.extraName} <span className="opacity-60">({u.productName})</span>
-                                                                            </span>
-                                                                        ))}
-                                                                    </span>
-                                                                </p>
-                                                            ) : (
-                                                                <p className="text-[10px] text-text-dim italic mt-0.5">Không tìm thấy tùy chọn tham chiếu</p>
-                                                            )}
-                                                        </div>
-                                                    )
-                                                })}
-                                            </div>
-                                        </div>
-                                    )}
-                                    {orphanInv.length > 0 && (
-                                        <div className="space-y-1">
-                                            <p className="text-[11px] font-bold text-text-secondary">
-                                                {orphanInv.length} nguyên liệu trong tồn kho nhưng chưa khai báo:
-                                            </p>
-                                            <p className="text-[10px] font-mono text-text-dim">{orphanInv.join(', ')}</p>
-                                        </div>
-                                    )}
-                                    <p className="text-[10px] text-text-dim italic">
-                                        Cách sửa: vào /recipes đổi nguyên liệu trong công thức/tùy chọn sang key đã có sẵn, HOẶC vào /ingredients tạo nguyên liệu mới với đúng key này.
+                                    <p className="text-[11px] font-black text-text-secondary uppercase tracking-wider">Nguyên liệu chưa khai báo</p>
+                                    <p className="text-[11px] text-text-secondary">
+                                        {allOrphanKeys.length} key đang được tham chiếu nhưng chưa có trong /ingredients (giá vốn = 0). Chỉnh đơn vị rồi bấm "Tạo nguyên liệu thiếu" — giá vốn sẽ về 0 và bạn có thể cập nhật sau trong /ingredients.
                                     </p>
+
+                                    {orphansCreated > 0 && (
+                                        <div className="bg-success/10 border border-success/30 rounded-[10px] px-3 py-2 flex items-center gap-2">
+                                            <Check size={13} className="text-success" />
+                                            <p className="text-[11px] font-bold text-success">Đã tạo {orphansCreated} nguyên liệu</p>
+                                        </div>
+                                    )}
+
+                                    {orphansCreated === 0 && (
+                                        <div className="space-y-1.5">
+                                            {allOrphanKeys.map(k => {
+                                                const usedIn = productsByIngredient[k] || []
+                                                const extraUsages = extrasByIngredient[k] || []
+                                                const inInventoryOnly = !orphanRecipe.includes(k) && !orphanExtra.includes(k) && orphanInv.includes(k)
+                                                return (
+                                                    <div key={k} className="bg-surface-light rounded-[8px] px-2.5 py-2 space-y-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="text-[11px] font-mono font-bold text-text flex-1 min-w-0 truncate">{k}</p>
+                                                            <input
+                                                                type="text"
+                                                                value={orphanUnits[k] || ''}
+                                                                onChange={e => setOrphanUnits(prev => ({ ...prev, [k]: e.target.value }))}
+                                                                disabled={creatingOrphans}
+                                                                placeholder="đv"
+                                                                className="w-[64px] bg-bg border border-border/60 rounded-md px-2 py-1 text-[11px] font-bold text-primary text-center focus:outline-none focus:border-primary disabled:opacity-50"
+                                                                title="Đơn vị (vd: g, ml, cái, đv)"
+                                                            />
+                                                        </div>
+                                                        {usedIn.length > 0 && (
+                                                            <p className="text-[10px] text-text-secondary">
+                                                                Công thức: <span className="text-text-dim">{usedIn.join(', ')}</span>
+                                                            </p>
+                                                        )}
+                                                        {extraUsages.length > 0 && (
+                                                            <p className="text-[10px] text-warning/80">
+                                                                Tùy chọn:{' '}
+                                                                <span className="text-text-dim">
+                                                                    {extraUsages.map((u, i) => (
+                                                                        <span key={i}>
+                                                                            {i > 0 && ', '}
+                                                                            {u.extraName} <span className="opacity-60">({u.productName})</span>
+                                                                        </span>
+                                                                    ))}
+                                                                </span>
+                                                            </p>
+                                                        )}
+                                                        {inInventoryOnly && (
+                                                            <p className="text-[10px] text-text-dim italic">Có trong tồn kho gần nhất</p>
+                                                        )}
+                                                    </div>
+                                                )
+                                            })}
+                                            <button
+                                                onClick={handleCreateOrphans}
+                                                disabled={creatingOrphans}
+                                                className="w-full mt-2 py-2.5 rounded-[10px] bg-primary/10 border border-primary/30 text-primary text-[12px] font-black hover:bg-primary/15 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                            >
+                                                {creatingOrphans ? (
+                                                    <><Loader size={12} className="animate-spin" /> Đang tạo…</>
+                                                ) : (
+                                                    <><Plus size={12} strokeWidth={3} /> Tạo {allOrphanKeys.length} nguyên liệu thiếu</>
+                                                )}
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 

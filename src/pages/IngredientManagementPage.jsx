@@ -127,11 +127,14 @@ export default function IngredientManagementPage() {
     useEffect(() => { refreshProducts?.() }, [])
 
     const loadStocks = async () => {
-        if (!selectedAddress?.id) return
-        const stocks = await fetchIngredientStocks(selectedAddress.id)
+        // selectedAddress.id may be null for the default template — fetchIngredientStocks
+        // handles that (queries rows with address_id IS NULL) so admins can manage stock on
+        // the playground template too.
+        if (!selectedAddress) return
+        const stocks = await fetchIngredientStocks(selectedAddress.id ?? null)
         setIngredientStocks(stocks)
     }
-    useEffect(() => { loadStocks() }, [selectedAddress?.id])
+    useEffect(() => { loadStocks() }, [selectedAddress?.id, selectedAddress?.name])
 
     useEffect(() => { setIngredientCosts(contextCosts) }, [contextCosts])
     useEffect(() => { setIngredientUnits(contextUnits || {}) }, [contextUnits])
@@ -298,10 +301,12 @@ export default function IngredientManagementPage() {
         setSortedIngredients(updated)
     }
     const saveSortOrderHandler = async () => {
-        if (!selectedAddress?.id) return
+        if (!selectedAddress) return
         setSaving(true)
         try {
-            await updateSortOrder(selectedAddress.id, sortedIngredients)
+            // selectedAddress.id may be null for the default template — AddressContext.updateSortOrder
+            // routes to app_settings in that case so the order persists for the playground.
+            await updateSortOrder(selectedAddress.id ?? null, sortedIngredients)
             setIsSorting(false)
             setSelectedSortIngredient(null)
         } catch (err) {

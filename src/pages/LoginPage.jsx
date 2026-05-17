@@ -53,14 +53,12 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-4">
+        <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-4 py-8">
             <div className="w-full max-w-sm">
-                <div className="text-center mb-4">
-                    {/* <img src="/icons/icon-512x512.png" alt="Kôphin" className="w-16 h-16 mx-auto rounded-[16px] shadow-sm" /> */}
-                    <h1 className="text-2xl font-black text-text mt-3">Đăng nhập</h1>
-                    <p className="text-center text-text-secondary text-xs mt-2">
-                        Bạn chưa có tài khoản?{' '}
-                        <Link to="/signup" className="text-primary font-bold hover:underline">Đăng ký</Link>
+                <div className="text-center mb-5">
+                    <h1 className="text-2xl font-black text-text uppercase">Smart POS</h1>
+                    <p className="text-center text-text-secondary text-[14px] mt-2">
+                        Công cụ quản lý bán hàng thông minh
                     </p>
                 </div>
 
@@ -110,31 +108,34 @@ export default function LoginPage() {
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full py-3 rounded-[14px] bg-primary text-white font-bold text-sm hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full py-3 rounded-[14px] bg-surface-light uppercase border border-border/60 text-text font-bold text-sm hover:bg-bg active:bg-surface transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
                     </button>
+
+                    <p className="text-center text-text-secondary text-xs mt-2">
+                        Chưa có tài khoản?{' '}
+                        <Link to="/signup" className="text-primary font-bold hover:underline">Đăng ký</Link>
+                    </p>
                 </form>
 
-                <div className="mt-6 relative flex items-center">
+                <div className="mt-4 relative flex items-center">
                     <div className="flex-grow border-t border-border/40" />
-                    <span className="mx-3 text-xs text-text-secondary">hoặc</span>
+                    <span className="mx-3 text-[10px] text-text-secondary tracking-wider">hoặc</span>
                     <div className="flex-grow border-t border-border/40" />
                 </div>
 
-                <button
-                    id="guest-mode-btn"
-                    type="button"
-                    onClick={handleGuest}
-                    disabled={guestLoading}
-                    className="mt-4 w-full py-3 rounded-[14px] border border-border/60 bg-surface text-text text-sm font-semibold hover:bg-surface-light active:bg-surface transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {guestLoading ? 'Đang tải thực đơn mẫu...' : '✨ Dùng thử miễn phí (Guest)'}
-                </button>
-                <p className="text-center text-text-secondary text-xs mt-2">
-                    Không cần đăng ký · Dữ liệu lưu trên thiết bị của bạn
-                </p>
-
+                <div className='pt-4 px-6 shadow-sm'>
+                    <button
+                        id="guest-mode-btn"
+                        type="button"
+                        onClick={handleGuest}
+                        disabled={guestLoading}
+                        className="w-full py-3.5 rounded-[14px] bg-primary items-center text-black/80 uppercase font-black text-sm hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_4px_20px_rgba(245,158,11,0.25)]"
+                    >
+                        {guestLoading ? 'Đang tải...' : 'Sử dụng thử'}
+                    </button>
+                </div>
 
 
             </div>

@@ -38,10 +38,7 @@ export default function SignUpPage() {
             <div className="w-full max-w-sm">
                 <div className="text-center mb-4">
                     <h1 className="text-2xl font-black text-text mt-3">Đăng ký</h1>
-                    <p className="text-center text-text-secondary text-xs mt-2">
-                        {' '}
-                        <Link to="/login" className="text-primary font-bold hover:underline">Quay lại</Link> trang đăng nhập
-                    </p>
+
                 </div>
 
 
@@ -57,7 +54,7 @@ export default function SignUpPage() {
                             required
                             autoComplete="email"
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder="example@gmail.com"
+                            placeholder=""
                         />
                     </div>
 
@@ -70,19 +67,19 @@ export default function SignUpPage() {
                             required
                             autoFocus
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder="Nguyễn Văn A"
+                            placeholder=""
                         />
                     </div>
-
+                    {/* change this input of username to phone number,  */}
                     <div>
-                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Tên đăng nhập</label>
+                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Số điện thoại</label>
                         <input
                             type="text"
                             value={username}
                             onChange={e => setUsername(e.target.value)}
                             required
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder="Tối thiểu 6 ký tự"
+                            placeholder=""
                         />
                     </div>
 
@@ -95,17 +92,22 @@ export default function SignUpPage() {
                             required
                             minLength={6}
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder="Tối thiểu 6 ký tự"
+                            placeholder=""
                         />
                     </div>
 
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full py-3 rounded-[14px] bg-primary text-white font-bold text-sm hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full py-3 rounded-[14px] bg-primary text-black/80 font-bold text-sm hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {loading ? 'Đang tạo...' : 'Tạo tài khoản'}
                     </button>
+
+                    <p className="text-center text-text-secondary text-xs mt-2">
+                        {' '}
+                        <Link to="/login" className="text-primary font-bold hover:underline">Quay lại</Link> trang đăng nhập
+                    </p>
                 </form>
 
 

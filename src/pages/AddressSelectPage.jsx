@@ -3,7 +3,7 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAddressStats } from '../contexts/AddressStatsContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { createInviteToken } from '../services/authService'
+import { createInviteToken, fetchDefaultIngredientSort } from '../services/authService'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { LogOut, Loader } from 'lucide-react'
 import Skeleton from '../components/common/Skeleton'
@@ -208,8 +208,10 @@ export default function AddressSelectPage() {
                         onBackup={setBackupSource}
                         onRename={renameAddress}
                         onRemove={removeAddress}
-                        onDefaultTemplate={() => {
-                            setSelectedAddress({ id: null, name: 'Mẫu mặc định' })
+                        onDefaultTemplate={async () => {
+                            // Load persisted ingredient sort so /ingredients respects admin's saved order.
+                            const ingredient_sort_order = await fetchDefaultIngredientSort()
+                            setSelectedAddress({ id: null, name: 'Mẫu mặc định', ingredient_sort_order })
                             navigate('/recipes')
                         }}
                     />

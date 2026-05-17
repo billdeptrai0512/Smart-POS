@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, signUpWithInvite as authSignUpWithInvite, fetchProfileByAuthId, removeSession } from '../services/authService'
-import { isGuest as getLocalIsGuest, setIsGuest as setLocalIsGuest, initializeGuestFromGlobal, clearGuestData } from '../services/localRepository'
+import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, signUpWithInvite as authSignUpWithInvite, fetchProfileByAuthId, removeSession, fetchDefaultIngredientSort } from '../services/authService'
+import { isGuest as getLocalIsGuest, setIsGuest as setLocalIsGuest, initializeGuestFromGlobal, clearGuestData, setGuestIngredientSortOrder } from '../services/localRepository'
 
 const AuthContext = createContext(null)
 
@@ -26,40 +26,61 @@ export function AuthProvider({ children }) {
             // instead of trying to read from an empty localStorage
             setLocalIsGuest(false)
 
-            const { 
-                fetchProducts, 
-                fetchAllRecipes, 
+            const {
+                fetchProducts,
+                fetchAllRecipes,
                 fetchIngredientCostsAndUnits,
                 fetchProductExtras,
-                fetchExtraIngredients
+                fetchExtraIngredients,
+                fetchIngredientStocks
             } = await import('../services/orderService')
 
-            const [products, recipes, ingredientData, extrasMap, extraIngsMap] = await Promise.all([
+            // Step 1 — fetch products/recipes/ingredients/extras/stocks/sort in parallel.
+            // Stocks come from the default address (address_id IS NULL) so the playground
+            // starts with realistic on-hand quantities instead of zero. The ingredient sort
+            // order comes from app_settings so the playground respects admin-curated order.
+            const [products, recipes, ingredientData, extrasMap, stocks, defaultSort] = await Promise.all([
                 fetchProducts(null),
                 fetchAllRecipes(null),
                 fetchIngredientCostsAndUnits(null),
                 fetchProductExtras(null),
-                fetchExtraIngredients(null)
+                fetchIngredientStocks(null),
+                fetchDefaultIngredientSort(),
             ])
 
-            // Flatten maps into arrays for storage
+            // Seed the guest's persisted ingredient sort_order so getDemoAddress() returns it.
+            if (Array.isArray(defaultSort) && defaultSort.length) {
+                setGuestIngredientSortOrder(defaultSort)
+            }
+
+            // Step 2 — only fetch extra_ingredients for the default extras we just got.
+            // (Previously this called fetchExtraIngredients(null) which scans the whole
+            // table — gets slower as more addresses/extras are added.)
             const extras = Object.values(extrasMap).flat()
+            const extraIds = extras.map(e => e.id)
+            const extraIngsMap = extraIds.length ? await fetchExtraIngredients(extraIds) : {}
             const extraIngredients = Object.values(extraIngsMap).flat()
 
             // Seed localStorage with the fetched global data
-            initializeGuestFromGlobal({ 
-                products, 
-                recipes, 
+            initializeGuestFromGlobal({
+                products,
+                recipes,
                 ingredients: ingredientData.rows,
                 extras,
-                extraIngredients
+                extraIngredients,
+                stocks
             })
         } catch (err) {
             console.error('[Guest] Failed to fetch global setup, using empty sandbox:', err)
         } finally {
-            // Only NOW flip the guest flag — data is already in localStorage
+            // Only NOW flip the guest flag — data is already in localStorage.
+            // Also set a synthetic manager profile so role-gated UI (canEdit, isManager)
+            // unlocks immediately — guest data lives in localStorage so full edit access
+            // is safe. Without this, profile stayed null until the next page reload
+            // (when the restoration branch in the auth useEffect sets it).
             setLocalIsGuest(true)
             setIsGuestState(true)
+            setProfile({ id: 'guest', name: 'Khách Ghé Thăm', role: 'manager', email: 'guest@demo.local' })
             setLoading(false)
         }
     }, [])

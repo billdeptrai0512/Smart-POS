@@ -531,9 +531,13 @@ export async function updateProductSortOrder(addressId, orderedProductIds) {
 
     const { error } = await supabase.rpc('update_products_sort_order', { p_ids: orderedProductIds })
     if (!error) return
-    if (error.code !== 'PGRST202' && error.code !== '42883') throw error
+    // Fall back on:
+    //   PGRST202/42883: function not deployed
+    //   42703: bad column reference (legacy RPC pre-fix migration 20260517_default_sort_and_rpc_fix.sql)
+    // Anything else (RLS, auth) → rethrow.
+    if (!['PGRST202', '42883', '42703'].includes(error.code)) throw error
 
-    // Fallback: parallel per-row updates (pre-migration codepath)
+    // Fallback: parallel per-row updates
     const updates = orderedProductIds.map((productId, index) =>
         supabase.from('products').update({ sort_order: index }).eq('id', productId)
     )
@@ -947,6 +951,15 @@ export async function fetchYesterdayExpenses(addressId) {
 
 // Fetch orders within a date range for an address (same structure as fetchTodayOrders)
 export async function fetchOrdersByRange(addressId, start, end) {
+    if (localRepo.isGuest()) {
+        const sMs = start.getTime(), eMs = end.getTime()
+        return localRepo.fetchAllLocalOrders(addressId)
+            .filter(o => {
+                const t = new Date(o.created_at).getTime()
+                return t >= sMs && t <= eMs
+            })
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    }
     if (!supabase) return []
     let query = supabase
         .from('orders')
@@ -962,6 +975,15 @@ export async function fetchOrdersByRange(addressId, start, end) {
 
 // Fetch expenses within a date range
 export async function fetchExpensesByRange(addressId, start, end) {
+    if (localRepo.isGuest()) {
+        const sMs = start.getTime(), eMs = end.getTime()
+        return localRepo.fetchAllLocalExpenses(addressId)
+            .filter(x => {
+                const t = new Date(x.created_at).getTime()
+                return t >= sMs && t <= eMs
+            })
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    }
     if (!supabase) return []
     let query = supabase
         .from('expenses')
@@ -976,6 +998,13 @@ export async function fetchExpensesByRange(addressId, start, end) {
 
 // Fetch shift closings within a date range (for summing cash/transfer)
 export async function fetchShiftClosingsByRange(addressId, start, end) {
+    if (localRepo.isGuest()) {
+        const sMs = start.getTime(), eMs = end.getTime()
+        return localRepo.fetchAllLocalShiftClosings(addressId).filter(s => {
+            const t = new Date(s.closed_at || s.created_at).getTime()
+            return t >= sMs && t <= eMs
+        })
+    }
     if (!supabase) return []
     const { data, error } = await supabase
         .from('shift_closings')
@@ -989,6 +1018,13 @@ export async function fetchShiftClosingsByRange(addressId, start, end) {
 
 // Fetch the most recent order today for an address (with items + product names)
 export async function fetchLatestOrder(addressId) {
+    if (localRepo.isGuest()) {
+        const todayStr = new Date().toDateString()
+        const today = localRepo.fetchAllLocalOrders(addressId)
+            .filter(o => new Date(o.created_at).toDateString() === todayStr)
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        return today[0] || null
+    }
     if (!supabase) return null
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -1152,40 +1188,57 @@ export async function fetchLastWeekSameDayOrderItems(addressId) {
 let _warnedFetchStocksFallback = false
 export async function fetchIngredientStocks(addressId) {
     if (localRepo.isGuest()) return localRepo.fetchLocalIngredientStocks(addressId)
-    if (!supabase || !addressId) return []
+    if (!supabase) return []
 
-    // Fast path
-    const { data: rpcData, error: rpcError } = await supabase.rpc('get_ingredient_stocks_v2', { p_address_id: addressId })
-    if (!rpcError && rpcData) {
-        return rpcData.map(row => ({
-            ingredient: row.ingredient,
-            current_stock: Number(row.current_stock) || 0,
-            restocked_qty: Number(row.restocked_qty) || 0,
-            warehouse_stock: Number(row.warehouse_stock) || 0,
-            counter_stock: Number(row.counter_stock) || 0
-        }))
+    // Default address (addressId=null) = global playground template. Anon callers can't
+    // read expenses/shift_closings directly (RLS), so use a SECURITY DEFINER RPC that
+    // returns aggregated stock for address_id IS NULL.
+    const isDefault = !addressId
+    const mapRow = (row) => ({
+        ingredient: row.ingredient,
+        current_stock: Number(row.current_stock) || 0,
+        restocked_qty: Number(row.restocked_qty) || 0,
+        warehouse_stock: Number(row.warehouse_stock) || 0,
+        counter_stock: Number(row.counter_stock) || 0
+    })
+
+    if (isDefault) {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_default_ingredient_stocks')
+        if (!rpcError && rpcData) return rpcData.map(mapRow)
+        if (rpcError && rpcError.code !== 'PGRST202' && rpcError.code !== '42883') {
+            console.error('get_default_ingredient_stocks RPC error:', rpcError)
+        }
+        // Fallback (admin contexts only — anon callers will hit RLS here and get []).
+        // Kept so deploying the migration is non-blocking.
+    } else {
+        // Fast path — only when we have a real UUID
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_ingredient_stocks_v2', { p_address_id: addressId })
+        if (!rpcError && rpcData) return rpcData.map(mapRow)
+        if (rpcError && rpcError.code !== 'PGRST202' && rpcError.code !== '42883') {
+            console.error('get_ingredient_stocks_v2 RPC error:', rpcError)
+        } else if (!_warnedFetchStocksFallback) {
+            _warnedFetchStocksFallback = true
+            console.warn('[fetchIngredientStocks] RPC missing — using slow fallback. Deploy migration 20260516_rpc_ingredient_stocks_v2.sql for ~20× speedup.')
+        }
     }
-    if (rpcError && rpcError.code !== 'PGRST202' && rpcError.code !== '42883') {
-        console.error('get_ingredient_stocks_v2 RPC error:', rpcError)
-    } else if (!_warnedFetchStocksFallback) {
-        _warnedFetchStocksFallback = true
-        console.warn('[fetchIngredientStocks] RPC missing — using slow fallback. Deploy migration 20260516_rpc_ingredient_stocks_v2.sql for ~20× speedup.')
-    }
+
+    const applyAddrFilter = (q) => isDefault ? q.is('address_id', null) : q.eq('address_id', addressId)
 
     // Fallback step 1: latest closing + all refills (parallel, both small)
     const [latestRes, refillsRes] = await Promise.all([
-        supabase
-            .from('shift_closings')
-            .select('inventory_report')
-            .eq('address_id', addressId)
+        applyAddrFilter(
+            supabase
+                .from('shift_closings')
+                .select('inventory_report')
+        )
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle(),
-        supabase
-            .from('expenses')
-            .select('created_at, metadata')
-            .eq('address_id', addressId)
-            .eq('is_refill', true)
+        applyAddrFilter(
+            supabase
+                .from('expenses')
+                .select('created_at, metadata')
+        ).eq('is_refill', true)
     ])
 
     const counter = {}
@@ -1216,11 +1269,11 @@ export async function fetchIngredientStocks(addressId) {
     const refillTimes = Object.values(firstRefillAt)
     if (refillTimes.length > 0) {
         const earliestRefillISO = new Date(Math.min(...refillTimes)).toISOString()
-        const { data: closingsData } = await supabase
-            .from('shift_closings')
-            .select('created_at, inventory_report')
-            .eq('address_id', addressId)
-            .gte('created_at', earliestRefillISO)
+        const { data: closingsData } = await applyAddrFilter(
+            supabase
+                .from('shift_closings')
+                .select('created_at, inventory_report')
+        ).gte('created_at', earliestRefillISO)
 
         ;(closingsData || []).forEach(closing => {
             const report = Array.isArray(closing.inventory_report) ? closing.inventory_report : []
@@ -1290,15 +1343,24 @@ export async function processIngredientRestock(addressId, ingredient, qty, total
         result = await insertExpense(displayName, totalCost, addressId, false, staffName, true, 'cash', { ingredient, qty, totalCost })
     } else {
         if (!supabase) throw new Error('No Supabase connection')
-        const { data, error } = await supabase.rpc('process_ingredient_restock', {
-            p_address_id: addressId,
-            p_ingredient: ingredient,
-            p_qty: qty,
-            p_total_cost: totalCost,
-            p_staff_name: staffName
-        })
-        if (error) throw error
-        result = data
+        if (addressId) {
+            const { data, error } = await supabase.rpc('process_ingredient_restock', {
+                p_address_id: addressId,
+                p_ingredient: ingredient,
+                p_qty: qty,
+                p_total_cost: totalCost,
+                p_staff_name: staffName
+            })
+            if (error) throw error
+            result = data
+        } else {
+            // Default address (template). RPC requires UUID — do the two writes manually so
+            // admins can exercise the full restock flow on the global template.
+            const unitCost = Number(qty) > 0 ? Math.round(Number(totalCost) / Number(qty)) : 0
+            await upsertIngredientCost(ingredient, unitCost, null)
+            const displayName = `Đi chợ: ${ingredient}`
+            result = await insertExpense(displayName, totalCost, null, false, staffName, true, 'cash', { ingredient, qty, totalCost })
+        }
     }
     invalidateDailyContext(addressId)
     return result

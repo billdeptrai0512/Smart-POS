@@ -37,10 +37,24 @@ export const isGuest = () => localStorage.getItem(KEYS.IS_GUEST) === 'true';
 
 // --- Addresses ---
 const DEMO_ADDRESS_ID = 'demo-address-uuid-123';
+const KEY_GUEST_INGREDIENT_SORT = 'guest_ingredient_sort_order';
+
+export const getGuestIngredientSortOrder = () => {
+    try {
+        const raw = localStorage.getItem(KEY_GUEST_INGREDIENT_SORT);
+        return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+};
+
+export const setGuestIngredientSortOrder = (arr) => {
+    localStorage.setItem(KEY_GUEST_INGREDIENT_SORT, JSON.stringify(arr || []));
+};
+
 export const getDemoAddress = () => ({
     id: DEMO_ADDRESS_ID,
     name: 'Quán Demo của tôi',
     manager_id: 'guest',
+    ingredient_sort_order: getGuestIngredientSortOrder() || [],
     created_at: new Date().toISOString()
 });
 
@@ -65,7 +79,27 @@ export const initializeGuestFromGlobal = (data) => {
     }
 
     set(KEYS.ORDERS, []);
-    set(KEYS.EXPENSES, []);
+
+    // Seed expenses with synthetic refill rows so the playground inherits the default's
+    // on-hand stock — fetchLocalIngredientStocks reads Σ refill_qty to compute warehouse.
+    // Each seeded refill has amount=0 (no fake cash impact on P&L) and metadata.seeded=true
+    // so it can be filtered out of the Đi chợ tab if we want to hide them later.
+    const seededExpenses = (data.stocks || [])
+        .filter(s => s && s.ingredient && Number(s.current_stock) > 0)
+        .map(s => ({
+            id: generateId(),
+            name: `Tồn ban đầu: ${s.ingredient}`,
+            amount: 0,
+            address_id: addressId,
+            is_fixed: false,
+            is_refill: true,
+            payment_method: 'cash',
+            staff_name: null,
+            metadata: { ingredient: s.ingredient, qty: Number(s.current_stock), totalCost: 0, seeded: true },
+            created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+        }));
+    set(KEYS.EXPENSES, seededExpenses);
+
     set(KEYS.SHIFT_CLOSINGS, []);
     set(KEYS.FIXED_COSTS, [
         { id: generateId(), name: 'Tiền mặt bằng (ngày)', amount: 100000, is_active: true, address_id: addressId },
@@ -80,7 +114,16 @@ export const seedDemoData = (force = false) => {
 
 // --- CRUD Helpers ---
 
-export const fetchLocalProducts = (addressId) => get(KEYS.PRODUCTS).filter(p => p.owner_address_id === addressId && p.is_active);
+export const fetchLocalProducts = (addressId) => {
+    const list = get(KEYS.PRODUCTS).filter(p => p.owner_address_id === addressId && p.is_active);
+    list.sort((a, b) => {
+        const aSort = a.sort_order ?? 999999;
+        const bSort = b.sort_order ?? 999999;
+        if (aSort !== bSort) return aSort - bSort;
+        return (a.name || '').localeCompare(b.name || '');
+    });
+    return list;
+};
 export const insertLocalProduct = (payload) => {
     const products = get(KEYS.PRODUCTS);
     const newProd = { id: generateId(), is_active: true, ...payload, created_at: new Date().toISOString() };
@@ -109,6 +152,13 @@ export const upsertLocalIngredientCost = (payload) => {
 
 export const fetchLocalProductExtras = (addressId) => {
     const list = get(KEYS.PRODUCT_EXTRAS).filter(e => e.address_id === addressId);
+    // Match Supabase path: order by sort_order ASC, nulls last.
+    list.sort((a, b) => {
+        const aSort = a.sort_order ?? 999999;
+        const bSort = b.sort_order ?? 999999;
+        if (aSort !== bSort) return aSort - bSort;
+        return (a.name || '').localeCompare(b.name || '');
+    });
     const map = {};
     list.forEach(ex => {
         if (!map[ex.product_id]) map[ex.product_id] = [];

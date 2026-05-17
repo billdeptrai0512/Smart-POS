@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabaseClient'
+import { isGuest } from './localRepository'
 
 // Formats username to a dummy email for Supabase Auth
 const formatUsernameToEmail = (username) => {
@@ -148,6 +149,7 @@ export async function signUpWithInvite(token, username, password, name) {
 
 // Fetch staff and co-managers belonging to a manager
 export async function fetchStaffByManager(managerId) {
+    if (isGuest()) return []
     if (!supabase) return []
     const { data, error } = await supabase
         .from('users')
@@ -254,15 +256,43 @@ export async function deleteAddress(id) {
     return true
 }
 
-// Update ingredient sort order for an address
+// Update ingredient sort order for an address.
+// addressId === null targets the global default template, persisted in app_settings.
 export async function updateAddressIngredientSort(addressId, sortOrderArray) {
     if (!supabase) throw new Error('No Supabase connection')
+    if (addressId) {
+        const { error } = await supabase
+            .from('addresses')
+            .update({ ingredient_sort_order: sortOrderArray })
+            .eq('id', addressId)
+        if (error) throw error
+        return true
+    }
+    // Default template — write to app_settings (admin-only RLS).
     const { error } = await supabase
-        .from('addresses')
-        .update({ ingredient_sort_order: sortOrderArray })
-        .eq('id', addressId)
+        .from('app_settings')
+        .upsert({ key: 'default_ingredient_sort_order', value: sortOrderArray, updated_at: new Date().toISOString() })
     if (error) throw error
     return true
+}
+
+// Fetch the default-template ingredient sort order (publicly readable so guests can
+// inherit it during playground init). Returns [] when missing.
+export async function fetchDefaultIngredientSort() {
+    if (!supabase) return []
+    const { data, error } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'default_ingredient_sort_order')
+        .maybeSingle()
+    if (error) {
+        // Table may not exist yet (migration not deployed) — fail open.
+        if (error.code !== '42P01' && error.code !== 'PGRST116') {
+            console.warn('fetchDefaultIngredientSort:', error)
+        }
+        return []
+    }
+    return Array.isArray(data?.value) ? data.value : []
 }
 
 // =============================================
@@ -301,6 +331,7 @@ export async function removeSession(userId) {
 //
 // Fix: fetch sessions alone, then resolve names in a separate best-effort query.
 export async function fetchActiveSessions(addressIds) {
+    if (isGuest()) return []
     if (!supabase || !addressIds?.length) return []
     const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString()
     const { data, error } = await supabase
@@ -336,6 +367,7 @@ export async function fetchActiveSessions(addressIds) {
 // single round-trip. Falls back to two legacy queries if the RPC isn't
 // deployed yet.
 export async function fetchBranchesTodayStats(addressIds) {
+    if (isGuest()) return { cupsMap: {}, revenueMap: {} }
     if (!supabase || !addressIds?.length) return { cupsMap: {}, revenueMap: {} }
 
     const { data, error } = await supabase.rpc('get_branches_today_stats', { p_address_ids: addressIds })
@@ -370,9 +402,6 @@ export async function fetchBranchesTodayStats(addressIds) {
             return s + i.quantity
         }, 0)
         cupsMap[order.address_id] = (cupsMap[order.address_id] || 0) + qty
-        revenueMap[order.address_id] = (revenueMap[order.address_id] || 0) + (order.total || 0)
-    })
-    ;(revData || []).forEach(order => {
         revenueMap[order.address_id] = (revenueMap[order.address_id] || 0) + (order.total || 0)
     })
     return { cupsMap, revenueMap }
