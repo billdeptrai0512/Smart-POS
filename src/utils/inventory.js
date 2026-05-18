@@ -201,3 +201,26 @@ export function calculateRefillTarget({
         effectiveTarget
     };
 }
+
+// Format a base-unit quantity into pack-aware text. e.g. 5350 + (1000, 'bịch', 'g')
+// → "5 bịch + 350 g". Falls back to "{qty} {baseUnit}" when pack info missing.
+//   qty: number in baseUnit
+//   packSize/packUnit: optional pack config
+//   baseUnit: the small-unit label (g, ml, cái, …)
+//   { compact: true } drops the base remainder when 0 (e.g. "5 bịch" not "5 bịch + 0 g")
+export function formatPackedQty(qty, packSize, packUnit, baseUnit, opts = {}) {
+    const n = Math.round(Number(qty || 0) * 10) / 10
+    const unit = baseUnit || 'đv'
+    const ps = Number(packSize || 0)
+    if (!ps || !packUnit || ps <= 0 || !Number.isFinite(n)) {
+        return `${n.toLocaleString('vi-VN')} ${unit}`.trim()
+    }
+    const sign = n < 0 ? -1 : 1
+    const abs = Math.abs(n)
+    const packs = Math.floor(abs / ps)
+    const rem = Math.round((abs - packs * ps) * 10) / 10
+    const parts = []
+    if (packs > 0) parts.push(`${sign < 0 ? '-' : ''}${packs} ${packUnit}`)
+    if (rem > 0 || packs === 0 || !opts.compact) parts.push(`${(sign * rem).toLocaleString('vi-VN')} ${unit}`)
+    return parts.filter(Boolean).join(' + ')
+}

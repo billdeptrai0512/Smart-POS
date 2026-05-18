@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { usePOS } from '../contexts/POSContext'
 import {
     upsertIngredientCost, deleteIngredientCost, renameIngredient,
-    fetchIngredientStocks, processIngredientRestock, adjustIngredientStock, fetchIngredientDeficits,
+    fetchIngredientStocks, processIngredientRestock, adjustIngredientStock, fetchIngredientDeficits, fetchIngredientDailyContext,
 } from '../services/orderService'
 import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
@@ -64,6 +64,7 @@ export default function IngredientManagementPage() {
     const [showKeySync, setShowKeySync] = useState(false)
     const [dismissedSig, setDismissedSig] = useState('')
     const [stockDeficits, setStockDeficits] = useState([])
+    const [dailyContext, setDailyContext] = useState({})
 
     // Filter recipes to only those referencing currently active products.
     // Without this, dead recipes for soft-deleted products show as false-positive orphans.
@@ -133,12 +134,14 @@ export default function IngredientManagementPage() {
         // handles that (queries rows with address_id IS NULL) so admins can manage stock on
         // the playground template too.
         if (!selectedAddress) return
-        const [stocks, deficits] = await Promise.all([
+        const [stocks, deficits, daily] = await Promise.all([
             fetchIngredientStocks(selectedAddress.id ?? null),
             fetchIngredientDeficits(selectedAddress.id ?? null),
+            fetchIngredientDailyContext(selectedAddress.id ?? null),
         ])
         setIngredientStocks(stocks)
         setStockDeficits(deficits)
+        setDailyContext(daily)
     }
     useEffect(() => { loadStocks() }, [selectedAddress?.id, selectedAddress?.name])
 
@@ -401,6 +404,7 @@ export default function IngredientManagementPage() {
                                     onConfigurePack={canEdit ? setPackConfigIngredient : null}
                                     stockData={stockByIngredient.get(ingredient)}
                                     onRestock={() => setRestockIngredient(ingredient)}
+                                    dailyContext={dailyContext[ingredient]}
                                     isEditingStock={editingStock?.ingredient === ingredient}
                                     editingStock={editingStock}
                                     setEditingStock={setEditingStock}

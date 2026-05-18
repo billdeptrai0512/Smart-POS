@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
+import { startOfDayVN, dateStringVN } from '../utils/dateVN'
 
 
 
@@ -94,8 +95,7 @@ export async function fetchTodayStats(addressId) {
         console.error('fetchTodayStats RPC error:', error)
     }
 
-    const from = new Date()
-    from.setHours(0, 0, 0, 0)
+    const from = startOfDayVN()
     const { data: legacyData, error: legacyError } = await supabase
         .from('orders')
         .select('total, order_items(quantity, products(count_as_cup))')
@@ -118,8 +118,7 @@ export async function fetchTodayStats(addressId) {
 export async function fetchTodayOrders(addressId) {
     if (localRepo.isGuest()) return localRepo.fetchLocalOrders(addressId)
     if (!supabase) return []
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = startOfDayVN()
 
     let query = supabase
         .from('orders')
@@ -160,8 +159,7 @@ export async function fetchTodayOrders(addressId) {
 export async function fetchTodayExpenses(addressId) {
     if (localRepo.isGuest()) return localRepo.fetchLocalExpenses(addressId)
     if (!supabase) return []
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = startOfDayVN()
 
     let query = supabase
         .from('expenses')
@@ -329,10 +327,15 @@ export async function fetchIngredientCostsAndUnits(addressId) {
         return { costs, units, rows }
     }
     if (!supabase) return { costs: {}, units: {}, rows: [] }
+    // ingredient_costs is now per-address (like products/recipes). Default rows
+    // (address_id IS NULL) are a one-time seed/template — copied to each new
+    // address via the seed_address_ingredient_costs trigger and the backfill in
+    // migration 20260518_decouple_ingredient_costs.sql. Admin edits to default
+    // rows DO NOT propagate to existing active addresses.
     let query = supabase.from('ingredient_costs').select('ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock')
 
     if (addressId) {
-        query = query.or(`address_id.eq.${addressId},address_id.is.null`)
+        query = query.eq('address_id', addressId)
     } else {
         query = query.is('address_id', null)
     }
@@ -344,25 +347,15 @@ export async function fetchIngredientCostsAndUnits(addressId) {
     }
     if (!data || data.length === 0) return { costs: {}, units: {}, rows: [] }
 
-    const defaultData = data.filter(d => d.address_id === null)
-    const addressData = data.filter(d => d.address_id === addressId)
-
     const costs = {}
     const units = {}
-    const ingredientMap = {}
-
-    for (const d of defaultData) {
+    const rows = []
+    for (const d of data) {
         costs[d.ingredient] = d.unit_cost
         units[d.ingredient] = d.unit || 'đv'
-        ingredientMap[d.ingredient] = { ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, min_stock: d.min_stock }
+        rows.push({ ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, min_stock: d.min_stock })
     }
-    for (const d of addressData) {
-        costs[d.ingredient] = d.unit_cost
-        units[d.ingredient] = d.unit || 'đv'
-        ingredientMap[d.ingredient] = { ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, min_stock: d.min_stock }
-    }
-
-    return { costs, units, rows: Object.values(ingredientMap) }
+    return { costs, units, rows }
 }
 
 // Kept for backward-compat with callers that only need the costs map
@@ -887,8 +880,7 @@ export async function fetchYesterdayOrders(addressId) {
         return localRepo.fetchLocalOrders(addressId, yesterday.toISOString())
     }
     if (!supabase) return []
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = startOfDayVN()
     const yesterday = new Date(today)
     yesterday.setDate(yesterday.getDate() - 1)
 
@@ -928,8 +920,7 @@ export async function fetchYesterdayExpenses(addressId) {
         return localRepo.fetchLocalExpenses(addressId, yesterday.toISOString())
     }
     if (!supabase) return []
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = startOfDayVN()
     const yesterday = new Date(today)
     yesterday.setDate(yesterday.getDate() - 1)
 
@@ -1019,15 +1010,14 @@ export async function fetchShiftClosingsByRange(addressId, start, end) {
 // Fetch the most recent order today for an address (with items + product names)
 export async function fetchLatestOrder(addressId) {
     if (localRepo.isGuest()) {
-        const todayStr = new Date().toDateString()
+        const todayStr = dateStringVN()
         const today = localRepo.fetchAllLocalOrders(addressId)
-            .filter(o => new Date(o.created_at).toDateString() === todayStr)
+            .filter(o => dateStringVN(new Date(o.created_at)) === todayStr)
             .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
         return today[0] || null
     }
     if (!supabase) return null
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = startOfDayVN()
 
     let query = supabase
         .from('orders')
@@ -1045,8 +1035,7 @@ export async function fetchLatestOrder(addressId) {
 export async function fetchTodayShiftClosing(addressId) {
     if (localRepo.isGuest()) return localRepo.fetchLocalShiftClosing(addressId, new Date().toISOString())
     if (!supabase) return null
-    const startOfDay = new Date()
-    startOfDay.setHours(0, 0, 0, 0)
+    const startOfDay = startOfDayVN()
 
     const { data, error } = await supabase
         .from('shift_closings')
@@ -1067,8 +1056,7 @@ export async function fetchTodayShiftClosing(addressId) {
 export async function fetchYesterdayShiftClosing(addressId) {
     if (localRepo.isGuest()) return localRepo.fetchLocalYesterdayShiftClosing(addressId)
     if (!supabase) return null
-    const startOfDay = new Date()
-    startOfDay.setHours(0, 0, 0, 0)
+    const startOfDay = startOfDayVN()
 
     const { data, error } = await supabase
         .from('shift_closings')
@@ -1094,8 +1082,7 @@ export async function fetchIngredientCostsWithUnits(addressId) {
 // Fetch order items for the past `days` fully completed days (excluding today)
 export async function fetchPastDaysOrderItems(addressId, days = 7) {
     if (!supabase) return []
-    const endDate = new Date()
-    endDate.setHours(0, 0, 0, 0)
+    const endDate = startOfDayVN()
 
     const startDate = new Date(endDate)
     startDate.setDate(startDate.getDate() - days)
@@ -1136,9 +1123,8 @@ export async function fetchLastWeekSameDayOrderItems(addressId) {
     if (!supabase) return []
     // If today is Tuesday, tomorrow is Wednesday. We want to predict tomorrow using Today and Last Wednesday.
     // Last Wednesday is Today - 6 days.
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    
+    const today = startOfDayVN()
+
     const targetDate = new Date(today)
     targetDate.setDate(targetDate.getDate() - 6)
     
@@ -1305,6 +1291,59 @@ export async function fetchIngredientStocks(addressId) {
             counter_stock: counterStock
         }
     })
+}
+
+// Per-ingredient daily metrics for /ingredients expand-on-click context (Task 3.8).
+// Returns map ingredient → { today_refill, today_restock }. Combine with current
+// warehouse_stock (from fetchIngredientStocks) to derive:
+//   warehouse_end_of_today   = current warehouse_stock
+//   warehouse_start_of_today = warehouse_end + today_restock − today_refill
+export async function fetchIngredientDailyContext(addressId) {
+    const startISO = startOfDayVN().toISOString()
+    if (localRepo.isGuest()) {
+        const startMs = new Date(startISO).getTime()
+        const result = {}
+        const expenses = localRepo.fetchAllLocalExpenses(addressId)
+        for (const e of expenses) {
+            if (!e.is_refill || !e.metadata?.ingredient) continue
+            if (new Date(e.created_at).getTime() < startMs) continue
+            const ing = e.metadata.ingredient
+            result[ing] = result[ing] || { today_refill: 0, today_restock: 0 }
+            result[ing].today_refill += Number(e.metadata.qty || 0)
+        }
+        const closings = localRepo.fetchAllLocalShiftClosings(addressId)
+        for (const sc of closings) {
+            if (new Date(sc.created_at).getTime() < startMs) continue
+            for (const item of (sc.inventory_report || [])) {
+                if (!item.ingredient) continue
+                result[item.ingredient] = result[item.ingredient] || { today_refill: 0, today_restock: 0 }
+                result[item.ingredient].today_restock += Number(item.restock || 0)
+            }
+        }
+        return result
+    }
+    if (!supabase) return {}
+    const isDefault = !addressId
+    const apply = (q) => isDefault ? q.is('address_id', null) : q.eq('address_id', addressId)
+    const [refillsRes, closingsRes] = await Promise.all([
+        apply(supabase.from('expenses').select('metadata')).eq('is_refill', true).gte('created_at', startISO),
+        apply(supabase.from('shift_closings').select('inventory_report')).gte('created_at', startISO)
+    ])
+    const result = {}
+    for (const e of refillsRes.data || []) {
+        const ing = e.metadata?.ingredient
+        if (!ing) continue
+        result[ing] = result[ing] || { today_refill: 0, today_restock: 0 }
+        result[ing].today_refill += Number(e.metadata?.qty || 0)
+    }
+    for (const sc of closingsRes.data || []) {
+        for (const item of (sc.inventory_report || [])) {
+            if (!item.ingredient) continue
+            result[item.ingredient] = result[item.ingredient] || { today_refill: 0, today_restock: 0 }
+            result[item.ingredient].today_restock += Number(item.restock || 0)
+        }
+    }
+    return result
 }
 
 // Compute raw warehouse balance per ingredient (Σ refill_qty − Σ restock_post_first_refill).
@@ -1480,10 +1519,9 @@ export async function fetchDailyReportContext(addressId) {
 
     let data
     if (localRepo.isGuest()) {
-        const todayStr = new Date().toDateString()
-        const yesterday = new Date()
-        yesterday.setDate(yesterday.getDate() - 1)
-        const yesterdayStr = yesterday.toDateString()
+        const todayStr = dateStringVN()
+        const yesterday = new Date(startOfDayVN().getTime() - 86_400_000)
+        const yesterdayStr = dateStringVN(yesterday)
 
         data = {
             shift_closing: localRepo.fetchLocalShiftClosing(addressId, todayStr) || null,
@@ -1504,12 +1542,11 @@ export async function fetchDailyReportContext(addressId) {
 
 export async function fetchReportByDate(addressId, dateStr) {
     if (localRepo.isGuest()) {
-        const targetDateStr = new Date(dateStr).toDateString()
-        const targetDate = new Date(targetDateStr)
-        
-        const yesterday = new Date(targetDate)
-        yesterday.setDate(yesterday.getDate() - 1)
-        const yesterdayStr = yesterday.toDateString()
+        const targetDateStr = dateStringVN(new Date(dateStr))
+        const targetDate = startOfDayVN(new Date(dateStr))
+
+        const yesterday = new Date(targetDate.getTime() - 86_400_000)
+        const yesterdayStr = dateStringVN(yesterday)
 
         return {
             shift_closing: localRepo.fetchLocalShiftClosing(addressId, targetDateStr) || null,

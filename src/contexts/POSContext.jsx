@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchTodayStats, fetchInventory, submitOrder, fetchTodayOrders, deleteOrder, fetchTodayExpenses, insertExpense, deleteExpense, fetchFixedCosts, insertFixedCost, updateFixedCost, deleteFixedCost, fetchLatestOrder, invalidateDailyContext } from '../services/orderService'
 import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder } from '../hooks/useOfflineSync'
+import { dateStringVN } from '../utils/dateVN'
 import { calculateProductCost } from '../utils'
 import { useProducts } from './ProductContext'
 import { useAddress } from './AddressContext'
@@ -102,7 +103,7 @@ export function POSProvider() {
     useEffect(() => {
         const checkNewDay = () => {
             const storedDate = localStorage.getItem('pos_current_date')
-            const todayStr = new Date().toDateString()
+            const todayStr = dateStringVN()
             if (storedDate && storedDate !== todayStr) {
                 if (navigator.onLine && supabase && addressId) {
                     fetchTodayStats(addressId).then(({ revenue, cups }) => { setRevenue(revenue); setCupsSold(cups) })

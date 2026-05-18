@@ -6,6 +6,7 @@ import { calculateProductCost } from '../utils'
 import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses, sumFixedCosts } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import { fetchDailyReportContext, fetchReportByDate } from '../services/orderService'
+import { dateStringVN } from '../utils/dateVN'
 import ReportHeader from '../components/DailyReportPage/ReportHeader'
 import SalesCard from '../components/DailyReportPage/SalesCard'
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
@@ -102,8 +103,8 @@ export default function DailyReportPage() {
     // All heavy stats: only reruns when orders/recipes/products change, NOT on UI state changes
     const { totalRevenue, totalCOGS, productStats, soldProducts, lineChartData, offlineToday } = useMemo(() => {
         const pending = customDate ? [] : getPendingOrders()
-        const todayStr = new Date().toDateString()
-        const offlineToday = pending.filter(o => new Date(o.createdAt).toDateString() === todayStr)
+        const todayStr = dateStringVN()
+        const offlineToday = pending.filter(o => dateStringVN(new Date(o.createdAt)) === todayStr)
 
         const agg = aggregateOrderStats({
             orders: [...displayOrders, ...offlineToday],
@@ -321,7 +322,7 @@ export default function DailyReportPage() {
                                     products={products}
                                     productExtras={productExtras}
                                     ingredientUnits={ingredientUnits}
-                                    isPastDate={!!customDate && new Date(customDate).toDateString() !== new Date().toDateString()}
+                                    isPastDate={!!customDate && dateStringVN(new Date(customDate)) !== dateStringVN()}
                                     canAccessAudit={hasFeature(activeModules, 'lossAudit')}
                                 />
                             </>

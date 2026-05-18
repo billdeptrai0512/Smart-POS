@@ -1,39 +1,36 @@
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import HistoryTabsBar from '../HistoryPage/HistoryTabsBar'
+import { startOfDayVN, endOfDayVN, startOfWeekVN, startOfMonthVN, endOfMonthVN, addDaysVN, dateStringVN } from '../../utils/dateVN'
 
-const fmt = (d) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+// Display "dd/mm" using VN-local components.
+const fmt = (d) => {
+    const [y, m, day] = dateStringVN(d).split('-')
+    return `${day}/${m}`
+}
 
 export function getDateRange(range, offset = 0) {
-    const now = new Date()
     if (range === 'week') {
-        const todayDiff = (now.getDay() + 6) % 7
-        const thisMonday = new Date(now)
-        thisMonday.setDate(now.getDate() - todayDiff)
-        thisMonday.setHours(0, 0, 0, 0)
-        const start = new Date(thisMonday)
-        start.setDate(thisMonday.getDate() + offset * 7)
-        const end = new Date(start)
-        end.setDate(start.getDate() + 6)
-        end.setHours(23, 59, 59, 999)
+        const thisMonday = startOfWeekVN()
+        const start = addDaysVN(thisMonday, offset * 7)
+        const end = new Date(addDaysVN(start, 7).getTime() - 1)
+        // Current week: count up to today; past/future weeks always 7 days.
+        const todayDiff = Math.round((startOfDayVN().getTime() - thisMonday.getTime()) / 86_400_000)
         const days = offset === 0 ? todayDiff + 1 : 7
         return { start, end, days }
     }
     if (range === 'month') {
-        const year = now.getFullYear()
-        const month = now.getMonth() + offset
-        const start = new Date(year, month, 1, 0, 0, 0, 0)
+        const start = startOfMonthVN(new Date(), offset)
         if (offset === 0) {
-            const end = new Date(now)
-            end.setHours(23, 59, 59, 999)
-            return { start, end, days: now.getDate() }
+            const today = startOfDayVN()
+            return { start, end: endOfDayVN(), days: Math.round((today.getTime() - start.getTime()) / 86_400_000) + 1 }
         }
-        const end = new Date(year, month + 1, 0, 23, 59, 59, 999)
-        return { start, end, days: end.getDate() }
+        const end = endOfMonthVN(new Date(), offset)
+        // # days in that month = (end - start) / day + 1
+        const days = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1
+        return { start, end, days }
     }
-    const start = new Date(now); start.setHours(0, 0, 0, 0)
-    const end = new Date(now); end.setHours(23, 59, 59, 999)
-    return { start, end, days: 1 }
+    return { start: startOfDayVN(), end: endOfDayVN(), days: 1 }
 }
 
 function getSubtitle(range, offset) {

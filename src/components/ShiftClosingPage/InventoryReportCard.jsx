@@ -1,5 +1,6 @@
 import { Lock, Unlock, AlertTriangle } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils'
+import { formatPackedQty } from '../../utils/inventory'
 
 export default function InventoryReportCard({
     ingredientsList, isLoading,
@@ -23,22 +24,22 @@ export default function InventoryReportCard({
     return (
         <div className="bg-surface rounded-[20px] p-3 border border-border/60 shadow-sm space-y-3">
             {ingredientsList.map(ing => (
-                    <IngredientRow
-                        key={ing.ingredient}
-                        ing={ing}
-                        ingredientUnits={ingredientUnits}
-                        openingValue={openingInputs[ing.ingredient]}
-                        openingFallback={openingStock[ing.ingredient]}
-                        isLocked={openingLocked[ing.ingredient]}
-                        restockValue={restockInputs[ing.ingredient]}
-                        inventoryValue={inventoryInputs[ing.ingredient]}
-                        warehouseAvailable={warehouseStocks[ing.ingredient]}
-                        canUnlock={canUnlock}
-                        isSubmitting={isSubmitting}
-                        onOpeningChange={onOpeningChange}
-                        onOpeningLock={onOpeningLock}
-                        onRestockChange={onRestockChange}
-                        onInventoryChange={onInventoryChange}
+                <IngredientRow
+                    key={ing.ingredient}
+                    ing={ing}
+                    ingredientUnits={ingredientUnits}
+                    openingValue={openingInputs[ing.ingredient]}
+                    openingFallback={openingStock[ing.ingredient]}
+                    isLocked={openingLocked[ing.ingredient]}
+                    restockValue={restockInputs[ing.ingredient]}
+                    inventoryValue={inventoryInputs[ing.ingredient]}
+                    warehouseAvailable={warehouseStocks[ing.ingredient]}
+                    canUnlock={canUnlock}
+                    isSubmitting={isSubmitting}
+                    onOpeningChange={onOpeningChange}
+                    onOpeningLock={onOpeningLock}
+                    onRestockChange={onRestockChange}
+                    onInventoryChange={onInventoryChange}
                 />
             ))}
         </div>
@@ -56,6 +57,9 @@ function IngredientRow({
     // address-specific cost row has a null unit override.
     const unit = getIngredientUnit(ing.ingredient, ing.unit, ingredientUnits)
     const showLockBtn = !isLocked || canUnlock
+    const packSize = Number(ing.pack_size || 0)
+    const packUnit = ing.pack_unit
+    const fmt = (n) => formatPackedQty(n, packSize, packUnit, unit, { compact: true })
     const openingDisplay = openingValue ?? (openingFallback !== undefined && openingFallback !== null ? String(openingFallback) : '')
 
     // Over-report detection: if staff types restock > kho tổng available, the difference
@@ -65,15 +69,16 @@ function IngredientRow({
     const restockOverflow = warehouseAvailable !== undefined && restockNum > warehouseNum
     const overBy = restockOverflow ? restockNum - warehouseNum : 0
 
+    // Live computed end-of-shift balances.
+    const warehouseEnd = Math.max(0, warehouseNum - restockNum)
+    const counterEnd = Number(inventoryValue || 0)
+    const showTotals = warehouseAvailable !== undefined && (restockValue !== undefined || inventoryValue !== undefined)
+
     return (
         <div className="border-b border-border/20 last:border-0 pb-2.5 last:pb-0">
-            <div className="flex items-baseline justify-between mb-1.5">
+            <div className="flex items-baseline justify-between mb-1.5 gap-2">
                 <span className="text-[12px] font-bold text-text">{ingredientLabel(ing.ingredient)}</span>
-                {warehouseAvailable !== undefined && (
-                    <span className="text-[10px] font-bold text-text-dim tabular-nums">
-                        kho tổng còn <span className="text-text-secondary">{warehouseNum.toLocaleString('vi-VN')}{unit}</span>
-                    </span>
-                )}
+
             </div>
 
             <div className="grid grid-cols-3 gap-2">
@@ -116,8 +121,21 @@ function IngredientRow({
                 <div className="flex items-start gap-1.5 mt-1.5 text-[10px] font-bold text-danger leading-tight">
                     <AlertTriangle size={11} className="mt-[1px] shrink-0" />
                     <span>
-                        Vượt kho tổng {overBy.toLocaleString('vi-VN')}{unit}.
+                        Vượt kho tổng {fmt(overBy)}.
                         Nếu hàng được mua mới, vào <span className="underline">/ingredients → + Nhập kho</span> trước.
+                    </span>
+                </div>
+            )}
+
+            {showTotals && !restockOverflow && (
+                <div className="flex items-baseline justify-between mt-1.5 text-[10px] tabular-nums leading-tight gap-2">
+                    {warehouseAvailable !== undefined && (
+                        <span className="text-[9px] font-bold text-text-dim uppercase tabular-nums text-right">
+                            Tôn kho: <span className="text-text-secondary">{fmt(warehouseNum)}</span>
+                        </span>
+                    )}
+                    <span className="text-[9px] font-bold text-text-dim uppercase tabular-nums text-right">
+                        cuối ngày: <span className="text-text-secondary font-bold">{fmt(warehouseEnd + counterEnd)}</span>
                     </span>
                 </div>
             )}

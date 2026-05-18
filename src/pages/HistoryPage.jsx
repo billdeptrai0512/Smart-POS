@@ -4,6 +4,7 @@ import { formatVNDInput, parseVNDInput, calculateProductCost } from '../utils'
 import { getPendingOrders, removePendingOrder } from '../hooks/useOfflineSync'
 import { fetchTodayShiftClosing, fetchExpensesByRange, fetchOrdersByRange } from '../services/orderService'
 import { getDateRange } from '../components/DailyReportPage/ReportHeader'
+import { startOfDayVN, endOfDayVN, dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { useAddress } from '../contexts/AddressContext'
 import { useProducts } from '../contexts/ProductContext'
 import { usePOS } from '../contexts/POSContext'
@@ -14,12 +15,9 @@ import ExpensePanel from '../components/HistoryPage/ExpensePanel'
 import AddExpenseModal from '../components/HistoryPage/AddExpenseModal'
 import HistoryFooter from '../components/HistoryPage/HistoryFooter'
 
-const getLocalISO = (date = new Date()) => {
-    const yyyy = date.getFullYear()
-    const mm = String(date.getMonth() + 1).padStart(2, '0')
-    const dd = String(date.getDate()).padStart(2, '0')
-    return `${yyyy}-${mm}-${dd}`
-}
+// Use dateStringVN so YYYY-MM-DD always reflects Vietnam local date,
+// regardless of where the browser runs.
+const getLocalISO = (date = new Date()) => dateStringVN(date)
 
 export default function HistoryPage() {
     const navigate = useNavigate()
@@ -104,15 +102,14 @@ export default function HistoryPage() {
         if (scope === 'day') {
             const target = new Date()
             target.setDate(target.getDate() + offset)
-            const start = new Date(target); start.setHours(0, 0, 0, 0)
-            const end = new Date(target); end.setHours(23, 59, 59, 999)
+            const start = startOfDayVN(target)
+            const end = endOfDayVN(target)
             return { rangeStart: start, rangeEnd: end, rangeLabel: `${fmt(start)}/${start.getFullYear()}` }
         }
         if (scope === 'custom' && customRange?.startISO && customRange?.endISO) {
-            const [sy, sm, sd] = customRange.startISO.split('-')
-            const [ey, em, ed] = customRange.endISO.split('-')
-            const start = new Date(sy, sm - 1, sd); start.setHours(0, 0, 0, 0)
-            const end = new Date(ey, em - 1, ed); end.setHours(23, 59, 59, 999)
+            // ISO strings are already in VN date form (from input type=date)
+            const start = new Date(`${customRange.startISO}T00:00:00+07:00`)
+            const end = new Date(`${customRange.endISO}T23:59:59.999+07:00`)
             return { rangeStart: start, rangeEnd: end, rangeLabel: `${fmt(start)} – ${fmt(end)}` }
         }
         const { start, end } = getDateRange(scope, offset)
@@ -163,9 +160,8 @@ export default function HistoryPage() {
 
     const setOffsetFromISO = (iso) => {
         if (!iso || iso >= todayISO) { setOffset(0); setHasManualPick(false); return }
-        const [y, m, d] = iso.split('-')
-        const target = new Date(y, m - 1, d); target.setHours(0, 0, 0, 0)
-        const today = new Date(); today.setHours(0, 0, 0, 0)
+        const target = new Date(`${iso}T00:00:00+07:00`)
+        const today = startOfDayVN()
         setOffset(Math.round((target - today) / 86400000))
     }
     // Calendar pick: flag manual so the "→ ngày" end chip can appear.
@@ -285,9 +281,9 @@ export default function HistoryPage() {
     }), [baseOrders, productById, recipes, extraIngredients, ingredientCosts])
 
     const formattedOffline = useMemo(() => {
-        const todayStr = new Date().toDateString()
+        const todayStr = dateStringVN()
         return pendingOrders
-            .filter(o => new Date(o.createdAt).toDateString() === todayStr)
+            .filter(o => dateStringVN(new Date(o.createdAt)) === todayStr)
             .map((o) => ({
                 id: `offline-${o.createdAt}`,
                 createdAt_key: o.createdAt,

@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { formatVNDInput, parseVNDInput } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import { insertShiftClosing, updateShiftClosing, fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchIngredientCostsWithUnits, fetchFixedCosts, insertExpense, fetchTodayExpenses, invalidateDailyContext, fetchIngredientStocks } from '../services/orderService'
+import { dateStringVN } from '../utils/dateVN'
 import { supabase } from '../lib/supabaseClient'
 import { sortIngredients } from '../components/common/recipeUtils'
 import { useToast } from '../hooks/useToast'
@@ -92,9 +93,11 @@ export default function ShiftClosingPage() {
     // counter_stock seeds the "Tồn đầu" column (= previous shift's remaining).
     // warehouse_stock is shown alongside each row as "kho tổng còn X" and used to
     // validate the restock input (Tầng 2 prevention).
+    // Re-runs on tab visibility regain so a manager doing /ingredients → + Nhập kho
+    // mid-shift gets reflected here without a manual refresh (Task 3.7).
     useEffect(() => {
         if (!selectedAddress?.id) return
-        fetchIngredientStocks(selectedAddress.id).then(rows => {
+        const load = () => fetchIngredientStocks(selectedAddress.id).then(rows => {
             const counters = {}, openings = {}, warehouses = {}
             ;(rows || []).forEach(r => {
                 if (typeof r.counter_stock === 'number') {
@@ -110,6 +113,10 @@ export default function ShiftClosingPage() {
             // Seed only if today's closing hasn't set them yet
             setOpeningInputs(prev => Object.keys(prev).length > 0 ? prev : openings)
         })
+        load()
+        const onVis = () => { if (document.visibilityState === 'visible') load() }
+        document.addEventListener('visibilitychange', onVis)
+        return () => document.removeEventListener('visibilitychange', onVis)
     }, [selectedAddress?.id])
 
     useEffect(() => {
@@ -151,8 +158,8 @@ export default function ShiftClosingPage() {
 
     // --- System total revenue ---
     const pending = getPendingOrders()
-    const todayStr = new Date().toDateString()
-    const offlineToday = pending.filter(o => new Date(o.createdAt).toDateString() === todayStr)
+    const todayStr = dateStringVN()
+    const offlineToday = pending.filter(o => dateStringVN(new Date(o.createdAt)) === todayStr)
     let systemTotalRevenue = 0
     todayOrders.forEach(o => { if (!o.deleted_at && !o.deletedAt) systemTotalRevenue += o.total })
     offlineToday.forEach(o => { if (!o.deleted_at && !o.deletedAt) systemTotalRevenue += o.total })

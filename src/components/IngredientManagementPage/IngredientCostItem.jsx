@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { formatVND } from '../../utils'
+import { formatPackedQty } from '../../utils/inventory'
 import { Plus } from 'lucide-react'
 
 /**
@@ -29,7 +30,9 @@ export default function IngredientCostItem({
     packSize, packUnit, onConfigurePack,
     // Stock display
     stockData, onRestock,
-    isEditingStock, editingStock, setEditingStock, saveStock
+    isEditingStock, editingStock, setEditingStock, saveStock,
+    // Daily context (always inline)
+    dailyContext,
 }) {
     const displayUnit = getIngredientUnit(ingredient, storedUnit)
     const navigate = useNavigate()
@@ -150,30 +153,95 @@ export default function IngredientCostItem({
                 )}
             </div>
 
-            {/* Row 3: meta line — manager only */}
+            {/* Row 2b: pack breakdown — only when pack info exists AND remainder ≠ raw qty */}
+            {currentStock !== null && packSize && packUnit && currentStock >= packSize && (
+                <span className="text-[11px] font-medium text-text-dim leading-none -mt-1 tabular-nums">
+                    = {formatPackedQty(currentStock, packSize, packUnit, displayUnit, { compact: true })}
+                </span>
+            )}
+
+            {/* Row 3: manager-only details — separated by border-top */}
             {canEdit && (
-                <div className="flex flex-col gap-0.5 -mt-1">
-                    <div className="flex items-center text-[11px] min-w-0">
-                        <span className="text-text-secondary font-bold tabular-nums shrink-0">
+                <div className="mt-1 pt-2 border-t border-border/40 flex flex-col gap-1 text-[11px] tabular-nums">
+                    <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-text-dim">Giá vốn</span>
+                        <span className="text-text-secondary font-bold">
                             {formatVND(cost)}<span className="text-text-dim font-medium">/{displayUnit}</span>
                         </span>
                     </div>
                     {onConfigurePack && (
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onConfigurePack(ingredient) }}
-                            className="text-left text-[11px] font-bold tabular-nums hover:text-primary transition-colors w-fit"
-                            title={hasPack ? 'Sửa quy cách đóng gói' : 'Thêm quy cách đóng gói'}
-                        >
-                            {hasPack ? (
-                                <span className="text-text-secondary">
-                                    1 {packUnit} = {packSize} {displayUnit}
-                                </span>
-                            ) : (
-                                <span className="text-text-dim italic font-medium">+ quy cách</span>
-                            )}
-                        </button>
+                        <div className="flex items-start justify-between gap-2">
+                            <span className="text-text-dim leading-none pt-[1px]">Quy đổi</span>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onConfigurePack(ingredient) }}
+                                className="hover:text-primary transition-colors text-right flex flex-col items-end gap-1"
+                                title={hasPack ? 'Sửa quy cách đóng gói' : 'Thêm quy cách đóng gói'}
+                            >
+                                {hasPack ? (
+                                    <>
+                                        <span className="text-text-secondary font-bold leading-none">1 {packUnit}</span>
+                                        <span className="text-text-dim font-medium leading-none tabular-nums">= {packSize} {displayUnit}</span>
+                                    </>
+                                ) : (
+                                    <span className="text-text-dim italic font-medium leading-none">+ thêm</span>
+                                )}
+                            </button>
+                        </div>
                     )}
                 </div>
+            )}
+
+
+            <div className="mt-1 pt-2 border-t border-border/40 flex-1 flex flex-col gap-1 text-[11px] tabular-nums" onClick={stop}>
+                {(() => {
+                    const todayRefill = Number(dailyContext?.today_refill || 0)
+                    const todayRestock = Number(dailyContext?.today_restock || 0)
+                    const warehouseNow = stockData?.warehouse_stock ?? 0
+                    const warehouseStart = warehouseNow + todayRestock - todayRefill
+                    const fmt = (n) => {
+                        // Negative values: collapse to base unit only — pack-breakdown of negative
+                        // numbers ("-4 hộp + -1.226 ml") reads awkwardly and isn't meaningful.
+                        if (n < 0) {
+                            const r = Math.round(n * 10) / 10
+                            return `${r.toLocaleString('vi-VN')} ${displayUnit}`
+                        }
+                        return formatPackedQty(n, packSize, packUnit, displayUnit, { compact: true })
+                    }
+                    return (
+                        <>
+                            <Row label="Tồn đầu" value={fmt(warehouseStart)} />
+                            <Row label="Nhập kho" value={fmt(todayRefill)} sign="+" accent={todayRefill > 0 ? 'text-success' : ''} />
+                            <Row label="Lấy ra" value={fmt(todayRestock)} sign="-" accent={todayRestock > 0 ? 'text-warning' : ''} />
+                            <Row label="Tồn cuối" value={fmt(warehouseNow)} bold />
+                            <button
+                                onClick={() => navigate(`/ingredients/${ingredient}`)}
+                                className="text-[10px] font-bold text-primary text-right mt-auto pt-1 hover:underline"
+                            >
+                                Lịch sử nhập kho →
+                            </button>
+                        </>
+                    )
+                })()}
+            </div>
+
+        </div>
+    )
+}
+
+function Row({ label, value, sign = '', accent, bold }) {
+    const parts = typeof value === 'string' ? value.split(' + ') : [value]
+    const multi = parts.length > 1
+    const valueClass = `${accent || 'text-text-secondary'} ${bold ? 'font-black' : 'font-bold'}`
+    return (
+        <div className={`flex justify-between gap-2 ${multi ? 'items-start' : 'items-baseline'}`}>
+            <span className="text-text-dim">{label}</span>
+            {multi ? (
+                <span className="flex flex-col items-end gap-1 leading-none">
+                    <span className={valueClass}>{sign && `${sign} `}{parts[0]}</span>
+                    <span className="text-[10px] text-text-dim font-medium">+ {parts[1]}</span>
+                </span>
+            ) : (
+                <span className={valueClass}>{sign && `${sign} `}{value}</span>
             )}
         </div>
     )

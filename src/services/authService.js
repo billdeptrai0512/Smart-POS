@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabaseClient'
 import { isGuest } from './localRepository'
+import { startOfDayVN } from '../utils/dateVN'
 
 // Formats username to a dummy email for Supabase Auth
 const formatUsernameToEmail = (username) => {
@@ -386,8 +387,7 @@ export async function fetchBranchesTodayStats(addressIds) {
 
     // Fallback: single query selecting both total + order_items (was two parallel
     // queries hitting the same orders rows with overlapping filters).
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = startOfDayVN()
 
     const { data: ordersData } = await supabase
         .from('orders')

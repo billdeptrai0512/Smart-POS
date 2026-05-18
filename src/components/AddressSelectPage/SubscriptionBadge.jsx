@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { MONETIZATION_ENABLED_FLAG } from '../../hooks/useEntitlement'
+import { startOfDayVN } from '../../utils/dateVN'
 
 /**
  * SubscriptionBadge — hiển thị trạng thái gói cước cho từng address card.
@@ -41,8 +42,7 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
     if (!MONETIZATION_ENABLED_FLAG || !loaded) return null
 
     // ── Tính số ngày còn lại ────────────────────────────────────────────────────
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = startOfDayVN()
 
     if (activeTiers.length === 0) {
         return (
@@ -59,8 +59,7 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
     let minDaysLeft = Infinity;
     activeTiers.forEach(t => {
         if (t.valid_to) {
-            const expiry = new Date(t.valid_to)
-            expiry.setHours(0, 0, 0, 0)
+            const expiry = startOfDayVN(new Date(t.valid_to))
             const daysLeft = Math.round((expiry - today) / (1000 * 60 * 60 * 24))
             minDaysLeft = Math.min(minDaysLeft, daysLeft)
         }

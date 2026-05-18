@@ -3,6 +3,7 @@
  * Manages all "Guest Mode" data in LocalStorage.
  * Mimics Supabase CRUD operations for products, recipes, orders, etc.
  */
+import { dateStringVN, startOfDayVN } from '../utils/dateVN'
 
 const generateId = () => crypto.randomUUID();
 
@@ -194,26 +195,16 @@ export const submitLocalOrder = (order) => {
 
 export const fetchLocalOrders = (addressId, dateStr = null) => {
     let orders = get(KEYS.ORDERS).filter(o => o.address_id === addressId);
-    if (dateStr) {
-        const d = new Date(dateStr).toDateString();
-        orders = orders.filter(o => new Date(o.created_at).toDateString() === d);
-    } else {
-        const today = new Date().toDateString();
-        orders = orders.filter(o => new Date(o.created_at).toDateString() === today);
-    }
+    const d = dateStr ? dateStringVN(new Date(dateStr)) : dateStringVN();
+    orders = orders.filter(o => dateStringVN(new Date(o.created_at)) === d);
     // Maintain compatibility with both 'items' and 'order_items'
     return orders.map(o => ({ ...o, order_items: o.order_items || o.items }));
 };
 
 export const fetchLocalExpenses = (addressId, dateStr = null) => {
     let list = get(KEYS.EXPENSES).filter(e => e.address_id === addressId);
-    if (dateStr) {
-        const d = new Date(dateStr).toDateString();
-        list = list.filter(e => new Date(e.created_at).toDateString() === d);
-    } else {
-        const today = new Date().toDateString();
-        list = list.filter(e => new Date(e.created_at).toDateString() === today);
-    }
+    const d = dateStr ? dateStringVN(new Date(dateStr)) : dateStringVN();
+    list = list.filter(e => dateStringVN(new Date(e.created_at)) === d);
     return list;
 };
 
@@ -231,14 +222,13 @@ export const insertLocalExpense = (payload) => {
 
 export const fetchLocalShiftClosing = (addressId, dateStr) => {
     const list = get(KEYS.SHIFT_CLOSINGS);
-    const d = new Date(dateStr).toDateString();
-    return list.find(s => s.address_id === addressId && new Date(s.created_at).toDateString() === d);
+    const d = dateStringVN(new Date(dateStr));
+    return list.find(s => s.address_id === addressId && dateStringVN(new Date(s.created_at)) === d);
 };
 
 export const fetchLocalYesterdayShiftClosing = (addressId) => {
     const list = get(KEYS.SHIFT_CLOSINGS).filter(s => s.address_id === addressId);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = startOfDayVN();
 
     // Find the latest closing before today
     const past = list
@@ -345,8 +335,8 @@ export const deleteLocalFixedCost = (id) => {
 
 export const upsertLocalShiftClosing = (payload) => {
     const list = get(KEYS.SHIFT_CLOSINGS);
-    const dateStr = new Date().toDateString();
-    const idx = list.findIndex(s => s.address_id === payload.address_id && new Date(s.created_at).toDateString() === dateStr);
+    const dateStr = dateStringVN();
+    const idx = list.findIndex(s => s.address_id === payload.address_id && dateStringVN(new Date(s.created_at)) === dateStr);
     if (idx >= 0) {
         list[idx] = { ...list[idx], ...payload };
     } else {
