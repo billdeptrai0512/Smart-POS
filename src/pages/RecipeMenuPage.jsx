@@ -109,7 +109,11 @@ export default function RecipeMenuPage() {
             <RecipeMenuHeader
                 productCount={products.length}
                 onBack={() => navigate(backTo)}
-                onForward={() => navigate('/ingredients')}
+                onForward={() => navigate('/pos')}
+                activeTab="recipes"
+                onTabSelect={(key) => {
+                    if (key === 'ingredients') navigate('/ingredients', { state: location.state, replace: true })
+                }}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-4 pb-48 space-y-3 bg-bg">

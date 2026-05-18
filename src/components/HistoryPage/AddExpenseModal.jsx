@@ -1,37 +1,12 @@
 import { X } from 'lucide-react'
-import { useState } from 'react'
-import { ingredientLabel } from '../common/recipeUtils'
 
 export default function AddExpenseModal({
     expenseCategory, fixedSubMode, costName, costAmount, isSubmitting,
     onClose, onSubmit,
     onCategoryChange, onFixedSubModeChange, onNameChange, onAmountChange,
-    // NVL restock (Tồn kho) — bound to a specific ingredient so inventory updates
-    ingredientOptions = [], onSubmitRestock,
 }) {
-    const [restockIngredient, setRestockIngredient] = useState('')
-    const [restockQty, setRestockQty] = useState('')
-
-    const isNvl = expenseCategory === 'nvl'
-    const canSubmit = isNvl
-        ? (restockIngredient && Number(restockQty) > 0 && Number(costAmount) > 0 && !isSubmitting)
-        : (costAmount && !isNaN(costAmount) && Number(costAmount) > 0 && costName.trim() && !isSubmitting)
-    const submitColor = expenseCategory === 'nvl' ? 'bg-primary' : expenseCategory === 'fixed' ? 'bg-warning' : 'bg-danger'
-
-    const handleSubmit = () => {
-        if (!canSubmit) return
-        if (isNvl) {
-            onSubmitRestock?.({
-                ingredient: restockIngredient,
-                qty: Number(restockQty),
-                totalCost: Number(costAmount) * 1000,
-            })
-            return
-        }
-        onSubmit()
-    }
-
-    const selectedUnit = ingredientOptions.find(o => o.key === restockIngredient)?.unit || ''
+    const canSubmit = costAmount && !isNaN(costAmount) && Number(costAmount) > 0 && costName.trim() && !isSubmitting
+    const submitColor = expenseCategory === 'fixed' ? 'bg-warning' : 'bg-danger'
 
     return (
         <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={onClose}>
@@ -49,9 +24,11 @@ export default function AddExpenseModal({
 
                 <div className="flex bg-surface-light border border-border/60 rounded-[12px] p-0.5">
                     <CategoryTab active={expenseCategory === 'expense'} color="bg-danger/80" onClick={() => onCategoryChange('expense')}>Vận hành</CategoryTab>
-                    <CategoryTab active={expenseCategory === 'nvl'} color="bg-primary/80" onClick={() => onCategoryChange('nvl')}>Tồn kho</CategoryTab>
                     <CategoryTab active={expenseCategory === 'fixed'} color="bg-warning/80" onClick={() => onCategoryChange('fixed')}>Cố định</CategoryTab>
                 </div>
+                {/* "Tồn kho" tab removed — single inflow rule: mọi nhập kho phải qua
+                    /ingredients → + Nhập kho để đồng bộ kho tổng. Lịch sử tồn kho vẫn
+                    xem được ở tab Chi phí > filter "Tồn kho" trong page này. */}
 
                 {expenseCategory === 'fixed' && (
                     <div className="flex flex-col gap-1.5">
@@ -67,59 +44,29 @@ export default function AddExpenseModal({
                     </div>
                 )}
 
-                {isNvl ? (
-                    <select
-                        autoFocus
-                        value={restockIngredient}
-                        onChange={e => setRestockIngredient(e.target.value)}
-                        className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[15px] font-medium text-text focus:outline-none focus:border-primary/50"
-                    >
-                        <option value="">— Chọn nguyên liệu —</option>
-                        {ingredientOptions.map(opt => (
-                            <option key={opt.key} value={opt.key}>{ingredientLabel(opt.key)} ({opt.unit})</option>
-                        ))}
-                    </select>
-                ) : (
-                    <input
-                        type="text"
-                        autoFocus
-                        placeholder="Tên chi phí..."
-                        value={costName}
-                        onChange={e => onNameChange(e.target.value)}
-                        className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[15px] font-medium text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary/50"
-                    />
-                )}
-
-                {isNvl && (
-                    <div className="relative flex items-center bg-surface-light border border-border/60 rounded-[12px] overflow-hidden focus-within:border-primary/50">
-                        <input
-                            type="number"
-                            placeholder="Số lượng nhập"
-                            value={restockQty}
-                            onChange={e => setRestockQty(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
-                            className="w-full bg-transparent px-4 py-3 text-[15px] font-medium text-text placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        />
-                        {restockQty && selectedUnit && (
-                            <span className="absolute right-4 text-[15px] font-medium text-text-secondary pointer-events-none">{selectedUnit}</span>
-                        )}
-                    </div>
-                )}
+                <input
+                    type="text"
+                    autoFocus
+                    placeholder="Tên chi phí..."
+                    value={costName}
+                    onChange={e => onNameChange(e.target.value)}
+                    className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[15px] font-medium text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary/50"
+                />
 
                 <div className="relative flex items-center bg-surface-light border border-border/60 rounded-[12px] overflow-hidden focus-within:border-primary/50">
                     <input
                         type="number"
-                        placeholder={isNvl ? 'Tổng tiền thanh toán' : '0'}
+                        placeholder="0"
                         value={costAmount}
                         onChange={e => onAmountChange(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
+                        onKeyDown={e => { if (e.key === 'Enter') canSubmit && onSubmit() }}
                         className="w-full bg-transparent px-4 py-3 text-[15px] font-medium text-text placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     {costAmount && <span className="absolute right-4 text-[15px] font-medium text-text-secondary pointer-events-none">.000đ</span>}
                 </div>
 
                 <button
-                    onClick={handleSubmit}
+                    onClick={() => canSubmit && onSubmit()}
                     disabled={!canSubmit}
                     className={`w-full py-3.5 rounded-[14px] text-white text-[15px] font-black uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed ${submitColor}`}
                 >

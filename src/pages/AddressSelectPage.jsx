@@ -233,14 +233,16 @@ export default function AddressSelectPage() {
                     />
                 )}
 
-                {/* Sign out */}
-                <button
-                    onClick={handleSignOut}
-                    className="flex items-center justify-center gap-2 w-full mt-6 py-2.5 text-text-secondary text-xs font-bold hover:text-danger transition-colors"
-                >
-                    <LogOut size={13} />
-                    Đăng xuất
-                </button>
+                {/* Sign out — matches the "Sắp xếp" pill on /recipes */}
+                <div className="flex justify-center mt-6">
+                    <button
+                        onClick={handleSignOut}
+                        className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center justify-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light hover:text-danger active:scale-95 transition-all shadow-sm"
+                    >
+                        <LogOut size={13} />
+                        Đăng xuất
+                    </button>
+                </div>
             </div>
 
             {/* Footer: Create new address */}

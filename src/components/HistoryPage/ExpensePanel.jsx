@@ -278,9 +278,18 @@ function ExpenseCard({ expense, isReadOnly, ingredientUnits, snap, runningTotal,
                     {isNvlWithMeta ? (
                         <div className="flex flex-col gap-2 items-start w-full">
                             <span className={`text-[14px] leading-snug font-medium max-w-[85%] whitespace-pre-wrap text-text ${expense.deletedAt ? 'line-through' : ''}`}>{ingredientLabel(ingKey)}</span>
-                            {snap && (
+                            {/* Snap = running balance (preferred); fallback = qty + đơn giá nhập so audit
+                                always sees how much came in and at what price, even without snapshot data. */}
+                            {snap ? (
                                 <span className="text-text text-[13px] font-medium whitespace-nowrap tabular-nums">
                                     {Math.round(snap.before * 10) / 10} {unit} {qty > 0 ? '+' : ''} {qty} {unit} → {Math.round(snap.after * 10) / 10} {unit}
+                                </span>
+                            ) : qty > 0 && (
+                                <span className="text-text-secondary text-[12px] font-bold whitespace-nowrap tabular-nums">
+                                    +{qty.toLocaleString('vi-VN')} {unit}
+                                    {expense.amount > 0 && (
+                                        <span className="text-text-dim font-medium"> · {Math.round(expense.amount / qty).toLocaleString('vi-VN')}đ/{unit}</span>
+                                    )}
                                 </span>
                             )}
                         </div>

@@ -1,12 +1,13 @@
 import { ArrowLeft, Trash2 } from 'lucide-react'
 import { formatVND } from '../../utils'
 import InlineEditor from './InlineEditor'
+import MenuTabsBar from '../common/MenuTabsBar'
 
 export default function RecipeHeader({
-    product, canEdit, onBack, onSavePrice, onDeleteFromMenu,
+    product, canEdit, onBack, onSavePrice, onDeleteFromMenu, onTabSelect,
 }) {
     return (
-        <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
+        <header className="shrink-0 pt-6 pb-3 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
             <div className="flex items-center gap-3">
                 <button
                     onClick={onBack}
@@ -43,6 +44,8 @@ export default function RecipeHeader({
                     </button>
                 )}
             </div>
+
+            {onTabSelect && <MenuTabsBar activeTab="recipes" onSelect={onTabSelect} />}
         </header>
     )
 }

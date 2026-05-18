@@ -108,7 +108,7 @@ export default function LoginPage() {
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full py-3 rounded-[14px] bg-surface-light uppercase border border-border/60 text-text font-bold text-sm hover:bg-bg active:bg-surface transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full py-3 rounded-[14px] bg-primary uppercase border border-border/60 text-black/80 font-bold text-sm hover:bg-bg active:bg-surface transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
                     </button>
@@ -131,7 +131,7 @@ export default function LoginPage() {
                         type="button"
                         onClick={handleGuest}
                         disabled={guestLoading}
-                        className="w-full py-3.5 rounded-[14px] bg-primary items-center text-black/80 uppercase font-black text-sm hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_4px_20px_rgba(245,158,11,0.25)]"
+                        className="w-full py-3.5 rounded-[14px] bg-surface-light items-center text-text uppercase font-black text-sm hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_4px_20px_rgba(245,158,11,0.25)]"
                     >
                         {guestLoading ? 'Đang tải...' : 'Sử dụng thử'}
                     </button>

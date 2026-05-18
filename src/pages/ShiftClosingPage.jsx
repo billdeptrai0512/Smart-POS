@@ -5,7 +5,7 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { formatVNDInput, parseVNDInput } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
-import { insertShiftClosing, updateShiftClosing, fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchIngredientCostsWithUnits, fetchFixedCosts, insertExpense, fetchTodayExpenses, invalidateDailyContext } from '../services/orderService'
+import { insertShiftClosing, updateShiftClosing, fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchIngredientCostsWithUnits, fetchFixedCosts, insertExpense, fetchTodayExpenses, invalidateDailyContext, fetchIngredientStocks } from '../services/orderService'
 import { supabase } from '../lib/supabaseClient'
 import { sortIngredients } from '../components/common/recipeUtils'
 import { useToast } from '../hooks/useToast'
@@ -16,7 +16,6 @@ import ShiftClosingHeader from '../components/ShiftClosingPage/ShiftClosingHeade
 import RevenueInputCard from '../components/ShiftClosingPage/RevenueInputCard'
 import InventoryReportCard from '../components/ShiftClosingPage/InventoryReportCard'
 import NoteCard from '../components/ShiftClosingPage/NoteCard'
-import ShiftClosingFooter from '../components/ShiftClosingPage/ShiftClosingFooter'
 
 export default function ShiftClosingPage() {
     const navigate = useNavigate()
@@ -53,6 +52,10 @@ export default function ShiftClosingPage() {
     const [openingStock, setOpeningStock] = useState({})
     const [openingInputs, setOpeningInputs] = useState({})
     const [openingLocked, setOpeningLocked] = useState({})
+    // Canonical warehouse balance per ingredient (from fetchIngredientStocks). Used to
+    // surface "kho tổng còn X" and validate that staff's `restock` input doesn't exceed
+    // what's available — prevents over-report which silently creates deficits.
+    const [warehouseStocks, setWarehouseStocks] = useState({})
 
     // Load existing shift closing (for editing)
     useEffect(() => {
@@ -85,19 +88,25 @@ export default function ShiftClosingPage() {
         }).finally(() => setIsLoadingExisting(false))
     }, [selectedAddress?.id])
 
-    // Load yesterday's opening stock
+    // Canonical reader: pull warehouse + counter stocks via fetchIngredientStocks (one source).
+    // counter_stock seeds the "Tồn đầu" column (= previous shift's remaining).
+    // warehouse_stock is shown alongside each row as "kho tổng còn X" and used to
+    // validate the restock input (Tầng 2 prevention).
     useEffect(() => {
         if (!selectedAddress?.id) return
-        fetchYesterdayShiftClosing(selectedAddress.id).then(data => {
-            if (!data?.inventory_report || !Array.isArray(data.inventory_report)) return
-            const stock = {}, openings = {}
-            data.inventory_report.forEach(item => {
-                if (typeof item.remaining === 'number') {
-                    stock[item.ingredient] = item.remaining
-                    openings[item.ingredient] = String(item.remaining)
+        fetchIngredientStocks(selectedAddress.id).then(rows => {
+            const counters = {}, openings = {}, warehouses = {}
+            ;(rows || []).forEach(r => {
+                if (typeof r.counter_stock === 'number') {
+                    counters[r.ingredient] = r.counter_stock
+                    openings[r.ingredient] = String(r.counter_stock)
+                }
+                if (typeof r.warehouse_stock === 'number') {
+                    warehouses[r.ingredient] = r.warehouse_stock
                 }
             })
-            setOpeningStock(stock)
+            setOpeningStock(counters)
+            setWarehouseStocks(warehouses)
             // Seed only if today's closing hasn't set them yet
             setOpeningInputs(prev => Object.keys(prev).length > 0 ? prev : openings)
         })
@@ -273,9 +282,11 @@ export default function ShiftClosingPage() {
                         isDisabled={isSubmitting || isLoadingHistory || isLoadingIngredients || isLoadingExisting}
                         onBack={handleBack}
                         onSubmit={handleSubmit}
+                        activeTab={activeTab}
+                        onTabSelect={setActiveTab}
                     />
 
-                    <main className="flex-1 overflow-y-auto px-4 py-5 pb-28 space-y-5 bg-bg">
+                    <main className="flex-1 overflow-y-auto px-4 py-5 space-y-5 bg-bg">
                         {isLoadingHistory ? (
                             <div className="flex flex-col gap-3 animate-pulse">
                                 <div className="bg-surface-light rounded-[20px] h-24 w-full" />
@@ -284,21 +295,29 @@ export default function ShiftClosingPage() {
                         ) : (
                             <>
                                 {activeTab === 'inventory' && (
-                                    <InventoryReportCard
-                                        ingredientsList={ingredientsList}
-                                        isLoading={isLoadingIngredients}
-                                        openingStock={openingStock}
-                                        openingInputs={openingInputs}
-                                        openingLocked={openingLocked}
-                                        restockInputs={restockInputs}
-                                        inventoryInputs={inventoryInputs}
-                                        canUnlock={canUnlock}
-                                        isSubmitting={isSubmitting}
-                                        onOpeningChange={handleOpeningChange}
-                                        onOpeningLock={handleOpeningLock}
-                                        onRestockChange={handleRestockChange}
-                                        onInventoryChange={handleInventoryChange}
-                                    />
+                                    <>
+                                        <p className="text-[11px] text-text-secondary leading-snug bg-primary/5 border border-primary/15 rounded-[10px] px-3 py-2 -mb-2">
+                                            Cột <span className="font-bold text-text">"Nhập thêm"</span> = số rút từ kho tổng → quầy.
+                                            Mua nguyên liệu mới phải qua <span className="font-bold text-text">/ingredients → + Nhập kho</span> trước, không để hàng thẳng lên quầy.
+                                        </p>
+                                        <InventoryReportCard
+                                            ingredientsList={ingredientsList}
+                                            isLoading={isLoadingIngredients}
+                                            openingStock={openingStock}
+                                            openingInputs={openingInputs}
+                                            openingLocked={openingLocked}
+                                            restockInputs={restockInputs}
+                                            inventoryInputs={inventoryInputs}
+                                            warehouseStocks={warehouseStocks}
+                                            ingredientUnits={Object.fromEntries(ingredientsList.map(i => [i.ingredient, i.unit]))}
+                                            canUnlock={canUnlock}
+                                            isSubmitting={isSubmitting}
+                                            onOpeningChange={handleOpeningChange}
+                                            onOpeningLock={handleOpeningLock}
+                                            onRestockChange={handleRestockChange}
+                                            onInventoryChange={handleInventoryChange}
+                                        />
+                                    </>
                                 )}
 
                                 {activeTab === 'revenue' && (
@@ -321,8 +340,6 @@ export default function ShiftClosingPage() {
                             </>
                         )}
                     </main>
-
-                    <ShiftClosingFooter activeTab={activeTab} onSelect={setActiveTab} />
                 </>
             )}
         </div>

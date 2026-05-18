@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { formatVNDInput, parseVNDInput, calculateProductCost } from '../utils'
 import { getPendingOrders, removePendingOrder } from '../hooks/useOfflineSync'
-import { fetchTodayShiftClosing, fetchExpensesByRange, fetchOrdersByRange, processIngredientRestock } from '../services/orderService'
+import { fetchTodayShiftClosing, fetchExpensesByRange, fetchOrdersByRange } from '../services/orderService'
 import { getDateRange } from '../components/DailyReportPage/ReportHeader'
 import { useAddress } from '../contexts/AddressContext'
 import { useProducts } from '../contexts/ProductContext'
@@ -416,24 +416,6 @@ export default function HistoryPage() {
         finally { setIsSubmitting(false) }
     }
 
-    // Tồn kho restock — uses the RPC so ingredient inventory actually updates.
-    const submitRestock = async ({ ingredient, qty, totalCost }) => {
-        if (!selectedAddress?.id) return
-        setIsSubmitting(true)
-        try {
-            await processIngredientRestock(selectedAddress.id, ingredient, qty, totalCost, profile?.name)
-            await Promise.all([refreshTodayExpenses?.(), refreshProducts?.()])
-            setShowAddModal(false)
-        } catch { }
-        finally { setIsSubmitting(false) }
-    }
-
-    const ingredientOptions = useMemo(() => {
-        return Object.keys(ingredientCosts || {})
-            .sort()
-            .map(key => ({ key, unit: ingredientUnits?.[key] || '' }))
-    }, [ingredientCosts, ingredientUnits])
-
     const startEditFixed = (fc) => {
         setEditingFixedId(fc.id)
         setEditFixedName(fc.name)
@@ -586,8 +568,6 @@ export default function HistoryPage() {
                     onFixedSubModeChange={setFixedSubMode}
                     onNameChange={setCostName}
                     onAmountChange={setCostAmount}
-                    ingredientOptions={ingredientOptions}
-                    onSubmitRestock={submitRestock}
                 />
             )}
 

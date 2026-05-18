@@ -6,13 +6,14 @@ import { useAuth } from '../contexts/AuthContext'
 import { usePOS } from '../contexts/POSContext'
 import {
     upsertIngredientCost, deleteIngredientCost, renameIngredient,
-    fetchIngredientStocks, processIngredientRestock, adjustIngredientStock,
+    fetchIngredientStocks, processIngredientRestock, adjustIngredientStock, fetchIngredientDeficits,
 } from '../services/orderService'
 import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
 import PackConfigModal from '../components/IngredientManagementPage/PackConfigModal'
+import StockDeficitBanner from '../components/IngredientManagementPage/StockDeficitBanner'
 import KeyMismatchBanner from '../components/IngredientManagementPage/KeyMismatchBanner'
 import IngredientsHeader from '../components/IngredientManagementPage/IngredientsHeader'
 import CreateIngredientForm from '../components/IngredientManagementPage/CreateIngredientForm'
@@ -62,6 +63,7 @@ export default function IngredientManagementPage() {
     const [packConfigIngredient, setPackConfigIngredient] = useState(null)
     const [showKeySync, setShowKeySync] = useState(false)
     const [dismissedSig, setDismissedSig] = useState('')
+    const [stockDeficits, setStockDeficits] = useState([])
 
     // Filter recipes to only those referencing currently active products.
     // Without this, dead recipes for soft-deleted products show as false-positive orphans.
@@ -131,8 +133,12 @@ export default function IngredientManagementPage() {
         // handles that (queries rows with address_id IS NULL) so admins can manage stock on
         // the playground template too.
         if (!selectedAddress) return
-        const stocks = await fetchIngredientStocks(selectedAddress.id ?? null)
+        const [stocks, deficits] = await Promise.all([
+            fetchIngredientStocks(selectedAddress.id ?? null),
+            fetchIngredientDeficits(selectedAddress.id ?? null),
+        ])
         setIngredientStocks(stocks)
+        setStockDeficits(deficits)
     }
     useEffect(() => { loadStocks() }, [selectedAddress?.id, selectedAddress?.name])
 
@@ -326,10 +332,25 @@ export default function IngredientManagementPage() {
             <IngredientsHeader
                 count={isSorting ? sortedIngredients.length : allIngredients.length}
                 isSorting={isSorting}
-                onBack={() => navigate(location.state?.from || '/recipes')}
+                onBack={() => navigate(location.state?.from || '/history')}
+                onForward={() => navigate('/pos')}
+                activeTab="ingredients"
+                onTabSelect={(key) => {
+                    if (key === 'recipes') navigate('/recipes', { state: location.state, replace: true })
+                }}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-4 pb-48 bg-bg">
+                {canEdit && !isSorting && stockDeficits.length > 0 && (
+                    <StockDeficitBanner
+                        deficits={stockDeficits}
+                        ingredientUnits={ingredientUnits}
+                        configByIngredient={configByIngredient}
+                        addressId={selectedAddress?.id ?? null}
+                        staffName={profile?.name}
+                        onResolved={() => loadStocks()}
+                    />
+                )}
                 {canEdit && !isSorting && keyMismatches.hasIssues && !isDismissed && (
                     <KeyMismatchBanner
                         mismatches={keyMismatches}

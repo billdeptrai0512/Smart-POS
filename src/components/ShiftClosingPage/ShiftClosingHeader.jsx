@@ -1,12 +1,19 @@
 import { ArrowLeft, Check } from 'lucide-react'
 import { formatVND } from '../../utils'
 
+const TABS = [
+    { key: 'inventory', label: 'Tồn kho',  activeColor: 'bg-primary' },
+    { key: 'revenue',   label: 'Thực thu', activeColor: 'bg-success' },
+    { key: 'note',      label: 'Ghi chú',  activeColor: 'bg-warning' },
+]
+
 export default function ShiftClosingHeader({
     systemTotalRevenue, isSubmitting, isDisabled,
     onBack, onSubmit,
+    activeTab, onTabSelect,
 }) {
     return (
-        <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
+        <header className="shrink-0 pt-6 pb-3 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
             <div className="flex items-center gap-3">
                 <button
                     onClick={onBack}
@@ -33,6 +40,27 @@ export default function ShiftClosingHeader({
                     )}
                 </button>
             </div>
+
+            {activeTab && (
+                <div className="bg-surface-light border border-border/50 rounded-[14px] flex p-1 gap-1 shadow-sm">
+                    {TABS.map(tab => {
+                        const active = activeTab === tab.key
+                        return (
+                            <button
+                                key={tab.key}
+                                onClick={() => onTabSelect?.(tab.key)}
+                                className={`flex-1 flex items-center justify-center py-2 rounded-[10px] transition-all duration-200
+                                    ${active ? `${tab.activeColor} shadow-sm` : 'hover:bg-border/30'}`}
+                            >
+                                <span className={`text-[11px] font-black uppercase tracking-wider transition-colors
+                                    ${active ? 'text-bg' : 'text-text-secondary'}`}>
+                                    {tab.label}
+                                </span>
+                            </button>
+                        )
+                    })}
+                </div>
+            )}
         </header>
     )
 }

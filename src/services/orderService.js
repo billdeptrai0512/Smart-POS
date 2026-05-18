@@ -1307,6 +1307,58 @@ export async function fetchIngredientStocks(addressId) {
     })
 }
 
+// Compute raw warehouse balance per ingredient (Σ refill_qty − Σ restock_post_first_refill).
+// Without the `max(0, ...)` clamp that fetchIngredientStocks applies. Negative values mean
+// staff over-reported restock OR bought outside the system — `/ingredients` surfaces these
+// as a "kho lệch sổ sách" banner so manager can reconcile via the Kiểm kê & reset flow.
+export async function fetchIngredientDeficits(addressId) {
+    if (localRepo.isGuest()) {
+        const expenses = localRepo.fetchAllLocalExpenses(addressId).filter(e => e.is_refill && e.metadata?.ingredient)
+        const closings = localRepo.fetchAllLocalShiftClosings(addressId)
+        return computeDeficits(expenses, closings)
+    }
+    if (!supabase) return []
+    const isDefault = !addressId
+    const applyAddrFilter = (q) => isDefault ? q.is('address_id', null) : q.eq('address_id', addressId)
+    const [refillsRes, closingsRes] = await Promise.all([
+        applyAddrFilter(supabase.from('expenses').select('created_at, metadata')).eq('is_refill', true),
+        applyAddrFilter(supabase.from('shift_closings').select('created_at, inventory_report'))
+    ])
+    return computeDeficits(refillsRes.data || [], closingsRes.data || [])
+}
+
+function computeDeficits(refills, closings) {
+    // Group refills: Σ qty + earliest created_at per ingredient
+    const totalRefill = {}
+    const firstRefillAt = {}
+    for (const e of refills) {
+        const ing = e.metadata?.ingredient
+        if (!ing) continue
+        totalRefill[ing] = (totalRefill[ing] || 0) + (Number(e.metadata?.qty) || 0)
+        const t = new Date(e.created_at).getTime()
+        if (firstRefillAt[ing] === undefined || t < firstRefillAt[ing]) firstRefillAt[ing] = t
+    }
+    // Σ restock per ingredient, only counting closings on/after that ingredient's first refill
+    const totalRestock = {}
+    for (const sc of closings) {
+        const report = Array.isArray(sc.inventory_report) ? sc.inventory_report : []
+        const t = new Date(sc.created_at).getTime()
+        for (const item of report) {
+            const ing = item.ingredient
+            if (!ing) continue
+            const start = firstRefillAt[ing]
+            if (start === undefined || t < start) continue
+            totalRestock[ing] = (totalRestock[ing] || 0) + (Number(item.restock) || 0)
+        }
+    }
+    const deficits = []
+    for (const ing of Object.keys(totalRefill)) {
+        const raw = totalRefill[ing] - (totalRestock[ing] || 0)
+        if (raw < 0) deficits.push({ ingredient: ing, refill: totalRefill[ing], restock: totalRestock[ing] || 0, deficit: raw })
+    }
+    return deficits
+}
+
 // Manual stock adjustment (kiểm kê / hao hụt / seed initial).
 // Tạo 1 expense `is_refill=true, amount=0, metadata.adjustment=true, qty=delta` —
 // được sum vào Σrefill_qty của fetchIngredientStocks → warehouse +delta.

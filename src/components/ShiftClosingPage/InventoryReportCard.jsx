@@ -1,10 +1,12 @@
-import { Lock, Unlock } from 'lucide-react'
-import { ingredientLabel } from '../common/recipeUtils'
+import { Lock, Unlock, AlertTriangle } from 'lucide-react'
+import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils'
 
 export default function InventoryReportCard({
     ingredientsList, isLoading,
     openingStock, openingInputs, openingLocked,
     restockInputs, inventoryInputs,
+    warehouseStocks = {},
+    ingredientUnits = {},
     canUnlock, isSubmitting,
     onOpeningChange, onOpeningLock, onRestockChange, onInventoryChange,
 }) {
@@ -24,11 +26,13 @@ export default function InventoryReportCard({
                     <IngredientRow
                         key={ing.ingredient}
                         ing={ing}
+                        ingredientUnits={ingredientUnits}
                         openingValue={openingInputs[ing.ingredient]}
                         openingFallback={openingStock[ing.ingredient]}
                         isLocked={openingLocked[ing.ingredient]}
                         restockValue={restockInputs[ing.ingredient]}
                         inventoryValue={inventoryInputs[ing.ingredient]}
+                        warehouseAvailable={warehouseStocks[ing.ingredient]}
                         canUnlock={canUnlock}
                         isSubmitting={isSubmitting}
                         onOpeningChange={onOpeningChange}
@@ -42,17 +46,35 @@ export default function InventoryReportCard({
 }
 
 function IngredientRow({
-    ing, openingValue, openingFallback, isLocked, restockValue, inventoryValue,
+    ing, ingredientUnits, openingValue, openingFallback, isLocked, restockValue, inventoryValue,
+    warehouseAvailable,
     canUnlock, isSubmitting,
     onOpeningChange, onOpeningLock, onRestockChange, onInventoryChange,
 }) {
-    const unit = ing.unit || 'đv'
+    // Match /ingredients unit resolution: prefer DB unit, fall back to ingredient_costs
+    // map, then suffix inference (_g→g, _ml→ml). Avoids the "đv" fallback when the
+    // address-specific cost row has a null unit override.
+    const unit = getIngredientUnit(ing.ingredient, ing.unit, ingredientUnits)
     const showLockBtn = !isLocked || canUnlock
     const openingDisplay = openingValue ?? (openingFallback !== undefined && openingFallback !== null ? String(openingFallback) : '')
 
+    // Over-report detection: if staff types restock > kho tổng available, the difference
+    // becomes a phantom deficit that absorbs future NHẬP KHO. Surface it inline.
+    const restockNum = Number(restockValue || 0)
+    const warehouseNum = Number(warehouseAvailable || 0)
+    const restockOverflow = warehouseAvailable !== undefined && restockNum > warehouseNum
+    const overBy = restockOverflow ? restockNum - warehouseNum : 0
+
     return (
         <div className="border-b border-border/20 last:border-0 pb-2.5 last:pb-0">
-            <span className="text-[12px] font-bold text-text block mb-1.5">{ingredientLabel(ing.ingredient)}</span>
+            <div className="flex items-baseline justify-between mb-1.5">
+                <span className="text-[12px] font-bold text-text">{ingredientLabel(ing.ingredient)}</span>
+                {warehouseAvailable !== undefined && (
+                    <span className="text-[10px] font-bold text-text-dim tabular-nums">
+                        kho tổng còn <span className="text-text-secondary">{warehouseNum.toLocaleString('vi-VN')}{unit}</span>
+                    </span>
+                )}
+            </div>
 
             <div className="grid grid-cols-3 gap-2">
                 <ColumnInput
@@ -79,6 +101,7 @@ function IngredientRow({
                     unit={unit}
                     disabled={isSubmitting}
                     onChange={(v) => onRestockChange(ing.ingredient, v)}
+                    overflow={restockOverflow}
                 />
                 <ColumnInput
                     label="Tồn cuối"
@@ -88,16 +111,28 @@ function IngredientRow({
                     onChange={(v) => onInventoryChange(ing.ingredient, v)}
                 />
             </div>
+
+            {restockOverflow && (
+                <div className="flex items-start gap-1.5 mt-1.5 text-[10px] font-bold text-danger leading-tight">
+                    <AlertTriangle size={11} className="mt-[1px] shrink-0" />
+                    <span>
+                        Vượt kho tổng {overBy.toLocaleString('vi-VN')}{unit}.
+                        Nếu hàng được mua mới, vào <span className="underline">/ingredients → + Nhập kho</span> trước.
+                    </span>
+                </div>
+            )}
         </div>
     )
 }
 
-function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRight }) {
-    const wrapCls = locked
-        ? 'bg-primary/8 border border-primary/30'
-        : 'bg-surface-light border border-border/60 focus-within:border-primary/40'
-    const inputCls = locked ? 'text-primary cursor-not-allowed' : 'text-text'
-    const unitCls = locked ? 'text-primary/70' : 'text-text-dim'
+function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRight, overflow }) {
+    const wrapCls = overflow
+        ? 'bg-danger/5 border border-danger/40 focus-within:border-danger'
+        : locked
+            ? 'bg-primary/8 border border-primary/30'
+            : 'bg-surface-light border border-border/60 focus-within:border-primary/40'
+    const inputCls = overflow ? 'text-danger' : locked ? 'text-primary cursor-not-allowed' : 'text-text'
+    const unitCls = overflow ? 'text-danger/70' : locked ? 'text-primary/70' : 'text-text-dim'
 
     return (
         <div className="flex flex-col">

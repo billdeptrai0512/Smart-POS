@@ -53,6 +53,12 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, onC
                     </button>
                 </div>
 
+                {/* Single-inflow reminder — this modal is the only legit way to add to kho tổng */}
+                <p className="text-[11px] text-text-secondary leading-snug bg-primary/5 border border-primary/15 rounded-[10px] px-3 py-2">
+                    Mọi nguyên liệu mua về <span className="font-bold text-text">phải nhập qua đây</span> để kho tổng khớp sổ.
+                    Đừng để hàng thẳng lên quầy không qua hệ thống.
+                </p>
+
                 {/* Form */}
                 <div className="flex flex-col gap-4">
                     {/* Quantity */}
