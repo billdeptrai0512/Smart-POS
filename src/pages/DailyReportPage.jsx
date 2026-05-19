@@ -31,7 +31,11 @@ export default function DailyReportPage() {
     const { activeModules, loading: entitlementLoading } = useEntitlement()
 
     // ── All hooks unconditional (Rules of Hooks) ──────────────────────────────
-    const [view, setView] = useState(VIEW_PROFIT)
+    // Seed view from navigate state so /shift-closing can land on Tồn kho or Dòng tiền
+    // matching the tab the user just submitted from.
+    const initialView = [VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY].includes(location.state?.initialView)
+        ? location.state.initialView : VIEW_CASHFLOW
+    const [view, setView] = useState(initialView)
     const [selectedProductId, setSelectedProductId] = useState('all')
     const { selectedAddress } = useAddress()
     const initialDate = location.state?.initialDate || null

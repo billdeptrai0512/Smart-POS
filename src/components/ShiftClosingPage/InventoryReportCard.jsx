@@ -134,9 +134,9 @@ function IngredientRow({
                             Tôn kho: <span className="text-text-secondary">{fmt(warehouseNum)}</span>
                         </span>
                     )}
-                    <span className="text-[9px] font-bold text-text-dim uppercase tabular-nums text-right">
+                    {/* <span className="text-[9px] font-bold text-text-dim uppercase tabular-nums text-right">
                         cuối ngày: <span className="text-text-secondary font-bold">{fmt(warehouseEnd + counterEnd)}</span>
-                    </span>
+                    </span> */}
                 </div>
             )}
         </div>

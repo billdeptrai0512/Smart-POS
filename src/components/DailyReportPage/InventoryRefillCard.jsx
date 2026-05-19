@@ -37,7 +37,7 @@ export default function InventoryRefillCard({
     const { ingredientConfigs = [] } = useProducts() || {};
     const [lastWeekItems, setLastWeekItems] = useState([]);
     const [isLoadingPast, setIsLoadingPast] = useState(false);
-    const [activeTab, setActiveTab] = useState(isPastDate ? 'audit' : 'refill');
+    const [activeTab, setActiveTab] = useState('audit');
     const [expandedRows, setExpandedRows] = useState({});
     const [isLossExpanded, setIsLossExpanded] = useState(false);
     const [showAuditUpsell, setShowAuditUpsell] = useState(false);
@@ -277,17 +277,10 @@ export default function InventoryRefillCard({
             {!isPastDate ? (
                 <div className="flex flex-col gap-3 border-b border-border/40 pb-3">
                     <div className="flex p-1 bg-surface-light rounded-[12px] gap-1 w-full">
-                        <button
-                            onClick={() => setActiveTab('refill')}
-                            className={`flex-1 py-2.5 rounded-[10px] uppercase text-[13px] font-bold transition-all flex items-center justify-center gap-1 ${activeTab === 'refill' ? 'bg-primary/70 text-white shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
-                        >
-                            Bổ sung
-                        </button>
-                        {/* Audit tab — Pro only */}
                         {canAccessAudit ? (
                             <button
                                 onClick={() => setActiveTab('audit')}
-                                className={`flex-1 py-2.5 rounded-[10px] uppercase text-[13px] font-bold transition-all ${activeTab === 'audit' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                                className={`flex-1 py-1.5 rounded-[10px] uppercase text-[13px] font-bold transition-all ${activeTab === 'audit' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
                             >
                                 Hao hụt
                             </button>
@@ -295,12 +288,18 @@ export default function InventoryRefillCard({
                             <button
                                 id="audit-tab-upsell-btn"
                                 onClick={() => setShowAuditUpsell(true)}
-                                className="flex-1 py-2.5 rounded-[10px] uppercase text-[13px] font-bold transition-all text-text-secondary/50 flex items-center justify-center gap-1.5 hover:text-primary/70"
+                                className="flex-1 py-1.5 rounded-[10px] uppercase text-[13px] font-bold transition-all text-text-secondary/50 flex items-center justify-center gap-1.5 hover:text-primary/70"
                             >
                                 <Lock size={11} className="text-primary/60" />
                                 Hao hụt
                             </button>
                         )}
+                        <button
+                            onClick={() => setActiveTab('refill')}
+                            className={`flex-1 py-1.5 rounded-[10px] uppercase text-[13px] font-bold transition-all flex items-center justify-center gap-1 ${activeTab === 'refill' ? 'bg-primary/70 text-white shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                        >
+                            Bổ sung
+                        </button>
                     </div>
                 </div>
             ) : (

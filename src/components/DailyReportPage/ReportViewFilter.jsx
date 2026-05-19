@@ -4,8 +4,8 @@ export const VIEW_CASHFLOW = 'cashflow'
 export const VIEW_INVENTORY = 'inventory'
 
 const MENU = [
-    { key: VIEW_PROFIT, label: 'Lợi nhuận' },
     { key: VIEW_CASHFLOW, label: 'Dòng tiền' },
+    { key: VIEW_PROFIT, label: 'Lợi nhuận' },
     { key: VIEW_INVENTORY, label: 'Tồn kho' },
 ]
 

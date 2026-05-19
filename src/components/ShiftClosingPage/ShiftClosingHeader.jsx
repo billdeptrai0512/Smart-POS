@@ -31,7 +31,7 @@ export default function ShiftClosingHeader({
                 <button
                     onClick={onSubmit}
                     disabled={isDisabled}
-                    className="w-10 h-10 flex shrink-0 flex-col items-center justify-center rounded-[14px] bg-success/10 border-border/60 transition-colors shadow-sm focus:outline-none"
+                    className="w-10 h-10 flex shrink-0 flex-col items-center justify-center rounded-[14px] bg-success/10 border-border/60 transition-colors shadow-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {isSubmitting ? (
                         <div className="w-5 h-5 border-2 border-success border-t-transparent rounded-full animate-spin" />

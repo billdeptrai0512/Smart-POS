@@ -170,23 +170,28 @@ export default function IngredientCostItem({
                         </span>
                     </div>
                     {onConfigurePack && (
-                        <div className="flex items-start justify-between gap-2">
-                            <span className="text-text-dim leading-none pt-[1px]">Quy đổi</span>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onConfigurePack(ingredient) }}
-                                className="hover:text-primary transition-colors text-right flex flex-col items-end gap-1"
-                                title={hasPack ? 'Sửa quy cách đóng gói' : 'Thêm quy cách đóng gói'}
-                            >
-                                {hasPack ? (
-                                    <>
-                                        <span className="text-text-secondary font-bold leading-none">1 {packUnit}</span>
-                                        <span className="text-text-dim font-medium leading-none tabular-nums">= {packSize} {displayUnit}</span>
-                                    </>
-                                ) : (
-                                    <span className="text-text-dim italic font-medium leading-none">+ thêm</span>
-                                )}
-                            </button>
-                        </div>
+                        <>
+                            <div className="flex items-start justify-between gap-2">
+                                <span className="text-text-dim leading-none pt-[1px]">Quy đổi</span>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onConfigurePack(ingredient) }}
+                                    className="hover:text-primary transition-colors text-right flex flex items-end gap-1"
+                                    title={hasPack ? 'Sửa quy cách đóng gói' : 'Thêm quy cách đóng gói'}
+                                >
+                                    {!hasPack && (<span className="text-text-dim italic font-medium leading-none">+ thêm</span>
+                                    )}
+                                </button>
+                            </div>
+                            {hasPack && (
+                                <div className='flex justify-between'>
+                                    <span className="text-text-secondary font-bold leading-none">1 {packUnit}</span>
+                                    <span className="text-text-dim font-medium leading-none tabular-nums">=</span>
+                                    <span className="text-text-secondary font-bold leading-none tabular-nums"> {packSize} {displayUnit}</span>
+                                </div>
+                            )}
+
+                        </>
+
                     )}
                 </div>
             )}
@@ -210,8 +215,8 @@ export default function IngredientCostItem({
                     return (
                         <>
                             <Row label="Tồn đầu" value={fmt(warehouseStart)} />
-                            <Row label="Nhập kho" value={fmt(todayRefill)} sign="+" accent={todayRefill > 0 ? 'text-success' : ''} />
                             <Row label="Lấy ra" value={fmt(todayRestock)} sign="-" accent={todayRestock > 0 ? 'text-warning' : ''} />
+                            <Row label="Nhập mới" value={fmt(todayRefill)} sign="+" accent={todayRefill > 0 ? 'text-success' : ''} />
                             <Row label="Tồn cuối" value={fmt(warehouseNow)} bold />
                             <button
                                 onClick={() => navigate(`/ingredients/${ingredient}`)}

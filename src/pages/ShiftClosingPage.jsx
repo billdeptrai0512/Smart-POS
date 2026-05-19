@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePOS } from '../contexts/POSContext'
 import { useAddress } from '../contexts/AddressContext'
@@ -156,6 +156,26 @@ export default function ShiftClosingPage() {
         channelRef.current?.send({ type: 'broadcast', event: 'sync-state', payload }).catch(() => { })
     }
 
+    // When editing an already-saved shift, `warehouseStocks` from fetchIngredientStocks
+    // has already subtracted this shift's restock (it's part of Σ restocks). Add it back
+    // so validation compares the new restock input against the warehouse balance
+    // *before* this shift's restock — otherwise a no-op edit triggers a false "Vượt kho".
+    const effectiveWarehouseStocks = useMemo(() => {
+        if (!existingClosing) return warehouseStocks
+        let parsed = existingClosing.inventory_report
+        if (typeof parsed === 'string') {
+            try { parsed = JSON.parse(parsed) } catch { return warehouseStocks }
+        }
+        if (!Array.isArray(parsed)) return warehouseStocks
+        const adjusted = { ...warehouseStocks }
+        parsed.forEach(item => {
+            if (typeof item.restock === 'number' && item.ingredient) {
+                adjusted[item.ingredient] = (adjusted[item.ingredient] || 0) + item.restock
+            }
+        })
+        return adjusted
+    }, [warehouseStocks, existingClosing])
+
     // --- System total revenue ---
     const pending = getPendingOrders()
     const todayStr = dateStringVN()
@@ -205,8 +225,31 @@ export default function ShiftClosingPage() {
         window.history.length > 2 ? navigate(-1) : navigate('/history')
     }
 
+    // Any row where the typed restock exceeds the warehouse available for THIS shift.
+    // Submitting through this would clamp warehouse_stock to 0 on the server and corrupt
+    // the daily-context "tồn đầu" math on /ingredients — so we block submit on overflow.
+    const restockOverflowIngredients = useMemo(() => {
+        const list = []
+        for (const ing of ingredientsList) {
+            const r = Number(restockInputs[ing.ingredient] || 0)
+            const avail = effectiveWarehouseStocks[ing.ingredient]
+            if (avail !== undefined && r > Number(avail || 0)) list.push(ing.ingredient)
+        }
+        return list
+    }, [ingredientsList, restockInputs, effectiveWarehouseStocks])
+
     const handleSubmit = async () => {
         if (isSubmitting) return
+
+        // Block submit when any row reports more restock than the warehouse can supply.
+        if (restockOverflowIngredients.length > 0) {
+            window.alert(`Không thể chốt ca: ${restockOverflowIngredients.length} nguyên liệu có "Nhập thêm" vượt quá kho tổng. Vào /ingredients → + Nhập kho trước, hoặc giảm số "Nhập thêm" lại.`)
+            return
+        }
+
+        // Confirm before committing — chốt ca is a coarse action and not easily reversible.
+        if (!window.confirm(existingClosing?.id ? 'Cập nhật báo cáo ca?' : 'Xác nhận chốt ca?')) return
+
         setIsSubmitting(true)
         try {
             const inventoryReport = ingredientsList
@@ -240,17 +283,27 @@ export default function ShiftClosingPage() {
             } else {
                 await insertShiftClosing(payload)
                 // Auto-inject fixed costs as expenses (only for first-time shift close).
-                // Parallel fetch — fixedCosts + todayExpenses are independent, both needed.
+                // Dedup by metadata.fixed_cost_id so two staff racing on the same first-time
+                // close still only insert one row per fixed cost.
                 try {
                     const [fixedCosts, todayExpenses] = await Promise.all([
                         fetchFixedCosts(selectedAddress?.id),
                         fetchTodayExpenses(selectedAddress?.id),
                     ])
                     if (fixedCosts.length > 0) {
-                        const alreadyInjected = todayExpenses.some(e => e.is_fixed === true)
-                        if (!alreadyInjected) {
+                        const injectedIds = new Set(
+                            todayExpenses
+                                .filter(e => e.is_fixed === true)
+                                .map(e => e.metadata?.fixed_cost_id)
+                                .filter(Boolean)
+                        )
+                        const legacyInjected = todayExpenses.some(e => e.is_fixed === true && !e.metadata?.fixed_cost_id)
+                        const missing = legacyInjected ? [] : fixedCosts.filter(fc => !injectedIds.has(fc.id))
+                        if (missing.length > 0) {
                             await Promise.all(
-                                fixedCosts.map(fc => insertExpense(`[CĐ] ${fc.name}`, fc.amount, selectedAddress?.id, true))
+                                missing.map(fc =>
+                                    insertExpense(`[CĐ] ${fc.name}`, fc.amount, selectedAddress?.id, true, null, false, 'cash', { fixed_cost_id: fc.id })
+                                )
                             )
                         }
                     }
@@ -260,10 +313,27 @@ export default function ShiftClosingPage() {
             }
             invalidateDailyContext(selectedAddress?.id)
 
+            // Mark today's shift as finalized so HistoryPage categorizes subsequent operational
+            // expenses as "Sau ca" (free_form refill) instead of "Trong ca" (raw daily expense).
+            // Previously this flag was only set by a separate button on /daily-report.
+            if (selectedAddress?.id) {
+                const today = new Date().toISOString().split('T')[0]
+                localStorage.setItem(`shift_finalized_${selectedAddress.id}_${today}`, Date.now().toString())
+            }
+
             setIsDirty(false)
             if (hasFeature(activeModules, 'reports')) {
-                navigate('/daily-report', { replace: true })
+                // Land on the report view that matches the tab the user was just editing:
+                // Tồn kho (inventory) → Inventory view, Thực thu (revenue) → Cashflow view.
+                const initialView = activeTab === 'inventory' ? 'inventory'
+                    : activeTab === 'revenue' ? 'cashflow'
+                    : undefined
+                navigate('/daily-report', { replace: true, state: initialView ? { initialView } : undefined })
             } else {
+                // Paywall path: stay on page. Refresh existingClosing so subsequent edits
+                // recompute effectiveWarehouseStocks against the just-saved restock values.
+                const fresh = await fetchTodayShiftClosing(selectedAddress?.id)
+                if (fresh) setExistingClosing(fresh)
                 setShowPaywall(true)
             }
         } catch (err) {
@@ -315,7 +385,7 @@ export default function ShiftClosingPage() {
                                             openingLocked={openingLocked}
                                             restockInputs={restockInputs}
                                             inventoryInputs={inventoryInputs}
-                                            warehouseStocks={warehouseStocks}
+                                            warehouseStocks={effectiveWarehouseStocks}
                                             ingredientUnits={Object.fromEntries(ingredientsList.map(i => [i.ingredient, i.unit]))}
                                             canUnlock={canUnlock}
                                             isSubmitting={isSubmitting}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
@@ -10,6 +10,11 @@ import SortableList from '../components/common/SortableList'
 import RecipeMenuHeader from '../components/RecipeMenuPage/RecipeMenuHeader'
 import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
+
+// Module-level scroll cache. Set when user clicks a product card to drill into
+// /recipes/:productId; consumed once on next mount of /recipes (back nav).
+// Cleared after restore so a fresh visit from another route starts at top.
+let savedScroll = null
 
 export default function RecipeMenuPage() {
     const navigate = useNavigate()
@@ -28,8 +33,18 @@ export default function RecipeMenuPage() {
     const [sortedProducts, setSortedProducts] = useState([])
     const [selectedSortProductId, setSelectedSortProductId] = useState(null)
 
+    const mainRef = useRef(null)
+
     // Fetch fresh data on mount to avoid showing stale localStorage cache
     useEffect(() => { refreshProducts?.() }, [])
+
+    // Restore scroll on back nav from /recipes/:productId; clear cache after use
+    useEffect(() => {
+        if (savedScroll !== null && mainRef.current) {
+            mainRef.current.scrollTop = savedScroll
+            savedScroll = null
+        }
+    }, [])
 
     // PERF: index recipes by product_id ONCE.
     // Was: recipes.filter(...) called twice per product per render — O(N×M).
@@ -116,7 +131,7 @@ export default function RecipeMenuPage() {
                 }}
             />
 
-            <main className="flex-1 overflow-y-auto px-4 py-4 pb-48 space-y-3 bg-bg">
+            <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-48 space-y-3 bg-bg">
                 {isSorting ? (
                     <SortableList
                         items={sortedProducts}
@@ -135,7 +150,10 @@ export default function RecipeMenuPage() {
                                 prodRecipes={recipesByProduct.get(product.id) || []}
                                 cost={costByProduct.get(product.id) || 0}
                                 ingredientUnits={ingredientUnits}
-                                onClick={() => navigate(`/recipes/${product.id}`, { state: location.state })}
+                                onClick={() => {
+                                    savedScroll = mainRef.current?.scrollTop ?? 0
+                                    navigate(`/recipes/${product.id}`, { state: location.state })
+                                }}
                             />
                         ))}
                     </div>
