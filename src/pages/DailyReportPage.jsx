@@ -365,7 +365,7 @@ export default function DailyReportPage() {
                     </div>
                 ) : (
                     <div className="flex flex-col gap-4 animate-fade-in">
-                        <ReportViewFilter value={view} onChange={setView} isStaff={isStaff} />
+                        <ReportViewFilter value={view} onChange={setView} />
 
                         {/* {view === VIEW_PROFIT && (
                             <SalesCard
@@ -476,7 +476,7 @@ export default function DailyReportPage() {
             </main>
 
             {/* FAB: Cập nhật báo cáo */}
-            {(view === VIEW_CASHFLOW || view === VIEW_INVENTORY) && (
+            {view !== VIEW_PROFIT && (
                 <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
                     <div className="flex justify-end px-4 mb-[72px] pointer-events-auto">
                         <button

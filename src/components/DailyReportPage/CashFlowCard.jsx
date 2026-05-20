@@ -1,54 +1,58 @@
-import { ArrowRight } from 'lucide-react'
 import { formatVND } from '../../utils'
 
-export function Card({ label, value, valueClass = 'text-primary', prefix = '', sub = null, className = '', onClick = null, alignRight = false }) {
-    return (
-        <div
-            onClick={onClick}
-            className={`bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center ${alignRight ? 'items-end text-right' : ''} ${onClick ? 'cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all' : ''} ${className}`}
-        >
-            <div className='flex items-center justify-between'>
-                <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1 truncate">{label}</h3>
-                {onClick && <ArrowRight className='text-text-secondary' size={20} strokeWidth={2.5} />}
-            </div>
-            <div className={`text-[16px] font-bold tabular-nums ${valueClass}`}>
-                {prefix}{formatVND(value)}
-            </div>
-            {sub && <div className="text-[10px] font-bold text-text-dim tabular-nums mt-0.5">{sub}</div>}
-        </div>
-    )
-}
-
-export default function CashFlowCard({ shiftClosing, cash: cashProp, transfer: transferProp, dailyExpense, onDailyExpenseClick, salesCard }) {
+export default function CashFlowCard({
+    shiftClosing,
+    cash: cashProp,
+    transfer: transferProp,
+    dailyExpense,
+    onDailyExpenseClick,
+    salesCard
+}) {
     const actualCash = cashProp ?? (shiftClosing?.actual_cash || 0)
     const actualTransfer = transferProp ?? (shiftClosing?.actual_transfer || 0)
 
-    // Thực nhận = TM + CK + chi phí ca (không bao gồm mua NVL vì NVL mua sau khi chốt ca)
+    // Thực thu = Tiền mặt + Chuyển khoản + Chi phí phát sinh trong ca
     const actualTotal = actualCash + actualTransfer + (dailyExpense || 0)
 
     return (
         <div className="flex flex-col gap-4">
-            {/* PHẦN 1: TỔNG THU TRONG CA */}
-            <div className="grid grid-cols-2 gap-3">
-                {salesCard && <div className="col-span-2">{salesCard}</div>}
-                <Card label="Tiền mặt" value={actualCash} valueClass="text-success" prefix='+' />
-                <Card label="Chuyển khoản" value={actualTransfer} valueClass="text-success" prefix='+' alignRight />
+            {salesCard && <div className="w-full">{salesCard}</div>}
 
-                <Card
-                    label="Chi phí phát sinh trong ca"
-                    value={dailyExpense || 0}
-                    valueClass="text-primary"
-                    prefix='+'
-                    onClick={onDailyExpenseClick}
-                    className="col-span-2"
-                />
-
-                {/* <div className="col-span-2 bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center items-end text-right relative overflow-hidden group">
-                    <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Thực thu</h3>
-                    <div className="text-[18px] font-bold text-success tabular-nums">
-                        {formatVND(actualTotal)}
+            {/* THỰC THU TRONG CA PANEL */}
+            <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
+                <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Thực thu</h3>
+                <div className="flex flex-col gap-2.5 pl-2">
+                    <div className="flex justify-between items-center">
+                        <span className="text-[12px] font-bold text-text-secondary">Tiền mặt</span>
+                        <span className="text-[13px] font-bold text-text tabular-nums">
+                            {formatVND(actualCash)}
+                        </span>
                     </div>
-                </div> */}
+                    <div className="flex justify-between items-center">
+                        <span className="text-[12px] font-bold text-text-secondary">Chuyển khoản</span>
+                        <span className="text-[13px] font-bold text-text tabular-nums">
+                            {formatVND(actualTransfer)}
+                        </span>
+                    </div>
+                    <div
+                        onClick={onDailyExpenseClick}
+                        className="flex justify-between items-center cursor-pointer hover:opacity-85 active:scale-[0.99] transition-all"
+                    >
+                        <span className="text-[12px] font-bold text-text-secondary decoration-text-secondary/50 underline-offset-2">
+                            Chi phí phát sinh
+                        </span>
+                        <span className="text-[13px] font-bold text-warning tabular-nums">
+                            {formatVND(dailyExpense || 0)}
+                        </span>
+                    </div>
+                </div>
+                <div className="w-full h-[1px] bg-border/60 rounded-full my-3" />
+                <div className="flex justify-between items-center mt-1 pl-1">
+                    <span className="text-[13px] font-black text-text uppercase tracking-wide">Tổng thực thu</span>
+                    <span className="text-[16px] font-black text-success tabular-nums">
+                        {formatVND(actualTotal)}
+                    </span>
+                </div>
             </div>
         </div>
     )
