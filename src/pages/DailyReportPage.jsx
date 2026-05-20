@@ -327,7 +327,7 @@ export default function DailyReportPage() {
                 rangeLabel={rangeLabel}
                 scope={scope}
                 onBack={() => navigate(backTo)}
-                onForward={() => navigate('/shift-closing')}
+                onForward={() => navigate('/recipes')}
                 activeTab="report"
                 onTabSelect={(tab) => {
                     if (tab === 'report') return
@@ -365,9 +365,9 @@ export default function DailyReportPage() {
                     </div>
                 ) : (
                     <div className="flex flex-col gap-4 animate-fade-in">
-                        <ReportViewFilter value={view} onChange={setView} />
+                        <ReportViewFilter value={view} onChange={setView} isStaff={isStaff} />
 
-                        {view === VIEW_PROFIT && (
+                        {/* {view === VIEW_PROFIT && (
                             <SalesCard
                                 totalCups={totalCups}
                                 selectedProductId={selectedProductId}
@@ -378,13 +378,13 @@ export default function DailyReportPage() {
                                 productStats={productStats}
                                 lineChartData={lineChartData}
                             />
-                        )}
+                        )} */}
 
                         {(view === VIEW_ALL || view === VIEW_PROFIT) && !isStaff && (
                             <FinanceCards
                                 totalRevenue={totalRevenue}
                                 totalCOGS={totalCOGS}
-                                dailyExpense={operationalExpense}
+                                dailyExpense={dailyExpense}
                                 refillNvl={refillNvl}
                                 refillFreeForm={refillFreeForm}
                                 fixedExpense={fixedExpense}
@@ -400,14 +400,6 @@ export default function DailyReportPage() {
 
                         {(view === VIEW_ALL || view === VIEW_CASHFLOW) && (
                             <>
-                                {view === VIEW_ALL && (
-                                    <div className="flex items-center gap-3 py-1 my-1 px-4">
-                                        <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                                        <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Dòng tiền</span>
-                                        <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                                    </div>
-                                )}
-
                                 <CashFlowCard
                                     shiftClosing={shiftClosing}
                                     dailyExpense={dailyExpense}
@@ -484,16 +476,19 @@ export default function DailyReportPage() {
             </main>
 
             {/* FAB: Cập nhật báo cáo */}
-            <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
-                <div className="flex justify-end px-4 mb-[72px] pointer-events-auto">
-                    <button
-                        onClick={() => navigate('/shift-closing')}
-                        className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
-                    >
-                        Cập nhật báo cáo
-                    </button>
+            {(view === VIEW_CASHFLOW || view === VIEW_INVENTORY) && (
+                <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
+                    <div className="flex justify-end px-4 mb-[72px] pointer-events-auto">
+                        <button
+                            onClick={() => navigate('/shift-closing')}
+                            className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
+                        >
+                            Cập nhật báo cáo
+                        </button>
+                    </div>
                 </div>
-            </div>
+            )}
+
 
             <HistoryFooter
                 scope={scope}

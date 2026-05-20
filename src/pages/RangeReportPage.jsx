@@ -231,10 +231,10 @@ export default function RangeReportPage() {
                     </div>
                 ) : (
                     <div className="flex flex-col gap-4 animate-fade-in">
-                        <ReportViewFilter value={view} onChange={setView} />
+                        {/* <ReportViewFilter value={view} onChange={setView} /> */}
 
                         {/* Section 1: Kết quả kinh doanh */}
-                        {(view === VIEW_ALL || view === VIEW_PROFIT) && (
+                        {/* {(view === VIEW_ALL || view === VIEW_PROFIT) && (
                             <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 relative overflow-hidden">
                                 <div className="flex items-start justify-between">
                                     <div className="flex flex-col min-w-0 flex-1">
@@ -300,7 +300,7 @@ export default function RangeReportPage() {
                                     </div>
                                 )}
                             </div>
-                        )}
+                        )} */}
 
                         {(view === VIEW_ALL || view === VIEW_PROFIT) && (
                             <DayPerformanceChart orders={orders} range={range} start={periodStart} end={periodEnd} products={products} />
