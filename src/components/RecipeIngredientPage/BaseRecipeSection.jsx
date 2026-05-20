@@ -9,6 +9,7 @@ export default function BaseRecipeSection({
     availableBaseIngredients, dbIngredients,
     canEdit,
     onSaveAmount, onDeleteIngredient, onAddIngredients,
+    ingredientStocks,
 }) {
     const [adding, setAdding] = useState(false)
 
@@ -24,6 +25,7 @@ export default function BaseRecipeSection({
                     recipe={recipe}
                     unitCost={ingredientCosts[recipe.ingredient] || 0}
                     unit={getIngredientUnit(recipe.ingredient, recipe.unit, ingredientUnits)}
+                    currentStock={ingredientStocks?.[recipe.ingredient]}
                     canEdit={canEdit}
                     onSaveAmount={(amount) => onSaveAmount(recipe.ingredient, amount)}
                     onDelete={() => onDeleteIngredient(recipe.ingredient)}
@@ -53,13 +55,18 @@ export default function BaseRecipeSection({
     )
 }
 
-function RecipeRow({ recipe, unitCost, unit, canEdit, onSaveAmount, onDelete }) {
+function RecipeRow({ recipe, unitCost, unit, currentStock, canEdit, onSaveAmount, onDelete }) {
     const lineCost = recipe.amount * unitCost
     return (
         <div className="bg-surface border border-border/60 rounded-[14px] px-4 py-3 flex items-center gap-2 group">
-            <span className="text-[13px] text-text flex-1 min-w-0 truncate">
-                {ingredientLabel(recipe.ingredient)}
-            </span>
+            <div className="flex flex-col flex-1 min-w-0">
+                <span className="text-[13px] text-text truncate">
+                    {ingredientLabel(recipe.ingredient)}
+                </span>
+                <span className="text-[11px] font-medium text-text-secondary mt-0.5">
+                    Tồn: {currentStock != null ? `${Math.round(currentStock * 10) / 10} ${unit}` : '—'}
+                </span>
+            </div>
 
             <InlineEditor
                 value={recipe.amount}

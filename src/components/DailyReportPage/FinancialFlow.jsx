@@ -37,17 +37,11 @@ export default function FinancialFlow({
     const isTakeHomeUp = takeHomeDelta >= 0
 
     return (
-        <div className="flex flex-col gap-4 mt-3">
-            {/* DIVIDER BƯỚC 2 */}
-            {/* <div className="flex items-center gap-3 py-0.5 px-4">
-                <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-            </div> */}
-
+        <div className="flex flex-col gap-4">
             <div className="col-span-2 bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex items-center justify-between relative overflow-hidden group">
                 <div className="flex flex-col flex-1 items-start text-left">
-                    <h3 className="text-[11px] font-black text-text-secondary uppercase mb-1">Thực thu</h3>
-                    <div className="text-[18px] font-bold tabular-nums text-success">
+                    <h3 className="text-[11px] font-black text-text-secondary uppercase mb-1">Tổng thực thu</h3>
+                    <div className="text-[16px] font-bold tabular-nums text-success">
                         {formatVND(actualTotal)}
                     </div>
                 </div>
@@ -68,26 +62,27 @@ export default function FinancialFlow({
             {/* Tồn kho = chỉ tiền mua NVL thực (refillNvl). */}
             <div className="grid grid-cols-2 gap-3">
                 <Card
-                    label="Vận hành"
+                    label="Tổng chi phí trong ngày"
                     value={operationalExpense}
                     valueClass="text-danger"
                     prefix={operationalExpense > 0 ? '-' : ''}
                     onClick={onDailyExpenseClick}
+                    className="col-span-2"
                 />
                 <Card
-                    label="Tồn kho"
+                    label="Chi phí mua nguyên vật liệu"
                     value={refillNvl}
                     valueClass='text-danger'
                     prefix={refillNvl > 0 ? '-' : ''}
                     onClick={onRefillClick}
-                    alignRight
+                    className="col-span-2"
                 />
 
                 {/* Cầm về thực — full width with comparison */}
                 <div className="col-span-2 bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex items-center justify-between relative overflow-hidden group">
                     <div className="flex flex-col flex-1 items-start text-left">
-                        <h3 className="text-[11px] font-black text-text-secondary uppercase mb-1">Thực nhận</h3>
-                        <div className="text-[18px] font-bold tabular-nums text-success">
+                        <h3 className="text-[11px] font-black text-text-secondary uppercase mb-1">Tổng thực nhận</h3>
+                        <div className="text-[16px] font-bold tabular-nums text-success">
                             {formatVND(takeHome)}
                         </div>
                     </div>

@@ -4,7 +4,8 @@ import ExtraCard from './ExtraCard'
 export default function ExtrasSection({
     extras, extraIngs, ingredientUnits, dbIngredients, canEdit, saving,
     onAddExtra, onSaveSortOrder,
-    extraHandlers,  // bundle of per-extra callbacks (keeps prop list shorter)
+    extraHandlers,
+    ingredientStocks,
 }) {
     const [addingExtra, setAddingExtra] = useState(false)
     const [newExtraName, setNewExtraName] = useState('')
@@ -82,6 +83,7 @@ export default function ExtrasSection({
                         onDeleteExtraIngredient={(ing) => extraHandlers.deleteExtraIngredient(extra.id, ing)}
                         onAddExtraIngredients={(payload) => extraHandlers.addExtraIngredients(extra.id, payload)}
                         onDuplicate={(name) => extraHandlers.duplicate(extra.id, name)}
+                        ingredientStocks={ingredientStocks}
                     />
                 ))}
             </div>
