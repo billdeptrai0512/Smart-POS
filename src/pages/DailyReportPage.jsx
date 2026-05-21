@@ -2,10 +2,11 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { usePOS } from '../contexts/POSContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { calculateProductCost } from '../utils'
+import { calculateProductCost, formatVNDInput, parseVNDInput } from '../utils'
 import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses, sumFixedCosts } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import { fetchDailyReportContext, fetchReportByDate, fetchReportByRange } from '../services/orderService'
+import { useShiftClosingSave } from '../hooks/useShiftClosingSave'
 import { startOfDayVN, dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { calcRangeWithPrev, offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
@@ -13,7 +14,6 @@ import SalesCard from '../components/DailyReportPage/SalesCard'
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
-import FinancialFlow from '../components/DailyReportPage/FinancialFlow'
 import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY } from '../components/DailyReportPage/ReportViewFilter'
 import HistoryFooter from '../components/HistoryPage/HistoryFooter'
 import { supabase } from '../lib/supabaseClient'
@@ -33,9 +33,9 @@ export default function DailyReportPage() {
     const backTo = location.state?.from || '/history'
     const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits } = useProducts()
     const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, fixedCosts } = usePOS()
-    const { isStaff } = useAuth()
+    const { isStaff, profile } = useAuth()
     const { activeModules, loading: entitlementLoading } = useEntitlement()
-    const { toast, showError } = useToast()
+    const { toast, showToast, showError } = useToast()
 
     // ── All hooks unconditional (Rules of Hooks) ──────────────────────────────
     const initialView = [VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY].includes(location.state?.initialView)
@@ -73,6 +73,13 @@ export default function DailyReportPage() {
     const [apiShiftClosings, setApiShiftClosings] = useState([])
     const [prevShiftClosings, setPrevShiftClosings] = useState([])
 
+    // Inline cash/transfer editor (today scope only). Pre-fills from shiftClosing when
+    // it loads; dirty flag controls when the Lưu button appears.
+    const [cashInput, setCashInput] = useState('')
+    const [transferInput, setTransferInput] = useState('')
+    const [cashDirty, setCashDirty] = useState(false)
+    const { save: saveShiftClosing, isSaving: isSavingShift } = useShiftClosingSave(selectedAddress?.id)
+
     useEffect(() => {
         if (todayOrders.length === 0 && !isLoadingHistory) handleLoadHistory()
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -85,6 +92,16 @@ export default function DailyReportPage() {
     }, [scope, offset, customRange])
 
     const isTodayScope = scope === 'day' && offset === 0
+
+    // Pre-fill cash/transfer inputs from the existing shift_closing (if any).
+    // Resets the dirty flag — user's mid-edit values are preserved across re-renders
+    // because this only fires when the underlying shiftClosing rows actually change.
+    useEffect(() => {
+        if (!isTodayScope) return
+        setCashInput(shiftClosing?.actual_cash != null ? formatVNDInput(shiftClosing.actual_cash) : '')
+        setTransferInput(shiftClosing?.actual_transfer != null ? formatVNDInput(shiftClosing.actual_transfer) : '')
+        setCashDirty(false)
+    }, [isTodayScope, shiftClosing?.id, shiftClosing?.actual_cash, shiftClosing?.actual_transfer])
 
     // Computed display data
     const displayOrders = isTodayScope ? todayOrders : apiOrders
@@ -284,14 +301,120 @@ export default function DailyReportPage() {
         return (rev - cogs) - nonFixedSum - fixedSum
     }, [yesterdayOrders, yesterdayExpensesData, recipes, extraIngredients, ingredientCosts])
 
-    const yesterdayActualCash = scope === 'day' ? (yesterdayClosing?.actual_cash || 0) : prevShiftClosings.reduce((sum, s) => sum + (s.actual_cash || 0), 0)
-    const yesterdayActualTransfer = scope === 'day' ? (yesterdayClosing?.actual_transfer || 0) : prevShiftClosings.reduce((sum, s) => sum + (s.actual_transfer || 0), 0)
+    // Sync cash flow calculations for both daily view and range view (handling unclosed shifts by falling back to expected order totals)
+    const calculateSyncedCashFlow = (isDay, singleClosing, rangeClosings, rangeOrders, rangeOffline = []) => {
+        if (isDay) {
+            if (singleClosing) {
+                return {
+                    cash: singleClosing.actual_cash || 0,
+                    transfer: singleClosing.actual_transfer || 0
+                }
+            }
+            const orders = [...rangeOrders, ...rangeOffline].filter(o => !o.deleted_at)
+            const cash = orders.filter(o => o.payment_method === 'cash').reduce((sum, o) => sum + (o.total || 0), 0)
+            const transfer = orders.filter(o => o.payment_method !== 'cash').reduce((sum, o) => sum + (o.total || 0), 0)
+            return { cash, transfer }
+        }
+
+        const closingMap = new Map()
+            ; (rangeClosings || []).forEach(s => {
+                const dateStr = dateStringVN(new Date(s.closed_at || s.created_at))
+                if (!closingMap.has(dateStr)) {
+                    closingMap.set(dateStr, { cash: 0, transfer: 0 })
+                }
+                const val = closingMap.get(dateStr)
+                val.cash += s.actual_cash || 0
+                val.transfer += s.actual_transfer || 0
+            })
+
+        const ordersByDate = new Map()
+        const allOrders = [...rangeOrders, ...rangeOffline].filter(o => !o.deleted_at)
+        allOrders.forEach(o => {
+            const dateStr = dateStringVN(new Date(o.created_at || o.createdAt))
+            if (!ordersByDate.has(dateStr)) {
+                ordersByDate.set(dateStr, [])
+            }
+            ordersByDate.get(dateStr).push(o)
+        })
+
+        const allDates = new Set([...closingMap.keys(), ...ordersByDate.keys()])
+
+        let totalCash = 0
+        let totalTransfer = 0
+
+        allDates.forEach(dateStr => {
+            if (closingMap.has(dateStr)) {
+                const closing = closingMap.get(dateStr)
+                totalCash += closing.cash
+                totalTransfer += closing.transfer
+            } else {
+                const orders = ordersByDate.get(dateStr) || []
+                const cash = orders.filter(o => o.payment_method === 'cash').reduce((sum, o) => sum + (o.total || 0), 0)
+                const transfer = orders.filter(o => o.payment_method !== 'cash').reduce((sum, o) => sum + (o.total || 0), 0)
+                totalCash += cash
+                totalTransfer += transfer
+            }
+        })
+
+        return { cash: totalCash, transfer: totalTransfer }
+    }
+
+    // calculateSyncedCashFlow returns { cash, transfer } — alias on destructure to keep
+    // the rest of the page calling them actualCash/actualTransfer.
+    const { cash: actualCash, transfer: actualTransfer } = useMemo(() => {
+        return calculateSyncedCashFlow(scope === 'day', shiftClosing, apiShiftClosings, displayOrders, offlineToday)
+    }, [scope, shiftClosing, apiShiftClosings, displayOrders, offlineToday])
+
+    const { cash: yesterdayActualCash, transfer: yesterdayActualTransfer } = useMemo(() => {
+        return calculateSyncedCashFlow(scope === 'day', yesterdayClosing, prevShiftClosings, yesterdayOrders)
+    }, [scope, yesterdayClosing, prevShiftClosings, yesterdayOrders])
 
     const yestTotalRefill = yesterdayExpensesData.filter(e => e.is_refill).reduce((s, e) => s + e.amount, 0)
     const yestOpsExpense = yesterdayExpensesData.filter(e => !e.is_fixed && !e.is_refill).reduce((s, e) => s + e.amount, 0)
 
     const yesterdayTakeHome = yesterdayActualCash + yesterdayActualTransfer - yestTotalRefill
     const yesterdayActualTotal = yesterdayActualCash + yesterdayActualTransfer + yestOpsExpense
+
+    // Sum today's orders (online + offline) for the system_total_revenue snapshot we send
+    // when creating a new shift_closing. Mirrors /shift-closing's calculation.
+    const systemTotalRevenue = useMemo(() => {
+        if (!isTodayScope) return 0
+        let sum = 0
+        for (const o of todayOrders) if (!o.deleted_at && !o.deletedAt) sum += o.total || 0
+        for (const o of offlineToday) if (!o.deleted_at && !o.deletedAt) sum += o.total || 0
+        return sum
+    }, [isTodayScope, todayOrders, offlineToday])
+
+    const handleSaveCashflow = async () => {
+        if (!selectedAddress?.id) return
+        const payload = {
+            address_id: selectedAddress.id,
+            closed_by: profile?.id || null,
+            system_total_revenue: systemTotalRevenue,
+            actual_cash: parseVNDInput(cashInput) || 0,
+            actual_transfer: parseVNDInput(transferInput) || 0,
+        }
+        // On insert we also need inventory_report (empty if not provided yet) and a note;
+        // on update we preserve whatever the existing row has — only the cash fields change.
+        if (!shiftClosing?.id) {
+            payload.inventory_report = []
+            payload.note = ''
+        }
+        try {
+            await saveShiftClosing(payload, {
+                existingId: shiftClosing?.id,
+                onFixedCostError: (err) => showError(err, 'Ghi chi phí cố định vào ca'),
+            })
+            showToast('Đã lưu thực thu', 'success')
+            setCashDirty(false)
+            // Refetch shift_closing so display + pre-fill sync. invalidateDailyContext
+            // inside the hook already cleared the cache, so the network is hit fresh.
+            const fresh = await fetchDailyReportContext(selectedAddress.id)
+            setShiftClosing(fresh?.shift_closing || null)
+        } catch (err) {
+            showError(err, 'Lưu thực thu')
+        }
+    }
 
     if (!entitlementLoading && !hasFeature(activeModules, 'reports')) {
         return <UpsellPage required="basic" backTo="/history" />
@@ -375,41 +498,39 @@ export default function DailyReportPage() {
                         )}
 
                         {(view === VIEW_ALL || view === VIEW_CASHFLOW) && (
-                            <>
-                                <CashFlowCard
-                                    shiftClosing={shiftClosing}
-                                    dailyExpense={dailyExpense}
-                                    cash={scope === 'day' ? (shiftClosing?.actual_cash || 0) : apiShiftClosings.reduce((sum, s) => sum + (s.actual_cash || 0), 0)}
-                                    transfer={scope === 'day' ? (shiftClosing?.actual_transfer || 0) : apiShiftClosings.reduce((sum, s) => sum + (s.actual_transfer || 0), 0)}
-                                    onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'operation', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } })}
-                                    salesCard={
-                                        <SalesCard
-                                            totalCups={totalCups}
-                                            selectedProductId={selectedProductId}
-                                            onFilterChange={setSelectedProductId}
-                                            products={products}
-                                            soldProducts={soldProducts}
-                                            totalRevenue={totalRevenue}
-                                            productStats={productStats}
-                                            lineChartData={lineChartData}
-                                        />
-                                    }
-                                />
-
-                                <FinancialFlow
-                                    actualCash={scope === 'day' ? (shiftClosing?.actual_cash || 0) : apiShiftClosings.reduce((sum, s) => sum + (s.actual_cash || 0), 0)}
-                                    actualTransfer={scope === 'day' ? (shiftClosing?.actual_transfer || 0) : apiShiftClosings.reduce((sum, s) => sum + (s.actual_transfer || 0), 0)}
-                                    dailyExpense={dailyExpense}
-                                    refillTotal={refillTotal}
-                                    refillNvl={refillNvl}
-                                    refillFreeForm={refillFreeForm}
-                                    expenses={displayExpenses}
-                                    yesterdayActualTotal={yesterdayActualTotal}
-                                    yesterdayTakeHome={yesterdayTakeHome}
-                                    onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'operation', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } })}
-                                    onRefillClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'nvl', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } })}
-                                />
-                            </>
+                            <CashFlowCard
+                                actualCash={actualCash}
+                                actualTransfer={actualTransfer}
+                                dailyExpense={dailyExpense}
+                                refillTotal={refillTotal}
+                                refillNvl={refillNvl}
+                                refillFreeForm={refillFreeForm}
+                                expenses={displayExpenses}
+                                yesterdayActualTotal={yesterdayActualTotal}
+                                yesterdayTakeHome={yesterdayTakeHome}
+                                editable={isTodayScope}
+                                cashInput={cashInput}
+                                transferInput={transferInput}
+                                onCashChange={(v) => { setCashInput(formatVNDInput(v)); setCashDirty(true) }}
+                                onTransferChange={(v) => { setTransferInput(formatVNDInput(v)); setCashDirty(true) }}
+                                onSave={handleSaveCashflow}
+                                isSaving={isSavingShift}
+                                hasChanges={cashDirty}
+                                onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'operation', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } })}
+                                onRefillClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'nvl', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } })}
+                                salesCard={
+                                    <SalesCard
+                                        totalCups={totalCups}
+                                        selectedProductId={selectedProductId}
+                                        onFilterChange={setSelectedProductId}
+                                        products={products}
+                                        soldProducts={soldProducts}
+                                        totalRevenue={totalRevenue}
+                                        productStats={productStats}
+                                        lineChartData={lineChartData}
+                                    />
+                                }
+                            />
                         )}
 
                         {(view === VIEW_ALL || view === VIEW_INVENTORY) && (
@@ -453,18 +574,18 @@ export default function DailyReportPage() {
             </main>
 
             {/* FAB: Cập nhật báo cáo */}
-            {view !== VIEW_PROFIT && (
+            {/* {view !== VIEW_PROFIT && (
                 <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
                     <div className="flex justify-end px-4 mb-[72px] pointer-events-auto">
                         <button
                             onClick={() => navigate('/shift-closing')}
                             className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
                         >
-                            Cập nhật báo cáo
+                            Lưu báo cáo
                         </button>
                     </div>
                 </div>
-            )}
+            )} */}
 
 
             <HistoryFooter
