@@ -1,13 +1,25 @@
-import { Lock, Unlock, AlertTriangle } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils'
 import { formatPackedQty } from '../../utils/inventory'
 
+// 3×3 grid per ingredient:
+//   row 1 (warehouse):  Tồn kho   |  Lấy ra      |  Còn lại  = Tồn kho − Lấy ra
+//   row 2 (counter):    Đầu kỳ    |  Sử dụng     |  +        = actual đếm quầy (input)
+//   row 3 (audit):      Trạng thái (Khớp / Hụt N ly / Dư N ly)  |  Hao hụt = actual − theoretical
+//
+// Staff inputs: Lấy ra, Đầu kỳ, "+" (actual quầy). Everything else is computed and disabled.
+// Audit uses: theoretical = opening + restock − used   ;   diff = actual − theoretical.
+//   diff < 0  → "Hụt N ly" (when ingredientToProduct has amountPerCup) or just đơn vị
+//   diff > 0  → "Dư N ly"  /  đơn vị
+//   diff = 0  → "Khớp"
 export default function InventoryReportCard({
     ingredientsList, isLoading,
     openingStock, openingInputs, openingLocked,
     restockInputs, inventoryInputs,
     warehouseStocks = {},
     ingredientUnits = {},
+    usedMap = {},            // ingredient → todayEstimatedConsumption qty
+    ingredientToProduct = {}, // ingredient → { amountPerCup, productName } (cups equiv for Trạng thái)
     canUnlock, isSubmitting,
     onOpeningChange, onOpeningLock, onRestockChange, onInventoryChange,
 }) {
@@ -34,6 +46,8 @@ export default function InventoryReportCard({
                     restockValue={restockInputs[ing.ingredient]}
                     inventoryValue={inventoryInputs[ing.ingredient]}
                     warehouseAvailable={warehouseStocks[ing.ingredient]}
+                    used={lookupByLabel(ing.ingredient, usedMap)}
+                    productRef={ingredientToProduct[ing.ingredient]}
                     canUnlock={canUnlock}
                     isSubmitting={isSubmitting}
                     onOpeningChange={onOpeningChange}
@@ -46,33 +60,66 @@ export default function InventoryReportCard({
     )
 }
 
+// Fallback when exact ingredient key has no consumption — match by display label.
+// Same pattern as InventoryRefillCard: recipes might use 'condensed_milk_ml' while inventory
+// tracks 'sữa_đặc'; both label to "Sữa đặc" so lookup by display avoids a 0 false-negative.
+function lookupByLabel(ingredient, map) {
+    if (!map) return 0
+    if (map[ingredient] != null) return map[ingredient]
+    const label = ingredientLabel(ingredient).toLowerCase()
+    for (const [key, val] of Object.entries(map)) {
+        if (key !== ingredient && ingredientLabel(key).toLowerCase() === label) return val
+    }
+    return 0
+}
+
 function IngredientRow({
     ing, ingredientUnits, openingValue, openingFallback, isLocked, restockValue, inventoryValue,
-    warehouseAvailable,
-    canUnlock, isSubmitting,
-    onOpeningChange, onOpeningLock, onRestockChange, onInventoryChange,
+    warehouseAvailable, used, productRef,
+    isSubmitting,
+    onOpeningChange, onRestockChange, onInventoryChange,
 }) {
-    // Match /ingredients unit resolution: prefer DB unit, fall back to ingredient_costs
-    // map, then suffix inference (_g→g, _ml→ml). Avoids the "đv" fallback when the
-    // address-specific cost row has a null unit override.
     const unit = getIngredientUnit(ing.ingredient, ing.unit, ingredientUnits)
-    const showLockBtn = !isLocked || canUnlock
     const packSize = Number(ing.pack_size || 0)
     const packUnit = ing.pack_unit
     const fmt = (n) => formatPackedQty(n, packSize, packUnit, unit, { compact: true })
     const openingDisplay = openingValue ?? (openingFallback !== undefined && openingFallback !== null ? String(openingFallback) : '')
 
+    // Round to 1 decimal so noisy float math doesn't surface in the UI.
+    const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
+
     // Over-report detection: if staff types restock > kho tổng available, the difference
     // becomes a phantom deficit that absorbs future NHẬP KHO. Surface it inline.
-    const restockNum = Number(restockValue || 0)
+    const restockNum = r1(restockValue)
     const warehouseNum = Number(warehouseAvailable || 0)
     const restockOverflow = warehouseAvailable !== undefined && restockNum > warehouseNum
     const overBy = restockOverflow ? restockNum - warehouseNum : 0
 
-    // Live computed end-of-shift balances.
+    // Live computed balances.
     const warehouseEnd = Math.max(0, warehouseNum - restockNum)
-    const counterEnd = Number(inventoryValue || 0)
-    const showTotals = warehouseAvailable !== undefined && (restockValue !== undefined || inventoryValue !== undefined)
+    const openingNum = r1(openingDisplay)
+    const usedNum = r1(used)
+    const theoreticalRemaining = r1(openingNum + restockNum - usedNum)
+    const hasActual = inventoryValue !== undefined && inventoryValue !== ''
+    const actualNum = hasActual ? r1(inventoryValue) : null
+    const diff = actualNum != null ? r1(actualNum - theoreticalRemaining) : null
+
+    // "Khớp / Hụt N ly / Dư N ly" — fall back to đơn vị when no product mapping.
+    let statusText = '—'
+    let statusTone = 'neutral'
+    if (diff != null) {
+        if (diff === 0) {
+            statusText = 'Khớp'
+            statusTone = 'good'
+        } else {
+            const absDiff = Math.abs(diff)
+            const cupsLabel = productRef?.amountPerCup > 0
+                ? `${Math.round(absDiff / productRef.amountPerCup)} ly`
+                : `${absDiff} ${unit}`
+            statusText = `${diff < 0 ? 'Hụt' : 'Dư'} ${cupsLabel}`
+            statusTone = diff < 0 ? 'bad' : 'warn'
+        }
+    }
 
     return (
         <div className="border-b border-border/20 last:border-0 pb-2.5 last:pb-0">
@@ -80,16 +127,9 @@ function IngredientRow({
                 <span className="text-[16px] font-bold text-text">{ingredientLabel(ing.ingredient)}</span>
             </div>
 
+            {/* Row 1 — warehouse level */}
             <div className="grid grid-cols-3 gap-2">
-                <ColumnInput
-                    label="Tồn kho"
-                    value={warehouseNum}
-                    unit={unit}
-                    disabled={true}
-                    onChange={(v) => onOpeningChange(ing.ingredient, v)}
-                    locked={isLocked}
-
-                />
+                <ColumnInput label="Tồn kho" value={warehouseNum} unit={unit} disabled />
                 <ColumnInput
                     label="Lấy ra"
                     value={restockValue || ''}
@@ -98,15 +138,10 @@ function IngredientRow({
                     onChange={(v) => onRestockChange(ing.ingredient, v)}
                     overflow={restockOverflow}
                 />
-                <ColumnInput
-                    label="Còn lại"
-                    value={inventoryValue || ''}
-                    unit={unit}
-                    disabled={true}
-                    onChange={(v) => onInventoryChange(ing.ingredient, v)}
-                />
+                <ColumnInput label="Còn lại" value={warehouseEnd} unit={unit} disabled />
             </div>
 
+            {/* Row 2 — counter level */}
             <div className="grid grid-cols-3 gap-2 mt-2">
                 <ColumnInput
                     label="Đầu kỳ"
@@ -115,41 +150,28 @@ function IngredientRow({
                     disabled={isLocked || isSubmitting}
                     onChange={(v) => onOpeningChange(ing.ingredient, v)}
                     locked={isLocked}
-
                 />
-                <ColumnInput
-                    label="Sử dụng"
-                    value={restockValue || ''}
-                    unit={unit}
-                    disabled={true}
-                    onChange={(v) => onRestockChange(ing.ingredient, v)}
-                    overflow={restockOverflow}
-                />
+                <ColumnInput label="Sử dụng" value={usedNum} unit={unit} disabled />
                 <ColumnInput
                     label="+"
-                    value={inventoryValue || ''}
+                    value={inventoryValue ?? ''}
                     unit={unit}
                     disabled={isSubmitting}
                     onChange={(v) => onInventoryChange(ing.ingredient, v)}
                 />
             </div>
 
+            {/* Row 3 — audit */}
             <div className="grid grid-cols-3 gap-2 mt-2">
                 <div className="col-span-2">
-                    <ColumnInput
-                        label="Trạng thái"
-                        value={inventoryValue || ''}
-                        unit={unit}
-                        disabled={true}
-                        onChange={(v) => onInventoryChange(ing.ingredient, v)}
-                    />
+                    <StatusBox label="Trạng thái" text={statusText} tone={statusTone} />
                 </div>
                 <ColumnInput
                     label="Hao hụt"
-                    value={inventoryValue || ''}
+                    value={diff != null ? diff : ''}
                     unit={unit}
-                    disabled={true}
-                    onChange={(v) => onInventoryChange(ing.ingredient, v)}
+                    disabled
+                    tone={diff == null ? 'neutral' : diff === 0 ? 'good' : diff < 0 ? 'bad' : 'warn'}
                 />
             </div>
 
@@ -162,19 +184,29 @@ function IngredientRow({
                     </span>
                 </div>
             )}
-
         </div>
     )
 }
 
-function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRight, overflow }) {
+function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRight, overflow, tone = 'neutral' }) {
+    // tone overrides the default disabled coloring for read-only diff cells.
+    const toneMap = {
+        good: { wrap: 'bg-success/8 border border-success/30', input: 'text-success', unit: 'text-success/70' },
+        bad: { wrap: 'bg-danger/8 border border-danger/30', input: 'text-danger', unit: 'text-danger/70' },
+        warn: { wrap: 'bg-warning/8 border border-warning/30', input: 'text-warning', unit: 'text-warning/70' },
+        neutral: { wrap: '', input: '', unit: '' },
+    }
+    const t = toneMap[tone] || toneMap.neutral
+
     const wrapCls = overflow
         ? 'bg-danger/5 border border-danger/40 focus-within:border-danger'
-        : locked
-            ? 'bg-primary/8 border border-primary/30'
-            : 'bg-surface-light border border-border/60 focus-within:border-primary/40'
-    const inputCls = overflow ? 'text-danger' : locked ? 'text-primary cursor-not-allowed' : 'text-text'
-    const unitCls = overflow ? 'text-danger/70' : locked ? 'text-primary/70' : 'text-text-dim'
+        : t.wrap
+            ? t.wrap
+            : locked
+                ? 'bg-primary/8 border border-primary/30'
+                : 'bg-surface-light border border-border/60 focus-within:border-primary/40'
+    const inputCls = overflow ? 'text-danger' : t.input || (locked ? 'text-primary cursor-not-allowed' : 'text-text')
+    const unitCls = overflow ? 'text-danger/70' : t.unit || (locked ? 'text-primary/70' : 'text-text-dim')
 
     return (
         <div className="flex flex-col">
@@ -187,11 +219,32 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRig
                     type="number"
                     placeholder="-"
                     value={value}
-                    onChange={e => onChange(e.target.value)}
+                    onChange={e => onChange?.(e.target.value)}
                     disabled={disabled}
                     className={`flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-bold text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:opacity-50 ${inputCls}`}
                 />
                 <span className={`pr-1.5 text-[10px] font-medium shrink-0 ${unitCls}`}>{unit}</span>
+            </div>
+        </div>
+    )
+}
+
+// Pure label-style cell for Trạng thái — text not numeric, but same visual rhythm
+// as ColumnInput so the grid alignment holds.
+function StatusBox({ label, text, tone }) {
+    const toneCls = {
+        good: 'bg-success/8 border-success/30 text-success',
+        bad: 'bg-danger/8 border-danger/30 text-danger',
+        warn: 'bg-warning/8 border-warning/30 text-warning',
+        neutral: 'bg-surface-light border-border/60 text-text-secondary',
+    }[tone] || ''
+    return (
+        <div className="flex flex-col">
+            <div className="flex items-center justify-between mb-1">
+                <span className="text-[9px] font-black text-text-dim uppercase">{label}</span>
+            </div>
+            <div className={`rounded-[10px] py-1.5 px-2 text-[13px] font-bold text-center border ${toneCls}`}>
+                {text}
             </div>
         </div>
     )

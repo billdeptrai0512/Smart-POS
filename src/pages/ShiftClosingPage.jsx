@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePOS } from '../contexts/POSContext'
+import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import { fetchTodayShiftClosing, fetchIngredientCostsWithUnits, fetchIngredientStocks } from '../services/orderService'
 import { useShiftClosingSave } from '../hooks/useShiftClosingSave'
+import { calculateEstimatedConsumption } from '../utils/inventory'
 import { dateStringVN } from '../utils/dateVN'
 import { supabase } from '../lib/supabaseClient'
 import { sortIngredients } from '../components/common/recipeUtils'
@@ -20,6 +22,7 @@ export default function ShiftClosingPage() {
     const navigate = useNavigate()
     const channelRef = React.useRef(null)
     const { todayOrders, isLoadingHistory, handleLoadHistory } = usePOS()
+    const { products, recipes, extraIngredients } = useProducts()
     const { selectedAddress } = useAddress()
     const { toast, showError } = useToast()
     const { profile, isManager, isAdmin } = useAuth()
@@ -174,6 +177,55 @@ export default function ShiftClosingPage() {
     todayOrders.forEach(o => { if (!o.deleted_at && !o.deletedAt) systemTotalRevenue += o.total })
     offlineToday.forEach(o => { if (!o.deleted_at && !o.deletedAt) systemTotalRevenue += o.total })
 
+    // --- Audit support: estimated consumption per ingredient + cups-equivalent product map ---
+    // Powers InventoryReportCard's "Sử dụng" cell and "Trạng thái Hụt/Dư N ly" label.
+    const todayOrderItems = useMemo(() => {
+        const items = []
+        todayOrders.filter(o => !o.deleted_at && !o.deletedAt).forEach(o => {
+            (o.order_items || []).forEach(i => items.push({
+                productId: i.product_id || i.productId,
+                qty: i.quantity || i.qty || 1,
+                extras: i.extra_ids ? i.extra_ids.map(id => ({ id })) : (i.extras || [])
+            }))
+        })
+        offlineToday.forEach(o => {
+            (o.cart || o.orderItems || []).forEach(i => items.push({
+                productId: i.productId,
+                qty: i.quantity || 1,
+                extras: i.extras || []
+            }))
+        })
+        return items
+    }, [todayOrders, offlineToday])
+
+    const usedMap = useMemo(
+        () => calculateEstimatedConsumption(todayOrderItems, recipes, extraIngredients),
+        [todayOrderItems, recipes, extraIngredients]
+    )
+
+    // Pick the dominant product for each ingredient — used to express Hụt/Dư as "N ly <product>".
+    // Skips ingredients where amountPerCup === 1 (likely cup/lid passthroughs).
+    const ingredientToProduct = useMemo(() => {
+        const sales = {}
+        todayOrderItems.forEach(i => { sales[i.productId] = (sales[i.productId] || 0) + (i.qty || 1) })
+        const map = {}
+        ;(recipes || []).forEach(r => {
+            if (!r.amount || r.amount <= 0) return
+            const s = sales[r.product_id] || 0
+            const cur = map[r.ingredient]
+            if (!cur || s > cur.sales) {
+                map[r.ingredient] = { productId: r.product_id, amountPerCup: r.amount, sales: s }
+            }
+        })
+        for (const ing of Object.keys(map)) {
+            const ref = map[ing]
+            const p = products.find(pp => pp.id === ref.productId)
+            if (!p?.name || ref.amountPerCup === 1) { delete map[ing]; continue }
+            ref.productName = p.name.toLowerCase()
+        }
+        return map
+    }, [recipes, products, todayOrderItems])
+
     // --- Change handlers ---
     const handleOpeningChange = (ingredient, value) => {
         setIsDirty(true)
@@ -314,6 +366,8 @@ export default function ShiftClosingPage() {
                                 inventoryInputs={inventoryInputs}
                                 warehouseStocks={effectiveWarehouseStocks}
                                 ingredientUnits={Object.fromEntries(ingredientsList.map(i => [i.ingredient, i.unit]))}
+                                usedMap={usedMap}
+                                ingredientToProduct={ingredientToProduct}
                                 canUnlock={canUnlock}
                                 isSubmitting={isSaving}
                                 onOpeningChange={handleOpeningChange}
