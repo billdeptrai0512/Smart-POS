@@ -62,3 +62,20 @@ export function createCache(ttlMs) {
 
     return { get, set, invalidate, invalidatePrefix, clear, through }
 }
+
+// ─── Shared instances ────────────────────────────────────────────────────────
+// reportCache (30s) backs everything users see on Report / History pages:
+// reports, orders/expenses by range, fixed costs, shift closings. Any mutation
+// to those tables calls invalidateReportCache(addressId) so the next read goes
+// to the network.
+//
+// historicalCache (5 min) backs immutable past data (last week / past days).
+// Yesterday's rows don't mutate, so a longer TTL is safe.
+export const reportCache = createCache(30_000)
+export const historicalCache = createCache(5 * 60_000)
+
+export function invalidateReportCache(addressId) {
+    if (addressId) reportCache.invalidatePrefix([addressId])
+    else reportCache.clear()
+}
+
