@@ -215,10 +215,13 @@ export default function HistoryPage() {
     }, [retrySync, refreshPending])
 
     // ─── Orders data ──────────────────────────────────────────────────
-    const getItemCost = (productId, extras, snapshotUnitCost) => {
+    // Stable callback so downstream useMemos don't bust on every render.
+    // snapshotUnitCost > 0 means the cost was frozen on the DB row at sale time —
+    // honor it instead of recomputing from current recipes/prices.
+    const getItemCost = useCallback((productId, extras, snapshotUnitCost) => {
         if (snapshotUnitCost > 0) return snapshotUnitCost
         return calculateProductCost(productId, extras || [], recipes, extraIngredients, ingredientCosts)
-    }
+    }, [recipes, extraIngredients, ingredientCosts])
 
     const baseOrders = isTodayScope ? (todayOrders || []) : rangeOrders
 
@@ -231,10 +234,24 @@ export default function HistoryPage() {
 
     // PERF: memoize formatted lists so downstream useMemo's (runningTotals, totalCups) actually
     // get stable inputs. Previously these recomputed every render → all derived memos were busted.
+    // Per-item cost is computed once and shared with the order-total fallback to avoid 2 lookups per item.
     const formattedOnline = useMemo(() => baseOrders.map(o => {
+        const items = o.order_items ? o.order_items.map(i => {
+            const options = i.options
+                ? i.options.split(', ').filter(opt => opt !== 'Tiền mặt' && opt !== 'MoMo').join(' - ')
+                : ''
+            const pName = productById.get(i.product_id)?.name || i.products?.name || '☕'
+            const unitCost = getItemCost(i.product_id, i.extras || [], i.unit_cost || 0)
+            return {
+                text: `${i.quantity} ${pName}${options ? ` (${options})` : ''}`,
+                cost: unitCost * i.quantity,
+                quantity: i.quantity,
+                productId: i.product_id
+            }
+        }) : []
         const cost = (o.total_cost > 0)
             ? o.total_cost
-            : (o.order_items ? o.order_items.reduce((sum, i) => sum + (getItemCost(i.product_id, i.extras || [], i.unit_cost || 0) * i.quantity), 0) : 0)
+            : items.reduce((sum, item) => sum + item.cost, 0)
         return {
             id: o.id,
             total: o.total,
@@ -245,53 +262,46 @@ export default function HistoryPage() {
             deletedBy: o.deleted_by,
             isOffline: false,
             paymentMethod: o.payment_method || null,
-            items: o.order_items ? o.order_items.map(i => {
-                const options = i.options
-                    ? i.options.split(', ').filter(opt => opt !== 'Tiền mặt' && opt !== 'MoMo').join(' - ')
-                    : ''
-                const pName = productById.get(i.product_id)?.name || i.products?.name || '☕'
-                return {
-                    text: `${i.quantity} ${pName}${options ? ` (${options})` : ''}`,
-                    cost: getItemCost(i.product_id, i.extras || [], i.unit_cost || 0) * i.quantity,
-                    quantity: i.quantity,
-                    productId: i.product_id
-                }
-            }) : []
+            items,
         }
-    }), [baseOrders, productById, recipes, extraIngredients, ingredientCosts])
+    }), [baseOrders, productById, getItemCost])
 
     const formattedOffline = useMemo(() => {
         const todayStr = dateStringVN()
         return pendingOrders
             .filter(o => dateStringVN(new Date(o.createdAt)) === todayStr)
-            .map((o) => ({
-                id: `offline-${o.createdAt}`,
-                createdAt_key: o.createdAt,
-                total: o.total,
-                cost: o.totalCost > 0
-                    ? o.totalCost
-                    : (o.cart || o.orderItems || []).reduce((sum, i) => sum + (calculateProductCost(i.productId, i.extras || [], recipes, extraIngredients, ingredientCosts) * i.quantity), 0),
-                createdAt: o.createdAt,
-                staffName: o.staffName,
-                isOffline: true,
-                paymentMethod: o.paymentMethod || null,
-                items: o.cart
+            .map((o) => {
+                const items = o.cart
                     ? o.cart.map(i => {
                         const extras = i.extras.filter(e => e.name !== 'Tiền mặt' && e.name !== 'MoMo')
-                        const itemCost = i.unitCost > 0 ? i.unitCost : calculateProductCost(i.productId, i.extras || [], recipes, extraIngredients, ingredientCosts)
+                        const unitCost = getItemCost(i.productId, i.extras, i.unitCost || 0)
                         return {
                             text: `${i.quantity} ${i.name}${extras.length ? ` (${extras.map(e => e.name).join(' - ')})` : ''}`,
-                            cost: itemCost * i.quantity,
+                            cost: unitCost * i.quantity,
                             quantity: i.quantity,
                             productId: i.productId
                         }
                     })
                     : o.orderItems ? o.orderItems.map(i => {
-                        const itemCost = i.unitCost > 0 ? i.unitCost : calculateProductCost(i.productId, i.extras || [], recipes, extraIngredients, ingredientCosts)
-                        return { text: `${i.quantity} ${i.name}`, cost: itemCost * i.quantity, quantity: i.quantity, productId: i.productId }
+                        const unitCost = getItemCost(i.productId, i.extras, i.unitCost || 0)
+                        return { text: `${i.quantity} ${i.name}`, cost: unitCost * i.quantity, quantity: i.quantity, productId: i.productId }
                     }) : []
-            }))
-    }, [pendingOrders, recipes, extraIngredients, ingredientCosts])
+                const cost = o.totalCost > 0
+                    ? o.totalCost
+                    : items.reduce((sum, item) => sum + item.cost, 0)
+                return {
+                    id: `offline-${o.createdAt}`,
+                    createdAt_key: o.createdAt,
+                    total: o.total,
+                    cost,
+                    createdAt: o.createdAt,
+                    staffName: o.staffName,
+                    isOffline: true,
+                    paymentMethod: o.paymentMethod || null,
+                    items,
+                }
+            })
+    }, [pendingOrders, getItemCost])
 
     // Hide offline pending orders when viewing a non-today range (they only exist for today)
     const allOrders = useMemo(
