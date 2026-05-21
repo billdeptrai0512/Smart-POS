@@ -642,37 +642,26 @@ export default function DailyReportPage() {
                                         </div>
 
                                         {inventoryTab === 'report' ? (
-                                            <>
-                                                <InventoryReportCard
-                                                    ingredientsList={inventory.ingredientsList}
-                                                    isLoading={inventory.isLoadingIngredients}
-                                                    openingStock={inventory.openingStock}
-                                                    openingInputs={inventory.openingInputs}
-                                                    openingLocked={inventory.openingLocked}
-                                                    restockInputs={inventory.restockInputs}
-                                                    inventoryInputs={inventory.inventoryInputs}
-                                                    warehouseStocks={inventory.effectiveWarehouseStocks}
-                                                    ingredientUnits={Object.fromEntries(inventory.ingredientsList.map(i => [i.ingredient, i.unit]))}
-                                                    usedMap={usedMap}
-                                                    ingredientToProduct={ingredientToProduct}
-                                                    consumptionBreakdown={consumptionBreakdown}
-                                                    canUnlock={!isStaff}
-                                                    isSubmitting={isSavingShift}
-                                                    onOpeningChange={inventory.onOpeningChange}
-                                                    onOpeningLock={inventory.onOpeningLock}
-                                                    onRestockChange={inventory.onRestockChange}
-                                                    onInventoryChange={inventory.onInventoryChange}
-                                                />
-                                                {inventory.isDirty && (
-                                                    <button
-                                                        onClick={handleSaveInventory}
-                                                        disabled={isSavingShift}
-                                                        className="w-full bg-primary text-white rounded-[12px] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wider hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                                                    >
-                                                        {isSavingShift ? 'Đang lưu...' : 'Lưu báo cáo'}
-                                                    </button>
-                                                )}
-                                            </>
+                                            <InventoryReportCard
+                                                ingredientsList={inventory.ingredientsList}
+                                                isLoading={inventory.isLoadingIngredients}
+                                                openingStock={inventory.openingStock}
+                                                openingInputs={inventory.openingInputs}
+                                                openingLocked={inventory.openingLocked}
+                                                restockInputs={inventory.restockInputs}
+                                                inventoryInputs={inventory.inventoryInputs}
+                                                warehouseStocks={inventory.effectiveWarehouseStocks}
+                                                ingredientUnits={Object.fromEntries(inventory.ingredientsList.map(i => [i.ingredient, i.unit]))}
+                                                usedMap={usedMap}
+                                                ingredientToProduct={ingredientToProduct}
+                                                consumptionBreakdown={consumptionBreakdown}
+                                                canUnlock={!isStaff}
+                                                isSubmitting={isSavingShift}
+                                                onOpeningChange={inventory.onOpeningChange}
+                                                onOpeningLock={inventory.onOpeningLock}
+                                                onRestockChange={inventory.onRestockChange}
+                                                onInventoryChange={inventory.onInventoryChange}
+                                            />
                                         ) : (
                                             <InventoryRefillCard
                                                 shiftClosing={shiftClosing}
@@ -722,6 +711,22 @@ export default function DailyReportPage() {
                     </div>
                 )}
             </main>
+
+            {/* FAB: Lưu báo cáo — floating bottom-right, shown only when inventory has unsaved edits.
+                Same shape/spacing as HistoryPage's "+ Add expense" FAB. */}
+            {isTodayScope && (view === VIEW_ALL || view === VIEW_INVENTORY) && inventoryTab === 'report' && inventory.isDirty && (
+                <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
+                    <div className="flex justify-end px-4 mb-[72px] pointer-events-auto">
+                        <button
+                            onClick={handleSaveInventory}
+                            disabled={isSavingShift}
+                            className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                            {isSavingShift ? 'Đang lưu...' : 'Lưu báo cáo'}
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <HistoryFooter
                 scope={scope}
