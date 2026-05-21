@@ -190,7 +190,7 @@ function IngredientRow({
             {/* Row 3 — audit: Hao hụt | Lý thuyết | Thực tế */}
             <div className="grid grid-cols-3 gap-2 mt-2">
                 <ColumnInput
-                    label="Hao hụt"
+                    label="Chênh lệch"
                     value={haoHut != null ? haoHut : ''}
                     unit={unit}
                     disabled
@@ -256,7 +256,7 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRig
                     value={value}
                     onChange={e => onChange?.(e.target.value)}
                     disabled={disabled}
-                    className={`flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-bold text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:opacity-50 ${inputCls}`}
+                    className={`flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-bold text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${tone === 'neutral' ? 'disabled:opacity-50' : ''} ${inputCls}`}
                 />
                 <span className={`pr-1.5 text-[10px] font-medium shrink-0 ${unitCls}`}>{unit}</span>
             </div>
