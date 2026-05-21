@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { fetchTodayStats, fetchInventory, submitOrder, fetchTodayOrders, deleteOrder, fetchTodayExpenses, insertExpense, deleteExpense, fetchFixedCosts, insertFixedCost, updateFixedCost, deleteFixedCost, fetchLatestOrder, invalidateDailyContext } from '../services/orderService'
 import { upsertSession } from '../services/authService'
@@ -11,9 +11,17 @@ import { useAuth } from './AuthContext'
 import { Outlet } from 'react-router-dom'
 import { useToast } from '../hooks/useToast'
 import { STORAGE_KEYS } from '../constants/storageKeys'
+import { CartContext } from './CartContext'
+import { StatsContext } from './StatsContext'
+import { HistoryContext } from './HistoryContext'
 
 const POSContext = createContext(null)
 
+// usePOS returns the merged slice (cart + stats + history + shared) for
+// back-compat. Prefer the focused hooks in new code:
+//   useCart()    — re-renders only on cart-related changes
+//   useStats()   — re-renders only on running totals
+//   useHistory() — re-renders only on orders/expenses/fixed costs
 export function usePOS() {
     const ctx = useContext(POSContext)
     if (!ctx) throw new Error('usePOS must be used within POSProvider')
@@ -519,28 +527,49 @@ export function POSProvider() {
         }
     }
 
+    const userRole = profile?.role || 'staff'
+
+    // ---- Memoized slices ----
+    // Each useMemo's deps list only the state this slice exposes. A change to,
+    // say, todayOrders won't recompute cartValue → useCart consumers don't
+    // re-render. (Function identities are stable across renders only when their
+    // deps don't change; the original code already recreated them every render,
+    // so this is no worse and slices keep change frequencies separated.)
+    const cartValue = useMemo(() => ({
+        cart, activeCartItemId, setActiveCartItemId,
+        handleAddItem, handleRemoveCartItem, handleToggleExtra, handleToggleStickyExtra, handleConfirm,
+        enabledStickyExtraIds, setEnabledStickyExtraIds,
+        total, orderCount, hasOrder, isSubmitting,
+        lastOrder,
+        toast, showToast,
+    }), [cart, activeCartItemId, enabledStickyExtraIds, total, orderCount, hasOrder, isSubmitting, lastOrder, toast, showToast])
+
+    const statsValue = useMemo(() => ({
+        revenue, totalCost, cupsSold, inventory, isOnline,
+        retrySync,
+    }), [revenue, totalCost, cupsSold, inventory, isOnline, retrySync])
+
+    const historyValue = useMemo(() => ({
+        todayOrders, todayExpenses, isLoadingHistory,
+        handleLoadHistory, handleDeleteOrder, handleAddExpense, handleDeleteExpense, refreshTodayExpenses,
+        fixedCosts, handleLoadFixedCosts, handleAddFixedCost, handleUpdateFixedCost, handleDeleteFixedCost,
+        userRole,
+    }), [todayOrders, todayExpenses, isLoadingHistory, fixedCosts, userRole])
+
+    // Merged value for usePOS() back-compat. New code should use the focused hooks.
+    const mergedValue = useMemo(() => ({
+        ...cartValue, ...statsValue, ...historyValue,
+    }), [cartValue, statsValue, historyValue])
+
     return (
-        <POSContext.Provider value={{
-            // Cart
-            cart, activeCartItemId, setActiveCartItemId,
-            handleAddItem, handleRemoveCartItem, handleToggleExtra, handleToggleStickyExtra, handleConfirm,
-            enabledStickyExtraIds, setEnabledStickyExtraIds,
-            total, orderCount, hasOrder, isSubmitting,
-            // Dashboard
-            revenue, totalCost, cupsSold, inventory, isOnline,
-            // History
-            todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, handleDeleteOrder, handleAddExpense, handleDeleteExpense, refreshTodayExpenses,
-            lastOrder,
-            // Fixed Costs
-            fixedCosts, handleLoadFixedCosts, handleAddFixedCost, handleUpdateFixedCost, handleDeleteFixedCost,
-            // User info
-            userRole: profile?.role || 'staff',
-            // Offline sync
-            retrySync,
-            // Toast & Realtime
-            toast, showToast
-        }}>
-            <Outlet />
-        </POSContext.Provider>
+        <CartContext.Provider value={cartValue}>
+            <StatsContext.Provider value={statsValue}>
+                <HistoryContext.Provider value={historyValue}>
+                    <POSContext.Provider value={mergedValue}>
+                        <Outlet />
+                    </POSContext.Provider>
+                </HistoryContext.Provider>
+            </StatsContext.Provider>
+        </CartContext.Provider>
     )
 }
