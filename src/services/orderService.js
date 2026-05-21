@@ -2,6 +2,23 @@ import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
 import { startOfDayVN, dateStringVN } from '../utils/dateVN'
 import { STORAGE_KEYS } from '../constants/storageKeys'
+import { createCache } from './cache'
+
+// ─── Read caches ─────────────────────────────────────────────────────────────
+// reportCache: short-TTL cache for everything users see on Report / History
+// pages. 30s lets repeated tab toggles feel instant. Any write to the
+// underlying tables (orders, expenses, shift_closings, fixed_costs) calls
+// invalidateReportCache(addressId) to drop stale rows.
+//
+// historicalCache: 5 min — for past, immutable data (last week / past days).
+// These don't need quick invalidation since nothing mutates yesterday's rows.
+const reportCache = createCache(30_000)
+const historicalCache = createCache(5 * 60_000)
+
+function invalidateReportCache(addressId) {
+    if (addressId) reportCache.invalidatePrefix([addressId])
+    else reportCache.clear()
+}
 
 
 
@@ -188,6 +205,7 @@ export async function fetchTodayExpenses(addressId) {
 // - paymentMethod: 'cash' | 'transfer' — determines which pot the refill came from
 // - metadata: JSONB object for structured data like `{ items: [{ingredient, qty, price}] }`
 export async function insertExpense(name, amount, addressId = null, isFixed = false, staffName = null, isRefill = false, paymentMethod = 'cash', metadata = {}) {
+    invalidateReportCache(addressId)
     if (localRepo.isGuest()) return localRepo.insertLocalExpense({ name, amount, address_id: addressId, is_fixed: isFixed, staff_name: staffName, is_refill: isRefill, payment_method: paymentMethod, metadata })
     if (!supabase) throw new Error('No Supabase connection')
     const payload = { name, amount, is_fixed: isFixed, is_refill: isRefill, payment_method: paymentMethod, metadata }
@@ -203,8 +221,9 @@ export async function insertExpense(name, amount, addressId = null, isFixed = fa
     return data
 }
 
-// Delete an expense
+// Delete an expense — addressId unknown here so flush the whole report cache.
 export async function deleteExpense(expenseId) {
+    invalidateReportCache(null)
     if (localRepo.isGuest()) return localRepo.deleteLocalExpense(expenseId)
     if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
@@ -219,23 +238,26 @@ export async function deleteExpense(expenseId) {
 
 // Fetch all active fixed costs for an address
 export async function fetchFixedCosts(addressId) {
-    if (localRepo.isGuest()) return localRepo.fetchLocalFixedCosts(addressId)
-    if (!supabase) return []
-    const { data, error } = await supabase
-        .from('fixed_costs')
-        .select('id, name, amount, is_active, address_id, created_at')
-        .eq('address_id', addressId)
-        .eq('is_active', true)
-        .order('created_at', { ascending: true })
-    if (error) {
-        if (error.code !== '42P01') console.error('fetchFixedCosts error:', error)
-        return []
-    }
-    return data || []
+    return reportCache.through([addressId, 'fixedCosts'], async () => {
+        if (localRepo.isGuest()) return localRepo.fetchLocalFixedCosts(addressId)
+        if (!supabase) return []
+        const { data, error } = await supabase
+            .from('fixed_costs')
+            .select('id, name, amount, is_active, address_id, created_at')
+            .eq('address_id', addressId)
+            .eq('is_active', true)
+            .order('created_at', { ascending: true })
+        if (error) {
+            if (error.code !== '42P01') console.error('fetchFixedCosts error:', error)
+            return []
+        }
+        return data || []
+    })
 }
 
 // Insert a new fixed cost
 export async function insertFixedCost(name, amount, addressId) {
+    invalidateReportCache(addressId)
     if (localRepo.isGuest()) return localRepo.insertLocalFixedCost({ name, amount, address_id: addressId })
     if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase
@@ -247,8 +269,9 @@ export async function insertFixedCost(name, amount, addressId) {
     return data
 }
 
-// Update a fixed cost (name and/or amount)
+// Update a fixed cost (name and/or amount). addressId unknown — flush all.
 export async function updateFixedCost(id, updates) {
+    invalidateReportCache(null)
     if (localRepo.isGuest()) return localRepo.updateLocalFixedCost(id, updates)
     if (!supabase) throw new Error('No Supabase connection')
     const payload = { updated_at: new Date().toISOString() }
@@ -264,8 +287,9 @@ export async function updateFixedCost(id, updates) {
     return data
 }
 
-// Soft-delete a fixed cost
+// Soft-delete a fixed cost. addressId unknown — flush all.
 export async function deleteFixedCost(id) {
+    invalidateReportCache(null)
     if (localRepo.isGuest()) return localRepo.deleteLocalFixedCost(id)
     if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
@@ -748,6 +772,7 @@ export async function deleteExtraIngredient(extraId, ingredient) {
 // totalCost: tổng giá vốn của bill (snapshot)
 // costPerItem: Map<cartItemId, unitCost> giá vốn mỗi dòng (snapshot)
 export async function submitOrder(cart, total, paymentMethod = null, addressId = null, totalCost = 0, costPerItem = {}, staffName = null) {
+    invalidateReportCache(addressId)
     if (localRepo.isGuest()) {
         return localRepo.submitLocalOrder({
             total,
@@ -795,6 +820,8 @@ export async function submitOrder(cart, total, paymentMethod = null, addressId =
 
 // Bulk submit offline orders in ONE HTTP Request
 export async function bulkSubmitOrders(ordersArray) {
+    // Mixed addresses possible — flush all to be safe.
+    invalidateReportCache(null)
     if (localRepo.isGuest()) {
         ordersArray.forEach(o => localRepo.submitLocalOrder(o))
         return true
@@ -829,8 +856,9 @@ export async function bulkSubmitOrders(ordersArray) {
     return true
 }
 
-// Soft Delete an order
+// Soft Delete an order. addressId unknown — flush all.
 export async function deleteOrder(orderId, staffName = null) {
+    invalidateReportCache(null)
     if (localRepo.isGuest()) return localRepo.deleteLocalOrder(orderId, staffName)
     if (!supabase) throw new Error('No Supabase connection')
 
@@ -848,6 +876,7 @@ export async function deleteOrder(orderId, staffName = null) {
 
 // Insert a shift closing record
 export async function insertShiftClosing(data) {
+    invalidateReportCache(data?.address_id)
     if (localRepo.isGuest()) return localRepo.upsertLocalShiftClosing(data)
     if (!supabase) throw new Error('No Supabase connection')
     const { data: row, error } = await supabase
@@ -861,6 +890,7 @@ export async function insertShiftClosing(data) {
 
 // Update an existing shift closing record
 export async function updateShiftClosing(id, data) {
+    invalidateReportCache(data?.address_id || null)
     if (localRepo.isGuest()) return localRepo.upsertLocalShiftClosing(data)
     if (!supabase) throw new Error('No Supabase connection')
     const { data: row, error } = await supabase
@@ -943,49 +973,53 @@ export async function fetchYesterdayExpenses(addressId) {
 
 // Fetch orders within a date range for an address (same structure as fetchTodayOrders)
 export async function fetchOrdersByRange(addressId, start, end) {
-    if (localRepo.isGuest()) {
-        const sMs = start.getTime(), eMs = end.getTime()
-        return localRepo.fetchAllLocalOrders(addressId)
-            .filter(o => {
-                const t = new Date(o.created_at).getTime()
-                return t >= sMs && t <= eMs
-            })
-            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    }
-    if (!supabase) return []
-    let query = supabase
-        .from('orders')
-        .select(`id, total, total_cost, payment_method, staff_name, created_at, deleted_at, deleted_by,
-            order_items(quantity, options, product_id, unit_cost, extra_ids, products(name))`)
-        .gte('created_at', start.toISOString())
-        .lte('created_at', end.toISOString())
-    if (addressId) query = query.eq('address_id', addressId)
-    const { data, error } = await query.order('created_at', { ascending: false })
-    if (error) { console.error('fetchOrdersByRange error:', error); return [] }
-    return data || []
+    return reportCache.through([addressId, 'ordersByRange', start.toISOString(), end.toISOString()], async () => {
+        if (localRepo.isGuest()) {
+            const sMs = start.getTime(), eMs = end.getTime()
+            return localRepo.fetchAllLocalOrders(addressId)
+                .filter(o => {
+                    const t = new Date(o.created_at).getTime()
+                    return t >= sMs && t <= eMs
+                })
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        }
+        if (!supabase) return []
+        let query = supabase
+            .from('orders')
+            .select(`id, total, total_cost, payment_method, staff_name, created_at, deleted_at, deleted_by,
+                order_items(quantity, options, product_id, unit_cost, extra_ids, products(name))`)
+            .gte('created_at', start.toISOString())
+            .lte('created_at', end.toISOString())
+        if (addressId) query = query.eq('address_id', addressId)
+        const { data, error } = await query.order('created_at', { ascending: false })
+        if (error) { console.error('fetchOrdersByRange error:', error); return [] }
+        return data || []
+    })
 }
 
 // Fetch expenses within a date range
 export async function fetchExpensesByRange(addressId, start, end) {
-    if (localRepo.isGuest()) {
-        const sMs = start.getTime(), eMs = end.getTime()
-        return localRepo.fetchAllLocalExpenses(addressId)
-            .filter(x => {
-                const t = new Date(x.created_at).getTime()
-                return t >= sMs && t <= eMs
-            })
-            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    }
-    if (!supabase) return []
-    let query = supabase
-        .from('expenses')
-        .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, metadata, created_at, address_id')
-        .gte('created_at', start.toISOString())
-        .lte('created_at', end.toISOString())
-    if (addressId) query = query.eq('address_id', addressId)
-    const { data, error } = await query.order('created_at', { ascending: false })
-    if (error) { console.error('fetchExpensesByRange error:', error); return [] }
-    return data || []
+    return reportCache.through([addressId, 'expensesByRange', start.toISOString(), end.toISOString()], async () => {
+        if (localRepo.isGuest()) {
+            const sMs = start.getTime(), eMs = end.getTime()
+            return localRepo.fetchAllLocalExpenses(addressId)
+                .filter(x => {
+                    const t = new Date(x.created_at).getTime()
+                    return t >= sMs && t <= eMs
+                })
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        }
+        if (!supabase) return []
+        let query = supabase
+            .from('expenses')
+            .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, metadata, created_at, address_id')
+            .gte('created_at', start.toISOString())
+            .lte('created_at', end.toISOString())
+        if (addressId) query = query.eq('address_id', addressId)
+        const { data, error } = await query.order('created_at', { ascending: false })
+        if (error) { console.error('fetchExpensesByRange error:', error); return [] }
+        return data || []
+    })
 }
 
 // Fetch shift closings within a date range (for summing cash/transfer)
@@ -1082,84 +1116,88 @@ export async function fetchIngredientCostsWithUnits(addressId) {
 
 // Fetch order items for the past `days` fully completed days (excluding today)
 export async function fetchPastDaysOrderItems(addressId, days = 7) {
-    if (!supabase) return []
-    const endDate = startOfDayVN()
+    return historicalCache.through([addressId, 'pastDaysItems', days, dateStringVN()], async () => {
+        if (!supabase) return []
+        const endDate = startOfDayVN()
 
-    const startDate = new Date(endDate)
-    startDate.setDate(startDate.getDate() - days)
+        const startDate = new Date(endDate)
+        startDate.setDate(startDate.getDate() - days)
 
-    let query = supabase
-        .from('orders')
-        .select(`
-            order_items (
-                quantity,
-                product_id,
-                extra_ids
-            )
-        `)
-        .is('deleted_at', null)
-        .gte('created_at', startDate.toISOString())
-        .lt('created_at', endDate.toISOString())
+        let query = supabase
+            .from('orders')
+            .select(`
+                order_items (
+                    quantity,
+                    product_id,
+                    extra_ids
+                )
+            `)
+            .is('deleted_at', null)
+            .gte('created_at', startDate.toISOString())
+            .lt('created_at', endDate.toISOString())
 
-    if (addressId) query = query.eq('address_id', addressId)
+        if (addressId) query = query.eq('address_id', addressId)
 
-    const { data, error } = await query
-    if (error) {
-        console.error('fetchPastDaysOrderItems error:', error)
-        return []
-    }
-
-    // Flatten order items
-    const allItems = []
-    data.forEach(o => {
-        if (o.order_items) {
-            o.order_items.forEach(i => allItems.push(i))
+        const { data, error } = await query
+        if (error) {
+            console.error('fetchPastDaysOrderItems error:', error)
+            return []
         }
+
+        // Flatten order items
+        const allItems = []
+        data.forEach(o => {
+            if (o.order_items) {
+                o.order_items.forEach(i => allItems.push(i))
+            }
+        })
+        return allItems
     })
-    return allItems
 }
 
 // Fetch order items for exactly "same day last week" (for tomorrow's prediction, so 6 days ago)
 export async function fetchLastWeekSameDayOrderItems(addressId) {
-    if (!supabase) return []
-    // If today is Tuesday, tomorrow is Wednesday. We want to predict tomorrow using Today and Last Wednesday.
-    // Last Wednesday is Today - 6 days.
-    const today = startOfDayVN()
+    return historicalCache.through([addressId, 'lastWeekSameDay', dateStringVN()], async () => {
+        if (!supabase) return []
+        // If today is Tuesday, tomorrow is Wednesday. We want to predict tomorrow using Today and Last Wednesday.
+        // Last Wednesday is Today - 6 days.
+        const today = startOfDayVN()
 
-    const targetDate = new Date(today)
-    targetDate.setDate(targetDate.getDate() - 6)
-    
-    const nextDate = new Date(targetDate)
-    nextDate.setDate(nextDate.getDate() + 1)
+        const targetDate = new Date(today)
+        targetDate.setDate(targetDate.getDate() - 6)
 
-    let query = supabase
-        .from('orders')
-        .select(`
-            order_items (
-                quantity,
-                product_id,
-                extra_ids
-            )
-        `)
-        .is('deleted_at', null)
-        .gte('created_at', targetDate.toISOString())
-        .lt('created_at', nextDate.toISOString())
+        const nextDate = new Date(targetDate)
+        nextDate.setDate(nextDate.getDate() + 1)
 
-    if (addressId) query = query.eq('address_id', addressId)
+        let query = supabase
+            .from('orders')
+            .select(`
+                order_items (
+                    quantity,
+                    product_id,
+                    extra_ids
+                )
+            `)
+            .is('deleted_at', null)
+            .gte('created_at', targetDate.toISOString())
+            .lt('created_at', nextDate.toISOString())
 
-    const { data, error } = await query
-    if (error) {
-        console.error('fetchLastWeekSameDayOrderItems error:', error)
-        return []
-    }
+        if (addressId) query = query.eq('address_id', addressId)
 
-    const allItems = []
-    data.forEach(o => {
-        if (o.order_items) {
-            o.order_items.forEach(i => allItems.push(i))
+        const { data, error } = await query
+        if (error) {
+            console.error('fetchLastWeekSameDayOrderItems error:', error)
+            return []
         }
+
+        const allItems = []
+        data.forEach(o => {
+            if (o.order_items) {
+                o.order_items.forEach(i => allItems.push(i))
+            }
+        })
+        return allItems
     })
-    return allItems
 }
 
 // ---- Ingredient Stock (warehouse + counter) ----
@@ -1499,104 +1537,95 @@ export async function fetchIngredientRestockHistory(addressId, ingredient, fromD
 }
 
 // ---- Reports (Daily / Range) ----
-// In-memory TTL cache: spares the RPC when the manager toggles between Báo cáo / Nhật ký
-// tabs (shared footer). 30 s is short enough that user-driven changes appear soon, long
-// enough that quick tab toggles feel instant. Invalidated explicitly when relevant state
-// mutates (shift_closing insert/update, expense add/delete) via invalidateDailyContext().
-const _dailyContextCache = new Map() // addressId → { data, t }
-const DAILY_CONTEXT_TTL_MS = 30_000
-
+// Backed by the shared reportCache so toggling between Báo cáo / Nhật ký tabs
+// feels instant. Cache invalidates on any write to the underlying tables
+// via invalidateReportCache() — see mutation functions above. Existing call
+// sites still use `invalidateDailyContext(addressId)` which now forwards.
 export function invalidateDailyContext(addressId) {
-    if (addressId) _dailyContextCache.delete(addressId)
-    else _dailyContextCache.clear()
+    invalidateReportCache(addressId)
 }
 
 export async function fetchDailyReportContext(addressId) {
     if (!addressId) return {}
-    const cached = _dailyContextCache.get(addressId)
-    if (cached && Date.now() - cached.t < DAILY_CONTEXT_TTL_MS) {
-        return cached.data
-    }
-
-    let data
-    if (localRepo.isGuest()) {
-        const todayStr = dateStringVN()
-        const yesterday = new Date(startOfDayVN().getTime() - 86_400_000)
-        const yesterdayStr = dateStringVN(yesterday)
-
-        data = {
-            shift_closing: localRepo.fetchLocalShiftClosing(addressId, todayStr) || null,
-            yesterday_closing: localRepo.fetchLocalShiftClosing(addressId, yesterdayStr) || localRepo.fetchLocalYesterdayShiftClosing(addressId) || null,
-            yesterday_orders: localRepo.fetchLocalOrders(addressId, yesterdayStr),
-            yesterday_expenses: localRepo.fetchLocalExpenses(addressId, yesterdayStr)
+    return reportCache.through([addressId, 'dailyReportContext'], async () => {
+        if (localRepo.isGuest()) {
+            const todayStr = dateStringVN()
+            const yesterday = new Date(startOfDayVN().getTime() - 86_400_000)
+            const yesterdayStr = dateStringVN(yesterday)
+            return {
+                shift_closing: localRepo.fetchLocalShiftClosing(addressId, todayStr) || null,
+                yesterday_closing: localRepo.fetchLocalShiftClosing(addressId, yesterdayStr) || localRepo.fetchLocalYesterdayShiftClosing(addressId) || null,
+                yesterday_orders: localRepo.fetchLocalOrders(addressId, yesterdayStr),
+                yesterday_expenses: localRepo.fetchLocalExpenses(addressId, yesterdayStr)
+            }
         }
-    } else if (!supabase) {
-        data = {}
-    } else {
-        const { data: rpcData, error } = await supabase.rpc('get_daily_report_context', { p_address_id: addressId })
+        if (!supabase) return {}
+        const { data, error } = await supabase.rpc('get_daily_report_context', { p_address_id: addressId })
         if (error) throw error
-        data = rpcData || {}
-    }
-    _dailyContextCache.set(addressId, { data, t: Date.now() })
-    return data
+        return data || {}
+    })
 }
 
 export async function fetchReportByDate(addressId, dateStr) {
-    if (localRepo.isGuest()) {
-        const targetDateStr = dateStringVN(new Date(dateStr))
-        const targetDate = startOfDayVN(new Date(dateStr))
+    return reportCache.through([addressId, 'reportByDate', dateStr], async () => {
+        if (localRepo.isGuest()) {
+            const targetDateStr = dateStringVN(new Date(dateStr))
+            const targetDate = startOfDayVN(new Date(dateStr))
 
-        const yesterday = new Date(targetDate.getTime() - 86_400_000)
-        const yesterdayStr = dateStringVN(yesterday)
+            const yesterday = new Date(targetDate.getTime() - 86_400_000)
+            const yesterdayStr = dateStringVN(yesterday)
 
-        return {
-            shift_closing: localRepo.fetchLocalShiftClosing(addressId, targetDateStr) || null,
-            yesterday_closing: localRepo.fetchLocalShiftClosing(addressId, yesterdayStr) || null,
-            yesterday_orders: localRepo.fetchLocalOrders(addressId, yesterdayStr),
-            yesterday_expenses: localRepo.fetchLocalExpenses(addressId, yesterdayStr),
-            target_orders: localRepo.fetchLocalOrders(addressId, targetDateStr),
-            target_expenses: localRepo.fetchLocalExpenses(addressId, targetDateStr)
+            return {
+                shift_closing: localRepo.fetchLocalShiftClosing(addressId, targetDateStr) || null,
+                yesterday_closing: localRepo.fetchLocalShiftClosing(addressId, yesterdayStr) || null,
+                yesterday_orders: localRepo.fetchLocalOrders(addressId, yesterdayStr),
+                yesterday_expenses: localRepo.fetchLocalExpenses(addressId, yesterdayStr),
+                target_orders: localRepo.fetchLocalOrders(addressId, targetDateStr),
+                target_expenses: localRepo.fetchLocalExpenses(addressId, targetDateStr)
+            }
         }
-    }
-    if (!supabase) return {}
-    const { data, error } = await supabase.rpc('get_report_by_date', { p_address_id: addressId, p_date: dateStr })
-    if (error) throw error
-    return data || {}
+        if (!supabase) return {}
+        const { data, error } = await supabase.rpc('get_report_by_date', { p_address_id: addressId, p_date: dateStr })
+        if (error) throw error
+        return data || {}
+    })
 }
 
 export async function fetchReportByRange(addressId, targetStart, targetEnd, prevStart, prevEnd) {
-    if (localRepo.isGuest()) {
-        const allOrders = localRepo.fetchAllLocalOrders(addressId)
-        const allExpenses = localRepo.fetchAllLocalExpenses(addressId)
-        const allClosings = localRepo.fetchAllLocalShiftClosings(addressId)
-        
-        const tS = new Date(targetStart).getTime()
-        const tE = new Date(targetEnd).getTime()
-        const pS = new Date(prevStart).getTime()
-        const pE = new Date(prevEnd).getTime()
+    return reportCache.through([addressId, 'reportByRange', targetStart, targetEnd, prevStart, prevEnd], async () => {
+        if (localRepo.isGuest()) {
+            const allOrders = localRepo.fetchAllLocalOrders(addressId)
+            const allExpenses = localRepo.fetchAllLocalExpenses(addressId)
+            const allClosings = localRepo.fetchAllLocalShiftClosings(addressId)
 
-        const filterRange = (list, start, end) => list.filter(x => {
-            const t = new Date(x.created_at).getTime()
-            return t >= start && t <= end && x.address_id === addressId
-        })
+            const tS = new Date(targetStart).getTime()
+            const tE = new Date(targetEnd).getTime()
+            const pS = new Date(prevStart).getTime()
+            const pE = new Date(prevEnd).getTime()
 
-        return {
-            target_orders: filterRange(allOrders, tS, tE),
-            target_expenses: filterRange(allExpenses, tS, tE),
-            target_shift_closings: filterRange(allClosings, tS, tE),
-            prev_orders: filterRange(allOrders, pS, pE),
-            prev_expenses: filterRange(allExpenses, pS, pE),
-            prev_shift_closings: filterRange(allClosings, pS, pE)
+            const filterRange = (list, start, end) => list.filter(x => {
+                const t = new Date(x.created_at).getTime()
+                return t >= start && t <= end && x.address_id === addressId
+            })
+
+            return {
+                target_orders: filterRange(allOrders, tS, tE),
+                target_expenses: filterRange(allExpenses, tS, tE),
+                target_shift_closings: filterRange(allClosings, tS, tE),
+                prev_orders: filterRange(allOrders, pS, pE),
+                prev_expenses: filterRange(allExpenses, pS, pE),
+                prev_shift_closings: filterRange(allClosings, pS, pE)
+            }
         }
-    }
-    if (!supabase) return {}
-    const { data, error } = await supabase.rpc('get_report_by_range', {
-        p_address_id: addressId,
-        p_target_start: targetStart,
-        p_target_end: targetEnd,
-        p_prev_start: prevStart,
-        p_prev_end: prevEnd
+        if (!supabase) return {}
+        const { data, error } = await supabase.rpc('get_report_by_range', {
+            p_address_id: addressId,
+            p_target_start: targetStart,
+            p_target_end: targetEnd,
+            p_prev_start: prevStart,
+            p_prev_end: prevEnd
+        })
+        if (error) throw error
+        return data || {}
     })
-    if (error) throw error
-    return data || {}
 }
