@@ -6,9 +6,9 @@ import { calculateProductCost } from '../utils'
 import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses, sumFixedCosts } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import { fetchDailyReportContext, fetchReportByDate, fetchReportByRange } from '../services/orderService'
-import { startOfDayVN, endOfDayVN, dateStringVN, isSameDayVN } from '../utils/dateVN'
+import { startOfDayVN, dateStringVN, isSameDayVN } from '../utils/dateVN'
+import { calcRangeWithPrev, offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
-import { getDateRange } from '../components/DailyReportPage/ReportHeader'
 import SalesCard from '../components/DailyReportPage/SalesCard'
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
@@ -77,27 +77,7 @@ export default function DailyReportPage() {
 
     // Range calculations
     const { rangeStart, rangeEnd, prevStart, prevEnd } = useMemo(() => {
-        if (scope === 'day') {
-            const target = new Date()
-            target.setDate(target.getDate() + offset)
-            const start = startOfDayVN(target)
-            const end = endOfDayVN(target)
-            const pStart = new Date(start)
-            pStart.setDate(pStart.getDate() - 1)
-            const pEnd = new Date(end)
-            pEnd.setDate(pEnd.getDate() - 1)
-            return { rangeStart: start, rangeEnd: end, prevStart: pStart, prevEnd: pEnd }
-        }
-        if (scope === 'custom' && customRange?.startISO && customRange?.endISO) {
-            const start = new Date(`${customRange.startISO}T00:00:00+07:00`)
-            const end = new Date(`${customRange.endISO}T23:59:59.999+07:00`)
-            const diff = end.getTime() - start.getTime()
-            const pStart = new Date(start.getTime() - diff - 86400000)
-            const pEnd = new Date(end.getTime() - diff - 86400000)
-            return { rangeStart: start, rangeEnd: end, prevStart: pStart, prevEnd: pEnd }
-        }
-        const { start, end } = getDateRange(scope, offset)
-        const { start: pStart, end: pEnd } = getDateRange(scope, offset - 1)
+        const { start, end, prevStart: pStart, prevEnd: pEnd } = calcRangeWithPrev(scope, offset, customRange)
         return { rangeStart: start, rangeEnd: end, prevStart: pStart, prevEnd: pEnd }
     }, [scope, offset, customRange])
 
@@ -158,12 +138,7 @@ export default function DailyReportPage() {
 
     // Header date logic
     const todayISO = dateStringVN(new Date())
-    const dayCustomDate = useMemo(() => {
-        if (scope !== 'day' || offset === 0) return null
-        const d = new Date()
-        d.setDate(d.getDate() + offset)
-        return dateStringVN(d)
-    }, [scope, offset])
+    const dayCustomDate = useMemo(() => dayCustomDateOf(scope, offset), [scope, offset])
 
     const dayInputValue = dayCustomDate || todayISO
     const canGoForwardDay = dayInputValue < todayISO
@@ -183,9 +158,7 @@ export default function DailyReportPage() {
 
     const setOffsetFromISO = (iso) => {
         if (!iso || iso >= todayISO) { setOffset(0); setHasManualPick(false); return }
-        const target = new Date(`${iso}T00:00:00+07:00`)
-        const today = startOfDayVN()
-        setOffset(Math.round((target - today) / 86400000))
+        setOffset(offsetFromISO(iso, todayISO))
     }
     const handleScopeChange = (next) => { setOffset(0); setScope(next); setHasManualPick(false) }
     const handleManualDatePick = (iso) => { setHasManualPick(true); setOffsetFromISO(iso) }

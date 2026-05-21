@@ -3,8 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { formatVNDInput, parseVNDInput, calculateProductCost } from '../utils'
 import { getPendingOrders, removePendingOrder } from '../hooks/useOfflineSync'
 import { fetchTodayShiftClosing, fetchExpensesByRange, fetchOrdersByRange } from '../services/orderService'
-import { getDateRange } from '../components/DailyReportPage/ReportHeader'
-import { startOfDayVN, endOfDayVN, dateStringVN, isSameDayVN } from '../utils/dateVN'
+import { dateStringVN, isSameDayVN } from '../utils/dateVN'
+import { calcRangeWithLabel, offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
 import { useAddress } from '../contexts/AddressContext'
 import { useProducts } from '../contexts/ProductContext'
 import { usePOS } from '../contexts/POSContext'
@@ -99,22 +99,8 @@ export default function HistoryPage() {
     const rangeOrdersCache = useRef(new Map())
 
     const { rangeStart, rangeEnd, rangeLabel } = useMemo(() => {
-        const fmt = d => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
-        if (scope === 'day') {
-            const target = new Date()
-            target.setDate(target.getDate() + offset)
-            const start = startOfDayVN(target)
-            const end = endOfDayVN(target)
-            return { rangeStart: start, rangeEnd: end, rangeLabel: `${fmt(start)}/${start.getFullYear()}` }
-        }
-        if (scope === 'custom' && customRange?.startISO && customRange?.endISO) {
-            // ISO strings are already in VN date form (from input type=date)
-            const start = new Date(`${customRange.startISO}T00:00:00+07:00`)
-            const end = new Date(`${customRange.endISO}T23:59:59.999+07:00`)
-            return { rangeStart: start, rangeEnd: end, rangeLabel: `${fmt(start)} – ${fmt(end)}` }
-        }
-        const { start, end } = getDateRange(scope, offset)
-        return { rangeStart: start, rangeEnd: end, rangeLabel: `${fmt(start)} – ${fmt(end)}` }
+        const { start, end, label } = calcRangeWithLabel(scope, offset, customRange)
+        return { rangeStart: start, rangeEnd: end, rangeLabel: label }
     }, [scope, offset, customRange])
 
     const canGoForward = offset < 0
@@ -150,20 +136,13 @@ export default function HistoryPage() {
 
     // ─── Day-mode date picker ─────────────────────────────────────────
     const todayISO = getLocalISO(new Date())
-    const dayCustomDate = useMemo(() => {
-        if (scope !== 'day' || offset === 0) return null
-        const d = new Date()
-        d.setDate(d.getDate() + offset)
-        return getLocalISO(d)
-    }, [scope, offset])
+    const dayCustomDate = useMemo(() => dayCustomDateOf(scope, offset), [scope, offset])
     const dayInputValue = dayCustomDate || todayISO
     const canGoForwardDay = dayInputValue < todayISO
 
     const setOffsetFromISO = (iso) => {
         if (!iso || iso >= todayISO) { setOffset(0); setHasManualPick(false); return }
-        const target = new Date(`${iso}T00:00:00+07:00`)
-        const today = startOfDayVN()
-        setOffset(Math.round((target - today) / 86400000))
+        setOffset(offsetFromISO(iso, todayISO))
     }
     // Calendar pick: flag manual so the "→ ngày" end chip can appear.
     const handleManualDatePick = (iso) => {
