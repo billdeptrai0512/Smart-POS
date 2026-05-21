@@ -34,11 +34,12 @@ export default function InventoryRefillCard({
     ingredientUnits = {},
     isPastDate = false,
     canAccessAudit = true,   // false khi tier === 'basic' (Pro feature)
+    forcedTab,               // when set, lock activeTab + hide tab nav (used by /daily-report inventory "Bổ sung" sub-tab)
 }) {
     const { ingredientConfigs = [] } = useProducts() || {};
     const [lastWeekItems, setLastWeekItems] = useState([]);
     const [isLoadingPast, setIsLoadingPast] = useState(false);
-    const [activeTab, setActiveTab] = useState('audit');
+    const [activeTab, setActiveTab] = useState(forcedTab || 'audit');
     const [expandedRows, setExpandedRows] = useState({});
     const [isLossExpanded, setIsLossExpanded] = useState(false);
     const [showAuditUpsell, setShowAuditUpsell] = useState(false);
@@ -274,8 +275,8 @@ export default function InventoryRefillCard({
 
     return (
         <div className="bg-surface rounded-[20px] p-4 border border-border/60 shadow-sm flex flex-col gap-3">
-            {/* Header & Tabs */}
-            {!isPastDate ? (
+            {/* Header & Tabs — hidden when forcedTab pins the view (parent already owns its own tab nav). */}
+            {!forcedTab && !isPastDate ? (
                 <div className="flex flex-col gap-3 border-b border-border/40 pb-3">
                     <div className="flex p-1 bg-surface-light rounded-[12px] gap-1 w-full">
                         {canAccessAudit ? (
@@ -303,13 +304,13 @@ export default function InventoryRefillCard({
                         </button>
                     </div>
                 </div>
-            ) : (
+            ) : !forcedTab && isPastDate ? (
                 <div className="flex flex-col gap-3 border-b border-border/40 pb-3">
                     <div className="flex items-center justify-center w-full">
                         <span className="text-[13px] font-bold text-text uppercase tracking-widest opacity-80">Hao hụt trong ngày</span>
                     </div>
                 </div>
-            )}
+            ) : null}
 
             {/* Audit Tab */}
             {activeTab === 'audit' && (

@@ -402,14 +402,14 @@ export default function RangeReportPage() {
                 )}
             </main>
 
-            {/* FAB: Cập nhật báo cáo — same style as "+ Thêm chi phí" in ExpensePanel */}
+            {/* FAB: edit today's report — only meaningful on the current period. */}
             <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
                 <div className="flex justify-end px-4 mb-[72px] pointer-events-auto">
                     <button
-                        onClick={() => navigate('/shift-closing')}
+                        onClick={() => navigate('/daily-report', { state: { initialView: 'inventory' } })}
                         className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
                     >
-                        Cập nhật báo cáo
+                        Lưu báo cáo
                     </button>
                 </div>
             </div>

@@ -19,7 +19,6 @@ const RecipeMenuPage = lazy(() => import('./pages/RecipeMenuPage'))
 const RecipeIngredientPage = lazy(() => import('./pages/RecipeIngredientPage'))
 const DailyReportPage = lazy(() => import('./pages/DailyReportPage'))
 const RangeReportPage = lazy(() => import('./pages/RangeReportPage'))
-const ShiftClosingPage = lazy(() => import('./pages/ShiftClosingPage'))
 const IngredientManagementPage = lazy(() => import('./pages/IngredientManagementPage'))
 const IngredientDetailPage = lazy(() => import('./pages/IngredientDetailPage'))
 
@@ -77,7 +76,7 @@ export default function App() {
                       <Route element={<POSProvider />}>
                         <Route path="/pos" element={<POSPage />} />
                         <Route path="/history" element={<HistoryPage />} />
-                        <Route path="/shift-closing" element={<ShiftClosingPage />} />
+                        <Route path="/shift-closing" element={<Navigate to="/daily-report" replace state={{ initialView: 'inventory' }} />} />
                         <Route path="/daily-report" element={<DailyReportPage />} />
                         <Route path="/range-report" element={<RangeReportPage />} />
                         <Route path="/expenses" element={<Navigate to="/history" replace />} />

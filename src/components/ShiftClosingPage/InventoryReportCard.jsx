@@ -1,4 +1,5 @@
-import { AlertTriangle } from 'lucide-react'
+import { useState } from 'react'
+import { AlertTriangle, ChevronDown } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils'
 import { formatPackedQty } from '../../utils/inventory'
 
@@ -20,6 +21,7 @@ export default function InventoryReportCard({
     ingredientUnits = {},
     usedMap = {},            // ingredient → todayEstimatedConsumption qty
     ingredientToProduct = {}, // ingredient → { amountPerCup, productName } (cups equiv for Trạng thái)
+    consumptionBreakdown = {}, // ingredient → { [variantKey]: { name, qty, totalAmount } } for expand-on-tap
     canUnlock, isSubmitting,
     onOpeningChange, onOpeningLock, onRestockChange, onInventoryChange,
 }) {
@@ -48,6 +50,7 @@ export default function InventoryReportCard({
                     warehouseAvailable={warehouseStocks[ing.ingredient]}
                     used={lookupByLabel(ing.ingredient, usedMap)}
                     productRef={ingredientToProduct[ing.ingredient]}
+                    breakdown={lookupByLabel(ing.ingredient, consumptionBreakdown) || null}
                     canUnlock={canUnlock}
                     isSubmitting={isSubmitting}
                     onOpeningChange={onOpeningChange}
@@ -75,10 +78,15 @@ function lookupByLabel(ingredient, map) {
 
 function IngredientRow({
     ing, ingredientUnits, openingValue, openingFallback, isLocked, restockValue, inventoryValue,
-    warehouseAvailable, used, productRef,
+    warehouseAvailable, used, productRef, breakdown,
     isSubmitting,
     onOpeningChange, onRestockChange, onInventoryChange,
 }) {
+    // Tap Sử dụng to expand the per-recipe breakdown (which products consumed this ingredient today).
+    const [expanded, setExpanded] = useState(false)
+    const hasBreakdown = breakdown && Object.keys(breakdown).length > 0
+    const toggleExpanded = () => hasBreakdown && setExpanded(e => !e)
+
     const unit = getIngredientUnit(ing.ingredient, ing.unit, ingredientUnits)
     const packSize = Number(ing.pack_size || 0)
     const packUnit = ing.pack_unit
@@ -151,7 +159,17 @@ function IngredientRow({
                     onChange={(v) => onOpeningChange(ing.ingredient, v)}
                     locked={isLocked}
                 />
-                <ColumnInput label="Sử dụng" value={usedNum} unit={unit} disabled />
+                <ColumnInput
+                    label="Sử dụng"
+                    value={usedNum}
+                    unit={unit}
+                    disabled
+                    onLabelClick={hasBreakdown ? toggleExpanded : undefined}
+                    labelTrailing={hasBreakdown
+                        ? <ChevronDown size={11} className={`text-text-dim shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                        : null
+                    }
+                />
                 <ColumnInput
                     label="+"
                     value={inventoryValue ?? ''}
@@ -175,6 +193,22 @@ function IngredientRow({
                 />
             </div>
 
+            {expanded && hasBreakdown && (
+                <div className="mt-2 px-3 py-2 bg-surface-light rounded-[10px] border border-border/40 flex flex-col gap-1">
+                    {Object.values(breakdown)
+                        .sort((a, b) => b.totalAmount - a.totalAmount)
+                        .map((entry, i) => (
+                            <div key={i} className="flex items-center justify-between">
+                                <span className="text-[11px] text-text-secondary truncate flex-1">{entry.name}</span>
+                                <span className="text-[11px] font-bold text-text-dim tabular-nums shrink-0 ml-2">
+                                    {entry.qty} ly × {Math.round(entry.totalAmount / entry.qty * 10) / 10} = <span className="text-text font-black">{entry.totalAmount}</span>
+                                </span>
+                            </div>
+                        ))
+                    }
+                </div>
+            )}
+
             {restockOverflow && (
                 <div className="flex items-start gap-1.5 mt-1.5 text-[10px] font-bold text-danger leading-tight">
                     <AlertTriangle size={11} className="mt-[1px] shrink-0" />
@@ -188,7 +222,7 @@ function IngredientRow({
     )
 }
 
-function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRight, overflow, tone = 'neutral' }) {
+function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRight, overflow, tone = 'neutral', onLabelClick, labelTrailing }) {
     // tone overrides the default disabled coloring for read-only diff cells.
     const toneMap = {
         good: { wrap: 'bg-success/8 border border-success/30', input: 'text-success', unit: 'text-success/70' },
@@ -210,10 +244,15 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRig
 
     return (
         <div className="flex flex-col">
-            <div className="flex items-center justify-between mb-1">
-                <span className="text-[9px] font-black text-text-dim uppercase">{label}</span>
-                {headerRight}
-            </div>
+            <button
+                type="button"
+                onClick={onLabelClick}
+                disabled={!onLabelClick}
+                className="flex items-center justify-center gap-1 mb-1 disabled:cursor-default"
+            >
+                <span className={`text-[9px] font-black uppercase ${onLabelClick ? 'text-text' : 'text-text-dim'}`}>{label}</span>
+                {labelTrailing || headerRight}
+            </button>
             <div className={`flex items-center rounded-[10px] overflow-hidden transition-all gap-1 ${wrapCls}`}>
                 <input
                     type="number"
@@ -240,7 +279,7 @@ function StatusBox({ label, text, tone }) {
     }[tone] || ''
     return (
         <div className="flex flex-col">
-            <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center justify-center mb-1">
                 <span className="text-[9px] font-black text-text-dim uppercase">{label}</span>
             </div>
             <div className={`rounded-[10px] py-1.5 px-2 text-[13px] font-bold text-center border ${toneCls}`}>

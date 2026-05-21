@@ -7,6 +7,8 @@ import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpense
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import { fetchDailyReportContext, fetchReportByDate, fetchReportByRange } from '../services/orderService'
 import { useShiftClosingSave } from '../hooks/useShiftClosingSave'
+import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown } from '../utils/inventory'
 import { startOfDayVN, dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { calcRangeWithPrev, offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
@@ -14,6 +16,7 @@ import SalesCard from '../components/DailyReportPage/SalesCard'
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
+import InventoryReportCard from '../components/ShiftClosingPage/InventoryReportCard'
 import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY } from '../components/DailyReportPage/ReportViewFilter'
 import HistoryFooter from '../components/HistoryPage/HistoryFooter'
 import { useAddress } from '../contexts/AddressContext'
@@ -74,6 +77,11 @@ export default function DailyReportPage() {
     const [transferInput, setTransferInput] = useState('')
     const [cashDirty, setCashDirty] = useState(false)
     const { save: saveShiftClosing, isSaving: isSavingShift } = useShiftClosingSave(selectedAddress?.id)
+
+    // Inventory editor (today scope only). All input state + warehouse fetch live in
+    // the hook so DailyReportPage stays focused on render orchestration.
+    const inventory = useShiftInventoryState(selectedAddress?.id, selectedAddress?.ingredient_sort_order)
+    const [inventoryTab, setInventoryTab] = useState('report') // 'report' | 'refill'
 
     useEffect(() => {
         if (todayOrders.length === 0 && !isLoadingHistory) handleLoadHistory()
@@ -357,6 +365,59 @@ export default function DailyReportPage() {
         return calculateSyncedCashFlow(scope === 'day', shiftClosing, apiShiftClosings, displayOrders, offlineToday)
     }, [scope, shiftClosing, apiShiftClosings, displayOrders, offlineToday])
 
+    // Inventory audit support: estimated consumption per ingredient + cups-equivalent
+    // product map + per-product breakdown for expand-on-tap.
+    const todayOrderItems = useMemo(() => {
+        if (!isTodayScope) return []
+        const items = []
+        todayOrders.filter(o => !o.deleted_at && !o.deletedAt).forEach(o => {
+            (o.order_items || []).forEach(i => items.push({
+                productId: i.product_id || i.productId,
+                qty: i.quantity || i.qty || 1,
+                extras: i.extra_ids ? i.extra_ids.map(id => ({ id })) : (i.extras || [])
+            }))
+        })
+        offlineToday.forEach(o => {
+            (o.cart || o.orderItems || []).forEach(i => items.push({
+                productId: i.productId,
+                qty: i.quantity || 1,
+                extras: i.extras || []
+            }))
+        })
+        return items
+    }, [isTodayScope, todayOrders, offlineToday])
+
+    const usedMap = useMemo(
+        () => calculateEstimatedConsumption(todayOrderItems, recipes, extraIngredients),
+        [todayOrderItems, recipes, extraIngredients]
+    )
+
+    const consumptionBreakdown = useMemo(
+        () => calculateConsumptionBreakdown(todayOrderItems, recipes, extraIngredients, products, productExtras),
+        [todayOrderItems, recipes, extraIngredients, products, productExtras]
+    )
+
+    const ingredientToProduct = useMemo(() => {
+        const sales = {}
+        todayOrderItems.forEach(i => { sales[i.productId] = (sales[i.productId] || 0) + (i.qty || 1) })
+        const map = {}
+        ;(recipes || []).forEach(r => {
+            if (!r.amount || r.amount <= 0) return
+            const s = sales[r.product_id] || 0
+            const cur = map[r.ingredient]
+            if (!cur || s > cur.sales) {
+                map[r.ingredient] = { productId: r.product_id, amountPerCup: r.amount, sales: s }
+            }
+        })
+        for (const ing of Object.keys(map)) {
+            const ref = map[ing]
+            const p = products.find(pp => pp.id === ref.productId)
+            if (!p?.name || ref.amountPerCup === 1) { delete map[ing]; continue }
+            ref.productName = p.name.toLowerCase()
+        }
+        return map
+    }, [recipes, products, todayOrderItems])
+
     // Sum today's orders (online + offline) for the system_total_revenue snapshot we send
     // when creating a new shift_closing. Mirrors /shift-closing's calculation.
     const systemTotalRevenue = useMemo(() => {
@@ -366,6 +427,46 @@ export default function DailyReportPage() {
         for (const o of offlineToday) if (!o.deleted_at && !o.deletedAt) sum += o.total || 0
         return sum
     }, [isTodayScope, todayOrders, offlineToday])
+
+    const handleSaveInventory = async () => {
+        if (!selectedAddress?.id) return
+        if (inventory.restockOverflowIngredients.length > 0) {
+            window.alert(`Không thể lưu: ${inventory.restockOverflowIngredients.length} nguyên liệu có "Lấy ra" vượt quá kho tổng. Vào /ingredients → + Nhập kho trước, hoặc giảm số "Lấy ra".`)
+            return
+        }
+        // Confirm before committing — chốt ca is coarse and not easily reversible.
+        if (!window.confirm(inventory.existingClosing?.id ? 'Cập nhật báo cáo tồn kho?' : 'Xác nhận lưu báo cáo?')) return
+
+        const inventoryReport = inventory.buildInventoryReport()
+        // Cash/transfer/note are owned by the cashflow card — only seed defaults on first
+        // insert; updates leave them untouched so the cashflow Lưu thực thu values stick.
+        const payload = {
+            address_id: selectedAddress.id,
+            inventory_report: inventoryReport,
+        }
+        if (!inventory.existingClosing?.id) {
+            payload.closed_by = profile?.id || null
+            payload.system_total_revenue = systemTotalRevenue
+            payload.actual_cash = parseVNDInput(cashInput) || 0
+            payload.actual_transfer = parseVNDInput(transferInput) || 0
+            payload.note = ''
+        }
+
+        try {
+            await saveShiftClosing(payload, {
+                existingId: inventory.existingClosing?.id,
+                onFixedCostError: (err) => showError(err, 'Ghi chi phí cố định vào ca'),
+            })
+            showToast('Đã lưu báo cáo tồn kho', 'success')
+            inventory.setIsDirty(false)
+            // Refresh shift_closing so future edits land as updates instead of inserts.
+            const fresh = await fetchDailyReportContext(selectedAddress.id)
+            setShiftClosing(fresh?.shift_closing || null)
+            if (fresh?.shift_closing) inventory.setExistingClosing(fresh.shift_closing)
+        } catch (err) {
+            showError(err, 'Lưu báo cáo tồn kho')
+        }
+    }
 
     const handleSaveCashflow = async () => {
         if (!selectedAddress?.id) return
@@ -521,20 +622,91 @@ export default function DailyReportPage() {
                                     </div>
                                 )}
 
-                                <InventoryRefillCard
-                                    shiftClosing={shiftClosing}
-                                    yesterdayClosing={yesterdayClosing}
-                                    todayOrders={displayOrders}
-                                    offlineToday={scope !== 'day' || offset !== 0 ? [] : offlineToday}
-                                    recipes={recipes}
-                                    extraIngredients={extraIngredients}
-                                    selectedAddress={selectedAddress}
-                                    products={products}
-                                    productExtras={productExtras}
-                                    ingredientUnits={ingredientUnits}
-                                    isPastDate={scope !== 'day' || offset !== 0}
-                                    canAccessAudit={hasFeature(activeModules, 'lossAudit')}
-                                />
+                                {/* Today: editable inventory report + refill forecast tabs. */}
+                                {/* Past date: read-only audit + refill view via InventoryRefillCard. */}
+                                {isTodayScope ? (
+                                    <div className="flex flex-col gap-3">
+                                        <div className="flex p-1 bg-surface-light rounded-[12px] gap-1 w-full">
+                                            <button
+                                                onClick={() => setInventoryTab('report')}
+                                                className={`flex-1 py-1.5 rounded-[10px] uppercase text-[13px] font-bold transition-all ${inventoryTab === 'report' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                                            >
+                                                Báo cáo
+                                            </button>
+                                            <button
+                                                onClick={() => setInventoryTab('refill')}
+                                                className={`flex-1 py-1.5 rounded-[10px] uppercase text-[13px] font-bold transition-all ${inventoryTab === 'refill' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                                            >
+                                                Bổ sung
+                                            </button>
+                                        </div>
+
+                                        {inventoryTab === 'report' ? (
+                                            <>
+                                                <InventoryReportCard
+                                                    ingredientsList={inventory.ingredientsList}
+                                                    isLoading={inventory.isLoadingIngredients}
+                                                    openingStock={inventory.openingStock}
+                                                    openingInputs={inventory.openingInputs}
+                                                    openingLocked={inventory.openingLocked}
+                                                    restockInputs={inventory.restockInputs}
+                                                    inventoryInputs={inventory.inventoryInputs}
+                                                    warehouseStocks={inventory.effectiveWarehouseStocks}
+                                                    ingredientUnits={Object.fromEntries(inventory.ingredientsList.map(i => [i.ingredient, i.unit]))}
+                                                    usedMap={usedMap}
+                                                    ingredientToProduct={ingredientToProduct}
+                                                    consumptionBreakdown={consumptionBreakdown}
+                                                    canUnlock={!isStaff}
+                                                    isSubmitting={isSavingShift}
+                                                    onOpeningChange={inventory.onOpeningChange}
+                                                    onOpeningLock={inventory.onOpeningLock}
+                                                    onRestockChange={inventory.onRestockChange}
+                                                    onInventoryChange={inventory.onInventoryChange}
+                                                />
+                                                {inventory.isDirty && (
+                                                    <button
+                                                        onClick={handleSaveInventory}
+                                                        disabled={isSavingShift}
+                                                        className="w-full bg-primary text-white rounded-[12px] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wider hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                                    >
+                                                        {isSavingShift ? 'Đang lưu...' : 'Lưu báo cáo'}
+                                                    </button>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <InventoryRefillCard
+                                                shiftClosing={shiftClosing}
+                                                yesterdayClosing={yesterdayClosing}
+                                                todayOrders={displayOrders}
+                                                offlineToday={offlineToday}
+                                                recipes={recipes}
+                                                extraIngredients={extraIngredients}
+                                                selectedAddress={selectedAddress}
+                                                products={products}
+                                                productExtras={productExtras}
+                                                ingredientUnits={ingredientUnits}
+                                                isPastDate={false}
+                                                canAccessAudit={hasFeature(activeModules, 'lossAudit')}
+                                                forcedTab="refill"
+                                            />
+                                        )}
+                                    </div>
+                                ) : (
+                                    <InventoryRefillCard
+                                        shiftClosing={shiftClosing}
+                                        yesterdayClosing={yesterdayClosing}
+                                        todayOrders={displayOrders}
+                                        offlineToday={[]}
+                                        recipes={recipes}
+                                        extraIngredients={extraIngredients}
+                                        selectedAddress={selectedAddress}
+                                        products={products}
+                                        productExtras={productExtras}
+                                        ingredientUnits={ingredientUnits}
+                                        isPastDate={true}
+                                        canAccessAudit={hasFeature(activeModules, 'lossAudit')}
+                                    />
+                                )}
                             </>
                         )}
 
@@ -550,21 +722,6 @@ export default function DailyReportPage() {
                     </div>
                 )}
             </main>
-
-            {/* FAB: Cập nhật báo cáo */}
-            {view !== VIEW_PROFIT && (
-                <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
-                    <div className="flex justify-end px-4 mb-[72px] pointer-events-auto">
-                        <button
-                            onClick={() => navigate('/shift-closing')}
-                            className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
-                        >
-                            Lưu báo cáo
-                        </button>
-                    </div>
-                </div>
-            )}
-
 
             <HistoryFooter
                 scope={scope}
