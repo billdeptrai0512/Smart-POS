@@ -21,6 +21,8 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useEntitlement, hasFeature } from '../hooks/useEntitlement'
 import UpsellPage from '../components/common/UpsellPage'
+import Toast from '../components/POSPage/Toast'
+import { useToast } from '../hooks/useToast'
 
 // Use dateStringVN so YYYY-MM-DD always reflects Vietnam local date
 const getLocalISO = (date = new Date()) => dateStringVN(date)
@@ -33,6 +35,7 @@ export default function DailyReportPage() {
     const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, fixedCosts } = usePOS()
     const { isStaff } = useAuth()
     const { activeModules, loading: entitlementLoading } = useEntitlement()
+    const { toast, showError } = useToast()
 
     // ── All hooks unconditional (Rules of Hooks) ──────────────────────────────
     const initialView = [VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY].includes(location.state?.initialView)
@@ -99,7 +102,7 @@ export default function DailyReportPage() {
                     setYesterdayOrders(data?.yesterday_orders || [])
                     setYesterdayExpensesData(data?.yesterday_expenses || [])
                 })
-                .catch((error) => console.error('fetchDailyReportContext error:', error))
+                .catch((error) => showError(error, 'Tải báo cáo hôm nay'))
                 .finally(() => setIsAsyncReady(true))
         } else if (scope === 'day') {
             const targetDateStr = dateStringVN(rangeStart)
@@ -112,7 +115,7 @@ export default function DailyReportPage() {
                     setApiOrders(data?.target_orders || [])
                     setApiExpenses(data?.target_expenses || [])
                 })
-                .catch((error) => console.error('fetchReportByDate error:', error))
+                .catch((error) => showError(error, `Tải báo cáo ngày ${targetDateStr}`))
                 .finally(() => setIsAsyncReady(true))
         } else {
             // Range scopes
@@ -131,7 +134,7 @@ export default function DailyReportPage() {
                         setShiftClosing(null)
                     }
                 })
-                .catch((error) => console.error('fetchReportByRange error:', error))
+                .catch((error) => showError(error, 'Tải báo cáo theo khoảng'))
                 .finally(() => setIsAsyncReady(true))
         }
     }, [selectedAddress?.id, scope, offset, rangeStart, rangeEnd, isTodayScope])
@@ -473,6 +476,7 @@ export default function DailyReportPage() {
                     }
                 }}
             />
+            <Toast toast={toast} />
         </div>
     )
 }

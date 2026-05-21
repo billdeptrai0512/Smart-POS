@@ -20,6 +20,8 @@ import { Filter, Lock } from 'lucide-react'
 import { useEntitlement, hasFeature } from '../hooks/useEntitlement'
 import UpsellPage from '../components/common/UpsellPage'
 import UpsellSheet from '../components/common/UpsellSheet'
+import Toast from '../components/POSPage/Toast'
+import { useToast } from '../hooks/useToast'
 
 const RANGE_LABEL = { week: 'Tuần này', month: 'Tháng này' }
 
@@ -34,6 +36,7 @@ export default function RangeReportPage() {
     const { selectedAddress } = useAddress()
     const { isStaff } = useAuth()
     const { activeModules, loading: entitlementLoading } = useEntitlement()
+    const { toast, showError } = useToast()
 
     // ── All hooks must be declared before any conditional return ─────────────
     const [view, setView] = useState(VIEW_PROFIT)
@@ -110,7 +113,7 @@ export default function RangeReportPage() {
                 setPrevExpenses(pExps)
                 setPrevShiftClosings(pClosings)
             })
-            .catch((error) => console.error('fetchReportByRange error:', error))
+            .catch((error) => showError(error, `Tải báo cáo ${RANGE_LABEL[range] || range}`))
             .finally(() => setIsLoading(false))
     }, [selectedAddress?.id, range, offset, activeModules, entitlementLoading])
 
@@ -414,6 +417,7 @@ export default function RangeReportPage() {
                 scope={range}
                 onScopeChange={handleNavigateRange}
             />
+            <Toast toast={toast} />
         </div>
     )
 }
