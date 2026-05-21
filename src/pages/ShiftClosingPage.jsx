@@ -17,6 +17,7 @@ import ShiftClosingHeader from '../components/ShiftClosingPage/ShiftClosingHeade
 import RevenueInputCard from '../components/ShiftClosingPage/RevenueInputCard'
 import InventoryReportCard from '../components/ShiftClosingPage/InventoryReportCard'
 import NoteCard from '../components/ShiftClosingPage/NoteCard'
+import { shiftFinalizedKey } from '../constants/storageKeys'
 
 export default function ShiftClosingPage() {
     const navigate = useNavigate()
@@ -318,7 +319,7 @@ export default function ShiftClosingPage() {
             // Previously this flag was only set by a separate button on /daily-report.
             if (selectedAddress?.id) {
                 const today = new Date().toISOString().split('T')[0]
-                localStorage.setItem(`shift_finalized_${selectedAddress.id}_${today}`, Date.now().toString())
+                localStorage.setItem(shiftFinalizedKey(selectedAddress.id, today), Date.now().toString())
             }
 
             setIsDirty(false)

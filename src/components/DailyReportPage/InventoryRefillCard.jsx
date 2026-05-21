@@ -6,6 +6,7 @@ import { ChevronDown, Check, Lock } from 'lucide-react';
 import { useProducts } from '../../contexts/ProductContext';
 import { formatVND } from '../../utils';
 import UpsellSheet from '../common/UpsellSheet';
+import { shiftFinalizedKey } from '../../constants/storageKeys';
 
 // Fallback: if exact ingredient key has no consumption, try matching by display label.
 // This handles the case where recipes use 'condensed_milk_ml' but inventory tracks 'sữa_đặc'
@@ -44,7 +45,7 @@ export default function InventoryRefillCard({
     const [isFinalized, setIsFinalized] = useState(() => {
         if (!selectedAddress?.id || isPastDate) return false
         const today = new Date().toISOString().split('T')[0]
-        return !!localStorage.getItem(`shift_finalized_${selectedAddress.id}_${today}`)
+        return !!localStorage.getItem(shiftFinalizedKey(selectedAddress.id, today))
     });
 
     const toggleRow = (ingredient) => {
@@ -265,7 +266,7 @@ export default function InventoryRefillCard({
     const handleFinalizeShift = () => {
         if (!selectedAddress?.id) return
         const today = new Date().toISOString().split('T')[0]
-        localStorage.setItem(`shift_finalized_${selectedAddress.id}_${today}`, Date.now().toString())
+        localStorage.setItem(shiftFinalizedKey(selectedAddress.id, today), Date.now().toString())
         setIsFinalized(true)
     };
 

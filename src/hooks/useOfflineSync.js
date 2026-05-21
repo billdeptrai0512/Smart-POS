@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { bulkSubmitOrders } from '../services/orderService'
 import { supabase } from '../lib/supabaseClient'
+import { STORAGE_KEYS } from '../constants/storageKeys'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -9,7 +10,7 @@ function isValidOrder(order) {
     return order.orderItems.every(item => UUID_RE.test(item.productId))
 }
 
-const PENDING_ORDERS_KEY = 'coffee_pending_orders'
+const PENDING_ORDERS_KEY = STORAGE_KEYS.PENDING_ORDERS
 
 export function getPendingOrders() {
     try {

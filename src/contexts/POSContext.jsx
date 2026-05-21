@@ -10,6 +10,7 @@ import { useAddress } from './AddressContext'
 import { useAuth } from './AuthContext'
 import { Outlet } from 'react-router-dom'
 import { useToast } from '../hooks/useToast'
+import { STORAGE_KEYS } from '../constants/storageKeys'
 
 const POSContext = createContext(null)
 
@@ -33,13 +34,13 @@ export function POSProvider() {
         catch { return fallback }
     }
 
-    const [cart, setCart] = useState(() => loadLocalJSON('pos_cart', []))
+    const [cart, setCart] = useState(() => loadLocalJSON(STORAGE_KEYS.CART, []))
     const [activeCartItemId, setActiveCartItemId] = useState(null)
     const [enabledStickyExtraIds, setEnabledStickyExtraIds] = useState([])
-    const [revenue, setRevenue] = useState(() => Number(localStorage.getItem('pos_revenue')) || 0)
-    const [totalCost, setTotalCost] = useState(() => Number(localStorage.getItem('pos_total_cost')) || 0)
-    const [cupsSold, setCupsSold] = useState(() => Number(localStorage.getItem('pos_cups')) || 0)
-    const [inventory, setInventory] = useState(() => loadLocalJSON('pos_inventory', {}))
+    const [revenue, setRevenue] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.REVENUE)) || 0)
+    const [totalCost, setTotalCost] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.TOTAL_COST)) || 0)
+    const [cupsSold, setCupsSold] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.CUPS)) || 0)
+    const [inventory, setInventory] = useState(() => loadLocalJSON(STORAGE_KEYS.INVENTORY, {}))
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isOnline, setIsOnline] = useState(navigator.onLine)
     const { toast, showToast, showError } = useToast()
@@ -102,7 +103,7 @@ export function POSProvider() {
     // ---- Auto-Reset New Day ----
     useEffect(() => {
         const checkNewDay = () => {
-            const storedDate = localStorage.getItem('pos_current_date')
+            const storedDate = localStorage.getItem(STORAGE_KEYS.CURRENT_DATE)
             const todayStr = dateStringVN()
             if (storedDate && storedDate !== todayStr) {
                 if (navigator.onLine && supabase && addressId) {
@@ -114,9 +115,9 @@ export function POSProvider() {
                     setCupsSold(0)
                     setTotalCost(0)
                 }
-                localStorage.setItem('pos_current_date', todayStr)
+                localStorage.setItem(STORAGE_KEYS.CURRENT_DATE, todayStr)
             } else if (!storedDate) {
-                localStorage.setItem('pos_current_date', todayStr)
+                localStorage.setItem(STORAGE_KEYS.CURRENT_DATE, todayStr)
             }
         }
 
@@ -208,10 +209,10 @@ export function POSProvider() {
         // so we read userId from localStorage or let AddressContext handle initial upsert
         const interval = setInterval(() => {
             // Re-upsert session to keep last_seen fresh
-            const savedId = localStorage.getItem('pos_selected_address')
+            const savedId = localStorage.getItem(STORAGE_KEYS.SELECTED_ADDRESS)
             if (savedId === addressId) {
                 // We need the userId — stored when AddressContext calls upsertSession
-                const userId = localStorage.getItem('pos_active_user_id')
+                const userId = localStorage.getItem(STORAGE_KEYS.ACTIVE_USER_ID)
                 if (userId) upsertSession(userId, addressId)
             }
         }, 5 * 60 * 1000) // every 5 minutes
@@ -226,11 +227,11 @@ export function POSProvider() {
     // a single write per quiet period.
     useEffect(() => {
         const t = setTimeout(() => {
-            localStorage.setItem('pos_cart', JSON.stringify(cart))
-            localStorage.setItem('pos_revenue', revenue.toString())
-            localStorage.setItem('pos_total_cost', totalCost.toString())
-            localStorage.setItem('pos_cups', cupsSold.toString())
-            localStorage.setItem('pos_inventory', JSON.stringify(inventory))
+            localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(cart))
+            localStorage.setItem(STORAGE_KEYS.REVENUE, revenue.toString())
+            localStorage.setItem(STORAGE_KEYS.TOTAL_COST, totalCost.toString())
+            localStorage.setItem(STORAGE_KEYS.CUPS, cupsSold.toString())
+            localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventory))
         }, 400)
         return () => clearTimeout(t)
     }, [cart, revenue, totalCost, cupsSold, inventory])

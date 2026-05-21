@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabaseClient'
+import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 
 /**
  * Clone full address setup from source → target (NEW address only).
@@ -213,7 +214,7 @@ export async function cloneAddressConfig(sourceAddressId, targetAddressId, optio
     // prefetch wins, it stores empty arrays under cache_*_${targetId}. Clearing here forces
     // ProductContext to network-fetch on next /pos mount, which gets the correct data.
     for (const name of ['products', 'recipes', 'costs', 'units', 'extras', 'extra_ingredients']) {
-        try { localStorage.removeItem(`cache_${name}_${targetAddressId}`) } catch { /* ignore */ }
+        try { localStorage.removeItem(buildCacheKey(targetAddressId, name)) } catch { /* ignore */ }
     }
 
     return { productCount: productIdMap.size }

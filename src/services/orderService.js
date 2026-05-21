@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
 import { startOfDayVN, dateStringVN } from '../utils/dateVN'
+import { STORAGE_KEYS } from '../constants/storageKeys'
 
 
 
@@ -503,7 +504,7 @@ export async function removeProductFromAddress(productId, _addressId) {
         const idx = products.findIndex(p => p.id === productId);
         if (idx >= 0) {
             products[idx].is_active = false;
-            localStorage.setItem('guest_products', JSON.stringify(products));
+            localStorage.setItem(STORAGE_KEYS.GUEST_PRODUCTS, JSON.stringify(products));
         }
         return true;
     }

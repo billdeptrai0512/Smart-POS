@@ -21,6 +21,7 @@ import SortableList from '../components/common/SortableList'
 import { detectKeyMismatches } from '../utils/ingredientKeySync'
 import { useToast } from '../hooks/useToast'
 import Toast from '../components/POSPage/Toast'
+import { keySyncDismissedKey } from '../constants/storageKeys'
 
 const normalizeKey = (raw) => raw.trim().toLowerCase().replace(/\s+/g, '_')
 
@@ -112,7 +113,7 @@ export default function IngredientManagementPage() {
 
     useEffect(() => {
         if (!selectedAddress?.id) { setDismissedSig(''); return }
-        try { setDismissedSig(localStorage.getItem(`key_sync_dismissed_${selectedAddress.id}`) || '') }
+        try { setDismissedSig(localStorage.getItem(keySyncDismissedKey(selectedAddress.id)) || '') }
         catch { setDismissedSig('') }
     }, [selectedAddress?.id])
 
@@ -122,7 +123,7 @@ export default function IngredientManagementPage() {
         e.stopPropagation()
         if (!selectedAddress?.id || !mismatchSig) return
         try {
-            localStorage.setItem(`key_sync_dismissed_${selectedAddress.id}`, mismatchSig)
+            localStorage.setItem(keySyncDismissedKey(selectedAddress.id), mismatchSig)
             setDismissedSig(mismatchSig)
         } catch { /* localStorage may be full or disabled */ }
     }

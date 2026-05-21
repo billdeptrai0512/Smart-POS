@@ -14,6 +14,7 @@ import OrdersList from '../components/HistoryPage/OrdersList'
 import ExpensePanel from '../components/HistoryPage/ExpensePanel'
 import AddExpenseModal from '../components/HistoryPage/AddExpenseModal'
 import HistoryFooter from '../components/HistoryPage/HistoryFooter'
+import { shiftFinalizedKey } from '../constants/storageKeys'
 
 // Use dateStringVN so YYYY-MM-DD always reflects Vietnam local date,
 // regardless of where the browser runs.
@@ -400,7 +401,7 @@ export default function HistoryPage() {
             } else {
                 // 'expense' — auto-detect Trong ca vs Sau ca from shift_finalized flag
                 const today = new Date().toISOString().split('T')[0]
-                const isFinalized = selectedAddress?.id && !!localStorage.getItem(`shift_finalized_${selectedAddress.id}_${today}`)
+                const isFinalized = selectedAddress?.id && !!localStorage.getItem(shiftFinalizedKey(selectedAddress.id, today))
                 if (isFinalized) {
                     await handleAddExpense(costName.trim(), amount, true, 'cash', { free_form: true })
                 } else {
