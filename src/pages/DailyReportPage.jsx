@@ -397,27 +397,6 @@ export default function DailyReportPage() {
         [todayOrderItems, recipes, extraIngredients, products, productExtras]
     )
 
-    const ingredientToProduct = useMemo(() => {
-        const sales = {}
-        todayOrderItems.forEach(i => { sales[i.productId] = (sales[i.productId] || 0) + (i.qty || 1) })
-        const map = {}
-        ;(recipes || []).forEach(r => {
-            if (!r.amount || r.amount <= 0) return
-            const s = sales[r.product_id] || 0
-            const cur = map[r.ingredient]
-            if (!cur || s > cur.sales) {
-                map[r.ingredient] = { productId: r.product_id, amountPerCup: r.amount, sales: s }
-            }
-        })
-        for (const ing of Object.keys(map)) {
-            const ref = map[ing]
-            const p = products.find(pp => pp.id === ref.productId)
-            if (!p?.name || ref.amountPerCup === 1) { delete map[ing]; continue }
-            ref.productName = p.name.toLowerCase()
-        }
-        return map
-    }, [recipes, products, todayOrderItems])
-
     // Sum today's orders (online + offline) for the system_total_revenue snapshot we send
     // when creating a new shift_closing. Mirrors /shift-closing's calculation.
     const systemTotalRevenue = useMemo(() => {
@@ -631,7 +610,7 @@ export default function DailyReportPage() {
                                                 onClick={() => setInventoryTab('report')}
                                                 className={`flex-1 py-1.5 rounded-[10px] uppercase text-[13px] font-bold transition-all ${inventoryTab === 'report' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
                                             >
-                                                Báo cáo
+                                                Hao hụt
                                             </button>
                                             <button
                                                 onClick={() => setInventoryTab('refill')}
@@ -653,7 +632,6 @@ export default function DailyReportPage() {
                                                 warehouseStocks={inventory.effectiveWarehouseStocks}
                                                 ingredientUnits={Object.fromEntries(inventory.ingredientsList.map(i => [i.ingredient, i.unit]))}
                                                 usedMap={usedMap}
-                                                ingredientToProduct={ingredientToProduct}
                                                 consumptionBreakdown={consumptionBreakdown}
                                                 canUnlock={!isStaff}
                                                 isSubmitting={isSavingShift}

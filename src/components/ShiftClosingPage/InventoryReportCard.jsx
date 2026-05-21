@@ -4,15 +4,15 @@ import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils'
 import { formatPackedQty } from '../../utils/inventory'
 
 // 3×3 grid per ingredient:
-//   row 1 (warehouse):  Tồn kho   |  Lấy ra      |  Còn lại  = Tồn kho − Lấy ra
-//   row 2 (counter):    Đầu kỳ    |  Sử dụng     |  +        = actual đếm quầy (input)
-//   row 3 (audit):      Trạng thái (Khớp / Hụt N ly / Dư N ly)  |  Hao hụt = actual − theoretical
+//   row 1 (warehouse):  Tồn kho   |  Lấy ra      |  Tồn cuối = Tồn kho − Lấy ra
+//   row 2 (counter):    Đầu kỳ    |  Sử dụng     |  + Cuối kỳ = actual đếm quầy (input)
+//   row 3 (audit):      Hao hụt   |  Lý thuyết   |  Thực tế
 //
-// Staff inputs: Lấy ra, Đầu kỳ, "+" (actual quầy). Everything else is computed and disabled.
-// Audit uses: theoretical = opening + restock − used   ;   diff = actual − theoretical.
-//   diff < 0  → "Hụt N ly" (when ingredientToProduct has amountPerCup) or just đơn vị
-//   diff > 0  → "Dư N ly"  /  đơn vị
-//   diff = 0  → "Khớp"
+// Staff inputs: Lấy ra, Đầu kỳ, "+ Cuối kỳ". Everything else is computed and disabled.
+// Audit math:
+//   Thực tế   = Tồn cuối + Cuối kỳ          (tổng tồn vật lý cuối ca)
+//   Lý thuyết = Tồn cuối + Đầu kỳ − Sử dụng (tồn dự kiến theo công thức)
+//   Hao hụt   = Thực tế − Lý thuyết         (âm = thiếu, dương = dư, 0 = khớp)
 export default function InventoryReportCard({
     ingredientsList, isLoading,
     openingStock, openingInputs, openingLocked,
@@ -20,7 +20,6 @@ export default function InventoryReportCard({
     warehouseStocks = {},
     ingredientUnits = {},
     usedMap = {},            // ingredient → todayEstimatedConsumption qty
-    ingredientToProduct = {}, // ingredient → { amountPerCup, productName } (cups equiv for Trạng thái)
     consumptionBreakdown = {}, // ingredient → { [variantKey]: { name, qty, totalAmount } } for expand-on-tap
     canUnlock, isSubmitting,
     onOpeningChange, onOpeningLock, onRestockChange, onInventoryChange,
@@ -49,7 +48,6 @@ export default function InventoryReportCard({
                     inventoryValue={inventoryInputs[ing.ingredient]}
                     warehouseAvailable={warehouseStocks[ing.ingredient]}
                     used={lookupByLabel(ing.ingredient, usedMap)}
-                    productRef={ingredientToProduct[ing.ingredient]}
                     breakdown={lookupByLabel(ing.ingredient, consumptionBreakdown) || null}
                     canUnlock={canUnlock}
                     isSubmitting={isSubmitting}
@@ -78,7 +76,7 @@ function lookupByLabel(ingredient, map) {
 
 function IngredientRow({
     ing, ingredientUnits, openingValue, openingFallback, isLocked, restockValue, inventoryValue,
-    warehouseAvailable, used, productRef, breakdown,
+    warehouseAvailable, used, breakdown,
     isSubmitting,
     onOpeningChange, onRestockChange, onInventoryChange,
 }) {
@@ -104,30 +102,24 @@ function IngredientRow({
     const overBy = restockOverflow ? restockNum - warehouseNum : 0
 
     // Live computed balances.
+    //   warehouseEnd = Tồn kho − Lấy ra   (kho tổng còn sau khi rút)
+    //   Sử dụng      = recipe-based estimated consumption
+    //   Thực tế      = Tồn cuối + Cuối kỳ (đếm vật lý cuối ca)
+    //   Lý thuyết    = (Tồn cuối + Đầu kỳ) − Sử dụng
+    //   Hao hụt      = Thực tế − Lý thuyết
+    //                 (âm = thiếu → mất hàng / công thức sai;
+    //                  dương = dư → restock vượt / công thức trừ thiếu)
     const warehouseEnd = Math.max(0, warehouseNum - restockNum)
     const openingNum = r1(openingDisplay)
     const usedNum = r1(used)
-    const theoreticalRemaining = r1(openingNum + restockNum - usedNum)
     const hasActual = inventoryValue !== undefined && inventoryValue !== ''
-    const actualNum = hasActual ? r1(inventoryValue) : null
-    const diff = actualNum != null ? r1(actualNum - theoreticalRemaining) : null
-
-    // "Khớp / Hụt N ly / Dư N ly" — fall back to đơn vị when no product mapping.
-    let statusText = '—'
-    let statusTone = 'neutral'
-    if (diff != null) {
-        if (diff === 0) {
-            statusText = 'Khớp'
-            statusTone = 'good'
-        } else {
-            const absDiff = Math.abs(diff)
-            const cupsLabel = productRef?.amountPerCup > 0
-                ? `${Math.round(absDiff / productRef.amountPerCup)} ly`
-                : `${absDiff} ${unit}`
-            statusText = `${diff < 0 ? 'Hụt' : 'Dư'} ${cupsLabel}`
-            statusTone = diff < 0 ? 'bad' : 'warn'
-        }
-    }
+    const cuoiKyNum = hasActual ? r1(inventoryValue) : null
+    const thucTe = cuoiKyNum != null ? r1(warehouseEnd + cuoiKyNum) : null
+    const lyThuyet = r1(warehouseEnd + openingNum - usedNum)
+    const haoHut = thucTe != null ? r1(thucTe - lyThuyet) : null
+    const haoHutTone = haoHut == null
+        ? 'neutral'
+        : haoHut === 0 ? 'good' : haoHut < 0 ? 'bad' : 'warn'
 
     return (
         <div className="border-b border-border/20 last:border-0 pb-2.5 last:pb-0">
@@ -146,7 +138,7 @@ function IngredientRow({
                     onChange={(v) => onRestockChange(ing.ingredient, v)}
                     overflow={restockOverflow}
                 />
-                <ColumnInput label="Còn lại" value={warehouseEnd} unit={unit} disabled />
+                <ColumnInput label="Tồn cuối" value={warehouseEnd} unit={unit} disabled />
             </div>
 
             {/* Row 2 — counter level */}
@@ -171,25 +163,11 @@ function IngredientRow({
                     }
                 />
                 <ColumnInput
-                    label="+"
+                    label="+ Cuối kỳ"
                     value={inventoryValue ?? ''}
                     unit={unit}
                     disabled={isSubmitting}
                     onChange={(v) => onInventoryChange(ing.ingredient, v)}
-                />
-            </div>
-
-            {/* Row 3 — audit */}
-            <div className="grid grid-cols-3 gap-2 mt-2">
-                <div className="col-span-2">
-                    <StatusBox label="Trạng thái" text={statusText} tone={statusTone} />
-                </div>
-                <ColumnInput
-                    label="Hao hụt"
-                    value={diff != null ? diff : ''}
-                    unit={unit}
-                    disabled
-                    tone={diff == null ? 'neutral' : diff === 0 ? 'good' : diff < 0 ? 'bad' : 'warn'}
                 />
             </div>
 
@@ -208,6 +186,24 @@ function IngredientRow({
                     }
                 </div>
             )}
+
+            {/* Row 3 — audit: Hao hụt | Lý thuyết | Thực tế */}
+            <div className="grid grid-cols-3 gap-2 mt-2">
+                <ColumnInput
+                    label="Hao hụt"
+                    value={haoHut != null ? haoHut : ''}
+                    unit={unit}
+                    disabled
+                    tone={haoHutTone}
+                />
+                <ColumnInput label="Lý thuyết" value={lyThuyet} unit={unit} disabled />
+                <ColumnInput
+                    label="Thực tế"
+                    value={thucTe != null ? thucTe : ''}
+                    unit={unit}
+                    disabled
+                />
+            </div>
 
             {restockOverflow && (
                 <div className="flex items-start gap-1.5 mt-1.5 text-[10px] font-bold text-danger leading-tight">
@@ -268,23 +264,3 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRig
     )
 }
 
-// Pure label-style cell for Trạng thái — text not numeric, but same visual rhythm
-// as ColumnInput so the grid alignment holds.
-function StatusBox({ label, text, tone }) {
-    const toneCls = {
-        good: 'bg-success/8 border-success/30 text-success',
-        bad: 'bg-danger/8 border-danger/30 text-danger',
-        warn: 'bg-warning/8 border-warning/30 text-warning',
-        neutral: 'bg-surface-light border-border/60 text-text-secondary',
-    }[tone] || ''
-    return (
-        <div className="flex flex-col">
-            <div className="flex items-center justify-center mb-1">
-                <span className="text-[9px] font-black text-text-dim uppercase">{label}</span>
-            </div>
-            <div className={`rounded-[10px] py-1.5 px-2 text-[13px] font-bold text-center border ${toneCls}`}>
-                {text}
-            </div>
-        </div>
-    )
-}
