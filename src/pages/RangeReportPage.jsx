@@ -347,6 +347,7 @@ export default function RangeReportPage() {
                                     refillTotal={stats.refillTotal}
                                     refillNvl={stats.refillNvl}
                                     refillFreeForm={stats.refillFreeForm}
+                                    expenses={expenses}
                                     yesterdayActualTotal={prevStats.actualTotal}
                                     yesterdayTakeHome={prevStats.takeHome}
                                     compareLabel={`So với ${range === 'week' ? 'tuần trước' : 'tháng trước'}`}

@@ -36,14 +36,16 @@ export default function FinancialFlow({
 
     return (
         <div className="flex flex-col gap-4">
-            {/* PANEL 1: CHI PHÍ TRONG CA */}
+            {/* PANEL 1: CHI PHÍ — chia theo thời điểm phát sinh */}
             <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
-                <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Chi phí trong ca</h3>
-                <div className="flex flex-col gap-2.5 pl-1">
+                <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Chi phí</h3>
+
+                <div className="flex flex-col gap-1 pl-1">
+                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Trong ca</span>
                     {shiftExpenses.length > 0 ? (
                         shiftExpenses.map((e) => (
                             <div key={e.id} className="flex justify-between items-center">
-                                <span className="text-[12px] font-bold text-text-secondary">· {e.name || 'Chi phí vận hành'}</span>
+                                <span className="text-[12px] font-bold text-text-secondary">· {e.name || 'Chi phí khác'}</span>
                                 <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(e.amount)}</span>
                             </div>
                         ))
@@ -51,32 +53,25 @@ export default function FinancialFlow({
                         <span className="text-[12px] text-text-secondary italic">Không có chi phí trong ca</span>
                     )}
                 </div>
-            </div>
 
-            {/* PANEL 2: CHI PHÍ SAU CHỐT CA */}
-            <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
-                <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Chi phí sau chốt ca</h3>
-                <div className="flex flex-col gap-2.5 pl-1">
-                    {(afterShiftOps.length > 0 || afterShiftNvl.length > 0) ? (
-                        <>
-                            {afterShiftOps.map((e) => (
-                                <div key={e.id} className="flex justify-between items-center">
-                                    <span className="text-[12px] font-bold text-text-secondary">· {e.name || 'Vận hành sau ca'}</span>
-                                    <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(e.amount)}</span>
-                                </div>
-                            ))}
-                            {afterShiftNvl.map((e) => (
-                                <div key={e.id} className="flex justify-between items-center">
-                                    <span className="text-[12px] font-bold text-text-secondary">· {getExpenseName(e)}</span>
-                                    <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(e.amount)}</span>
-                                </div>
-                            ))}
-                        </>
+                <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
+
+                <div className="flex flex-col gap-1 pl-1">
+                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Sau chốt ca</span>
+                    {afterShiftOps.length > 0 ? (
+                        afterShiftOps.map((e) => (
+                            <div key={e.id} className="flex justify-between items-center">
+                                <span className="text-[12px] font-bold text-text-secondary">· {e.name || 'Chi phí khác'}</span>
+                                <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(e.amount)}</span>
+                            </div>
+                        ))
                     ) : (
                         <span className="text-[12px] text-text-secondary italic">Không có chi phí sau ca</span>
                     )}
                 </div>
             </div>
+
+
 
             {/* PANEL 3: TỔNG CHI PHÍ */}
             <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">

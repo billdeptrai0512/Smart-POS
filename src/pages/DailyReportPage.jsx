@@ -403,6 +403,7 @@ export default function DailyReportPage() {
                                     refillTotal={refillTotal}
                                     refillNvl={refillNvl}
                                     refillFreeForm={refillFreeForm}
+                                    expenses={displayExpenses}
                                     yesterdayActualTotal={yesterdayActualTotal}
                                     yesterdayTakeHome={yesterdayTakeHome}
                                     onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'operation', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } })}
