@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { formatVNDInput, parseVNDInput, calculateProductCost } from '../utils'
 import { getPendingOrders, removePendingOrder } from '../hooks/useOfflineSync'
-import { fetchTodayShiftClosing, fetchExpensesByRange, fetchOrdersByRange } from '../services/orderService'
 import { dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { calcRangeWithLabel, offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
+import { useHistoryRangeFetch } from '../hooks/useHistoryRangeFetch'
+import { useFilteredExpenses } from '../hooks/useFilteredExpenses'
+import { useFormatHistoryOrders } from '../hooks/useFormatHistoryOrders'
 import { useAddress } from '../contexts/AddressContext'
 import { useProducts } from '../contexts/ProductContext'
 import { usePOS } from '../contexts/POSContext'
@@ -91,13 +93,6 @@ export default function HistoryPage() {
     }, [showAddModal])
 
     // ─── Range fetch ──────────────────────────────────────────────────
-    const [rangeExpenses, setRangeExpenses] = useState([])
-    const [rangeOrders, setRangeOrders] = useState([])
-    const [isLoadingRange, setIsLoadingRange] = useState(false)
-    const [isLoadingRangeOrders, setIsLoadingRangeOrders] = useState(false)
-    const rangeCache = useRef(new Map())
-    const rangeOrdersCache = useRef(new Map())
-
     const { rangeStart, rangeEnd, rangeLabel } = useMemo(() => {
         const { start, end, label } = calcRangeWithLabel(scope, offset, customRange)
         return { rangeStart: start, rangeEnd: end, rangeLabel: label }
@@ -174,29 +169,11 @@ export default function HistoryPage() {
     }
 
     // ─── Range data fetchers ──────────────────────────────────────────
-    useEffect(() => {
-        if (!selectedAddress?.id || isReadOnly) return
-        if (isTodayScope) { setRangeExpenses([]); return }
-        const cacheKey = `${selectedAddress.id}|${rangeStart.toISOString()}|${rangeEnd.toISOString()}`
-        const cached = rangeCache.current.get(cacheKey)
-        if (cached) { setRangeExpenses(cached); return }
-        setIsLoadingRange(true)
-        fetchExpensesByRange(selectedAddress.id, rangeStart, rangeEnd)
-            .then(data => { rangeCache.current.set(cacheKey, data); setRangeExpenses(data) })
-            .finally(() => setIsLoadingRange(false))
-    }, [scope, offset, selectedAddress?.id, rangeStart.toISOString(), rangeEnd.toISOString(), isReadOnly, isTodayScope])
-
-    useEffect(() => {
-        if (!selectedAddress?.id || isReadOnly) return
-        if (isTodayScope) { setRangeOrders([]); return }
-        const cacheKey = `${selectedAddress.id}|${rangeStart.toISOString()}|${rangeEnd.toISOString()}`
-        const cached = rangeOrdersCache.current.get(cacheKey)
-        if (cached) { setRangeOrders(cached); return }
-        setIsLoadingRangeOrders(true)
-        fetchOrdersByRange(selectedAddress.id, rangeStart, rangeEnd)
-            .then(data => { rangeOrdersCache.current.set(cacheKey, data); setRangeOrders(data) })
-            .finally(() => setIsLoadingRangeOrders(false))
-    }, [scope, offset, selectedAddress?.id, rangeStart.toISOString(), rangeEnd.toISOString(), isReadOnly, isTodayScope])
+    const { rangeExpenses, rangeOrders, isLoadingRange, isLoadingRangeOrders } = useHistoryRangeFetch({
+        addressId: selectedAddress?.id,
+        rangeStart, rangeEnd,
+        isTodayScope, isReadOnly,
+    })
 
     // ─── Offline order sync ───────────────────────────────────────────
     const refreshPending = useCallback(() => setPendingOrders(getPendingOrders()), [])
@@ -232,83 +209,9 @@ export default function HistoryPage() {
         return m
     }, [products])
 
-    // PERF: memoize formatted lists so downstream useMemo's (runningTotals, totalCups) actually
-    // get stable inputs. Previously these recomputed every render → all derived memos were busted.
-    // Per-item cost is computed once and shared with the order-total fallback to avoid 2 lookups per item.
-    const formattedOnline = useMemo(() => baseOrders.map(o => {
-        const items = o.order_items ? o.order_items.map(i => {
-            const options = i.options
-                ? i.options.split(', ').filter(opt => opt !== 'Tiền mặt' && opt !== 'MoMo').join(' - ')
-                : ''
-            const pName = productById.get(i.product_id)?.name || i.products?.name || '☕'
-            const unitCost = getItemCost(i.product_id, i.extras || [], i.unit_cost || 0)
-            return {
-                text: `${i.quantity} ${pName}${options ? ` (${options})` : ''}`,
-                cost: unitCost * i.quantity,
-                quantity: i.quantity,
-                productId: i.product_id
-            }
-        }) : []
-        const cost = (o.total_cost > 0)
-            ? o.total_cost
-            : items.reduce((sum, item) => sum + item.cost, 0)
-        return {
-            id: o.id,
-            total: o.total,
-            cost,
-            createdAt: o.created_at,
-            staffName: o.staff_name,
-            deletedAt: o.deleted_at,
-            deletedBy: o.deleted_by,
-            isOffline: false,
-            paymentMethod: o.payment_method || null,
-            items,
-        }
-    }), [baseOrders, productById, getItemCost])
-
-    const formattedOffline = useMemo(() => {
-        const todayStr = dateStringVN()
-        return pendingOrders
-            .filter(o => dateStringVN(new Date(o.createdAt)) === todayStr)
-            .map((o) => {
-                const items = o.cart
-                    ? o.cart.map(i => {
-                        const extras = i.extras.filter(e => e.name !== 'Tiền mặt' && e.name !== 'MoMo')
-                        const unitCost = getItemCost(i.productId, i.extras, i.unitCost || 0)
-                        return {
-                            text: `${i.quantity} ${i.name}${extras.length ? ` (${extras.map(e => e.name).join(' - ')})` : ''}`,
-                            cost: unitCost * i.quantity,
-                            quantity: i.quantity,
-                            productId: i.productId
-                        }
-                    })
-                    : o.orderItems ? o.orderItems.map(i => {
-                        const unitCost = getItemCost(i.productId, i.extras, i.unitCost || 0)
-                        return { text: `${i.quantity} ${i.name}`, cost: unitCost * i.quantity, quantity: i.quantity, productId: i.productId }
-                    }) : []
-                const cost = o.totalCost > 0
-                    ? o.totalCost
-                    : items.reduce((sum, item) => sum + item.cost, 0)
-                return {
-                    id: `offline-${o.createdAt}`,
-                    createdAt_key: o.createdAt,
-                    total: o.total,
-                    cost,
-                    createdAt: o.createdAt,
-                    staffName: o.staffName,
-                    isOffline: true,
-                    paymentMethod: o.paymentMethod || null,
-                    items,
-                }
-            })
-    }, [pendingOrders, getItemCost])
-
-    // Hide offline pending orders when viewing a non-today range (they only exist for today)
-    const allOrders = useMemo(
-        () => [...formattedOnline, ...(isTodayScope ? formattedOffline : [])]
-            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
-        [formattedOnline, formattedOffline, isTodayScope]
-    )
+    const { formattedOnline, formattedOffline, allOrders } = useFormatHistoryOrders({
+        baseOrders, pendingOrders, productById, getItemCost, isTodayScope,
+    })
 
     const productCountMap = useMemo(() => new Map((products || []).map(p => [p.id, p.count_as_cup !== false])), [products])
 
@@ -343,15 +246,7 @@ export default function HistoryPage() {
 
     const isLoadingExpenses = isReadOnly ? false : (isTodayScope ? isLoadingHistory : isLoadingRange)
 
-    const filteredExpenses = useMemo(() => {
-        let list = nonFixedExpenses
-        if (expenseFilter === 'daily') list = list.filter(e => !e.is_refill)
-        else if (expenseFilter === 'after') list = list.filter(e => e.is_refill && e.metadata?.free_form)
-        else if (expenseFilter === 'operation') list = list.filter(e => !e.is_refill || (e.is_refill && e.metadata?.free_form))
-        else if (expenseFilter === 'nvl') list = list.filter(e => e.is_refill && !e.metadata?.free_form)
-        else if (expenseFilter === 'fixed') list = []
-        return [...list].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    }, [nonFixedExpenses, expenseFilter])
+    const filteredExpenses = useFilteredExpenses(nonFixedExpenses, expenseFilter)
 
     // Cumulative inflow per ingredient — walks oldest→newest. Per refill: before = running total, after = +qty.
     const nvlStockSnapshot = useMemo(() => {
