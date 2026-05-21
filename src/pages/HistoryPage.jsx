@@ -17,6 +17,7 @@ import ExpensePanel from '../components/HistoryPage/ExpensePanel'
 import AddExpenseModal from '../components/HistoryPage/AddExpenseModal'
 import HistoryFooter from '../components/HistoryPage/HistoryFooter'
 import { shiftFinalizedKey } from '../constants/storageKeys'
+import { Plus } from 'lucide-react'
 
 // Use dateStringVN so YYYY-MM-DD always reflects Vietnam local date,
 // regardless of where the browser runs.
@@ -430,7 +431,7 @@ export default function HistoryPage() {
                             onClick={() => setShowAddModal(true)}
                             className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
                         >
-                            + Thêm chi phí
+                            <Plus size={18} />
                         </button>
                     </div>
                 </div>

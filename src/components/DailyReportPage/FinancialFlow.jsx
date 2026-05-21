@@ -38,10 +38,10 @@ export default function FinancialFlow({
         <div className="flex flex-col gap-4">
             {/* PANEL 1: CHI PHÍ — chia theo thời điểm phát sinh */}
             <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
-                <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Chi phí</h3>
+                <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Chi phí phát sinh</h3>
 
                 <div className="flex flex-col gap-1 pl-1">
-                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Trong ca</span>
+                    {/* <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Phát sinh</span> */}
                     {shiftExpenses.length > 0 ? (
                         shiftExpenses.map((e) => (
                             <div key={e.id} className="flex justify-between items-center">
@@ -69,6 +69,22 @@ export default function FinancialFlow({
                         <span className="text-[12px] text-text-secondary italic">Không có chi phí sau ca</span>
                     )}
                 </div>
+
+                <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
+
+                <div className="flex flex-col gap-1 pl-1">
+                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Nguyên vật liệu</span>
+                    {afterShiftNvl.length > 0 ? (
+                        afterShiftNvl.map((e) => (
+                            <div key={e.id} className="flex justify-between items-center">
+                                <span className="text-[12px] font-bold text-text-secondary">· {getExpenseName(e)}</span>
+                                <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(e.amount)}</span>
+                            </div>
+                        ))
+                    ) : (
+                        <span className="text-[12px] text-text-secondary italic">Không có nguyên vật liệu nhập kho</span>
+                    )}
+                </div>
             </div>
 
 
@@ -77,7 +93,7 @@ export default function FinancialFlow({
             <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
                 <div className="flex justify-between items-center mt-1 pl-1">
                     <span className="text-[13px] font-black text-text uppercase tracking-wide">Tổng chi phí</span>
-                    <span className="text-[16px] font-black text-danger tabular-nums">
+                    <span className="text-[14px] font-black text-danger tabular-nums">
                         -{formatVND(totalExpenses)}
                     </span>
                 </div>

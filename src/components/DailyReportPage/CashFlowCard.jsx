@@ -5,15 +5,10 @@ export default function CashFlowCard({
     actualCash = 0,
     actualTransfer = 0,
     dailyExpense = 0,
-    refillTotal = 0,
     refillNvl = 0,
     refillFreeForm = 0,
     expenses = [],
-    yesterdayActualTotal,
-    yesterdayTakeHome,
-    compareLabel = 'So với hôm qua',
     onDailyExpenseClick,
-    onRefillClick,
     salesCard,
     // Inline-edit props (today scope on /daily-report). When `editable` is true the
     // Tiền mặt / Chuyển khoản rows become text inputs and a "Lưu" button appears
@@ -38,11 +33,18 @@ export default function CashFlowCard({
     // 2. Tổng chi phí
     const totalExpenses = (dailyExpense || 0) + (refillFreeForm || 0) + (refillNvl || 0)
 
-    // 3. Thực nhận (Cầm về thực) = TM + CK - mua NVL (tiền thực trong túi sau khi trừ NVL đã mua)
-    // Ưu tiên trừ tiền mặt trước, nếu dư thì trừ chuyển khoản
-    const takeHomeCash = Math.max(0, liveCash - refillTotal)
-    const remainingRefill = Math.max(0, refillTotal - liveCash)
-    const takeHomeTransfer = Math.max(0, liveTransfer - remainingRefill)
+    // 3. Thực nhận (Cầm về thực) — trừ refill theo đúng pot đã chi.
+    // Trước đây dùng refillTotal + fall-through (hết cash thì ăn transfer), khiến tổng
+    // refill > revenue lập tức kéo cả 2 pot về 0. Bây giờ split theo payment_method nên
+    // refill chuyển khoản chỉ trừ chuyển khoản, refill tiền mặt chỉ trừ tiền mặt.
+    let cashRefill = 0, transferRefill = 0
+    for (const e of expenses || []) {
+        if (e.is_fixed || !e.is_refill) continue
+        if (e.payment_method === 'transfer') transferRefill += e.amount || 0
+        else cashRefill += e.amount || 0  // default 'cash' when payment_method nullish
+    }
+    const takeHomeCash = Math.max(0, liveCash - cashRefill)
+    const takeHomeTransfer = Math.max(0, liveTransfer - transferRefill)
     const takeHome = takeHomeCash + takeHomeTransfer
 
     // Phân loại chi phí theo đúng schema

@@ -77,31 +77,21 @@ function IngredientRow({
     return (
         <div className="border-b border-border/20 last:border-0 pb-2.5 last:pb-0">
             <div className="flex items-baseline justify-between mb-1.5 gap-2">
-                <span className="text-[12px] font-bold text-text">{ingredientLabel(ing.ingredient)}</span>
-
+                <span className="text-[16px] font-bold text-text">{ingredientLabel(ing.ingredient)}</span>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
                 <ColumnInput
-                    label="Tồn đầu"
-                    value={openingDisplay}
+                    label="Tồn kho"
+                    value={warehouseNum}
                     unit={unit}
-                    disabled={isLocked || isSubmitting}
+                    disabled={true}
                     onChange={(v) => onOpeningChange(ing.ingredient, v)}
                     locked={isLocked}
-                    headerRight={showLockBtn && (
-                        <button
-                            type="button"
-                            disabled={isSubmitting}
-                            onClick={() => onOpeningLock(ing.ingredient, !isLocked)}
-                            className={`transition-colors disabled:opacity-50 ${isLocked ? 'text-primary' : 'text-text-dim hover:text-primary'}`}
-                        >
-                            {isLocked ? <Lock size={10} strokeWidth={2.5} /> : <Unlock size={10} strokeWidth={2} />}
-                        </button>
-                    )}
+
                 />
                 <ColumnInput
-                    label="Nhập thêm"
+                    label="Lấy ra"
                     value={restockValue || ''}
                     unit={unit}
                     disabled={isSubmitting}
@@ -109,10 +99,56 @@ function IngredientRow({
                     overflow={restockOverflow}
                 />
                 <ColumnInput
-                    label="Tồn cuối"
+                    label="Còn lại"
+                    value={inventoryValue || ''}
+                    unit={unit}
+                    disabled={true}
+                    onChange={(v) => onInventoryChange(ing.ingredient, v)}
+                />
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 mt-2">
+                <ColumnInput
+                    label="Đầu kỳ"
+                    value={openingDisplay}
+                    unit={unit}
+                    disabled={isLocked || isSubmitting}
+                    onChange={(v) => onOpeningChange(ing.ingredient, v)}
+                    locked={isLocked}
+
+                />
+                <ColumnInput
+                    label="Sử dụng"
+                    value={restockValue || ''}
+                    unit={unit}
+                    disabled={true}
+                    onChange={(v) => onRestockChange(ing.ingredient, v)}
+                    overflow={restockOverflow}
+                />
+                <ColumnInput
+                    label="+"
                     value={inventoryValue || ''}
                     unit={unit}
                     disabled={isSubmitting}
+                    onChange={(v) => onInventoryChange(ing.ingredient, v)}
+                />
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 mt-2">
+                <div className="col-span-2">
+                    <ColumnInput
+                        label="Trạng thái"
+                        value={inventoryValue || ''}
+                        unit={unit}
+                        disabled={true}
+                        onChange={(v) => onInventoryChange(ing.ingredient, v)}
+                    />
+                </div>
+                <ColumnInput
+                    label="Hao hụt"
+                    value={inventoryValue || ''}
+                    unit={unit}
+                    disabled={true}
                     onChange={(v) => onInventoryChange(ing.ingredient, v)}
                 />
             </div>
@@ -127,18 +163,6 @@ function IngredientRow({
                 </div>
             )}
 
-            {showTotals && !restockOverflow && (
-                <div className="flex items-baseline justify-between mt-1.5 text-[10px] tabular-nums leading-tight gap-2">
-                    {warehouseAvailable !== undefined && (
-                        <span className="text-[9px] font-bold text-text-dim uppercase tabular-nums text-right">
-                            Tôn kho: <span className="text-text-secondary">{fmt(warehouseNum)}</span>
-                        </span>
-                    )}
-                    {/* <span className="text-[9px] font-bold text-text-dim uppercase tabular-nums text-right">
-                        cuối ngày: <span className="text-text-secondary font-bold">{fmt(warehouseEnd + counterEnd)}</span>
-                    </span> */}
-                </div>
-            )}
         </div>
     )
 }

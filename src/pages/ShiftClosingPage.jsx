@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { usePOS } from '../contexts/POSContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
-import { formatVNDInput, parseVNDInput } from '../utils'
 import { getPendingOrders } from '../hooks/useOfflineSync'
-import { insertShiftClosing, updateShiftClosing, fetchTodayShiftClosing, fetchYesterdayShiftClosing, fetchIngredientCostsWithUnits, fetchFixedCosts, insertExpense, fetchTodayExpenses, invalidateDailyContext, fetchIngredientStocks } from '../services/orderService'
+import { fetchTodayShiftClosing, fetchIngredientCostsWithUnits, fetchIngredientStocks } from '../services/orderService'
+import { useShiftClosingSave } from '../hooks/useShiftClosingSave'
 import { dateStringVN } from '../utils/dateVN'
 import { supabase } from '../lib/supabaseClient'
 import { sortIngredients } from '../components/common/recipeUtils'
@@ -14,10 +14,7 @@ import { useEntitlement, hasFeature } from '../hooks/useEntitlement'
 import Toast from '../components/POSPage/Toast'
 import UpsellPage from '../components/common/UpsellPage'
 import ShiftClosingHeader from '../components/ShiftClosingPage/ShiftClosingHeader'
-import RevenueInputCard from '../components/ShiftClosingPage/RevenueInputCard'
 import InventoryReportCard from '../components/ShiftClosingPage/InventoryReportCard'
-import NoteCard from '../components/ShiftClosingPage/NoteCard'
-import { shiftFinalizedKey } from '../constants/storageKeys'
 
 export default function ShiftClosingPage() {
     const navigate = useNavigate()
@@ -34,17 +31,11 @@ export default function ShiftClosingPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
-    const [activeTab, setActiveTab] = useState('inventory') // 'inventory' | 'revenue' | 'note'
-
-    // --- Revenue inputs ---
-    const [actualCash, setActualCash] = useState('')
-    const [actualTransfer, setActualTransfer] = useState('')
-    const [note, setNote] = useState('')
-    const [isSubmitting, setIsSubmitting] = useState(false)
     const [isDirty, setIsDirty] = useState(false)
     const [showPaywall, setShowPaywall] = useState(false)
     const [existingClosing, setExistingClosing] = useState(null)
     const [isLoadingExisting, setIsLoadingExisting] = useState(true)
+    const { save: saveShiftClosing, isSaving } = useShiftClosingSave(selectedAddress?.id)
 
     // --- Ingredient list with units ---
     const [ingredientsList, setIngredientsList] = useState([])
@@ -59,16 +50,15 @@ export default function ShiftClosingPage() {
     // what's available — prevents over-report which silently creates deficits.
     const [warehouseStocks, setWarehouseStocks] = useState({})
 
-    // Load existing shift closing (for editing)
+    // Load existing shift closing (for editing). Cash/transfer/note live on the row but are
+    // edited from /daily-report now — we read inventory_report only and forward the rest
+    // untouched on save.
     useEffect(() => {
         if (!selectedAddress?.id) { setIsLoadingExisting(false); return }
         setIsLoadingExisting(true)
         fetchTodayShiftClosing(selectedAddress.id).then(data => {
             if (!data) return
             setExistingClosing(data)
-            setActualCash(data.actual_cash != null ? formatVNDInput(data.actual_cash) : '')
-            setActualTransfer(data.actual_transfer != null ? formatVNDInput(data.actual_transfer) : '')
-            setNote(data.note || '')
 
             let parsed = data.inventory_report
             if (typeof parsed === 'string') {
@@ -139,9 +129,8 @@ export default function ShiftClosingPage() {
 
         channel
             .on('broadcast', { event: 'sync-state' }, ({ payload }) => {
-                if (payload.type === 'actualCash') setActualCash(payload.value)
-                if (payload.type === 'actualTransfer') setActualTransfer(payload.value)
-                if (payload.type === 'note') setNote(payload.value)
+                // actualCash / actualTransfer / note are now edited from /daily-report —
+                // intentionally not synced here.
                 if (payload.type === 'inventory') setInventoryInputs(prev => ({ ...prev, [payload.ingredient]: payload.value }))
                 if (payload.type === 'restock') setRestockInputs(prev => ({ ...prev, [payload.ingredient]: payload.value }))
                 if (payload.type === 'opening') setOpeningInputs(prev => ({ ...prev, [payload.ingredient]: payload.value }))
@@ -186,20 +175,6 @@ export default function ShiftClosingPage() {
     offlineToday.forEach(o => { if (!o.deleted_at && !o.deletedAt) systemTotalRevenue += o.total })
 
     // --- Change handlers ---
-    const handleCashChange = (raw) => {
-        const val = formatVNDInput(raw)
-        setIsDirty(true); setActualCash(val)
-        broadcast({ type: 'actualCash', value: val })
-    }
-    const handleTransferChange = (raw) => {
-        const val = formatVNDInput(raw)
-        setIsDirty(true); setActualTransfer(val)
-        broadcast({ type: 'actualTransfer', value: val })
-    }
-    const handleNoteChange = (val) => {
-        setIsDirty(true); setNote(val)
-        broadcast({ type: 'note', value: val })
-    }
     const handleOpeningChange = (ingredient, value) => {
         setIsDirty(true)
         setOpeningInputs(prev => ({ ...prev, [ingredient]: value }))
@@ -240,7 +215,7 @@ export default function ShiftClosingPage() {
     }, [ingredientsList, restockInputs, effectiveWarehouseStocks])
 
     const handleSubmit = async () => {
-        if (isSubmitting) return
+        if (isSaving) return
 
         // Block submit when any row reports more restock than the warehouse can supply.
         if (restockOverflowIngredients.length > 0) {
@@ -251,7 +226,6 @@ export default function ShiftClosingPage() {
         // Confirm before committing — chốt ca is a coarse action and not easily reversible.
         if (!window.confirm(existingClosing?.id ? 'Cập nhật báo cáo ca?' : 'Xác nhận chốt ca?')) return
 
-        setIsSubmitting(true)
         try {
             const inventoryReport = ingredientsList
                 .filter(ing => {
@@ -269,67 +243,30 @@ export default function ShiftClosingPage() {
                     restock: Number(restockInputs[ing.ingredient]) || 0
                 }))
 
+            // Cash / transfer / note are owned by /daily-report now — only include them in
+            // the insert payload so the column has a defined default on first close. Updates
+            // omit them so /daily-report's edits aren't clobbered.
             const payload = {
                 address_id: selectedAddress?.id,
-                closed_by: profile?.id || null,
-                system_total_revenue: systemTotalRevenue,
-                actual_cash: parseVNDInput(actualCash),
-                actual_transfer: parseVNDInput(actualTransfer),
                 inventory_report: inventoryReport,
-                note: note.trim()
+            }
+            if (!existingClosing?.id) {
+                payload.closed_by = profile?.id || null
+                payload.system_total_revenue = systemTotalRevenue
+                payload.actual_cash = 0
+                payload.actual_transfer = 0
+                payload.note = ''
             }
 
-            if (existingClosing?.id) {
-                await updateShiftClosing(existingClosing.id, payload)
-            } else {
-                await insertShiftClosing(payload)
-                // Auto-inject fixed costs as expenses (only for first-time shift close).
-                // Dedup by metadata.fixed_cost_id so two staff racing on the same first-time
-                // close still only insert one row per fixed cost.
-                try {
-                    const [fixedCosts, todayExpenses] = await Promise.all([
-                        fetchFixedCosts(selectedAddress?.id),
-                        fetchTodayExpenses(selectedAddress?.id),
-                    ])
-                    if (fixedCosts.length > 0) {
-                        const injectedIds = new Set(
-                            todayExpenses
-                                .filter(e => e.is_fixed === true)
-                                .map(e => e.metadata?.fixed_cost_id)
-                                .filter(Boolean)
-                        )
-                        const legacyInjected = todayExpenses.some(e => e.is_fixed === true && !e.metadata?.fixed_cost_id)
-                        const missing = legacyInjected ? [] : fixedCosts.filter(fc => !injectedIds.has(fc.id))
-                        if (missing.length > 0) {
-                            await Promise.all(
-                                missing.map(fc =>
-                                    insertExpense(`[CĐ] ${fc.name}`, fc.amount, selectedAddress?.id, true, null, false, 'cash', { fixed_cost_id: fc.id })
-                                )
-                            )
-                        }
-                    }
-                } catch (fixedErr) {
-                    showError(fixedErr, 'Ghi chi phí cố định vào ca')
-                }
-            }
-            invalidateDailyContext(selectedAddress?.id)
-
-            // Mark today's shift as finalized so HistoryPage categorizes subsequent operational
-            // expenses as "Sau ca" (free_form refill) instead of "Trong ca" (raw daily expense).
-            // Previously this flag was only set by a separate button on /daily-report.
-            if (selectedAddress?.id) {
-                const today = new Date().toISOString().split('T')[0]
-                localStorage.setItem(shiftFinalizedKey(selectedAddress.id, today), Date.now().toString())
-            }
+            await saveShiftClosing(payload, {
+                existingId: existingClosing?.id,
+                onFixedCostError: (err) => showError(err, 'Ghi chi phí cố định vào ca'),
+            })
 
             setIsDirty(false)
             if (hasFeature(activeModules, 'reports')) {
-                // Land on the report view that matches the tab the user was just editing:
-                // Tồn kho (inventory) → Inventory view, Thực thu (revenue) → Cashflow view.
-                const initialView = activeTab === 'inventory' ? 'inventory'
-                    : activeTab === 'revenue' ? 'cashflow'
-                    : undefined
-                navigate('/daily-report', { replace: true, state: initialView ? { initialView } : undefined })
+                // Land on the inventory view — the only thing /shift-closing edits now.
+                navigate('/daily-report', { replace: true, state: { initialView: 'inventory' } })
             } else {
                 // Paywall path: stay on page. Refresh existingClosing so subsequent edits
                 // recompute effectiveWarehouseStocks against the just-saved restock values.
@@ -339,8 +276,6 @@ export default function ShiftClosingPage() {
             }
         } catch (err) {
             showError(err, 'Chốt ca')
-        } finally {
-            setIsSubmitting(false)
         }
     }
 
@@ -356,12 +291,10 @@ export default function ShiftClosingPage() {
                 <>
                     <ShiftClosingHeader
                         systemTotalRevenue={systemTotalRevenue}
-                        isSubmitting={isSubmitting}
-                        isDisabled={isSubmitting || isLoadingHistory || isLoadingIngredients || isLoadingExisting}
+                        isSubmitting={isSaving}
+                        isDisabled={isSaving || isLoadingHistory || isLoadingIngredients || isLoadingExisting}
                         onBack={handleBack}
                         onSubmit={handleSubmit}
-                        activeTab={activeTab}
-                        onTabSelect={setActiveTab}
                     />
 
                     <main className="flex-1 overflow-y-auto px-4 py-5 space-y-5 bg-bg">
@@ -371,51 +304,23 @@ export default function ShiftClosingPage() {
                                 <div className="bg-surface-light rounded-[20px] h-40 w-full" />
                             </div>
                         ) : (
-                            <>
-                                {activeTab === 'inventory' && (
-                                    <>
-                                        <p className="text-[11px] text-text-secondary leading-snug bg-primary/5 border border-primary/15 rounded-[10px] px-3 py-2 -mb-2">
-                                            Cột <span className="font-bold text-text">"Nhập thêm"</span> = số rút từ kho tổng → quầy.
-                                            Mua nguyên liệu mới phải qua <span className="font-bold text-text">/ingredients → + Nhập kho</span> trước, không để hàng thẳng lên quầy.
-                                        </p>
-                                        <InventoryReportCard
-                                            ingredientsList={ingredientsList}
-                                            isLoading={isLoadingIngredients}
-                                            openingStock={openingStock}
-                                            openingInputs={openingInputs}
-                                            openingLocked={openingLocked}
-                                            restockInputs={restockInputs}
-                                            inventoryInputs={inventoryInputs}
-                                            warehouseStocks={effectiveWarehouseStocks}
-                                            ingredientUnits={Object.fromEntries(ingredientsList.map(i => [i.ingredient, i.unit]))}
-                                            canUnlock={canUnlock}
-                                            isSubmitting={isSubmitting}
-                                            onOpeningChange={handleOpeningChange}
-                                            onOpeningLock={handleOpeningLock}
-                                            onRestockChange={handleRestockChange}
-                                            onInventoryChange={handleInventoryChange}
-                                        />
-                                    </>
-                                )}
-
-                                {activeTab === 'revenue' && (
-                                    <RevenueInputCard
-                                        actualCash={actualCash}
-                                        actualTransfer={actualTransfer}
-                                        isSubmitting={isSubmitting}
-                                        onCashChange={handleCashChange}
-                                        onTransferChange={handleTransferChange}
-                                    />
-                                )}
-
-                                {activeTab === 'note' && (
-                                    <NoteCard
-                                        note={note}
-                                        isSubmitting={isSubmitting}
-                                        onChange={handleNoteChange}
-                                    />
-                                )}
-                            </>
+                            <InventoryReportCard
+                                ingredientsList={ingredientsList}
+                                isLoading={isLoadingIngredients}
+                                openingStock={openingStock}
+                                openingInputs={openingInputs}
+                                openingLocked={openingLocked}
+                                restockInputs={restockInputs}
+                                inventoryInputs={inventoryInputs}
+                                warehouseStocks={effectiveWarehouseStocks}
+                                ingredientUnits={Object.fromEntries(ingredientsList.map(i => [i.ingredient, i.unit]))}
+                                canUnlock={canUnlock}
+                                isSubmitting={isSaving}
+                                onOpeningChange={handleOpeningChange}
+                                onOpeningLock={handleOpeningLock}
+                                onRestockChange={handleRestockChange}
+                                onInventoryChange={handleInventoryChange}
+                            />
                         )}
                     </main>
                 </>

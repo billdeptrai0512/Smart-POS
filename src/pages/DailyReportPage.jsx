@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { usePOS } from '../contexts/POSContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -16,16 +16,12 @@ import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
 import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY } from '../components/DailyReportPage/ReportViewFilter'
 import HistoryFooter from '../components/HistoryPage/HistoryFooter'
-import { supabase } from '../lib/supabaseClient'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useEntitlement, hasFeature } from '../hooks/useEntitlement'
 import UpsellPage from '../components/common/UpsellPage'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
-
-// Use dateStringVN so YYYY-MM-DD always reflects Vietnam local date
-const getLocalISO = (date = new Date()) => dateStringVN(date)
 
 export default function DailyReportPage() {
     const navigate = useNavigate()
@@ -71,7 +67,6 @@ export default function DailyReportPage() {
     const [apiOrders, setApiOrders] = useState([])
     const [apiExpenses, setApiExpenses] = useState([])
     const [apiShiftClosings, setApiShiftClosings] = useState([])
-    const [prevShiftClosings, setPrevShiftClosings] = useState([])
 
     // Inline cash/transfer editor (today scope only). Pre-fills from shiftClosing when
     // it loads; dirty flag controls when the Lưu button appears.
@@ -143,7 +138,6 @@ export default function DailyReportPage() {
                     setApiShiftClosings(data?.target_shift_closings || [])
                     setYesterdayOrders(data?.prev_orders || [])
                     setYesterdayExpensesData(data?.prev_expenses || [])
-                    setPrevShiftClosings(data?.prev_shift_closings || [])
 
                     if (data?.target_shift_closings?.length) {
                         setShiftClosing(data.target_shift_closings[data.target_shift_closings.length - 1])
@@ -180,7 +174,6 @@ export default function DailyReportPage() {
         if (!iso || iso >= todayISO) { setOffset(0); setHasManualPick(false); return }
         setOffset(offsetFromISO(iso, todayISO))
     }
-    const handleScopeChange = (next) => { setOffset(0); setScope(next); setHasManualPick(false) }
     const handleManualDatePick = (iso) => { setHasManualPick(true); setOffsetFromISO(iso) }
     const handlePrevDay = () => {
         setHasManualPick(false)
@@ -222,7 +215,6 @@ export default function DailyReportPage() {
     // All heavy stats: only reruns when orders/recipes/products change, NOT on UI state changes
     const { totalRevenue, totalCOGS, productStats, soldProducts, lineChartData, offlineToday } = useMemo(() => {
         const pending = scope !== 'day' || offset !== 0 ? [] : getPendingOrders()
-        const todayStr = dateStringVN()
         const offlineToday = pending.filter(o => isSameDayVN(new Date(o.createdAt), new Date()))
 
         const agg = aggregateOrderStats({
@@ -271,7 +263,7 @@ export default function DailyReportPage() {
         return cups
     }, [displayOrders, offlineToday, selectedProductId, productMap])
 
-    const { dailyExpense, refillTotal, refillNvl, refillFreeForm } = useMemo(
+    const { dailyExpense, refillNvl, refillFreeForm } = useMemo(
         () => splitExpenses(displayExpenses),
         [displayExpenses]
     )
@@ -364,16 +356,6 @@ export default function DailyReportPage() {
     const { cash: actualCash, transfer: actualTransfer } = useMemo(() => {
         return calculateSyncedCashFlow(scope === 'day', shiftClosing, apiShiftClosings, displayOrders, offlineToday)
     }, [scope, shiftClosing, apiShiftClosings, displayOrders, offlineToday])
-
-    const { cash: yesterdayActualCash, transfer: yesterdayActualTransfer } = useMemo(() => {
-        return calculateSyncedCashFlow(scope === 'day', yesterdayClosing, prevShiftClosings, yesterdayOrders)
-    }, [scope, yesterdayClosing, prevShiftClosings, yesterdayOrders])
-
-    const yestTotalRefill = yesterdayExpensesData.filter(e => e.is_refill).reduce((s, e) => s + e.amount, 0)
-    const yestOpsExpense = yesterdayExpensesData.filter(e => !e.is_fixed && !e.is_refill).reduce((s, e) => s + e.amount, 0)
-
-    const yesterdayTakeHome = yesterdayActualCash + yesterdayActualTransfer - yestTotalRefill
-    const yesterdayActualTotal = yesterdayActualCash + yesterdayActualTransfer + yestOpsExpense
 
     // Sum today's orders (online + offline) for the system_total_revenue snapshot we send
     // when creating a new shift_closing. Mirrors /shift-closing's calculation.
@@ -502,12 +484,9 @@ export default function DailyReportPage() {
                                 actualCash={actualCash}
                                 actualTransfer={actualTransfer}
                                 dailyExpense={dailyExpense}
-                                refillTotal={refillTotal}
                                 refillNvl={refillNvl}
                                 refillFreeForm={refillFreeForm}
                                 expenses={displayExpenses}
-                                yesterdayActualTotal={yesterdayActualTotal}
-                                yesterdayTakeHome={yesterdayTakeHome}
                                 editable={isTodayScope}
                                 cashInput={cashInput}
                                 transferInput={transferInput}
@@ -517,7 +496,6 @@ export default function DailyReportPage() {
                                 isSaving={isSavingShift}
                                 hasChanges={cashDirty}
                                 onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'operation', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } })}
-                                onRefillClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'nvl', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } })}
                                 salesCard={
                                     <SalesCard
                                         totalCups={totalCups}
@@ -574,7 +552,7 @@ export default function DailyReportPage() {
             </main>
 
             {/* FAB: Cập nhật báo cáo */}
-            {/* {view !== VIEW_PROFIT && (
+            {view !== VIEW_PROFIT && (
                 <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
                     <div className="flex justify-end px-4 mb-[72px] pointer-events-auto">
                         <button
@@ -585,7 +563,7 @@ export default function DailyReportPage() {
                         </button>
                     </div>
                 </div>
-            )} */}
+            )}
 
 
             <HistoryFooter
