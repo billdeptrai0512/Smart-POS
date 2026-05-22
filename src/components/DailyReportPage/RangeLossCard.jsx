@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { calculateEstimatedConsumption } from '../../utils/inventory';
 import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Lock } from 'lucide-react';
 import { useProducts } from '../../contexts/ProductContext';
 import { formatVND } from '../../utils';
 

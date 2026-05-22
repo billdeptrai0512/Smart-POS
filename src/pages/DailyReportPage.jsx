@@ -17,12 +17,14 @@ import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
 import InventoryReportCard from '../components/ShiftClosingPage/InventoryReportCard'
+import RangeLossCard from '../components/DailyReportPage/RangeLossCard'
 import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY } from '../components/DailyReportPage/ReportViewFilter'
 import HistoryFooter from '../components/HistoryPage/HistoryFooter'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useEntitlement, hasFeature } from '../hooks/useEntitlement'
 import UpsellPage from '../components/common/UpsellPage'
+import UpsellSheet from '../components/common/UpsellSheet'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
 
@@ -48,6 +50,7 @@ export default function DailyReportPage() {
     const [offset, setOffset] = useState(0)
     const [customRange, setCustomRange] = useState(null)
     const [hasManualPick, setHasManualPick] = useState(false)
+    const [showLossUpsell, setShowLossUpsell] = useState(false)
 
     // Seed customDate if navigated with it
     useEffect(() => {
@@ -70,6 +73,7 @@ export default function DailyReportPage() {
     const [apiOrders, setApiOrders] = useState([])
     const [apiExpenses, setApiExpenses] = useState([])
     const [apiShiftClosings, setApiShiftClosings] = useState([])
+    const [prevShiftClosings, setPrevShiftClosings] = useState([])
 
     // `todayISO` is state (not per-render) so an overnight tab can detect the date
     // change on focus/visibility and trigger a refetch of shift_closing + clear stale
@@ -167,6 +171,7 @@ export default function DailyReportPage() {
                     setApiOrders(data?.target_orders || [])
                     setApiExpenses(data?.target_expenses || [])
                     setApiShiftClosings(data?.target_shift_closings || [])
+                    setPrevShiftClosings(data?.prev_shift_closings || [])
                     setYesterdayOrders(data?.prev_orders || [])
                     setYesterdayExpensesData(data?.prev_expenses || [])
 
@@ -707,7 +712,7 @@ export default function DailyReportPage() {
                                             />
                                         )}
                                     </div>
-                                ) : (
+                                ) : scope === 'day' ? (
                                     <InventoryRefillCard
                                         shiftClosing={shiftClosing}
                                         yesterdayClosing={yesterdayClosing}
@@ -721,6 +726,19 @@ export default function DailyReportPage() {
                                         ingredientUnits={ingredientUnits}
                                         isPastDate={true}
                                         canAccessAudit={hasFeature(activeModules, 'lossAudit')}
+                                    />
+                                ) : (
+                                    // Range scopes (week/month/custom): aggregate loss across all
+                                    // closings in the period — mirrors what /range-report shows.
+                                    <RangeLossCard
+                                        orders={apiOrders}
+                                        shiftClosings={apiShiftClosings}
+                                        prevShiftClosings={prevShiftClosings}
+                                        recipes={recipes}
+                                        extraIngredients={extraIngredients}
+                                        ingredientUnits={ingredientUnits}
+                                        isLocked={!hasFeature(activeModules, 'lossAudit')}
+                                        onUnlockClick={() => setShowLossUpsell(true)}
                                     />
                                 )}
                             </>
@@ -766,6 +784,11 @@ export default function DailyReportPage() {
                 }}
             />
             <Toast toast={toast} />
+            <UpsellSheet
+                open={showLossUpsell}
+                onClose={() => setShowLossUpsell(false)}
+                required="pro"
+            />
         </div>
     )
 }

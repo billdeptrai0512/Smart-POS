@@ -12,7 +12,7 @@ import { formatVND } from '../../utils'
 // Staff inputs: Lấy ra, Đầu kỳ, "+ Cuối kỳ". Everything else is computed and disabled.
 // Audit math:
 //   Thực tế   = Tồn cuối + Cuối kỳ          (tổng tồn vật lý cuối ca)
-//   Lý thuyết = Tồn cuối + Đầu kỳ − Sử dụng (tồn dự kiến theo công thức)
+//   Lý thuyết = Tồn kho + Đầu kỳ − Sử dụng  (tồn dự kiến theo công thức)
 //   Hao hụt   = Thực tế − Lý thuyết         (âm = thiếu, dương = dư, 0 = khớp)
 export default function InventoryReportCard({
     ingredientsList, isLoading,
@@ -108,7 +108,7 @@ function IngredientRow({
     //   warehouseEnd = Tồn kho − Lấy ra   (kho tổng còn sau khi rút)
     //   Sử dụng      = recipe-based estimated consumption
     //   Thực tế      = Tồn cuối + Cuối kỳ (đếm vật lý cuối ca)
-    //   Lý thuyết    = (Tồn cuối + Đầu kỳ) − Sử dụng
+    //   Lý thuyết    = (Tồn kho + Đầu kỳ) − Sử dụng
     //   Hao hụt      = Thực tế − Lý thuyết
     //                 (âm = thiếu → mất hàng / công thức sai;
     //                  dương = dư → restock vượt / công thức trừ thiếu)
@@ -118,7 +118,7 @@ function IngredientRow({
     const hasActual = inventoryValue !== undefined && inventoryValue !== ''
     const cuoiKyNum = hasActual ? r1(inventoryValue) : null
     const thucTe = cuoiKyNum != null ? r1(warehouseEnd + cuoiKyNum) : null
-    const lyThuyet = r1(warehouseEnd + openingNum - usedNum)
+    const lyThuyet = r1(warehouseNum + openingNum - usedNum)
     const haoHut = thucTe != null ? r1(thucTe - lyThuyet) : null
     const haoHutTone = haoHut == null
         ? 'neutral'
