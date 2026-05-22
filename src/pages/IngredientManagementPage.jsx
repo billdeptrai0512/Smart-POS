@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { Plus, X, ArrowUpDown } from 'lucide-react'
+import FabActionMenu from '../components/common/FabActionMenu'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -57,6 +59,7 @@ export default function IngredientManagementPage() {
     const [newName, setNewName] = useState('')
     const [newUnit, setNewUnit] = useState('')
     const [newCost, setNewCost] = useState('')
+    const [showCreateModal, setShowCreateModal] = useState(false)
 
     // Stock & modals
     const [ingredientStocks, setIngredientStocks] = useState([])
@@ -257,6 +260,7 @@ export default function IngredientManagementPage() {
             setIngredientCosts(prev => ({ ...prev, [key]: cost }))
             setIngredientUnits(prev => ({ ...prev, [key]: unit }))
             setNewName(''); setNewUnit(''); setNewCost('')
+            setShowCreateModal(false)
         } catch (err) {
             showError(err, 'Tạo nguyên liệu mới')
         } finally {
@@ -422,19 +426,8 @@ export default function IngredientManagementPage() {
 
             {(showFooterCreate || showFooterSort) && (
                 <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-50">
-                    {showFooterCreate && (
-                        <div className="flex justify-end px-4 mb-2 pointer-events-auto">
-                            <button
-                                onClick={enterSortMode}
-                                className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center justify-center text-[13px] font-bold text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
-                            >
-                                ↕ Sắp xếp
-                            </button>
-                        </div>
-                    )}
-
-                    <div className="p-4 bg-surface border-t border-border/60 pointer-events-auto">
-                        {showFooterSort ? (
+                    {showFooterSort ? (
+                        <div className="p-4 bg-surface border-t border-border/60 pointer-events-auto">
                             <div className="flex gap-2">
                                 <button
                                     onClick={cancelSortMode}
@@ -450,18 +443,47 @@ export default function IngredientManagementPage() {
                                     {saving ? '⏳ Đang lưu...' : 'Lưu sắp xếp'}
                                 </button>
                             </div>
-                        ) : (
-                            <CreateIngredientForm
-                                name={newName}
-                                unit={newUnit}
-                                cost={newCost}
-                                saving={saving}
-                                onNameChange={setNewName}
-                                onUnitChange={setNewUnit}
-                                onCostChange={setNewCost}
-                                onSubmit={handleCreateIngredient}
+                        </div>
+                    ) : (
+                        <div className="flex justify-end px-4 pb-[max(env(safe-area-inset-bottom),16px)] pointer-events-auto">
+                            <FabActionMenu
+                                items={[
+                                    { key: 'sort', icon: <ArrowUpDown size={14} />, label: 'Sắp xếp', onClick: enterSortMode },
+                                    { key: 'create', icon: <Plus size={14} />, label: 'Tạo NVL', onClick: () => setShowCreateModal(true) },
+                                ]}
                             />
-                        )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {showCreateModal && (
+                <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={() => !saving && setShowCreateModal(false)}>
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+                    <div
+                        className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between">
+                            <span className="text-[16px] font-black text-text">Tạo nguyên liệu mới</span>
+                            <button
+                                onClick={() => setShowCreateModal(false)}
+                                disabled={saving}
+                                className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all disabled:opacity-50"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <CreateIngredientForm
+                            name={newName}
+                            unit={newUnit}
+                            cost={newCost}
+                            saving={saving}
+                            onNameChange={setNewName}
+                            onUnitChange={setNewUnit}
+                            onCostChange={setNewCost}
+                            onSubmit={handleCreateIngredient}
+                        />
                     </div>
                 </div>
             )}

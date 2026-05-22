@@ -252,16 +252,18 @@ export async function fetchIngredientStocks(addressId) {
 
     const applyAddrFilter = (q) => isDefault ? q.is('address_id', null) : q.eq('address_id', addressId)
 
-    // Fallback step 1: latest closing + all refills (parallel, both small)
+    // Fallback step 1: recent closings + all refills (parallel, both small).
+    // Walk N=30 latest closings (DESC) so we can carry forward the most-recent
+    // non-null `remaining` per ingredient — null means staff didn't count that
+    // ingredient that shift, so we keep yesterday's counter instead of zeroing.
     const [latestRes, refillsRes] = await Promise.all([
         applyAddrFilter(
             supabase
                 .from('shift_closings')
-                .select('inventory_report')
+                .select('created_at, inventory_report')
         )
             .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
+            .limit(30),
         applyAddrFilter(
             supabase
                 .from('expenses')
@@ -271,10 +273,26 @@ export async function fetchIngredientStocks(addressId) {
 
     const counter = {}
     const todayRestock = {}
-    const latestReport = Array.isArray(latestRes.data?.inventory_report) ? latestRes.data.inventory_report : []
+    const closingsDesc = Array.isArray(latestRes.data) ? latestRes.data : []
+
+    // todayRestock = restock from THE latest closing only (today's restock).
+    const latestReport = Array.isArray(closingsDesc[0]?.inventory_report) ? closingsDesc[0].inventory_report : []
     latestReport.forEach(item => {
-        counter[item.ingredient] = Number(item.remaining) || 0
-        todayRestock[item.ingredient] = Number(item.restock) || 0
+        if (item.ingredient && item.restock != null) {
+            todayRestock[item.ingredient] = Number(item.restock)
+        }
+    })
+
+    // counter = most-recent non-null remaining per ingredient. Walking DESC and
+    // only writing on first hit means yesterday's count wins when today is null.
+    closingsDesc.forEach(closing => {
+        const report = Array.isArray(closing.inventory_report) ? closing.inventory_report : []
+        report.forEach(item => {
+            if (!item.ingredient) return
+            if (item.remaining != null && counter[item.ingredient] === undefined) {
+                counter[item.ingredient] = Number(item.remaining)
+            }
+        })
     })
 
     // First refill timestamp + total refill per ingredient

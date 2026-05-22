@@ -13,6 +13,9 @@ export default function HistoryHeader({
     onPrevDay, onNextDay, onDateChange, onEndDatePick, hasManualPick,
     // Custom range mode
     customRange, onCustomStartChange, onCustomEndChange,
+    // Optional slot: extra row rendered below the tabs bar inside the sticky
+    // header (e.g. DailyReportPage's Dòng tiền / Tồn kho / Lợi nhuận filter).
+    belowTabs,
 }) {
     return (
         <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
@@ -69,6 +72,7 @@ export default function HistoryHeader({
             </div>
 
             <HistoryTabsBar activeTab={activeTab} onSelect={onTabSelect} />
+            {belowTabs}
         </header>
     )
 }

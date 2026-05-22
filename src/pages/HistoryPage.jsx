@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { formatVNDInput, parseVNDInput, calculateProductCost } from '../utils'
+import { calculateProductCost } from '../utils'
 import { getPendingOrders, removePendingOrder } from '../hooks/useOfflineSync'
 import { dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { calcRangeWithLabel, offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
 import { useHistoryRangeFetch } from '../hooks/useHistoryRangeFetch'
-import { useFilteredExpenses } from '../hooks/useFilteredExpenses'
 import { useFormatHistoryOrders } from '../hooks/useFormatHistoryOrders'
 import { useAddress } from '../contexts/AddressContext'
 import { useProducts } from '../contexts/ProductContext'
@@ -18,6 +17,7 @@ import AddExpenseModal from '../components/HistoryPage/AddExpenseModal'
 import HistoryFooter from '../components/HistoryPage/HistoryFooter'
 import { shiftFinalizedKey } from '../constants/storageKeys'
 import { Plus } from 'lucide-react'
+import { fetchExpenseCategories, insertExpenseCategory, updateExpenseCategory, deleteExpenseCategory } from '../services/expenseService'
 
 // Use dateStringVN so YYYY-MM-DD always reflects Vietnam local date,
 // regardless of where the browser runs.
@@ -27,11 +27,11 @@ export default function HistoryPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const { selectedAddress } = useAddress()
-    const { products, recipes, ingredientCosts, extraIngredients, ingredientUnits, refreshProducts } = useProducts()
+    const { products, recipes, ingredientCosts, extraIngredients, refreshProducts } = useProducts()
     const {
         todayOrders, todayExpenses, isLoadingHistory,
-        handleDeleteOrder, handleAddExpense, handleDeleteExpense, handleLoadHistory, retrySync,
-        fixedCosts, handleAddFixedCost, handleUpdateFixedCost, handleDeleteFixedCost, refreshTodayExpenses,
+        handleDeleteOrder, handleAddExpense, handleUpdateExpense, handleDeleteExpense, handleLoadHistory, retrySync,
+        refreshTodayExpenses,
     } = usePOS()
     const { isManager: isManagerRole, isAdmin, profile } = useAuth()
     const isManager = isManagerRole || isAdmin
@@ -43,7 +43,6 @@ export default function HistoryPage() {
 
     // ─── Navigation state ─────────────────────────────────────────────
     const initialTab = location.state?.tab === 'expense' ? 'expense' : 'orders'
-    const initialFilter = location.state?.filter || 'operation'
     const expensesToView = location.state?.expensesToView  // read-only past date list
     const isReadOnly = location.state?.isReadOnly || false
     const backTo = location.state?.from || '/pos'
@@ -54,7 +53,6 @@ export default function HistoryPage() {
 
     // ─── UI state ─────────────────────────────────────────────────────
     const [activeTab, setActiveTab] = useState(initialTab)
-    const [expenseFilter, setExpenseFilter] = useState(initialFilter)
     const [showAddModal, setShowAddModal] = useState(false)
 
     const [scope, setScope] = useState(initialScope)
@@ -71,27 +69,75 @@ export default function HistoryPage() {
 
     // ─── Expense state ────────────────────────────────────────────────
     const [deletingExpId, setDeletingExpId] = useState(null)
-    const [editingFixedId, setEditingFixedId] = useState(null)
-    const [editFixedName, setEditFixedName] = useState('')
-    const [editFixedAmount, setEditFixedAmount] = useState('')
-    const [deletingFixedId, setDeletingFixedId] = useState(null)
 
     // ─── Add-expense form state ───────────────────────────────────────
-    const [expenseCategory, setExpenseCategory] = useState('expense') // 'expense' | 'nvl' | 'fixed'
-    const [fixedSubMode, setFixedSubMode] = useState('setup') // 'setup' | 'actual'
+    // `expenseCategory` here = top tab. 'expense' → Vận hành (operating tags),
+    // 'fixed' → Quản lý & khác (overhead tags). The legacy 'fixed' key is kept
+    // to avoid touching scattered handlers; semantically it now drives only
+    // group_section, not the fixed_costs template flow (which is deprecated).
+    const [expenseCategory, setExpenseCategory] = useState('expense')
     const [costName, setCostName] = useState('')
     const [costAmount, setCostAmount] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [selectedCategoryId, setSelectedCategoryId] = useState(null)
+    const [expenseCategories, setExpenseCategories] = useState([])
+    const [paymentMethod, setPaymentMethod] = useState('cash')
+
+    // Fetch tags on mount + whenever the modal opens (cache-backed). Card list
+    // also needs categories to resolve the tag chip on each ExpenseCard, so we
+    // can't gate solely on modal open.
+    useEffect(() => {
+        if (!selectedAddress?.id) return
+        fetchExpenseCategories(selectedAddress.id).then(setExpenseCategories)
+    }, [selectedAddress?.id, showAddModal])
+
+    // Auto-pick a sensible default category whenever the modal opens or the top
+    // tab switches. Switching Vận hành ↔ Quản lý & khác MUST reset the selection
+    // to a tag in the new group — otherwise the picker shows a chip that's
+    // hidden from the filtered list, leaving the user with no visible selection.
+    useEffect(() => {
+        if (!showAddModal || expenseCategories.length === 0) return
+        const targetGroup = expenseCategory === 'fixed' ? 'overhead' : 'operating'
+        const current = expenseCategories.find(c => c.id === selectedCategoryId)
+        if (current && current.group_section === targetGroup) return
+        const fallback =
+            expenseCategories.find(c => c.is_default && c.group_section === targetGroup && c.name === 'Chi phí khác')
+            || expenseCategories.find(c => c.group_section === targetGroup)
+            || null
+        setSelectedCategoryId(fallback?.id || null)
+    }, [showAddModal, expenseCategories, selectedCategoryId, expenseCategory])
 
     // Reset form when modal closes
     useEffect(() => {
         if (!showAddModal) {
             setCostName('')
             setCostAmount('')
-            setFixedSubMode('setup')
             setExpenseCategory('expense')
+            setSelectedCategoryId(null)
+            setPaymentMethod('cash')
         }
     }, [showAddModal])
+
+    const handleCreateCategory = useCallback(async ({ name, group_section }) => {
+        if (!selectedAddress?.id) return null
+        const created = await insertExpenseCategory(selectedAddress.id, { name, group_section })
+        setExpenseCategories(prev => [...prev, created])
+        return created
+    }, [selectedAddress?.id])
+
+    const handleUpdateCategory = useCallback(async (id, updates) => {
+        const updated = await updateExpenseCategory(id, updates)
+        setExpenseCategories(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c))
+        return updated
+    }, [])
+
+    const handleDeleteCategoryTag = useCallback(async (id) => {
+        await deleteExpenseCategory(id)
+        setExpenseCategories(prev => prev.filter(c => c.id !== id))
+        // Note: existing expenses still hold this category_id. FinanceCards +
+        // TagPill fall back to "Chưa phân loại" / "Chi phí khác" via lookup miss.
+        // Manager can re-tag them via the sheet if needed.
+    }, [])
 
     // ─── Range fetch ──────────────────────────────────────────────────
     const { rangeStart, rangeEnd, rangeLabel } = useMemo(() => {
@@ -170,7 +216,7 @@ export default function HistoryPage() {
     }
 
     // ─── Range data fetchers ──────────────────────────────────────────
-    const { rangeExpenses, rangeOrders, isLoadingRange, isLoadingRangeOrders } = useHistoryRangeFetch({
+    const { rangeExpenses, rangeOrders, isLoadingRange, isLoadingRangeOrders, patchExpense: patchRangeExpense } = useHistoryRangeFetch({
         addressId: selectedAddress?.id,
         rangeStart, rangeEnd,
         isTodayScope, isReadOnly,
@@ -242,80 +288,66 @@ export default function HistoryPage() {
         return rangeExpenses
     }, [expensesToView, isTodayScope, todayExpenses, rangeExpenses])
 
-    const nonFixedExpenses = useMemo(() => baseExpenses.filter(e => !e.is_fixed), [baseExpenses])
-    const fixedPayments = useMemo(() => baseExpenses.filter(e => e.is_fixed).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)), [baseExpenses])
+    // Expense list shown in /history excludes NVL refills — biến động kho mỗi
+    // nguyên liệu sống ở /ingredient/:id. NVL vẫn xuất hiện trong dòng tiền
+    // (CashFlowCard) vì là cash-out thật, chỉ không trừ lại trong P&L.
+    // Free-form refills (chi linh tinh sau ca) vẫn là expense thường → giữ lại.
+    const expensesForList = useMemo(
+        () => baseExpenses
+            .filter(e => !e.is_refill || e.metadata?.free_form)
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)),
+        [baseExpenses]
+    )
 
     const isLoadingExpenses = isReadOnly ? false : (isTodayScope ? isLoadingHistory : isLoadingRange)
-
-    const filteredExpenses = useFilteredExpenses(nonFixedExpenses, expenseFilter)
-
-    // Cumulative inflow per ingredient — walks oldest→newest. Per refill: before = running total, after = +qty.
-    const nvlStockSnapshot = useMemo(() => {
-        const snapshot = new Map()
-        const running = {}
-        const asc = [...baseExpenses].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
-        for (const e of asc) {
-            if (!e.is_refill || e.metadata?.free_form) continue
-            const ing = e.metadata?.ingredient
-            if (!ing) continue
-            const qty = Number(e.metadata?.qty) || 0
-            const before = running[ing] || 0
-            const after = before + qty
-            running[ing] = after
-            snapshot.set(e.id, { before, after })
-        }
-        return snapshot
-    }, [baseExpenses])
-
-    const totalNonFixedRange = nonFixedExpenses.reduce((s, e) => s + (e.amount || 0), 0)
     const totalRevenue = useMemo(
         () => allOrders.reduce((s, o) => s + (o.deletedAt ? 0 : (o.total || 0)), 0),
         [allOrders]
     )
 
     // ─── Action handlers ──────────────────────────────────────────────
+    // "Thực chi" only: mọi chi phí đều là expense thực được ghi nhận tại
+    // thời điểm chi tiêu. Tab chỉ quyết định group_section qua tag (operating
+    // vs overhead) — không còn fixed_costs template / auto-inject.
     const submitExpense = async () => {
         if (!costAmount || isNaN(costAmount) || Number(costAmount) <= 0 || !costName.trim()) return
         setIsSubmitting(true)
         try {
             const amount = Number(costAmount) * 1000
-            if (expenseCategory === 'fixed' && fixedSubMode === 'setup') {
-                await handleAddFixedCost(costName.trim(), amount)
-            } else if (expenseCategory === 'fixed' && fixedSubMode === 'actual') {
-                await handleAddExpense(costName.trim(), amount, false, 'cash', {}, true)
+            const tagId = selectedCategoryId || null
+            // Auto-detect Trong ca vs Sau ca from shift_finalized flag — vẫn cần
+            // để ExpensePanel badge phân biệt "Sau ca" cho expense vận hành.
+            const today = new Date().toISOString().split('T')[0]
+            const isFinalized = selectedAddress?.id && !!localStorage.getItem(shiftFinalizedKey(selectedAddress.id, today))
+            if (isFinalized) {
+                await handleAddExpense(costName.trim(), amount, true, paymentMethod, { free_form: true }, false, tagId)
             } else {
-                // 'expense' — auto-detect Trong ca vs Sau ca from shift_finalized flag
-                const today = new Date().toISOString().split('T')[0]
-                const isFinalized = selectedAddress?.id && !!localStorage.getItem(shiftFinalizedKey(selectedAddress.id, today))
-                if (isFinalized) {
-                    await handleAddExpense(costName.trim(), amount, true, 'cash', { free_form: true })
-                } else {
-                    await handleAddExpense(costName.trim(), amount, false, 'cash', {})
-                }
+                await handleAddExpense(costName.trim(), amount, false, paymentMethod, {}, false, tagId)
             }
             setShowAddModal(false)
         } catch { }
         finally { setIsSubmitting(false) }
     }
 
-    const startEditFixed = (fc) => {
-        setEditingFixedId(fc.id)
-        setEditFixedName(fc.name)
-        setEditFixedAmount(formatVNDInput(fc.amount))
-    }
+    const changeExpenseCategory = useCallback(async (expenseId, newCategoryId) => {
+        // POSContext.handleUpdateExpense patches todayExpenses + invalidates daily cache.
+        // For non-today scopes we also patch the range fetch cache so the card
+        // re-renders immediately without an extra round-trip.
+        await handleUpdateExpense(expenseId, { category_id: newCategoryId })
+        if (!isTodayScope && patchRangeExpense) {
+            patchRangeExpense(expenseId, { category_id: newCategoryId })
+        }
+    }, [handleUpdateExpense, isTodayScope, patchRangeExpense])
 
-    const submitEditFixed = async () => {
-        if (!editFixedName.trim() || !editFixedAmount || parseVNDInput(editFixedAmount) <= 0) return
-        try {
-            await handleUpdateFixedCost(editingFixedId, { name: editFixedName.trim(), amount: parseVNDInput(editFixedAmount) })
-            setEditingFixedId(null)
-        } catch { }
-    }
-
-    const deleteFixed = (id) => {
-        setDeletingFixedId(id)
-        handleDeleteFixedCost(id).finally(() => setDeletingFixedId(null))
-    }
+    const changeExpensePayment = useCallback(async (expenseId, newPaymentMethod) => {
+        // Affects CashFlowCard's cash/transfer split + cuối kỳ "thực thu" math, so
+        // patching both the local list and the range cache is critical for the
+        // dashboards above to recompute when manager flips this.
+        await handleUpdateExpense(expenseId, { payment_method: newPaymentMethod })
+        if (!isTodayScope && patchRangeExpense) {
+            patchRangeExpense(expenseId, { payment_method: newPaymentMethod })
+        }
+    }, [handleUpdateExpense, isTodayScope, patchRangeExpense])
 
     const deleteExpense = async (id, amount) => {
         setDeletingExpId(id)
@@ -400,26 +432,15 @@ export default function HistoryPage() {
                 <ExpensePanel
                     isReadOnly={isReadOnly}
                     isLoading={isLoadingExpenses}
-                    expenseFilter={expenseFilter}
-                    onSelectFilter={(f) => setExpenseFilter(f)}
-                    isManager={isManager}
-                    fixedCosts={fixedCosts}
-                    editingFixedId={editingFixedId}
-                    editFixedName={editFixedName}
-                    editFixedAmount={editFixedAmount}
-                    deletingFixedId={deletingFixedId}
-                    onStartEditFixed={startEditFixed}
-                    onCancelEditFixed={() => setEditingFixedId(null)}
-                    onSubmitEditFixed={submitEditFixed}
-                    onEditFixedNameChange={setEditFixedName}
-                    onEditFixedAmountChange={setEditFixedAmount}
-                    onDeleteFixed={deleteFixed}
-                    fixedPayments={fixedPayments}
-                    filteredExpenses={filteredExpenses}
-                    ingredientUnits={ingredientUnits}
-                    nvlStockSnapshot={nvlStockSnapshot}
+                    expenses={expensesForList}
+                    expenseCategories={expenseCategories}
                     deletingExpId={deletingExpId}
                     onDeleteExpense={deleteExpense}
+                    onChangeCategory={changeExpenseCategory}
+                    onCreateCategory={handleCreateCategory}
+                    onUpdateCategory={handleUpdateCategory}
+                    onDeleteCategoryTag={handleDeleteCategoryTag}
+                    onChangePayment={changeExpensePayment}
                 />
             )}
 
@@ -440,14 +461,18 @@ export default function HistoryPage() {
             {showAddModal && (
                 <AddExpenseModal
                     expenseCategory={expenseCategory}
-                    fixedSubMode={fixedSubMode}
                     costName={costName}
                     costAmount={costAmount}
                     isSubmitting={isSubmitting}
+                    expenseCategories={expenseCategories}
+                    selectedCategoryId={selectedCategoryId}
+                    onCategoryIdChange={setSelectedCategoryId}
+                    onCreateCategory={handleCreateCategory}
+                    paymentMethod={paymentMethod}
+                    onPaymentMethodChange={setPaymentMethod}
                     onClose={() => setShowAddModal(false)}
                     onSubmit={submitExpense}
                     onCategoryChange={setExpenseCategory}
-                    onFixedSubModeChange={setFixedSubMode}
                     onNameChange={setCostName}
                     onAmountChange={setCostAmount}
                 />

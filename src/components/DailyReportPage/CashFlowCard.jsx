@@ -39,7 +39,8 @@ export default function CashFlowCard({
     // refill chuyển khoản chỉ trừ chuyển khoản, refill tiền mặt chỉ trừ tiền mặt.
     let cashRefill = 0, transferRefill = 0
     for (const e of expenses || []) {
-        if (e.is_fixed || !e.is_refill) continue
+        if (!e.is_refill) continue
+        if (e.metadata?.adjustment) continue  // bookkeeping only, không phải cash-out
         if (e.payment_method === 'transfer') transferRefill += e.amount || 0
         else cashRefill += e.amount || 0  // default 'cash' when payment_method nullish
     }
@@ -47,10 +48,11 @@ export default function CashFlowCard({
     const takeHomeTransfer = Math.max(0, liveTransfer - transferRefill)
     const takeHome = takeHomeCash + takeHomeTransfer
 
-    // Phân loại chi phí theo đúng schema
-    const shiftExpenses = (expenses || []).filter(e => !e.is_fixed && !e.is_refill)
-    const afterShiftOps = (expenses || []).filter(e => !e.is_fixed && e.is_refill && e.metadata?.free_form)
-    const afterShiftNvl = (expenses || []).filter(e => !e.is_fixed && e.is_refill && !e.metadata?.free_form && !e.metadata?.adjustment)
+    // Phân loại chi phí — bỏ filter `!e.is_fixed` vì legacy fixed expenses
+    // vẫn là cash-out thực, cần hiện trong dòng tiền.
+    const shiftExpenses = (expenses || []).filter(e => !e.is_refill)
+    const afterShiftOps = (expenses || []).filter(e => e.is_refill && e.metadata?.free_form)
+    const afterShiftNvl = (expenses || []).filter(e => e.is_refill && !e.metadata?.free_form && !e.metadata?.adjustment)
 
     const getExpenseName = (e) => {
         if (e.is_refill && !e.metadata?.free_form && e.metadata?.ingredient) {

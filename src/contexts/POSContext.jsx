@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { fetchTodayStats, fetchInventory, submitOrder, fetchTodayOrders, deleteOrder, fetchTodayExpenses, insertExpense, deleteExpense, fetchFixedCosts, insertFixedCost, updateFixedCost, deleteFixedCost, fetchLatestOrder, invalidateDailyContext } from '../services/orderService'
+import { fetchTodayStats, fetchInventory, submitOrder, fetchTodayOrders, deleteOrder, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchLatestOrder, invalidateDailyContext } from '../services/orderService'
 import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder } from '../hooks/useOfflineSync'
 import { dateStringVN } from '../utils/dateVN'
@@ -56,7 +56,6 @@ export function POSProvider() {
     // ---- History State ----
     const [todayOrders, setTodayOrders] = useState([])
     const [todayExpenses, setTodayExpenses] = useState([])
-    const [fixedCosts, setFixedCosts] = useState([])
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
     const [lastOrder, setLastOrder] = useState(null)
 
@@ -411,14 +410,12 @@ export function POSProvider() {
         if (!addressId) return
         setIsLoadingHistory(true)
         try {
-            const [orders, expenses, fixed] = await Promise.all([
+            const [orders, expenses] = await Promise.all([
                 fetchTodayOrders(addressId),
                 fetchTodayExpenses(addressId),
-                fetchFixedCosts(addressId)
             ])
             setTodayOrders(orders)
             setTodayExpenses(expenses)
-            setFixedCosts(fixed)
         } catch (err) {
             showError(err, 'Tải lịch sử đơn hàng')
         } finally {
@@ -442,10 +439,10 @@ export function POSProvider() {
         }
     }
 
-    async function handleAddExpense(name, amount, isRefill = false, paymentMethod = 'cash', metadata = {}, isFixed = false) {
+    async function handleAddExpense(name, amount, isRefill = false, paymentMethod = 'cash', metadata = {}, isFixed = false, categoryId = null) {
         if (!addressId) return
         try {
-            const expense = await insertExpense(name, amount, addressId, isFixed, profile?.name, isRefill, paymentMethod, metadata)
+            const expense = await insertExpense(name, amount, addressId, isFixed, profile?.name, isRefill, paymentMethod, metadata, categoryId)
             setTodayExpenses(prev => [expense, ...prev])
             if (!isFixed) setTotalCost(prev => prev + amount)
             invalidateDailyContext(addressId)
@@ -453,6 +450,20 @@ export function POSProvider() {
             return expense
         } catch (err) {
             showError(err, isFixed ? 'Ghi nhận thực chi cố định' : isRefill ? 'Thêm mua nguyên vật liệu' : 'Thêm chi phí')
+            throw err
+        }
+    }
+
+    async function handleUpdateExpense(expenseId, updates) {
+        try {
+            const updated = await updateExpense(expenseId, updates)
+            // Patch today's local list if the row belongs to today's shift; range
+            // views refetch via invalidateReportCache happening inside updateExpense.
+            setTodayExpenses(prev => prev.map(e => e.id === expenseId ? { ...e, ...updates } : e))
+            invalidateDailyContext(addressId)
+            return updated
+        } catch (err) {
+            showError(err, 'Cập nhật chi phí')
             throw err
         }
     }
@@ -481,52 +492,6 @@ export function POSProvider() {
         }
     }
 
-    // ---- Fixed Costs Handlers ----
-    async function handleLoadFixedCosts() {
-        if (!addressId) return
-        try {
-            const fixed = await fetchFixedCosts(addressId)
-            setFixedCosts(fixed)
-        } catch (err) {
-            showError(err, 'Tải chi phí cố định')
-        }
-    }
-
-    async function handleAddFixedCost(name, amount) {
-        if (!addressId) return
-        try {
-            const item = await insertFixedCost(name, amount, addressId)
-            setFixedCosts(prev => [...prev, item])
-            showToast('Đã thêm chi phí cố định', 'success')
-            return item
-        } catch (err) {
-            showError(err, 'Thêm chi phí cố định')
-            throw err
-        }
-    }
-
-    async function handleUpdateFixedCost(id, updates) {
-        try {
-            const updated = await updateFixedCost(id, updates)
-            setFixedCosts(prev => prev.map(fc => fc.id === id ? updated : fc))
-            showToast('Đã cập nhật chi phí cố định', 'success')
-            return updated
-        } catch (err) {
-            showError(err, 'Cập nhật chi phí cố định')
-            throw err
-        }
-    }
-
-    async function handleDeleteFixedCost(id) {
-        try {
-            await deleteFixedCost(id)
-            setFixedCosts(prev => prev.filter(fc => fc.id !== id))
-            showToast('Đã xóa chi phí cố định', 'success')
-        } catch (err) {
-            showError(err, 'Xóa chi phí cố định')
-        }
-    }
-
     const userRole = profile?.role || 'staff'
 
     // ---- Memoized slices ----
@@ -551,10 +516,9 @@ export function POSProvider() {
 
     const historyValue = useMemo(() => ({
         todayOrders, todayExpenses, isLoadingHistory,
-        handleLoadHistory, handleDeleteOrder, handleAddExpense, handleDeleteExpense, refreshTodayExpenses,
-        fixedCosts, handleLoadFixedCosts, handleAddFixedCost, handleUpdateFixedCost, handleDeleteFixedCost,
+        handleLoadHistory, handleDeleteOrder, handleAddExpense, handleUpdateExpense, handleDeleteExpense, refreshTodayExpenses,
         userRole,
-    }), [todayOrders, todayExpenses, isLoadingHistory, fixedCosts, userRole])
+    }), [todayOrders, todayExpenses, isLoadingHistory, userRole])
 
     // Merged value for usePOS() back-compat. New code should use the focused hooks.
     const mergedValue = useMemo(() => ({

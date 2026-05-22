@@ -203,6 +203,11 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
     }, [ingredientsList, restockInputs, effectiveWarehouseStocks])
 
     // ── Helper: build the inventory_report payload for save ──────────────────
+    // Empty inputs are preserved as `null`, NOT coerced to 0 — a blank "+ Cuối kỳ"
+    // means "staff didn't count this ingredient at end of shift", not "0g remaining".
+    // Audit cards must skip diff calc for null `remaining` so they don't surface
+    // a fake hao hụt equal to the whole theoretical stock.
+    const parseOrNull = (v) => (v === undefined || v === '' ? null : Number(v))
     const buildInventoryReport = useCallback(() => {
         return ingredientsList
             .filter(ing => {
@@ -214,10 +219,10 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
             .map(ing => ({
                 ingredient: ing.ingredient,
                 unit: ing.unit || 'đv',
-                opening: openingInputs[ing.ingredient] !== undefined ? Number(openingInputs[ing.ingredient]) : null,
+                opening: parseOrNull(openingInputs[ing.ingredient]),
                 opening_locked: openingLocked[ing.ingredient] || false,
-                remaining: Number(inventoryInputs[ing.ingredient]) || 0,
-                restock: Number(restockInputs[ing.ingredient]) || 0
+                remaining: parseOrNull(inventoryInputs[ing.ingredient]),
+                restock: parseOrNull(restockInputs[ing.ingredient]),
             }))
     }, [ingredientsList, inventoryInputs, restockInputs, openingInputs, openingLocked])
 
