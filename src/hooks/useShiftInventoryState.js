@@ -6,6 +6,7 @@ import {
 } from '../services/orderService'
 import { supabase } from '../lib/supabaseClient'
 import { sortIngredients } from '../components/common/recipeUtils'
+import { dateStringVN } from '../utils/dateVN'
 
 // Owns all the inventory-side state and side-effects that used to live in
 // ShiftClosingPage: input maps for opening / restock / counter, the existing
@@ -52,6 +53,12 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         setIsDirty(false)
         fetchTodayShiftClosing(addressId).then(data => {
             if (!data) return
+            // Guard against server returning yesterday's row as "today's" (tz / RPC
+            // boundary issue). When closed_at isn't today VN, ignore — treat as no
+            // existing closing so save creates a fresh row instead of updating yesterday.
+            const isToday = !dateKey
+                || (data.closed_at && dateStringVN(new Date(data.closed_at)) === dateKey)
+            if (!isToday) return
             setExistingClosing(data)
 
             let parsed = data.inventory_report
@@ -84,15 +91,15 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         if (!addressId) return
         const load = () => fetchIngredientStocks(addressId).then(rows => {
             const counters = {}, openings = {}, warehouses = {}
-            ;(rows || []).forEach(r => {
-                if (typeof r.counter_stock === 'number') {
-                    counters[r.ingredient] = r.counter_stock
-                    openings[r.ingredient] = String(r.counter_stock)
-                }
-                if (typeof r.warehouse_stock === 'number') {
-                    warehouses[r.ingredient] = r.warehouse_stock
-                }
-            })
+                ; (rows || []).forEach(r => {
+                    if (typeof r.counter_stock === 'number') {
+                        counters[r.ingredient] = r.counter_stock
+                        openings[r.ingredient] = String(r.counter_stock)
+                    }
+                    if (typeof r.warehouse_stock === 'number') {
+                        warehouses[r.ingredient] = r.warehouse_stock
+                    }
+                })
             setOpeningStock(counters)
             setWarehouseStocks(warehouses)
             // Seed openingInputs only if today's closing hasn't set them yet.
