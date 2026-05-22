@@ -20,6 +20,8 @@ import { Filter, Lock } from 'lucide-react'
 import { useEntitlement, hasFeature } from '../hooks/useEntitlement'
 import UpsellPage from '../components/common/UpsellPage'
 import UpsellSheet from '../components/common/UpsellSheet'
+import Toast from '../components/POSPage/Toast'
+import { useToast } from '../hooks/useToast'
 
 const RANGE_LABEL = { week: 'Tuần này', month: 'Tháng này' }
 
@@ -34,6 +36,7 @@ export default function RangeReportPage() {
     const { selectedAddress } = useAddress()
     const { isStaff } = useAuth()
     const { activeModules, loading: entitlementLoading } = useEntitlement()
+    const { toast, showError } = useToast()
 
     // ── All hooks must be declared before any conditional return ─────────────
     const [view, setView] = useState(VIEW_PROFIT)
@@ -110,7 +113,7 @@ export default function RangeReportPage() {
                 setPrevExpenses(pExps)
                 setPrevShiftClosings(pClosings)
             })
-            .catch((error) => console.error('fetchReportByRange error:', error))
+            .catch((error) => showError(error, `Tải báo cáo ${RANGE_LABEL[range] || range}`))
             .finally(() => setIsLoading(false))
     }, [selectedAddress?.id, range, offset, activeModules, entitlementLoading])
 
@@ -231,10 +234,10 @@ export default function RangeReportPage() {
                     </div>
                 ) : (
                     <div className="flex flex-col gap-4 animate-fade-in">
-                        <ReportViewFilter value={view} onChange={setView} />
+                        {/* <ReportViewFilter value={view} onChange={setView} /> */}
 
                         {/* Section 1: Kết quả kinh doanh */}
-                        {(view === VIEW_ALL || view === VIEW_PROFIT) && (
+                        {/* {(view === VIEW_ALL || view === VIEW_PROFIT) && (
                             <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 relative overflow-hidden">
                                 <div className="flex items-start justify-between">
                                     <div className="flex flex-col min-w-0 flex-1">
@@ -300,7 +303,7 @@ export default function RangeReportPage() {
                                     </div>
                                 )}
                             </div>
-                        )}
+                        )} */}
 
                         {(view === VIEW_ALL || view === VIEW_PROFIT) && (
                             <DayPerformanceChart orders={orders} range={range} start={periodStart} end={periodEnd} products={products} />
@@ -344,6 +347,7 @@ export default function RangeReportPage() {
                                     refillTotal={stats.refillTotal}
                                     refillNvl={stats.refillNvl}
                                     refillFreeForm={stats.refillFreeForm}
+                                    expenses={expenses}
                                     yesterdayActualTotal={prevStats.actualTotal}
                                     yesterdayTakeHome={prevStats.takeHome}
                                     compareLabel={`So với ${range === 'week' ? 'tuần trước' : 'tháng trước'}`}
@@ -398,14 +402,14 @@ export default function RangeReportPage() {
                 )}
             </main>
 
-            {/* FAB: Cập nhật báo cáo — same style as "+ Thêm chi phí" in ExpensePanel */}
+            {/* FAB: edit today's report — only meaningful on the current period. */}
             <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
                 <div className="flex justify-end px-4 mb-[72px] pointer-events-auto">
                     <button
-                        onClick={() => navigate('/shift-closing')}
+                        onClick={() => navigate('/daily-report', { state: { initialView: 'inventory' } })}
                         className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
                     >
-                        Cập nhật báo cáo
+                        Lưu báo cáo
                     </button>
                 </div>
             </div>
@@ -414,6 +418,7 @@ export default function RangeReportPage() {
                 scope={range}
                 onScopeChange={handleNavigateRange}
             />
+            <Toast toast={toast} />
         </div>
     )
 }

@@ -11,6 +11,7 @@ import BackupModal from '../components/AddressSelectPage/BackupModal'
 import AddressHeader from '../components/AddressSelectPage/AddressHeader'
 import BranchGrid from '../components/AddressSelectPage/BranchGrid'
 import StaffTab from '../components/AddressSelectPage/StaffTab'
+import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 
 export default function AddressSelectPage() {
     const { addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading, fetchError } = useAddress()
@@ -67,7 +68,7 @@ export default function AddressSelectPage() {
                 const extraIds = Object.values(extras).flat().map(e => e.id)
                 const extraIngs = await fetchExtraIngredients(extraIds)
                 const { costs, units } = costsResult
-                const key = name => `cache_${name}_${addr.id}`
+                const key = name => buildCacheKey(addr.id, name)
                 try {
                     localStorage.setItem(key('products'), JSON.stringify(prods))
                     localStorage.setItem(key('recipes'), JSON.stringify(recs))

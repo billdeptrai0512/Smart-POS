@@ -8,6 +8,7 @@ export default function ExtraCard({
     extra, extraIngs, ingredientUnits, dbIngredients, canEdit,
     onSaveName, onSavePrice, onToggleSticky, onDelete,
     onSaveExtraAmount, onDeleteExtraIngredient, onAddExtraIngredients, onDuplicate,
+    ingredientStocks,
 }) {
     const [addingIngs, setAddingIngs] = useState(false)
     const [duplicating, setDuplicating] = useState(false)
@@ -80,6 +81,7 @@ export default function ExtraCard({
                         key={ei.id ?? ei.ingredient}
                         ei={ei}
                         unit={getIngredientUnit(ei.ingredient, ei.unit, ingredientUnits)}
+                        currentStock={ingredientStocks?.[ei.ingredient]}
                         canEdit={canEdit}
                         onSaveAmount={(v) => onSaveExtraAmount(ei.ingredient, v)}
                         onDelete={() => onDeleteExtraIngredient(ei.ingredient)}
@@ -154,10 +156,13 @@ export default function ExtraCard({
     )
 }
 
-function ExtraIngredientRow({ ei, unit, canEdit, onSaveAmount, onDelete }) {
+function ExtraIngredientRow({ ei, unit, currentStock, canEdit, onSaveAmount, onDelete }) {
     return (
         <div className="flex justify-between items-center bg-bg/50 px-2 py-1.5 rounded text-[12px]">
-            <span className="text-text flex-1 min-w-0 truncate">{ingredientLabel(ei.ingredient)}</span>
+            <div className="flex flex-col flex-1 min-w-0">
+                <span className="text-text truncate">{ingredientLabel(ei.ingredient)}</span>
+                <span className="text-[10px] text-text-secondary mt-0.5">Tồn: {currentStock != null ? `${Math.round(currentStock * 10) / 10} ${unit}` : '—'}</span>
+            </div>
             <div className="flex items-center gap-2">
                 <InlineEditor
                     value={ei.amount}

@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { formatVNDInput, parseVNDInput, calculateProductCost } from '../utils'
 import { getPendingOrders, removePendingOrder } from '../hooks/useOfflineSync'
-import { fetchTodayShiftClosing, fetchExpensesByRange, fetchOrdersByRange } from '../services/orderService'
-import { getDateRange } from '../components/DailyReportPage/ReportHeader'
-import { startOfDayVN, endOfDayVN, dateStringVN, isSameDayVN } from '../utils/dateVN'
+import { dateStringVN, isSameDayVN } from '../utils/dateVN'
+import { calcRangeWithLabel, offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
+import { useHistoryRangeFetch } from '../hooks/useHistoryRangeFetch'
+import { useFilteredExpenses } from '../hooks/useFilteredExpenses'
+import { useFormatHistoryOrders } from '../hooks/useFormatHistoryOrders'
 import { useAddress } from '../contexts/AddressContext'
 import { useProducts } from '../contexts/ProductContext'
 import { usePOS } from '../contexts/POSContext'
@@ -14,6 +16,8 @@ import OrdersList from '../components/HistoryPage/OrdersList'
 import ExpensePanel from '../components/HistoryPage/ExpensePanel'
 import AddExpenseModal from '../components/HistoryPage/AddExpenseModal'
 import HistoryFooter from '../components/HistoryPage/HistoryFooter'
+import { shiftFinalizedKey } from '../constants/storageKeys'
+import { Plus } from 'lucide-react'
 
 // Use dateStringVN so YYYY-MM-DD always reflects Vietnam local date,
 // regardless of where the browser runs.
@@ -90,30 +94,9 @@ export default function HistoryPage() {
     }, [showAddModal])
 
     // ─── Range fetch ──────────────────────────────────────────────────
-    const [rangeExpenses, setRangeExpenses] = useState([])
-    const [rangeOrders, setRangeOrders] = useState([])
-    const [isLoadingRange, setIsLoadingRange] = useState(false)
-    const [isLoadingRangeOrders, setIsLoadingRangeOrders] = useState(false)
-    const rangeCache = useRef(new Map())
-    const rangeOrdersCache = useRef(new Map())
-
     const { rangeStart, rangeEnd, rangeLabel } = useMemo(() => {
-        const fmt = d => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
-        if (scope === 'day') {
-            const target = new Date()
-            target.setDate(target.getDate() + offset)
-            const start = startOfDayVN(target)
-            const end = endOfDayVN(target)
-            return { rangeStart: start, rangeEnd: end, rangeLabel: `${fmt(start)}/${start.getFullYear()}` }
-        }
-        if (scope === 'custom' && customRange?.startISO && customRange?.endISO) {
-            // ISO strings are already in VN date form (from input type=date)
-            const start = new Date(`${customRange.startISO}T00:00:00+07:00`)
-            const end = new Date(`${customRange.endISO}T23:59:59.999+07:00`)
-            return { rangeStart: start, rangeEnd: end, rangeLabel: `${fmt(start)} – ${fmt(end)}` }
-        }
-        const { start, end } = getDateRange(scope, offset)
-        return { rangeStart: start, rangeEnd: end, rangeLabel: `${fmt(start)} – ${fmt(end)}` }
+        const { start, end, label } = calcRangeWithLabel(scope, offset, customRange)
+        return { rangeStart: start, rangeEnd: end, rangeLabel: label }
     }, [scope, offset, customRange])
 
     const canGoForward = offset < 0
@@ -149,20 +132,13 @@ export default function HistoryPage() {
 
     // ─── Day-mode date picker ─────────────────────────────────────────
     const todayISO = getLocalISO(new Date())
-    const dayCustomDate = useMemo(() => {
-        if (scope !== 'day' || offset === 0) return null
-        const d = new Date()
-        d.setDate(d.getDate() + offset)
-        return getLocalISO(d)
-    }, [scope, offset])
+    const dayCustomDate = useMemo(() => dayCustomDateOf(scope, offset), [scope, offset])
     const dayInputValue = dayCustomDate || todayISO
     const canGoForwardDay = dayInputValue < todayISO
 
     const setOffsetFromISO = (iso) => {
         if (!iso || iso >= todayISO) { setOffset(0); setHasManualPick(false); return }
-        const target = new Date(`${iso}T00:00:00+07:00`)
-        const today = startOfDayVN()
-        setOffset(Math.round((target - today) / 86400000))
+        setOffset(offsetFromISO(iso, todayISO))
     }
     // Calendar pick: flag manual so the "→ ngày" end chip can appear.
     const handleManualDatePick = (iso) => {
@@ -194,29 +170,11 @@ export default function HistoryPage() {
     }
 
     // ─── Range data fetchers ──────────────────────────────────────────
-    useEffect(() => {
-        if (!selectedAddress?.id || isReadOnly) return
-        if (isTodayScope) { setRangeExpenses([]); return }
-        const cacheKey = `${selectedAddress.id}|${rangeStart.toISOString()}|${rangeEnd.toISOString()}`
-        const cached = rangeCache.current.get(cacheKey)
-        if (cached) { setRangeExpenses(cached); return }
-        setIsLoadingRange(true)
-        fetchExpensesByRange(selectedAddress.id, rangeStart, rangeEnd)
-            .then(data => { rangeCache.current.set(cacheKey, data); setRangeExpenses(data) })
-            .finally(() => setIsLoadingRange(false))
-    }, [scope, offset, selectedAddress?.id, rangeStart.toISOString(), rangeEnd.toISOString(), isReadOnly, isTodayScope])
-
-    useEffect(() => {
-        if (!selectedAddress?.id || isReadOnly) return
-        if (isTodayScope) { setRangeOrders([]); return }
-        const cacheKey = `${selectedAddress.id}|${rangeStart.toISOString()}|${rangeEnd.toISOString()}`
-        const cached = rangeOrdersCache.current.get(cacheKey)
-        if (cached) { setRangeOrders(cached); return }
-        setIsLoadingRangeOrders(true)
-        fetchOrdersByRange(selectedAddress.id, rangeStart, rangeEnd)
-            .then(data => { rangeOrdersCache.current.set(cacheKey, data); setRangeOrders(data) })
-            .finally(() => setIsLoadingRangeOrders(false))
-    }, [scope, offset, selectedAddress?.id, rangeStart.toISOString(), rangeEnd.toISOString(), isReadOnly, isTodayScope])
+    const { rangeExpenses, rangeOrders, isLoadingRange, isLoadingRangeOrders } = useHistoryRangeFetch({
+        addressId: selectedAddress?.id,
+        rangeStart, rangeEnd,
+        isTodayScope, isReadOnly,
+    })
 
     // ─── Offline order sync ───────────────────────────────────────────
     const refreshPending = useCallback(() => setPendingOrders(getPendingOrders()), [])
@@ -235,10 +193,13 @@ export default function HistoryPage() {
     }, [retrySync, refreshPending])
 
     // ─── Orders data ──────────────────────────────────────────────────
-    const getItemCost = (productId, extras, snapshotUnitCost) => {
+    // Stable callback so downstream useMemos don't bust on every render.
+    // snapshotUnitCost > 0 means the cost was frozen on the DB row at sale time —
+    // honor it instead of recomputing from current recipes/prices.
+    const getItemCost = useCallback((productId, extras, snapshotUnitCost) => {
         if (snapshotUnitCost > 0) return snapshotUnitCost
         return calculateProductCost(productId, extras || [], recipes, extraIngredients, ingredientCosts)
-    }
+    }, [recipes, extraIngredients, ingredientCosts])
 
     const baseOrders = isTodayScope ? (todayOrders || []) : rangeOrders
 
@@ -249,76 +210,9 @@ export default function HistoryPage() {
         return m
     }, [products])
 
-    // PERF: memoize formatted lists so downstream useMemo's (runningTotals, totalCups) actually
-    // get stable inputs. Previously these recomputed every render → all derived memos were busted.
-    const formattedOnline = useMemo(() => baseOrders.map(o => {
-        const cost = (o.total_cost > 0)
-            ? o.total_cost
-            : (o.order_items ? o.order_items.reduce((sum, i) => sum + (getItemCost(i.product_id, i.extras || [], i.unit_cost || 0) * i.quantity), 0) : 0)
-        return {
-            id: o.id,
-            total: o.total,
-            cost,
-            createdAt: o.created_at,
-            staffName: o.staff_name,
-            deletedAt: o.deleted_at,
-            deletedBy: o.deleted_by,
-            isOffline: false,
-            paymentMethod: o.payment_method || null,
-            items: o.order_items ? o.order_items.map(i => {
-                const options = i.options
-                    ? i.options.split(', ').filter(opt => opt !== 'Tiền mặt' && opt !== 'MoMo').join(' - ')
-                    : ''
-                const pName = productById.get(i.product_id)?.name || i.products?.name || '☕'
-                return {
-                    text: `${i.quantity} ${pName}${options ? ` (${options})` : ''}`,
-                    cost: getItemCost(i.product_id, i.extras || [], i.unit_cost || 0) * i.quantity,
-                    quantity: i.quantity,
-                    productId: i.product_id
-                }
-            }) : []
-        }
-    }), [baseOrders, productById, recipes, extraIngredients, ingredientCosts])
-
-    const formattedOffline = useMemo(() => {
-        const todayStr = dateStringVN()
-        return pendingOrders
-            .filter(o => dateStringVN(new Date(o.createdAt)) === todayStr)
-            .map((o) => ({
-                id: `offline-${o.createdAt}`,
-                createdAt_key: o.createdAt,
-                total: o.total,
-                cost: o.totalCost > 0
-                    ? o.totalCost
-                    : (o.cart || o.orderItems || []).reduce((sum, i) => sum + (calculateProductCost(i.productId, i.extras || [], recipes, extraIngredients, ingredientCosts) * i.quantity), 0),
-                createdAt: o.createdAt,
-                staffName: o.staffName,
-                isOffline: true,
-                paymentMethod: o.paymentMethod || null,
-                items: o.cart
-                    ? o.cart.map(i => {
-                        const extras = i.extras.filter(e => e.name !== 'Tiền mặt' && e.name !== 'MoMo')
-                        const itemCost = i.unitCost > 0 ? i.unitCost : calculateProductCost(i.productId, i.extras || [], recipes, extraIngredients, ingredientCosts)
-                        return {
-                            text: `${i.quantity} ${i.name}${extras.length ? ` (${extras.map(e => e.name).join(' - ')})` : ''}`,
-                            cost: itemCost * i.quantity,
-                            quantity: i.quantity,
-                            productId: i.productId
-                        }
-                    })
-                    : o.orderItems ? o.orderItems.map(i => {
-                        const itemCost = i.unitCost > 0 ? i.unitCost : calculateProductCost(i.productId, i.extras || [], recipes, extraIngredients, ingredientCosts)
-                        return { text: `${i.quantity} ${i.name}`, cost: itemCost * i.quantity, quantity: i.quantity, productId: i.productId }
-                    }) : []
-            }))
-    }, [pendingOrders, recipes, extraIngredients, ingredientCosts])
-
-    // Hide offline pending orders when viewing a non-today range (they only exist for today)
-    const allOrders = useMemo(
-        () => [...formattedOnline, ...(isTodayScope ? formattedOffline : [])]
-            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
-        [formattedOnline, formattedOffline, isTodayScope]
-    )
+    const { formattedOnline, formattedOffline, allOrders } = useFormatHistoryOrders({
+        baseOrders, pendingOrders, productById, getItemCost, isTodayScope,
+    })
 
     const productCountMap = useMemo(() => new Map((products || []).map(p => [p.id, p.count_as_cup !== false])), [products])
 
@@ -353,15 +247,7 @@ export default function HistoryPage() {
 
     const isLoadingExpenses = isReadOnly ? false : (isTodayScope ? isLoadingHistory : isLoadingRange)
 
-    const filteredExpenses = useMemo(() => {
-        let list = nonFixedExpenses
-        if (expenseFilter === 'daily') list = list.filter(e => !e.is_refill)
-        else if (expenseFilter === 'after') list = list.filter(e => e.is_refill && e.metadata?.free_form)
-        else if (expenseFilter === 'operation') list = list.filter(e => !e.is_refill || (e.is_refill && e.metadata?.free_form))
-        else if (expenseFilter === 'nvl') list = list.filter(e => e.is_refill && !e.metadata?.free_form)
-        else if (expenseFilter === 'fixed') list = []
-        return [...list].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    }, [nonFixedExpenses, expenseFilter])
+    const filteredExpenses = useFilteredExpenses(nonFixedExpenses, expenseFilter)
 
     // Cumulative inflow per ingredient — walks oldest→newest. Per refill: before = running total, after = +qty.
     const nvlStockSnapshot = useMemo(() => {
@@ -400,7 +286,7 @@ export default function HistoryPage() {
             } else {
                 // 'expense' — auto-detect Trong ca vs Sau ca from shift_finalized flag
                 const today = new Date().toISOString().split('T')[0]
-                const isFinalized = selectedAddress?.id && !!localStorage.getItem(`shift_finalized_${selectedAddress.id}_${today}`)
+                const isFinalized = selectedAddress?.id && !!localStorage.getItem(shiftFinalizedKey(selectedAddress.id, today))
                 if (isFinalized) {
                     await handleAddExpense(costName.trim(), amount, true, 'cash', { free_form: true })
                 } else {
@@ -545,7 +431,7 @@ export default function HistoryPage() {
                             onClick={() => setShowAddModal(true)}
                             className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
                         >
-                            + Thêm chi phí
+                            <Plus size={18} />
                         </button>
                     </div>
                 </div>

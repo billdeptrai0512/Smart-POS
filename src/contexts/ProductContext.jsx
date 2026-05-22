@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext'
 import { useAddress } from './AddressContext'
 import { supabase } from '../lib/supabaseClient'
 import { Outlet } from 'react-router-dom'
+import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 
 const ProductContext = createContext(null)
 
@@ -18,7 +19,7 @@ export function ProductProvider() {
     const activeManagerId = profile?.role === 'manager' ? profile.id : profile?.manager_id
     const { selectedAddress } = useAddress()
 
-    const cacheKey = (name) => `cache_${name}_${selectedAddress?.id || 'default'}`
+    const cacheKey = (name) => buildCacheKey(selectedAddress?.id || 'default', name)
 
     const readCache = (name, fallback) => {
         try {
@@ -47,7 +48,7 @@ export function ProductProvider() {
         setProductExtras(extras)
         setExtraIngredients(extraIngs)
         try {
-            const key = (name) => `cache_${name}_${addressId || 'default'}`
+            const key = (name) => buildCacheKey(addressId || 'default', name)
             localStorage.setItem(key('products'), JSON.stringify(prods))
             localStorage.setItem(key('recipes'), JSON.stringify(recs))
             localStorage.setItem(key('costs'), JSON.stringify(costs))

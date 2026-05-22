@@ -1,48 +1,242 @@
-import { formatVND } from '../../utils'
+import { formatVND, parseVNDInput } from '../../utils'
+import { ingredientLabel } from '../common/recipeUtils'
 
-export function Card({ label, value, valueClass = 'text-primary', prefix = '', sub = null, className = '', onClick = null, alignRight = false }) {
+export default function CashFlowCard({
+    actualCash = 0,
+    actualTransfer = 0,
+    dailyExpense = 0,
+    refillNvl = 0,
+    refillFreeForm = 0,
+    expenses = [],
+    onDailyExpenseClick,
+    salesCard,
+    // Inline-edit props (today scope on /daily-report). When `editable` is true the
+    // Tiền mặt / Chuyển khoản rows become text inputs and a "Lưu" button appears
+    // once the user has changed something.
+    editable = false,
+    cashInput = '',
+    transferInput = '',
+    onCashChange,
+    onTransferChange,
+    onSave,
+    isSaving = false,
+    hasChanges = false,
+}) {
+    // When editing, totals/Thực nhận track the typed values so the user sees the impact
+    // live before saving. Read-only mode falls back to the persisted (actualCash/Transfer) props.
+    const liveCash = editable ? (parseVNDInput(cashInput) || 0) : actualCash
+    const liveTransfer = editable ? (parseVNDInput(transferInput) || 0) : actualTransfer
+
+    // 1. Thực thu = Tiền mặt + Chuyển khoản + Chi phí phát sinh trong ca
+    const actualTotal = liveCash + liveTransfer + (dailyExpense || 0)
+
+    // 2. Tổng chi phí
+    const totalExpenses = (dailyExpense || 0) + (refillFreeForm || 0) + (refillNvl || 0)
+
+    // 3. Thực nhận (Cầm về thực) — trừ refill theo đúng pot đã chi.
+    // Trước đây dùng refillTotal + fall-through (hết cash thì ăn transfer), khiến tổng
+    // refill > revenue lập tức kéo cả 2 pot về 0. Bây giờ split theo payment_method nên
+    // refill chuyển khoản chỉ trừ chuyển khoản, refill tiền mặt chỉ trừ tiền mặt.
+    let cashRefill = 0, transferRefill = 0
+    for (const e of expenses || []) {
+        if (e.is_fixed || !e.is_refill) continue
+        if (e.payment_method === 'transfer') transferRefill += e.amount || 0
+        else cashRefill += e.amount || 0  // default 'cash' when payment_method nullish
+    }
+    const takeHomeCash = Math.max(0, liveCash - cashRefill)
+    const takeHomeTransfer = Math.max(0, liveTransfer - transferRefill)
+    const takeHome = takeHomeCash + takeHomeTransfer
+
+    // Phân loại chi phí theo đúng schema
+    const shiftExpenses = (expenses || []).filter(e => !e.is_fixed && !e.is_refill)
+    const afterShiftOps = (expenses || []).filter(e => !e.is_fixed && e.is_refill && e.metadata?.free_form)
+    const afterShiftNvl = (expenses || []).filter(e => !e.is_fixed && e.is_refill && !e.metadata?.free_form && !e.metadata?.adjustment)
+
+    const getExpenseName = (e) => {
+        if (e.is_refill && !e.metadata?.free_form && e.metadata?.ingredient) {
+            return ingredientLabel(e.metadata.ingredient)
+        }
+        return e.name || 'Chi phí'
+    }
+
     return (
-        <div
-            onClick={onClick}
-            className={`bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center ${alignRight ? 'items-end text-right' : ''} ${onClick ? 'cursor-pointer hover:bg-surface-light active:scale-[0.98] transition-all' : ''} ${className}`}
-        >
-            <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">{label}</h3>
-            <div className={`text-[18px] font-bold tabular-nums ${valueClass}`}>
-                {prefix}{formatVND(value)}
+        <div className="flex flex-col gap-4">
+            {salesCard && <div className="w-full">{salesCard}</div>}
+
+            {/* PANEL 1: THỰC THU */}
+            <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
+                <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Thực thu</h3>
+                <div className="flex flex-col gap-2.5 pl-2">
+                    {editable ? (
+                        <>
+                            <MoneyInputRow
+                                label="Tiền mặt"
+                                value={cashInput}
+                                disabled={isSaving}
+                                onChange={onCashChange}
+                            />
+                            <MoneyInputRow
+                                label="Chuyển khoản"
+                                value={transferInput}
+                                disabled={isSaving}
+                                onChange={onTransferChange}
+                            />
+                        </>
+                    ) : (
+                        <>
+                            <div className="flex justify-between items-center">
+                                <span className="text-[12px] font-bold text-text-secondary">Tiền mặt</span>
+                                <span className="text-[13px] font-bold text-text tabular-nums">
+                                    {formatVND(actualCash)}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-[12px] font-bold text-text-secondary">Chuyển khoản</span>
+                                <span className="text-[13px] font-bold text-text tabular-nums">
+                                    {formatVND(actualTransfer)}
+                                </span>
+                            </div>
+                        </>
+                    )}
+                    <div
+                        onClick={onDailyExpenseClick}
+                        className="flex justify-between items-center cursor-pointer hover:opacity-85 active:scale-[0.99] transition-all"
+                    >
+                        <span className="text-[12px] font-bold text-text-secondary decoration-text-secondary/50 underline-offset-2">
+                            Chi phí phát sinh
+                        </span>
+                        <span className="text-[13px] font-bold text-warning tabular-nums">
+                            {formatVND(dailyExpense || 0)}
+                        </span>
+                    </div>
+                </div>
+                <div className="w-full h-[1px] bg-border/60 rounded-full my-3" />
+                <div className="flex justify-between items-center mt-1 pl-1">
+                    <span className="text-[13px] font-black text-text uppercase tracking-wide">Tổng thực thu</span>
+                    <span className="text-[13px] font-black text-success tabular-nums">
+                        {formatVND(actualTotal)}
+                    </span>
+                </div>
+                {editable && hasChanges && (
+                    <button
+                        onClick={onSave}
+                        disabled={isSaving}
+                        className="mt-3 w-full bg-primary text-white rounded-[12px] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wider hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                        {isSaving ? 'Đang lưu...' : 'Lưu thực thu'}
+                    </button>
+                )}
             </div>
-            {sub && <div className="text-[10px] font-bold text-text-dim tabular-nums mt-0.5">{sub}</div>}
+
+            {/* PANEL 2: CHI PHÍ PHÁT SINH */}
+            <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
+                <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Chi phí phát sinh</h3>
+                <div className="flex flex-col gap-1 pl-1">
+                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Trong ca</span>
+
+                    {shiftExpenses.length > 0 ? (
+                        shiftExpenses.map((e) => (
+                            <div key={e.id} className="flex justify-between items-center">
+                                <span className="text-[12px] font-bold text-text-secondary">· {e.name || 'Chi phí khác'}</span>
+                                <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(e.amount)}</span>
+                            </div>
+                        ))
+                    ) : (
+                        <span className="text-[12px] text-text-secondary italic">Không có chi phí trong ca</span>
+                    )}
+                </div>
+
+                <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
+
+                <div className="flex flex-col gap-1 pl-1">
+                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Sau chốt ca</span>
+                    {afterShiftOps.length > 0 ? (
+                        afterShiftOps.map((e) => (
+                            <div key={e.id} className="flex justify-between items-center">
+                                <span className="text-[12px] font-bold text-text-secondary">· {e.name || 'Chi phí khác'}</span>
+                                <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(e.amount)}</span>
+                            </div>
+                        ))
+                    ) : (
+                        <span className="text-[12px] text-text-secondary italic">Không có chi phí sau ca</span>
+                    )}
+                </div>
+
+                <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
+
+                <div className="flex flex-col gap-1 pl-1">
+                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Nguyên vật liệu</span>
+                    {afterShiftNvl.length > 0 ? (
+                        afterShiftNvl.map((e) => (
+                            <div key={e.id} className="flex justify-between items-center">
+                                <span className="text-[12px] font-bold text-text-secondary">· {getExpenseName(e)}</span>
+                                <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(e.amount)}</span>
+                            </div>
+                        ))
+                    ) : (
+                        <span className="text-[12px] text-text-secondary italic">Không có nguyên vật liệu nhập kho</span>
+                    )}
+                </div>
+            </div>
+
+            {/* PANEL 3: TỔNG CHI PHÍ */}
+            <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
+                <div className="flex justify-between items-center mt-1 pl-1">
+                    <span className="text-[13px] font-black text-text uppercase tracking-wide">Tổng chi phí</span>
+                    <span className="text-[14px] font-black text-danger tabular-nums">
+                        -{formatVND(totalExpenses)}
+                    </span>
+                </div>
+            </div>
+
+            {/* PANEL 4: THỰC NHẬN */}
+            <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
+                <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Thực nhận</h3>
+                <div className="flex flex-col gap-2.5 pl-2">
+                    <div className="flex justify-between items-center">
+                        <span className="text-[12px] font-bold text-text-secondary">Tiền mặt thực tế:</span>
+                        <span className="text-[13px] font-bold text-text tabular-nums">
+                            {formatVND(takeHomeCash)}
+                        </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <span className="text-[12px] font-bold text-text-secondary">Chuyển khoản thực tế:</span>
+                        <span className="text-[13px] font-bold text-text tabular-nums">
+                            {formatVND(takeHomeTransfer)}
+                        </span>
+                    </div>
+                </div>
+
+                <div className="w-full h-[1px] bg-border/60 rounded-full my-3" />
+
+                <div className="flex justify-between items-center mt-1 pl-1">
+                    <span className="text-[13px] font-black text-text uppercase tracking-wide">Tổng thực nhận</span>
+                    <span className="text-[16px] font-black text-success tabular-nums">
+                        {formatVND(takeHome)}
+                    </span>
+                </div>
+            </div>
         </div>
     )
 }
 
-export default function CashFlowCard({ shiftClosing, cash: cashProp, transfer: transferProp, dailyExpense, onDailyExpenseClick }) {
-    const actualCash = cashProp ?? (shiftClosing?.actual_cash || 0)
-    const actualTransfer = transferProp ?? (shiftClosing?.actual_transfer || 0)
-
-    // Thực nhận = TM + CK + chi phí ca (không bao gồm mua NVL vì NVL mua sau khi chốt ca)
-    const actualTotal = actualCash + actualTransfer + (dailyExpense || 0)
-
+function MoneyInputRow({ label, value, disabled, onChange }) {
     return (
-        <div className="flex flex-col gap-4">
-            {/* PHẦN 1: TỔNG THU TRONG CA */}
-            <div className="grid grid-cols-2 gap-3">
-                <Card label="Tiền mặt" value={actualCash} prefix='+' />
-                <Card label="Chuyển khoản" value={actualTransfer} prefix='+' alignRight />
-
-                <Card
-                    label="Vận hành"
-                    value={dailyExpense || 0}
-                    valueClass="text-primary"
-                    prefix='+'
-                    onClick={onDailyExpenseClick}
+        <div className="flex items-center justify-between gap-3">
+            <span className="text-[12px] font-bold text-text-secondary shrink-0">{label}</span>
+            <div className="relative flex items-center bg-surface-light border border-border/60 rounded-[10px] focus-within:border-primary/40 transition-colors overflow-hidden max-w-[180px] flex-1">
+                <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={value}
+                    onChange={e => onChange?.(e.target.value)}
+                    disabled={disabled}
+                    className="w-full bg-transparent px-2.5 py-1.5 text-right text-[13px] font-bold text-text tabular-nums placeholder:text-text-secondary/40 focus:outline-none disabled:opacity-50"
                 />
-
-                <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col justify-center items-end text-right relative overflow-hidden group">
-                    <h3 className="text-[12px] font-black text-text-secondary uppercase mb-1">Thực thu</h3>
-                    <div className="text-[18px] font-bold text-success tabular-nums">
-                        {formatVND(actualTotal)}
-                    </div>
-                </div>
+                {value && (
+                    <span className="text-[12px] font-bold text-text-secondary pr-2 shrink-0 pointer-events-none">đ</span>
+                )}
             </div>
         </div>
     )

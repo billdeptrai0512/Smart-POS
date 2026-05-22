@@ -19,6 +19,7 @@ import {
     deleteExtraIngredient,
     upsertIngredientCost,
     deleteRecipeRow,
+    fetchIngredientStocks,
 } from '../services/orderService'
 import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
 import { useToast } from '../hooks/useToast'
@@ -48,8 +49,18 @@ export default function RecipeIngredientPage() {
     const [extras, setExtras] = useState([])
     const [extraIngs, setExtraIngs] = useState(contextExtraIngs || {})
     const [saving, setSaving] = useState(false)
+    const [ingredientStocks, setIngredientStocks] = useState({})
 
     const product = useMemo(() => products.find(p => p.id === productId), [products, productId])
+
+    useEffect(() => {
+        if (!selectedAddress?.id) return
+        fetchIngredientStocks(selectedAddress.id).then(stocks => {
+            const map = {}
+            stocks.forEach(s => map[s.ingredient] = s.current_stock)
+            setIngredientStocks(map)
+        }).catch(console.error)
+    }, [selectedAddress?.id])
 
     // Fetch fresh data on mount to avoid showing stale localStorage cache
     useEffect(() => { refreshProducts?.() }, [])
@@ -312,6 +323,7 @@ export default function RecipeIngredientPage() {
                     onSaveAmount={saveAmount}
                     onDeleteIngredient={handleDeleteRecipeIngredient}
                     onAddIngredients={handleAddBaseIngredients}
+                    ingredientStocks={ingredientStocks}
                 />
 
                 {canEdit && (
@@ -341,6 +353,7 @@ export default function RecipeIngredientPage() {
                     onAddExtra={handleAddExtra}
                     onSaveSortOrder={saveExtrasSortOrder}
                     extraHandlers={extraHandlers}
+                    ingredientStocks={ingredientStocks}
                 />
             </main>
 

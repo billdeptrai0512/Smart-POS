@@ -5,15 +5,16 @@ export const VIEW_INVENTORY = 'inventory'
 
 const MENU = [
     { key: VIEW_CASHFLOW, label: 'Dòng tiền' },
-    { key: VIEW_PROFIT, label: 'Lợi nhuận' },
     { key: VIEW_INVENTORY, label: 'Tồn kho' },
+    { key: VIEW_PROFIT, label: 'Lợi nhuận' },
 ]
 
 // Card-style segmented control — visually part of the main panel family.
-export default function ReportViewFilter({ value, onChange }) {
+export default function ReportViewFilter({ value, onChange, isStaff }) {
+    const menu = MENU.filter(item => !(isStaff && item.key === VIEW_PROFIT))
     return (
         <div className="bg-surface border border-border/60 rounded-[14px] p-1 shadow-sm flex gap-1">
-            {MENU.map(item => {
+            {menu.map(item => {
                 const active = value === item.key
                 return (
                     <button

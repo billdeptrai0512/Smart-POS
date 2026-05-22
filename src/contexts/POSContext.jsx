@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { fetchTodayStats, fetchInventory, submitOrder, fetchTodayOrders, deleteOrder, fetchTodayExpenses, insertExpense, deleteExpense, fetchFixedCosts, insertFixedCost, updateFixedCost, deleteFixedCost, fetchLatestOrder, invalidateDailyContext } from '../services/orderService'
 import { upsertSession } from '../services/authService'
@@ -10,9 +10,18 @@ import { useAddress } from './AddressContext'
 import { useAuth } from './AuthContext'
 import { Outlet } from 'react-router-dom'
 import { useToast } from '../hooks/useToast'
+import { STORAGE_KEYS } from '../constants/storageKeys'
+import { CartContext } from './CartContext'
+import { StatsContext } from './StatsContext'
+import { HistoryContext } from './HistoryContext'
 
 const POSContext = createContext(null)
 
+// usePOS returns the merged slice (cart + stats + history + shared) for
+// back-compat. Prefer the focused hooks in new code:
+//   useCart()    — re-renders only on cart-related changes
+//   useStats()   — re-renders only on running totals
+//   useHistory() — re-renders only on orders/expenses/fixed costs
 export function usePOS() {
     const ctx = useContext(POSContext)
     if (!ctx) throw new Error('usePOS must be used within POSProvider')
@@ -33,13 +42,13 @@ export function POSProvider() {
         catch { return fallback }
     }
 
-    const [cart, setCart] = useState(() => loadLocalJSON('pos_cart', []))
+    const [cart, setCart] = useState(() => loadLocalJSON(STORAGE_KEYS.CART, []))
     const [activeCartItemId, setActiveCartItemId] = useState(null)
     const [enabledStickyExtraIds, setEnabledStickyExtraIds] = useState([])
-    const [revenue, setRevenue] = useState(() => Number(localStorage.getItem('pos_revenue')) || 0)
-    const [totalCost, setTotalCost] = useState(() => Number(localStorage.getItem('pos_total_cost')) || 0)
-    const [cupsSold, setCupsSold] = useState(() => Number(localStorage.getItem('pos_cups')) || 0)
-    const [inventory, setInventory] = useState(() => loadLocalJSON('pos_inventory', {}))
+    const [revenue, setRevenue] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.REVENUE)) || 0)
+    const [totalCost, setTotalCost] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.TOTAL_COST)) || 0)
+    const [cupsSold, setCupsSold] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.CUPS)) || 0)
+    const [inventory, setInventory] = useState(() => loadLocalJSON(STORAGE_KEYS.INVENTORY, {}))
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isOnline, setIsOnline] = useState(navigator.onLine)
     const { toast, showToast, showError } = useToast()
@@ -102,7 +111,7 @@ export function POSProvider() {
     // ---- Auto-Reset New Day ----
     useEffect(() => {
         const checkNewDay = () => {
-            const storedDate = localStorage.getItem('pos_current_date')
+            const storedDate = localStorage.getItem(STORAGE_KEYS.CURRENT_DATE)
             const todayStr = dateStringVN()
             if (storedDate && storedDate !== todayStr) {
                 if (navigator.onLine && supabase && addressId) {
@@ -114,9 +123,9 @@ export function POSProvider() {
                     setCupsSold(0)
                     setTotalCost(0)
                 }
-                localStorage.setItem('pos_current_date', todayStr)
+                localStorage.setItem(STORAGE_KEYS.CURRENT_DATE, todayStr)
             } else if (!storedDate) {
-                localStorage.setItem('pos_current_date', todayStr)
+                localStorage.setItem(STORAGE_KEYS.CURRENT_DATE, todayStr)
             }
         }
 
@@ -208,10 +217,10 @@ export function POSProvider() {
         // so we read userId from localStorage or let AddressContext handle initial upsert
         const interval = setInterval(() => {
             // Re-upsert session to keep last_seen fresh
-            const savedId = localStorage.getItem('pos_selected_address')
+            const savedId = localStorage.getItem(STORAGE_KEYS.SELECTED_ADDRESS)
             if (savedId === addressId) {
                 // We need the userId — stored when AddressContext calls upsertSession
-                const userId = localStorage.getItem('pos_active_user_id')
+                const userId = localStorage.getItem(STORAGE_KEYS.ACTIVE_USER_ID)
                 if (userId) upsertSession(userId, addressId)
             }
         }, 5 * 60 * 1000) // every 5 minutes
@@ -226,11 +235,11 @@ export function POSProvider() {
     // a single write per quiet period.
     useEffect(() => {
         const t = setTimeout(() => {
-            localStorage.setItem('pos_cart', JSON.stringify(cart))
-            localStorage.setItem('pos_revenue', revenue.toString())
-            localStorage.setItem('pos_total_cost', totalCost.toString())
-            localStorage.setItem('pos_cups', cupsSold.toString())
-            localStorage.setItem('pos_inventory', JSON.stringify(inventory))
+            localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(cart))
+            localStorage.setItem(STORAGE_KEYS.REVENUE, revenue.toString())
+            localStorage.setItem(STORAGE_KEYS.TOTAL_COST, totalCost.toString())
+            localStorage.setItem(STORAGE_KEYS.CUPS, cupsSold.toString())
+            localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventory))
         }, 400)
         return () => clearTimeout(t)
     }, [cart, revenue, totalCost, cupsSold, inventory])
@@ -518,28 +527,49 @@ export function POSProvider() {
         }
     }
 
+    const userRole = profile?.role || 'staff'
+
+    // ---- Memoized slices ----
+    // Each useMemo's deps list only the state this slice exposes. A change to,
+    // say, todayOrders won't recompute cartValue → useCart consumers don't
+    // re-render. (Function identities are stable across renders only when their
+    // deps don't change; the original code already recreated them every render,
+    // so this is no worse and slices keep change frequencies separated.)
+    const cartValue = useMemo(() => ({
+        cart, activeCartItemId, setActiveCartItemId,
+        handleAddItem, handleRemoveCartItem, handleToggleExtra, handleToggleStickyExtra, handleConfirm,
+        enabledStickyExtraIds, setEnabledStickyExtraIds,
+        total, orderCount, hasOrder, isSubmitting,
+        lastOrder,
+        toast, showToast,
+    }), [cart, activeCartItemId, enabledStickyExtraIds, total, orderCount, hasOrder, isSubmitting, lastOrder, toast, showToast])
+
+    const statsValue = useMemo(() => ({
+        revenue, totalCost, cupsSold, inventory, isOnline,
+        retrySync,
+    }), [revenue, totalCost, cupsSold, inventory, isOnline, retrySync])
+
+    const historyValue = useMemo(() => ({
+        todayOrders, todayExpenses, isLoadingHistory,
+        handleLoadHistory, handleDeleteOrder, handleAddExpense, handleDeleteExpense, refreshTodayExpenses,
+        fixedCosts, handleLoadFixedCosts, handleAddFixedCost, handleUpdateFixedCost, handleDeleteFixedCost,
+        userRole,
+    }), [todayOrders, todayExpenses, isLoadingHistory, fixedCosts, userRole])
+
+    // Merged value for usePOS() back-compat. New code should use the focused hooks.
+    const mergedValue = useMemo(() => ({
+        ...cartValue, ...statsValue, ...historyValue,
+    }), [cartValue, statsValue, historyValue])
+
     return (
-        <POSContext.Provider value={{
-            // Cart
-            cart, activeCartItemId, setActiveCartItemId,
-            handleAddItem, handleRemoveCartItem, handleToggleExtra, handleToggleStickyExtra, handleConfirm,
-            enabledStickyExtraIds, setEnabledStickyExtraIds,
-            total, orderCount, hasOrder, isSubmitting,
-            // Dashboard
-            revenue, totalCost, cupsSold, inventory, isOnline,
-            // History
-            todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, handleDeleteOrder, handleAddExpense, handleDeleteExpense, refreshTodayExpenses,
-            lastOrder,
-            // Fixed Costs
-            fixedCosts, handleLoadFixedCosts, handleAddFixedCost, handleUpdateFixedCost, handleDeleteFixedCost,
-            // User info
-            userRole: profile?.role || 'staff',
-            // Offline sync
-            retrySync,
-            // Toast & Realtime
-            toast, showToast
-        }}>
-            <Outlet />
-        </POSContext.Provider>
+        <CartContext.Provider value={cartValue}>
+            <StatsContext.Provider value={statsValue}>
+                <HistoryContext.Provider value={historyValue}>
+                    <POSContext.Provider value={mergedValue}>
+                        <Outlet />
+                    </POSContext.Provider>
+                </HistoryContext.Provider>
+            </StatsContext.Provider>
+        </CartContext.Provider>
     )
 }

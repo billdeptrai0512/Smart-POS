@@ -6,6 +6,7 @@ import { ChevronDown, Check, Lock } from 'lucide-react';
 import { useProducts } from '../../contexts/ProductContext';
 import { formatVND } from '../../utils';
 import UpsellSheet from '../common/UpsellSheet';
+import { shiftFinalizedKey } from '../../constants/storageKeys';
 
 // Fallback: if exact ingredient key has no consumption, try matching by display label.
 // This handles the case where recipes use 'condensed_milk_ml' but inventory tracks 'sữa_đặc'
@@ -33,18 +34,19 @@ export default function InventoryRefillCard({
     ingredientUnits = {},
     isPastDate = false,
     canAccessAudit = true,   // false khi tier === 'basic' (Pro feature)
+    forcedTab,               // when set, lock activeTab + hide tab nav (used by /daily-report inventory "Bổ sung" sub-tab)
 }) {
     const { ingredientConfigs = [] } = useProducts() || {};
     const [lastWeekItems, setLastWeekItems] = useState([]);
     const [isLoadingPast, setIsLoadingPast] = useState(false);
-    const [activeTab, setActiveTab] = useState('audit');
+    const [activeTab, setActiveTab] = useState(forcedTab || 'audit');
     const [expandedRows, setExpandedRows] = useState({});
     const [isLossExpanded, setIsLossExpanded] = useState(false);
     const [showAuditUpsell, setShowAuditUpsell] = useState(false);
     const [isFinalized, setIsFinalized] = useState(() => {
         if (!selectedAddress?.id || isPastDate) return false
         const today = new Date().toISOString().split('T')[0]
-        return !!localStorage.getItem(`shift_finalized_${selectedAddress.id}_${today}`)
+        return !!localStorage.getItem(shiftFinalizedKey(selectedAddress.id, today))
     });
 
     const toggleRow = (ingredient) => {
@@ -265,7 +267,7 @@ export default function InventoryRefillCard({
     const handleFinalizeShift = () => {
         if (!selectedAddress?.id) return
         const today = new Date().toISOString().split('T')[0]
-        localStorage.setItem(`shift_finalized_${selectedAddress.id}_${today}`, Date.now().toString())
+        localStorage.setItem(shiftFinalizedKey(selectedAddress.id, today), Date.now().toString())
         setIsFinalized(true)
     };
 
@@ -273,8 +275,8 @@ export default function InventoryRefillCard({
 
     return (
         <div className="bg-surface rounded-[20px] p-4 border border-border/60 shadow-sm flex flex-col gap-3">
-            {/* Header & Tabs */}
-            {!isPastDate ? (
+            {/* Header & Tabs — hidden when forcedTab pins the view (parent already owns its own tab nav). */}
+            {!forcedTab && !isPastDate ? (
                 <div className="flex flex-col gap-3 border-b border-border/40 pb-3">
                     <div className="flex p-1 bg-surface-light rounded-[12px] gap-1 w-full">
                         {canAccessAudit ? (
@@ -302,13 +304,13 @@ export default function InventoryRefillCard({
                         </button>
                     </div>
                 </div>
-            ) : (
+            ) : !forcedTab && isPastDate ? (
                 <div className="flex flex-col gap-3 border-b border-border/40 pb-3">
                     <div className="flex items-center justify-center w-full">
                         <span className="text-[13px] font-bold text-text uppercase tracking-widest opacity-80">Hao hụt trong ngày</span>
                     </div>
                 </div>
-            )}
+            ) : null}
 
             {/* Audit Tab */}
             {activeTab === 'audit' && (
@@ -345,7 +347,7 @@ export default function InventoryRefillCard({
                                                     <span className="mx-1 text-border">•</span> Nhập thêm: {item.restock}
                                                 </span>
                                                 <span className="text-[11px] font-medium text-text-secondary">
-                                                    <span className="mx-1 text-border">•</span> Sử dụng: {item.used}
+                                                    <span className="mx-1 text-border">•</span> Sử dụng: {item.used}ccc
                                                 </span>
                                             </div>
 

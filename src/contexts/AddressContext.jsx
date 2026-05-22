@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import { useAuth } from './AuthContext'
 import { fetchAddresses, createAddress as apiCreateAddress, updateAddress as apiUpdateAddress, deleteAddress as apiDeleteAddress, upsertSession, updateAddressIngredientSort as apiUpdateAddressIngredientSort } from '../services/authService'
 import { getDemoAddress, setGuestIngredientSortOrder } from '../services/localRepository'
+import { STORAGE_KEYS } from '../constants/storageKeys'
 import { Outlet } from 'react-router-dom'
 
 const AddressContext = createContext(null)
@@ -65,14 +66,14 @@ export function AddressProvider() {
             setAddresses(addrs)
 
             // Restore previously selected address from localStorage
-            const savedId = localStorage.getItem('pos_selected_address')
+            const savedId = localStorage.getItem(STORAGE_KEYS.SELECTED_ADDRESS)
             const saved = addrs.find(a => a.id === savedId)
             if (saved) {
                 setSelectedAddressState(saved)
             } else if (addrs.length === 1) {
                 // Auto-select if only one address
                 setSelectedAddressState(addrs[0])
-                localStorage.setItem('pos_selected_address', addrs[0].id)
+                localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS, addrs[0].id)
             }
 
             setLoading(false)
@@ -82,14 +83,14 @@ export function AddressProvider() {
     const setSelectedAddress = useCallback((addr) => {
         setSelectedAddressState(addr)
         if (addr) {
-            localStorage.setItem('pos_selected_address', addr.id)
+            localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS, addr.id)
             if (profile?.id) {
                 upsertSession(profile.id, addr.id)
-                localStorage.setItem('pos_active_user_id', profile.id)
+                localStorage.setItem(STORAGE_KEYS.ACTIVE_USER_ID, profile.id)
             }
         } else {
-            localStorage.removeItem('pos_selected_address')
-            localStorage.removeItem('pos_active_user_id')
+            localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS)
+            localStorage.removeItem(STORAGE_KEYS.ACTIVE_USER_ID)
         }
     }, [profile])
 
@@ -133,7 +134,7 @@ export function AddressProvider() {
         setAddresses(prev => prev.filter(a => a.id !== addressId))
         if (selectedAddress?.id === addressId) {
             setSelectedAddressState(null)
-            localStorage.removeItem('pos_selected_address')
+            localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS)
         }
     }, [profile, selectedAddress])
 

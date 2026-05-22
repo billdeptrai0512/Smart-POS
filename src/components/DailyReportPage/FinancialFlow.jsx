@@ -1,5 +1,5 @@
 import { formatVND } from '../../utils'
-import { Card } from './CashFlowCard'
+import { ingredientLabel } from '../common/recipeUtils'
 
 export default function FinancialFlow({
     actualCash = 0,
@@ -12,95 +12,118 @@ export default function FinancialFlow({
     yesterdayTakeHome,
     compareLabel = 'So với hôm qua',
     onDailyExpenseClick,
-    onRefillClick
+    onRefillClick,
+    expenses = []
 }) {
-    // Vận hành = chi phí ca + free-form refill (sau ca nhưng vẫn là vận hành, không phải NVL).
-    const operationalExpense = (dailyExpense || 0) + (refillFreeForm || 0)
+    const totalExpenses = (dailyExpense || 0) + (refillFreeForm || 0) + (refillNvl || 0)
 
-    // Thực thu = TM + CK + chi phí ca trong ca (refill sau ca không cộng vào,
-    // vì cash đã được đếm trước khi xảy ra refill — không cần "trả về" gross).
-    const actualTotal = actualCash + actualTransfer + (dailyExpense || 0)
-
-    // Cầm về thực = TM + CK - mua NVL (tiền thực trong túi sau khi trừ NVL đã mua)
-    // Ưu tiên trừ tiền mặt trước, nếu dư thì trừ chuyển khoản
     const takeHomeCash = Math.max(0, actualCash - refillTotal)
     const remainingRefill = Math.max(0, refillTotal - actualCash)
     const takeHomeTransfer = Math.max(0, actualTransfer - remainingRefill)
     const takeHome = takeHomeCash + takeHomeTransfer
 
-    const hasYesterdayActual = yesterdayActualTotal !== null && yesterdayActualTotal !== undefined
-    const totalDelta = hasYesterdayActual ? actualTotal - yesterdayActualTotal : 0
-    const isTotalUp = totalDelta >= 0
+    // Phân loại chi phí theo đúng schema
+    const shiftExpenses = (expenses || []).filter(e => !e.is_fixed && !e.is_refill)
+    const afterShiftOps = (expenses || []).filter(e => !e.is_fixed && e.is_refill && e.metadata?.free_form)
+    const afterShiftNvl = (expenses || []).filter(e => !e.is_fixed && e.is_refill && !e.metadata?.free_form)
 
-    const hasYesterdayTakeHome = yesterdayTakeHome !== null && yesterdayTakeHome !== undefined
-    const takeHomeDelta = hasYesterdayTakeHome ? takeHome - yesterdayTakeHome : 0
-    const isTakeHomeUp = takeHomeDelta >= 0
+    const getExpenseName = (e) => {
+        if (e.is_refill && !e.metadata?.free_form && e.metadata?.ingredient) {
+            return ingredientLabel(e.metadata.ingredient)
+        }
+        return e.name || 'Chi phí'
+    }
 
     return (
-        <div className="flex flex-col gap-4 mt-3">
-            {/* DIVIDER BƯỚC 2 */}
-            {/* <div className="flex items-center gap-3 py-0.5 px-4">
-                <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-            </div> */}
+        <div className="flex flex-col gap-4">
+            {/* PANEL 1: CHI PHÍ — chia theo thời điểm phát sinh */}
+            <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
+                <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Chi phí phát sinh</h3>
 
-            <div className="col-span-2 bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex items-center justify-between relative overflow-hidden group">
-                <div className="flex flex-col flex-1 items-start text-left">
-                    <h3 className="text-[11px] font-black text-text-secondary uppercase mb-1">Thực thu</h3>
-                    <div className="text-[18px] font-bold tabular-nums text-success">
-                        {formatVND(actualTotal)}
-                    </div>
+                <div className="flex flex-col gap-1 pl-1">
+                    {/* <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Phát sinh</span> */}
+                    {shiftExpenses.length > 0 ? (
+                        shiftExpenses.map((e) => (
+                            <div key={e.id} className="flex justify-between items-center">
+                                <span className="text-[12px] font-bold text-text-secondary">· {e.name || 'Chi phí khác'}</span>
+                                <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(e.amount)}</span>
+                            </div>
+                        ))
+                    ) : (
+                        <span className="text-[12px] text-text-secondary italic">Không có chi phí trong ca</span>
+                    )}
                 </div>
-                {hasYesterdayActual && (
-                    <div className="flex flex-col items-end">
-                        <span className="self-end text-[10px] font-black text-text-secondary uppercase mb-1 opacity-70">{compareLabel}</span>
-                        <div className={`px-3 py-1 rounded-xl border ${isTotalUp ? 'bg-success/10 border-success/20 text-success' : 'bg-danger/10 border-danger/20 text-danger'}`}>
-                            <span className="text-[12px] font-black tabular-nums leading-none block">
-                                {(isTotalUp && totalDelta > 0 ? '+' : '')}{formatVND(totalDelta)}
-                            </span>
-                        </div>
-                    </div>
-                )}
+
+                <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
+
+                <div className="flex flex-col gap-1 pl-1">
+                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Sau chốt ca</span>
+                    {afterShiftOps.length > 0 ? (
+                        afterShiftOps.map((e) => (
+                            <div key={e.id} className="flex justify-between items-center">
+                                <span className="text-[12px] font-bold text-text-secondary">· {e.name || 'Chi phí khác'}</span>
+                                <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(e.amount)}</span>
+                            </div>
+                        ))
+                    ) : (
+                        <span className="text-[12px] text-text-secondary italic">Không có chi phí sau ca</span>
+                    )}
+                </div>
+
+                <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
+
+                <div className="flex flex-col gap-1 pl-1">
+                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Nguyên vật liệu</span>
+                    {afterShiftNvl.length > 0 ? (
+                        afterShiftNvl.map((e) => (
+                            <div key={e.id} className="flex justify-between items-center">
+                                <span className="text-[12px] font-bold text-text-secondary">· {getExpenseName(e)}</span>
+                                <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(e.amount)}</span>
+                            </div>
+                        ))
+                    ) : (
+                        <span className="text-[12px] text-text-secondary italic">Không có nguyên vật liệu nhập kho</span>
+                    )}
+                </div>
             </div>
 
-            {/* PHẦN 2: ĐI CHỢ & MANG VỀ */}
-            {/* Vận hành = chi phí trong ca + free-form sau ca (vận hành ≠ timing). */}
-            {/* Tồn kho = chỉ tiền mua NVL thực (refillNvl). */}
-            <div className="grid grid-cols-2 gap-3">
-                <Card
-                    label="Vận hành"
-                    value={operationalExpense}
-                    valueClass="text-danger"
-                    prefix={operationalExpense > 0 ? '-' : ''}
-                    onClick={onDailyExpenseClick}
-                />
-                <Card
-                    label="Tồn kho"
-                    value={refillNvl}
-                    valueClass='text-danger'
-                    prefix={refillNvl > 0 ? '-' : ''}
-                    onClick={onRefillClick}
-                    alignRight
-                />
 
-                {/* Cầm về thực — full width with comparison */}
-                <div className="col-span-2 bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex items-center justify-between relative overflow-hidden group">
-                    <div className="flex flex-col flex-1 items-start text-left">
-                        <h3 className="text-[11px] font-black text-text-secondary uppercase mb-1">Thực nhận</h3>
-                        <div className="text-[18px] font-bold tabular-nums text-success">
-                            {formatVND(takeHome)}
-                        </div>
+
+            {/* PANEL 3: TỔNG CHI PHÍ */}
+            <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
+                <div className="flex justify-between items-center mt-1 pl-1">
+                    <span className="text-[13px] font-black text-text uppercase tracking-wide">Tổng chi phí</span>
+                    <span className="text-[14px] font-black text-danger tabular-nums">
+                        -{formatVND(totalExpenses)}
+                    </span>
+                </div>
+            </div>
+
+            {/* PANEL 4: THỰC NHẬN */}
+            <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
+                <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Thực nhận</h3>
+                <div className="flex flex-col gap-2.5 pl-2">
+                    <div className="flex justify-between items-center">
+                        <span className="text-[12px] font-bold text-text-secondary">Tiền mặt thực tế:</span>
+                        <span className="text-[13px] font-bold text-text tabular-nums">
+                            {formatVND(takeHomeCash)}
+                        </span>
                     </div>
-                    {hasYesterdayTakeHome && (
-                        <div className="flex flex-col items-end">
-                            <span className="self-end text-[10px] font-black text-text-secondary uppercase mb-1 opacity-70">{compareLabel}</span>
-                            <div className={`px-3 py-1 rounded-xl border ${isTakeHomeUp ? 'bg-success/10 border-success/20 text-success' : 'bg-danger/10 border-danger/20 text-danger'}`}>
-                                <span className="text-[12px] font-black tabular-nums leading-none block">
-                                    {(isTakeHomeUp && takeHomeDelta > 0 ? '+' : '')}{formatVND(takeHomeDelta)}
-                                </span>
-                            </div>
-                        </div>
-                    )}
+                    <div className="flex justify-between items-center">
+                        <span className="text-[12px] font-bold text-text-secondary">Chuyển khoản thực tế:</span>
+                        <span className="text-[13px] font-bold text-text tabular-nums">
+                            {formatVND(takeHomeTransfer)}
+                        </span>
+                    </div>
+                </div>
+
+                <div className="w-full h-[1px] bg-border/60 rounded-full my-3" />
+
+                <div className="flex justify-between items-center mt-1 pl-1">
+                    <span className="text-[13px] font-black text-text uppercase tracking-wide">Tổng thực nhận</span>
+                    <span className="text-[16px] font-black text-success tabular-nums">
+                        {formatVND(takeHome)}
+                    </span>
                 </div>
             </div>
         </div>

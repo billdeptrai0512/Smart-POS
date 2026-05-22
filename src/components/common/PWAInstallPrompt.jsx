@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { STORAGE_KEYS } from '../../constants/storageKeys'
 
 export default function PWAInstallPrompt() {
     const [supportsPWA, setSupportsPWA] = useState(false)
@@ -37,7 +38,7 @@ export default function PWAInstallPrompt() {
         // If it's iOS and not standalone, we can automatically show the prompt
         // Or we might want to delay it or only show if they haven't dismissed it
         // Check local storage so we don't annoy users constantly
-        const dismissed = localStorage.getItem('pwa_prompt_dismissed')
+        const dismissed = localStorage.getItem(STORAGE_KEYS.PWA_PROMPT_DISMISSED)
         if (iosEnv && !dismissed) {
             setShowPrompt(true)
         } else if (!iosEnv && !dismissed && supportsPWA) {
@@ -60,7 +61,7 @@ export default function PWAInstallPrompt() {
 
     const dismissPrompt = () => {
         setShowPrompt(false)
-        localStorage.setItem('pwa_prompt_dismissed', 'true')
+        localStorage.setItem(STORAGE_KEYS.PWA_PROMPT_DISMISSED, 'true')
     }
 
     if (isStandalone || !showPrompt) {
