@@ -71,6 +71,24 @@ export default function DailyReportPage() {
     const [apiExpenses, setApiExpenses] = useState([])
     const [apiShiftClosings, setApiShiftClosings] = useState([])
 
+    // `todayISO` is state (not per-render) so an overnight tab can detect the date
+    // change on focus/visibility and trigger a refetch of shift_closing + clear stale
+    // cash + inventory inputs. Declared up here so hooks below can take it as a dep.
+    const [todayISO, setTodayISO] = useState(() => dateStringVN(new Date()))
+    useEffect(() => {
+        const check = () => {
+            const now = dateStringVN(new Date())
+            if (now !== todayISO) setTodayISO(now)
+        }
+        const onVis = () => { if (document.visibilityState === 'visible') check() }
+        window.addEventListener('focus', check)
+        document.addEventListener('visibilitychange', onVis)
+        return () => {
+            window.removeEventListener('focus', check)
+            document.removeEventListener('visibilitychange', onVis)
+        }
+    }, [todayISO])
+
     // Inline cash/transfer editor (today scope only). Pre-fills from shiftClosing when
     // it loads; dirty flag controls when the Lưu button appears.
     const [cashInput, setCashInput] = useState('')
@@ -79,8 +97,9 @@ export default function DailyReportPage() {
     const { save: saveShiftClosing, isSaving: isSavingShift } = useShiftClosingSave(selectedAddress?.id)
 
     // Inventory editor (today scope only). All input state + warehouse fetch live in
-    // the hook so DailyReportPage stays focused on render orchestration.
-    const inventory = useShiftInventoryState(selectedAddress?.id, selectedAddress?.ingredient_sort_order)
+    // the hook so DailyReportPage stays focused on render orchestration. todayISO
+    // drives existingClosing refetch on midnight rollover.
+    const inventory = useShiftInventoryState(selectedAddress?.id, selectedAddress?.ingredient_sort_order, todayISO)
     const [inventoryTab, setInventoryTab] = useState('report') // 'report' | 'refill'
 
     useEffect(() => {
@@ -156,10 +175,11 @@ export default function DailyReportPage() {
                 .catch((error) => showError(error, 'Tải báo cáo theo khoảng'))
                 .finally(() => setIsAsyncReady(true))
         }
-    }, [selectedAddress?.id, scope, offset, rangeStart, rangeEnd, isTodayScope])
+        // todayISO so a midnight rollover invalidates the cached shift_closing
+        // and reloads fresh data for the new VN day.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedAddress?.id, scope, offset, rangeStart, rangeEnd, isTodayScope, todayISO])
 
-    // Header date logic
-    const todayISO = dateStringVN(new Date())
     const dayCustomDate = useMemo(() => dayCustomDateOf(scope, offset), [scope, offset])
 
     const dayInputValue = dayCustomDate || todayISO

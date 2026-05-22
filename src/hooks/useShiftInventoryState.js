@@ -17,7 +17,10 @@ import { sortIngredients } from '../components/common/recipeUtils'
 //
 // Realtime channel is named after the address (same as before) so devices
 // editing the same shift converge regardless of which page they're on.
-export function useShiftInventoryState(addressId, ingredientSortOrder) {
+// `dateKey` (e.g. todayISO from caller) is part of the effect deps so an overnight
+// session detecting a date change clears stale inputs and refetches the new day's
+// shift_closing instead of editing yesterday's row.
+export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) {
     // ── Inputs (staff-typed) ──────────────────────────────────────────────────
     const [openingInputs, setOpeningInputs] = useState({})
     const [openingLocked, setOpeningLocked] = useState({})
@@ -36,9 +39,17 @@ export function useShiftInventoryState(addressId, ingredientSortOrder) {
     const channelRef = useRef(null)
 
     // ── Load existing shift closing → seed input maps ─────────────────────────
+    // Re-runs when dateKey changes (midnight rollover) to drop stale yesterday inputs.
     useEffect(() => {
         if (!addressId) { setIsLoadingExisting(false); return }
         setIsLoadingExisting(true)
+        // Clear pre-existing input state so a new day starts blank if no closing exists yet.
+        setExistingClosing(null)
+        setInventoryInputs({})
+        setRestockInputs({})
+        setOpeningInputs({})
+        setOpeningLocked({})
+        setIsDirty(false)
         fetchTodayShiftClosing(addressId).then(data => {
             if (!data) return
             setExistingClosing(data)
@@ -61,7 +72,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder) {
             if (Object.keys(openings).length) setOpeningInputs(openings)
             if (Object.keys(locked).length) setOpeningLocked(locked)
         }).finally(() => setIsLoadingExisting(false))
-    }, [addressId])
+    }, [addressId, dateKey])
 
     // ── Canonical stock reader: warehouse + counter snapshots ────────────────
     // counter_stock seeds "Đầu kỳ" (= previous shift's remaining).
