@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AlertTriangle, ChevronDown } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils'
 import { formatPackedQty } from '../../utils/inventory'
+import { formatVND } from '../../utils'
 
 // 3×3 grid per ingredient:
 //   row 1 (warehouse):  Tồn kho   |  Lấy ra      |  Tồn cuối = Tồn kho − Lấy ra
@@ -21,6 +22,7 @@ export default function InventoryReportCard({
     ingredientUnits = {},
     usedMap = {},            // ingredient → todayEstimatedConsumption qty
     consumptionBreakdown = {}, // ingredient → { [variantKey]: { name, qty, totalAmount } } for expand-on-tap
+    ingredientToProduct = {}, // ingredient → { amountPerCup, productName } for "Tương đương N ly" label
     canUnlock, isSubmitting,
     onOpeningChange, onOpeningLock, onRestockChange, onInventoryChange,
 }) {
@@ -49,6 +51,7 @@ export default function InventoryReportCard({
                     warehouseAvailable={warehouseStocks[ing.ingredient]}
                     used={lookupByLabel(ing.ingredient, usedMap)}
                     breakdown={lookupByLabel(ing.ingredient, consumptionBreakdown) || null}
+                    productRef={ingredientToProduct[ing.ingredient]}
                     canUnlock={canUnlock}
                     isSubmitting={isSubmitting}
                     onOpeningChange={onOpeningChange}
@@ -76,7 +79,7 @@ function lookupByLabel(ingredient, map) {
 
 function IngredientRow({
     ing, ingredientUnits, openingValue, openingFallback, isLocked, restockValue, inventoryValue,
-    warehouseAvailable, used, breakdown,
+    warehouseAvailable, used, breakdown, productRef,
     isSubmitting,
     onOpeningChange, onRestockChange, onInventoryChange,
 }) {
@@ -120,6 +123,19 @@ function IngredientRow({
     const haoHutTone = haoHut == null
         ? 'neutral'
         : haoHut === 0 ? 'good' : haoHut < 0 ? 'bad' : 'warn'
+
+    // Money value of the discrepancy = |Hao hụt| × unit_cost. Render absolute number
+    // tinted by sign so the negative magnitude is implicit in the tone.
+    const unitCost = Number(ing.unit_cost) || 0
+    const giaTri = haoHut != null && unitCost > 0 ? Math.round(haoHut * unitCost) : null
+
+    // Cups-equivalent label: how many drinks of the dominant product the |Hao hụt|
+    // could have made. Skips ingredients where amountPerCup is missing/1 (cup/lid passthrough).
+    let tuongDuongText = '—'
+    if (haoHut != null && productRef?.amountPerCup > 0 && haoHut !== 0) {
+        const cups = Math.round(Math.abs(haoHut) / productRef.amountPerCup)
+        if (cups > 0) tuongDuongText = `≈ ${cups} ly ${productRef.productName || ''}`.trim()
+    }
 
     return (
         <div className="border-b border-border/20 last:border-0 pb-2.5 last:pb-0">
@@ -204,6 +220,19 @@ function IngredientRow({
                     disabled
                 />
             </div>
+            {/* Row 4 — money + cups-equivalent context for Hao hụt */}
+            <div className="grid grid-cols-3 gap-2 mt-2">
+                <TextCell
+                    label="Giá trị"
+                    text={giaTri != null
+                        ? `${giaTri < 0 ? '-' : ''}${formatVND(Math.abs(giaTri))}`
+                        : '—'}
+                    tone={haoHutTone}
+                />
+                <div className="col-span-2">
+                    <TextCell label="Tương đương" text={tuongDuongText} tone={haoHutTone} />
+                </div>
+            </div>
 
             {restockOverflow && (
                 <div className="flex items-start gap-1.5 mt-1.5 text-[10px] font-bold text-danger leading-tight">
@@ -259,6 +288,28 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRig
                     className={`flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-bold text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${tone === 'neutral' ? 'disabled:opacity-50' : ''} ${inputCls}`}
                 />
                 <span className={`pr-1.5 text-[10px] font-medium shrink-0 ${unitCls}`}>{unit}</span>
+            </div>
+        </div>
+    )
+}
+
+// Read-only text cell that visually matches ColumnInput (same label+box rhythm) but
+// renders a string instead of a number input. Used for "Tương đương N ly <product>".
+function TextCell({ label, text, tone = 'neutral' }) {
+    const toneMap = {
+        good: { wrap: 'bg-success/8 border-success/30', text: 'text-success' },
+        bad: { wrap: 'bg-danger/8 border-danger/30', text: 'text-danger' },
+        warn: { wrap: 'bg-warning/8 border-warning/30', text: 'text-warning' },
+        neutral: { wrap: 'bg-surface-light border-border/60', text: 'text-text-secondary' },
+    }
+    const t = toneMap[tone] || toneMap.neutral
+    return (
+        <div className="flex flex-col">
+            <div className="flex items-center justify-center gap-1 mb-1">
+                <span className="text-[9px] font-black uppercase text-text-dim">{label}</span>
+            </div>
+            <div className={`rounded-[10px] py-1.5 px-2 text-[13px] font-bold text-right border ${t.wrap} ${t.text}`}>
+                {text}
             </div>
         </div>
     )

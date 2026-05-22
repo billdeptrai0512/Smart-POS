@@ -116,14 +116,18 @@ export default function DailyReportPage() {
     const isTodayScope = scope === 'day' && offset === 0
 
     // Pre-fill cash/transfer inputs from the existing shift_closing (if any).
-    // Resets the dirty flag — user's mid-edit values are preserved across re-renders
-    // because this only fires when the underlying shiftClosing rows actually change.
+    // Guard with closed_at === today VN: fetchDailyReportContext occasionally
+    // returns yesterday's shift_closing as `shift_closing` (server tz / RPC
+    // boundary issue), which would leave yesterday's cash + transfer values
+    // sticky after midnight. If closed_at isn't today, treat as no row → blank.
     useEffect(() => {
         if (!isTodayScope) return
-        setCashInput(shiftClosing?.actual_cash != null ? formatVNDInput(shiftClosing.actual_cash) : '')
-        setTransferInput(shiftClosing?.actual_transfer != null ? formatVNDInput(shiftClosing.actual_transfer) : '')
+        const isTodaysClosing = shiftClosing?.closed_at
+            && dateStringVN(new Date(shiftClosing.closed_at)) === todayISO
+        setCashInput(isTodaysClosing && shiftClosing.actual_cash != null ? formatVNDInput(shiftClosing.actual_cash) : '')
+        setTransferInput(isTodaysClosing && shiftClosing.actual_transfer != null ? formatVNDInput(shiftClosing.actual_transfer) : '')
         setCashDirty(false)
-    }, [isTodayScope, shiftClosing?.id, shiftClosing?.actual_cash, shiftClosing?.actual_transfer])
+    }, [isTodayScope, todayISO, shiftClosing?.id, shiftClosing?.actual_cash, shiftClosing?.actual_transfer, shiftClosing?.closed_at])
 
     // Computed display data
     const displayOrders = isTodayScope ? todayOrders : apiOrders
@@ -417,6 +421,30 @@ export default function DailyReportPage() {
         [todayOrderItems, recipes, extraIngredients, products, productExtras]
     )
 
+    // Dominant product per ingredient — drives "Tương đương N ly <product>" on the
+    // Hao hụt row. Pick the recipe with the highest sales volume; skip cup/lid
+    // passthroughs (amountPerCup === 1) and ingredients that don't map to a named product.
+    const ingredientToProduct = useMemo(() => {
+        const sales = {}
+        todayOrderItems.forEach(i => { sales[i.productId] = (sales[i.productId] || 0) + (i.qty || 1) })
+        const map = {}
+        ;(recipes || []).forEach(r => {
+            if (!r.amount || r.amount <= 0) return
+            const s = sales[r.product_id] || 0
+            const cur = map[r.ingredient]
+            if (!cur || s > cur.sales) {
+                map[r.ingredient] = { productId: r.product_id, amountPerCup: r.amount, sales: s }
+            }
+        })
+        for (const ing of Object.keys(map)) {
+            const ref = map[ing]
+            const p = products.find(pp => pp.id === ref.productId)
+            if (!p?.name || ref.amountPerCup === 1) { delete map[ing]; continue }
+            ref.productName = p.name.toLowerCase()
+        }
+        return map
+    }, [recipes, products, todayOrderItems])
+
     // Sum today's orders (online + offline) for the system_total_revenue snapshot we send
     // when creating a new shift_closing. Mirrors /shift-closing's calculation.
     const systemTotalRevenue = useMemo(() => {
@@ -653,6 +681,7 @@ export default function DailyReportPage() {
                                                 ingredientUnits={Object.fromEntries(inventory.ingredientsList.map(i => [i.ingredient, i.unit]))}
                                                 usedMap={usedMap}
                                                 consumptionBreakdown={consumptionBreakdown}
+                                                ingredientToProduct={ingredientToProduct}
                                                 canUnlock={!isStaff}
                                                 isSubmitting={isSavingShift}
                                                 onOpeningChange={inventory.onOpeningChange}
