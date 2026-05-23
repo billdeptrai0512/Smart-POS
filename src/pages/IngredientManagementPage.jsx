@@ -19,6 +19,7 @@ import StockDeficitBanner from '../components/IngredientManagementPage/StockDefi
 import KeyMismatchBanner from '../components/IngredientManagementPage/KeyMismatchBanner'
 import IngredientsHeader from '../components/IngredientManagementPage/IngredientsHeader'
 import CreateIngredientForm from '../components/IngredientManagementPage/CreateIngredientForm'
+import IngredientReportView from '../components/IngredientManagementPage/IngredientReportView'
 import SortableList from '../components/common/SortableList'
 import { detectKeyMismatches } from '../utils/ingredientKeySync'
 import { useToast } from '../hooks/useToast'
@@ -59,7 +60,11 @@ export default function IngredientManagementPage() {
     const [newName, setNewName] = useState('')
     const [newUnit, setNewUnit] = useState('')
     const [newCost, setNewCost] = useState('')
+    const [newCategory, setNewCategory] = useState(null)
     const [showCreateModal, setShowCreateModal] = useState(false)
+
+    // View mode: 'manage' (grid, default) | 'report' (grouped by category)
+    const [viewMode, setViewMode] = useState('manage')
 
     // Stock & modals
     const [ingredientStocks, setIngredientStocks] = useState([])
@@ -256,13 +261,29 @@ export default function IngredientManagementPage() {
         const cost = parseInt(newCost) || 0
         setSaving(true)
         try {
-            await upsertIngredientCost(key, cost, selectedAddress?.id, unit)
+            await upsertIngredientCost(key, cost, selectedAddress?.id, unit, { category: newCategory })
             setIngredientCosts(prev => ({ ...prev, [key]: cost }))
             setIngredientUnits(prev => ({ ...prev, [key]: unit }))
-            setNewName(''); setNewUnit(''); setNewCost('')
+            // Refresh configs so the new ingredient picks up its category in `configByIngredient`.
+            refreshProducts?.()
+            setNewName(''); setNewUnit(''); setNewCost(''); setNewCategory(null)
             setShowCreateModal(false)
         } catch (err) {
             showError(err, 'Tạo nguyên liệu mới')
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    async function saveCategory(ingredient, newCat) {
+        setSaving(true)
+        try {
+            const cost = ingredientCosts[ingredient] || 0
+            const unit = ingredientUnits[ingredient] || 'đv'
+            await upsertIngredientCost(ingredient, cost, selectedAddress?.id, unit, { category: newCat })
+            refreshProducts?.()
+        } catch (err) {
+            showError(err, 'Lưu nhóm nguyên liệu')
         } finally {
             setSaving(false)
         }
@@ -346,6 +367,8 @@ export default function IngredientManagementPage() {
                 onTabSelect={(key) => {
                     if (key === 'recipes') navigate('/recipes', { state: location.state, replace: true })
                 }}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-4 pb-48 bg-bg">
@@ -375,6 +398,16 @@ export default function IngredientManagementPage() {
                         selectedKey={selectedSortIngredient}
                         onSelect={setSelectedSortIngredient}
                         onMove={moveIngredient}
+                    />
+                ) : viewMode === 'report' ? (
+                    <IngredientReportView
+                        ingredients={allIngredients}
+                        ingredientCosts={ingredientCosts}
+                        ingredientUnits={ingredientUnits}
+                        configByIngredient={configByIngredient}
+                        stockByIngredient={stockByIngredient}
+                        canEdit={canEdit}
+                        onSaveCategory={canEdit ? saveCategory : null}
                     />
                 ) : (
                     <div className="grid grid-cols-2 gap-2">
@@ -414,6 +447,8 @@ export default function IngredientManagementPage() {
                                     editingStock={editingStock}
                                     setEditingStock={setEditingStock}
                                     saveStock={saveStock}
+                                    category={cfg?.category || null}
+                                    onSaveCategory={canEdit ? saveCategory : null}
                                 />
                             )
                         })}
@@ -478,10 +513,12 @@ export default function IngredientManagementPage() {
                             name={newName}
                             unit={newUnit}
                             cost={newCost}
+                            category={newCategory}
                             saving={saving}
                             onNameChange={setNewName}
                             onUnitChange={setNewUnit}
                             onCostChange={setNewCost}
+                            onCategoryChange={setNewCategory}
                             onSubmit={handleCreateIngredient}
                         />
                     </div>

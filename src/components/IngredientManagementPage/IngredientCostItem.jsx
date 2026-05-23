@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { formatVND } from '../../utils'
 import { formatPackedQty } from '../../utils/inventory'
 import { Plus } from 'lucide-react'
+import { INGREDIENT_CATEGORIES } from '../common/recipeUtils'
 
 /**
  * Compact 2-line ingredient card:
@@ -33,6 +34,8 @@ export default function IngredientCostItem({
     isEditingStock, editingStock, setEditingStock, saveStock,
     // Daily context (always inline)
     dailyContext,
+    // Category
+    category, onSaveCategory,
 }) {
     const displayUnit = getIngredientUnit(ingredient, storedUnit)
     const navigate = useNavigate()
@@ -169,6 +172,22 @@ export default function IngredientCostItem({
                             {formatVND(cost)}<span className="text-text-dim font-medium">/{displayUnit}</span>
                         </span>
                     </div>
+                    {onSaveCategory && (
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="text-text-dim">Nhóm</span>
+                            <select
+                                value={category || ''}
+                                onClick={stop}
+                                onChange={e => onSaveCategory(ingredient, e.target.value || null)}
+                                className={`bg-transparent border-0 text-[11px] font-bold focus:outline-none cursor-pointer ${category ? 'text-text-secondary' : 'text-text-dim italic'}`}
+                            >
+                                <option value="">Chưa phân loại</option>
+                                {INGREDIENT_CATEGORIES.map(c => (
+                                    <option key={c.key} value={c.key}>{c.label}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                     {onConfigurePack && (
                         <>
                             <div className="flex items-start justify-between gap-2">

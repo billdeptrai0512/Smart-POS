@@ -93,7 +93,7 @@ export async function fetchIngredientCostsAndUnits(addressId) {
     // address via the seed_address_ingredient_costs trigger and the backfill in
     // migration 20260518_decouple_ingredient_costs.sql. Admin edits to default
     // rows DO NOT propagate to existing active addresses.
-    let query = supabase.from('ingredient_costs').select('ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock')
+    let query = supabase.from('ingredient_costs').select('ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock, category')
 
     if (addressId) {
         query = query.eq('address_id', addressId)
@@ -114,7 +114,7 @@ export async function fetchIngredientCostsAndUnits(addressId) {
     for (const d of data) {
         costs[d.ingredient] = d.unit_cost
         units[d.ingredient] = d.unit || 'đv'
-        rows.push({ ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, min_stock: d.min_stock })
+        rows.push({ ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, min_stock: d.min_stock, category: d.category || null })
     }
     return { costs, units, rows }
 }
@@ -143,6 +143,7 @@ export async function upsertIngredientCost(ingredient, unitCost, addressId = nul
     if (opts.packSize !== undefined) payload.pack_size = opts.packSize || null
     if (opts.packUnit !== undefined) payload.pack_unit = opts.packUnit || null
     if (opts.minStock !== undefined) payload.min_stock = opts.minStock || null
+    if (opts.category !== undefined) payload.category = opts.category || null
 
     const { error } = await supabase
         .from('ingredient_costs')

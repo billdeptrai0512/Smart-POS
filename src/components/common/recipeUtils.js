@@ -3,6 +3,26 @@ import { INGREDIENT_NAMES } from '../../constants'
 // ALL_INGREDIENTS is now empty — all ingredients are fetched from DB
 export const ALL_INGREDIENTS = []
 
+// Display order matters: used as the section order in /ingredients > Báo cáo.
+// `null` (chưa phân loại) is rendered before these by the report view so managers
+// see what still needs assigning at the top.
+export const INGREDIENT_CATEGORIES = [
+    { key: 'main',      label: 'Nguyên liệu chính' },
+    { key: 'packaging', label: 'Bao bì' },
+    { key: 'tools',     label: 'Đồ dùng / Dụng cụ' },
+]
+
+export const INGREDIENT_CATEGORY_LABELS = {
+    main: 'Nguyên liệu chính',
+    packaging: 'Bao bì',
+    tools: 'Đồ dùng / Dụng cụ',
+}
+
+export function ingredientCategoryLabel(key) {
+    if (!key) return 'Chưa phân loại'
+    return INGREDIENT_CATEGORY_LABELS[key] || 'Chưa phân loại'
+}
+
 export function sortIngredients(a, b, customOrderArray) {
     if (customOrderArray && customOrderArray.length > 0) {
         const idxA = customOrderArray.indexOf(a)
