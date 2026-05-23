@@ -14,7 +14,6 @@ import { sortIngredients, ingredientLabel, getIngredientUnit, normalizeIngredien
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
-import PackConfigModal from '../components/IngredientManagementPage/PackConfigModal'
 import StockDeficitBanner from '../components/IngredientManagementPage/StockDeficitBanner'
 import KeyMismatchBanner from '../components/IngredientManagementPage/KeyMismatchBanner'
 import IngredientsHeader from '../components/IngredientManagementPage/IngredientsHeader'
@@ -68,7 +67,6 @@ export default function IngredientManagementPage() {
     // Stock & modals
     const [ingredientStocks, setIngredientStocks] = useState([])
     const [restockIngredient, setRestockIngredient] = useState(null)
-    const [packConfigIngredient, setPackConfigIngredient] = useState(null)
     const [showKeySync, setShowKeySync] = useState(false)
     const [dismissedSig, setDismissedSig] = useState('')
     const [stockDeficits, setStockDeficits] = useState([])
@@ -247,20 +245,6 @@ export default function IngredientManagementPage() {
         }
     }
 
-    async function handleSaveAdvanced(ingredient, { packSize, packUnit, minStock }) {
-        setSaving(true)
-        try {
-            const cost = ingredientCosts[ingredient] || 0
-            const unit = ingredientUnits[ingredient] || 'đv'
-            await upsertIngredientCost(ingredient, cost, selectedAddress?.id, unit, { packSize, packUnit, minStock })
-            refreshProducts?.() // refresh configs into ProductContext
-        } catch (err) {
-            showError(err, 'Lưu cấu hình nâng cao')
-        } finally {
-            setSaving(false)
-        }
-    }
-
     async function handleCreateIngredient() {
         if (!newName.trim()) return
         const key = normalizeKey(newName)
@@ -435,8 +419,6 @@ export default function IngredientManagementPage() {
                                     packSize={cfg?.pack_size}
                                     packUnit={cfg?.pack_unit}
                                     minStock={cfg?.min_stock}
-                                    onSaveAdvanced={handleSaveAdvanced}
-                                    onConfigurePack={canEdit ? setPackConfigIngredient : null}
                                     stockData={stockByIngredient.get(ingredient)}
                                     onRestock={() => setRestockIngredient(ingredient)}
                                     dailyContext={dailyContext[ingredient]}
@@ -444,8 +426,6 @@ export default function IngredientManagementPage() {
                                     editingStock={editingStock}
                                     setEditingStock={setEditingStock}
                                     saveStock={saveStock}
-                                    category={normalizeIngredientCategory(cfg?.category)}
-                                    onSaveCategory={canEdit ? saveCategory : null}
                                 />
                             )
                         })}
@@ -544,24 +524,6 @@ export default function IngredientManagementPage() {
                     }}
                 />
             )}
-
-            {packConfigIngredient && (() => {
-                const cfg = configByIngredient.get(packConfigIngredient) || {}
-                const baseUnit = getIngredientUnit(packConfigIngredient, ingredientUnits[packConfigIngredient])
-                return (
-                    <PackConfigModal
-                        open={true}
-                        onClose={() => setPackConfigIngredient(null)}
-                        ingredientLabel={ingredientLabel(packConfigIngredient)}
-                        baseUnit={baseUnit}
-                        currentPackSize={cfg.pack_size}
-                        currentPackUnit={cfg.pack_unit}
-                        onSave={async ({ packSize, packUnit }) => {
-                            await handleSaveAdvanced(packConfigIngredient, { packSize, packUnit, minStock: cfg.min_stock })
-                        }}
-                    />
-                )
-            })()}
 
             <KeySyncModal
                 open={showKeySync}

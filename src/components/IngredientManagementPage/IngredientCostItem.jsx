@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { formatVND } from '../../utils'
 import { formatPackedQty } from '../../utils/inventory'
 import { Plus } from 'lucide-react'
-import { INGREDIENT_CATEGORIES } from '../common/recipeUtils'
 
 /**
  * Compact 2-line ingredient card:
@@ -27,15 +26,14 @@ export default function IngredientCostItem({
     isEditingName, editingName, setEditingName, saveName,
     canEdit = true,
     minStock,
-    // Pack config (quy cách đóng gói)
-    packSize, packUnit, onConfigurePack,
+    // Pack config (quy cách đóng gói) — edit moved to detail page;
+    // packSize/packUnit kept for the inline "= X bịch + Y g" display.
+    packSize, packUnit,
     // Stock display
     stockData, onRestock,
     isEditingStock, editingStock, setEditingStock, saveStock,
     // Daily context (always inline)
     dailyContext,
-    // Category
-    category, onSaveCategory,
 }) {
     const displayUnit = getIngredientUnit(ingredient, storedUnit)
     const navigate = useNavigate()
@@ -43,7 +41,6 @@ export default function IngredientCostItem({
 
     const currentStock = stockData?.current_stock ?? null
     const isLowStock = currentStock !== null && currentStock <= (minStock || 0)
-    const hasPack = !!(packSize && packUnit)
 
     const stop = (e) => e.stopPropagation()
 
@@ -163,7 +160,8 @@ export default function IngredientCostItem({
                 </span>
             )}
 
-            {/* Row 3: manager-only details — separated by border-top */}
+            {/* Row 3: manager-only details — separated by border-top.
+                 Nhóm + Quy đổi đã chuyển sang trang chi tiết của ingredient. */}
             {canEdit && (
                 <div className="mt-1 pt-2 border-t border-border/40 flex flex-col gap-1 text-[11px] tabular-nums">
                     <div className="flex items-baseline justify-between gap-2">
@@ -172,45 +170,6 @@ export default function IngredientCostItem({
                             {formatVND(cost)}<span className="text-text-dim font-medium">/{displayUnit}</span>
                         </span>
                     </div>
-                    {onSaveCategory && (
-                        <div className="flex items-center justify-between gap-2">
-                            <span className="text-text-dim">Nhóm</span>
-                            <select
-                                value={category || 'main'}
-                                onClick={stop}
-                                onChange={e => onSaveCategory(ingredient, e.target.value)}
-                                className="bg-transparent border-0 text-[11px] font-bold text-text-secondary focus:outline-none cursor-pointer"
-                            >
-                                {INGREDIENT_CATEGORIES.map(c => (
-                                    <option key={c.key} value={c.key}>{c.label}</option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
-                    {onConfigurePack && (
-                        <>
-                            <div className="flex items-start justify-between gap-2">
-                                <span className="text-text-dim leading-none pt-[1px]">Quy đổi</span>
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); onConfigurePack(ingredient) }}
-                                    className="hover:text-primary transition-colors text-right flex flex items-end gap-1"
-                                    title={hasPack ? 'Sửa quy cách đóng gói' : 'Thêm quy cách đóng gói'}
-                                >
-                                    {!hasPack && (<span className="text-text-dim italic font-medium leading-none">+ thêm</span>
-                                    )}
-                                </button>
-                            </div>
-                            {hasPack && (
-                                <div className='flex justify-between'>
-                                    <span className="text-text-secondary font-bold leading-none">1 {packUnit}</span>
-                                    <span className="text-text-dim font-medium leading-none tabular-nums">=</span>
-                                    <span className="text-text-secondary font-bold leading-none tabular-nums"> {packSize} {displayUnit}</span>
-                                </div>
-                            )}
-
-                        </>
-
-                    )}
                 </div>
             )}
 
