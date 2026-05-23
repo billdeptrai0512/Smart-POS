@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Plus, X, ArrowUpDown } from 'lucide-react'
 import FabActionMenu from '../components/common/FabActionMenu'
@@ -25,6 +25,12 @@ import Toast from '../components/POSPage/Toast'
 import { keySyncDismissedKey } from '../constants/storageKeys'
 
 const normalizeKey = (raw) => raw.trim().toLowerCase().replace(/\s+/g, '_')
+
+// Module-level scroll cache. Set when user opens a card to drill into
+// /ingredients/:key; consumed once on next mount of /ingredients (back nav).
+// Mirrors the /recipes pattern so back-from-detail lands at the same scroll
+// position the user left.
+let savedScroll = null
 
 export default function IngredientManagementPage() {
     const navigate = useNavigate()
@@ -63,6 +69,21 @@ export default function IngredientManagementPage() {
 
     // View mode = active category tab. Uncategorized NVL (category=null) shown under 'main'.
     const [viewMode, setViewMode] = useState('main')
+
+    const mainRef = useRef(null)
+
+    // Restore scroll on back nav from /ingredients/:key; clear cache after use.
+    useEffect(() => {
+        if (savedScroll !== null && mainRef.current) {
+            mainRef.current.scrollTop = savedScroll
+            savedScroll = null
+        }
+    }, [])
+
+    const openIngredient = (ingredient) => {
+        savedScroll = mainRef.current?.scrollTop ?? 0
+        navigate(`/ingredients/${ingredient}`, { state: location.state })
+    }
 
     // Stock & modals
     const [ingredientStocks, setIngredientStocks] = useState([])
@@ -362,7 +383,7 @@ export default function IngredientManagementPage() {
                 onViewModeChange={setViewMode}
             />
 
-            <main className="flex-1 overflow-y-auto px-4 py-4 pb-48 bg-bg">
+            <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-48 bg-bg">
                 {canEdit && !isSorting && stockDeficits.length > 0 && (
                     <StockDeficitBanner
                         deficits={stockDeficits}
@@ -426,6 +447,7 @@ export default function IngredientManagementPage() {
                                     editingStock={editingStock}
                                     setEditingStock={setEditingStock}
                                     saveStock={saveStock}
+                                    onOpen={openIngredient}
                                 />
                             )
                         })}

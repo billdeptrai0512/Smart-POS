@@ -1,19 +1,18 @@
-import { ArrowLeft, ArrowRight } from 'lucide-react'
-import MenuTabsBar from '../common/MenuTabsBar'
+import { ArrowLeft, Trash2 } from 'lucide-react'
 
 const VIEW_TABS = [
     { key: 'details', label: 'Chi tiết' },
     { key: 'history', label: 'Nhật ký' },
 ]
 
-// Mirrors IngredientsHeader layout so the detail page feels like a sub-view
-// of /ingredients rather than a standalone screen.
+// Mirrors IngredientsHeader layout but drops MenuTabsBar (the user is already
+// drilled into a specific NVL — switching to Công thức from here is noise).
+// The right-side affordance becomes Delete instead of Forward.
 export default function IngredientDetailHeader({
     title,
     subtitle,
     onBack,
-    onForward,
-    onMenuTabSelect,
+    onDelete,
     viewMode = 'details',
     onViewModeChange,
 }) {
@@ -35,18 +34,16 @@ export default function IngredientDetailHeader({
                     )}
                 </div>
 
-                {onForward && (
+                {onDelete && (
                     <button
-                        onClick={onForward}
-                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none shrink-0"
-                        title="Tiếp"
+                        onClick={onDelete}
+                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-danger/80 hover:text-danger hover:bg-danger/10 active:bg-danger/15 transition-colors shadow-sm focus:outline-none shrink-0"
+                        title="Xóa nguyên liệu"
                     >
-                        <ArrowRight size={20} strokeWidth={2.5} />
+                        <Trash2 size={18} strokeWidth={2.5} />
                     </button>
                 )}
             </div>
-
-            <MenuTabsBar activeTab="ingredients" onSelect={onMenuTabSelect} />
 
             {onViewModeChange && (
                 <div className="flex gap-1 bg-surface-light border border-border/40 rounded-[12px] p-1">

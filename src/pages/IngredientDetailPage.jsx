@@ -13,7 +13,7 @@ import {
 } from '../components/common/recipeUtils'
 import { formatVND } from '../utils'
 import { formatPackedQty } from '../utils/inventory'
-import { ChevronLeft, ChevronRight, Trash2, Pencil } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
 import IngredientDetailHeader from '../components/IngredientManagementPage/IngredientDetailHeader'
 import PackConfigModal from '../components/IngredientManagementPage/PackConfigModal'
 import Toast from '../components/POSPage/Toast'
@@ -150,11 +150,7 @@ export default function IngredientDetailPage() {
                 title={titleLabel}
                 subtitle={`Tồn: ${stockSubtitle}`}
                 onBack={() => navigate(location.state?.from || '/ingredients')}
-                onForward={() => navigate('/pos')}
-                onMenuTabSelect={(key) => {
-                    if (key === 'recipes') navigate('/recipes', { state: location.state, replace: true })
-                    else navigate('/ingredients', { state: location.state, replace: true })
-                }}
+                onDelete={canEdit ? handleDelete : null}
                 viewMode={viewMode}
                 onViewModeChange={setViewMode}
             />
@@ -180,7 +176,6 @@ export default function IngredientDetailPage() {
                         onCancelCost={() => setEditingCost(false)}
                         onChangeCategory={saveCategory}
                         onConfigurePack={() => setPackModalOpen(true)}
-                        onDelete={handleDelete}
                     />
                 ) : (
                     <HistoryTab
@@ -225,7 +220,7 @@ function DetailsTab({
     canEdit, saving,
     editingCost, costInput,
     onStartEditCost, onCostInputChange, onSaveCost, onCancelCost,
-    onChangeCategory, onConfigurePack, onDelete,
+    onChangeCategory, onConfigurePack,
 }) {
     const hasPack = !!(packSize && packUnit)
     return (
@@ -314,16 +309,6 @@ function DetailsTab({
                     </Row>
                 )}
             </section>
-
-            {canEdit && (
-                <button
-                    onClick={onDelete}
-                    className="self-end flex items-center gap-2 text-[12px] font-bold text-danger/80 hover:text-danger px-3 py-2 rounded-[10px] border border-danger/20 hover:border-danger/40 bg-danger/5 hover:bg-danger/10 transition-all"
-                >
-                    <Trash2 size={14} />
-                    Xóa nguyên liệu
-                </button>
-            )}
         </div>
     )
 }

@@ -1,5 +1,4 @@
 import { useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { formatVND } from '../../utils'
 import { formatPackedQty } from '../../utils/inventory'
 import { Plus } from 'lucide-react'
@@ -34,9 +33,10 @@ export default function IngredientCostItem({
     isEditingStock, editingStock, setEditingStock, saveStock,
     // Daily context (always inline)
     dailyContext,
+    // Navigation — parent owns scroll-cache save before navigating to detail
+    onOpen,
 }) {
     const displayUnit = getIngredientUnit(ingredient, storedUnit)
-    const navigate = useNavigate()
     const nameCancelledRef = useRef(false)
 
     const currentStock = stockData?.current_stock ?? null
@@ -47,7 +47,7 @@ export default function IngredientCostItem({
     return (
         <div
             className={`bg-surface border rounded-[14px] p-3 flex flex-col gap-2 min-w-0 cursor-pointer hover:bg-surface-light/40 transition-colors ${isLowStock ? 'border-danger/40' : 'border-border/60'}`}
-            onClick={() => navigate(`/ingredients/${ingredient}`)}
+            onClick={() => onOpen?.(ingredient)}
         >
             {/* Row 1: name + restock button */}
             <div className="flex items-start gap-1.5 min-w-0">
@@ -196,7 +196,7 @@ export default function IngredientCostItem({
                             <Row label="Nhập mới" value={fmt(todayRefill)} sign="+" accent={todayRefill > 0 ? 'text-success' : ''} />
                             <Row label="Tồn cuối" value={fmt(warehouseNow)} bold />
                             <button
-                                onClick={() => navigate(`/ingredients/${ingredient}`)}
+                                onClick={() => onOpen?.(ingredient)}
                                 className="text-[10px] font-bold text-primary text-right mt-auto pt-1 hover:underline"
                             >
                                 Lịch sử nhập kho →
