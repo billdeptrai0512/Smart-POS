@@ -202,6 +202,121 @@ export function calculateRefillTarget({
     };
 }
 
+/**
+ * Bucket ingredient COGS across all orders into {main, packaging, tools}
+ * using CURRENT recipes + ingredient category map.
+ *
+ * Returns absolute VND amounts per bucket — caller can rescale against a
+ * historical totalCOGS to absorb recipe-drift when needed (Range mode uses
+ * order.total_cost snapshots which can diverge from current-recipe cost).
+ *
+ * Ingredients with no category (null) are treated as 'main' to match the
+ * UX rule: legacy NVL fall under "Nguyên liệu chính" until reclassified.
+ */
+export function splitCogsByCategory(orders, recipes, extraIngredients, ingredientCosts, categoryByIngredient) {
+    const bucket = { main: 0, packaging: 0, tools: 0 }
+    const bucketFor = (key) => {
+        const cat = (categoryByIngredient?.get?.(key)) ?? categoryByIngredient?.[key] ?? null
+        return cat === 'packaging' || cat === 'tools' ? cat : 'main'
+    }
+    for (const o of orders || []) {
+        if (o?.deleted_at) continue
+        const items = o.order_items || o.cart || o.orderItems || []
+        for (const item of items) {
+            const qty = item.quantity || item.qty || 1
+            const productId = item.product_id || item.productId
+            for (const r of recipes || []) {
+                if (r.product_id !== productId) continue
+                bucket[bucketFor(r.ingredient)] += (ingredientCosts[r.ingredient] || 0) * (r.amount || 0) * qty
+            }
+            const extras = item.extras || (item.extra_ids ? item.extra_ids.map(id => ({ id })) : [])
+            for (const e of extras) {
+                const eid = e?.id
+                if (!eid) continue
+                for (const ei of extraIngredients[eid] || []) {
+                    bucket[bucketFor(ei.ingredient)] += (ingredientCosts[ei.ingredient] || 0) * (ei.amount || 0) * qty
+                }
+            }
+        }
+    }
+    return bucket
+}
+
+/**
+ * Per-day audit of `actual - (opening + restock - used)` summed across shift
+ * closings; returns Σ|diff × unit_cost| where diff < 0 (hao hụt money lost).
+ *
+ * Mirrors the formula used inline in InventoryRefillCard + RangeLossCard so a
+ * single source of truth feeds the FinanceCards "Hao hụt / hủy" line.
+ *
+ * Opening rules (matches the cards):
+ *   - First closing: prevShiftClosings[0]?.inventory_report.remaining map,
+ *     OR if `openingOverrideMap` supplied use it as the base (Daily passes
+ *     a precomputed map that already folds in yesterday + opening overrides).
+ *   - Subsequent closings: previous closing's `remaining` per ingredient.
+ *   - Always: `item.opening` on the closing wins when present.
+ *
+ * dailyConsumption: { 'YYYY-MM-DD': { ingredient: usedAmount, ... } }.
+ *   Caller computes via calculateEstimatedConsumption on orders bucketed
+ *   by VN local date (matches the existing cards' dayStr key).
+ *
+ * Returns 0 when there are no closings.
+ */
+export function calculateLossValue({
+    shiftClosings,
+    prevShiftClosings = [],
+    dailyConsumption = {},
+    ingredientConfigs = [],
+    openingOverrideMap = null,
+}) {
+    if (!shiftClosings || shiftClosings.length === 0) return 0
+    const sorted = [...shiftClosings].sort((a, b) =>
+        new Date(a.closed_at || a.created_at) - new Date(b.closed_at || b.created_at)
+    )
+    const costByIngredient = new Map()
+    for (const c of ingredientConfigs || []) costByIngredient.set(c.ingredient, c.unit_cost || 0)
+
+    let prevPeriodMap = null
+    if (openingOverrideMap) {
+        prevPeriodMap = openingOverrideMap
+    } else if (prevShiftClosings?.[0]?.inventory_report) {
+        prevPeriodMap = {}
+        for (const it of prevShiftClosings[0].inventory_report) {
+            prevPeriodMap[it.ingredient] = it.remaining ?? 0
+        }
+    } else {
+        prevPeriodMap = {}
+    }
+
+    let totalLoss = 0
+    sorted.forEach((closing, idx) => {
+        if (!closing.inventory_report) return
+        const dayStr = new Date(closing.closed_at || closing.created_at).toLocaleDateString('sv-SE')
+        const usedMap = dailyConsumption[dayStr] || {}
+
+        for (const item of closing.inventory_report) {
+            if (item.remaining == null) continue
+            let opening
+            if (item.opening != null) {
+                opening = item.opening
+            } else if (idx === 0) {
+                opening = prevPeriodMap[item.ingredient] ?? 0
+            } else {
+                const prev = sorted[idx - 1]
+                const prevItem = (prev?.inventory_report || []).find(i => i.ingredient === item.ingredient)
+                opening = prevItem?.remaining ?? 0
+            }
+            const restock = item.restock || 0
+            const used = Math.round((usedMap[item.ingredient] || 0) * 10) / 10
+            const theoretical = Math.round((opening + restock - used) * 10) / 10
+            const diff = Math.round((item.remaining - theoretical) * 10) / 10
+            const diffValue = diff * (costByIngredient.get(item.ingredient) || 0)
+            if (diffValue < 0) totalLoss += Math.abs(diffValue)
+        }
+    })
+    return totalLoss
+}
+
 // Format a base-unit quantity into pack-aware text. e.g. 5350 + (1000, 'bịch', 'g')
 // → "5 bịch + 350 g". Falls back to "{qty} {baseUnit}" when pack info missing.
 //   qty: number in baseUnit

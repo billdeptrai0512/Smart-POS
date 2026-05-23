@@ -5,6 +5,7 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { formatVND } from '../utils'
 import { aggregateOrderStats, buildExtraMaps, splitExpenses } from '../utils/reportStats'
+import { calculateEstimatedConsumption, splitCogsByCategory, calculateLossValue } from '../utils/inventory'
 import { supabase } from '../lib/supabaseClient'
 import { fetchReportByRange } from '../services/orderService'
 import ReportHeader, { getDateRange } from '../components/DailyReportPage/ReportHeader'
@@ -31,7 +32,7 @@ export default function RangeReportPage() {
     const location = useLocation()
     const range = searchParams.get('range') || 'week'
 
-    const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits } = useProducts()
+    const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits, ingredientConfigs } = useProducts()
     const { selectedAddress } = useAddress()
     const { isStaff } = useAuth()
     const { activeModules, loading: entitlementLoading } = useEntitlement()
@@ -140,8 +141,42 @@ export default function RangeReportPage() {
         // Vận hành tổng = trong ca + free-form sau ca. Thực chi: legacy is_fixed
         // expenses đã được splitExpenses cộng vào dailyExpense.
         const operationalExpense = dailyExpense + refillFreeForm
-        // P&L = Revenue - COGS - Tất cả thực chi. NVL không trừ (đã nằm trong COGS).
-        const netProfit = agg.totalRevenue - agg.totalCOGS - operationalExpense
+
+        // ── COGS category breakdown + hao hụt ───────────────────────────────
+        const categoryByIngredient = new Map()
+        for (const c of ingredientConfigs || []) categoryByIngredient.set(c.ingredient, c.category || null)
+
+        const cogsByCategory = splitCogsByCategory(
+            orders, recipes, extraIngredients, ingredientCosts, categoryByIngredient
+        )
+
+        // Bucket orders by VN day so calculateLossValue can match per-closing usage.
+        const itemsByDay = {}
+        for (const o of orders || []) {
+            if (o.deleted_at) continue
+            const dayStr = new Date(o.created_at || o.createdAt).toLocaleDateString('sv-SE')
+            if (!itemsByDay[dayStr]) itemsByDay[dayStr] = []
+            for (const i of (o.order_items || [])) {
+                itemsByDay[dayStr].push({
+                    productId: i.product_id || i.productId,
+                    qty: i.quantity || i.qty || 1,
+                    extras: i.extra_ids ? i.extra_ids.map(id => ({ id })) : (i.extras || []),
+                })
+            }
+        }
+        const dailyConsumption = {}
+        for (const [dayStr, items] of Object.entries(itemsByDay)) {
+            dailyConsumption[dayStr] = calculateEstimatedConsumption(items, recipes, extraIngredients)
+        }
+        const lossValue = calculateLossValue({
+            shiftClosings,
+            prevShiftClosings,
+            dailyConsumption,
+            ingredientConfigs,
+        })
+
+        // P&L = Revenue - COGS - Hao hụt - Tất cả thực chi. NVL không trừ (đã nằm trong COGS).
+        const netProfit = agg.totalRevenue - agg.totalCOGS - lossValue - operationalExpense
 
         return {
             totalRevenue: agg.totalRevenue,
@@ -153,8 +188,10 @@ export default function RangeReportPage() {
             dailyExpense, refillTotal, refillNvl, refillFreeForm,
             operationalExpense,
             netProfit,
+            cogsByCategory,
+            lossValue,
         }
-    }, [orders, expenses, shiftClosings, recipes, extraIngredients, ingredientCosts, productExtras, products, selectedProductId, days])
+    }, [orders, expenses, shiftClosings, prevShiftClosings, recipes, extraIngredients, ingredientCosts, ingredientConfigs, productExtras, products, selectedProductId, days])
 
     const prevStats = useMemo(() => {
         const prevProductMap = new Map(products.map(p => [p.id, p]))
@@ -319,6 +356,8 @@ export default function RangeReportPage() {
                                     compareLabel={`So với ${range === 'week' ? 'tuần trước' : 'tháng trước'}`}
                                     expenses={expenses}
                                     expenseCategories={expenseCategories}
+                                    cogsByCategory={stats.cogsByCategory}
+                                    lossValue={stats.lossValue}
                                     onRecipesClick={() => navigate('/recipes', { state: { from: '/range-report' } })}
                                 />
                             </>

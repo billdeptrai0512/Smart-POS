@@ -9,7 +9,7 @@ import { fetchDailyReportContext } from '../services/orderService'
 import { useShiftClosingSave } from '../hooks/useShiftClosingSave'
 import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
 import { useDailyReportData } from '../hooks/useDailyReportData'
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown } from '../utils/inventory'
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogsByCategory, calculateLossValue } from '../utils/inventory'
 import { startOfDayVN, dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
@@ -34,7 +34,7 @@ export default function DailyReportPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const backTo = location.state?.from || '/history'
-    const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits } = useProducts()
+    const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits, ingredientConfigs } = useProducts()
     const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory } = usePOS()
     const { isStaff, profile } = useAuth()
     const { activeModules, loading: entitlementLoading } = useEntitlement()
@@ -252,8 +252,72 @@ export default function DailyReportPage() {
     // Vận hành tổng = trong ca + free-form sau ca (sau ca vẫn là vận hành, không phải NVL).
     // Thực chi: legacy is_fixed=true rows ĐÃ được splitExpenses cộng vào dailyExpense.
     const operationalExpense = dailyExpense + refillFreeForm
-    // P&L = Revenue - COGS - Tất cả chi phí thực chi. NVL không trừ (đã nằm trong COGS).
-    const netProfit = totalRevenue - totalCOGS - operationalExpense
+
+    // ── COGS category breakdown + hao hụt ────────────────────────────────────
+    // Map ingredient → category (null when migration 20260523 not deployed yet —
+    // splitCogsByCategory treats null as 'main' so the page still renders).
+    const categoryByIngredient = useMemo(() => {
+        const map = new Map()
+        for (const c of ingredientConfigs || []) map.set(c.ingredient, c.category || null)
+        return map
+    }, [ingredientConfigs])
+
+    const cogsByCategory = useMemo(
+        () => splitCogsByCategory(
+            [...displayOrders, ...offlineToday],
+            recipes, extraIngredients, ingredientCosts, categoryByIngredient
+        ),
+        [displayOrders, offlineToday, recipes, extraIngredients, ingredientCosts, categoryByIngredient]
+    )
+
+    const lossValue = useMemo(() => {
+        // Daily scope: today's single closing + yesterday as the opening source.
+        // Range scope: all closings in the period + prev-period closings.
+        const isDayScope = scope === 'day'
+        const closings = isDayScope
+            ? (shiftClosing ? [shiftClosing] : [])
+            : (apiShiftClosings || [])
+        if (closings.length === 0) return 0
+
+        // Bucket orders by VN date string so calculateLossValue can look up
+        // per-day consumption (same dayStr key the RangeLossCard uses).
+        const itemsByDay = {}
+        const pushItem = (dayStr, productId, qty, extras) => {
+            if (!itemsByDay[dayStr]) itemsByDay[dayStr] = []
+            itemsByDay[dayStr].push({ productId, qty, extras })
+        }
+        const sourceOrders = isDayScope ? [...displayOrders, ...offlineToday] : (apiOrders || [])
+        for (const o of sourceOrders) {
+            if (o.deleted_at) continue
+            const dayStr = new Date(o.created_at || o.createdAt).toLocaleDateString('sv-SE')
+            const items = o.order_items || o.cart || o.orderItems || []
+            for (const i of items) {
+                pushItem(
+                    dayStr,
+                    i.product_id || i.productId,
+                    i.quantity || i.qty || 1,
+                    i.extra_ids ? i.extra_ids.map(id => ({ id })) : (i.extras || [])
+                )
+            }
+        }
+        const dailyConsumption = {}
+        for (const [dayStr, items] of Object.entries(itemsByDay)) {
+            dailyConsumption[dayStr] = calculateEstimatedConsumption(items, recipes, extraIngredients)
+        }
+
+        const prevClosings = isDayScope
+            ? (yesterdayClosing ? [yesterdayClosing] : [])
+            : (prevShiftClosings || [])
+        return calculateLossValue({
+            shiftClosings: closings,
+            prevShiftClosings: prevClosings,
+            dailyConsumption,
+            ingredientConfigs,
+        })
+    }, [scope, shiftClosing, yesterdayClosing, apiShiftClosings, prevShiftClosings, apiOrders, displayOrders, offlineToday, recipes, extraIngredients, ingredientConfigs])
+
+    // P&L = Revenue - COGS - Hao hụt - Tất cả chi phí thực chi. NVL không trừ (đã nằm trong COGS).
+    const netProfit = totalRevenue - totalCOGS - lossValue - operationalExpense
 
     const yesterdayNetProfit = useMemo(() => {
         let rev = 0, cogs = 0
@@ -548,6 +612,8 @@ export default function DailyReportPage() {
                                 yesterdayNetProfit={yesterdayNetProfit}
                                 expenses={displayExpenses}
                                 expenseCategories={expenseCategories}
+                                cogsByCategory={cogsByCategory}
+                                lossValue={lossValue}
                                 onRecipesClick={() => navigate('/recipes', { state: { from: '/daily-report' } })}
                             />
                         )}

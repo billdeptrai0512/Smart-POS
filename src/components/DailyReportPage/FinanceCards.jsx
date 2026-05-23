@@ -24,13 +24,31 @@ export default function FinanceCards({
     expenses = [],
     expenseCategories = [],
     onRecipesClick,
+    // Category split of totalCOGS — caller passes raw bucket; we normalize so lines sum to totalCOGS.
+    // Tools is folded into packaging per UX decision ("Bao bì (ly, nắp, ống hút, dụng cụ...)").
+    cogsByCategory = null,
+    // Σ|hao hụt × unit_cost| over the period — added on top of totalCOGS as a separate line.
+    lossValue = 0,
 }) {
     const { operatingRows, overheadRows, operatingTotal, overheadTotal } = useMemo(
         () => buildCategoryBreakdown({ expenses, expenseCategories }),
         [expenses, expenseCategories]
     )
 
-    const grossProfit = totalRevenue - totalCOGS
+    const cogsLines = useMemo(() => {
+        const main = Math.max(0, cogsByCategory?.main || 0)
+        const packTools = Math.max(0, (cogsByCategory?.packaging || 0) + (cogsByCategory?.tools || 0))
+        const sum = main + packTools
+        if (sum <= 0) return { direct: totalCOGS, packaging: 0 }
+        // Rescale so the two lines add up to totalCOGS — keeps numbers consistent
+        // even when current-recipe split drifts from snapshot order.total_cost.
+        const scale = totalCOGS / sum
+        const packagingScaled = Math.round(packTools * scale)
+        return { direct: totalCOGS - packagingScaled, packaging: packagingScaled }
+    }, [cogsByCategory, totalCOGS])
+
+    const cogsTotal = totalCOGS + lossValue
+    const grossProfit = totalRevenue - cogsTotal
     const operatingProfit = grossProfit - operatingTotal
 
     return (
@@ -42,10 +60,10 @@ export default function FinanceCards({
             </SimpleCard>
 
             {/* 2. GIÁ VỐN (COGS) */}
-            <SimpleCard title="Giá vốn (COGS)" totalLabel="Tổng giá vốn" totalAmount={totalCOGS} totalTone="warning">
-                <LineItem label="· Nguyên liệu trực tiếp" amount={totalCOGS} />
-                <LineItem label="· Bao bì (ly, nắp, ống hút...)" amount={0} />
-                <LineItem label="· Hao hụt / hủy" amount={0} />
+            <SimpleCard title="Giá vốn (COGS)" totalLabel="Tổng giá vốn" totalAmount={cogsTotal} totalTone="warning">
+                <LineItem label="· Nguyên liệu trực tiếp" amount={cogsLines.direct} />
+                <LineItem label="· Bao bì (ly, nắp, ống hút, dụng cụ...)" amount={cogsLines.packaging} />
+                <LineItem label="· Hao hụt / hủy" amount={lossValue} />
             </SimpleCard>
 
             {/* 3. LỢI NHUẬN GỘP */}
