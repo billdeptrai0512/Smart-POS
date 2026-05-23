@@ -232,18 +232,18 @@ function DetailsTab({
         <div className="flex flex-col gap-3">
             <section className="bg-surface rounded-[18px] border border-border/60 p-4 flex flex-col divide-y divide-border/40">
                 <Row label="Tồn kho">
-                    <span className="text-[14px] font-black text-text tabular-nums">
-                        {currentStock !== null ? Math.round(currentStock * 10) / 10 : '—'}
-                        <span className="text-text-dim font-medium ml-1">{unit}</span>
-                    </span>
-                </Row>
-                {hasPack && currentStock !== null && currentStock >= packSize && (
-                    <Row label="">
-                        <span className="text-[12px] font-medium text-text-dim tabular-nums">
-                            = {formatPackedQty(currentStock, packSize, packUnit, unit, { compact: true })}
+                    <div className="flex flex-col items-end gap-0.5 leading-tight">
+                        <span className="text-[14px] font-black text-text tabular-nums">
+                            {currentStock !== null ? Math.round(currentStock * 10) / 10 : '—'}
+                            <span className="text-text-dim font-medium ml-1">{unit}</span>
                         </span>
-                    </Row>
-                )}
+                        {hasPack && currentStock !== null && currentStock >= packSize && (
+                            <span className="text-[11px] font-medium text-text-dim tabular-nums">
+                                = {formatPackedQty(currentStock, packSize, packUnit, unit, { compact: true })}
+                            </span>
+                        )}
+                    </div>
+                </Row>
                 <Row label="Giá vốn">
                     {canEdit && editingCost ? (
                         <input
