@@ -62,7 +62,7 @@ export default function FinanceCards({
             {/* 2. GIÁ VỐN (COGS) */}
             <SimpleCard title="Giá vốn (COGS)" totalLabel="Tổng giá vốn" totalAmount={cogsTotal} totalTone="warning">
                 <LineItem label="· Nguyên liệu trực tiếp" amount={cogsLines.direct} />
-                <LineItem label="· Bao bì (ly, nắp, ống hút, dụng cụ...)" amount={cogsLines.packaging} />
+                <LineItem label="· Bao bì (ly, nắp, ống hút...)" amount={cogsLines.packaging} />
                 <LineItem label="· Hao hụt / hủy" amount={lossValue} />
             </SimpleCard>
 

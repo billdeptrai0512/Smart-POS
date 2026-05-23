@@ -7,7 +7,6 @@ import { INGREDIENT_CATEGORIES } from '../common/recipeUtils'
 const VIEW_TAB_LABELS = {
     main: 'NL chính',
     packaging: 'Bao bì',
-    tools: 'Dụng cụ',
 }
 const VIEW_TABS = INGREDIENT_CATEGORIES.map(c => ({ key: c.key, label: VIEW_TAB_LABELS[c.key] || c.label }))
 

@@ -176,12 +176,11 @@ export default function IngredientCostItem({
                         <div className="flex items-center justify-between gap-2">
                             <span className="text-text-dim">Nhóm</span>
                             <select
-                                value={category || ''}
+                                value={category || 'main'}
                                 onClick={stop}
-                                onChange={e => onSaveCategory(ingredient, e.target.value || null)}
-                                className={`bg-transparent border-0 text-[11px] font-bold focus:outline-none cursor-pointer ${category ? 'text-text-secondary' : 'text-text-dim italic'}`}
+                                onChange={e => onSaveCategory(ingredient, e.target.value)}
+                                className="bg-transparent border-0 text-[11px] font-bold text-text-secondary focus:outline-none cursor-pointer"
                             >
-                                <option value="">Chưa phân loại</option>
                                 {INGREDIENT_CATEGORIES.map(c => (
                                     <option key={c.key} value={c.key}>{c.label}</option>
                                 ))}

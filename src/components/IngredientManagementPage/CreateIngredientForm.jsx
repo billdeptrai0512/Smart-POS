@@ -38,11 +38,10 @@ export default function CreateIngredientForm({
             </div>
 
             <select
-                value={category || ''}
-                onChange={e => onCategoryChange(e.target.value || null)}
+                value={category || 'main'}
+                onChange={e => onCategoryChange(e.target.value)}
                 className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text focus:outline-none focus:border-primary/40 transition-colors"
             >
-                <option value="">Chưa phân loại</option>
                 {INGREDIENT_CATEGORIES.map(c => (
                     <option key={c.key} value={c.key}>{c.label}</option>
                 ))}

@@ -10,7 +10,7 @@ import {
     upsertIngredientCost, deleteIngredientCost, renameIngredient,
     fetchIngredientStocks, processIngredientRestock, adjustIngredientStock, fetchIngredientDeficits, fetchIngredientDailyContext,
 } from '../services/orderService'
-import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
+import { sortIngredients, ingredientLabel, getIngredientUnit, normalizeIngredientCategory } from '../components/common/recipeUtils'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
@@ -186,12 +186,11 @@ export default function IngredientManagementPage() {
         return map
     }, [contextRecipes])
 
-    // Card grid shows only the active category tab. Uncategorized (null) is treated as 'main'
-    // so legacy NVL don't disappear — manager can reclassify inline on the card.
+    // Card grid shows only the active category tab. Uncategorized (null) → 'main';
+    // legacy 'tools' → 'packaging' (see normalizeIngredientCategory). Keeps no NVL hidden.
     const visibleIngredients = useMemo(() => {
         return allIngredients.filter(ing => {
-            const cat = configByIngredient.get(ing)?.category || 'main'
-            return cat === viewMode
+            return normalizeIngredientCategory(configByIngredient.get(ing)?.category) === viewMode
         })
     }, [allIngredients, configByIngredient, viewMode])
 
@@ -445,7 +444,7 @@ export default function IngredientManagementPage() {
                                     editingStock={editingStock}
                                     setEditingStock={setEditingStock}
                                     saveStock={saveStock}
-                                    category={cfg?.category || null}
+                                    category={normalizeIngredientCategory(cfg?.category)}
                                     onSaveCategory={canEdit ? saveCategory : null}
                                 />
                             )
