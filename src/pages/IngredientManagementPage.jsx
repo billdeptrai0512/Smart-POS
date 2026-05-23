@@ -19,7 +19,6 @@ import StockDeficitBanner from '../components/IngredientManagementPage/StockDefi
 import KeyMismatchBanner from '../components/IngredientManagementPage/KeyMismatchBanner'
 import IngredientsHeader from '../components/IngredientManagementPage/IngredientsHeader'
 import CreateIngredientForm from '../components/IngredientManagementPage/CreateIngredientForm'
-import IngredientReportView from '../components/IngredientManagementPage/IngredientReportView'
 import SortableList from '../components/common/SortableList'
 import { detectKeyMismatches } from '../utils/ingredientKeySync'
 import { useToast } from '../hooks/useToast'
@@ -63,8 +62,8 @@ export default function IngredientManagementPage() {
     const [newCategory, setNewCategory] = useState(null)
     const [showCreateModal, setShowCreateModal] = useState(false)
 
-    // View mode: 'manage' (grid, default) | 'report' (grouped by category)
-    const [viewMode, setViewMode] = useState('manage')
+    // View mode = active category tab. Uncategorized NVL (category=null) shown under 'main'.
+    const [viewMode, setViewMode] = useState('main')
 
     // Stock & modals
     const [ingredientStocks, setIngredientStocks] = useState([])
@@ -186,6 +185,15 @@ export default function IngredientManagementPage() {
         }
         return map
     }, [contextRecipes])
+
+    // Card grid shows only the active category tab. Uncategorized (null) is treated as 'main'
+    // so legacy NVL don't disappear — manager can reclassify inline on the card.
+    const visibleIngredients = useMemo(() => {
+        return allIngredients.filter(ing => {
+            const cat = configByIngredient.get(ing)?.category || 'main'
+            return cat === viewMode
+        })
+    }, [allIngredients, configByIngredient, viewMode])
 
     // ─── Action handlers ───────────────────────────────────────────────
     async function saveCost(ingredient, newCostVal) {
@@ -359,7 +367,7 @@ export default function IngredientManagementPage() {
             <Toast toast={toast} />
 
             <IngredientsHeader
-                count={isSorting ? sortedIngredients.length : allIngredients.length}
+                count={isSorting ? sortedIngredients.length : visibleIngredients.length}
                 isSorting={isSorting}
                 onBack={() => navigate(location.state?.from || '/history')}
                 onForward={() => navigate('/pos')}
@@ -399,19 +407,9 @@ export default function IngredientManagementPage() {
                         onSelect={setSelectedSortIngredient}
                         onMove={moveIngredient}
                     />
-                ) : viewMode === 'report' ? (
-                    <IngredientReportView
-                        ingredients={allIngredients}
-                        ingredientCosts={ingredientCosts}
-                        ingredientUnits={ingredientUnits}
-                        configByIngredient={configByIngredient}
-                        stockByIngredient={stockByIngredient}
-                        canEdit={canEdit}
-                        onSaveCategory={canEdit ? saveCategory : null}
-                    />
                 ) : (
                     <div className="grid grid-cols-2 gap-2">
-                        {allIngredients.map(ingredient => {
+                        {visibleIngredients.map(ingredient => {
                             const cfg = configByIngredient.get(ingredient)
                             return (
                                 <IngredientCostItem
@@ -452,8 +450,10 @@ export default function IngredientManagementPage() {
                                 />
                             )
                         })}
-                        {allIngredients.length === 0 && (
-                            <p className="col-span-2 text-text-secondary text-[13px] text-center py-6">Chưa có nguyên liệu nào.</p>
+                        {visibleIngredients.length === 0 && (
+                            <p className="col-span-2 text-text-secondary text-[13px] text-center py-6">
+                                {allIngredients.length === 0 ? 'Chưa có nguyên liệu nào.' : 'Chưa có nguyên liệu trong nhóm này.'}
+                            </p>
                         )}
                     </div>
                 )}
@@ -484,7 +484,7 @@ export default function IngredientManagementPage() {
                             <FabActionMenu
                                 items={[
                                     { key: 'sort', icon: <ArrowUpDown size={14} />, label: 'Sắp xếp', onClick: enterSortMode },
-                                    { key: 'create', icon: <Plus size={14} />, label: 'Tạo NVL', onClick: () => setShowCreateModal(true) },
+                                    { key: 'create', icon: <Plus size={14} />, label: 'Tạo NVL', onClick: () => { setNewCategory(viewMode); setShowCreateModal(true) } },
                                 ]}
                             />
                         </div>

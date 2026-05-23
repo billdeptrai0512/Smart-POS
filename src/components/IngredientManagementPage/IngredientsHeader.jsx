@@ -1,15 +1,20 @@
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import MenuTabsBar from '../common/MenuTabsBar'
+import { INGREDIENT_CATEGORIES } from '../common/recipeUtils'
 
-const VIEW_TABS = [
-    { key: 'manage', label: 'Quản lý' },
-    { key: 'report', label: 'Báo cáo' },
-]
+// Short labels for the sub-tab bar — full labels are too wide for 3 columns
+// on mobile. Order matches INGREDIENT_CATEGORIES so the keys line up.
+const VIEW_TAB_LABELS = {
+    main: 'NL chính',
+    packaging: 'Bao bì',
+    tools: 'Dụng cụ',
+}
+const VIEW_TABS = INGREDIENT_CATEGORIES.map(c => ({ key: c.key, label: VIEW_TAB_LABELS[c.key] || c.label }))
 
 export default function IngredientsHeader({
     count, isSorting, onBack, onForward,
     activeTab = 'ingredients', onTabSelect,
-    viewMode = 'manage', onViewModeChange,
+    viewMode = 'main', onViewModeChange,
 }) {
     // While sorting, swap the title to "Sắp xếp" and hide the tabs so the dedicated
     // sort UI (footer "Hủy / Lưu") owns the screen — matches pre-merge behavior.

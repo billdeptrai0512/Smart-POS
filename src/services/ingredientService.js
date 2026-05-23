@@ -93,15 +93,21 @@ export async function fetchIngredientCostsAndUnits(addressId) {
     // address via the seed_address_ingredient_costs trigger and the backfill in
     // migration 20260518_decouple_ingredient_costs.sql. Admin edits to default
     // rows DO NOT propagate to existing active addresses.
-    let query = supabase.from('ingredient_costs').select('ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock, category')
-
-    if (addressId) {
-        query = query.eq('address_id', addressId)
-    } else {
-        query = query.is('address_id', null)
+    // Try with category first; fall back to legacy SELECT if migration
+    // 20260523_add_ingredient_category.sql isn't deployed yet (Postgres 42703).
+    const runQuery = async (withCategory) => {
+        const cols = withCategory
+            ? 'ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock, category'
+            : 'ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock'
+        let q = supabase.from('ingredient_costs').select(cols)
+        q = addressId ? q.eq('address_id', addressId) : q.is('address_id', null)
+        return await q
     }
 
-    const { data, error } = await query
+    let { data, error } = await runQuery(true)
+    if (error && error.code === '42703') {
+        ({ data, error } = await runQuery(false))
+    }
     if (error) {
         console.error('fetchIngredientCostsAndUnits error:', error)
         return { costs: {}, units: {}, rows: [] }
@@ -145,9 +151,16 @@ export async function upsertIngredientCost(ingredient, unitCost, addressId = nul
     if (opts.minStock !== undefined) payload.min_stock = opts.minStock || null
     if (opts.category !== undefined) payload.category = opts.category || null
 
-    const { error } = await supabase
+    let { error } = await supabase
         .from('ingredient_costs')
         .upsert(payload, { onConflict: 'ingredient,address_id' })
+    // Retry without `category` if migration 20260523 isn't deployed yet.
+    if (error && error.code === '42703' && 'category' in payload) {
+        const { category: _drop, ...rest } = payload
+        ;({ error } = await supabase
+            .from('ingredient_costs')
+            .upsert(rest, { onConflict: 'ingredient,address_id' }))
+    }
     if (error) throw error
 }
 
