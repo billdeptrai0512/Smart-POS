@@ -1,5 +1,32 @@
 import { useState, useRef } from 'react'
 
+// navigator.clipboard fails in non-secure contexts and inside iframes without
+// `allow="clipboard-write"`. Falls back to the legacy execCommand path which
+// works in both. Returns true on success.
+async function copyText(text) {
+    try {
+        if (navigator.clipboard?.writeText && window.isSecureContext) {
+            await navigator.clipboard.writeText(text)
+            return true
+        }
+    } catch { /* fall through to legacy path */ }
+    try {
+        const ta = document.createElement('textarea')
+        ta.value = text
+        ta.setAttribute('readonly', '')
+        ta.style.position = 'fixed'
+        ta.style.top = '0'
+        ta.style.left = '0'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        ta.setSelectionRange(0, text.length)
+        const ok = document.execCommand('copy')
+        document.body.removeChild(ta)
+        return ok
+    } catch { return false }
+}
+
 export function useToast(duration = 3500) {
     const [toast, setToast] = useState(null)
     const timer = useRef(null)
@@ -14,7 +41,7 @@ export function useToast(duration = 3500) {
         const errMsg = err?.message || String(err) || 'Lỗi không xác định'
         const errCode = err?.code ? `\nCode: ${err.code}` : ''
         const errDetails = err?.details ? `\nDetails: ${err.details}` : ''
-        const copyText = [
+        const copy = [
             `[${new Date().toLocaleString('vi-VN')}]`,
             `Thao tác: ${actionLabel}`,
             `Lỗi: ${errMsg}${errCode}${errDetails}`,
@@ -24,7 +51,10 @@ export function useToast(duration = 3500) {
         console.error(`[${actionLabel}]`, err)
         showToast('Có lỗi xảy ra', 'error', {
             label: 'Sao chép lỗi',
-            onClick: () => navigator.clipboard?.writeText(copyText).catch(() => {})
+            onClick: async () => {
+                const ok = await copyText(copy)
+                showToast(ok ? 'Đã sao chép lỗi' : 'Không sao chép được — copy thủ công từ console', ok ? 'success' : 'warning')
+            }
         })
     }
 
