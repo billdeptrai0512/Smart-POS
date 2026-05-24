@@ -131,7 +131,9 @@ export default function RecipeMenuPage() {
                 onForward={() => navigate('/pos')}
                 activeTab="recipes"
                 onTabSelect={(key) => {
-                    if (key === 'ingredients') navigate('/ingredients', { state: location.state, replace: true })
+                    if (key === 'main' || key === 'packaging') {
+                        navigate('/ingredients', { state: { ...location.state, viewMode: key }, replace: true })
+                    }
                 }}
             />
 

@@ -68,7 +68,8 @@ export default function IngredientManagementPage() {
     const [showCreateModal, setShowCreateModal] = useState(false)
 
     // View mode = active category tab. Uncategorized NVL (category=null) shown under 'main'.
-    const [viewMode, setViewMode] = useState('main')
+    // Seed from location.state so deep-links from /recipes' tabbar land on the right view.
+    const [viewMode, setViewMode] = useState(location.state?.viewMode || 'main')
 
     const mainRef = useRef(null)
 
@@ -375,12 +376,11 @@ export default function IngredientManagementPage() {
                 isSorting={isSorting}
                 onBack={() => navigate(location.state?.from || '/history')}
                 onForward={() => navigate('/pos')}
-                activeTab="ingredients"
+                activeTab={viewMode}
                 onTabSelect={(key) => {
                     if (key === 'recipes') navigate('/recipes', { state: location.state, replace: true })
+                    else setViewMode(key)
                 }}
-                viewMode={viewMode}
-                onViewModeChange={setViewMode}
             />
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-48 bg-bg">

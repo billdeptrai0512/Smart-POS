@@ -1,19 +1,9 @@
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import MenuTabsBar from '../common/MenuTabsBar'
-import { INGREDIENT_CATEGORIES } from '../common/recipeUtils'
-
-// Short labels for the sub-tab bar — full labels are too wide for 3 columns
-// on mobile. Order matches INGREDIENT_CATEGORIES so the keys line up.
-const VIEW_TAB_LABELS = {
-    main: 'NL chính',
-    packaging: 'Bao bì',
-}
-const VIEW_TABS = INGREDIENT_CATEGORIES.map(c => ({ key: c.key, label: VIEW_TAB_LABELS[c.key] || c.label }))
 
 export default function IngredientsHeader({
     count, isSorting, onBack, onForward,
-    activeTab = 'ingredients', onTabSelect,
-    viewMode = 'main', onViewModeChange,
+    activeTab = 'main', onTabSelect,
 }) {
     // While sorting, swap the title to "Sắp xếp" and hide the tabs so the dedicated
     // sort UI (footer "Hủy / Lưu") owns the screen — matches pre-merge behavior.
@@ -47,23 +37,6 @@ export default function IngredientsHeader({
             </div>
 
             {!isSorting && <MenuTabsBar activeTab={activeTab} onSelect={onTabSelect} />}
-
-            {!isSorting && onViewModeChange && (
-                <div className="flex gap-1 bg-surface-light border border-border/40 rounded-[12px] p-1">
-                    {VIEW_TABS.map(t => {
-                        const active = viewMode === t.key
-                        return (
-                            <button
-                                key={t.key}
-                                onClick={() => onViewModeChange(t.key)}
-                                className={`flex-1 py-1.5 rounded-[8px] text-[11px] font-black uppercase tracking-wider transition-all ${active ? 'bg-surface text-primary shadow-sm' : 'text-text-secondary hover:text-text'}`}
-                            >
-                                {t.label}
-                            </button>
-                        )
-                    })}
-                </div>
-            )}
         </header>
     )
 }
