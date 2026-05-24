@@ -44,45 +44,65 @@ export default function ExpenseCategoryPicker({
         }
     }
 
+    // When the caller doesn't lock a group, split the chip list into 2 captioned
+    // sections (Vận hành / Quản lý & khác) so user still sees the group context
+    // that the old top tab provided — without taking up a full toggle row.
+    const sections = lockedGroupSection
+        ? [{ key: lockedGroupSection, label: null, items: categories }]
+        : [
+            { key: 'operating', label: 'Vận hành', items: categories.filter(c => c.group_section !== 'overhead') },
+            { key: 'overhead', label: 'Quản lý & khác', items: categories.filter(c => c.group_section === 'overhead') },
+        ]
+
+    const renderChip = (c) => {
+        const active = c.id === selectedId
+        const sectionDot = c.group_section === 'overhead' ? 'bg-warning' : 'bg-danger'
+        return (
+            <button
+                key={c.id}
+                type="button"
+                disabled={disabled}
+                onClick={() => onSelect(c.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold border transition-all ${
+                    active
+                        ? 'bg-primary/15 border-primary/50 text-primary'
+                        : 'bg-surface-light border-border/60 text-text-secondary hover:text-text hover:border-border'
+                }`}
+            >
+                <span className={`w-1.5 h-1.5 rounded-full ${sectionDot} opacity-70`} />
+                {c.name}
+                {active && <Check size={11} strokeWidth={3} />}
+            </button>
+        )
+    }
+
     return (
         <div className="flex flex-col gap-2">
             <span className="text-[11px] font-black uppercase tracking-wider text-text-secondary">Nhãn chi phí</span>
 
-            <div className="flex flex-wrap gap-1.5">
-                {categories.map(c => {
-                    const active = c.id === selectedId
-                    const sectionDot = c.group_section === 'overhead' ? 'bg-warning' : 'bg-danger'
-                    return (
-                        <button
-                            key={c.id}
-                            type="button"
-                            disabled={disabled}
-                            onClick={() => onSelect(c.id)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold border transition-all ${
-                                active
-                                    ? 'bg-primary/15 border-primary/50 text-primary'
-                                    : 'bg-surface-light border-border/60 text-text-secondary hover:text-text hover:border-border'
-                            }`}
-                        >
-                            <span className={`w-1.5 h-1.5 rounded-full ${sectionDot} opacity-70`} />
-                            {c.name}
-                            {active && <Check size={11} strokeWidth={3} />}
-                        </button>
-                    )
-                })}
-
-                {!isCreating && (
-                    <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => setIsCreating(true)}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[12px] font-bold border border-dashed border-border text-text-secondary hover:text-primary hover:border-primary/50 transition-all"
-                    >
-                        <Plus size={12} strokeWidth={2.5} />
-                        Nhãn mới
-                    </button>
-                )}
-            </div>
+            {sections.map((section, idx) => (
+                <div key={section.key} className={`flex flex-col gap-1.5 ${idx > 0 ? 'mt-1' : ''}`}>
+                    {section.label && (
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-text-dim">{section.label}</span>
+                    )}
+                    <div className="flex flex-wrap gap-1.5">
+                        {section.items.map(renderChip)}
+                        {/* "+ Nhãn mới" lives at the end of the last section so the inline
+                            create form sits next to the chips it'll join. */}
+                        {idx === sections.length - 1 && !isCreating && (
+                            <button
+                                type="button"
+                                disabled={disabled}
+                                onClick={() => setIsCreating(true)}
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[12px] font-bold border border-dashed border-border text-text-secondary hover:text-primary hover:border-primary/50 transition-all"
+                            >
+                                <Plus size={12} strokeWidth={2.5} />
+                                Nhãn mới
+                            </button>
+                        )}
+                    </div>
+                </div>
+            ))}
 
             {isCreating && (
                 <div className="flex flex-col gap-2 p-3 bg-surface-light border border-border/60 rounded-[12px]">

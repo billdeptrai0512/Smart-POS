@@ -17,12 +17,19 @@ export default function AddExpenseModal({
 }) {
     const canSubmit = costAmount && !isNaN(costAmount) && Number(costAmount) > 0 && costName.trim() && !isSubmitting
     const submitColor = expenseCategory === 'fixed' ? 'bg-warning' : 'bg-danger'
-    // Tab drives the group section. "Vận hành" → operating tags, "Quản lý & khác"
-    // → overhead tags. Tag picker is filtered by this so manager can't accidentally
-    // tag an overhead expense with an operating-only label (e.g. "Marketing" under
-    // overhead would visually fit but bucket-shift it on the report).
-    const currentGroupSection = expenseCategory === 'fixed' ? 'overhead' : 'operating'
-    const filteredCategories = expenseCategories.filter(c => c.group_section === currentGroupSection)
+
+    // The top Vận hành/Quản lý tab is gone — chip section + dot color carry the
+    // group context now. When user picks a chip, mirror its group_section back
+    // into expenseCategory so the parent's save path (and submit button tone)
+    // route to the correct bucket without a separate tab toggle.
+    const handleChipSelect = (id) => {
+        const chip = expenseCategories.find(c => c.id === id)
+        if (chip) {
+            const next = chip.group_section === 'overhead' ? 'fixed' : 'expense'
+            if (next !== expenseCategory) onCategoryChange?.(next)
+        }
+        onCategoryIdChange(id)
+    }
 
     return (
         <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={onClose}>
@@ -38,16 +45,6 @@ export default function AddExpenseModal({
                     </button>
                 </div>
 
-                <div className="flex bg-surface-light border border-border/60 rounded-[12px] p-0.5">
-                    <CategoryTab active={expenseCategory === 'expense'} color="bg-danger/80" onClick={() => onCategoryChange('expense')}>Vận hành</CategoryTab>
-                    <CategoryTab active={expenseCategory === 'fixed'} color="bg-warning/80" onClick={() => onCategoryChange('fixed')}>Quản lý & khác</CategoryTab>
-                </div>
-                {/* "Tồn kho" tab removed — single inflow rule: mọi nhập kho phải qua
-                    /ingredients → + Nhập kho để đồng bộ kho tổng. Lịch sử tồn kho vẫn
-                    xem được ở tab Chi phí > filter "Tồn kho" trong page này.
-                    Sub-mode "Setup / Ghi thực chi" cũng bỏ — tất cả chi phí đều là
-                    thực chi ghi nhận tại thời điểm chi tiêu, không còn template/projection. */}
-
                 <input
                     type="text"
                     autoFocus
@@ -57,14 +54,13 @@ export default function AddExpenseModal({
                     className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[15px] font-medium text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary/50"
                 />
 
-                {/* Tag picker — filtered by the active tab's group_section so
-                    operating vs overhead nhãn không bị trộn nhầm. */}
+                {/* Tag picker — sections itself into Vận hành / Quản lý & khác so
+                    the dropped top tab's group context lives inside the chip list. */}
                 <ExpenseCategoryPicker
-                    categories={filteredCategories}
+                    categories={expenseCategories}
                     selectedId={selectedCategoryId}
-                    onSelect={onCategoryIdChange}
+                    onSelect={handleChipSelect}
                     onCreate={onCreateCategory}
-                    lockedGroupSection={currentGroupSection}
                     disabled={isSubmitting}
                 />
 
@@ -107,17 +103,6 @@ export default function AddExpenseModal({
                 </button>
             </div>
         </div>
-    )
-}
-
-function CategoryTab({ active, color, onClick, children }) {
-    return (
-        <button
-            onClick={onClick}
-            className={`flex-1 py-1.5 rounded-[10px] text-[12px] font-black uppercase transition-all ${active ? `${color} text-white shadow-sm` : 'text-text-secondary hover:text-text'}`}
-        >
-            {children}
-        </button>
     )
 }
 
