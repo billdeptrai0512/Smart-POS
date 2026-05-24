@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { calculateProductCost } from '../utils'
+import { calculateProductCost, parseVNDInput } from '../utils'
 import { getPendingOrders, removePendingOrder } from '../hooks/useOfflineSync'
 import { dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { calcRangeWithLabel, offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
@@ -310,10 +310,10 @@ export default function HistoryPage() {
     // thời điểm chi tiêu. Tab chỉ quyết định group_section qua tag (operating
     // vs overhead) — không còn fixed_costs template / auto-inject.
     const submitExpense = async () => {
-        if (!costAmount || isNaN(costAmount) || Number(costAmount) <= 0 || !costName.trim()) return
+        const amount = parseVNDInput(costAmount)
+        if (amount <= 0 || !costName.trim()) return
         setIsSubmitting(true)
         try {
-            const amount = Number(costAmount) * 1000
             const tagId = selectedCategoryId || null
             // Auto-detect Trong ca vs Sau ca from shift_finalized flag — vẫn cần
             // để ExpensePanel badge phân biệt "Sau ca" cho expense vận hành.

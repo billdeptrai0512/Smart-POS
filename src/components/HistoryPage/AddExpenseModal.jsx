@@ -1,5 +1,7 @@
 import { X } from 'lucide-react'
 import ExpenseCategoryPicker from './ExpenseCategoryPicker'
+import MoneyInput from '../common/MoneyInput'
+import { parseVNDInput } from '../../utils'
 
 export default function AddExpenseModal({
     expenseCategory, costName, costAmount, isSubmitting,
@@ -15,7 +17,7 @@ export default function AddExpenseModal({
     onClose, onSubmit,
     onCategoryChange, onNameChange, onAmountChange,
 }) {
-    const canSubmit = costAmount && !isNaN(costAmount) && Number(costAmount) > 0 && costName.trim() && !isSubmitting
+    const canSubmit = parseVNDInput(costAmount) > 0 && costName.trim() && !isSubmitting
     const submitColor = expenseCategory === 'fixed' ? 'bg-warning' : 'bg-danger'
 
     // The top Vận hành/Quản lý tab is gone — chip section + dot color carry the
@@ -64,17 +66,13 @@ export default function AddExpenseModal({
                     disabled={isSubmitting}
                 />
 
-                <div className="relative flex items-center bg-surface-light border border-border/60 rounded-[12px] overflow-hidden focus-within:border-primary/50">
-                    <input
-                        type="number"
-                        placeholder="0"
-                        value={costAmount}
-                        onChange={e => onAmountChange(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') canSubmit && onSubmit() }}
-                        className="w-full bg-transparent px-4 py-3 text-[15px] font-medium text-text placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    {costAmount && <span className="absolute right-4 text-[15px] font-medium text-text-secondary pointer-events-none">.000đ</span>}
-                </div>
+                <MoneyInput
+                    value={costAmount}
+                    onChange={onAmountChange}
+                    onKeyDown={e => { if (e.key === 'Enter') canSubmit && onSubmit() }}
+                    size="lg"
+                />
+                {/* `.000đ` shortcut removed — staff types full amount; see MoneyInput. */}
 
                 {/* Payment method — default cash. Editable here avoids the
                     "create then toggle pill" 2-tap pattern. */}

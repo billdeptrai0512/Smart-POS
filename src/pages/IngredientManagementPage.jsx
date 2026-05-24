@@ -11,6 +11,7 @@ import {
     fetchIngredientStocks, processIngredientRestock, adjustIngredientStock, fetchIngredientDeficits, fetchIngredientDailyContext,
 } from '../services/orderService'
 import { sortIngredients, ingredientLabel, getIngredientUnit, normalizeIngredientCategory } from '../components/common/recipeUtils'
+import { parseVNDInput } from '../utils'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
@@ -271,7 +272,7 @@ export default function IngredientManagementPage() {
         if (!newName.trim()) return
         const key = normalizeKey(newName)
         const unit = newUnit || 'đv'
-        const cost = parseInt(newCost) || 0
+        const cost = parseVNDInput(newCost)
         setSaving(true)
         try {
             await upsertIngredientCost(key, cost, selectedAddress?.id, unit, { category: newCategory })

@@ -11,8 +11,9 @@ import {
     ingredientLabel, getIngredientUnit,
     INGREDIENT_CATEGORIES, normalizeIngredientCategory,
 } from '../components/common/recipeUtils'
-import { formatVND } from '../utils'
+import { formatVND, formatVNDInput, parseVNDInput } from '../utils'
 import { formatPackedQty } from '../utils/inventory'
+import MoneyInput from '../components/common/MoneyInput'
 import { ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
 import IngredientDetailHeader from '../components/IngredientManagementPage/IngredientDetailHeader'
 import PackConfigModal from '../components/IngredientManagementPage/PackConfigModal'
@@ -115,7 +116,7 @@ export default function IngredientDetailPage() {
     }
 
     async function saveCost() {
-        const newCost = parseInt(costInput) || 0
+        const newCost = parseVNDInput(costInput)
         setEditingCost(false)
         if (newCost === cost) return
         setSaving(true)
@@ -170,7 +171,7 @@ export default function IngredientDetailPage() {
                         saving={saving}
                         editingCost={editingCost}
                         costInput={costInput}
-                        onStartEditCost={() => { setCostInput(String(cost)); setEditingCost(true) }}
+                        onStartEditCost={() => { setCostInput(formatVNDInput(cost)); setEditingCost(true) }}
                         onCostInputChange={setCostInput}
                         onSaveCost={saveCost}
                         onCancelCost={() => setEditingCost(false)}
@@ -241,18 +242,21 @@ function DetailsTab({
                 </Row>
                 <Row label="Giá vốn">
                     {canEdit && editingCost ? (
-                        <input
-                            type="number"
-                            autoFocus
-                            value={costInput}
-                            onChange={e => onCostInputChange(e.target.value)}
-                            onBlur={onSaveCost}
-                            onKeyDown={e => {
-                                if (e.key === 'Enter') onSaveCost()
-                                if (e.key === 'Escape') onCancelCost()
-                            }}
-                            className="w-28 bg-primary/10 border border-primary/30 rounded-md px-2 py-0.5 text-[14px] font-bold text-primary text-right focus:outline-none focus:border-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        />
+                        <div className="flex items-center gap-1">
+                            <MoneyInput
+                                value={costInput}
+                                onChange={onCostInputChange}
+                                onBlur={onSaveCost}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') onSaveCost()
+                                    if (e.key === 'Escape') onCancelCost()
+                                }}
+                                autoFocus
+                                size="sm"
+                                className="w-32"
+                            />
+                            <span className="text-[12px] text-text-dim font-medium">/{unit}</span>
+                        </div>
                     ) : (
                         <button
                             onClick={canEdit ? onStartEditCost : undefined}

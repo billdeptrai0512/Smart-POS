@@ -6,6 +6,7 @@ import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { upsertProductPrice, insertProduct, updateProductSortOrder } from '../services/orderService'
+import { parseVNDInput } from '../utils'
 import { useToast } from '../hooks/useToast'
 import Toast from '../components/POSPage/Toast'
 import SortableList from '../components/common/SortableList'
@@ -76,7 +77,7 @@ export default function RecipeMenuPage() {
     async function handleCreateProduct() {
         if (!newProductName.trim()) return
         setSaving(true)
-        const parsedPrice = parseInt(newProductPrice) ? parseInt(newProductPrice) * 1000 : 0
+        const parsedPrice = parseVNDInput(newProductPrice)
         try {
             const newProd = await insertProduct(newProductName.trim(), parsedPrice, selectedAddress?.id)
             if (newProd && selectedAddress?.id) {
