@@ -4,6 +4,28 @@ import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils'
 import { formatPackedQty } from '../../utils/inventory'
 import { formatVND } from '../../utils'
 
+// Status priority for sorting collapsed list. Lower = render earlier.
+// Chưa nhập first (needs action), then anomalies (Hụt/Dư), then Khớp (done).
+const STATUS_PRIORITY = { pending: 0, loss: 1, excess: 2, match: 3 }
+
+function computeRowStatus({ inventoryValue, restockValue, warehouseAvailable, openingValue, openingFallback, used }) {
+    const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
+    const hasActual = inventoryValue !== undefined && inventoryValue !== ''
+    if (!hasActual) return 'pending'
+    const warehouseNum = Number(warehouseAvailable || 0)
+    const restockNum = r1(restockValue)
+    const warehouseEnd = Math.max(0, warehouseNum - restockNum)
+    const openingDisplay = openingValue ?? (openingFallback !== undefined && openingFallback !== null ? String(openingFallback) : '')
+    const openingNum = r1(openingDisplay)
+    const usedNum = r1(used)
+    const thucTe = r1(warehouseEnd + r1(inventoryValue))
+    const lyThuyet = r1(warehouseNum + openingNum - usedNum)
+    const haoHut = r1(thucTe - lyThuyet)
+    if (haoHut === 0) return 'match'
+    if (haoHut < 0) return 'loss'
+    return 'excess'
+}
+
 // 3×3 grid per ingredient:
 //   row 1 (warehouse):  Tồn kho   |  Lấy ra      |  Tồn cuối = Tồn kho − Lấy ra
 //   row 2 (counter):    Đầu kỳ    |  Sử dụng     |  + Cuối kỳ = actual đếm quầy (input)
@@ -36,9 +58,34 @@ export default function InventoryReportCard({
     }
     if (!ingredientsList.length) return null
 
+    // Sort by status priority so staff sees "Chưa nhập" first, then anomalies,
+    // then matched rows at the bottom. Tie-break by display name for stability.
+    const sortedList = [...ingredientsList].sort((a, b) => {
+        const sa = computeRowStatus({
+            inventoryValue: inventoryInputs[a.ingredient],
+            restockValue: restockInputs[a.ingredient],
+            warehouseAvailable: warehouseStocks[a.ingredient],
+            openingValue: openingInputs[a.ingredient],
+            openingFallback: openingStock[a.ingredient],
+            used: lookupByLabel(a.ingredient, usedMap),
+        })
+        const sb = computeRowStatus({
+            inventoryValue: inventoryInputs[b.ingredient],
+            restockValue: restockInputs[b.ingredient],
+            warehouseAvailable: warehouseStocks[b.ingredient],
+            openingValue: openingInputs[b.ingredient],
+            openingFallback: openingStock[b.ingredient],
+            used: lookupByLabel(b.ingredient, usedMap),
+        })
+        const pa = STATUS_PRIORITY[sa]
+        const pb = STATUS_PRIORITY[sb]
+        if (pa !== pb) return pa - pb
+        return ingredientLabel(a.ingredient).localeCompare(ingredientLabel(b.ingredient))
+    })
+
     return (
         <div className="bg-surface rounded-[20px] p-3 border border-border/60 shadow-sm space-y-3">
-            {ingredientsList.map(ing => (
+            {sortedList.map(ing => (
                 <IngredientRow
                     key={ing.ingredient}
                     ing={ing}
