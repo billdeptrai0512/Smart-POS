@@ -189,10 +189,11 @@ function IngredientRow({
     }
 
     // Status badge text + tone for the collapsed header.
-    // 'idle' before staff inputs "+ Cuối kỳ"; switches to good/bad/warn once thực tế is known.
+    // 'pending' uses a quiet secondary tone — "Chưa nhập" is the default state of
+    // every row before staff opens chốt ca, not a problem to flag.
     let badge
     if (!hasActual) {
-        badge = { text: 'Chưa nhập', tone: 'warn' }
+        badge = { text: 'Chưa nhập', tone: 'pending' }
     } else if (haoHut === 0) {
         badge = { text: 'Khớp', tone: 'good' }
     } else if (haoHut < 0) {
@@ -205,6 +206,7 @@ function IngredientRow({
         good: 'bg-success/10 text-success border-success/30',
         bad: 'bg-danger/10 text-danger border-danger/30',
         warn: 'bg-warning/10 text-warning border-warning/30',
+        pending: 'bg-surface-light text-text-secondary border-border/60',
     }[badge.tone]
 
     return (

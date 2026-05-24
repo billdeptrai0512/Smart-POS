@@ -502,7 +502,7 @@ export default function DailyReportPage() {
                 existingId: inventory.existingClosing?.id,
             })
             showToast('Đã lưu báo cáo tồn kho', 'success')
-            inventory.setIsDirty(false)
+            inventory.resetDirty()
             // Refresh shift_closing so future edits land as updates instead of inserts.
             const fresh = await fetchDailyReportContext(selectedAddress.id)
             setShiftClosing(fresh?.shift_closing || null)
