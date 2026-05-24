@@ -59,6 +59,24 @@ export default function CashFlowCard({
         return e.name || 'Chi phí'
     }
 
+    // Multiple refill bills can land on the same ingredient (e.g. 4 lần nhập Sữa đặc
+    // trong ngày). Roll them up by display name so the cashflow line shows one row per
+    // NVL with the total spent, instead of a wall of duplicate names.
+    const afterShiftNvlGrouped = (() => {
+        const byName = new Map()
+        for (const e of afterShiftNvl) {
+            const name = getExpenseName(e)
+            const prev = byName.get(name)
+            if (prev) {
+                prev.amount += e.amount || 0
+                prev.count += 1
+            } else {
+                byName.set(name, { name, amount: e.amount || 0, count: 1, key: e.id })
+            }
+        }
+        return [...byName.values()]
+    })()
+
     return (
         <div className="flex flex-col gap-4">
             {salesCard && <div className="w-full">{salesCard}</div>}
@@ -157,11 +175,16 @@ export default function CashFlowCard({
 
                 <div className="flex flex-col gap-1 pl-1">
                     <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Nguyên vật liệu</span>
-                    {afterShiftNvl.length > 0 ? (
-                        afterShiftNvl.map((e) => (
-                            <div key={e.id} className="flex justify-between items-center">
-                                <span className="text-[12px] font-bold text-text-secondary">· {getExpenseName(e)}</span>
-                                <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(e.amount)}</span>
+                    {afterShiftNvlGrouped.length > 0 ? (
+                        afterShiftNvlGrouped.map((row) => (
+                            <div key={row.key} className="flex justify-between items-center">
+                                <span className="text-[12px] font-bold text-text-secondary">
+                                    · {row.name}
+                                    {row.count > 1 && (
+                                        <span className="ml-1 text-text-dim font-medium">×{row.count}</span>
+                                    )}
+                                </span>
+                                <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(row.amount)}</span>
                             </div>
                         ))
                     ) : (
