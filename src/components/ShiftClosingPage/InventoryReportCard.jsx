@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertTriangle, ChevronDown } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils'
 import { formatPackedQty } from '../../utils/inventory'
 import { formatVND } from '../../utils'
@@ -83,7 +83,11 @@ function IngredientRow({
     isSubmitting,
     onOpeningChange, onRestockChange, onInventoryChange,
 }) {
-    // Tap Sử dụng to expand the per-recipe breakdown (which products consumed this ingredient today).
+    // Whole-row collapse: default closed so staff can scroll the list of NVL fast and
+    // open just the ones they're counting. Status badge in the header tells them
+    // which rows still need "+ Cuối kỳ" input vs. already counted.
+    const [open, setOpen] = useState(false)
+    // Sub-expand: per-recipe consumption breakdown inside the expanded row.
     const [expanded, setExpanded] = useState(false)
     const hasBreakdown = breakdown && Object.keys(breakdown).length > 0
     const toggleExpanded = () => hasBreakdown && setExpanded(e => !e)
@@ -137,12 +141,45 @@ function IngredientRow({
         if (cups > 0) tuongDuongText = `≈ ${cups} ly ${productRef.productName || ''}`.trim()
     }
 
+    // Status badge text + tone for the collapsed header.
+    // 'idle' before staff inputs "+ Cuối kỳ"; switches to good/bad/warn once thực tế is known.
+    let badge
+    if (!hasActual) {
+        badge = { text: 'Chưa nhập', tone: 'warn' }
+    } else if (haoHut === 0) {
+        badge = { text: 'Khớp', tone: 'good' }
+    } else if (haoHut < 0) {
+        const moneyTxt = giaTri != null ? ` · ${formatVND(Math.abs(giaTri))}` : ''
+        badge = { text: `Hụt ${Math.abs(haoHut)} ${unit}${moneyTxt}`, tone: 'bad' }
+    } else {
+        badge = { text: `Dư ${haoHut} ${unit}`, tone: 'warn' }
+    }
+    const badgeToneCls = {
+        good: 'bg-success/10 text-success border-success/30',
+        bad: 'bg-danger/10 text-danger border-danger/30',
+        warn: 'bg-warning/10 text-warning border-warning/30',
+    }[badge.tone]
+
     return (
         <div className="border-b border-border/20 last:border-0 pb-2.5 last:pb-0">
-            <div className="flex items-baseline justify-between mb-1.5 gap-2">
-                <span className="text-[16px] font-bold text-text">{ingredientLabel(ing.ingredient)}</span>
-            </div>
+            <button
+                type="button"
+                onClick={() => setOpen(o => !o)}
+                className="w-full flex items-center justify-between gap-2 py-1 group"
+            >
+                <span className="text-[15px] font-bold text-text text-left">{ingredientLabel(ing.ingredient)}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border tabular-nums ${badgeToneCls}`}>
+                        {badge.text}
+                    </span>
+                    {open
+                        ? <ChevronUp size={14} className="text-text-dim" />
+                        : <ChevronDown size={14} className="text-text-dim" />
+                    }
+                </div>
+            </button>
 
+            {!open ? null : (<>
             {/* Row 1 — warehouse level */}
             <div className="grid grid-cols-3 gap-2">
                 <ColumnInput label="Tồn kho" value={warehouseNum} unit={unit} disabled />
@@ -243,6 +280,7 @@ function IngredientRow({
                     </span>
                 </div>
             )}
+            </>)}
         </div>
     )
 }
