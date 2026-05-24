@@ -6,7 +6,6 @@ import { ChevronDown, Check, Lock } from 'lucide-react';
 import { useProducts } from '../../contexts/ProductContext';
 import { formatVND } from '../../utils';
 import UpsellSheet from '../common/UpsellSheet';
-import { shiftFinalizedKey } from '../../constants/storageKeys';
 
 // Fallback: if exact ingredient key has no consumption, try matching by display label.
 // This handles the case where recipes use 'condensed_milk_ml' but inventory tracks 'sữa_đặc'
@@ -35,6 +34,7 @@ export default function InventoryRefillCard({
     isPastDate = false,
     canAccessAudit = true,   // false khi tier === 'basic' (Pro feature)
     forcedTab,               // when set, lock activeTab + hide tab nav (used by /daily-report inventory "Bổ sung" sub-tab)
+    isFinalized = false,     // derived on DailyReportPage from inventory + cash + transfer
 }) {
     const { ingredientConfigs = [] } = useProducts() || {};
     const [lastWeekItems, setLastWeekItems] = useState([]);
@@ -43,11 +43,6 @@ export default function InventoryRefillCard({
     const [expandedRows, setExpandedRows] = useState({});
     const [isLossExpanded, setIsLossExpanded] = useState(false);
     const [showAuditUpsell, setShowAuditUpsell] = useState(false);
-    const [isFinalized, setIsFinalized] = useState(() => {
-        if (!selectedAddress?.id || isPastDate) return false
-        const today = new Date().toISOString().split('T')[0]
-        return !!localStorage.getItem(shiftFinalizedKey(selectedAddress.id, today))
-    });
 
     const toggleRow = (ingredient) => {
         setExpandedRows(prev => ({ ...prev, [ingredient]: !prev[ingredient] }));
@@ -268,13 +263,6 @@ export default function InventoryRefillCard({
         }).filter(item => item.finalRefill > 0);
     }, [shiftClosing, todayEstimatedConsumption, lastWeekConsumption, ingredientConfigs]);
 
-    const handleFinalizeShift = () => {
-        if (!selectedAddress?.id) return
-        const today = new Date().toISOString().split('T')[0]
-        localStorage.setItem(shiftFinalizedKey(selectedAddress.id, today), Date.now().toString())
-        setIsFinalized(true)
-    };
-
     if (!shiftClosing?.inventory_report?.length) return null;
 
     return (
@@ -484,21 +472,14 @@ export default function InventoryRefillCard({
                                     </div>
                                 );
                             })}
-                            <div className="mt-4 pt-2">
-                                {isFinalized ? (
+                            {isFinalized && (
+                                <div className="mt-4 pt-2">
                                     <div className="flex items-center justify-center gap-2 bg-success/10 border border-success/20 px-4 py-3 rounded-[12px] w-full text-success">
                                         <Check size={18} />
                                         <span className="text-[13px] font-bold uppercase tracking-wide">Đã hoàn tất ca hôm nay</span>
                                     </div>
-                                ) : (
-                                    <button
-                                        onClick={handleFinalizeShift}
-                                        className="flex items-center justify-center gap-2 bg-primary/10 hover:bg-primary/20 active:scale-[0.98] transition-all px-4 py-3 rounded-[12px] w-full text-primary"
-                                    >
-                                        <span className="text-[13px] font-bold uppercase tracking-wide">Xác nhận chốt ca</span>
-                                    </button>
-                                )}
-                            </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

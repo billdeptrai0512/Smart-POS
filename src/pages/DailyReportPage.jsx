@@ -29,6 +29,7 @@ import UpsellPage from '../components/common/UpsellPage'
 import UpsellSheet from '../components/common/UpsellSheet'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
+import { shiftFinalizedKey } from '../constants/storageKeys'
 
 export default function DailyReportPage() {
     const navigate = useNavigate()
@@ -134,6 +135,34 @@ export default function DailyReportPage() {
         setCashInput(isTodaysClosing && shiftClosing.actual_cash != null ? formatVNDInput(shiftClosing.actual_cash) : '')
         setTransferInput(isTodaysClosing && shiftClosing.actual_transfer != null ? formatVNDInput(shiftClosing.actual_transfer) : '')
     }, [isTodayScope, todayISO, shiftClosing?.id, shiftClosing?.actual_cash, shiftClosing?.actual_transfer, shiftClosing?.closed_at])
+
+    // Pure-derived finalize flag — true iff persisted shift_closing has cash + transfer
+    // entered AND every ingredient in the recipe list has Cuối kỳ (remaining) counted.
+    // No localStorage source of truth, no manual "Xác nhận chốt ca" button: if staff
+    // later clears a Cuối kỳ value and re-saves, the badge unsets itself.
+    const isShiftFinalized = useMemo(() => {
+        if (!isTodaysClosing) return false
+        if (shiftClosing.actual_cash == null || shiftClosing.actual_transfer == null) return false
+        const report = shiftClosing.inventory_report
+        if (!Array.isArray(report) || report.length === 0) return false
+        const list = inventory.ingredientsList || []
+        if (list.length === 0) return false
+        const remainingByIng = {}
+        for (const row of report) remainingByIng[row.ingredient] = row.remaining
+        return list.every(ing => remainingByIng[ing.ingredient] != null)
+    }, [isTodaysClosing, shiftClosing?.actual_cash, shiftClosing?.actual_transfer, shiftClosing?.inventory_report, inventory.ingredientsList])
+
+    // Sync the derived flag to localStorage so HistoryPage can classify subsequent
+    // operational expenses as "Sau ca" without needing to refetch shift_closing.
+    useEffect(() => {
+        if (!isTodayScope || !selectedAddress?.id) return
+        const key = shiftFinalizedKey(selectedAddress.id, todayISO)
+        if (isShiftFinalized) {
+            if (!localStorage.getItem(key)) localStorage.setItem(key, Date.now().toString())
+        } else {
+            localStorage.removeItem(key)
+        }
+    }, [isShiftFinalized, isTodayScope, selectedAddress?.id, todayISO])
 
     // Computed display data
     const displayOrders = isTodayScope ? todayOrders : apiOrders
@@ -718,6 +747,7 @@ export default function DailyReportPage() {
                                                 isPastDate={false}
                                                 canAccessAudit={hasFeature(activeModules, 'lossAudit')}
                                                 forcedTab="refill"
+                                                isFinalized={isShiftFinalized}
                                             />
                                         )}
                                     </div>
