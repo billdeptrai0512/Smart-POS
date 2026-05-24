@@ -29,7 +29,8 @@ export default function KeySyncModal({
     open,
     onClose,
     mismatches,            // { orphanRecipeKeys, orphanInventoryKeys, orphanExtraIngredientKeys, labelCollisions }
-    recipes = [],
+    recipes = [],          // liveRecipes — filtered to active products (used for collision UI)
+    allRecipes = [],       // contextRecipes — unfiltered, includes recipes of soft-deleted products
     products = [],
     productExtras = {},    // { [productId]: [{ id, name }] } — used to attribute orphan extra-ingredients
     extraIngredients = {}, // { [extraId]: [{ ingredient, ... }] }
@@ -77,22 +78,34 @@ export default function KeySyncModal({
         return map
     }, [recipes])
 
-    // Map ingredient_key → [product names that reference it via recipes]
-    // Used to give context for orphan keys ("cup được dùng trong: Cà phê, Trà đá")
+    // Map ingredient_key → [{ name, deleted }] for all references found in recipes,
+    // including those whose product has been soft-deleted (not in active `products`).
+    // Tagging deleted ones lets the UI show "Cà phê (đã xóa)" so user understands the
+    // orphan is stale data left over from a removed product, not a current dependency.
     const productsByIngredient = useMemo(() => {
+        const activeIds = new Set(products.map(p => p.id))
         const productMap = new Map(products.map(p => [p.id, p.name]))
-        const result = {}
-        for (const r of recipes) {
-            if (!r.ingredient) continue
-            const name = productMap.get(r.product_id)
-            if (!name) continue
-            if (!result[r.ingredient]) result[r.ingredient] = new Set()
-            result[r.ingredient].add(name)
+        // Walk the broader set (allRecipes) so we still surface references whose
+        // product was soft-deleted. Fall back to `recipes` if `allRecipes` is empty.
+        const source = allRecipes.length > 0 ? allRecipes : recipes
+        const buckets = {}
+        for (const r of source) {
+            if (!r.ingredient || !r.product_id) continue
+            const isActive = activeIds.has(r.product_id)
+            const name = productMap.get(r.product_id) || 'Công thức đã xóa'
+            if (!buckets[r.ingredient]) buckets[r.ingredient] = new Map()
+            const key = `${name}::${isActive ? 'a' : 'd'}`
+            buckets[r.ingredient].set(key, { name, deleted: !isActive })
         }
-        // Convert sets to sorted arrays
-        for (const k of Object.keys(result)) result[k] = [...result[k]].sort()
+        const result = {}
+        for (const [ing, m] of Object.entries(buckets)) {
+            result[ing] = [...m.values()].sort((a, b) => {
+                if (a.deleted !== b.deleted) return a.deleted ? 1 : -1
+                return a.name.localeCompare(b.name)
+            })
+        }
         return result
-    }, [recipes, products])
+    }, [recipes, allRecipes, products])
 
     const costKeys = useMemo(() => new Set(Object.keys(ingredientCosts || {})), [ingredientCosts])
 
@@ -288,7 +301,7 @@ export default function KeySyncModal({
                                             {allOrphanKeys.map(k => {
                                                 const usedIn = productsByIngredient[k] || []
                                                 const extraUsages = extrasByIngredient[k] || []
-                                                const inInventoryOnly = !orphanRecipe.includes(k) && !orphanExtra.includes(k) && orphanInv.includes(k)
+                                                const hasAnyRef = usedIn.length > 0 || extraUsages.length > 0
                                                 return (
                                                     <div key={k} className="bg-surface-light rounded-[8px] px-2.5 py-2 space-y-1">
                                                         <div className="flex items-center gap-2">
@@ -305,7 +318,16 @@ export default function KeySyncModal({
                                                         </div>
                                                         {usedIn.length > 0 && (
                                                             <p className="text-[10px] text-text-secondary">
-                                                                Công thức: <span className="text-text-dim">{usedIn.join(', ')}</span>
+                                                                Công thức:{' '}
+                                                                <span className="text-text-dim">
+                                                                    {usedIn.map((u, i) => (
+                                                                        <span key={i}>
+                                                                            {i > 0 && ', '}
+                                                                            {u.name}
+                                                                            {u.deleted && <span className="text-text-dim/60"> (đã xóa)</span>}
+                                                                        </span>
+                                                                    ))}
+                                                                </span>
                                                             </p>
                                                         )}
                                                         {extraUsages.length > 0 && (
@@ -321,8 +343,10 @@ export default function KeySyncModal({
                                                                 </span>
                                                             </p>
                                                         )}
-                                                        {inInventoryOnly && (
-                                                            <p className="text-[10px] text-text-dim italic">Có trong tồn kho gần nhất</p>
+                                                        {!hasAnyRef && (
+                                                            <p className="text-[10px] text-text-dim italic">
+                                                                Không có công thức hay tùy chọn nào đang dùng — chỉ còn trong tồn kho cũ
+                                                            </p>
                                                         )}
                                                     </div>
                                                 )

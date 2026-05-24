@@ -553,6 +553,7 @@ export default function IngredientManagementPage() {
                 onClose={() => setShowKeySync(false)}
                 mismatches={keyMismatches}
                 recipes={liveRecipes}
+                allRecipes={contextRecipes || []}
                 products={contextProducts || []}
                 productExtras={contextProductExtras || {}}
                 extraIngredients={liveExtraIngredients}
