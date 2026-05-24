@@ -347,7 +347,7 @@ export default function InventoryRefillCard({
                                                     <span className="mx-1 text-border">•</span> Nhập thêm: {item.restock}
                                                 </span>
                                                 <span className="text-[11px] font-medium text-text-secondary">
-                                                    <span className="mx-1 text-border">•</span> Sử dụng: {item.used}ccc
+                                                    <span className="mx-1 text-border">•</span> Sử dụng: {item.used}
                                                 </span>
                                             </div>
 
