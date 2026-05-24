@@ -23,10 +23,12 @@ export function detectKeyMismatches({
     ingredientCosts = {},
     inventoryReport = [],
     extraIngredients = {},
+    ignoredKeys = null,   // Set<string> | null — orphan keys the user has chosen to suppress
 }) {
     const recipeKeys    = new Set(recipes.map(r => r.ingredient).filter(Boolean))
     const costKeys      = new Set(Object.keys(ingredientCosts || {}))
     const inventoryKeys = new Set((inventoryReport || []).map(i => i.ingredient).filter(Boolean))
+    const ignored = ignoredKeys instanceof Set ? ignoredKeys : new Set(ignoredKeys || [])
 
     // Flatten extra-ingredient assignments — each extra has [{ ingredient, ... }, ...].
     // An orphan here is critical: hao hụt calc reads recipe + extra ingredients to estimate
@@ -39,9 +41,9 @@ export function detectKeyMismatches({
         }
     }
 
-    const orphanRecipeKeys         = [...recipeKeys].filter(k => !costKeys.has(k)).sort()
-    const orphanInventoryKeys      = [...inventoryKeys].filter(k => !costKeys.has(k)).sort()
-    const orphanExtraIngredientKeys = [...extraIngKeys].filter(k => !costKeys.has(k)).sort()
+    const orphanRecipeKeys         = [...recipeKeys].filter(k => !costKeys.has(k) && !ignored.has(k)).sort()
+    const orphanInventoryKeys      = [...inventoryKeys].filter(k => !costKeys.has(k) && !ignored.has(k)).sort()
+    const orphanExtraIngredientKeys = [...extraIngKeys].filter(k => !costKeys.has(k) && !ignored.has(k)).sort()
 
     // Group all known keys by their display label (case-insensitive)
     const allKeys = new Set([...recipeKeys, ...costKeys, ...inventoryKeys, ...extraIngKeys])

@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { usePOS } from '../contexts/POSContext'
 import {
     upsertIngredientCost, deleteIngredientCost, renameIngredient,
+    syncIngredientKey,
     fetchIngredientStocks, processIngredientRestock, adjustIngredientStock, fetchIngredientDeficits, fetchIngredientDailyContext,
 } from '../services/orderService'
 import { sortIngredients, ingredientLabel, getIngredientUnit, normalizeIngredientCategory } from '../components/common/recipeUtils'
@@ -23,7 +24,7 @@ import SortableList from '../components/common/SortableList'
 import { detectKeyMismatches } from '../utils/ingredientKeySync'
 import { useToast } from '../hooks/useToast'
 import Toast from '../components/POSPage/Toast'
-import { keySyncDismissedKey } from '../constants/storageKeys'
+import { keySyncDismissedKey, orphanIgnoredKey } from '../constants/storageKeys'
 
 const normalizeKey = (raw) => raw.trim().toLowerCase().replace(/\s+/g, '_')
 
@@ -117,14 +118,44 @@ export default function IngredientManagementPage() {
         return filtered
     }, [contextProductExtras, contextExtraIngs])
 
+    // Per-address list of orphan keys the user has explicitly silenced. Loaded
+    // from localStorage; filters orphan*Keys out of the mismatch result entirely
+    // so the banner clears and the modal stops listing them.
+    const [ignoredOrphans, setIgnoredOrphans] = useState(() => new Set())
+    useEffect(() => {
+        if (!selectedAddress?.id) { setIgnoredOrphans(new Set()); return }
+        try {
+            const raw = localStorage.getItem(orphanIgnoredKey(selectedAddress.id))
+            setIgnoredOrphans(new Set(raw ? JSON.parse(raw) : []))
+        } catch { setIgnoredOrphans(new Set()) }
+    }, [selectedAddress?.id])
+
+    const handleIgnoreOrphan = (key) => {
+        if (!selectedAddress?.id) return
+        setIgnoredOrphans(prev => {
+            const next = new Set(prev)
+            next.add(key)
+            try { localStorage.setItem(orphanIgnoredKey(selectedAddress.id), JSON.stringify([...next])) }
+            catch { /* localStorage full or disabled — keep in-memory only */ }
+            return next
+        })
+    }
+
+    const handleAssignOrphan = async (oldKey, newKey) => {
+        if (!selectedAddress?.id || !oldKey || !newKey || oldKey === newKey) return
+        await syncIngredientKey(selectedAddress.id, oldKey, newKey)
+        await Promise.all([loadStocks(), refreshProducts?.()])
+    }
+
     const keyMismatches = useMemo(
         () => detectKeyMismatches({
             recipes: liveRecipes,
             ingredientCosts,
             inventoryReport: ingredientStocks,
             extraIngredients: liveExtraIngredients,
+            ignoredKeys: ignoredOrphans,
         }),
-        [liveRecipes, ingredientCosts, ingredientStocks, liveExtraIngredients]
+        [liveRecipes, ingredientCosts, ingredientStocks, liveExtraIngredients, ignoredOrphans]
     )
 
     // Signature of current mismatches — used to detect when dismissed warning should re-surface.
@@ -559,6 +590,8 @@ export default function IngredientManagementPage() {
                 extraIngredients={liveExtraIngredients}
                 ingredientCosts={ingredientCosts}
                 addressId={selectedAddress?.id}
+                onIgnoreKey={handleIgnoreOrphan}
+                onAssignKey={handleAssignOrphan}
                 onComplete={async () => {
                     await Promise.all([loadStocks(), refreshProducts?.()])
                 }}

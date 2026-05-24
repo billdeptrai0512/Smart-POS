@@ -36,6 +36,8 @@ export default function KeySyncModal({
     extraIngredients = {}, // { [extraId]: [{ ingredient, ... }] }
     ingredientCosts = {},
     addressId,
+    onIgnoreKey,           // (key) => void — silence this orphan permanently for this address
+    onAssignKey,           // async (oldKey, newKey) => void — rename orphan into an existing ingredient
     onComplete,            // called after successful sync to refresh data
 }) {
     // user's chosen canonical key per collision label
@@ -67,6 +69,12 @@ export default function KeySyncModal({
     })
     const [creatingOrphans, setCreatingOrphans] = useState(false)
     const [orphansCreated, setOrphansCreated] = useState(0)
+
+    // Per-row UI state for the inline "Gộp vào" picker.
+    //   assignTargetByKey: { [orphanKey]: existingKey }  — chosen target in the dropdown
+    //   assignBusyKey: string|null — orphan currently being renamed (disables row buttons)
+    const [assignTargetByKey, setAssignTargetByKey] = useState({})
+    const [assignBusyKey, setAssignBusyKey] = useState(null)
 
     // Count usage per key — helps user pick canonical
     const recipeCountByKey = useMemo(() => {
@@ -172,6 +180,30 @@ export default function KeySyncModal({
         if (syncing || creatingOrphans) return
         if (done || orphansCreated > 0) onComplete?.()
         onClose()
+    }
+
+    const sortedExistingKeys = useMemo(
+        () => [...costKeys].sort((a, b) => ingredientLabel(a).localeCompare(ingredientLabel(b))),
+        [costKeys]
+    )
+
+    const handleAssignClick = async (orphanKey) => {
+        const target = assignTargetByKey[orphanKey]
+        if (!target || !onAssignKey) return
+        setAssignBusyKey(orphanKey); setError('')
+        try {
+            await onAssignKey(orphanKey, target)
+            setAssignTargetByKey(prev => { const n = { ...prev }; delete n[orphanKey]; return n })
+        } catch (err) {
+            setError(err?.message || 'Gộp nguyên liệu thất bại')
+        } finally {
+            setAssignBusyKey(null)
+        }
+    }
+
+    const handleIgnoreClick = (orphanKey) => {
+        if (!onIgnoreKey) return
+        onIgnoreKey(orphanKey)
     }
 
     const handleCreateOrphans = async () => {
@@ -347,6 +379,43 @@ export default function KeySyncModal({
                                                             <p className="text-[10px] text-text-dim italic">
                                                                 Không có công thức hay tùy chọn nào đang dùng — chỉ còn trong tồn kho cũ
                                                             </p>
+                                                        )}
+                                                        {(onAssignKey || onIgnoreKey) && (
+                                                            <div className="flex items-center gap-1.5 pt-1">
+                                                                {onAssignKey && sortedExistingKeys.length > 0 && (
+                                                                    <>
+                                                                        <select
+                                                                            value={assignTargetByKey[k] || ''}
+                                                                            onChange={e => setAssignTargetByKey(prev => ({ ...prev, [k]: e.target.value }))}
+                                                                            disabled={assignBusyKey === k || creatingOrphans}
+                                                                            className="flex-1 min-w-0 bg-bg border border-border/60 rounded-md px-2 py-1 text-[10px] font-bold text-text focus:outline-none focus:border-primary disabled:opacity-50"
+                                                                            title="Gộp orphan này vào một nguyên liệu đang có"
+                                                                        >
+                                                                            <option value="">Gộp vào…</option>
+                                                                            {sortedExistingKeys.map(opt => (
+                                                                                <option key={opt} value={opt}>{ingredientLabel(opt)}</option>
+                                                                            ))}
+                                                                        </select>
+                                                                        <button
+                                                                            onClick={() => handleAssignClick(k)}
+                                                                            disabled={!assignTargetByKey[k] || assignBusyKey === k || creatingOrphans}
+                                                                            className="px-2 py-1 rounded-md bg-primary/10 border border-primary/30 text-primary text-[10px] font-black hover:bg-primary/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                                                                        >
+                                                                            {assignBusyKey === k ? '…' : 'Gộp'}
+                                                                        </button>
+                                                                    </>
+                                                                )}
+                                                                {onIgnoreKey && (
+                                                                    <button
+                                                                        onClick={() => handleIgnoreClick(k)}
+                                                                        disabled={assignBusyKey === k || creatingOrphans}
+                                                                        className="px-2 py-1 rounded-md bg-bg border border-border/60 text-text-secondary text-[10px] font-bold hover:bg-surface hover:text-text transition-colors disabled:opacity-50 shrink-0"
+                                                                        title="Bỏ qua orphan này vĩnh viễn (lưu trong localStorage)"
+                                                                    >
+                                                                        Bỏ qua
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         )}
                                                     </div>
                                                 )

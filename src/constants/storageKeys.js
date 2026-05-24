@@ -45,3 +45,7 @@ export const shiftFinalizedKey = (addressId, dateStr) =>
 
 // Ingredient key-sync warning dismissal, per address.
 export const keySyncDismissedKey = (addressId) => `key_sync_dismissed_${addressId}`
+
+// Per-address list of orphan ingredient keys the user has chosen to ignore
+// permanently. Filtered out of `orphan*Keys` in detectKeyMismatches.
+export const orphanIgnoredKey = (addressId) => `orphan_ignored_${addressId}`
