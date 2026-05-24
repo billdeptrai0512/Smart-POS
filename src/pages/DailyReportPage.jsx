@@ -164,6 +164,23 @@ export default function DailyReportPage() {
         }
     }, [isShiftFinalized, isTodayScope, selectedAddress?.id, todayISO])
 
+    // Breakdown of what's still missing — drives the status banner so staff
+    // can see exactly which boxes block finalize instead of just "not done yet".
+    const finalizeMissing = useMemo(() => {
+        if (!isTodayScope) return null
+        const parts = []
+        const report = isTodaysClosing && Array.isArray(shiftClosing?.inventory_report)
+            ? shiftClosing.inventory_report : []
+        const remainingByIng = {}
+        for (const row of report) remainingByIng[row.ingredient] = row.remaining
+        const list = inventory.ingredientsList || []
+        const uncounted = list.filter(ing => remainingByIng[ing.ingredient] == null).length
+        if (list.length > 0 && uncounted > 0) parts.push(`${uncounted} nguyên liệu chưa đếm`)
+        if (!isTodaysClosing || shiftClosing.actual_cash == null) parts.push('chưa nhập tiền mặt')
+        if (!isTodaysClosing || shiftClosing.actual_transfer == null) parts.push('chưa nhập chuyển khoản')
+        return parts
+    }, [isTodayScope, isTodaysClosing, shiftClosing?.actual_cash, shiftClosing?.actual_transfer, shiftClosing?.inventory_report, inventory.ingredientsList])
+
     // Computed display data
     const displayOrders = isTodayScope ? todayOrders : apiOrders
     const displayExpenses = isTodayScope ? todayExpenses : apiExpenses
@@ -696,6 +713,19 @@ export default function DailyReportPage() {
                                 {/* Past date: read-only audit + refill view via InventoryRefillCard. */}
                                 {isTodayScope ? (
                                     <div className="flex flex-col gap-3">
+                                        {isShiftFinalized ? (
+                                            <div className="flex items-center justify-center gap-2 bg-success/10 border border-success/30 px-3 py-2 rounded-[10px] text-success">
+                                                <span className="text-[12px] font-bold uppercase tracking-wide">✓ Đã hoàn tất ca hôm nay</span>
+                                            </div>
+                                        ) : finalizeMissing && finalizeMissing.length > 0 ? (
+                                            <div className="flex items-start gap-2 bg-warning/10 border border-warning/30 px-3 py-2 rounded-[10px] text-warning">
+                                                <span className="text-[12px] font-bold leading-snug">
+                                                    <span className="uppercase tracking-wide">Chưa hoàn tất:</span>{' '}
+                                                    {finalizeMissing.join(' · ')}
+                                                </span>
+                                            </div>
+                                        ) : null}
+
                                         <div className="flex p-1 bg-surface-light rounded-[12px] gap-1 w-full">
                                             <button
                                                 onClick={() => setInventoryTab('report')}
@@ -747,7 +777,6 @@ export default function DailyReportPage() {
                                                 isPastDate={false}
                                                 canAccessAudit={hasFeature(activeModules, 'lossAudit')}
                                                 forcedTab="refill"
-                                                isFinalized={isShiftFinalized}
                                             />
                                         )}
                                     </div>

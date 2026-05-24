@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateRefillTarget } from '../../utils/inventory';
 import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils';
 import { fetchLastWeekSameDayOrderItems } from '../../services/orderService';
-import { ChevronDown, Check, Lock } from 'lucide-react';
+import { ChevronDown, Lock } from 'lucide-react';
 import { useProducts } from '../../contexts/ProductContext';
 import { formatVND } from '../../utils';
 import UpsellSheet from '../common/UpsellSheet';
@@ -34,7 +34,6 @@ export default function InventoryRefillCard({
     isPastDate = false,
     canAccessAudit = true,   // false khi tier === 'basic' (Pro feature)
     forcedTab,               // when set, lock activeTab + hide tab nav (used by /daily-report inventory "Bổ sung" sub-tab)
-    isFinalized = false,     // derived on DailyReportPage from inventory + cash + transfer
 }) {
     const { ingredientConfigs = [] } = useProducts() || {};
     const [lastWeekItems, setLastWeekItems] = useState([]);
@@ -472,14 +471,6 @@ export default function InventoryRefillCard({
                                     </div>
                                 );
                             })}
-                            {isFinalized && (
-                                <div className="mt-4 pt-2">
-                                    <div className="flex items-center justify-center gap-2 bg-success/10 border border-success/20 px-4 py-3 rounded-[12px] w-full text-success">
-                                        <Check size={18} />
-                                        <span className="text-[13px] font-bold uppercase tracking-wide">Đã hoàn tất ca hôm nay</span>
-                                    </div>
-                                </div>
-                            )}
                         </div>
                     )}
                 </div>
