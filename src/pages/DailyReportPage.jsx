@@ -631,9 +631,7 @@ export default function DailyReportPage() {
                                 transferInput={transferInput}
                                 onCashChange={(v) => { setCashInput(formatVNDInput(v)); setCashDirty(true) }}
                                 onTransferChange={(v) => { setTransferInput(formatVNDInput(v)); setCashDirty(true) }}
-                                onSave={handleSaveCashflow}
                                 isSaving={isSavingShift}
-                                hasChanges={cashDirty}
                                 onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } })}
                                 salesCard={
                                     <SalesCard
@@ -763,20 +761,35 @@ export default function DailyReportPage() {
                 )}
             </main>
 
-            {/* FAB: Lưu báo cáo — floating bottom-right, shown only when inventory has unsaved edits.
-                Same shape/spacing as HistoryPage's "+ Add expense" FAB. */}
-            {isTodayScope && (view === VIEW_ALL || view === VIEW_INVENTORY) && inventoryTab === 'report' && inventory.isDirty && (
-                <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
-                    <div className="flex justify-end px-4 mb-[72px] pointer-events-auto">
-                        <button
-                            onClick={handleSaveInventory}
-                            disabled={isSavingShift}
-                            className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                            {isSavingShift ? 'Đang lưu...' : 'Lưu báo cáo'}
-                        </button>
+            {/* FABs: Lưu thực thu + Lưu báo cáo — both floating bottom-right with the same
+                CTA style (bg-primary + text-black), each auto-hidden until its section is dirty.
+                Stacked when both appear (view = all + both dirty). */}
+            {isTodayScope && (
+                (((view === VIEW_ALL || view === VIEW_CASHFLOW) && cashDirty) ||
+                 ((view === VIEW_ALL || view === VIEW_INVENTORY) && inventoryTab === 'report' && inventory.isDirty)) && (
+                    <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
+                        <div className="flex flex-col items-end gap-2 px-4 mb-[72px] pointer-events-auto">
+                            {(view === VIEW_ALL || view === VIEW_CASHFLOW) && cashDirty && (
+                                <button
+                                    onClick={handleSaveCashflow}
+                                    disabled={isSavingShift}
+                                    className="bg-primary text-black rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider hover:bg-primary/90 active:scale-95 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                    {isSavingShift ? 'Đang lưu...' : 'Lưu thực thu'}
+                                </button>
+                            )}
+                            {(view === VIEW_ALL || view === VIEW_INVENTORY) && inventoryTab === 'report' && inventory.isDirty && (
+                                <button
+                                    onClick={handleSaveInventory}
+                                    disabled={isSavingShift}
+                                    className="bg-primary text-black rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider hover:bg-primary/90 active:scale-95 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                    {isSavingShift ? 'Đang lưu...' : 'Lưu báo cáo'}
+                                </button>
+                            )}
+                        </div>
                     </div>
-                </div>
+                )
             )}
 
             <HistoryFooter

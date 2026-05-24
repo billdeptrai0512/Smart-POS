@@ -11,16 +11,14 @@ export default function CashFlowCard({
     onDailyExpenseClick,
     salesCard,
     // Inline-edit props (today scope on /daily-report). When `editable` is true the
-    // Tiền mặt / Chuyển khoản rows become text inputs and a "Lưu" button appears
-    // once the user has changed something.
+    // Tiền mặt / Chuyển khoản rows become text inputs. The Lưu thực thu CTA itself
+    // lives as a FAB on DailyReportPage so it shares position/style with Lưu báo cáo.
     editable = false,
     cashInput = '',
     transferInput = '',
+    isSaving = false,
     onCashChange,
     onTransferChange,
-    onSave,
-    isSaving = false,
-    hasChanges = false,
 }) {
     // When editing, totals/Thực nhận track the typed values so the user sees the impact
     // live before saving. Read-only mode falls back to the persisted (actualCash/Transfer) props.
@@ -119,15 +117,6 @@ export default function CashFlowCard({
                         {formatVND(actualTotal)}
                     </span>
                 </div>
-                {editable && hasChanges && (
-                    <button
-                        onClick={onSave}
-                        disabled={isSaving}
-                        className="mt-3 w-full bg-primary text-white rounded-[12px] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wider hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                        {isSaving ? 'Đang lưu...' : 'Lưu thực thu'}
-                    </button>
-                )}
             </div>
 
             {/* PANEL 2: CHI PHÍ PHÁT SINH */}
