@@ -116,6 +116,10 @@ export default function KeySyncModal({
     }, [recipes, allRecipes, products])
 
     const costKeys = useMemo(() => new Set(Object.keys(ingredientCosts || {})), [ingredientCosts])
+    const sortedExistingKeys = useMemo(
+        () => [...costKeys].sort((a, b) => ingredientLabel(a).localeCompare(ingredientLabel(b))),
+        [costKeys]
+    )
 
     // Map ingredient_key → [{ extraName, productName }] for orphan-extra-ingredient context.
     // Helps user trace "topping_dau is referenced in extra 'Trân châu' of product 'Trà sữa'".
@@ -181,11 +185,6 @@ export default function KeySyncModal({
         if (done || orphansCreated > 0) onComplete?.()
         onClose()
     }
-
-    const sortedExistingKeys = useMemo(
-        () => [...costKeys].sort((a, b) => ingredientLabel(a).localeCompare(ingredientLabel(b))),
-        [costKeys]
-    )
 
     const handleAssignClick = async (orphanKey) => {
         const target = assignTargetByKey[orphanKey]
