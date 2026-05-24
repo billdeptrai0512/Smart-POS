@@ -306,9 +306,12 @@ export default function RecipeIngredientPage() {
                 onSavePrice={saveProductPrice}
                 onDeleteFromMenu={handleDeleteFromMenu}
                 onTabSelect={(key) => {
-                    if (key === 'ingredients') navigate('/ingredients', { state: location.state, replace: true })
-                    // 'recipes' tab is already active for this page — clicking it goes back to the list
-                    else navigate('/recipes', { state: location.state, replace: true })
+                    if (key === 'main' || key === 'packaging') {
+                        navigate('/ingredients', { state: { ...location.state, viewMode: key }, replace: true })
+                    } else {
+                        // 'recipes' — go back to the list (we're inside a product detail).
+                        navigate('/recipes', { state: location.state, replace: true })
+                    }
                 }}
             />
 

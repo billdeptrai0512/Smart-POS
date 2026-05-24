@@ -18,6 +18,7 @@ const KEYS = {
     EXPENSES: 'guest_expenses',
     SHIFT_CLOSINGS: 'guest_shift_closings',
     FIXED_COSTS: 'guest_fixed_costs',
+    EXPENSE_CATEGORIES: 'guest_expense_categories',
     IS_GUEST: 'pos_is_guest'
 };
 
@@ -102,10 +103,7 @@ export const initializeGuestFromGlobal = (data) => {
     set(KEYS.EXPENSES, seededExpenses);
 
     set(KEYS.SHIFT_CLOSINGS, []);
-    set(KEYS.FIXED_COSTS, [
-        { id: generateId(), name: 'Tiền mặt bằng (ngày)', amount: 100000, is_active: true, address_id: addressId },
-        { id: generateId(), name: 'Điện nước (ngày)', amount: 20000, is_active: true, address_id: addressId }
-    ]);
+    // fixed_costs seed removed — "thực chi" model no longer uses templates.
 };
 
 export const seedDemoData = (force = false) => {
@@ -249,6 +247,18 @@ export const fetchLocalIngredientStocks = (addressId) => {
         latestClosing.inventory_report.forEach(item => { if (item.ingredient) ingredients.add(item.ingredient) });
     }
 
+    // Walk closings DESC for the most-recent non-null `remaining` per ingredient.
+    // null = staff didn't count this ingredient that shift; we carry the previous
+    // count forward instead of resetting counter_stock to 0.
+    const counterByIngredient = {};
+    closings.forEach(closing => {
+        (closing.inventory_report || []).forEach(item => {
+            if (item?.ingredient && item.remaining != null && counterByIngredient[item.ingredient] === undefined) {
+                counterByIngredient[item.ingredient] = Number(item.remaining);
+            }
+        });
+    });
+
     return Array.from(ingredients).map(ing => {
         // Σ refill
         const totalRefill = expenses
@@ -264,7 +274,7 @@ export const fetchLocalIngredientStocks = (addressId) => {
 
         const warehouse = Math.max(0, totalRefill - totalRestock);
         const item = (latestClosing?.inventory_report || []).find(i => i.ingredient === ing);
-        const counter = Number(item?.remaining) || 0;
+        const counter = counterByIngredient[ing] ?? 0;
 
         return {
             ingredient: ing,
@@ -282,53 +292,98 @@ export const renameLocalIngredient = (oldKey, newKey) => {
     if (costs[oldKey] !== undefined) {
         costs[newKey] = costs[oldKey];
         delete costs[oldKey];
-        save(KEYS.INGREDIENT_COSTS, costs);
+        set(KEYS.INGREDIENT_COSTS, costs);
     }
     // 2. Units
     const units = get(KEYS.INGREDIENT_UNITS);
     if (units[oldKey] !== undefined) {
         units[newKey] = units[oldKey];
         delete units[oldKey];
-        save(KEYS.INGREDIENT_UNITS, units);
+        set(KEYS.INGREDIENT_UNITS, units);
     }
     // 3. Recipes
     const recipes = get(KEYS.RECIPES);
     recipes.forEach(r => {
         if (r.ingredient === oldKey) r.ingredient = newKey;
     });
-    save(KEYS.RECIPES, recipes);
+    set(KEYS.RECIPES, recipes);
 };
 
-export const fetchLocalFixedCosts = (addressId) => {
-    return get(KEYS.FIXED_COSTS).filter(fc => fc.address_id === addressId && fc.is_active);
+// Local fixed_costs CRUD removed — see expenseService.js comment.
+
+// --- Expense Categories (tags for the profit report) ---
+// Default seed matches the Supabase migration so guest and signed-in users see
+// the same starter set. Categories are scoped per address.
+const DEFAULT_EXPENSE_CATEGORIES = [
+    { name: 'Lương nhân viên',     group_section: 'operating', sort_order: 10 },
+    { name: 'Thuê mặt bằng',       group_section: 'operating', sort_order: 20 },
+    { name: 'Điện nước',           group_section: 'operating', sort_order: 30 },
+    { name: 'Marketing',           group_section: 'operating', sort_order: 40 },
+    { name: 'Phần mềm / Hệ thống', group_section: 'operating', sort_order: 50 },
+    { name: 'Chi phí khác',        group_section: 'operating', sort_order: 999 },
+    { name: 'Lương quản lý',       group_section: 'overhead',  sort_order: 10 },
+    { name: 'Khấu hao máy móc',    group_section: 'overhead',  sort_order: 20 },
+    { name: 'Chi phí tài chính',   group_section: 'overhead',  sort_order: 30 },
+    { name: 'Chi phí khác',        group_section: 'overhead',  sort_order: 999 },
+];
+
+const seedLocalExpenseCategoriesIfNeeded = (addressId) => {
+    const list = get(KEYS.EXPENSE_CATEGORIES);
+    const hasAny = list.some(c => c.address_id === addressId && c.is_default);
+    if (hasAny) return list;
+    const seeded = DEFAULT_EXPENSE_CATEGORIES.map(d => ({
+        id: generateId(),
+        address_id: addressId,
+        is_active: true,
+        is_default: true,
+        created_at: new Date().toISOString(),
+        ...d,
+    }));
+    const next = [...list, ...seeded];
+    set(KEYS.EXPENSE_CATEGORIES, next);
+    return next;
 };
 
-export const insertLocalFixedCost = (payload) => {
-    const list = get(KEYS.FIXED_COSTS);
-    const newItem = { id: generateId(), is_active: true, ...payload, created_at: new Date().toISOString() };
+export const fetchLocalExpenseCategories = (addressId) => {
+    const list = seedLocalExpenseCategoriesIfNeeded(addressId);
+    return list
+        .filter(c => c.address_id === addressId && c.is_active)
+        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+};
+
+export const insertLocalExpenseCategory = (payload) => {
+    const list = get(KEYS.EXPENSE_CATEGORIES);
+    const newItem = {
+        id: generateId(),
+        is_active: true,
+        is_default: false,
+        sort_order: 100,
+        created_at: new Date().toISOString(),
+        ...payload,
+    };
     list.push(newItem);
-    set(KEYS.FIXED_COSTS, list);
+    set(KEYS.EXPENSE_CATEGORIES, list);
     return newItem;
 };
 
-export const updateLocalFixedCost = (id, updates) => {
-    const list = get(KEYS.FIXED_COSTS);
-    const idx = list.findIndex(fc => fc.id === id);
+export const updateLocalExpenseCategory = (id, updates) => {
+    const list = get(KEYS.EXPENSE_CATEGORIES);
+    const idx = list.findIndex(c => c.id === id);
     if (idx >= 0) {
         list[idx] = { ...list[idx], ...updates, updated_at: new Date().toISOString() };
-        set(KEYS.FIXED_COSTS, list);
+        set(KEYS.EXPENSE_CATEGORIES, list);
         return list[idx];
     }
     return null;
 };
 
-export const deleteLocalFixedCost = (id) => {
-    const list = get(KEYS.FIXED_COSTS);
-    const idx = list.findIndex(fc => fc.id === id);
+export const deleteLocalExpenseCategory = (id) => {
+    const list = get(KEYS.EXPENSE_CATEGORIES);
+    const idx = list.findIndex(c => c.id === id);
     if (idx >= 0) {
         list[idx].is_active = false;
         list[idx].updated_at = new Date().toISOString();
-        set(KEYS.FIXED_COSTS, list);
+        set(KEYS.EXPENSE_CATEGORIES, list);
     }
     return true;
 };
@@ -380,6 +435,17 @@ export const updateLocalProductSortOrder = (orderedProductIds) => {
         if (p) p.sort_order = index;
     });
     set(KEYS.PRODUCTS, products);
+};
+
+export const updateLocalExpense = (id, updates) => {
+    const list = get(KEYS.EXPENSES);
+    const idx = list.findIndex(e => e.id === id);
+    if (idx >= 0) {
+        list[idx] = { ...list[idx], ...updates, updated_at: new Date().toISOString() };
+        set(KEYS.EXPENSES, list);
+        return list[idx];
+    }
+    return null;
 };
 
 export const deleteLocalExpense = (expenseId) => {

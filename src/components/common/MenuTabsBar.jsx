@@ -1,10 +1,12 @@
-// Shared tab bar for the Menu/Ingredients dashboard — mirrors HistoryTabsBar so
-// /recipes ↔ /ingredients feels like one page split into tabs, even though each
-// keeps its own route + state. Active color is the primary brand orange.
+// Shared tab bar for the Menu/Ingredients dashboard. Three tabs span both
+// /recipes (Công thức) and /ingredients (Nguyên liệu / Bao bì sub-views).
+// The parent owns active selection: pass 'recipes' on Recipe pages, or the
+// ingredient viewMode ('main' / 'packaging') on the Ingredients page.
 
 const TABS = [
-    { key: 'recipes',     label: 'Công thức',       activeColor: 'bg-primary' },
-    { key: 'ingredients', label: 'Nguyên vật liệu', activeColor: 'bg-primary' },
+    { key: 'recipes',   label: 'Công thức' },
+    { key: 'main',      label: 'Nguyên liệu' },
+    { key: 'packaging', label: 'Bao bì' },
 ]
 
 export default function MenuTabsBar({ activeTab, onSelect }) {
@@ -16,11 +18,9 @@ export default function MenuTabsBar({ activeTab, onSelect }) {
                     <button
                         key={tab.key}
                         onClick={() => onSelect?.(tab.key)}
-                        className={`flex-1 flex items-center justify-center py-2 rounded-[10px] transition-all duration-200
-                            ${active ? `${tab.activeColor} shadow-sm` : 'hover:bg-border/30'}`}
+                        className={`flex-1 flex items-center justify-center py-2 rounded-[10px] transition-all duration-200 ${active ? 'bg-primary shadow-sm' : 'hover:bg-border/30'}`}
                     >
-                        <span className={`text-[11px] font-black uppercase tracking-wider transition-colors
-                            ${active ? 'text-bg' : 'text-text-secondary'}`}>
+                        <span className={`text-[11px] font-black uppercase tracking-wider transition-colors ${active ? 'text-bg' : 'text-text-secondary'}`}>
                             {tab.label}
                         </span>
                     </button>

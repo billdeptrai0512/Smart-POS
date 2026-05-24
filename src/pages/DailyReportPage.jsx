@@ -3,18 +3,20 @@ import { usePOS } from '../contexts/POSContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { calculateProductCost, formatVNDInput, parseVNDInput } from '../utils'
-import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses, sumFixedCosts } from '../utils/reportStats'
+import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
-import { fetchDailyReportContext, fetchReportByDate, fetchReportByRange } from '../services/orderService'
+import { fetchDailyReportContext } from '../services/orderService'
 import { useShiftClosingSave } from '../hooks/useShiftClosingSave'
 import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown } from '../utils/inventory'
+import { useDailyReportData } from '../hooks/useDailyReportData'
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogsByCategory, calculateLossValue } from '../utils/inventory'
 import { startOfDayVN, dateStringVN, isSameDayVN } from '../utils/dateVN'
-import { calcRangeWithPrev, offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
+import { offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import SalesCard from '../components/DailyReportPage/SalesCard'
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
+import { fetchExpenseCategories } from '../services/expenseService'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
 import InventoryReportCard from '../components/ShiftClosingPage/InventoryReportCard'
 import RangeLossCard from '../components/DailyReportPage/RangeLossCard'
@@ -32,8 +34,8 @@ export default function DailyReportPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const backTo = location.state?.from || '/history'
-    const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits } = useProducts()
-    const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, fixedCosts } = usePOS()
+    const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits, ingredientConfigs } = useProducts()
+    const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory } = usePOS()
     const { isStaff, profile } = useAuth()
     const { activeModules, loading: entitlementLoading } = useEntitlement()
     const { toast, showToast, showError } = useToast()
@@ -65,33 +67,27 @@ export default function DailyReportPage() {
         }
     }, [initialDate])
 
-    const [shiftClosing, setShiftClosing] = useState(null)
-    const [yesterdayClosing, setYesterdayClosing] = useState(null)
-    const [yesterdayOrders, setYesterdayOrders] = useState([])
-    const [yesterdayExpensesData, setYesterdayExpensesData] = useState([])
-    const [isAsyncReady, setIsAsyncReady] = useState(false)
-    const [apiOrders, setApiOrders] = useState([])
-    const [apiExpenses, setApiExpenses] = useState([])
-    const [apiShiftClosings, setApiShiftClosings] = useState([])
-    const [prevShiftClosings, setPrevShiftClosings] = useState([])
-
-    // `todayISO` is state (not per-render) so an overnight tab can detect the date
-    // change on focus/visibility and trigger a refetch of shift_closing + clear stale
-    // cash + inventory inputs. Declared up here so hooks below can take it as a dep.
-    const [todayISO, setTodayISO] = useState(() => dateStringVN(new Date()))
-    useEffect(() => {
-        const check = () => {
-            const now = dateStringVN(new Date())
-            if (now !== todayISO) setTodayISO(now)
-        }
-        const onVis = () => { if (document.visibilityState === 'visible') check() }
-        window.addEventListener('focus', check)
-        document.addEventListener('visibilitychange', onVis)
-        return () => {
-            window.removeEventListener('focus', check)
-            document.removeEventListener('visibilitychange', onVis)
-        }
-    }, [todayISO])
+    // All server-data state (shift closing, yesterday comparison, range data,
+    // todayISO midnight rollover) lives in useDailyReportData. setShiftClosing
+    // is exposed so save handlers can patch it inline after a write.
+    const {
+        todayISO,
+        isTodayScope,
+        rangeStart, rangeEnd,
+        shiftClosing, setShiftClosing,
+        yesterdayClosing,
+        yesterdayOrders,
+        yesterdayExpensesData,
+        apiOrders,
+        apiExpenses,
+        apiShiftClosings,
+        prevShiftClosings,
+        isAsyncReady,
+    } = useDailyReportData({
+        addressId: selectedAddress?.id,
+        scope, offset, customRange,
+        onError: showError,
+    })
 
     // Inline cash/transfer editor (today scope only). Pre-fills from shiftClosing when
     // it loads; dirty flag controls when the Lưu button appears.
@@ -106,18 +102,19 @@ export default function DailyReportPage() {
     const inventory = useShiftInventoryState(selectedAddress?.id, selectedAddress?.ingredient_sort_order, todayISO)
     const [inventoryTab, setInventoryTab] = useState('report') // 'report' | 'refill'
 
+    // Expense categories — feed dynamic rows into FinanceCards. Refetched per
+    // address; new tags added in /history are picked up on next mount or after
+    // reportCache invalidation.
+    const [expenseCategories, setExpenseCategories] = useState([])
+    useEffect(() => {
+        if (!selectedAddress?.id) return
+        fetchExpenseCategories(selectedAddress.id).then(setExpenseCategories)
+    }, [selectedAddress?.id])
+
     useEffect(() => {
         if (todayOrders.length === 0 && !isLoadingHistory) handleLoadHistory()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
-
-    // Range calculations
-    const { rangeStart, rangeEnd, prevStart, prevEnd } = useMemo(() => {
-        const { start, end, prevStart: pStart, prevEnd: pEnd } = calcRangeWithPrev(scope, offset, customRange)
-        return { rangeStart: start, rangeEnd: end, prevStart: pStart, prevEnd: pEnd }
-    }, [scope, offset, customRange])
-
-    const isTodayScope = scope === 'day' && offset === 0
 
     // Pre-fill cash/transfer inputs from the existing shift_closing (if any).
     // Guard with closed_at === today VN: fetchDailyReportContext occasionally
@@ -136,58 +133,6 @@ export default function DailyReportPage() {
     // Computed display data
     const displayOrders = isTodayScope ? todayOrders : apiOrders
     const displayExpenses = isTodayScope ? todayExpenses : apiExpenses
-
-    useEffect(() => {
-        if (!selectedAddress?.id) return
-
-        setIsAsyncReady(false)
-        if (isTodayScope) {
-            fetchDailyReportContext(selectedAddress.id)
-                .then((data) => {
-                    setShiftClosing(data?.shift_closing || null)
-                    setYesterdayClosing(data?.yesterday_closing || null)
-                    setYesterdayOrders(data?.yesterday_orders || [])
-                    setYesterdayExpensesData(data?.yesterday_expenses || [])
-                })
-                .catch((error) => showError(error, 'Tải báo cáo hôm nay'))
-                .finally(() => setIsAsyncReady(true))
-        } else if (scope === 'day') {
-            const targetDateStr = dateStringVN(rangeStart)
-            fetchReportByDate(selectedAddress.id, targetDateStr)
-                .then((data) => {
-                    setShiftClosing(data?.shift_closing || null)
-                    setYesterdayClosing(data?.yesterday_closing || null)
-                    setYesterdayOrders(data?.yesterday_orders || [])
-                    setYesterdayExpensesData(data?.yesterday_expenses || [])
-                    setApiOrders(data?.target_orders || [])
-                    setApiExpenses(data?.target_expenses || [])
-                })
-                .catch((error) => showError(error, `Tải báo cáo ngày ${targetDateStr}`))
-                .finally(() => setIsAsyncReady(true))
-        } else {
-            // Range scopes
-            fetchReportByRange(selectedAddress.id, rangeStart.toISOString(), rangeEnd.toISOString(), prevStart.toISOString(), prevEnd.toISOString())
-                .then((data) => {
-                    setApiOrders(data?.target_orders || [])
-                    setApiExpenses(data?.target_expenses || [])
-                    setApiShiftClosings(data?.target_shift_closings || [])
-                    setPrevShiftClosings(data?.prev_shift_closings || [])
-                    setYesterdayOrders(data?.prev_orders || [])
-                    setYesterdayExpensesData(data?.prev_expenses || [])
-
-                    if (data?.target_shift_closings?.length) {
-                        setShiftClosing(data.target_shift_closings[data.target_shift_closings.length - 1])
-                    } else {
-                        setShiftClosing(null)
-                    }
-                })
-                .catch((error) => showError(error, 'Tải báo cáo theo khoảng'))
-                .finally(() => setIsAsyncReady(true))
-        }
-        // todayISO so a midnight rollover invalidates the cached shift_closing
-        // and reloads fresh data for the new VN day.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedAddress?.id, scope, offset, rangeStart, rangeEnd, isTodayScope, todayISO])
 
     const dayCustomDate = useMemo(() => dayCustomDateOf(scope, offset), [scope, offset])
 
@@ -304,11 +249,75 @@ export default function DailyReportPage() {
         () => splitExpenses(displayExpenses),
         [displayExpenses]
     )
-    const fixedExpense = useMemo(() => sumFixedCosts(fixedCosts), [fixedCosts])
     // Vận hành tổng = trong ca + free-form sau ca (sau ca vẫn là vận hành, không phải NVL).
+    // Thực chi: legacy is_fixed=true rows ĐÃ được splitExpenses cộng vào dailyExpense.
     const operationalExpense = dailyExpense + refillFreeForm
-    // P&L = Revenue - COGS - Vận hành - Cố định. NVL không trừ (đã nằm trong COGS).
-    const netProfit = totalRevenue - totalCOGS - operationalExpense - fixedExpense
+
+    // ── COGS category breakdown + hao hụt ────────────────────────────────────
+    // Map ingredient → category (null when migration 20260523 not deployed yet —
+    // splitCogsByCategory treats null as 'main' so the page still renders).
+    const categoryByIngredient = useMemo(() => {
+        const map = new Map()
+        for (const c of ingredientConfigs || []) map.set(c.ingredient, c.category || null)
+        return map
+    }, [ingredientConfigs])
+
+    const cogsByCategory = useMemo(
+        () => splitCogsByCategory(
+            [...displayOrders, ...offlineToday],
+            recipes, extraIngredients, ingredientCosts, categoryByIngredient
+        ),
+        [displayOrders, offlineToday, recipes, extraIngredients, ingredientCosts, categoryByIngredient]
+    )
+
+    const lossValue = useMemo(() => {
+        // Daily scope: today's single closing + yesterday as the opening source.
+        // Range scope: all closings in the period + prev-period closings.
+        const isDayScope = scope === 'day'
+        const closings = isDayScope
+            ? (shiftClosing ? [shiftClosing] : [])
+            : (apiShiftClosings || [])
+        if (closings.length === 0) return 0
+
+        // Bucket orders by VN date string so calculateLossValue can look up
+        // per-day consumption (same dayStr key the RangeLossCard uses).
+        const itemsByDay = {}
+        const pushItem = (dayStr, productId, qty, extras) => {
+            if (!itemsByDay[dayStr]) itemsByDay[dayStr] = []
+            itemsByDay[dayStr].push({ productId, qty, extras })
+        }
+        const sourceOrders = isDayScope ? [...displayOrders, ...offlineToday] : (apiOrders || [])
+        for (const o of sourceOrders) {
+            if (o.deleted_at) continue
+            const dayStr = new Date(o.created_at || o.createdAt).toLocaleDateString('sv-SE')
+            const items = o.order_items || o.cart || o.orderItems || []
+            for (const i of items) {
+                pushItem(
+                    dayStr,
+                    i.product_id || i.productId,
+                    i.quantity || i.qty || 1,
+                    i.extra_ids ? i.extra_ids.map(id => ({ id })) : (i.extras || [])
+                )
+            }
+        }
+        const dailyConsumption = {}
+        for (const [dayStr, items] of Object.entries(itemsByDay)) {
+            dailyConsumption[dayStr] = calculateEstimatedConsumption(items, recipes, extraIngredients)
+        }
+
+        const prevClosings = isDayScope
+            ? (yesterdayClosing ? [yesterdayClosing] : [])
+            : (prevShiftClosings || [])
+        return calculateLossValue({
+            shiftClosings: closings,
+            prevShiftClosings: prevClosings,
+            dailyConsumption,
+            ingredientConfigs,
+        })
+    }, [scope, shiftClosing, yesterdayClosing, apiShiftClosings, prevShiftClosings, apiOrders, displayOrders, offlineToday, recipes, extraIngredients, ingredientConfigs])
+
+    // P&L = Revenue - COGS - Hao hụt - Tất cả chi phí thực chi. NVL không trừ (đã nằm trong COGS).
+    const netProfit = totalRevenue - totalCOGS - lossValue - operationalExpense
 
     const yesterdayNetProfit = useMemo(() => {
         let rev = 0, cogs = 0
@@ -325,9 +334,13 @@ export default function DailyReportPage() {
                 })
             }
         })
-        const nonFixedSum = yesterdayExpensesData.filter(e => !e.is_fixed).reduce((s, e) => s + e.amount, 0)
-        const fixedSum = yesterdayExpensesData.filter(e => e.is_fixed).reduce((s, e) => s + e.amount, 0)
-        return (rev - cogs) - nonFixedSum - fixedSum
+        // Thực chi: tổng mọi expense thực ra. NVL refill bị COGS đã trừ qua
+        // o.total_cost → skip để không double-count.
+        const expenseSum = yesterdayExpensesData.reduce((s, e) => {
+            if (e.is_refill && !e.metadata?.free_form) return s
+            return s + (e.amount || 0)
+        }, 0)
+        return (rev - cogs) - expenseSum
     }, [yesterdayOrders, yesterdayExpensesData, recipes, extraIngredients, ingredientCosts])
 
     // Sync cash flow calculations for both daily view and range view (handling unclosed shifts by falling back to expected order totals)
@@ -487,10 +500,9 @@ export default function DailyReportPage() {
         try {
             await saveShiftClosing(payload, {
                 existingId: inventory.existingClosing?.id,
-                onFixedCostError: (err) => showError(err, 'Ghi chi phí cố định vào ca'),
             })
             showToast('Đã lưu báo cáo tồn kho', 'success')
-            inventory.setIsDirty(false)
+            inventory.resetDirty()
             // Refresh shift_closing so future edits land as updates instead of inserts.
             const fresh = await fetchDailyReportContext(selectedAddress.id)
             setShiftClosing(fresh?.shift_closing || null)
@@ -518,7 +530,6 @@ export default function DailyReportPage() {
         try {
             await saveShiftClosing(payload, {
                 existingId: shiftClosing?.id,
-                onFixedCostError: (err) => showError(err, 'Ghi chi phí cố định vào ca'),
             })
             showToast('Đã lưu thực thu', 'success')
             setCashDirty(false)
@@ -562,6 +573,7 @@ export default function DailyReportPage() {
                 customRange={customRange}
                 onCustomStartChange={handleCustomStartChange}
                 onCustomEndChange={handleCustomEndChange}
+                belowTabs={<ReportViewFilter value={view} onChange={setView} />}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-6 pb-6 space-y-4 bg-bg">
@@ -579,8 +591,6 @@ export default function DailyReportPage() {
                     </div>
                 ) : (
                     <div className="flex flex-col gap-4 animate-fade-in">
-                        <ReportViewFilter value={view} onChange={setView} />
-
                         {/* {view === VIEW_PROFIT && (
                             <SalesCard
                                 totalCups={totalCups}
@@ -598,17 +608,13 @@ export default function DailyReportPage() {
                             <FinanceCards
                                 totalRevenue={totalRevenue}
                                 totalCOGS={totalCOGS}
-                                dailyExpense={dailyExpense}
-                                refillNvl={refillNvl}
-                                refillFreeForm={refillFreeForm}
-                                fixedExpense={fixedExpense}
                                 netProfit={netProfit}
-                                onRecipesClick={() => navigate('/recipes', { state: { from: '/daily-report' } })}
-                                onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'operation', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } })}
-                                onRefillNvlClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'nvl', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } })}
-                                onRefillFreeFormClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'after', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } })}
-                                onFixedExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'fixed', isReadOnly: scope !== 'day' || offset !== 0 } })}
                                 yesterdayNetProfit={yesterdayNetProfit}
+                                expenses={displayExpenses}
+                                expenseCategories={expenseCategories}
+                                cogsByCategory={cogsByCategory}
+                                lossValue={lossValue}
+                                onRecipesClick={() => navigate('/recipes', { state: { from: '/daily-report' } })}
                             />
                         )}
 
@@ -628,7 +634,7 @@ export default function DailyReportPage() {
                                 onSave={handleSaveCashflow}
                                 isSaving={isSavingShift}
                                 hasChanges={cashDirty}
-                                onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', filter: 'operation', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } })}
+                                onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } })}
                                 salesCard={
                                     <SalesCard
                                         totalCups={totalCups}

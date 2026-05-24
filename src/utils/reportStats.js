@@ -19,11 +19,17 @@ export function buildVariantLabel(extraNames) {
         .join(' + ')
 }
 
-// Splits non-fixed expenses into the 4 P&L buckets per TASK.md.
+// Splits expenses into the P&L buckets.
+// "Thực chi" model: is_fixed=true rows are LEGACY auto-injected fixed costs from
+// before the model switch. They still represent actual money paid, so they're
+// counted as operational expense. New entries never set is_fixed=true.
+// Adjustments (metadata.adjustment=true) are inventory bookkeeping — manager
+// edited the qty on file. Amount is 0 by construction, but we skip explicitly
+// so a future bug that sets amount != 0 doesn't leak into cash flow / P&L.
 export function splitExpenses(expenses) {
     let dailyExpense = 0, refillNvl = 0, refillFreeForm = 0
     for (const e of expenses || []) {
-        if (e.is_fixed) continue
+        if (e.metadata?.adjustment) continue
         if (e.is_refill) {
             if (e.metadata?.free_form) refillFreeForm += e.amount
             else refillNvl += e.amount
@@ -32,11 +38,6 @@ export function splitExpenses(expenses) {
         }
     }
     return { dailyExpense, refillNvl, refillFreeForm, refillTotal: refillNvl + refillFreeForm }
-}
-
-export function sumFixedCosts(fixedCosts, days = 1) {
-    const daily = (fixedCosts || []).reduce((s, fc) => s + (fc.amount || 0), 0)
-    return daily * (days > 0 ? days : 1)
 }
 
 // Walks orders once and returns aggregated stats shared by Daily/Range reports.

@@ -13,7 +13,7 @@ export async function fetchTodayExpenses(addressId) {
 
     let query = supabase
         .from('expenses')
-        .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, metadata, created_at')
+        .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, metadata, category_id, created_at')
         .gte('created_at', today.toISOString())
 
     if (addressId) query = query.eq('address_id', addressId)
@@ -36,17 +36,42 @@ export async function fetchTodayExpenses(addressId) {
 //   but counted in cash flow / đối soát
 // - paymentMethod: 'cash' | 'transfer' — determines which pot the refill came from
 // - metadata: JSONB object for structured data like `{ items: [{ingredient, qty, price}] }`
-export async function insertExpense(name, amount, addressId = null, isFixed = false, staffName = null, isRefill = false, paymentMethod = 'cash', metadata = {}) {
+// - categoryId: FK into expense_categories. NULL is allowed for NVL refills (NVL is
+//   in COGS, not a tagged expense). For all other expenses callers should pass the
+//   category picked in the form, or omit to let UI default to "Chi phí khác".
+export async function insertExpense(name, amount, addressId = null, isFixed = false, staffName = null, isRefill = false, paymentMethod = 'cash', metadata = {}, categoryId = null) {
     invalidateReportCache(addressId)
-    if (localRepo.isGuest()) return localRepo.insertLocalExpense({ name, amount, address_id: addressId, is_fixed: isFixed, staff_name: staffName, is_refill: isRefill, payment_method: paymentMethod, metadata })
+    if (localRepo.isGuest()) return localRepo.insertLocalExpense({ name, amount, address_id: addressId, is_fixed: isFixed, staff_name: staffName, is_refill: isRefill, payment_method: paymentMethod, metadata, category_id: categoryId })
     if (!supabase) throw new Error('No Supabase connection')
     const payload = { name, amount, is_fixed: isFixed, is_refill: isRefill, payment_method: paymentMethod, metadata }
     if (addressId) payload.address_id = addressId
     if (staffName) payload.staff_name = staffName
+    if (categoryId) payload.category_id = categoryId
 
     const { data, error } = await supabase
         .from('expenses')
         .insert(payload)
+        .select()
+        .single()
+    if (error) throw error
+    return data
+}
+
+// Update an expense (currently only category_id; extend as needed).
+// addressId unknown here so flush the whole report cache.
+export async function updateExpense(id, updates) {
+    invalidateReportCache(null)
+    if (localRepo.isGuest()) return localRepo.updateLocalExpense(id, updates)
+    if (!supabase) throw new Error('No Supabase connection')
+    const payload = {}
+    if (updates.category_id !== undefined) payload.category_id = updates.category_id
+    if (updates.name !== undefined) payload.name = updates.name
+    if (updates.amount !== undefined) payload.amount = updates.amount
+    if (updates.payment_method !== undefined) payload.payment_method = updates.payment_method
+    const { data, error } = await supabase
+        .from('expenses')
+        .update(payload)
+        .eq('id', id)
         .select()
         .single()
     if (error) throw error
@@ -80,7 +105,7 @@ export async function fetchYesterdayExpenses(addressId) {
 
     let query = supabase
         .from('expenses')
-        .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, created_at, address_id')
+        .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, category_id, created_at, address_id')
         .gte('created_at', yesterday.toISOString())
         .lt('created_at', today.toISOString())
 
@@ -109,7 +134,7 @@ export async function fetchExpensesByRange(addressId, start, end) {
         if (!supabase) return []
         let query = supabase
             .from('expenses')
-            .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, metadata, created_at, address_id')
+            .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, metadata, category_id, created_at, address_id')
             .gte('created_at', start.toISOString())
             .lte('created_at', end.toISOString())
         if (addressId) query = query.eq('address_id', addressId)
@@ -159,51 +184,60 @@ export async function fetchIngredientRestockHistory(addressId, ingredient, fromD
     return (data || []).filter(e => e.metadata?.ingredient === ingredient)
 }
 
-// ---- Fixed Costs CRUD ----
+// ---- Fixed Costs CRUD removed ----
+// Under the "thực chi" model fixed_costs templates are not created or auto-injected.
+// Legacy table + column remain in the DB for audit; drop in a future migration.
 
-// Fetch all active fixed costs for an address
-export async function fetchFixedCosts(addressId) {
-    return reportCache.through([addressId, 'fixedCosts'], async () => {
-        if (localRepo.isGuest()) return localRepo.fetchLocalFixedCosts(addressId)
+// ---- Expense Categories CRUD ----
+// Tags that group expenses on the profit report. Manager-managed inline through
+// the expense form. NVL refills intentionally don't get a category — they're
+// in COGS, not the expense breakdown.
+
+export async function fetchExpenseCategories(addressId) {
+    if (!addressId) return []
+    return reportCache.through([addressId, 'expenseCategories'], async () => {
+        if (localRepo.isGuest()) return localRepo.fetchLocalExpenseCategories(addressId)
         if (!supabase) return []
         const { data, error } = await supabase
-            .from('fixed_costs')
-            .select('id, name, amount, is_active, address_id, created_at')
+            .from('expense_categories')
+            .select('id, name, group_section, sort_order, is_active, is_default, created_at')
             .eq('address_id', addressId)
             .eq('is_active', true)
+            .order('sort_order', { ascending: true })
             .order('created_at', { ascending: true })
         if (error) {
-            if (error.code !== '42P01') console.error('fetchFixedCosts error:', error)
+            if (error.code !== '42P01') console.error('fetchExpenseCategories error:', error)
             return []
         }
         return data || []
     })
 }
 
-// Insert a new fixed cost
-export async function insertFixedCost(name, amount, addressId) {
+export async function insertExpenseCategory(addressId, { name, group_section, sort_order = 100 }) {
+    if (!addressId) throw new Error('addressId required')
     invalidateReportCache(addressId)
-    if (localRepo.isGuest()) return localRepo.insertLocalFixedCost({ name, amount, address_id: addressId })
+    if (localRepo.isGuest()) return localRepo.insertLocalExpenseCategory({ address_id: addressId, name, group_section, sort_order })
     if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase
-        .from('fixed_costs')
-        .insert({ name, amount, address_id: addressId })
+        .from('expense_categories')
+        .insert({ address_id: addressId, name, group_section, sort_order })
         .select()
         .single()
     if (error) throw error
     return data
 }
 
-// Update a fixed cost (name and/or amount). addressId unknown — flush all.
-export async function updateFixedCost(id, updates) {
+// Partial update. addressId unknown — flush all.
+export async function updateExpenseCategory(id, updates) {
     invalidateReportCache(null)
-    if (localRepo.isGuest()) return localRepo.updateLocalFixedCost(id, updates)
+    if (localRepo.isGuest()) return localRepo.updateLocalExpenseCategory(id, updates)
     if (!supabase) throw new Error('No Supabase connection')
-    const payload = { updated_at: new Date().toISOString() }
+    const payload = {}
     if (updates.name !== undefined) payload.name = updates.name
-    if (updates.amount !== undefined) payload.amount = updates.amount
+    if (updates.group_section !== undefined) payload.group_section = updates.group_section
+    if (updates.sort_order !== undefined) payload.sort_order = updates.sort_order
     const { data, error } = await supabase
-        .from('fixed_costs')
+        .from('expense_categories')
         .update(payload)
         .eq('id', id)
         .select()
@@ -212,14 +246,17 @@ export async function updateFixedCost(id, updates) {
     return data
 }
 
-// Soft-delete a fixed cost. addressId unknown — flush all.
-export async function deleteFixedCost(id) {
+// Soft-delete a category. Existing expenses keep the FK but readers should
+// treat soft-deleted categories as falling back to "Chi phí khác". We do NOT
+// hard-delete because that would null-out historical expense.category_id via
+// the ON DELETE SET NULL trigger and lose audit trail.
+export async function deleteExpenseCategory(id) {
     invalidateReportCache(null)
-    if (localRepo.isGuest()) return localRepo.deleteLocalFixedCost(id)
+    if (localRepo.isGuest()) return localRepo.deleteLocalExpenseCategory(id)
     if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
-        .from('fixed_costs')
-        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .from('expense_categories')
+        .update({ is_active: false })
         .eq('id', id)
     if (error) throw error
     return true

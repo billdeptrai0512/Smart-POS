@@ -35,7 +35,21 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
     const [warehouseStocks, setWarehouseStocks] = useState({})
     const [existingClosing, setExistingClosing] = useState(null)
     const [isLoadingExisting, setIsLoadingExisting] = useState(true)
-    const [isDirty, setIsDirty] = useState(false)
+
+    // Dirty is DERIVED from a baseline snapshot (last loaded / last saved values).
+    // The old boolean flag stuck at true after a revert because nothing knew
+    // current state had returned to baseline; comparing maps each render fixes that.
+    const baselineRef = useRef({ opening: {}, openingLocked: {}, restock: {}, inventory: {} })
+    const [baselineVersion, setBaselineVersion] = useState(0)
+    const commitBaseline = useCallback((opening, openingLocked, restock, inventory) => {
+        baselineRef.current = {
+            opening: { ...opening },
+            openingLocked: { ...openingLocked },
+            restock: { ...restock },
+            inventory: { ...inventory },
+        }
+        setBaselineVersion(v => v + 1)
+    }, [])
 
     const channelRef = useRef(null)
 
@@ -50,7 +64,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         setRestockInputs({})
         setOpeningInputs({})
         setOpeningLocked({})
-        setIsDirty(false)
+        commitBaseline({}, {}, {}, {})
         fetchTodayShiftClosing(addressId).then(data => {
             if (!data) return
             // Guard against server returning yesterday's row as "today's" (tz / RPC
@@ -78,8 +92,10 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
             setRestockInputs(restocks)
             if (Object.keys(openings).length) setOpeningInputs(openings)
             if (Object.keys(locked).length) setOpeningLocked(locked)
+            // Snapshot baseline = whatever just got hydrated from the existing closing.
+            commitBaseline(openings, locked, restocks, inputs)
         }).finally(() => setIsLoadingExisting(false))
-    }, [addressId, dateKey])
+    }, [addressId, dateKey, commitBaseline])
 
     // ── Canonical stock reader: warehouse + counter snapshots ────────────────
     // counter_stock seeds "Đầu kỳ" (= previous shift's remaining).
@@ -103,7 +119,14 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
             setOpeningStock(counters)
             setWarehouseStocks(warehouses)
             // Seed openingInputs only if today's closing hasn't set them yet.
-            setOpeningInputs(prev => Object.keys(prev).length > 0 ? prev : openings)
+            // When seeding kicks in, also fold the seed into baseline.opening so
+            // a fresh tab doesn't read as "dirty" before any user edit.
+            setOpeningInputs(prev => {
+                if (Object.keys(prev).length > 0) return prev
+                baselineRef.current = { ...baselineRef.current, opening: { ...openings } }
+                setBaselineVersion(v => v + 1)
+                return openings
+            })
         })
         load()
         const onVis = () => { if (document.visibilityState === 'visible') load() }
@@ -143,30 +166,52 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         channelRef.current?.send({ type: 'broadcast', event: 'sync-state', payload }).catch(() => { })
     }, [])
 
-    // ── Mutation handlers (flip dirty + broadcast) ───────────────────────────
+    // ── Mutation handlers (broadcast; dirty is derived) ──────────────────────
     const onOpeningChange = useCallback((ingredient, value) => {
-        setIsDirty(true)
         setOpeningInputs(prev => ({ ...prev, [ingredient]: value }))
         broadcast({ type: 'opening', ingredient, value })
     }, [broadcast])
 
     const onOpeningLock = useCallback((ingredient, locked) => {
-        setIsDirty(true)
         setOpeningLocked(prev => ({ ...prev, [ingredient]: locked }))
         broadcast({ type: 'openingLocked', ingredient, value: locked })
     }, [broadcast])
 
     const onRestockChange = useCallback((ingredient, value) => {
-        setIsDirty(true)
         setRestockInputs(prev => ({ ...prev, [ingredient]: value }))
         broadcast({ type: 'restock', ingredient, value })
     }, [broadcast])
 
     const onInventoryChange = useCallback((ingredient, value) => {
-        setIsDirty(true)
         setInventoryInputs(prev => ({ ...prev, [ingredient]: value }))
         broadcast({ type: 'inventory', ingredient, value })
     }, [broadcast])
+
+    // ── Derived: isDirty (compare inputs vs baseline) ────────────────────────
+    // Empty string and undefined both mean "no input" — normalize so a load that
+    // hydrates "" → never sees a phantom diff against undefined baseline keys.
+    const isDirty = useMemo(() => {
+        const norm = (v) => (v === undefined || v === null || v === '' ? null : String(v))
+        const mapEq = (a, b) => {
+            const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})])
+            for (const k of keys) if (norm(a?.[k]) !== norm(b?.[k])) return false
+            return true
+        }
+        const b = baselineRef.current
+        return !(
+            mapEq(openingInputs, b.opening)
+            && mapEq(openingLocked, b.openingLocked)
+            && mapEq(restockInputs, b.restock)
+            && mapEq(inventoryInputs, b.inventory)
+        )
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [openingInputs, openingLocked, restockInputs, inventoryInputs, baselineVersion])
+
+    // Save handlers call this after a successful save so current inputs become
+    // the new baseline → button hides again, ready for the next edit.
+    const resetDirty = useCallback(() => {
+        commitBaseline(openingInputs, openingLocked, restockInputs, inventoryInputs)
+    }, [commitBaseline, openingInputs, openingLocked, restockInputs, inventoryInputs])
 
     // ── Derived: effective warehouse stocks ──────────────────────────────────
     // When editing an already-saved shift, `warehouseStocks` from fetchIngredientStocks
@@ -203,6 +248,11 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
     }, [ingredientsList, restockInputs, effectiveWarehouseStocks])
 
     // ── Helper: build the inventory_report payload for save ──────────────────
+    // Empty inputs are preserved as `null`, NOT coerced to 0 — a blank "+ Cuối kỳ"
+    // means "staff didn't count this ingredient at end of shift", not "0g remaining".
+    // Audit cards must skip diff calc for null `remaining` so they don't surface
+    // a fake hao hụt equal to the whole theoretical stock.
+    const parseOrNull = (v) => (v === undefined || v === '' ? null : Number(v))
     const buildInventoryReport = useCallback(() => {
         return ingredientsList
             .filter(ing => {
@@ -214,10 +264,10 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
             .map(ing => ({
                 ingredient: ing.ingredient,
                 unit: ing.unit || 'đv',
-                opening: openingInputs[ing.ingredient] !== undefined ? Number(openingInputs[ing.ingredient]) : null,
+                opening: parseOrNull(openingInputs[ing.ingredient]),
                 opening_locked: openingLocked[ing.ingredient] || false,
-                remaining: Number(inventoryInputs[ing.ingredient]) || 0,
-                restock: Number(restockInputs[ing.ingredient]) || 0
+                remaining: parseOrNull(inventoryInputs[ing.ingredient]),
+                restock: parseOrNull(restockInputs[ing.ingredient]),
             }))
     }, [ingredientsList, inventoryInputs, restockInputs, openingInputs, openingLocked])
 
@@ -230,8 +280,8 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         existingClosing, setExistingClosing,
         isLoadingExisting,
         restockOverflowIngredients,
-        // dirty tracking
-        isDirty, setIsDirty,
+        // dirty tracking (derived from baseline comparison; resetDirty after save)
+        isDirty, resetDirty,
         // handlers
         onOpeningChange, onOpeningLock, onRestockChange, onInventoryChange,
         // save helpers

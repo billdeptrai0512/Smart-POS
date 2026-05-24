@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
 import { ingredientLabel } from '../common/recipeUtils'
+import MoneyInput from '../common/MoneyInput'
+import { parseVNDInput } from '../../utils'
 
 export default function RestockModal({ ingredient, unit, packSize, packUnit, onConfirm, onClose }) {
     const hasPack = !!(packSize && packUnit)
@@ -11,8 +13,9 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, onC
 
     const activeUnit = usePackMode ? packUnit : unit
     const actualQty = usePackMode ? Number(qty) * packSize : Number(qty)
+    const totalCostNum = parseVNDInput(totalCost)
 
-    const isValid = qty && Number(qty) > 0 && totalCost && Number(totalCost) > 0
+    const isValid = qty && Number(qty) > 0 && totalCostNum > 0
 
     const handleSubmit = async () => {
         if (!isValid || submitting) return
@@ -21,7 +24,7 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, onC
             await onConfirm({
                 ingredient,
                 qty: actualQty,
-                totalCost: Number(totalCost) * 1000
+                totalCost: totalCostNum,
             })
             onClose()
         } catch {
@@ -108,29 +111,20 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, onC
                         <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">
                             Tổng tiền thanh toán
                         </label>
-                        <div className="relative flex items-center">
-                            <input
-                                type="number"
-                                placeholder="0"
-                                value={totalCost}
-                                onChange={e => setTotalCost(e.target.value)}
-                                className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[16px] font-black text-text placeholder:text-text-secondary/30 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
-                            />
-                            {totalCost && (
-                                <div className="absolute right-4 pointer-events-none">
-                                    <span className="text-[14px] font-bold text-text-secondary">.000đ</span>
-                                </div>
-                            )}
-                        </div>
+                        <MoneyInput
+                            value={totalCost}
+                            onChange={setTotalCost}
+                            onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
+                            size="lg"
+                        />
                     </div>
 
                     {/* Preview */}
-                    {qty && Number(qty) > 0 && totalCost && Number(totalCost) > 0 && (
+                    {qty && Number(qty) > 0 && totalCostNum > 0 && (
                         <div className="flex items-center justify-between px-4 py-2.5 bg-primary/5 border border-primary/10 rounded-[12px]">
                             <span className="text-[12px] font-bold text-text-secondary">Đơn giá mới</span>
                             <span className="text-[14px] font-black text-primary tabular-nums">
-                                {Math.round((Number(totalCost) * 1000) / actualQty).toLocaleString('vi-VN')}đ / {unit}
+                                {Math.round(totalCostNum / actualQty).toLocaleString('vi-VN')}đ / {unit}
                             </span>
                         </div>
                     )}

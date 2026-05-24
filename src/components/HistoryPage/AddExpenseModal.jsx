@@ -1,12 +1,37 @@
 import { X } from 'lucide-react'
+import ExpenseCategoryPicker from './ExpenseCategoryPicker'
+import MoneyInput from '../common/MoneyInput'
+import { parseVNDInput } from '../../utils'
 
 export default function AddExpenseModal({
-    expenseCategory, fixedSubMode, costName, costAmount, isSubmitting,
+    expenseCategory, costName, costAmount, isSubmitting,
+    // Tag picker
+    expenseCategories = [],
+    selectedCategoryId,
+    onCategoryIdChange,
+    onCreateCategory,
+    // Payment method (defaults to 'cash' if undefined)
+    paymentMethod = 'cash',
+    onPaymentMethodChange,
+    //
     onClose, onSubmit,
-    onCategoryChange, onFixedSubModeChange, onNameChange, onAmountChange,
+    onCategoryChange, onNameChange, onAmountChange,
 }) {
-    const canSubmit = costAmount && !isNaN(costAmount) && Number(costAmount) > 0 && costName.trim() && !isSubmitting
+    const canSubmit = parseVNDInput(costAmount) > 0 && costName.trim() && !isSubmitting
     const submitColor = expenseCategory === 'fixed' ? 'bg-warning' : 'bg-danger'
+
+    // The top Vận hành/Quản lý tab is gone — chip section + dot color carry the
+    // group context now. When user picks a chip, mirror its group_section back
+    // into expenseCategory so the parent's save path (and submit button tone)
+    // route to the correct bucket without a separate tab toggle.
+    const handleChipSelect = (id) => {
+        const chip = expenseCategories.find(c => c.id === id)
+        if (chip) {
+            const next = chip.group_section === 'overhead' ? 'fixed' : 'expense'
+            if (next !== expenseCategory) onCategoryChange?.(next)
+        }
+        onCategoryIdChange(id)
+    }
 
     return (
         <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={onClose}>
@@ -22,28 +47,6 @@ export default function AddExpenseModal({
                     </button>
                 </div>
 
-                <div className="flex bg-surface-light border border-border/60 rounded-[12px] p-0.5">
-                    <CategoryTab active={expenseCategory === 'expense'} color="bg-danger/80" onClick={() => onCategoryChange('expense')}>Vận hành</CategoryTab>
-                    <CategoryTab active={expenseCategory === 'fixed'} color="bg-warning/80" onClick={() => onCategoryChange('fixed')}>Cố định</CategoryTab>
-                </div>
-                {/* "Tồn kho" tab removed — single inflow rule: mọi nhập kho phải qua
-                    /ingredients → + Nhập kho để đồng bộ kho tổng. Lịch sử tồn kho vẫn
-                    xem được ở tab Chi phí > filter "Tồn kho" trong page này. */}
-
-                {expenseCategory === 'fixed' && (
-                    <div className="flex flex-col gap-1.5">
-                        <div className="flex bg-surface-light border border-border/60 rounded-[10px] p-0.5">
-                            <button onClick={() => onFixedSubModeChange('setup')} className={`flex-1 py-1 rounded-[8px] text-[11px] font-bold transition-all ${fixedSubMode === 'setup' ? 'bg-warning/20 text-warning' : 'text-text-secondary hover:text-text'}`}>Setup hằng tháng</button>
-                            <button onClick={() => onFixedSubModeChange('actual')} className={`flex-1 py-1 rounded-[8px] text-[11px] font-bold transition-all ${fixedSubMode === 'actual' ? 'bg-warning/20 text-warning' : 'text-text-secondary hover:text-text'}`}>Ghi thực chi</button>
-                        </div>
-                        <span className="text-[10px] text-text-dim leading-tight px-1">
-                            {fixedSubMode === 'setup'
-                                ? 'Khoản định kỳ — hệ thống tự chia đều mỗi ngày vào lợi nhuận.'
-                                : 'Ghi nhận đã thanh toán — không trừ kép vì đã phân bổ hàng ngày.'}
-                        </span>
-                    </div>
-                )}
-
                 <input
                     type="text"
                     autoFocus
@@ -53,16 +56,40 @@ export default function AddExpenseModal({
                     className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[15px] font-medium text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary/50"
                 />
 
-                <div className="relative flex items-center bg-surface-light border border-border/60 rounded-[12px] overflow-hidden focus-within:border-primary/50">
-                    <input
-                        type="number"
-                        placeholder="0"
-                        value={costAmount}
-                        onChange={e => onAmountChange(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') canSubmit && onSubmit() }}
-                        className="w-full bg-transparent px-4 py-3 text-[15px] font-medium text-text placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    {costAmount && <span className="absolute right-4 text-[15px] font-medium text-text-secondary pointer-events-none">.000đ</span>}
+                {/* Tag picker — sections itself into Vận hành / Quản lý & khác so
+                    the dropped top tab's group context lives inside the chip list. */}
+                <ExpenseCategoryPicker
+                    categories={expenseCategories}
+                    selectedId={selectedCategoryId}
+                    onSelect={handleChipSelect}
+                    onCreate={onCreateCategory}
+                    disabled={isSubmitting}
+                />
+
+                <MoneyInput
+                    value={costAmount}
+                    onChange={onAmountChange}
+                    onKeyDown={e => { if (e.key === 'Enter') canSubmit && onSubmit() }}
+                    size="lg"
+                />
+                {/* `.000đ` shortcut removed — staff types full amount; see MoneyInput. */}
+
+                {/* Payment method — default cash. Editable here avoids the
+                    "create then toggle pill" 2-tap pattern. */}
+                <div className="flex bg-surface-light border border-border/60 rounded-[10px] p-0.5">
+                    <PaymentTab
+                        active={paymentMethod === 'cash'}
+                        onClick={() => onPaymentMethodChange?.('cash')}
+                    >
+                        Tiền mặt
+                    </PaymentTab>
+                    <PaymentTab
+                        active={paymentMethod === 'transfer'}
+                        color="bg-primary/15 text-primary"
+                        onClick={() => onPaymentMethodChange?.('transfer')}
+                    >
+                        Chuyển khoản
+                    </PaymentTab>
                 </div>
 
                 <button
@@ -77,11 +104,12 @@ export default function AddExpenseModal({
     )
 }
 
-function CategoryTab({ active, color, onClick, children }) {
+function PaymentTab({ active, color, onClick, children }) {
     return (
         <button
+            type="button"
             onClick={onClick}
-            className={`flex-1 py-1.5 rounded-[10px] text-[12px] font-black uppercase transition-all ${active ? `${color} text-white shadow-sm` : 'text-text-secondary hover:text-text'}`}
+            className={`flex-1 py-1.5 rounded-[8px] text-[11px] font-bold transition-all ${active ? (color || 'bg-surface text-text shadow-sm') : 'text-text-secondary hover:text-text'}`}
         >
             {children}
         </button>

@@ -22,10 +22,12 @@ export default function FinancialFlow({
     const takeHomeTransfer = Math.max(0, actualTransfer - remainingRefill)
     const takeHome = takeHomeCash + takeHomeTransfer
 
-    // Phân loại chi phí theo đúng schema
-    const shiftExpenses = (expenses || []).filter(e => !e.is_fixed && !e.is_refill)
-    const afterShiftOps = (expenses || []).filter(e => !e.is_fixed && e.is_refill && e.metadata?.free_form)
-    const afterShiftNvl = (expenses || []).filter(e => !e.is_fixed && e.is_refill && !e.metadata?.free_form)
+    // Phân loại chi phí — bỏ filter `!e.is_fixed` vì legacy fixed expenses
+    // vẫn là thực chi, cần đếm vào. Adjustment rows (manager sửa số tồn kho
+    // thủ công, amount=0) skip khỏi list NVL — chỉ hiện refill thực.
+    const shiftExpenses = (expenses || []).filter(e => !e.is_refill)
+    const afterShiftOps = (expenses || []).filter(e => e.is_refill && e.metadata?.free_form)
+    const afterShiftNvl = (expenses || []).filter(e => e.is_refill && !e.metadata?.free_form && !e.metadata?.adjustment)
 
     const getExpenseName = (e) => {
         if (e.is_refill && !e.metadata?.free_form && e.metadata?.ingredient) {

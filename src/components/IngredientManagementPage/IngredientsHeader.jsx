@@ -3,7 +3,7 @@ import MenuTabsBar from '../common/MenuTabsBar'
 
 export default function IngredientsHeader({
     count, isSorting, onBack, onForward,
-    activeTab = 'ingredients', onTabSelect,
+    activeTab = 'main', onTabSelect,
 }) {
     // While sorting, swap the title to "Sắp xếp" and hide the tabs so the dedicated
     // sort UI (footer "Hủy / Lưu") owns the screen — matches pre-merge behavior.

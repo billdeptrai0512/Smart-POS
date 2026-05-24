@@ -1,6 +1,9 @@
+import { INGREDIENT_CATEGORIES } from '../common/recipeUtils'
+import MoneyInput from '../common/MoneyInput'
+
 export default function CreateIngredientForm({
-    name, unit, cost, saving,
-    onNameChange, onUnitChange, onCostChange, onSubmit,
+    name, unit, cost, category, saving,
+    onNameChange, onUnitChange, onCostChange, onCategoryChange, onSubmit,
 }) {
     const canSubmit = name.trim() && !saving
 
@@ -14,16 +17,13 @@ export default function CreateIngredientForm({
                     onChange={e => onNameChange(e.target.value)}
                     className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
                 />
-                <div className="relative shrink-0 flex items-center w-[90px] bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden">
-                    <input
-                        type="number"
-                        placeholder="Giá"
-                        value={cost}
-                        onChange={e => onCostChange(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') onSubmit() }}
-                        className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none z-10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                </div>
+                <MoneyInput
+                    value={cost}
+                    onChange={onCostChange}
+                    onKeyDown={e => { if (e.key === 'Enter') onSubmit() }}
+                    placeholder="Giá"
+                    className="shrink-0 w-[110px]"
+                />
                 <div className="relative shrink-0 flex items-center w-[80px] bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden">
                     <input
                         type="text"
@@ -34,6 +34,16 @@ export default function CreateIngredientForm({
                     />
                 </div>
             </div>
+
+            <select
+                value={category || 'main'}
+                onChange={e => onCategoryChange(e.target.value)}
+                className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text focus:outline-none focus:border-primary/40 transition-colors"
+            >
+                {INGREDIENT_CATEGORIES.map(c => (
+                    <option key={c.key} value={c.key}>{c.label}</option>
+                ))}
+            </select>
 
             <button
                 onClick={onSubmit}

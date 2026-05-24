@@ -47,6 +47,20 @@ body,
   overflow: hidden;
 }
 
+/* color-scheme on <html> so native popups (select dropdowns, date pickers,
+   scrollbars) render in dark mode. Body-only declaration doesn't always
+   propagate to OS-rendered widgets on Chromium. */
+html {
+  color-scheme: dark;
+}
+
+/* Native <select> dropdown options: force theme colors so the popup matches
+   the app surface. Without this, Chrome paints them with OS defaults. */
+select option {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+}
+
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: var(--color-bg);

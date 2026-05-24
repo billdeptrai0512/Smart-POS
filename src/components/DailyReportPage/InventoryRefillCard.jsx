@@ -163,7 +163,11 @@ export default function InventoryRefillCard({
         if (!shiftClosing?.inventory_report) return [];
         let totalLossValue = 0;
 
-        const rows = shiftClosing.inventory_report.map(item => {
+        const rows = shiftClosing.inventory_report
+            // Skip ingredients staff didn't count actual remaining for. `remaining == null`
+            // means "chưa kiểm cuối ca" — treating it as 0 would surface a fake hụt = −theoretical.
+            .filter(item => item.remaining != null)
+            .map(item => {
             const config = ingredientConfigs.find(c => c.ingredient === item.ingredient) || {};
             const unitCost = config.unit_cost || 0; // assuming unit_cost is available in config, else 0
 
@@ -172,7 +176,7 @@ export default function InventoryRefillCard({
             const used = Math.round(lookupByLabel(item.ingredient, todayEstimatedConsumption) * 10) / 10;
 
             const theoretical = Math.round((opening + restock - used) * 10) / 10;
-            const actual = item.remaining || 0;
+            const actual = item.remaining;
             const diff = Math.round((actual - theoretical) * 10) / 10;
 
             const diffValue = diff * unitCost;

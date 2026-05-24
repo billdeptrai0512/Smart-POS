@@ -5,8 +5,9 @@ import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { createInviteToken, fetchDefaultIngredientSort } from '../services/authService'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
-import { LogOut, Loader } from 'lucide-react'
+import { LogOut, Loader, Plus, X } from 'lucide-react'
 import Skeleton from '../components/common/Skeleton'
+import FabActionMenu from '../components/common/FabActionMenu'
 import BackupModal from '../components/AddressSelectPage/BackupModal'
 import AddressHeader from '../components/AddressSelectPage/AddressHeader'
 import BranchGrid from '../components/AddressSelectPage/BranchGrid'
@@ -24,6 +25,7 @@ export default function AddressSelectPage() {
     const [backupSource, setBackupSource] = useState(null)
     const [newAddressName, setNewAddressName] = useState('')
     const [creating, setCreating] = useState(false)
+    const [showCreateModal, setShowCreateModal] = useState(false)
     const createGuardRef = useRef(false)
 
     // Staff tab invite state
@@ -109,7 +111,7 @@ export default function AddressSelectPage() {
         handleSelect(addr)
     }
 
-    async function handleCreateFromFooter() {
+    async function handleCreate() {
         if (!newAddressName.trim()) return
         if (createGuardRef.current) return
         createGuardRef.current = true
@@ -118,6 +120,7 @@ export default function AddressSelectPage() {
         try {
             await handleCreateNew(newAddressName.trim())
             setNewAddressName('')
+            setShowCreateModal(false)
         } catch (err) {
             setError(err.message || 'Không thể tạo địa chỉ')
         } finally {
@@ -171,7 +174,7 @@ export default function AddressSelectPage() {
         )
     }
 
-    const showCreateFooter = !isStaff && activeTab === 'branches'
+    const showCreateFab = !isStaff && activeTab === 'branches'
 
     return (
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
@@ -188,7 +191,7 @@ export default function AddressSelectPage() {
                 managerCount={managerCount}
             />
 
-            <div className={`flex-1 overflow-y-auto px-4 pt-4 hide-scrollbar ${showCreateFooter ? 'pb-40' : 'pb-8'}`}>
+            <div className={`flex-1 overflow-y-auto px-4 pt-4 hide-scrollbar ${showCreateFab ? 'pb-24' : 'pb-8'}`}>
                 {/* ── BRANCHES TAB ── */}
                 {(activeTab === 'branches' || isStaff) && (
                     <BranchGrid
@@ -246,21 +249,49 @@ export default function AddressSelectPage() {
                 </div>
             </div>
 
-            {/* Footer: Create new address */}
-            {showCreateFooter && (
+            {/* Floating action — opens create-address modal (mirrors /recipes, /ingredients) */}
+            {showCreateFab && (
                 <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-50">
-                    <div className="p-4 bg-surface border-t border-border/60 pointer-events-auto">
+                    <div className="flex justify-end px-4 pb-[max(env(safe-area-inset-bottom),16px)] pointer-events-auto">
+                        <FabActionMenu
+                            items={[
+                                { key: 'create', icon: <Plus size={14} />, label: 'Tạo địa chỉ', onClick: () => setShowCreateModal(true) },
+                            ]}
+                        />
+                    </div>
+                </div>
+            )}
+
+            {/* Slide-up Tạo địa chỉ mới modal */}
+            {showCreateModal && (
+                <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={() => !creating && setShowCreateModal(false)}>
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+                    <div
+                        className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between">
+                            <span className="text-[16px] font-black text-text">Tạo địa chỉ mới</span>
+                            <button
+                                onClick={() => setShowCreateModal(false)}
+                                disabled={creating}
+                                className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all disabled:opacity-50"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
                         <div className="flex flex-col gap-3">
                             <input
                                 type="text"
+                                autoFocus
                                 placeholder="Tên địa chỉ mới..."
                                 value={newAddressName}
                                 onChange={e => setNewAddressName(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateFromFooter() }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
                                 className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
                             />
                             <button
-                                onClick={handleCreateFromFooter}
+                                onClick={handleCreate}
                                 disabled={!newAddressName.trim() || creating}
                                 className="w-full py-3 rounded-[12px] bg-primary text-bg text-[14px] font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase flex items-center justify-center gap-1.5"
                             >

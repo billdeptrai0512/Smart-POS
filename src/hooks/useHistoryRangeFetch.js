@@ -40,5 +40,15 @@ export function useHistoryRangeFetch({ addressId, rangeStart, rangeEnd, isTodayS
             .finally(() => setIsLoadingRangeOrders(false))
     }, [addressId, startISO, endISO, isTodayScope, isReadOnly])
 
-    return { rangeExpenses, rangeOrders, isLoadingRange, isLoadingRangeOrders }
+    // Optimistic patch helper for mutations (e.g. re-tag expense). Patches both
+    // the visible state and the cached entry so a re-render or cache hit shows
+    // the new value without a server refetch.
+    const patchExpense = (id, updates) => {
+        setRangeExpenses(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e))
+        const key = `${addressId}|${startISO}|${endISO}`
+        const cached = expCache.current.get(key)
+        if (cached) expCache.current.set(key, cached.map(e => e.id === id ? { ...e, ...updates } : e))
+    }
+
+    return { rangeExpenses, rangeOrders, isLoadingRange, isLoadingRangeOrders, patchExpense }
 }

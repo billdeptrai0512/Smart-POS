@@ -1,5 +1,7 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { Plus, X, ArrowUpDown } from 'lucide-react'
+import FabActionMenu from '../components/common/FabActionMenu'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -8,11 +10,11 @@ import {
     upsertIngredientCost, deleteIngredientCost, renameIngredient,
     fetchIngredientStocks, processIngredientRestock, adjustIngredientStock, fetchIngredientDeficits, fetchIngredientDailyContext,
 } from '../services/orderService'
-import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
+import { sortIngredients, ingredientLabel, getIngredientUnit, normalizeIngredientCategory } from '../components/common/recipeUtils'
+import { parseVNDInput } from '../utils'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
-import PackConfigModal from '../components/IngredientManagementPage/PackConfigModal'
 import StockDeficitBanner from '../components/IngredientManagementPage/StockDeficitBanner'
 import KeyMismatchBanner from '../components/IngredientManagementPage/KeyMismatchBanner'
 import IngredientsHeader from '../components/IngredientManagementPage/IngredientsHeader'
@@ -24,6 +26,12 @@ import Toast from '../components/POSPage/Toast'
 import { keySyncDismissedKey } from '../constants/storageKeys'
 
 const normalizeKey = (raw) => raw.trim().toLowerCase().replace(/\s+/g, '_')
+
+// Module-level scroll cache. Set when user opens a card to drill into
+// /ingredients/:key; consumed once on next mount of /ingredients (back nav).
+// Mirrors the /recipes pattern so back-from-detail lands at the same scroll
+// position the user left.
+let savedScroll = null
 
 export default function IngredientManagementPage() {
     const navigate = useNavigate()
@@ -57,11 +65,31 @@ export default function IngredientManagementPage() {
     const [newName, setNewName] = useState('')
     const [newUnit, setNewUnit] = useState('')
     const [newCost, setNewCost] = useState('')
+    const [newCategory, setNewCategory] = useState(null)
+    const [showCreateModal, setShowCreateModal] = useState(false)
+
+    // View mode = active category tab. Uncategorized NVL (category=null) shown under 'main'.
+    // Seed from location.state so deep-links from /recipes' tabbar land on the right view.
+    const [viewMode, setViewMode] = useState(location.state?.viewMode || 'main')
+
+    const mainRef = useRef(null)
+
+    // Restore scroll on back nav from /ingredients/:key; clear cache after use.
+    useEffect(() => {
+        if (savedScroll !== null && mainRef.current) {
+            mainRef.current.scrollTop = savedScroll
+            savedScroll = null
+        }
+    }, [])
+
+    const openIngredient = (ingredient) => {
+        savedScroll = mainRef.current?.scrollTop ?? 0
+        navigate(`/ingredients/${ingredient}`, { state: location.state })
+    }
 
     // Stock & modals
     const [ingredientStocks, setIngredientStocks] = useState([])
     const [restockIngredient, setRestockIngredient] = useState(null)
-    const [packConfigIngredient, setPackConfigIngredient] = useState(null)
     const [showKeySync, setShowKeySync] = useState(false)
     const [dismissedSig, setDismissedSig] = useState('')
     const [stockDeficits, setStockDeficits] = useState([])
@@ -179,6 +207,14 @@ export default function IngredientManagementPage() {
         return map
     }, [contextRecipes])
 
+    // Card grid shows only the active category tab. Uncategorized (null) → 'main';
+    // legacy 'tools' → 'packaging' (see normalizeIngredientCategory). Keeps no NVL hidden.
+    const visibleIngredients = useMemo(() => {
+        return allIngredients.filter(ing => {
+            return normalizeIngredientCategory(configByIngredient.get(ing)?.category) === viewMode
+        })
+    }, [allIngredients, configByIngredient, viewMode])
+
     // ─── Action handlers ───────────────────────────────────────────────
     async function saveCost(ingredient, newCostVal) {
         setSaving(true)
@@ -232,33 +268,36 @@ export default function IngredientManagementPage() {
         }
     }
 
-    async function handleSaveAdvanced(ingredient, { packSize, packUnit, minStock }) {
+    async function handleCreateIngredient() {
+        if (!newName.trim()) return
+        const key = normalizeKey(newName)
+        const unit = newUnit || 'đv'
+        const cost = parseVNDInput(newCost)
         setSaving(true)
         try {
-            const cost = ingredientCosts[ingredient] || 0
-            const unit = ingredientUnits[ingredient] || 'đv'
-            await upsertIngredientCost(ingredient, cost, selectedAddress?.id, unit, { packSize, packUnit, minStock })
-            refreshProducts?.() // refresh configs into ProductContext
+            await upsertIngredientCost(key, cost, selectedAddress?.id, unit, { category: newCategory })
+            setIngredientCosts(prev => ({ ...prev, [key]: cost }))
+            setIngredientUnits(prev => ({ ...prev, [key]: unit }))
+            // Refresh configs so the new ingredient picks up its category in `configByIngredient`.
+            refreshProducts?.()
+            setNewName(''); setNewUnit(''); setNewCost(''); setNewCategory(null)
+            setShowCreateModal(false)
         } catch (err) {
-            showError(err, 'Lưu cấu hình nâng cao')
+            showError(err, 'Tạo nguyên liệu mới')
         } finally {
             setSaving(false)
         }
     }
 
-    async function handleCreateIngredient() {
-        if (!newName.trim()) return
-        const key = normalizeKey(newName)
-        const unit = newUnit || 'đv'
-        const cost = parseInt(newCost) || 0
+    async function saveCategory(ingredient, newCat) {
         setSaving(true)
         try {
-            await upsertIngredientCost(key, cost, selectedAddress?.id, unit)
-            setIngredientCosts(prev => ({ ...prev, [key]: cost }))
-            setIngredientUnits(prev => ({ ...prev, [key]: unit }))
-            setNewName(''); setNewUnit(''); setNewCost('')
+            const cost = ingredientCosts[ingredient] || 0
+            const unit = ingredientUnits[ingredient] || 'đv'
+            await upsertIngredientCost(ingredient, cost, selectedAddress?.id, unit, { category: newCat })
+            refreshProducts?.()
         } catch (err) {
-            showError(err, 'Tạo nguyên liệu mới')
+            showError(err, 'Lưu nhóm nguyên liệu')
         } finally {
             setSaving(false)
         }
@@ -334,17 +373,18 @@ export default function IngredientManagementPage() {
             <Toast toast={toast} />
 
             <IngredientsHeader
-                count={isSorting ? sortedIngredients.length : allIngredients.length}
+                count={isSorting ? sortedIngredients.length : visibleIngredients.length}
                 isSorting={isSorting}
                 onBack={() => navigate(location.state?.from || '/history')}
                 onForward={() => navigate('/pos')}
-                activeTab="ingredients"
+                activeTab={viewMode}
                 onTabSelect={(key) => {
                     if (key === 'recipes') navigate('/recipes', { state: location.state, replace: true })
+                    else setViewMode(key)
                 }}
             />
 
-            <main className="flex-1 overflow-y-auto px-4 py-4 pb-48 bg-bg">
+            <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-48 bg-bg">
                 {canEdit && !isSorting && stockDeficits.length > 0 && (
                     <StockDeficitBanner
                         deficits={stockDeficits}
@@ -374,7 +414,7 @@ export default function IngredientManagementPage() {
                     />
                 ) : (
                     <div className="grid grid-cols-2 gap-2">
-                        {allIngredients.map(ingredient => {
+                        {visibleIngredients.map(ingredient => {
                             const cfg = configByIngredient.get(ingredient)
                             return (
                                 <IngredientCostItem
@@ -401,8 +441,6 @@ export default function IngredientManagementPage() {
                                     packSize={cfg?.pack_size}
                                     packUnit={cfg?.pack_unit}
                                     minStock={cfg?.min_stock}
-                                    onSaveAdvanced={handleSaveAdvanced}
-                                    onConfigurePack={canEdit ? setPackConfigIngredient : null}
                                     stockData={stockByIngredient.get(ingredient)}
                                     onRestock={() => setRestockIngredient(ingredient)}
                                     dailyContext={dailyContext[ingredient]}
@@ -410,11 +448,14 @@ export default function IngredientManagementPage() {
                                     editingStock={editingStock}
                                     setEditingStock={setEditingStock}
                                     saveStock={saveStock}
+                                    onOpen={openIngredient}
                                 />
                             )
                         })}
-                        {allIngredients.length === 0 && (
-                            <p className="col-span-2 text-text-secondary text-[13px] text-center py-6">Chưa có nguyên liệu nào.</p>
+                        {visibleIngredients.length === 0 && (
+                            <p className="col-span-2 text-text-secondary text-[13px] text-center py-6">
+                                {allIngredients.length === 0 ? 'Chưa có nguyên liệu nào.' : 'Chưa có nguyên liệu trong nhóm này.'}
+                            </p>
                         )}
                     </div>
                 )}
@@ -422,19 +463,8 @@ export default function IngredientManagementPage() {
 
             {(showFooterCreate || showFooterSort) && (
                 <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-50">
-                    {showFooterCreate && (
-                        <div className="flex justify-end px-4 mb-2 pointer-events-auto">
-                            <button
-                                onClick={enterSortMode}
-                                className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center justify-center text-[13px] font-bold text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
-                            >
-                                ↕ Sắp xếp
-                            </button>
-                        </div>
-                    )}
-
-                    <div className="p-4 bg-surface border-t border-border/60 pointer-events-auto">
-                        {showFooterSort ? (
+                    {showFooterSort ? (
+                        <div className="p-4 bg-surface border-t border-border/60 pointer-events-auto">
                             <div className="flex gap-2">
                                 <button
                                     onClick={cancelSortMode}
@@ -450,18 +480,49 @@ export default function IngredientManagementPage() {
                                     {saving ? '⏳ Đang lưu...' : 'Lưu sắp xếp'}
                                 </button>
                             </div>
-                        ) : (
-                            <CreateIngredientForm
-                                name={newName}
-                                unit={newUnit}
-                                cost={newCost}
-                                saving={saving}
-                                onNameChange={setNewName}
-                                onUnitChange={setNewUnit}
-                                onCostChange={setNewCost}
-                                onSubmit={handleCreateIngredient}
+                        </div>
+                    ) : (
+                        <div className="flex justify-end px-4 pb-[max(env(safe-area-inset-bottom),16px)] pointer-events-auto">
+                            <FabActionMenu
+                                items={[
+                                    { key: 'sort', icon: <ArrowUpDown size={14} />, label: 'Sắp xếp', onClick: enterSortMode },
+                                    { key: 'create', icon: <Plus size={14} />, label: 'Tạo NVL', onClick: () => { setNewCategory(viewMode); setShowCreateModal(true) } },
+                                ]}
                             />
-                        )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {showCreateModal && (
+                <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={() => !saving && setShowCreateModal(false)}>
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+                    <div
+                        className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between">
+                            <span className="text-[16px] font-black text-text">Tạo nguyên liệu mới</span>
+                            <button
+                                onClick={() => setShowCreateModal(false)}
+                                disabled={saving}
+                                className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all disabled:opacity-50"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <CreateIngredientForm
+                            name={newName}
+                            unit={newUnit}
+                            cost={newCost}
+                            category={newCategory}
+                            saving={saving}
+                            onNameChange={setNewName}
+                            onUnitChange={setNewUnit}
+                            onCostChange={setNewCost}
+                            onCategoryChange={setNewCategory}
+                            onSubmit={handleCreateIngredient}
+                        />
                     </div>
                 </div>
             )}
@@ -486,24 +547,6 @@ export default function IngredientManagementPage() {
                     }}
                 />
             )}
-
-            {packConfigIngredient && (() => {
-                const cfg = configByIngredient.get(packConfigIngredient) || {}
-                const baseUnit = getIngredientUnit(packConfigIngredient, ingredientUnits[packConfigIngredient])
-                return (
-                    <PackConfigModal
-                        open={true}
-                        onClose={() => setPackConfigIngredient(null)}
-                        ingredientLabel={ingredientLabel(packConfigIngredient)}
-                        baseUnit={baseUnit}
-                        currentPackSize={cfg.pack_size}
-                        currentPackUnit={cfg.pack_unit}
-                        onSave={async ({ packSize, packUnit }) => {
-                            await handleSaveAdvanced(packConfigIngredient, { packSize, packUnit, minStock: cfg.min_stock })
-                        }}
-                    />
-                )
-            })()}
 
             <KeySyncModal
                 open={showKeySync}

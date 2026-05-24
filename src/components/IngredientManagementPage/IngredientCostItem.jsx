@@ -1,5 +1,4 @@
 import { useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { formatVND } from '../../utils'
 import { formatPackedQty } from '../../utils/inventory'
 import { Plus } from 'lucide-react'
@@ -26,28 +25,29 @@ export default function IngredientCostItem({
     isEditingName, editingName, setEditingName, saveName,
     canEdit = true,
     minStock,
-    // Pack config (quy cách đóng gói)
-    packSize, packUnit, onConfigurePack,
+    // Pack config (quy cách đóng gói) — edit moved to detail page;
+    // packSize/packUnit kept for the inline "= X bịch + Y g" display.
+    packSize, packUnit,
     // Stock display
     stockData, onRestock,
     isEditingStock, editingStock, setEditingStock, saveStock,
     // Daily context (always inline)
     dailyContext,
+    // Navigation — parent owns scroll-cache save before navigating to detail
+    onOpen,
 }) {
     const displayUnit = getIngredientUnit(ingredient, storedUnit)
-    const navigate = useNavigate()
     const nameCancelledRef = useRef(false)
 
     const currentStock = stockData?.current_stock ?? null
     const isLowStock = currentStock !== null && currentStock <= (minStock || 0)
-    const hasPack = !!(packSize && packUnit)
 
     const stop = (e) => e.stopPropagation()
 
     return (
         <div
             className={`bg-surface border rounded-[14px] p-3 flex flex-col gap-2 min-w-0 cursor-pointer hover:bg-surface-light/40 transition-colors ${isLowStock ? 'border-danger/40' : 'border-border/60'}`}
-            onClick={() => navigate(`/ingredients/${ingredient}`)}
+            onClick={() => onOpen?.(ingredient)}
         >
             {/* Row 1: name + restock button */}
             <div className="flex items-start gap-1.5 min-w-0">
@@ -160,7 +160,8 @@ export default function IngredientCostItem({
                 </span>
             )}
 
-            {/* Row 3: manager-only details — separated by border-top */}
+            {/* Row 3: manager-only details — separated by border-top.
+                 Nhóm + Quy đổi đã chuyển sang trang chi tiết của ingredient. */}
             {canEdit && (
                 <div className="mt-1 pt-2 border-t border-border/40 flex flex-col gap-1 text-[11px] tabular-nums">
                     <div className="flex items-baseline justify-between gap-2">
@@ -169,30 +170,6 @@ export default function IngredientCostItem({
                             {formatVND(cost)}<span className="text-text-dim font-medium">/{displayUnit}</span>
                         </span>
                     </div>
-                    {onConfigurePack && (
-                        <>
-                            <div className="flex items-start justify-between gap-2">
-                                <span className="text-text-dim leading-none pt-[1px]">Quy đổi</span>
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); onConfigurePack(ingredient) }}
-                                    className="hover:text-primary transition-colors text-right flex flex items-end gap-1"
-                                    title={hasPack ? 'Sửa quy cách đóng gói' : 'Thêm quy cách đóng gói'}
-                                >
-                                    {!hasPack && (<span className="text-text-dim italic font-medium leading-none">+ thêm</span>
-                                    )}
-                                </button>
-                            </div>
-                            {hasPack && (
-                                <div className='flex justify-between'>
-                                    <span className="text-text-secondary font-bold leading-none">1 {packUnit}</span>
-                                    <span className="text-text-dim font-medium leading-none tabular-nums">=</span>
-                                    <span className="text-text-secondary font-bold leading-none tabular-nums"> {packSize} {displayUnit}</span>
-                                </div>
-                            )}
-
-                        </>
-
-                    )}
                 </div>
             )}
 
@@ -219,7 +196,7 @@ export default function IngredientCostItem({
                             <Row label="Nhập mới" value={fmt(todayRefill)} sign="+" accent={todayRefill > 0 ? 'text-success' : ''} />
                             <Row label="Tồn cuối" value={fmt(warehouseNow)} bold />
                             <button
-                                onClick={() => navigate(`/ingredients/${ingredient}`)}
+                                onClick={() => onOpen?.(ingredient)}
                                 className="text-[10px] font-bold text-primary text-right mt-auto pt-1 hover:underline"
                             >
                                 Lịch sử nhập kho →

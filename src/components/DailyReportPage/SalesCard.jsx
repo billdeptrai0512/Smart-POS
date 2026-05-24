@@ -132,9 +132,19 @@ export default function SalesCard({
                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                             >
                                 <option value="all">Tất cả</option>
-                                {products.filter(p => soldProducts.has(p.id)).sort((a, b) => a.name.localeCompare(b.name)).map(p => (
-                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                ))}
+                                {products
+                                    .filter(p => soldProducts.has(p.id))
+                                    .sort((a, b) => {
+                                        // Best-seller first → "ế" cuối. Tie-break by name so the list is stable
+                                        // across renders that don't change qty.
+                                        const qa = productStats?.[a.id]?.qty || 0
+                                        const qb = productStats?.[b.id]?.qty || 0
+                                        if (qb !== qa) return qb - qa
+                                        return a.name.localeCompare(b.name)
+                                    })
+                                    .map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
                             </select>
                         </div>
                     </div>

@@ -1,9 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { Plus, X, ArrowUpDown } from 'lucide-react'
+import FabActionMenu from '../components/common/FabActionMenu'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { upsertProductPrice, insertProduct, updateProductSortOrder } from '../services/orderService'
+import { parseVNDInput } from '../utils'
 import { useToast } from '../hooks/useToast'
 import Toast from '../components/POSPage/Toast'
 import SortableList from '../components/common/SortableList'
@@ -32,6 +35,7 @@ export default function RecipeMenuPage() {
     const [isSorting, setIsSorting] = useState(false)
     const [sortedProducts, setSortedProducts] = useState([])
     const [selectedSortProductId, setSelectedSortProductId] = useState(null)
+    const [showCreateModal, setShowCreateModal] = useState(false)
 
     const mainRef = useRef(null)
 
@@ -73,7 +77,7 @@ export default function RecipeMenuPage() {
     async function handleCreateProduct() {
         if (!newProductName.trim()) return
         setSaving(true)
-        const parsedPrice = parseInt(newProductPrice) ? parseInt(newProductPrice) * 1000 : 0
+        const parsedPrice = parseVNDInput(newProductPrice)
         try {
             const newProd = await insertProduct(newProductName.trim(), parsedPrice, selectedAddress?.id)
             if (newProd && selectedAddress?.id) {
@@ -82,6 +86,7 @@ export default function RecipeMenuPage() {
             refreshProducts?.()
             setNewProductName('')
             setNewProductPrice('')
+            setShowCreateModal(false)
         } catch (err) {
             showError(err, 'Tạo món mới')
         } finally {
@@ -127,7 +132,9 @@ export default function RecipeMenuPage() {
                 onForward={() => navigate('/pos')}
                 activeTab="recipes"
                 onTabSelect={(key) => {
-                    if (key === 'ingredients') navigate('/ingredients', { state: location.state, replace: true })
+                    if (key === 'main' || key === 'packaging') {
+                        navigate('/ingredients', { state: { ...location.state, viewMode: key }, replace: true })
+                    }
                 }}
             />
 
@@ -162,19 +169,8 @@ export default function RecipeMenuPage() {
 
             {canEdit && (
                 <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-50">
-                    {!isSorting && (
-                        <div className="flex justify-end px-4 mb-2 pointer-events-auto">
-                            <button
-                                onClick={enterSortMode}
-                                className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center justify-center text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
-                            >
-                                ↕ Sắp xếp
-                            </button>
-                        </div>
-                    )}
-
-                    <div className="p-4 bg-surface border-t border-border/60 pointer-events-auto">
-                        {isSorting ? (
+                    {isSorting ? (
+                        <div className="p-4 bg-surface border-t border-border/60 pointer-events-auto">
                             <div className="flex gap-2">
                                 <button
                                     onClick={cancelSortMode}
@@ -190,16 +186,45 @@ export default function RecipeMenuPage() {
                                     {saving ? '⏳ Đang lưu...' : 'Lưu sắp xếp'}
                                 </button>
                             </div>
-                        ) : (
-                            <CreateProductForm
-                                name={newProductName}
-                                price={newProductPrice}
-                                saving={saving}
-                                onNameChange={setNewProductName}
-                                onPriceChange={setNewProductPrice}
-                                onSubmit={handleCreateProduct}
+                        </div>
+                    ) : (
+                        <div className="flex justify-end px-4 pb-[max(env(safe-area-inset-bottom),16px)] pointer-events-auto">
+                            <FabActionMenu
+                                items={[
+                                    { key: 'sort', icon: <ArrowUpDown size={14} />, label: 'Sắp xếp', onClick: enterSortMode },
+                                    { key: 'create', icon: <Plus size={14} />, label: 'Tạo món', onClick: () => setShowCreateModal(true) },
+                                ]}
                             />
-                        )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {showCreateModal && (
+                <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={() => !saving && setShowCreateModal(false)}>
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+                    <div
+                        className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between">
+                            <span className="text-[16px] font-black text-text">Tạo món mới</span>
+                            <button
+                                onClick={() => setShowCreateModal(false)}
+                                disabled={saving}
+                                className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all disabled:opacity-50"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <CreateProductForm
+                            name={newProductName}
+                            price={newProductPrice}
+                            saving={saving}
+                            onNameChange={setNewProductName}
+                            onPriceChange={setNewProductPrice}
+                            onSubmit={handleCreateProduct}
+                        />
                     </div>
                 </div>
             )}

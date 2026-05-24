@@ -1,17 +1,18 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
-import { usePOS } from '../contexts/POSContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { formatVND } from '../utils'
-import { aggregateOrderStats, buildExtraMaps, splitExpenses, sumFixedCosts } from '../utils/reportStats'
+import { aggregateOrderStats, buildExtraMaps, splitExpenses } from '../utils/reportStats'
+import { calculateEstimatedConsumption, splitCogsByCategory, calculateLossValue } from '../utils/inventory'
 import { supabase } from '../lib/supabaseClient'
 import { fetchReportByRange } from '../services/orderService'
 import ReportHeader, { getDateRange } from '../components/DailyReportPage/ReportHeader'
 import DayPerformanceChart from '../components/DailyReportPage/DayPerformanceChart'
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
+import { fetchExpenseCategories } from '../services/expenseService'
 import FinancialFlow from '../components/DailyReportPage/FinancialFlow'
 import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY } from '../components/DailyReportPage/ReportViewFilter'
 import RangeLossCard from '../components/DailyReportPage/RangeLossCard'
@@ -31,8 +32,7 @@ export default function RangeReportPage() {
     const location = useLocation()
     const range = searchParams.get('range') || 'week'
 
-    const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits } = useProducts()
-    const { fixedCosts, handleLoadFixedCosts } = usePOS()
+    const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits, ingredientConfigs } = useProducts()
     const { selectedAddress } = useAddress()
     const { isStaff } = useAuth()
     const { activeModules, loading: entitlementLoading } = useEntitlement()
@@ -50,6 +50,12 @@ export default function RangeReportPage() {
     const [shiftClosings, setShiftClosings] = useState([])
     const [prevShiftClosings, setPrevShiftClosings] = useState([])
     const [isLoading, setIsLoading] = useState(true)
+    const [expenseCategories, setExpenseCategories] = useState([])
+
+    useEffect(() => {
+        if (!selectedAddress?.id) return
+        fetchExpenseCategories(selectedAddress.id).then(setExpenseCategories)
+    }, [selectedAddress?.id])
 
     // Reset offset when the URL `range` changes, by tracking the previous
     // value and updating during render. React 19 handles this without an
@@ -66,10 +72,6 @@ export default function RangeReportPage() {
 
     // ── Gate: sau khi tất cả hooks đã khai báo ─────────────────────────────
     // Moved to the bottom to respect Rules of Hooks
-
-    useEffect(() => {
-        if (selectedAddress?.id && fixedCosts.length === 0) handleLoadFixedCosts()
-    }, [selectedAddress?.id])
 
     useEffect(() => {
         if (!selectedAddress?.id) return
@@ -136,11 +138,45 @@ export default function RangeReportPage() {
         const transferRevenue = shiftClosings.reduce((s, sc) => s + (sc.actual_transfer || 0), 0)
 
         const { dailyExpense, refillNvl, refillFreeForm, refillTotal } = splitExpenses(expenses)
-        const fixedExpense = sumFixedCosts(fixedCosts, days)
-        // Vận hành tổng = trong ca + free-form sau ca.
+        // Vận hành tổng = trong ca + free-form sau ca. Thực chi: legacy is_fixed
+        // expenses đã được splitExpenses cộng vào dailyExpense.
         const operationalExpense = dailyExpense + refillFreeForm
-        // P&L = Revenue - COGS - Vận hành - Cố định. NVL không trừ (đã nằm trong COGS).
-        const netProfit = agg.totalRevenue - agg.totalCOGS - operationalExpense - fixedExpense
+
+        // ── COGS category breakdown + hao hụt ───────────────────────────────
+        const categoryByIngredient = new Map()
+        for (const c of ingredientConfigs || []) categoryByIngredient.set(c.ingredient, c.category || null)
+
+        const cogsByCategory = splitCogsByCategory(
+            orders, recipes, extraIngredients, ingredientCosts, categoryByIngredient
+        )
+
+        // Bucket orders by VN day so calculateLossValue can match per-closing usage.
+        const itemsByDay = {}
+        for (const o of orders || []) {
+            if (o.deleted_at) continue
+            const dayStr = new Date(o.created_at || o.createdAt).toLocaleDateString('sv-SE')
+            if (!itemsByDay[dayStr]) itemsByDay[dayStr] = []
+            for (const i of (o.order_items || [])) {
+                itemsByDay[dayStr].push({
+                    productId: i.product_id || i.productId,
+                    qty: i.quantity || i.qty || 1,
+                    extras: i.extra_ids ? i.extra_ids.map(id => ({ id })) : (i.extras || []),
+                })
+            }
+        }
+        const dailyConsumption = {}
+        for (const [dayStr, items] of Object.entries(itemsByDay)) {
+            dailyConsumption[dayStr] = calculateEstimatedConsumption(items, recipes, extraIngredients)
+        }
+        const lossValue = calculateLossValue({
+            shiftClosings,
+            prevShiftClosings,
+            dailyConsumption,
+            ingredientConfigs,
+        })
+
+        // P&L = Revenue - COGS - Hao hụt - Tất cả thực chi. NVL không trừ (đã nằm trong COGS).
+        const netProfit = agg.totalRevenue - agg.totalCOGS - lossValue - operationalExpense
 
         return {
             totalRevenue: agg.totalRevenue,
@@ -151,9 +187,11 @@ export default function RangeReportPage() {
             cashRevenue, transferRevenue,
             dailyExpense, refillTotal, refillNvl, refillFreeForm,
             operationalExpense,
-            fixedExpense, netProfit,
+            netProfit,
+            cogsByCategory,
+            lossValue,
         }
-    }, [orders, expenses, shiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, productExtras, products, selectedProductId, days])
+    }, [orders, expenses, shiftClosings, prevShiftClosings, recipes, extraIngredients, ingredientCosts, ingredientConfigs, productExtras, products, selectedProductId, days])
 
     const prevStats = useMemo(() => {
         const prevProductMap = new Map(products.map(p => [p.id, p]))
@@ -168,9 +206,8 @@ export default function RangeReportPage() {
         })
 
         const { dailyExpense, refillTotal, refillFreeForm } = splitExpenses(prevExpenses)
-        const fixedExpense = sumFixedCosts(fixedCosts, prevDays)
         const operationalExpense = dailyExpense + refillFreeForm
-        const netProfit = agg.totalRevenue - agg.totalCOGS - operationalExpense - fixedExpense
+        const netProfit = agg.totalRevenue - agg.totalCOGS - operationalExpense
 
         const prevCash = prevShiftClosings.reduce((s, sc) => s + (sc.actual_cash || 0), 0)
         const prevTransfer = prevShiftClosings.reduce((s, sc) => s + (sc.actual_transfer || 0), 0)
@@ -181,7 +218,7 @@ export default function RangeReportPage() {
         const actualTotal = prevCash + prevTransfer + dailyExpense
 
         return { revenue: agg.totalRevenue, cups: agg.totalCups, netProfit, takeHome, actualTotal }
-    }, [prevOrders, prevExpenses, prevShiftClosings, fixedCosts, recipes, extraIngredients, ingredientCosts, selectedProductId, prevDays, products])
+    }, [prevOrders, prevExpenses, prevShiftClosings, recipes, extraIngredients, ingredientCosts, selectedProductId, prevDays, products])
 
     const avg = (v) => days > 0 ? Math.round(v / days) : v
 
@@ -314,18 +351,14 @@ export default function RangeReportPage() {
                                 <FinanceCards
                                     totalRevenue={stats.totalRevenue}
                                     totalCOGS={stats.totalCOGS}
-                                    dailyExpense={stats.operationalExpense}
-                                    refillNvl={stats.refillNvl}
-                                    refillFreeForm={stats.refillFreeForm}
-                                    fixedExpense={stats.fixedExpense}
                                     netProfit={stats.netProfit}
-                                    onRecipesClick={() => navigate('/recipes', { state: { from: '/range-report' } })}
-                                    onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'operation', expensesToView: expenses, isReadOnly: true } })}
-                                    onRefillNvlClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'nvl', expensesToView: expenses, isReadOnly: true } })}
-                                    onRefillFreeFormClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'after', expensesToView: expenses, isReadOnly: true } })}
-                                    onFixedExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'fixed', isReadOnly: true } })}
                                     yesterdayNetProfit={prevStats.netProfit}
                                     compareLabel={`So với ${range === 'week' ? 'tuần trước' : 'tháng trước'}`}
+                                    expenses={expenses}
+                                    expenseCategories={expenseCategories}
+                                    cogsByCategory={stats.cogsByCategory}
+                                    lossValue={stats.lossValue}
+                                    onRecipesClick={() => navigate('/recipes', { state: { from: '/range-report' } })}
                                 />
                             </>
                         )}
@@ -337,7 +370,7 @@ export default function RangeReportPage() {
                                     cash={stats.cashRevenue}
                                     transfer={stats.transferRevenue}
                                     dailyExpense={stats.dailyExpense}
-                                    onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'operation', expensesToView: expenses, isReadOnly: true } })}
+                                    onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', expensesToView: expenses, isReadOnly: true } })}
                                 />
 
                                 <FinancialFlow
@@ -351,8 +384,8 @@ export default function RangeReportPage() {
                                     yesterdayActualTotal={prevStats.actualTotal}
                                     yesterdayTakeHome={prevStats.takeHome}
                                     compareLabel={`So với ${range === 'week' ? 'tuần trước' : 'tháng trước'}`}
-                                    onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'operation', expensesToView: expenses, isReadOnly: true } })}
-                                    onRefillClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', filter: 'nvl', expensesToView: expenses, isReadOnly: true } })}
+                                    onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', expensesToView: expenses, isReadOnly: true } })}
+                                    onRefillClick={() => navigate('/ingredients', { state: { from: `/range-report?range=${range}` } })}
                                 />
                             </>
                         )}

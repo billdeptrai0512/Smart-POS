@@ -141,6 +141,10 @@ export default function RangeLossCard({
             const todayEstimatedConsumption = dailyConsumption[dayStr] || {};
 
             closing.inventory_report.forEach(item => {
+                // Skip ingredients where staff didn't count actual remaining at end of shift —
+                // treating null as 0 would surface a fake hao hụt = −theoretical (the whole stock).
+                if (item.remaining == null) return;
+
                 const config = ingredientConfigs.find(c => c.ingredient === item.ingredient) || {};
                 const unitCost = config.unit_cost || 0;
 
@@ -167,7 +171,7 @@ export default function RangeLossCard({
                 const used = Math.round((todayEstimatedConsumption[item.ingredient] || 0) * 10) / 10;
 
                 const theoretical = Math.round((opening + restock - used) * 10) / 10;
-                const actual = item.remaining || 0;
+                const actual = item.remaining;
                 const diff = Math.round((actual - theoretical) * 10) / 10;
 
                 const diffValue = diff * unitCost;

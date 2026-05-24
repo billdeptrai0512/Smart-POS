@@ -93,15 +93,21 @@ export async function fetchIngredientCostsAndUnits(addressId) {
     // address via the seed_address_ingredient_costs trigger and the backfill in
     // migration 20260518_decouple_ingredient_costs.sql. Admin edits to default
     // rows DO NOT propagate to existing active addresses.
-    let query = supabase.from('ingredient_costs').select('ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock')
-
-    if (addressId) {
-        query = query.eq('address_id', addressId)
-    } else {
-        query = query.is('address_id', null)
+    // Try with category first; fall back to legacy SELECT if migration
+    // 20260523_add_ingredient_category.sql isn't deployed yet (Postgres 42703).
+    const runQuery = async (withCategory) => {
+        const cols = withCategory
+            ? 'ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock, category'
+            : 'ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock'
+        let q = supabase.from('ingredient_costs').select(cols)
+        q = addressId ? q.eq('address_id', addressId) : q.is('address_id', null)
+        return await q
     }
 
-    const { data, error } = await query
+    let { data, error } = await runQuery(true)
+    if (error && error.code === '42703') {
+        ({ data, error } = await runQuery(false))
+    }
     if (error) {
         console.error('fetchIngredientCostsAndUnits error:', error)
         return { costs: {}, units: {}, rows: [] }
@@ -114,7 +120,7 @@ export async function fetchIngredientCostsAndUnits(addressId) {
     for (const d of data) {
         costs[d.ingredient] = d.unit_cost
         units[d.ingredient] = d.unit || 'đv'
-        rows.push({ ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, min_stock: d.min_stock })
+        rows.push({ ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, min_stock: d.min_stock, category: d.category || null })
     }
     return { costs, units, rows }
 }
@@ -143,10 +149,18 @@ export async function upsertIngredientCost(ingredient, unitCost, addressId = nul
     if (opts.packSize !== undefined) payload.pack_size = opts.packSize || null
     if (opts.packUnit !== undefined) payload.pack_unit = opts.packUnit || null
     if (opts.minStock !== undefined) payload.min_stock = opts.minStock || null
+    if (opts.category !== undefined) payload.category = opts.category || null
 
-    const { error } = await supabase
+    let { error } = await supabase
         .from('ingredient_costs')
         .upsert(payload, { onConflict: 'ingredient,address_id' })
+    // Retry without `category` if migration 20260523 isn't deployed yet.
+    if (error && error.code === '42703' && 'category' in payload) {
+        const { category: _drop, ...rest } = payload
+        ;({ error } = await supabase
+            .from('ingredient_costs')
+            .upsert(rest, { onConflict: 'ingredient,address_id' }))
+    }
     if (error) throw error
 }
 
@@ -252,16 +266,18 @@ export async function fetchIngredientStocks(addressId) {
 
     const applyAddrFilter = (q) => isDefault ? q.is('address_id', null) : q.eq('address_id', addressId)
 
-    // Fallback step 1: latest closing + all refills (parallel, both small)
+    // Fallback step 1: recent closings + all refills (parallel, both small).
+    // Walk N=30 latest closings (DESC) so we can carry forward the most-recent
+    // non-null `remaining` per ingredient — null means staff didn't count that
+    // ingredient that shift, so we keep yesterday's counter instead of zeroing.
     const [latestRes, refillsRes] = await Promise.all([
         applyAddrFilter(
             supabase
                 .from('shift_closings')
-                .select('inventory_report')
+                .select('created_at, inventory_report')
         )
             .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
+            .limit(30),
         applyAddrFilter(
             supabase
                 .from('expenses')
@@ -271,10 +287,26 @@ export async function fetchIngredientStocks(addressId) {
 
     const counter = {}
     const todayRestock = {}
-    const latestReport = Array.isArray(latestRes.data?.inventory_report) ? latestRes.data.inventory_report : []
+    const closingsDesc = Array.isArray(latestRes.data) ? latestRes.data : []
+
+    // todayRestock = restock from THE latest closing only (today's restock).
+    const latestReport = Array.isArray(closingsDesc[0]?.inventory_report) ? closingsDesc[0].inventory_report : []
     latestReport.forEach(item => {
-        counter[item.ingredient] = Number(item.remaining) || 0
-        todayRestock[item.ingredient] = Number(item.restock) || 0
+        if (item.ingredient && item.restock != null) {
+            todayRestock[item.ingredient] = Number(item.restock)
+        }
+    })
+
+    // counter = most-recent non-null remaining per ingredient. Walking DESC and
+    // only writing on first hit means yesterday's count wins when today is null.
+    closingsDesc.forEach(closing => {
+        const report = Array.isArray(closing.inventory_report) ? closing.inventory_report : []
+        report.forEach(item => {
+            if (!item.ingredient) return
+            if (item.remaining != null && counter[item.ingredient] === undefined) {
+                counter[item.ingredient] = Number(item.remaining)
+            }
+        })
     })
 
     // First refill timestamp + total refill per ingredient
