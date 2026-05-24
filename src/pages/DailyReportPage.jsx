@@ -90,10 +90,10 @@ export default function DailyReportPage() {
     })
 
     // Inline cash/transfer editor (today scope only). Pre-fills from shiftClosing when
-    // it loads; dirty flag controls when the Lưu button appears.
+    // it loads; cashDirty is derived from input vs. persisted so reverting the change
+    // makes the Lưu button disappear again.
     const [cashInput, setCashInput] = useState('')
     const [transferInput, setTransferInput] = useState('')
-    const [cashDirty, setCashDirty] = useState(false)
     const { save: saveShiftClosing, isSaving: isSavingShift } = useShiftClosingSave(selectedAddress?.id)
 
     // Inventory editor (today scope only). All input state + warehouse fetch live in
@@ -121,13 +121,18 @@ export default function DailyReportPage() {
     // returns yesterday's shift_closing as `shift_closing` (server tz / RPC
     // boundary issue), which would leave yesterday's cash + transfer values
     // sticky after midnight. If closed_at isn't today, treat as no row → blank.
+    const isTodaysClosing = shiftClosing?.closed_at
+        && dateStringVN(new Date(shiftClosing.closed_at)) === todayISO
+    const persistedCash = isTodaysClosing && shiftClosing.actual_cash != null
+        ? Number(shiftClosing.actual_cash) : 0
+    const persistedTransfer = isTodaysClosing && shiftClosing.actual_transfer != null
+        ? Number(shiftClosing.actual_transfer) : 0
+    const cashDirty = (parseVNDInput(cashInput) || 0) !== persistedCash
+        || (parseVNDInput(transferInput) || 0) !== persistedTransfer
     useEffect(() => {
         if (!isTodayScope) return
-        const isTodaysClosing = shiftClosing?.closed_at
-            && dateStringVN(new Date(shiftClosing.closed_at)) === todayISO
         setCashInput(isTodaysClosing && shiftClosing.actual_cash != null ? formatVNDInput(shiftClosing.actual_cash) : '')
         setTransferInput(isTodaysClosing && shiftClosing.actual_transfer != null ? formatVNDInput(shiftClosing.actual_transfer) : '')
-        setCashDirty(false)
     }, [isTodayScope, todayISO, shiftClosing?.id, shiftClosing?.actual_cash, shiftClosing?.actual_transfer, shiftClosing?.closed_at])
 
     // Computed display data
@@ -629,8 +634,8 @@ export default function DailyReportPage() {
                                 editable={isTodayScope}
                                 cashInput={cashInput}
                                 transferInput={transferInput}
-                                onCashChange={(v) => { setCashInput(formatVNDInput(v)); setCashDirty(true) }}
-                                onTransferChange={(v) => { setTransferInput(formatVNDInput(v)); setCashDirty(true) }}
+                                onCashChange={(v) => setCashInput(formatVNDInput(v))}
+                                onTransferChange={(v) => setTransferInput(formatVNDInput(v))}
                                 isSaving={isSavingShift}
                                 onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } })}
                                 salesCard={
