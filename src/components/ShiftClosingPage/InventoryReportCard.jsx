@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronUp, Info } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils'
 import { formatPackedQty } from '../../utils/inventory'
 import { formatVND } from '../../utils'
@@ -8,34 +8,32 @@ import { formatVND } from '../../utils'
 // Chưa nhập first (needs action), then anomalies (Hụt/Dư), then Khớp (done).
 const STATUS_PRIORITY = { pending: 0, loss: 1, excess: 2, match: 3 }
 
-function computeRowStatus({ inventoryValue, restockValue, warehouseAvailable, openingValue, openingFallback, used }) {
+function computeRowStatus({ inventoryValue, restockValue, openingValue, openingFallback, used }) {
     const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
     const hasActual = inventoryValue !== undefined && inventoryValue !== ''
     if (!hasActual) return 'pending'
-    const warehouseNum = Number(warehouseAvailable || 0)
     const restockNum = r1(restockValue)
-    const warehouseEnd = Math.max(0, warehouseNum - restockNum)
     const openingDisplay = openingValue ?? (openingFallback !== undefined && openingFallback !== null ? String(openingFallback) : '')
     const openingNum = r1(openingDisplay)
     const usedNum = r1(used)
-    const thucTe = r1(warehouseEnd + r1(inventoryValue))
-    const lyThuyet = r1(warehouseNum + openingNum - usedNum)
+    const thucTe = r1(inventoryValue)
+    const lyThuyet = r1(openingNum + restockNum - usedNum)
     const haoHut = r1(thucTe - lyThuyet)
     if (haoHut === 0) return 'match'
     if (haoHut < 0) return 'loss'
     return 'excess'
 }
 
-// 3×3 grid per ingredient:
-//   row 1 (warehouse):  Tồn kho   |  Lấy ra      |  Tồn cuối = Tồn kho − Lấy ra
-//   row 2 (counter):    Đầu kỳ    |  Sử dụng     |  + Cuối kỳ = actual đếm quầy (input)
-//   row 3 (audit):      Hao hụt   |  Lý thuyết   |  Thực tế
+// Per-ingredient layout (counter-side only — Tồn kho tách ra ngoài):
+//   row 1 (inputs):  Đầu kỳ    |  Nhập thêm   |  Cuối kỳ
+//   row 2:           Sử dụng   |  Tổng cộng (col-span 2)
+//   row 3 (audit):   Chênh lệch|  Lý thuyết   |  Thực tế
 //
-// Staff inputs: Lấy ra, Đầu kỳ, "+ Cuối kỳ". Everything else is computed and disabled.
+// Staff inputs: Đầu kỳ, Nhập thêm, Cuối kỳ. Everything else is computed and disabled.
 // Audit math:
-//   Thực tế   = Tồn cuối + Cuối kỳ          (tổng tồn vật lý cuối ca)
-//   Lý thuyết = Tồn kho + Đầu kỳ − Sử dụng  (tồn dự kiến theo công thức)
-//   Hao hụt   = Thực tế − Lý thuyết         (âm = thiếu, dương = dư, 0 = khớp)
+//   Thực tế   = Cuối kỳ                       (đếm vật lý tại quầy)
+//   Lý thuyết = Đầu kỳ + Nhập thêm − Sử dụng  (lượng dự kiến còn tại quầy)
+//   Hao hụt   = Thực tế − Lý thuyết           (âm = thiếu, dương = dư, 0 = khớp)
 export default function InventoryReportCard({
     ingredientsList, isLoading,
     openingStock, openingInputs, openingLocked,
@@ -70,8 +68,8 @@ export default function InventoryReportCard({
     // → Hụt/Dư mid-keystroke and shuffle it down the list before staff finishes.
     // Falls back to live maps when no baseline is wired (older callers).
     const sortInputs = {
-        opening:   baselineInputs?.opening   ?? openingInputs,
-        restock:   baselineInputs?.restock   ?? restockInputs,
+        opening: baselineInputs?.opening ?? openingInputs,
+        restock: baselineInputs?.restock ?? restockInputs,
         inventory: baselineInputs?.inventory ?? inventoryInputs,
     }
     const sortedList = [...ingredientsList].sort((a, b) => {
@@ -150,6 +148,8 @@ function IngredientRow({
     const [open, setOpen] = useState(false)
     // Sub-expand: per-recipe consumption breakdown inside the expanded row.
     const [expanded, setExpanded] = useState(false)
+    // Inline help bubble for the Lý thuyết formula — tap the (i) to toggle.
+    const [showLyThuyetInfo, setShowLyThuyetInfo] = useState(false)
     const hasBreakdown = breakdown && Object.keys(breakdown).length > 0
     const toggleExpanded = () => hasBreakdown && setExpanded(e => !e)
 
@@ -169,21 +169,20 @@ function IngredientRow({
     const restockOverflow = warehouseAvailable !== undefined && restockNum > warehouseNum
     const overBy = restockOverflow ? restockNum - warehouseNum : 0
 
-    // Live computed balances.
-    //   warehouseEnd = Tồn kho − Lấy ra   (kho tổng còn sau khi rút)
-    //   Sử dụng      = recipe-based estimated consumption
-    //   Thực tế      = Tồn cuối + Cuối kỳ (đếm vật lý cuối ca)
-    //   Lý thuyết    = (Tồn kho + Đầu kỳ) − Sử dụng
-    //   Hao hụt      = Thực tế − Lý thuyết
-    //                 (âm = thiếu → mất hàng / công thức sai;
-    //                  dương = dư → restock vượt / công thức trừ thiếu)
-    const warehouseEnd = Math.max(0, warehouseNum - restockNum)
+    // Live computed balances — counter-side only. Tồn kho được tách ra khỏi
+    // công thức để Lý thuyết / Thực tế cùng quy chiếu về lượng đứng tại quầy.
+    //   Sử dụng   = recipe-based estimated consumption
+    //   Lý thuyết = Đầu kỳ + Nhập thêm − Sử dụng   (lượng dự kiến còn tại quầy)
+    //   Thực tế   = Cuối kỳ                        (đếm vật lý cuối ca)
+    //   Hao hụt   = Thực tế − Lý thuyết
+    //               (âm = thiếu → mất hàng / công thức sai;
+    //                dương = dư → nhập vượt / công thức trừ thiếu)
     const openingNum = r1(openingDisplay)
     const usedNum = r1(used)
     const hasActual = inventoryValue !== undefined && inventoryValue !== ''
     const cuoiKyNum = hasActual ? r1(inventoryValue) : null
-    const thucTe = cuoiKyNum != null ? r1(warehouseEnd + cuoiKyNum) : null
-    const lyThuyet = r1(warehouseNum + openingNum - usedNum)
+    const thucTe = cuoiKyNum != null ? r1(cuoiKyNum) : null
+    const lyThuyet = r1(openingNum + restockNum - usedNum)
     const haoHut = thucTe != null ? r1(thucTe - lyThuyet) : null
     const haoHutTone = haoHut == null
         ? 'neutral'
@@ -322,7 +321,14 @@ function IngredientRow({
                         disabled
                         tone={haoHutTone}
                     />
-                    <ColumnInput label="Lý thuyết" value={lyThuyet} unit={unit} disabled />
+                    <ColumnInput
+                        label="Lý thuyết"
+                        value={lyThuyet}
+                        unit={unit}
+                        disabled
+                        onLabelClick={() => setShowLyThuyetInfo(s => !s)}
+                        labelTrailing={<Info size={10} className="text-text-dim shrink-0" />}
+                    />
                     <ColumnInput
                         label="Thực tế"
                         value={thucTe != null ? thucTe : ''}
@@ -330,6 +336,14 @@ function IngredientRow({
                         disabled
                     />
                 </div>
+                {showLyThuyetInfo && (
+                    <div className="mt-2 px-3 py-2 bg-surface-light rounded-[10px] border border-border/40 text-[11px] text-text-secondary leading-snug">
+                        <span className="font-black text-text">Lý thuyết</span> = Đầu kỳ <span className="text-text-dim">({openingNum})</span>
+                        {' '}+ Nhập thêm <span className="text-text-dim">({restockNum})</span>
+                        {' '}− Sử dụng <span className="text-text-dim">({usedNum})</span>
+                        {' '}= <span className="font-black text-text tabular-nums">{lyThuyet} {unit}</span>
+                    </div>
+                )}
                 {/* Row 4 — money + cups-equivalent context for Hao hụt */}
                 <div className="grid grid-cols-3 gap-2 mt-2">
                     <TextCell
