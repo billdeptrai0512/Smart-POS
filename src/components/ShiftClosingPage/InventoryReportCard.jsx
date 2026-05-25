@@ -288,7 +288,6 @@ function IngredientRow({
                         <TextCell
                             label="Tổng cộng"
                             text={totalCupsText}
-                            tone={haoHutTone}
                             onClick={hasBreakdown ? toggleExpanded : undefined}
                             expanded={expanded}
                         />
@@ -337,11 +336,10 @@ function IngredientRow({
                     />
                 </div>
                 {showLyThuyetInfo && (
-                    <div className="mt-2 px-3 py-2 bg-surface-light rounded-[10px] border border-border/40 text-[11px] text-text-secondary leading-snug">
-                        <span className="font-black text-text">Lý thuyết</span> = Đầu kỳ <span className="text-text-dim">({openingNum})</span>
+                    <div className="mt-2 px-3 py-2 bg-surface-light rounded-[10px] text-center border border-border/40 text-[11px] text-text-secondary leading-snug">
+                        Đầu kỳ <span className="text-text-dim">({openingNum})</span>
                         {' '}+ Nhập thêm <span className="text-text-dim">({restockNum})</span>
                         {' '}− Sử dụng <span className="text-text-dim">({usedNum})</span>
-                        {' '}= <span className="font-black text-text tabular-nums">{lyThuyet} {unit}</span>
                     </div>
                 )}
                 {/* Row 4 — money + cups-equivalent context for Hao hụt */}
