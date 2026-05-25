@@ -121,7 +121,7 @@ export default function CashFlowCard({
                         className="flex justify-between items-center cursor-pointer hover:opacity-85 active:scale-[0.99] transition-all"
                     >
                         <span className="text-[12px] font-bold text-text-secondary decoration-text-secondary/50 underline-offset-2">
-                            Chi phí phát sinh
+                            Chi trong ca
                         </span>
                         <span className="text-[13px] font-bold text-warning tabular-nums">
                             {formatVND(dailyExpense || 0)}
@@ -139,7 +139,7 @@ export default function CashFlowCard({
 
             {/* PANEL 2: CHI PHÍ PHÁT SINH */}
             <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
-                <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Chi phí phát sinh</h3>
+                <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Thực chi</h3>
                 <div className="flex flex-col gap-1 pl-1">
                     <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Trong ca</span>
 
@@ -196,7 +196,7 @@ export default function CashFlowCard({
             {/* PANEL 3: TỔNG CHI PHÍ */}
             <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
                 <div className="flex justify-between items-center mt-1 pl-1">
-                    <span className="text-[13px] font-black text-text uppercase tracking-wide">Tổng chi phí</span>
+                    <span className="text-[13px] font-black text-text uppercase tracking-wide">Tổng thực chi</span>
                     <span className="text-[14px] font-black text-danger tabular-nums">
                         -{formatVND(totalExpenses)}
                     </span>

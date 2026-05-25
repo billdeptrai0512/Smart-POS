@@ -162,56 +162,56 @@ export default function InventoryRefillCard({
             // means "chưa kiểm cuối ca" — treating it as 0 would surface a fake hụt = −theoretical.
             .filter(item => item.remaining != null)
             .map(item => {
-            const config = ingredientConfigs.find(c => c.ingredient === item.ingredient) || {};
-            const unitCost = config.unit_cost || 0; // assuming unit_cost is available in config, else 0
+                const config = ingredientConfigs.find(c => c.ingredient === item.ingredient) || {};
+                const unitCost = config.unit_cost || 0; // assuming unit_cost is available in config, else 0
 
-            const opening = openingMap[item.ingredient] ?? 0;
-            const restock = item.restock || 0;
-            const used = Math.round(lookupByLabel(item.ingredient, todayEstimatedConsumption) * 10) / 10;
+                const opening = openingMap[item.ingredient] ?? 0;
+                const restock = item.restock || 0;
+                const used = Math.round(lookupByLabel(item.ingredient, todayEstimatedConsumption) * 10) / 10;
 
-            const theoretical = Math.round((opening + restock - used) * 10) / 10;
-            const actual = item.remaining;
-            const diff = Math.round((actual - theoretical) * 10) / 10;
+                const theoretical = Math.round((opening + restock - used) * 10) / 10;
+                const actual = item.remaining;
+                const diff = Math.round((actual - theoretical) * 10) / 10;
 
-            const diffValue = diff * unitCost;
-            if (diffValue < 0) totalLossValue += Math.abs(diffValue);
+                const diffValue = diff * unitCost;
+                if (diffValue < 0) totalLossValue += Math.abs(diffValue);
 
-            const unit = getIngredientUnit(item.ingredient, item.unit, ingredientUnits);
+                const unit = getIngredientUnit(item.ingredient, item.unit, ingredientUnits);
 
-            let diffText, diffColor, diffBg;
-            if (diff < 0) {
-                diffText = `Hụt ${Math.abs(diff)} ${unit}`;
-                diffColor = 'text-danger';
-                diffBg = 'bg-danger/10';
-            } else if (diff > 0) {
-                diffText = `Dư ${diff} ${unit}`;
-                diffColor = 'text-warning';
-                diffBg = 'bg-warning/10';
-            } else {
-                diffText = 'Khớp';
-                diffColor = 'text-success';
-                diffBg = 'bg-success/10';
-            }
+                let diffText, diffColor, diffBg;
+                if (diff < 0) {
+                    diffText = `Hụt ${Math.abs(diff)} ${unit}`;
+                    diffColor = 'text-danger';
+                    diffBg = 'bg-danger/10';
+                } else if (diff > 0) {
+                    diffText = `Dư ${diff} ${unit}`;
+                    diffColor = 'text-warning';
+                    diffBg = 'bg-warning/10';
+                } else {
+                    diffText = 'Khớp';
+                    diffColor = 'text-success';
+                    diffBg = 'bg-success/10';
+                }
 
-            const ref = ingredientToProduct[item.ingredient];
-            let equivText = null;
-            if (ref && ref.amountPerCup > 0 && diff < 0) {
-                const cups = Math.round(Math.abs(diff) / ref.amountPerCup);
-                if (cups > 0) equivText = `≈ ${cups} ly ${ref.productName}`;
-            }
+                const ref = ingredientToProduct[item.ingredient];
+                let equivText = null;
+                if (ref && ref.amountPerCup > 0 && diff < 0) {
+                    const cups = Math.round(Math.abs(diff) / ref.amountPerCup);
+                    if (cups > 0) equivText = `≈ ${cups} ly ${ref.productName}`;
+                }
 
-            const labelLower = ingredientLabel(item.ingredient).toLowerCase()
-            const bd = consumptionBreakdown[item.ingredient]
-                || Object.entries(consumptionBreakdown).find(([k]) =>
-                    k !== item.ingredient && ingredientLabel(k).toLowerCase() === labelLower
-                )?.[1]
-                || {}
+                const labelLower = ingredientLabel(item.ingredient).toLowerCase()
+                const bd = consumptionBreakdown[item.ingredient]
+                    || Object.entries(consumptionBreakdown).find(([k]) =>
+                        k !== item.ingredient && ingredientLabel(k).toLowerCase() === labelLower
+                    )?.[1]
+                    || {}
 
-            return {
-                ...item, config, opening, restock, used, theoretical, actual, diff, diffValue,
-                diffText, diffColor, diffBg, unitCost, unit, equivText, bd
-            };
-        });
+                return {
+                    ...item, config, opening, restock, used, theoretical, actual, diff, diffValue,
+                    diffText, diffColor, diffBg, unitCost, unit, equivText, bd
+                };
+            });
 
         rows.sort((a, b) => {
             const getPriority = (diff) => {
