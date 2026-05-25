@@ -160,21 +160,7 @@ export default function IngredientCostItem({
                 </span>
             )}
 
-            {/* Row 3: manager-only details — separated by border-top.
-                 Nhóm + Quy đổi đã chuyển sang trang chi tiết của ingredient. */}
-            {canEdit && (
-                <div className="mt-1 pt-2 border-t border-border/40 flex flex-col gap-1 text-[11px] tabular-nums">
-                    <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-text-dim">Giá vốn</span>
-                        <span className="text-text-secondary font-bold">
-                            {formatVND(cost)}<span className="text-text-dim font-medium">/{displayUnit}</span>
-                        </span>
-                    </div>
-                </div>
-            )}
-
-
-            <div className="mt-1 pt-2 border-t border-border/40 flex-1 flex flex-col gap-1 text-[11px] tabular-nums" onClick={stop}>
+            <div className="mt-1 pt-2 border-t border-border/40 flex-1 flex flex-col gap-1 text-[11px] tabular-nums">
                 {(() => {
                     const todayRefill = Number(dailyContext?.today_refill || 0)
                     const todayRestock = Number(dailyContext?.today_restock || 0)
@@ -195,16 +181,34 @@ export default function IngredientCostItem({
                             <Row label="Lấy ra" value={fmt(todayRestock)} sign="-" accent={todayRestock > 0 ? 'text-warning' : ''} />
                             <Row label="Nhập mới" value={fmt(todayRefill)} sign="+" accent={todayRefill > 0 ? 'text-success' : ''} />
                             <Row label="Tồn cuối" value={fmt(warehouseNow)} bold />
-                            <button
-                                onClick={() => onOpen?.(ingredient)}
-                                className="text-[10px] font-bold text-primary text-right mt-auto pt-1 hover:underline"
-                            >
-                                Lịch sử nhập kho →
-                            </button>
+
                         </>
                     )
                 })()}
             </div>
+
+            {/* Row 3: manager-only details — separated by border-top.
+                 Nhóm + Quy đổi đã chuyển sang trang chi tiết của ingredient. */}
+            {canEdit && (
+                <div className="mt-1 pt-2 border-t border-border/40 flex flex-col gap-1 text-[11px] tabular-nums">
+                    <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-text-dim">Giá vốn</span>
+                        <span className="text-text-secondary font-bold">
+                            {formatVND(cost)}<span className="text-text-dim font-medium">/{displayUnit}</span>
+                        </span>
+                    </div>
+                </div>
+            )}
+
+            <button
+                onClick={() => onOpen?.(ingredient)}
+                className="text-[10px] font-bold text-primary text-right mt-auto pt-1 hover:underline"
+            >
+                Xem chi tiết
+            </button>
+
+
+
 
         </div>
     )
