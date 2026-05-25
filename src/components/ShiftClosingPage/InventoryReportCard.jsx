@@ -46,6 +46,10 @@ export default function InventoryReportCard({
     consumptionBreakdown = {}, // ingredient → { [variantKey]: { name, qty, totalAmount } } for expand-on-tap
     ingredientToProduct = {}, // ingredient → { amountPerCup, productName } for "Tương đương N ly" label
     canUnlock, isSubmitting,
+    // Last-persisted snapshot — drives sort + collapse so live keystrokes don't
+    // re-order rows while staff is mid-edit; row key includes baselineVersion so
+    // every row remounts (→ collapses) right after a successful save.
+    baselineInputs, baselineVersion = 0,
     onOpeningChange, onOpeningLock, onRestockChange, onInventoryChange,
 }) {
     if (isLoading) {
@@ -60,20 +64,30 @@ export default function InventoryReportCard({
 
     // Sort by status priority so staff sees "Chưa nhập" first, then anomalies,
     // then matched rows at the bottom. Tie-break by display name for stability.
+    //
+    // Status is computed against the LAST-PERSISTED snapshot, not the live input
+    // maps — otherwise typing a Cuối kỳ value would flip the row from Chưa nhập
+    // → Hụt/Dư mid-keystroke and shuffle it down the list before staff finishes.
+    // Falls back to live maps when no baseline is wired (older callers).
+    const sortInputs = {
+        opening:   baselineInputs?.opening   ?? openingInputs,
+        restock:   baselineInputs?.restock   ?? restockInputs,
+        inventory: baselineInputs?.inventory ?? inventoryInputs,
+    }
     const sortedList = [...ingredientsList].sort((a, b) => {
         const sa = computeRowStatus({
-            inventoryValue: inventoryInputs[a.ingredient],
-            restockValue: restockInputs[a.ingredient],
+            inventoryValue: sortInputs.inventory[a.ingredient],
+            restockValue: sortInputs.restock[a.ingredient],
             warehouseAvailable: warehouseStocks[a.ingredient],
-            openingValue: openingInputs[a.ingredient],
+            openingValue: sortInputs.opening[a.ingredient],
             openingFallback: openingStock[a.ingredient],
             used: lookupByLabel(a.ingredient, usedMap),
         })
         const sb = computeRowStatus({
-            inventoryValue: inventoryInputs[b.ingredient],
-            restockValue: restockInputs[b.ingredient],
+            inventoryValue: sortInputs.inventory[b.ingredient],
+            restockValue: sortInputs.restock[b.ingredient],
             warehouseAvailable: warehouseStocks[b.ingredient],
-            openingValue: openingInputs[b.ingredient],
+            openingValue: sortInputs.opening[b.ingredient],
             openingFallback: openingStock[b.ingredient],
             used: lookupByLabel(b.ingredient, usedMap),
         })
@@ -87,7 +101,7 @@ export default function InventoryReportCard({
         <div className="bg-surface rounded-[20px] p-3 border border-border/60 shadow-sm space-y-3">
             {sortedList.map(ing => (
                 <IngredientRow
-                    key={ing.ingredient}
+                    key={`${ing.ingredient}-${baselineVersion}`}
                     ing={ing}
                     ingredientUnits={ingredientUnits}
                     openingValue={openingInputs[ing.ingredient]}
@@ -188,6 +202,13 @@ function IngredientRow({
         if (cups > 0) tuongDuongText = `≈ ${cups} ly ${productRef.productName || ''}`.trim()
     }
 
+    // Tổng cộng cell text: total cups across all variants that consumed this ingredient
+    // today (sum of breakdown[*].qty). Tap the cell to expand the per-variant breakdown.
+    const totalCupsUsing = hasBreakdown
+        ? Object.values(breakdown).reduce((sum, e) => sum + (Number(e.qty) || 0), 0)
+        : 0
+    const totalCupsText = totalCupsUsing > 0 ? `${totalCupsUsing} ly` : '—'
+
     // Status badge text + tone for the collapsed header.
     // 'pending' uses a quiet secondary tone — "Chưa nhập" is the default state of
     // every row before staff opens chốt ca, not a problem to flag.
@@ -229,106 +250,109 @@ function IngredientRow({
             </button>
 
             {!open ? null : (<>
-            {/* Row 1 — warehouse level */}
-            <div className="grid grid-cols-3 gap-2">
-                <ColumnInput label="Tồn kho" value={warehouseNum} unit={unit} disabled />
-                <ColumnInput
-                    label="Lấy ra"
-                    value={restockValue || ''}
-                    unit={unit}
-                    disabled={isSubmitting}
-                    onChange={(v) => onRestockChange(ing.ingredient, v)}
-                    overflow={restockOverflow}
-                />
-                <ColumnInput label="Tồn cuối" value={warehouseEnd} unit={unit} disabled />
-            </div>
-
-            {/* Row 2 — counter level */}
-            <div className="grid grid-cols-3 gap-2 mt-2">
-                <ColumnInput
-                    label="Đầu kỳ"
-                    value={openingDisplay}
-                    unit={unit}
-                    disabled={isLocked || isSubmitting}
-                    onChange={(v) => onOpeningChange(ing.ingredient, v)}
-                    locked={isLocked}
-                />
-                <ColumnInput
-                    label="Sử dụng"
-                    value={usedNum}
-                    unit={unit}
-                    disabled
-                    onLabelClick={hasBreakdown ? toggleExpanded : undefined}
-                    labelTrailing={hasBreakdown
-                        ? <ChevronDown size={11} className={`text-text-dim shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-                        : null
-                    }
-                />
-                <ColumnInput
-                    label="+ Cuối kỳ"
-                    value={inventoryValue ?? ''}
-                    unit={unit}
-                    disabled={isSubmitting}
-                    onChange={(v) => onInventoryChange(ing.ingredient, v)}
-                />
-            </div>
-
-            {expanded && hasBreakdown && (
-                <div className="mt-2 px-3 py-2 bg-surface-light rounded-[10px] border border-border/40 flex flex-col gap-1">
-                    {Object.values(breakdown)
-                        .sort((a, b) => b.totalAmount - a.totalAmount)
-                        .map((entry, i) => (
-                            <div key={i} className="flex items-center justify-between">
-                                <span className="text-[11px] text-text-secondary truncate flex-1">{entry.name}</span>
-                                <span className="text-[11px] font-bold text-text-dim tabular-nums shrink-0 ml-2">
-                                    {entry.qty} ly × {Math.round(entry.totalAmount / entry.qty * 10) / 10} = <span className="text-text font-black">{entry.totalAmount}</span>
-                                </span>
-                            </div>
-                        ))
-                    }
+                {/* Row 1 — warehouse level */}
+                <div className="grid grid-cols-3 gap-2">
+                    <ColumnInput
+                        label="Đầu kỳ"
+                        value={openingDisplay}
+                        unit={unit}
+                        disabled={isLocked || isSubmitting}
+                        onChange={(v) => onOpeningChange(ing.ingredient, v)}
+                        locked={isLocked}
+                    />
+                    <ColumnInput
+                        label="Nhập thêm"
+                        value={restockValue || ''}
+                        unit={unit}
+                        disabled={isSubmitting}
+                        onChange={(v) => onRestockChange(ing.ingredient, v)}
+                        overflow={restockOverflow}
+                    />
+                    <ColumnInput
+                        label="Cuối kỳ"
+                        value={inventoryValue ?? ''}
+                        unit={unit}
+                        disabled={isSubmitting}
+                        onChange={(v) => onInventoryChange(ing.ingredient, v)}
+                    />
                 </div>
-            )}
 
-            {/* Row 3 — audit: Hao hụt | Lý thuyết | Thực tế */}
-            <div className="grid grid-cols-3 gap-2 mt-2">
-                <ColumnInput
-                    label="Chênh lệch"
-                    value={haoHut != null ? haoHut : ''}
-                    unit={unit}
-                    disabled
-                    tone={haoHutTone}
-                />
-                <ColumnInput label="Lý thuyết" value={lyThuyet} unit={unit} disabled />
-                <ColumnInput
-                    label="Thực tế"
-                    value={thucTe != null ? thucTe : ''}
-                    unit={unit}
-                    disabled
-                />
-            </div>
-            {/* Row 4 — money + cups-equivalent context for Hao hụt */}
-            <div className="grid grid-cols-3 gap-2 mt-2">
-                <TextCell
-                    label="Giá trị"
-                    text={giaTri != null
-                        ? `${giaTri < 0 ? '-' : ''}${formatVND(Math.abs(giaTri))}`
-                        : '—'}
-                    tone={haoHutTone}
-                />
-                <div className="col-span-2">
-                    <TextCell label="Tương đương" text={tuongDuongText} tone={haoHutTone} />
-                </div>
-            </div>
+                {/* Row 2 — counter level */}
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                    <ColumnInput
+                        label="Sử dụng"
+                        value={usedNum}
+                        unit={unit}
+                        disabled
+                    />
+                    <div className="col-span-2">
+                        <TextCell
+                            label="Tổng cộng"
+                            text={totalCupsText}
+                            tone={haoHutTone}
+                            onClick={hasBreakdown ? toggleExpanded : undefined}
+                            expanded={expanded}
+                        />
+                    </div>
 
-            {restockOverflow && (
-                <div className="flex items-start gap-1.5 mt-1.5 text-[10px] font-bold text-danger leading-tight">
-                    <AlertTriangle size={11} className="mt-[1px] shrink-0" />
-                    <span>
-                        Vượt kho tổng {fmt(overBy)}.
-                        Nếu hàng được mua mới, vào <span className="underline">/ingredients → + Nhập kho</span> trước.
-                    </span>
                 </div>
-            )}
+
+                {expanded && hasBreakdown && (
+                    <div className="mt-2 px-3 py-2 bg-surface-light rounded-[10px] border border-border/40 flex flex-col gap-1">
+                        {Object.values(breakdown)
+                            .sort((a, b) => b.totalAmount - a.totalAmount)
+                            .map((entry, i) => (
+                                <div key={i} className="flex items-center justify-between">
+                                    <span className="text-[11px] text-text-secondary truncate flex-1">{entry.name}</span>
+                                    <span className="text-[11px] font-bold text-text-dim tabular-nums shrink-0 ml-2">
+                                        {entry.qty} ly × {Math.round(entry.totalAmount / entry.qty * 10) / 10} = <span className="text-text font-black">{entry.totalAmount}</span>
+                                    </span>
+                                </div>
+                            ))
+                        }
+                    </div>
+                )}
+
+                {/* Row 3 — audit: Hao hụt | Lý thuyết | Thực tế */}
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                    <ColumnInput
+                        label="Chênh lệch"
+                        value={haoHut != null ? haoHut : ''}
+                        unit={unit}
+                        disabled
+                        tone={haoHutTone}
+                    />
+                    <ColumnInput label="Lý thuyết" value={lyThuyet} unit={unit} disabled />
+                    <ColumnInput
+                        label="Thực tế"
+                        value={thucTe != null ? thucTe : ''}
+                        unit={unit}
+                        disabled
+                    />
+                </div>
+                {/* Row 4 — money + cups-equivalent context for Hao hụt */}
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                    <TextCell
+                        label="Giá trị"
+                        text={giaTri != null
+                            ? `${giaTri < 0 ? '-' : ''}${formatVND(Math.abs(giaTri))}`
+                            : '—'}
+                        tone={haoHutTone}
+                    />
+                    <div className="col-span-2">
+                        <TextCell label="Tương đương" text={tuongDuongText} tone={haoHutTone} />
+                    </div>
+                </div>
+
+                {restockOverflow && (
+                    <div className="flex items-start gap-1.5 mt-1.5 text-[10px] font-bold text-danger leading-tight">
+                        <AlertTriangle size={11} className="mt-[1px] shrink-0" />
+                        <span>
+                            Vượt kho tổng {fmt(overBy)}.
+                            Nếu hàng được mua mới, vào <span className="underline">/ingredients → + Nhập kho</span> trước.
+                        </span>
+                    </div>
+                )}
             </>)}
         </div>
     )
@@ -382,7 +406,7 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRig
 
 // Read-only text cell that visually matches ColumnInput (same label+box rhythm) but
 // renders a string instead of a number input. Used for "Tương đương N ly <product>".
-function TextCell({ label, text, tone = 'neutral' }) {
+function TextCell({ label, text, tone = 'neutral', onClick, expanded = false }) {
     const toneMap = {
         good: { wrap: 'bg-success/8 border-success/30', text: 'text-success' },
         bad: { wrap: 'bg-danger/8 border-danger/30', text: 'text-danger' },
@@ -390,14 +414,21 @@ function TextCell({ label, text, tone = 'neutral' }) {
         neutral: { wrap: 'bg-surface-light border-border/60', text: 'text-text-secondary' },
     }
     const t = toneMap[tone] || toneMap.neutral
+    const interactive = typeof onClick === 'function'
+    const boxClasses = `w-full rounded-[10px] py-1.5 px-2 text-[13px] text-center font-bold border ${t.wrap} ${t.text}${interactive ? ' flex items-center justify-end gap-1 hover:brightness-110 active:scale-[0.99] transition' : ''}`
     return (
         <div className="flex flex-col">
             <div className="flex items-center justify-center gap-1 mb-1">
                 <span className="text-[9px] font-black uppercase text-text-dim">{label}</span>
             </div>
-            <div className={`rounded-[10px] py-1.5 px-2 text-[13px] font-bold text-right border ${t.wrap} ${t.text}`}>
-                {text}
-            </div>
+            {interactive ? (
+                <button type="button" onClick={onClick} className={boxClasses}>
+                    <span className="flex-1 truncate">≈ {text}</span>
+                    <ChevronDown size={11} className={`shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                </button>
+            ) : (
+                <div className={boxClasses}>{text}</div>
+            )}
         </div>
     )
 }

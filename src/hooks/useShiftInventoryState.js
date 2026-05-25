@@ -271,6 +271,17 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
             }))
     }, [ingredientsList, inventoryInputs, restockInputs, openingInputs, openingLocked])
 
+    // Snapshot of the last-committed baseline, refreshed whenever baselineVersion bumps.
+    // Sort + collapse logic on InventoryReportCard reads from this so live keystrokes
+    // don't re-order rows mid-edit — only load / save / lock events shift the layout.
+    const baselineSnapshot = useMemo(() => ({
+        opening: baselineRef.current.opening,
+        openingLocked: baselineRef.current.openingLocked,
+        restock: baselineRef.current.restock,
+        inventory: baselineRef.current.inventory,
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }), [baselineVersion])
+
     return {
         // raw input maps
         openingInputs, openingLocked, restockInputs, inventoryInputs,
@@ -282,6 +293,9 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         restockOverflowIngredients,
         // dirty tracking (derived from baseline comparison; resetDirty after save)
         isDirty, resetDirty,
+        // last-persisted snapshot (bumps on load / save / lock) — used by the card to
+        // sort and to remount rows so they auto-collapse after a successful save.
+        baselineSnapshot, baselineVersion,
         // handlers
         onOpeningChange, onOpeningLock, onRestockChange, onInventoryChange,
         // save helpers

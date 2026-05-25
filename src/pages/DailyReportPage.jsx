@@ -757,6 +757,8 @@ export default function DailyReportPage() {
                                                 ingredientToProduct={ingredientToProduct}
                                                 canUnlock={!isStaff}
                                                 isSubmitting={isSavingShift}
+                                                baselineInputs={inventory.baselineSnapshot}
+                                                baselineVersion={inventory.baselineVersion}
                                                 onOpeningChange={inventory.onOpeningChange}
                                                 onOpeningLock={inventory.onOpeningLock}
                                                 onRestockChange={inventory.onRestockChange}
