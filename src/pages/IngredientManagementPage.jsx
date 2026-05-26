@@ -82,7 +82,9 @@ export default function IngredientManagementPage() {
 
     const openIngredient = (ingredient) => {
         savedScroll = mainRef.current?.scrollTop ?? 0
-        navigate(`/ingredients/${ingredient}`, { state: location.state })
+        // Carry viewMode forward so the detail page can hand it back on goBack,
+        // restoring the same tab (Bao bì vs Nguyên liệu) the user opened from.
+        navigate(`/ingredients/${ingredient}`, { state: { ...location.state, viewMode } })
     }
 
     // Stock & modals

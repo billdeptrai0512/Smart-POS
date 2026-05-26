@@ -234,7 +234,7 @@ export default function IngredientDetailPage() {
             <IngredientDetailHeader
                 title={titleLabel}
                 subtitle={`Tồn: ${stockSubtitle}`}
-                onBack={() => navigate(location.state?.from || '/ingredients')}
+                onBack={() => navigate(location.state?.from || '/ingredients', { state: { viewMode: location.state?.viewMode } })}
                 onDelete={canEdit ? handleDelete : null}
                 viewMode={viewMode}
                 onViewModeChange={setViewMode}
@@ -284,7 +284,16 @@ export default function IngredientDetailPage() {
                         onCancelCost={() => setEditingCost(false)}
                         editingMinStock={editingMinStock}
                         minStockInput={minStockInput}
-                        onStartEditMinStock={() => { setMinStockInput(String(minStock || '')); setEditingMinStock(true) }}
+                        onStartEditMinStock={() => {
+                            // Soft sync: first-time setup with a pack config pre-fills the
+                            // pack size, since "min = 1 pack" matches how owners reason about
+                            // restock thresholds. User can overwrite freely before saving.
+                            const seed = minStock != null
+                                ? String(minStock)
+                                : (packSize ? String(packSize) : '')
+                            setMinStockInput(seed)
+                            setEditingMinStock(true)
+                        }}
                         onMinStockInputChange={setMinStockInput}
                         onSaveMinStock={saveMinStock}
                         onCancelMinStock={() => setEditingMinStock(false)}
@@ -516,9 +525,16 @@ function DetailsTab({
                         ) : minStock != null ? (
                             <button
                                 onClick={canEdit ? onStartEditMinStock : undefined}
-                                className={`text-[13px] font-bold text-text tabular-nums ${canEdit ? 'cursor-pointer hover:text-primary' : 'cursor-default'}`}
+                                className={`flex flex-col items-end gap-0.5 leading-tight text-[13px] font-bold text-text tabular-nums ${canEdit ? 'cursor-pointer hover:text-primary' : 'cursor-default'}`}
                             >
-                                {minStock} <span className="text-text-dim font-medium">{unit}</span>
+                                <span>
+                                    {minStock} <span className="text-text-dim font-medium">{unit}</span>
+                                </span>
+                                {hasPack && minStock >= packSize && (
+                                    <span className="text-[11px] font-medium text-text-dim">
+                                        = {formatPackedQty(minStock, packSize, packUnit, unit, { compact: true })}
+                                    </span>
+                                )}
                             </button>
                         ) : (
                             <button
