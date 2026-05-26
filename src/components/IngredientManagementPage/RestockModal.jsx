@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
-import { ingredientLabel } from '../common/recipeUtils'
+import { ingredientLabel } from '../../utils/ingredients'
 import MoneyInput from '../common/MoneyInput'
 import { parseVNDInput } from '../../utils'
 

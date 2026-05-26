@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { X, Check, Loader, AlertTriangle, ChevronRight, Plus } from 'lucide-react'
-import { ingredientLabel } from '../common/recipeUtils'
+import { ingredientLabel } from '../../utils/ingredients'
 import { syncIngredientKey, upsertIngredientCost } from '../../services/orderService'
 import { suggestCanonical } from '../../utils/ingredientKeySync'
 

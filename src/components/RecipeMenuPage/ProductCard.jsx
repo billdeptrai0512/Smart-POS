@@ -1,5 +1,5 @@
 import { formatVND } from '../../utils'
-import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils'
+import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
 
 const SYMBOL_UNITS = new Set(['g', 'ml', 'l', 'kg', 'oz', 'mg'])
 

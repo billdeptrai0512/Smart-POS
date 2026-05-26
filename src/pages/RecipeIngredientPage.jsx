@@ -21,7 +21,7 @@ import {
     deleteRecipeRow,
     fetchIngredientStocks,
 } from '../services/orderService'
-import { sortIngredients, ingredientLabel, getIngredientUnit } from '../components/common/recipeUtils'
+import { sortIngredients, ingredientLabel, getIngredientUnit } from '../utils/ingredients'
 import { useToast } from '../hooks/useToast'
 import Toast from '../components/POSPage/Toast'
 import RecipeHeader from '../components/RecipeIngredientPage/RecipeHeader'

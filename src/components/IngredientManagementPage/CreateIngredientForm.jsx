@@ -1,4 +1,4 @@
-import { INGREDIENT_CATEGORIES } from '../common/recipeUtils'
+import { INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 import MoneyInput from '../common/MoneyInput'
 
 export default function CreateIngredientForm({

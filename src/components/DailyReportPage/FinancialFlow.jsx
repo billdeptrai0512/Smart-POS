@@ -1,5 +1,5 @@
 import { formatVND } from '../../utils'
-import { ingredientLabel } from '../common/recipeUtils'
+import { ingredientLabel } from '../../utils/ingredients'
 
 export default function FinancialFlow({
     actualCash = 0,

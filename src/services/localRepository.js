@@ -106,11 +106,6 @@ export const initializeGuestFromGlobal = (data) => {
     // fixed_costs seed removed — "thực chi" model no longer uses templates.
 };
 
-export const seedDemoData = (force = false) => {
-    if (!force && get(KEYS.PRODUCTS).length > 0) return;
-    // ... existing hardcoded fallback if needed ...
-};
-
 // --- CRUD Helpers ---
 
 export const fetchLocalProducts = (addressId) => {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ingredientLabel } from '../common/recipeUtils'
+import { ingredientLabel } from '../../utils/ingredients'
 
 const UNIT_PRESETS = ['g', 'ml', 'ly', 'gói', 'quả']
 

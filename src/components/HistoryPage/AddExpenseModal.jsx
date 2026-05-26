@@ -1,8 +1,12 @@
+import { useRef } from 'react'
 import { X } from 'lucide-react'
 import ExpenseCategoryPicker from './ExpenseCategoryPicker'
 import MoneyInput from '../common/MoneyInput'
 import { parseVNDInput } from '../../utils'
 
+// Create flow: pick label → name → amount → submit. Payment defaults to cash
+// on insert; user toggles it on the expense card (ExpensePanel) after the row
+// appears — keeps this modal tight to the essential 3 fields.
 export default function AddExpenseModal({
     expenseCategory, costName, costAmount, isSubmitting,
     // Tag picker
@@ -10,15 +14,15 @@ export default function AddExpenseModal({
     selectedCategoryId,
     onCategoryIdChange,
     onCreateCategory,
-    // Payment method (defaults to 'cash' if undefined)
-    paymentMethod = 'cash',
-    onPaymentMethodChange,
     //
     onClose, onSubmit,
     onCategoryChange, onNameChange, onAmountChange,
 }) {
     const canSubmit = parseVNDInput(costAmount) > 0 && costName.trim() && !isSubmitting
     const submitColor = expenseCategory === 'fixed' ? 'bg-warning' : 'bg-danger'
+
+    const nameRef = useRef(null)
+    const amountRef = useRef(null)
 
     // The top Vận hành/Quản lý tab is gone — chip section + dot color carry the
     // group context now. When user picks a chip, mirror its group_section back
@@ -31,6 +35,9 @@ export default function AddExpenseModal({
             if (next !== expenseCategory) onCategoryChange?.(next)
         }
         onCategoryIdChange(id)
+        // Advance focus only when the user hasn't started typing — avoid
+        // yanking caret away if they reach back to fix the label.
+        if (!costName.trim()) nameRef.current?.focus()
     }
 
     return (
@@ -47,17 +54,6 @@ export default function AddExpenseModal({
                     </button>
                 </div>
 
-                <input
-                    type="text"
-                    autoFocus
-                    placeholder="Tên chi phí..."
-                    value={costName}
-                    onChange={e => onNameChange(e.target.value)}
-                    className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[15px] font-medium text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary/50"
-                />
-
-                {/* Tag picker — sections itself into Vận hành / Quản lý & khác so
-                    the dropped top tab's group context lives inside the chip list. */}
                 <ExpenseCategoryPicker
                     categories={expenseCategories}
                     selectedId={selectedCategoryId}
@@ -66,31 +62,28 @@ export default function AddExpenseModal({
                     disabled={isSubmitting}
                 />
 
+                <input
+                    ref={nameRef}
+                    type="text"
+                    placeholder="Tên chi phí..."
+                    value={costName}
+                    onChange={e => onNameChange(e.target.value)}
+                    onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === 'Tab') {
+                            e.preventDefault()
+                            amountRef.current?.focus()
+                        }
+                    }}
+                    className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[15px] font-medium text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary/50"
+                />
+
                 <MoneyInput
                     value={costAmount}
                     onChange={onAmountChange}
                     onKeyDown={e => { if (e.key === 'Enter') canSubmit && onSubmit() }}
+                    inputRef={amountRef}
                     size="lg"
                 />
-                {/* `.000đ` shortcut removed — staff types full amount; see MoneyInput. */}
-
-                {/* Payment method — default cash. Editable here avoids the
-                    "create then toggle pill" 2-tap pattern. */}
-                <div className="flex bg-surface-light border border-border/60 rounded-[10px] p-0.5">
-                    <PaymentTab
-                        active={paymentMethod === 'cash'}
-                        onClick={() => onPaymentMethodChange?.('cash')}
-                    >
-                        Tiền mặt
-                    </PaymentTab>
-                    <PaymentTab
-                        active={paymentMethod === 'transfer'}
-                        color="bg-primary/15 text-primary"
-                        onClick={() => onPaymentMethodChange?.('transfer')}
-                    >
-                        Chuyển khoản
-                    </PaymentTab>
-                </div>
 
                 <button
                     onClick={() => canSubmit && onSubmit()}
@@ -101,17 +94,5 @@ export default function AddExpenseModal({
                 </button>
             </div>
         </div>
-    )
-}
-
-function PaymentTab({ active, color, onClick, children }) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            className={`flex-1 py-1.5 rounded-[8px] text-[11px] font-bold transition-all ${active ? (color || 'bg-surface text-text shadow-sm') : 'text-text-secondary hover:text-text'}`}
-        >
-            {children}
-        </button>
     )
 }

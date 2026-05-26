@@ -7,11 +7,11 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { usePOS } from '../contexts/POSContext'
 import {
-    upsertIngredientCost, deleteIngredientCost, renameIngredient,
+    upsertIngredientCost, deleteIngredientCost,
     syncIngredientKey,
-    fetchIngredientStocks, processIngredientRestock, adjustIngredientStock, fetchIngredientDeficits, fetchIngredientDailyContext,
+    fetchIngredientStocks, processIngredientRestock, fetchIngredientDeficits, fetchIngredientDailyContext,
 } from '../services/orderService'
-import { sortIngredients, ingredientLabel, getIngredientUnit, normalizeIngredientCategory } from '../components/common/recipeUtils'
+import { sortIngredients, ingredientLabel, getIngredientUnit, normalizeIngredientCategory } from '../utils/ingredients'
 import { parseVNDInput } from '../utils'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
@@ -52,9 +52,6 @@ export default function IngredientManagementPage() {
     const [ingredientCosts, setIngredientCosts] = useState(contextCosts || {})
     const [ingredientUnits, setIngredientUnits] = useState(contextUnits || {})
     const [editingCost, setEditingCost] = useState(null)
-    const [editingUnit, setEditingUnit] = useState(null)
-    const [editingName, setEditingName] = useState(null)
-    const [editingStock, setEditingStock] = useState(null)
     const [saving, setSaving] = useState(false)
 
     // Sort mode
@@ -260,45 +257,6 @@ export default function IngredientManagementPage() {
         }
     }
 
-    async function handleRenameIngredient(oldKey, newDisplayName) {
-        const newKey = normalizeKey(newDisplayName)
-        if (!newKey || newKey === oldKey) { setEditingName(null); return }
-        setSaving(true)
-        try {
-            await renameIngredient(oldKey, newKey, selectedAddress?.id)
-            setIngredientCosts(prev => {
-                const next = { ...prev }
-                next[newKey] = next[oldKey]
-                delete next[oldKey]
-                return next
-            })
-            setIngredientUnits(prev => {
-                const next = { ...prev }
-                next[newKey] = next[oldKey]
-                delete next[oldKey]
-                return next
-            })
-        } catch (err) {
-            showError(err, 'Đổi tên nguyên liệu')
-        } finally {
-            setSaving(false)
-            setEditingName(prev => prev?.ingredient === oldKey ? null : prev)
-        }
-    }
-
-    async function saveUnit(ingredient, newUnitVal, currentCost) {
-        setSaving(true)
-        try {
-            await upsertIngredientCost(ingredient, currentCost, selectedAddress?.id, newUnitVal)
-            setIngredientUnits(prev => ({ ...prev, [ingredient]: newUnitVal }))
-        } catch (err) {
-            showError(err, 'Lưu đơn vị nguyên liệu')
-        } finally {
-            setSaving(false)
-            setEditingUnit(prev => prev?.ingredient === ingredient ? null : prev)
-        }
-    }
-
     async function handleCreateIngredient() {
         if (!newName.trim()) return
         const key = normalizeKey(newName)
@@ -329,23 +287,6 @@ export default function IngredientManagementPage() {
             refreshProducts?.()
         } catch (err) {
             showError(err, 'Lưu nhóm nguyên liệu')
-        } finally {
-            setSaving(false)
-        }
-    }
-
-    async function saveStock(ingredient, newTotalRaw, currentTotal) {
-        setEditingStock(null)
-        const newTotal = Number(newTotalRaw)
-        if (!Number.isFinite(newTotal) || newTotal < 0) return
-        const delta = newTotal - currentTotal
-        if (delta === 0) return
-        setSaving(true)
-        try {
-            await adjustIngredientStock(selectedAddress?.id, ingredient, delta, profile?.name)
-            await Promise.all([loadStocks(), refreshTodayExpenses?.()])
-        } catch (err) {
-            showError(err, 'Hiệu chỉnh tồn')
         } finally {
             setSaving(false)
         }
@@ -459,14 +400,6 @@ export default function IngredientManagementPage() {
                                     ingredientLabel={ingredientLabel}
                                     getIngredientUnit={getIngredientUnit}
                                     storedUnit={ingredientUnits[ingredient]}
-                                    isEditingUnit={editingUnit?.ingredient === ingredient}
-                                    editingUnit={editingUnit}
-                                    setEditingUnit={setEditingUnit}
-                                    saveUnit={saveUnit}
-                                    isEditingName={editingName?.ingredient === ingredient}
-                                    editingName={editingName}
-                                    setEditingName={setEditingName}
-                                    saveName={handleRenameIngredient}
                                     onDelete={canEdit ? handleDeleteIngredient : null}
                                     canEdit={canEdit}
                                     packSize={cfg?.pack_size}
@@ -475,10 +408,6 @@ export default function IngredientManagementPage() {
                                     stockData={stockByIngredient.get(ingredient)}
                                     onRestock={() => setRestockIngredient(ingredient)}
                                     dailyContext={dailyContext[ingredient]}
-                                    isEditingStock={editingStock?.ingredient === ingredient}
-                                    editingStock={editingStock}
-                                    setEditingStock={setEditingStock}
-                                    saveStock={saveStock}
                                     onOpen={openIngredient}
                                 />
                             )

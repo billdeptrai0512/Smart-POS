@@ -1,5 +1,5 @@
 import { formatVND, parseVNDInput } from '../../utils'
-import { ingredientLabel } from '../common/recipeUtils'
+import { ingredientLabel } from '../../utils/ingredients'
 
 export default function CashFlowCard({
     actualCash = 0,

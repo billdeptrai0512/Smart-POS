@@ -1,4 +1,4 @@
-import { ingredientLabel } from '../components/common/recipeUtils'
+import { ingredientLabel } from './ingredients'
 
 /**
  * Detect ingredient key mismatches across recipes / ingredient_costs / inventory_report

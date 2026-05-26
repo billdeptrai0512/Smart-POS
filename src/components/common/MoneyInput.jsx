@@ -18,6 +18,7 @@ export default function MoneyInput({
     placeholder = '0',
     disabled = false,
     autoFocus = false,
+    inputRef,
     size = 'md',           // 'sm' (history row) | 'md' (default) | 'lg' (hero amount)
     align = 'right',       // 'right' (default) | 'left' | 'center'
     className = '',
@@ -33,6 +34,7 @@ export default function MoneyInput({
     return (
         <div className={`relative flex items-center bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden ${className}`}>
             <input
+                ref={inputRef}
                 type="text"
                 inputMode="numeric"
                 value={value || ''}

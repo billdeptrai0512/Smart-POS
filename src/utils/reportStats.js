@@ -1,4 +1,4 @@
-import { calculateProductCost } from '../utils'
+import { calculateItemCost as calculateProductCost } from './inventory'
 
 // Builds lookup maps once so per-item math stays O(1).
 export function buildExtraMaps(productExtras) {

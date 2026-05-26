@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { formatVND } from '../../utils'
-import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils'
+import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
 import InlineEditor from './InlineEditor'
 import IngredientPicker from './IngredientPicker'
 

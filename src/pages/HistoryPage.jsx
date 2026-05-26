@@ -81,7 +81,6 @@ export default function HistoryPage() {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [selectedCategoryId, setSelectedCategoryId] = useState(null)
     const [expenseCategories, setExpenseCategories] = useState([])
-    const [paymentMethod, setPaymentMethod] = useState('cash')
 
     // Fetch tags on mount + whenever the modal opens (cache-backed). Card list
     // also needs categories to resolve the tag chip on each ExpenseCard, so we
@@ -114,7 +113,6 @@ export default function HistoryPage() {
             setCostAmount('')
             setExpenseCategory('expense')
             setSelectedCategoryId(null)
-            setPaymentMethod('cash')
         }
     }, [showAddModal])
 
@@ -319,10 +317,11 @@ export default function HistoryPage() {
             // để ExpensePanel badge phân biệt "Sau ca" cho expense vận hành.
             const today = new Date().toISOString().split('T')[0]
             const isFinalized = selectedAddress?.id && !!localStorage.getItem(shiftFinalizedKey(selectedAddress.id, today))
+            // Always insert as cash; user toggles payment on the row card after.
             if (isFinalized) {
-                await handleAddExpense(costName.trim(), amount, true, paymentMethod, { free_form: true }, false, tagId)
+                await handleAddExpense(costName.trim(), amount, true, 'cash', { free_form: true }, false, tagId)
             } else {
-                await handleAddExpense(costName.trim(), amount, false, paymentMethod, {}, false, tagId)
+                await handleAddExpense(costName.trim(), amount, false, 'cash', {}, false, tagId)
             }
             setShowAddModal(false)
         } catch { }
@@ -468,8 +467,6 @@ export default function HistoryPage() {
                     selectedCategoryId={selectedCategoryId}
                     onCategoryIdChange={setSelectedCategoryId}
                     onCreateCategory={handleCreateCategory}
-                    paymentMethod={paymentMethod}
-                    onPaymentMethodChange={setPaymentMethod}
                     onClose={() => setShowAddModal(false)}
                     onSubmit={submitExpense}
                     onCategoryChange={setExpenseCategory}

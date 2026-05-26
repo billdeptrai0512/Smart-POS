@@ -19,11 +19,3 @@ export function parseVNDInput(formatted) {
     const numStr = String(formatted).replace(/[^\d]/g, '')
     return Number(numStr) || 0
 }
-
-import { calculateItemCost } from './utils/inventory'
-
-// Calculate the ingredient cost of a single product based on its recipe and any extras
-// ingredientCosts must be provided from DB
-export function calculateProductCost(productId, extras = [], recipes = [], extraIngredients = {}, ingredientCosts = {}) {
-    return calculateItemCost(productId, extras, recipes, extraIngredients, ingredientCosts);
-}

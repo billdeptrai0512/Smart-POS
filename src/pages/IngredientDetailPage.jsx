@@ -5,12 +5,17 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import {
     fetchIngredientRestockHistory, fetchIngredientStocks,
-    deleteIngredientCost, upsertIngredientCost,
+    deleteIngredientCost, upsertIngredientCost, renameIngredient,
+    adjustIngredientStock,
 } from '../services/orderService'
+import { usePOS } from '../contexts/POSContext'
+
+// Same canonicalisation IngredientManagementPage uses: lower-case, snake_case.
+const normalizeKey = (raw) => raw.trim().toLowerCase().replace(/\s+/g, '_')
 import {
     ingredientLabel, getIngredientUnit,
     INGREDIENT_CATEGORIES, normalizeIngredientCategory,
-} from '../components/common/recipeUtils'
+} from '../utils/ingredients'
 import { formatVND, formatVNDInput, parseVNDInput } from '../utils'
 import { formatPackedQty } from '../utils/inventory'
 import MoneyInput from '../components/common/MoneyInput'
@@ -26,7 +31,8 @@ export default function IngredientDetailPage() {
     const { ingredientKey } = useParams()
     const { ingredientCosts, ingredientUnits, ingredientConfigs, refreshProducts } = useProducts()
     const { selectedAddress } = useAddress()
-    const { isManager, isAdmin } = useAuth()
+    const { isManager, isAdmin, profile } = useAuth()
+    const { refreshTodayExpenses } = usePOS()
     const canEdit = isManager || isAdmin
     const { toast, showError } = useToast()
 
@@ -38,6 +44,14 @@ export default function IngredientDetailPage() {
     const [packModalOpen, setPackModalOpen] = useState(false)
     const [editingCost, setEditingCost] = useState(false)
     const [costInput, setCostInput] = useState('')
+    const [editingMinStock, setEditingMinStock] = useState(false)
+    const [minStockInput, setMinStockInput] = useState('')
+    const [editingName, setEditingName] = useState(false)
+    const [nameInput, setNameInput] = useState('')
+    const [editingStock, setEditingStock] = useState(false)
+    const [stockInput, setStockInput] = useState('')
+    const [editingUnit, setEditingUnit] = useState(false)
+    const [unitInput, setUnitInput] = useState('')
 
     // Month navigation (Nhật ký tab)
     const [monthOffset, setMonthOffset] = useState(0)
@@ -128,6 +142,76 @@ export default function IngredientDetailPage() {
         } finally { setSaving(false) }
     }
 
+    async function reloadStock() {
+        if (!selectedAddress?.id) return
+        const stocks = await fetchIngredientStocks(selectedAddress.id)
+        setStockData(stocks.find(s => s.ingredient === ingredientKey))
+    }
+
+    async function saveStock() {
+        const newTotal = Number(stockInput)
+        setEditingStock(false)
+        if (!Number.isFinite(newTotal) || newTotal < 0) return
+        const current = currentStock || 0
+        const delta = newTotal - current
+        if (delta === 0) return
+        setSaving(true)
+        try {
+            await adjustIngredientStock(selectedAddress?.id, ingredientKey, delta, profile?.name)
+            await Promise.all([reloadStock(), refreshTodayExpenses?.()])
+        } catch (err) {
+            showError(err, 'Hiệu chỉnh tồn')
+        } finally { setSaving(false) }
+    }
+
+    async function saveUnit() {
+        const newUnit = (unitInput || '').trim() || 'đv'
+        setEditingUnit(false)
+        if (newUnit === unit) return
+        setSaving(true)
+        try {
+            await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, newUnit, { category: config.category })
+            refreshProducts?.()
+        } catch (err) {
+            showError(err, 'Lưu đơn vị')
+        } finally { setSaving(false) }
+    }
+
+    async function saveName() {
+        const newKey = normalizeKey(nameInput || '')
+        setEditingName(false)
+        if (!newKey || newKey === ingredientKey) return
+        setSaving(true)
+        try {
+            await renameIngredient(ingredientKey, newKey, selectedAddress?.id)
+            refreshProducts?.()
+            // URL param drives every fetch on this page — repoint at the new key
+            // so the page keeps showing the same ingredient under its new name.
+            navigate(`/ingredients/${newKey}`, { replace: true, state: location.state })
+        } catch (err) {
+            showError(err, 'Đổi tên nguyên liệu')
+        } finally { setSaving(false) }
+    }
+
+    async function saveMinStock() {
+        const raw = String(minStockInput).replace(/[^\d]/g, '')
+        const newMin = raw ? Number(raw) : 0
+        setEditingMinStock(false)
+        if (newMin === (minStock || 0)) return
+        setSaving(true)
+        try {
+            await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, unit, {
+                category: config.category,
+                packSize: config.pack_size,
+                packUnit: config.pack_unit,
+                minStock: newMin,
+            })
+            refreshProducts?.()
+        } catch (err) {
+            showError(err, 'Lưu tồn tối thiểu')
+        } finally { setSaving(false) }
+    }
+
     async function handleDelete() {
         const label = ingredientLabel(ingredientKey)
         if (!window.confirm(`Xóa nguyên liệu "${label}"? Hành động này sẽ gỡ nó khỏi tất cả công thức liên quan.`)) return
@@ -160,6 +244,7 @@ export default function IngredientDetailPage() {
                 {viewMode === 'details' ? (
                     <DetailsTab
                         ingredientKey={ingredientKey}
+                        nameLabel={titleLabel}
                         unit={unit}
                         cost={cost}
                         category={category}
@@ -169,12 +254,40 @@ export default function IngredientDetailPage() {
                         currentStock={currentStock}
                         canEdit={canEdit}
                         saving={saving}
+                        editingName={editingName}
+                        nameInput={nameInput}
+                        onStartEditName={() => { setNameInput(titleLabel); setEditingName(true) }}
+                        onNameInputChange={setNameInput}
+                        onSaveName={saveName}
+                        onCancelName={() => setEditingName(false)}
+                        editingStock={editingStock}
+                        stockInput={stockInput}
+                        onStartEditStock={() => {
+                            const v = currentStock !== null ? Math.round(currentStock * 10) / 10 : 0
+                            setStockInput(String(v))
+                            setEditingStock(true)
+                        }}
+                        onStockInputChange={setStockInput}
+                        onSaveStock={saveStock}
+                        onCancelStock={() => setEditingStock(false)}
+                        editingUnit={editingUnit}
+                        unitInput={unitInput}
+                        onStartEditUnit={() => { setUnitInput(unit); setEditingUnit(true) }}
+                        onUnitInputChange={setUnitInput}
+                        onSaveUnit={saveUnit}
+                        onCancelUnit={() => setEditingUnit(false)}
                         editingCost={editingCost}
                         costInput={costInput}
                         onStartEditCost={() => { setCostInput(formatVNDInput(cost)); setEditingCost(true) }}
                         onCostInputChange={setCostInput}
                         onSaveCost={saveCost}
                         onCancelCost={() => setEditingCost(false)}
+                        editingMinStock={editingMinStock}
+                        minStockInput={minStockInput}
+                        onStartEditMinStock={() => { setMinStockInput(String(minStock || '')); setEditingMinStock(true) }}
+                        onMinStockInputChange={setMinStockInput}
+                        onSaveMinStock={saveMinStock}
+                        onCancelMinStock={() => setEditingMinStock(false)}
                         onChangeCategory={saveCategory}
                         onConfigurePack={() => setPackModalOpen(true)}
                     />
@@ -217,28 +330,104 @@ export default function IngredientDetailPage() {
 
 // ─── Chi tiết tab ────────────────────────────────────────────────────────────
 function DetailsTab({
-    unit, cost, category, packSize, packUnit, minStock, currentStock,
+    nameLabel, unit, cost, category, packSize, packUnit, minStock, currentStock,
     canEdit, saving,
+    editingName, nameInput,
+    onStartEditName, onNameInputChange, onSaveName, onCancelName,
+    editingStock, stockInput,
+    onStartEditStock, onStockInputChange, onSaveStock, onCancelStock,
+    editingUnit, unitInput,
+    onStartEditUnit, onUnitInputChange, onSaveUnit, onCancelUnit,
     editingCost, costInput,
     onStartEditCost, onCostInputChange, onSaveCost, onCancelCost,
+    editingMinStock, minStockInput,
+    onStartEditMinStock, onMinStockInputChange, onSaveMinStock, onCancelMinStock,
     onChangeCategory, onConfigurePack,
 }) {
     const hasPack = !!(packSize && packUnit)
     return (
         <div className="flex flex-col gap-3">
             <section className="bg-surface rounded-[18px] border border-border/60 p-4 flex flex-col divide-y divide-border/40">
+                <Row label="Tên">
+                    {editingName && canEdit ? (
+                        <input
+                            autoFocus
+                            type="text"
+                            value={nameInput}
+                            onChange={e => onNameInputChange(e.target.value)}
+                            onBlur={onSaveName}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') onSaveName()
+                                if (e.key === 'Escape') onCancelName()
+                            }}
+                            className="w-40 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[13px] font-bold text-text text-right focus:outline-none focus:border-primary/50"
+                        />
+                    ) : (
+                        <button
+                            onClick={canEdit ? onStartEditName : undefined}
+                            className={`text-[13px] font-bold text-text text-right ${canEdit ? 'cursor-pointer hover:text-primary' : 'cursor-default'}`}
+                        >
+                            {nameLabel}
+                        </button>
+                    )}
+                </Row>
                 <Row label="Tồn kho">
-                    <div className="flex flex-col items-end gap-0.5 leading-tight">
-                        <span className="text-[14px] font-black text-text tabular-nums">
-                            {currentStock !== null ? Math.round(currentStock * 10) / 10 : '—'}
-                            <span className="text-text-dim font-medium ml-1">{unit}</span>
-                        </span>
-                        {hasPack && currentStock !== null && currentStock >= packSize && (
-                            <span className="text-[11px] font-medium text-text-dim tabular-nums">
-                                = {formatPackedQty(currentStock, packSize, packUnit, unit, { compact: true })}
-                            </span>
-                        )}
-                    </div>
+                    {editingStock && canEdit ? (
+                        <div className="flex items-center gap-1">
+                            <input
+                                autoFocus
+                                type="text"
+                                inputMode="decimal"
+                                value={stockInput}
+                                onChange={e => onStockInputChange(e.target.value.replace(/[^\d.]/g, ''))}
+                                onBlur={onSaveStock}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') onSaveStock()
+                                    if (e.key === 'Escape') onCancelStock()
+                                }}
+                                className="w-24 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[14px] font-black text-text text-right tabular-nums focus:outline-none focus:border-primary/50"
+                            />
+                            <span className="text-[12px] text-text-dim font-medium">{unit}</span>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-end gap-0.5 leading-tight">
+                            <button
+                                onClick={canEdit ? onStartEditStock : undefined}
+                                className={`text-[14px] font-black text-text tabular-nums ${canEdit ? 'cursor-pointer hover:text-primary' : 'cursor-default'}`}
+                            >
+                                {currentStock !== null ? Math.round(currentStock * 10) / 10 : '—'}
+                                <span className="text-text-dim font-medium ml-1">{unit}</span>
+                            </button>
+                            {hasPack && currentStock !== null && currentStock >= packSize && (
+                                <span className="text-[11px] font-medium text-text-dim tabular-nums">
+                                    = {formatPackedQty(currentStock, packSize, packUnit, unit, { compact: true })}
+                                </span>
+                            )}
+                        </div>
+                    )}
+                </Row>
+                <Row label="Đơn vị">
+                    {editingUnit && canEdit ? (
+                        <input
+                            autoFocus
+                            type="text"
+                            value={unitInput}
+                            onChange={e => onUnitInputChange(e.target.value)}
+                            onBlur={onSaveUnit}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') onSaveUnit()
+                                if (e.key === 'Escape') onCancelUnit()
+                            }}
+                            className="w-20 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[13px] font-bold text-text text-right focus:outline-none focus:border-primary/50"
+                        />
+                    ) : (
+                        <button
+                            onClick={canEdit ? onStartEditUnit : undefined}
+                            className={`text-[13px] font-bold text-text ${canEdit ? 'cursor-pointer hover:text-primary' : 'cursor-default'}`}
+                        >
+                            {unit}
+                        </button>
+                    )}
                 </Row>
                 <Row label="Giá vốn">
                     {canEdit && editingCost ? (
@@ -272,7 +461,7 @@ function DetailsTab({
                             value={category}
                             disabled={saving}
                             onChange={e => onChangeCategory(e.target.value)}
-                            className="bg-transparent border-0 text-[13px] font-bold text-text focus:outline-none cursor-pointer"
+                            className="bg-transparent border-0 text-[13px] font-bold text-text text-right focus:outline-none cursor-pointer"
                         >
                             {INGREDIENT_CATEGORIES.map(c => (
                                 <option key={c.key} value={c.key}>{c.label}</option>
@@ -305,11 +494,40 @@ function DetailsTab({
                         <span className="text-[13px] text-text-dim italic">Chưa thiết lập</span>
                     )}
                 </Row>
-                {minStock != null && (
+                {(minStock != null || canEdit) && (
                     <Row label="Tồn tối thiểu">
-                        <span className="text-[13px] font-bold text-text tabular-nums">
-                            {minStock} {unit}
-                        </span>
+                        {editingMinStock && canEdit ? (
+                            <div className="flex items-center gap-1">
+                                <input
+                                    autoFocus
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={minStockInput}
+                                    onChange={e => onMinStockInputChange(e.target.value.replace(/[^\d]/g, ''))}
+                                    onBlur={onSaveMinStock}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') onSaveMinStock()
+                                        if (e.key === 'Escape') onCancelMinStock()
+                                    }}
+                                    className="w-20 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50"
+                                />
+                                <span className="text-[12px] text-text-dim font-medium">{unit}</span>
+                            </div>
+                        ) : minStock != null ? (
+                            <button
+                                onClick={canEdit ? onStartEditMinStock : undefined}
+                                className={`text-[13px] font-bold text-text tabular-nums ${canEdit ? 'cursor-pointer hover:text-primary' : 'cursor-default'}`}
+                            >
+                                {minStock} <span className="text-text-dim font-medium">{unit}</span>
+                            </button>
+                        ) : (
+                            <button
+                                onClick={onStartEditMinStock}
+                                className="text-[13px] font-bold text-primary hover:underline"
+                            >
+                                + Thêm mức tối thiểu
+                            </button>
+                        )}
                     </Row>
                 )}
             </section>

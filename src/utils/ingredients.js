@@ -1,7 +1,4 @@
-import { INGREDIENT_NAMES } from '../../constants'
-
-// ALL_INGREDIENTS is now empty — all ingredients are fetched from DB
-export const ALL_INGREDIENTS = []
+import { INGREDIENT_NAMES } from '../constants'
 
 // Display order matters: used as the tab order in /ingredients.
 // `null` (chưa phân loại) folds into 'main' per UX rule.
@@ -10,16 +7,6 @@ export const INGREDIENT_CATEGORIES = [
     { key: 'main',      label: 'Nguyên liệu chính' },
     { key: 'packaging', label: 'Bao bì' },
 ]
-
-export const INGREDIENT_CATEGORY_LABELS = {
-    main: 'Nguyên liệu chính',
-    packaging: 'Bao bì',
-}
-
-export function ingredientCategoryLabel(key) {
-    if (!key) return 'Chưa phân loại'
-    return INGREDIENT_CATEGORY_LABELS[key] || 'Chưa phân loại'
-}
 
 // Coerce raw category value into the active 2-tab set.
 // null / unknown → 'main'; legacy 'tools' → 'packaging'.
@@ -41,15 +28,12 @@ export function sortIngredients(a, b, customOrderArray) {
 
 export function ingredientLabel(key) {
     if (INGREDIENT_NAMES[key]) return INGREDIENT_NAMES[key]
-    // Capitalize first letter, replace underscores with spaces
     const name = key.replace(/_/g, ' ')
     return name.charAt(0).toUpperCase() + name.slice(1)
 }
 
 export function getIngredientUnit(key, storedUnit, ingredientUnits) {
-    // Prefer DB-stored unit if available and not the default placeholder
     if (storedUnit && storedUnit !== 'đv') return storedUnit;
-    // Fall back to ingredient_costs unit map
     if (ingredientUnits?.[key] && ingredientUnits[key] !== 'đv') return ingredientUnits[key];
     if (key.endsWith('_g')) return 'g';
     if (key.endsWith('_ml')) return 'ml';

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AlertTriangle, ChevronDown, ChevronUp, Info } from 'lucide-react'
-import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils'
+import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
 import { formatPackedQty } from '../../utils/inventory'
 import { formatVND } from '../../utils'
 

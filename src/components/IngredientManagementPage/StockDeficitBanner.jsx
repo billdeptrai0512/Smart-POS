@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AlertTriangle, X, Loader, Check } from 'lucide-react'
-import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils'
+import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
 import { adjustIngredientStock } from '../../services/orderService'
 
 /**

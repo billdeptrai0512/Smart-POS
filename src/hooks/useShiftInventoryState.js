@@ -5,7 +5,7 @@ import {
     fetchIngredientStocks,
 } from '../services/orderService'
 import { supabase } from '../lib/supabaseClient'
-import { sortIngredients } from '../components/common/recipeUtils'
+import { sortIngredients } from '../utils/ingredients'
 import { dateStringVN } from '../utils/dateVN'
 
 // Owns all the inventory-side state and side-effects that used to live in

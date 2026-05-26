@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateRefillTarget } from '../../utils/inventory';
-import { ingredientLabel, getIngredientUnit } from '../common/recipeUtils';
+import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients';
 import { fetchLastWeekSameDayOrderItems } from '../../services/orderService';
 import { ChevronDown, Lock } from 'lucide-react';
 import { useProducts } from '../../contexts/ProductContext';
