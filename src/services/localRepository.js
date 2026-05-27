@@ -19,6 +19,7 @@ const KEYS = {
     SHIFT_CLOSINGS: 'guest_shift_closings',
     FIXED_COSTS: 'guest_fixed_costs',
     EXPENSE_CATEGORIES: 'guest_expense_categories',
+    EXPENSE_PAYMENTS: 'guest_expense_payments',
     IS_GUEST: 'pos_is_guest'
 };
 
@@ -207,9 +208,22 @@ export const fetchAllLocalShiftClosings = (addressId) => get(KEYS.SHIFT_CLOSINGS
 
 export const insertLocalExpense = (payload) => {
     const list = get(KEYS.EXPENSES);
-    const newItem = { id: generateId(), ...payload, created_at: new Date().toISOString() };
+    // payload.created_at có thể được truyền khi user backdate (RestockModal). Fallback now() khi không có.
+    const newItem = { id: generateId(), created_at: new Date().toISOString(), discount_amount: 0, extra_cost: 0, ...payload };
     list.push(newItem);
     set(KEYS.EXPENSES, list);
+    return newItem;
+};
+
+// expense_payments mirror — same fallback shape as remote table.
+export const fetchAllLocalExpensePayments = (addressId) =>
+    get(KEYS.EXPENSE_PAYMENTS).filter(p => p.address_id === addressId);
+
+export const insertLocalExpensePayment = (payload) => {
+    const list = get(KEYS.EXPENSE_PAYMENTS);
+    const newItem = { id: generateId(), created_at: new Date().toISOString(), paid_at: new Date().toISOString(), ...payload };
+    list.push(newItem);
+    set(KEYS.EXPENSE_PAYMENTS, list);
     return newItem;
 };
 

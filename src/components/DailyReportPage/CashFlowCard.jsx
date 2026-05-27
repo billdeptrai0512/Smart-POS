@@ -5,9 +5,9 @@ export default function CashFlowCard({
     actualCash = 0,
     actualTransfer = 0,
     dailyExpense = 0,
-    refillNvl = 0,
     refillFreeForm = 0,
     expenses = [],
+    payments = [],   // NEW: expense_payments của ngày này (cash-out thực, theo paid_at)
     onDailyExpenseClick,
     salesCard,
     // Inline-edit props (today scope on /daily-report). When `editable` is true the
@@ -28,54 +28,83 @@ export default function CashFlowCard({
     // 1. Thực thu = Tiền mặt + Chuyển khoản + Chi phí phát sinh trong ca
     const actualTotal = liveCash + liveTransfer + (dailyExpense || 0)
 
-    // 2. Tổng chi phí
-    const totalExpenses = (dailyExpense || 0) + (refillFreeForm || 0) + (refillNvl || 0)
-
-    // 3. Thực nhận (Cầm về thực) — trừ refill theo đúng pot đã chi.
-    // Trước đây dùng refillTotal + fall-through (hết cash thì ăn transfer), khiến tổng
-    // refill > revenue lập tức kéo cả 2 pot về 0. Bây giờ split theo payment_method nên
-    // refill chuyển khoản chỉ trừ chuyển khoản, refill tiền mặt chỉ trừ tiền mặt.
+    // Cash-out NVL theo paid_at — payments[] đã được filter ngày bởi report RPC.
+    // Trước đây tính từ refill expenses (theo created_at), nay chuyển sang payments
+    // để khi user ghi nợ thì cash-out chỉ xảy ra vào ngày thật sự trả.
     let cashRefill = 0, transferRefill = 0
-    for (const e of expenses || []) {
-        if (!e.is_refill) continue
-        if (e.metadata?.adjustment) continue  // bookkeeping only, không phải cash-out
-        if (e.payment_method === 'transfer') transferRefill += e.amount || 0
-        else cashRefill += e.amount || 0  // default 'cash' when payment_method nullish
+    const nvlPayments = []        // payments cho refill NVL (loại trừ free_form)
+    const freeFormPayments = []   // payments cho "sau chốt ca" free_form
+    for (const p of payments || []) {
+        const isFreeForm = !!p.invoice_metadata?.free_form
+        const isAdjustment = !!p.invoice_metadata?.adjustment
+        if (isAdjustment) continue
+        if (p.payment_method === 'transfer') transferRefill += p.amount || 0
+        else cashRefill += p.amount || 0
+        if (isFreeForm) freeFormPayments.push(p)
+        else nvlPayments.push(p)
     }
+    const refillNvlPaid = nvlPayments.reduce((s, p) => s + (p.amount || 0), 0)
+    const refillFreeFormPaid = freeFormPayments.reduce((s, p) => s + (p.amount || 0), 0)
+
+    // 2. Tổng chi phí — dùng số thực trả (paid_at-based), không tính nghĩa vụ chưa trả.
+    const totalExpenses = (dailyExpense || 0) + (refillFreeForm || refillFreeFormPaid) + refillNvlPaid
+
     const takeHomeCash = Math.max(0, liveCash - cashRefill)
     const takeHomeTransfer = Math.max(0, liveTransfer - transferRefill)
     const takeHome = takeHomeCash + takeHomeTransfer
 
-    // Phân loại chi phí — bỏ filter `!e.is_fixed` vì legacy fixed expenses
-    // vẫn là cash-out thực, cần hiện trong dòng tiền.
     const shiftExpenses = (expenses || []).filter(e => !e.is_refill)
     const afterShiftOps = (expenses || []).filter(e => e.is_refill && e.metadata?.free_form)
-    const afterShiftNvl = (expenses || []).filter(e => e.is_refill && !e.metadata?.free_form && !e.metadata?.adjustment)
 
-    const getExpenseName = (e) => {
-        if (e.is_refill && !e.metadata?.free_form && e.metadata?.ingredient) {
-            return ingredientLabel(e.metadata.ingredient)
-        }
-        return e.name || 'Chi phí'
+    // Roll up NVL payments by ingredient/name, tách thành 2 nhóm:
+    //   - todayPurchases: payment paid_at cùng ngày invoice (= đi chợ trả ngay/1 phần ngay)
+    //   - debtRepayments: payment cho invoice tạo ngày khác (= trả nợ cũ)
+    // Cần JOIN-supplied `invoice_metadata` để so sánh; nếu thiếu (orphan) thì coi như debt.
+    // Map<expense_id, invoice.created_at> dựng từ expenses[] để bắt invoice cùng ngày của payments.
+    const invoiceCreatedById = new Map(
+        (expenses || []).filter(e => e.is_refill).map(e => [e.id, e.created_at])
+    )
+    const isSameDayLocal = (a, b) => {
+        if (!a || !b) return false
+        const da = new Date(a), db = new Date(b)
+        return da.getFullYear() === db.getFullYear()
+            && da.getMonth() === db.getMonth()
+            && da.getDate() === db.getDate()
     }
-
-    // Multiple refill bills can land on the same ingredient (e.g. 4 lần nhập Sữa đặc
-    // trong ngày). Roll them up by display name so the cashflow line shows one row per
-    // NVL with the total spent, instead of a wall of duplicate names.
-    const afterShiftNvlGrouped = (() => {
+    const groupByInvoice = (list) => {
         const byName = new Map()
-        for (const e of afterShiftNvl) {
-            const name = getExpenseName(e)
-            const prev = byName.get(name)
+        for (const p of list) {
+            const ing = p.invoice_metadata?.ingredient
+            const name = ing ? ingredientLabel(ing) : (p.invoice_name || 'Trả NCC')
+            const invDate = invoiceCreatedById.get(p.expense_id)
+            // Hiển thị ngày invoice cho debt repayments để user biết "trả nợ ngày nào".
+            const display = (() => {
+                if (!invDate) return name
+                const d = new Date(invDate)
+                return `${name} · ${d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`
+            })()
+            const prev = byName.get(display)
             if (prev) {
-                prev.amount += e.amount || 0
+                prev.amount += p.amount || 0
                 prev.count += 1
             } else {
-                byName.set(name, { name, amount: e.amount || 0, count: 1, key: e.id })
+                byName.set(display, { name: display, amount: p.amount || 0, count: 1, key: p.id })
             }
         }
         return [...byName.values()]
-    })()
+    }
+    const purchaseToday = []
+    const debtRepayments = []
+    for (const p of nvlPayments) {
+        const invCreated = invoiceCreatedById.get(p.expense_id)
+        if (invCreated && isSameDayLocal(invCreated, p.paid_at)) purchaseToday.push(p)
+        else debtRepayments.push(p)
+    }
+    const nvlGrouped = groupByInvoice(purchaseToday)
+    const debtGrouped = groupByInvoice(debtRepayments).map(g => ({
+        // Strip date suffix khỏi tên cho debt group? Giữ luôn để rõ ngày invoice gốc.
+        ...g,
+    }))
 
     return (
         <div className="flex flex-col gap-4">
@@ -174,9 +203,9 @@ export default function CashFlowCard({
                 <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
 
                 <div className="flex flex-col gap-1 pl-1">
-                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Nguyên vật liệu</span>
-                    {afterShiftNvlGrouped.length > 0 ? (
-                        afterShiftNvlGrouped.map((row) => (
+                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Đi chợ hôm nay</span>
+                    {nvlGrouped.length > 0 ? (
+                        nvlGrouped.map((row) => (
                             <div key={row.key} className="flex justify-between items-center">
                                 <span className="text-[12px] font-bold text-text-secondary">
                                     · {row.name}
@@ -188,9 +217,29 @@ export default function CashFlowCard({
                             </div>
                         ))
                     ) : (
-                        <span className="text-[12px] text-text-secondary italic">Không có nguyên vật liệu nhập kho</span>
+                        <span className="text-[12px] text-text-secondary italic">Không có đi chợ trong ngày</span>
                     )}
                 </div>
+
+                {debtGrouped.length > 0 && (
+                    <>
+                        <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
+                        <div className="flex flex-col gap-1 pl-1">
+                            <span className="text-[10px] font-black text-warning uppercase tracking-widest">Trả nợ cũ</span>
+                            {debtGrouped.map((row) => (
+                                <div key={row.key} className="flex justify-between items-center">
+                                    <span className="text-[12px] font-bold text-text-secondary">
+                                        · {row.name}
+                                        {row.count > 1 && (
+                                            <span className="ml-1 text-text-dim font-medium">×{row.count}</span>
+                                        )}
+                                    </span>
+                                    <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(row.amount)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                )}
             </div>
 
             {/* PANEL 3: TỔNG CHI PHÍ */}

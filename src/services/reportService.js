@@ -193,6 +193,23 @@ export function invalidateDailyContext(addressId) {
     invalidateReportCache(addressId)
 }
 
+// Helper: attach invoice info to a payment row (mirror RPC's LEFT JOIN).
+function attachInvoiceMeta(payments, expenseMap) {
+    return (payments || []).map(p => {
+        const inv = expenseMap.get(p.expense_id)
+        return inv ? { ...p, invoice_name: inv.name, invoice_metadata: inv.metadata } : p
+    })
+}
+
+// Helper: filter local payments by paid_at range and address.
+function filterLocalPayments(addressId, start, end) {
+    const sMs = start.getTime(), eMs = end.getTime()
+    return localRepo.fetchAllLocalExpensePayments(addressId).filter(p => {
+        const t = new Date(p.paid_at).getTime()
+        return t >= sMs && t < eMs
+    })
+}
+
 export async function fetchDailyReportContext(addressId) {
     if (!addressId) return {}
     return reportCache.through([addressId, 'dailyReportContext'], async () => {
@@ -200,11 +217,17 @@ export async function fetchDailyReportContext(addressId) {
             const todayStr = dateStringVN()
             const yesterday = new Date(startOfDayVN().getTime() - 86_400_000)
             const yesterdayStr = dateStringVN(yesterday)
+            const startToday = startOfDayVN()
+            const startYday = new Date(yesterday.getTime())
+            const allExp = localRepo.fetchAllLocalExpenses(addressId)
+            const expMap = new Map(allExp.map(e => [e.id, e]))
             return {
                 shift_closing: localRepo.fetchLocalShiftClosing(addressId, todayStr) || null,
                 yesterday_closing: localRepo.fetchLocalShiftClosing(addressId, yesterdayStr) || localRepo.fetchLocalYesterdayShiftClosing(addressId) || null,
                 yesterday_orders: localRepo.fetchLocalOrders(addressId, yesterdayStr),
-                yesterday_expenses: localRepo.fetchLocalExpenses(addressId, yesterdayStr)
+                yesterday_expenses: localRepo.fetchLocalExpenses(addressId, yesterdayStr),
+                target_payments: attachInvoiceMeta(filterLocalPayments(addressId, startToday, new Date(startToday.getTime() + 86_400_000)), expMap),
+                yesterday_payments: attachInvoiceMeta(filterLocalPayments(addressId, startYday, startToday), expMap),
             }
         }
         if (!supabase) return {}
@@ -219,9 +242,13 @@ export async function fetchReportByDate(addressId, dateStr) {
         if (localRepo.isGuest()) {
             const targetDateStr = dateStringVN(new Date(dateStr))
             const targetDate = startOfDayVN(new Date(dateStr))
+            const targetEnd = new Date(targetDate.getTime() + 86_400_000)
 
             const yesterday = new Date(targetDate.getTime() - 86_400_000)
             const yesterdayStr = dateStringVN(yesterday)
+
+            const allExp = localRepo.fetchAllLocalExpenses(addressId)
+            const expMap = new Map(allExp.map(e => [e.id, e]))
 
             return {
                 shift_closing: localRepo.fetchLocalShiftClosing(addressId, targetDateStr) || null,
@@ -229,7 +256,9 @@ export async function fetchReportByDate(addressId, dateStr) {
                 yesterday_orders: localRepo.fetchLocalOrders(addressId, yesterdayStr),
                 yesterday_expenses: localRepo.fetchLocalExpenses(addressId, yesterdayStr),
                 target_orders: localRepo.fetchLocalOrders(addressId, targetDateStr),
-                target_expenses: localRepo.fetchLocalExpenses(addressId, targetDateStr)
+                target_expenses: localRepo.fetchLocalExpenses(addressId, targetDateStr),
+                target_payments: attachInvoiceMeta(filterLocalPayments(addressId, targetDate, targetEnd), expMap),
+                yesterday_payments: attachInvoiceMeta(filterLocalPayments(addressId, yesterday, targetDate), expMap),
             }
         }
         if (!supabase) return {}
@@ -256,12 +285,15 @@ export async function fetchReportByRange(addressId, targetStart, targetEnd, prev
                 return t >= start && t <= end && x.address_id === addressId
             })
 
+            const expMap = new Map(allExpenses.map(e => [e.id, e]))
             return {
                 target_orders: filterRange(allOrders, tS, tE),
                 target_expenses: filterRange(allExpenses, tS, tE),
+                target_payments: attachInvoiceMeta(filterLocalPayments(addressId, new Date(tS), new Date(tE)), expMap),
                 target_shift_closings: filterRange(allClosings, tS, tE),
                 prev_orders: filterRange(allOrders, pS, pE),
                 prev_expenses: filterRange(allExpenses, pS, pE),
+                prev_payments: attachInvoiceMeta(filterLocalPayments(addressId, new Date(pS), new Date(pE)), expMap),
                 prev_shift_closings: filterRange(allClosings, pS, pE)
             }
         }

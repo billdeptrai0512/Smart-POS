@@ -39,14 +39,16 @@ export async function fetchTodayExpenses(addressId) {
 // - categoryId: FK into expense_categories. NULL is allowed for NVL refills (NVL is
 //   in COGS, not a tagged expense). For all other expenses callers should pass the
 //   category picked in the form, or omit to let UI default to "Chi phí khác".
-export async function insertExpense(name, amount, addressId = null, isFixed = false, staffName = null, isRefill = false, paymentMethod = 'cash', metadata = {}, categoryId = null) {
+export async function insertExpense(name, amount, addressId = null, isFixed = false, staffName = null, isRefill = false, paymentMethod = 'cash', metadata = {}, categoryId = null, createdAt = null, extraCols = null) {
     invalidateReportCache(addressId)
-    if (localRepo.isGuest()) return localRepo.insertLocalExpense({ name, amount, address_id: addressId, is_fixed: isFixed, staff_name: staffName, is_refill: isRefill, payment_method: paymentMethod, metadata, category_id: categoryId })
+    if (localRepo.isGuest()) return localRepo.insertLocalExpense({ name, amount, address_id: addressId, is_fixed: isFixed, staff_name: staffName, is_refill: isRefill, payment_method: paymentMethod, metadata, category_id: categoryId, created_at: createdAt || undefined, ...(extraCols || {}) })
     if (!supabase) throw new Error('No Supabase connection')
     const payload = { name, amount, is_fixed: isFixed, is_refill: isRefill, payment_method: paymentMethod, metadata }
     if (addressId) payload.address_id = addressId
     if (staffName) payload.staff_name = staffName
     if (categoryId) payload.category_id = categoryId
+    if (createdAt) payload.created_at = createdAt
+    if (extraCols) Object.assign(payload, extraCols)
 
     const { data, error } = await supabase
         .from('expenses')
@@ -166,22 +168,53 @@ export async function fetchRefillExpensesInRange(addressId, fromDate, toDate) {
 
 // Fetch restock history for a specific ingredient within a date range
 export async function fetchIngredientRestockHistory(addressId, ingredient, fromDate, toDate) {
+    if (localRepo.isGuest()) {
+        const expenses = localRepo.fetchAllLocalExpenses(addressId).filter(e =>
+            e.is_refill && e.metadata?.ingredient === ingredient &&
+            new Date(e.created_at) >= new Date(fromDate) &&
+            new Date(e.created_at) <= new Date(toDate)
+        )
+        const payments = localRepo.fetchAllLocalExpensePayments(addressId)
+        return expenses
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+            .map(e => ({
+                ...e,
+                discount_amount: e.discount_amount || 0,
+                extra_cost: e.extra_cost || 0,
+                payments: payments.filter(p => p.expense_id === e.id),
+            }))
+    }
     if (!supabase || !addressId) return []
-    const { data, error } = await supabase
-        .from('expenses')
-        .select('id, name, amount, staff_name, metadata, created_at')
-        .eq('address_id', addressId)
-        .eq('is_refill', true)
-        .gte('created_at', fromDate)
-        .lte('created_at', toDate)
-        .order('created_at', { ascending: false })
-
+    // Nested select kéo luôn payments để FE tính owing & hiển thị badge mà không cần round-trip phụ.
+    // Có 3 cấp fallback nếu migration 20260528 chưa deploy: bỏ payments → bỏ discount/extra columns.
+    const trySelects = [
+        'id, name, amount, staff_name, metadata, created_at, discount_amount, extra_cost, expense_payments(id, amount, payment_method, staff_name, paid_at)',
+        'id, name, amount, staff_name, metadata, created_at, discount_amount, extra_cost',
+        'id, name, amount, staff_name, metadata, created_at',
+    ]
+    let data = null, error = null
+    for (const sel of trySelects) {
+        const res = await supabase
+            .from('expenses')
+            .select(sel)
+            .eq('address_id', addressId)
+            .eq('is_refill', true)
+            .gte('created_at', fromDate)
+            .lte('created_at', toDate)
+            .order('created_at', { ascending: false })
+        if (!res.error) { data = res.data; error = null; break }
+        error = res.error
+        // 42P01 = relation missing, 42703 = column missing
+        if (error.code !== '42P01' && error.code !== '42703' && error.code !== 'PGRST200') break
+    }
     if (error) {
-        console.error('fetchIngredientRestockHistory error:', error)
+        console.error('fetchIngredientRestockHistory error code:', error.code, 'msg:', error.message, 'details:', error.details)
         return []
     }
     // Filter by ingredient in metadata (client-side, since Supabase JSONB filter syntax varies)
-    return (data || []).filter(e => e.metadata?.ingredient === ingredient)
+    return (data || [])
+        .filter(e => e.metadata?.ingredient === ingredient)
+        .map(e => ({ ...e, payments: e.expense_payments || [] }))
 }
 
 // ---- Fixed Costs CRUD removed ----

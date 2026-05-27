@@ -81,6 +81,8 @@ export default function DailyReportPage() {
         yesterdayExpensesData,
         apiOrders,
         apiExpenses,
+        apiPayments,
+        todayPayments,
         apiShiftClosings,
         prevShiftClosings,
         isAsyncReady,
@@ -184,6 +186,8 @@ export default function DailyReportPage() {
     // Computed display data
     const displayOrders = isTodayScope ? todayOrders : apiOrders
     const displayExpenses = isTodayScope ? todayExpenses : apiExpenses
+    // Payments của ngày scope hiện tại — driver chính của cashflow refill (paid_at-based).
+    const displayPayments = isTodayScope ? (todayPayments || []) : (apiPayments || [])
 
     const dayCustomDate = useMemo(() => dayCustomDateOf(scope, offset), [scope, offset])
 
@@ -674,9 +678,9 @@ export default function DailyReportPage() {
                                 actualCash={actualCash}
                                 actualTransfer={actualTransfer}
                                 dailyExpense={dailyExpense}
-                                refillNvl={refillNvl}
                                 refillFreeForm={refillFreeForm}
                                 expenses={displayExpenses}
+                                payments={displayPayments}
                                 editable={isTodayScope}
                                 cashInput={cashInput}
                                 transferInput={transferInput}

@@ -496,36 +496,119 @@ export async function adjustIngredientStock(addressId, ingredient, delta, staffN
     )
 }
 
-// Process a restock: updates COGS, creates expense, returns result
-export async function processIngredientRestock(addressId, ingredient, qty, totalCost, staffName) {
+// Process a restock: updates COGS, ghi nhận invoice + (optional) payment.
+//
+// opts: {
+//   subtotal:        Tổng tiền hàng (giá × qty trước giảm)
+//   discount:        Giảm giá (đã quy ra VND ở FE)
+//   extraCost:       Chi phí nhập (ship, vận chuyển)
+//   paid:            Số tiền trả ngay (default = amountDue = subtotal - discount + extraCost)
+//   paymentMethod:   'cash' | 'transfer' cho payment kèm
+//   purchaseDate:    ISO string khi user backdate, null = NOW() server
+// }
+//
+// Server tự tính `amount = subtotal − discount + extra`, WAC dùng amount này.
+// Trả full mặc định khi `paid` không được truyền (backward-compat với callers cũ).
+export async function processIngredientRestock(addressId, ingredient, qty, staffName, opts = {}) {
+    const {
+        subtotal = 0, discount = 0, extraCost = 0,
+        paid = null, paymentMethod = 'cash', purchaseDate = null,
+    } = opts
+    const amountDue = Math.max(0, Number(subtotal) - Number(discount) + Number(extraCost))
+    const paidAmount = paid == null ? amountDue : Math.max(0, Math.min(Number(paid), amountDue))
+
     let result
     if (localRepo.isGuest()) {
-        // 1. Update unit cost
-        const unitCost = Number(qty) > 0 ? Math.round(Number(totalCost) / Number(qty)) : 0
+        // 1. Update unit cost (WAC dùng amountDue)
+        const unitCost = Number(qty) > 0 ? Math.round(amountDue / Number(qty)) : 0
         await upsertIngredientCost(ingredient, unitCost, addressId)
-        // 2. Insert expense
+        // 2. Insert invoice expense (giữ created_at = purchaseDate nếu có)
         const displayName = `Đi chợ: ${ingredient}`
-        result = await insertExpense(displayName, totalCost, addressId, false, staffName, true, 'cash', { ingredient, qty, totalCost })
+        const invoice = await insertExpense(
+            displayName, amountDue, addressId, false, staffName, true, paymentMethod,
+            { ingredient, qty, subtotal },
+            null, purchaseDate,
+            { discount_amount: discount, extra_cost: extraCost }
+        )
+        // 3. Insert payment nếu có trả tiền
+        if (paidAmount > 0 && invoice?.id) {
+            await localRepo.insertLocalExpensePayment({
+                expense_id: invoice.id,
+                address_id: addressId,
+                amount: paidAmount,
+                payment_method: paymentMethod,
+                staff_name: staffName,
+                paid_at: purchaseDate || new Date().toISOString(),
+            })
+        }
+        result = { success: true, expense_id: invoice?.id, amount: amountDue, paid: paidAmount, owing: amountDue - paidAmount }
     } else {
         if (!supabase) throw new Error('No Supabase connection')
         if (addressId) {
-            const { data, error } = await supabase.rpc('process_ingredient_restock', {
+            const params = {
                 p_address_id: addressId,
                 p_ingredient: ingredient,
                 p_qty: qty,
-                p_total_cost: totalCost,
-                p_staff_name: staffName
-            })
+                p_subtotal: subtotal,
+                p_staff_name: staffName,
+                p_discount: discount,
+                p_extra_cost: extraCost,
+                p_initial_payment: paidAmount,
+                p_payment_method: paymentMethod,
+            }
+            if (purchaseDate) {
+                params.p_created_at = purchaseDate
+                params.p_paid_at = purchaseDate
+            }
+            const { data, error } = await supabase.rpc('process_ingredient_restock', params)
             if (error) throw error
             result = data
         } else {
             // Default address (template). RPC requires UUID — do the two writes manually so
             // admins can exercise the full restock flow on the global template.
-            const unitCost = Number(qty) > 0 ? Math.round(Number(totalCost) / Number(qty)) : 0
+            const unitCost = Number(qty) > 0 ? Math.round(amountDue / Number(qty)) : 0
             await upsertIngredientCost(ingredient, unitCost, null)
             const displayName = `Đi chợ: ${ingredient}`
-            result = await insertExpense(displayName, totalCost, null, false, staffName, true, 'cash', { ingredient, qty, totalCost })
+            result = await insertExpense(
+                displayName, amountDue, null, false, staffName, true, paymentMethod,
+                { ingredient, qty, subtotal },
+                null, purchaseDate,
+                { discount_amount: discount, extra_cost: extraCost }
+            )
         }
+    }
+    invalidateReportCache(addressId)
+    return result
+}
+
+// Ghi nhận 1 lần trả nợ cho invoice đã tồn tại (từ Tab Nhật ký của ingredient).
+// `paidAt` ISO string — default NOW server-side.
+export async function recordInvoicePayment(addressId, expenseId, amount, paymentMethod = 'cash', staffName = null, paidAt = null) {
+    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+        throw new Error('amount must be > 0')
+    }
+    let result
+    if (localRepo.isGuest()) {
+        result = await localRepo.insertLocalExpensePayment({
+            expense_id: expenseId,
+            address_id: addressId,
+            amount: Number(amount),
+            payment_method: paymentMethod,
+            staff_name: staffName,
+            paid_at: paidAt || new Date().toISOString(),
+        })
+    } else {
+        if (!supabase) throw new Error('No Supabase connection')
+        const params = {
+            p_expense_id: expenseId,
+            p_amount: amount,
+            p_payment_method: paymentMethod,
+        }
+        if (staffName) params.p_staff_name = staffName
+        if (paidAt) params.p_paid_at = paidAt
+        const { data, error } = await supabase.rpc('record_invoice_payment', params)
+        if (error) throw error
+        result = data
     }
     invalidateReportCache(addressId)
     return result

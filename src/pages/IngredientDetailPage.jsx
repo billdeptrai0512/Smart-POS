@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import {
     fetchIngredientRestockHistory, fetchIngredientStocks,
     deleteIngredientCost, upsertIngredientCost, renameIngredient,
-    adjustIngredientStock,
+    adjustIngredientStock, recordInvoicePayment,
 } from '../services/orderService'
 import { usePOS } from '../contexts/POSContext'
 
@@ -95,16 +95,30 @@ export default function IngredientDetailPage() {
     }, [selectedAddress?.id, ingredientKey, fromDate, toDate])
 
     const summary = useMemo(() => {
-        let totalSpent = 0, totalQty = 0, qtyForAvg = 0
+        let totalSpent = 0, totalQty = 0, qtyForAvg = 0, totalOwing = 0, totalPaidInMonth = 0
+        // `fromDate` / `toDate` xác định cửa sổ tháng đang xem — payments có paid_at
+        // trong cửa sổ này được tính vào "Đã trả" của tháng. Một payment có thể trả
+        // cho invoice tháng khác, nên paid không = invoice.amount khớp 1-1.
+        const monthStartMs = new Date(fromDate).getTime()
+        const monthEndMs = new Date(toDate).getTime()
         history.forEach(e => {
             totalSpent += e.amount || 0
             const qty = e.metadata?.qty || 0
             totalQty += qty
             if (!e.metadata?.adjustment) qtyForAvg += qty
+            const paid = (e.payments || []).reduce((s, p) => s + (p.amount || 0), 0)
+            totalOwing += Math.max(0, (e.amount || 0) - paid)
+            for (const p of e.payments || []) {
+                const t = new Date(p.paid_at).getTime()
+                if (t >= monthStartMs && t <= monthEndMs) totalPaidInMonth += p.amount || 0
+            }
         })
         const avgPrice = qtyForAvg > 0 ? Math.round(totalSpent / qtyForAvg) : 0
-        return { totalSpent, totalQty, avgPrice, count: history.length }
-    }, [history])
+        return { totalSpent, totalQty, avgPrice, totalOwing, totalPaidInMonth, count: history.length }
+    }, [history, fromDate, toDate])
+
+    // Payment sheet state — open with selected invoice; null = closed.
+    const [paymentInvoice, setPaymentInvoice] = useState(null)
 
     // ── Handlers ────────────────────────────────────────────────────────────
     async function saveCategory(newCat) {
@@ -146,6 +160,31 @@ export default function IngredientDetailPage() {
         if (!selectedAddress?.id) return
         const stocks = await fetchIngredientStocks(selectedAddress.id)
         setStockData(stocks.find(s => s.ingredient === ingredientKey))
+    }
+
+    async function reloadHistory() {
+        if (!selectedAddress?.id) return
+        const hist = await fetchIngredientRestockHistory(selectedAddress.id, ingredientKey, fromDate, toDate)
+        setHistory(hist)
+    }
+
+    async function handleRecordPayment({ amount, paymentMethod, paidAt }) {
+        if (!paymentInvoice) return
+        setSaving(true)
+        try {
+            await recordInvoicePayment(
+                selectedAddress?.id,
+                paymentInvoice.id,
+                amount,
+                paymentMethod,
+                profile?.name,
+                paidAt,
+            )
+            await Promise.all([reloadHistory(), refreshTodayExpenses?.()])
+            setPaymentInvoice(null)
+        } catch (err) {
+            showError(err, 'Ghi nhận thanh toán')
+        } finally { setSaving(false) }
     }
 
     async function saveStock() {
@@ -309,9 +348,19 @@ export default function IngredientDetailPage() {
                         monthLabel={monthLabel}
                         monthOffset={monthOffset}
                         onMonthChange={setMonthOffset}
+                        onOpenPayment={canEdit ? setPaymentInvoice : null}
                     />
                 )}
             </main>
+
+            {paymentInvoice && (
+                <PaymentSheet
+                    invoice={paymentInvoice}
+                    saving={saving}
+                    onClose={() => setPaymentInvoice(null)}
+                    onConfirm={handleRecordPayment}
+                />
+            )}
 
             {packModalOpen && (
                 <PackConfigModal
@@ -561,7 +610,8 @@ function Row({ label, children }) {
 }
 
 // ─── Nhật ký tab ─────────────────────────────────────────────────────────────
-function HistoryTab({ loading, summary, history, unit, monthLabel, monthOffset, onMonthChange }) {
+function HistoryTab({ loading, summary, history, unit, monthLabel, monthOffset, onMonthChange, onOpenPayment }) {
+    const hasOwing = summary.totalOwing > 0
     return (
         <>
             <div className="flex items-center justify-between bg-surface-light rounded-[12px] px-1 py-1">
@@ -582,19 +632,35 @@ function HistoryTab({ loading, summary, history, unit, monthLabel, monthOffset, 
             </div>
 
             {!loading && summary.count > 0 && (
-                <div className="bg-surface rounded-[16px] border border-border/60 p-4 grid grid-cols-3 gap-3">
+                // Grid 2×2 khi có nợ (gọn trên mobile hơn 4 cột), 1×3 khi không nợ.
+                // "Tiền nhập" = nghĩa vụ phát sinh trong tháng (theo created_at).
+                // "Đã trả" = cash-out NVL trong tháng (theo paid_at, có thể trả cho invoice tháng khác).
+                <div className={`bg-surface rounded-[16px] border border-border/60 p-4 grid gap-3 ${hasOwing ? 'grid-cols-2' : 'grid-cols-3'}`}>
                     <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-black text-text-secondary uppercase tracking-wider">Tổng chi</span>
-                        <span className="text-[16px] font-black text-danger tabular-nums mt-1">{formatVND(summary.totalSpent)}</span>
+                        <span className="text-[10px] font-black text-text-secondary uppercase tracking-wider">Tiền nhập</span>
+                        <span className="text-[15px] font-black text-text tabular-nums mt-1">{formatVND(summary.totalSpent)}</span>
                     </div>
                     <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-black text-text-secondary uppercase tracking-wider">Tổng nhập</span>
-                        <span className="text-[16px] font-black text-text tabular-nums mt-1">{summary.totalQty} {unit}</span>
+                        <span className="text-[10px] font-black text-text-secondary uppercase tracking-wider">Lượng nhập</span>
+                        <span className="text-[15px] font-black text-text tabular-nums mt-1">{summary.totalQty} {unit}</span>
                     </div>
-                    <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-black text-text-secondary uppercase tracking-wider">TB/đơn vị</span>
-                        <span className="text-[16px] font-black text-primary tabular-nums mt-1">{formatVND(summary.avgPrice)}</span>
-                    </div>
+                    {!hasOwing ? (
+                        <div className="flex flex-col items-center">
+                            <span className="text-[10px] font-black text-text-secondary uppercase tracking-wider">TB/đơn vị</span>
+                            <span className="text-[15px] font-black text-primary tabular-nums mt-1">{formatVND(summary.avgPrice)}</span>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="flex flex-col items-center">
+                                <span className="text-[10px] font-black text-success uppercase tracking-wider">Đã trả</span>
+                                <span className="text-[15px] font-black text-success tabular-nums mt-1">{formatVND(summary.totalPaidInMonth)}</span>
+                            </div>
+                            <div className="flex flex-col items-center">
+                                <span className="text-[10px] font-black text-warning uppercase tracking-wider">Còn nợ</span>
+                                <span className="text-[15px] font-black text-warning tabular-nums mt-1">{formatVND(summary.totalOwing)}</span>
+                            </div>
+                        </>
+                    )}
                 </div>
             )}
 
@@ -614,8 +680,22 @@ function HistoryTab({ loading, summary, history, unit, monthLabel, monthOffset, 
                         const timeStr = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
                         const qty = entry.metadata?.qty || 0
                         const unitPrice = qty > 0 ? Math.round(entry.amount / qty) : 0
+                        const isAdjust = !!entry.metadata?.adjustment
+                        const paid = (entry.payments || []).reduce((s, p) => s + (p.amount || 0), 0)
+                        const owing = Math.max(0, (entry.amount || 0) - paid)
+                        const status = isAdjust ? null
+                            : owing <= 0 ? 'paid'
+                            : paid <= 0 ? 'unpaid'
+                            : 'partial'
+                        const clickable = status === 'unpaid' || status === 'partial'
                         return (
-                            <div key={entry.id} className="bg-surface rounded-[14px] border border-border/60 p-3 flex items-center gap-3">
+                            <button
+                                key={entry.id}
+                                type="button"
+                                onClick={() => clickable && onOpenPayment && onOpenPayment(entry)}
+                                disabled={!clickable || !onOpenPayment}
+                                className={`text-left bg-surface rounded-[14px] border border-border/60 p-3 flex items-center gap-3 transition-all ${clickable && onOpenPayment ? 'cursor-pointer hover:border-primary/40 active:scale-[0.99]' : 'cursor-default'}`}
+                            >
                                 <div className="flex flex-col items-center shrink-0 w-12">
                                     <span className="text-[13px] font-black text-text tabular-nums">{dateStr}</span>
                                     <span className="text-[10px] font-bold text-text-dim tabular-nums">{timeStr}</span>
@@ -625,17 +705,123 @@ function HistoryTab({ loading, summary, history, unit, monthLabel, monthOffset, 
                                         {qty > 0 ? '+' : ''}{qty} {unit}
                                     </span>
                                     <span className="text-[11px] text-text-secondary truncate">
-                                        {entry.staff_name || 'Không rõ'} · {entry.metadata?.adjustment ? 'Hiệu chỉnh' : `${formatVND(unitPrice)}/${unit}`}
+                                        {entry.staff_name || 'Không rõ'} · {isAdjust ? 'Hiệu chỉnh' : `${formatVND(unitPrice)}/${unit}`}
                                     </span>
+                                    {status && status !== 'paid' && (
+                                        <span className={`text-[10px] font-bold mt-0.5 ${status === 'unpaid' ? 'text-warning' : 'text-info'}`}>
+                                            {status === 'unpaid' ? `Còn nợ ${formatVND(owing)}` : `Trả 1 phần: ${formatVND(paid)}/${formatVND(entry.amount)}`}
+                                        </span>
+                                    )}
                                 </div>
-                                <span className={`text-[14px] font-black tabular-nums shrink-0 ${entry.metadata?.adjustment ? 'text-text-secondary' : 'text-danger'}`}>
-                                    {entry.metadata?.adjustment ? '0đ' : `-${formatVND(entry.amount)}`}
-                                </span>
-                            </div>
+                                <div className="flex flex-col items-end shrink-0">
+                                    <span className={`text-[14px] font-black tabular-nums ${isAdjust ? 'text-text-secondary' : 'text-danger'}`}>
+                                        {isAdjust ? '0đ' : `-${formatVND(entry.amount)}`}
+                                    </span>
+                                    {status === 'paid' && (
+                                        <span className="text-[10px] font-bold text-success mt-0.5">Đã trả</span>
+                                    )}
+                                </div>
+                            </button>
                         )
                     })}
                 </div>
             )}
         </>
+    )
+}
+
+// ─── Payment sheet ───────────────────────────────────────────────────────────
+function PaymentSheet({ invoice, saving, onClose, onConfirm }) {
+    const today = (() => {
+        const d = new Date()
+        const tz = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }))
+        return tz.toISOString().slice(0, 10)
+    })()
+    const paidPrev = (invoice.payments || []).reduce((s, p) => s + (p.amount || 0), 0)
+    const owing = Math.max(0, (invoice.amount || 0) - paidPrev)
+    const [amountInput, setAmountInput] = useState(formatVNDInput(owing))
+    const [paymentMethod, setPaymentMethod] = useState('cash')
+    const [paidDate, setPaidDate] = useState(today)
+    const amount = parseVNDInput(amountInput)
+    const isValid = amount > 0 && amount <= owing
+
+    const handleConfirm = () => {
+        if (!isValid || saving) return
+        onConfirm({
+            amount,
+            paymentMethod,
+            paidAt: paidDate !== today
+                ? new Date(`${paidDate}T12:00:00+07:00`).toISOString()
+                : new Date().toISOString(),
+        })
+    }
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={onClose}>
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+            <div
+                className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-5 animate-slide-up"
+                onClick={e => e.stopPropagation()}
+            >
+                <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                        <span className="text-[11px] font-black text-text-secondary uppercase tracking-wider">Ghi nhận thanh toán</span>
+                        <span className="text-[16px] font-black text-text leading-tight">{invoice.name}</span>
+                    </div>
+                    <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all">
+                        <span className="text-[18px]">×</span>
+                    </button>
+                </div>
+
+                <div className="flex flex-col gap-2 p-3 bg-warning/5 border border-warning/20 rounded-[12px]">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-text-secondary">Hoá đơn gốc</span>
+                        <span className="text-[13px] font-bold text-text tabular-nums">{formatVND(invoice.amount)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-text-secondary">Đã trả</span>
+                        <span className="text-[13px] font-bold text-text tabular-nums">{formatVND(paidPrev)}</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1.5 border-t border-warning/20">
+                        <span className="text-[12px] font-black text-warning">Còn nợ</span>
+                        <span className="text-[15px] font-black text-warning tabular-nums">{formatVND(owing)}</span>
+                    </div>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Số tiền trả</label>
+                        <MoneyInput value={amountInput} onChange={setAmountInput} size="lg" />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Ngày trả</label>
+                        <input
+                            type="date"
+                            value={paidDate}
+                            max={today}
+                            onChange={e => setPaidDate(e.target.value)}
+                            className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[14px] font-bold text-text focus:outline-none focus:border-primary/50"
+                        />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Phương thức</span>
+                        <div className="flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
+                            <button onClick={() => setPaymentMethod('cash')} className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'cash' ? 'bg-primary text-white' : 'text-text-secondary'}`}>Tiền mặt</button>
+                            <button onClick={() => setPaymentMethod('transfer')} className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}>Chuyển khoản</button>
+                        </div>
+                    </div>
+                </div>
+
+                <button
+                    onClick={handleConfirm}
+                    disabled={!isValid || saving}
+                    className="w-full py-3.5 rounded-[14px] bg-primary text-white text-[15px] font-black uppercase tracking-wide hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-primary/20"
+                >
+                    {saving ? 'Đang lưu...' : 'Xác nhận thanh toán'}
+                </button>
+            </div>
+        </div>
     )
 }

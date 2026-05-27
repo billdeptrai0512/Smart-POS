@@ -502,8 +502,10 @@ export default function IngredientManagementPage() {
                     packSize={configByIngredient.get(restockIngredient)?.pack_size}
                     packUnit={configByIngredient.get(restockIngredient)?.pack_unit}
                     onClose={() => setRestockIngredient(null)}
-                    onConfirm={async ({ ingredient: ing, qty, totalCost }) => {
-                        const result = await processIngredientRestock(selectedAddress?.id, ing, qty, totalCost, profile?.name)
+                    onConfirm={async ({ ingredient: ing, qty, subtotal, discount, extraCost, paid, paymentMethod, purchaseDate }) => {
+                        const result = await processIngredientRestock(selectedAddress?.id, ing, qty, profile?.name, {
+                            subtotal, discount, extraCost, paid, paymentMethod, purchaseDate,
+                        })
                         await Promise.all([loadStocks(), refreshProducts?.(), refreshTodayExpenses?.()])
                         return result
                     }}

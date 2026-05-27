@@ -47,6 +47,7 @@ export default function RangeReportPage() {
     const [prevOrders, setPrevOrders] = useState([])
     const [expenses, setExpenses] = useState([])
     const [prevExpenses, setPrevExpenses] = useState([])
+    const [payments, setPayments] = useState([])
     const [shiftClosings, setShiftClosings] = useState([])
     const [prevShiftClosings, setPrevShiftClosings] = useState([])
     const [isLoading, setIsLoading] = useState(true)
@@ -82,6 +83,7 @@ export default function RangeReportPage() {
         if (cached) {
             setOrders(cached.orders)
             setExpenses(cached.expenses)
+            setPayments(cached.payments || [])
             setShiftClosings(cached.shiftClosings)
             setPrevOrders(cached.prevOrders)
             setPrevExpenses(cached.prevExpenses)
@@ -98,18 +100,20 @@ export default function RangeReportPage() {
             .then((data) => {
                 const ords = data.target_orders || []
                 const exps = data.target_expenses || []
+                const pays = data.target_payments || []
                 const closings = data.target_shift_closings || []
                 const pOrds = data.prev_orders || []
                 const pExps = data.prev_expenses || []
                 const pClosings = data.prev_shift_closings || []
 
                 fetchCache.current[key] = {
-                    orders: ords, expenses: exps, shiftClosings: closings,
+                    orders: ords, expenses: exps, payments: pays, shiftClosings: closings,
                     prevOrders: pOrds, prevExpenses: pExps, prevShiftClosings: pClosings
                 }
 
                 setOrders(ords)
                 setExpenses(exps)
+                setPayments(pays)
                 setShiftClosings(closings)
                 setPrevOrders(pOrds)
                 setPrevExpenses(pExps)
@@ -367,9 +371,12 @@ export default function RangeReportPage() {
                             <>
 
                                 <CashFlowCard
-                                    cash={stats.cashRevenue}
-                                    transfer={stats.transferRevenue}
+                                    actualCash={stats.cashRevenue}
+                                    actualTransfer={stats.transferRevenue}
                                     dailyExpense={stats.dailyExpense}
+                                    refillFreeForm={stats.refillFreeForm}
+                                    expenses={expenses}
+                                    payments={payments}
                                     onDailyExpenseClick={() => navigate('/history', { state: { from: `/range-report?range=${range}`, tab: 'expense', expensesToView: expenses, isReadOnly: true } })}
                                 />
 

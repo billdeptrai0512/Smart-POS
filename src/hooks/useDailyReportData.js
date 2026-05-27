@@ -27,6 +27,10 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
     const [isAsyncReady, setIsAsyncReady] = useState(false)
     const [apiOrders, setApiOrders] = useState([])
     const [apiExpenses, setApiExpenses] = useState([])
+    // apiPayments mirrors target_payments / today_payments — driver của refill cashflow
+    // (theo paid_at). todayPayments tách riêng vì today scope không set apiExpenses.
+    const [apiPayments, setApiPayments] = useState([])
+    const [todayPayments, setTodayPayments] = useState([])
     const [apiShiftClosings, setApiShiftClosings] = useState([])
     const [prevShiftClosings, setPrevShiftClosings] = useState([])
 
@@ -66,6 +70,7 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
                     setYesterdayClosing(data?.yesterday_closing || null)
                     setYesterdayOrders(data?.yesterday_orders || [])
                     setYesterdayExpensesData(data?.yesterday_expenses || [])
+                    setTodayPayments(data?.target_payments || [])
                 })
                 .catch((error) => onError?.(error, 'Tải báo cáo hôm nay'))
                 .finally(() => setIsAsyncReady(true))
@@ -79,6 +84,7 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
                     setYesterdayExpensesData(data?.yesterday_expenses || [])
                     setApiOrders(data?.target_orders || [])
                     setApiExpenses(data?.target_expenses || [])
+                    setApiPayments(data?.target_payments || [])
                 })
                 .catch((error) => onError?.(error, `Tải báo cáo ngày ${targetDateStr}`))
                 .finally(() => setIsAsyncReady(true))
@@ -88,6 +94,7 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
                 .then((data) => {
                     setApiOrders(data?.target_orders || [])
                     setApiExpenses(data?.target_expenses || [])
+                    setApiPayments(data?.target_payments || [])
                     setApiShiftClosings(data?.target_shift_closings || [])
                     setPrevShiftClosings(data?.prev_shift_closings || [])
                     setYesterdayOrders(data?.prev_orders || [])
@@ -116,6 +123,8 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
         yesterdayExpensesData,
         apiOrders,
         apiExpenses,
+        apiPayments,
+        todayPayments,
         apiShiftClosings,
         prevShiftClosings,
         isAsyncReady,

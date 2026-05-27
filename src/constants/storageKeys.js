@@ -33,6 +33,7 @@ export const STORAGE_KEYS = {
     GUEST_SHIFT_CLOSINGS: 'guest_shift_closings',
     GUEST_FIXED_COSTS: 'guest_fixed_costs',
     GUEST_INGREDIENT_SORT: 'guest_ingredient_sort_order',
+    GUEST_EXPENSE_PAYMENTS: 'guest_expense_payments',
 }
 
 // Per-address cache keys used by ProductContext / AddressSelectPage.
