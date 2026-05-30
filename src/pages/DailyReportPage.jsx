@@ -591,7 +591,6 @@ export default function DailyReportPage() {
                 existingId: shiftClosing?.id,
             })
             showToast('Đã lưu thực thu', 'success')
-            setCashDirty(false)
             // Refetch shift_closing so display + pre-fill sync. invalidateDailyContext
             // inside the hook already cleared the cache, so the network is hit fresh.
             const fresh = await fetchDailyReportContext(selectedAddress.id)
