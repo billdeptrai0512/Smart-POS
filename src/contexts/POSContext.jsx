@@ -4,7 +4,7 @@ import { fetchTodayStats, fetchInventory, submitOrder, fetchTodayOrders, deleteO
 import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder } from '../hooks/useOfflineSync'
 import { dateStringVN } from '../utils/dateVN'
-import { calculateProductCost } from '../utils'
+import { calculateProductCost, computeDiscount } from '../utils'
 import { useProducts } from './ProductContext'
 import { useAddress } from './AddressContext'
 import { useAuth } from './AuthContext'
@@ -285,13 +285,10 @@ export function POSProvider() {
     const orderCount = cart.reduce((sum, item) => sum + item.quantity, 0)
     const hasOrder = cart.length > 0
 
-    // Discount: clamp % to 100 and amount to subtotal so finalTotal never goes negative.
-    const discountAmount = !discount.value
-        ? 0
-        : discount.type === 'percent'
-            ? Math.round(total * Math.min(discount.value, 100) / 100)
-            : Math.min(discount.value, total)
-    const finalTotal = Math.max(0, total - discountAmount)
+    const { discountAmount, finalTotal } = computeDiscount(total, discount)
+
+    // Cart composition / total changed → clear any applied discount so it must be re-entered.
+    const clearDiscount = () => setDiscount(d => ({ ...d, value: 0 }))
 
     // ---- Handlers ----
     function handleAddItem(product) {
@@ -306,13 +303,12 @@ export function POSProvider() {
             extras: [...stickyExtras]
         }])
         setActiveCartItemId(cartItemId)
-        // Cart composition changed → clear any applied discount so it must be re-entered.
-        setDiscount(d => ({ ...d, value: 0 }))
+        clearDiscount()
     }
 
     function handleRemoveCartItem(cartItemId) {
         setCart(prev => prev.filter(item => item.cartItemId !== cartItemId))
-        setDiscount(d => ({ ...d, value: 0 }))
+        clearDiscount()
     }
 
     function handleToggleStickyExtra(extra) {
@@ -342,8 +338,7 @@ export function POSProvider() {
 
             return nextState
         })
-        // Order total changed → clear any applied discount.
-        if (cart.length) setDiscount(d => ({ ...d, value: 0 }))
+        if (cart.length) clearDiscount()
     }
 
     function handleToggleExtra(extra) {
@@ -360,8 +355,7 @@ export function POSProvider() {
             next[targetIndex] = { ...targetItem, extras: newExtras }
             return next
         })
-        // Order total changed → clear any applied discount.
-        if (cart.length) setDiscount(d => ({ ...d, value: 0 }))
+        if (cart.length) clearDiscount()
     }
 
     async function handleConfirm() {
@@ -391,7 +385,7 @@ export function POSProvider() {
         setLastOrder(buildLastOrderFromCart(savedCart, savedTotal))
         setCart([])
         setActiveCartItemId(null)
-        setDiscount(d => ({ ...d, value: 0 }))
+        clearDiscount()
         showToast('Tạo thành công', 'success')
 
         // Submit in background (with COGS snapshot)

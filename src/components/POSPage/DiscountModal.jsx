@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { X, BadgePercent } from 'lucide-react'
-import { formatVND, formatVNDInput, parseVNDInput } from '../../utils'
+import { formatVND, formatVNDInput, parseVNDInput, computeDiscount } from '../../utils'
 
 const PERCENT_PRESETS = [25, 50, 100]
 const AMOUNT_PRESETS = [10000, 20000, 50000]
@@ -22,10 +22,7 @@ export default function DiscountModal({ open, onClose, subtotal, discount, onApp
     if (!open) return null
 
     const rawValue = type === 'amount' ? parseVNDInput(input) : (parseInt(input, 10) || 0)
-    const discountAmount = type === 'percent'
-        ? Math.round(subtotal * Math.min(rawValue, 100) / 100)
-        : Math.min(rawValue, subtotal)
-    const finalTotal = Math.max(0, subtotal - discountAmount)
+    const { discountAmount, finalTotal } = computeDiscount(subtotal, { type, value: rawValue })
     const presets = type === 'percent' ? PERCENT_PRESETS : AMOUNT_PRESETS
 
     function switchType(next) {

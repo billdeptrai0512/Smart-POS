@@ -19,3 +19,15 @@ export function parseVNDInput(formatted) {
     const numStr = String(formatted).replace(/[^\d]/g, '')
     return Number(numStr) || 0
 }
+
+// Resolve a per-order discount ({ type: 'percent' | 'amount', value }) against a
+// subtotal. Clamps % to 100 and amount to the subtotal so finalTotal never goes
+// negative. Single source of truth shared by POSContext and the discount modal.
+export function computeDiscount(subtotal, discount) {
+    const discountAmount = !discount.value
+        ? 0
+        : discount.type === 'percent'
+            ? Math.round(subtotal * Math.min(discount.value, 100) / 100)
+            : Math.min(discount.value, subtotal)
+    return { discountAmount, finalTotal: Math.max(0, subtotal - discountAmount) }
+}
