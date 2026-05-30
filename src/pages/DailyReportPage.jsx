@@ -14,6 +14,7 @@ import { startOfDayVN, dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import SalesCard from '../components/DailyReportPage/SalesCard'
+import DayPerformanceChart from '../components/DailyReportPage/DayPerformanceChart'
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import { fetchExpenseCategories } from '../services/expenseService'
@@ -182,6 +183,9 @@ export default function DailyReportPage() {
         if (!isTodaysClosing || shiftClosing.actual_transfer == null) parts.push('chưa nhập chuyển khoản')
         return parts
     }, [isTodayScope, isTodaysClosing, shiftClosing?.actual_cash, shiftClosing?.actual_transfer, shiftClosing?.inventory_report, inventory.ingredientsList])
+
+    // Week/month scopes show the per-day/per-week bar chart instead of the hourly line.
+    const isRangeScope = scope === 'week' || scope === 'month'
 
     // Computed display data
     const displayOrders = isTodayScope ? todayOrders : apiOrders
@@ -646,19 +650,6 @@ export default function DailyReportPage() {
                     </div>
                 ) : (
                     <div className="flex flex-col gap-4 animate-fade-in">
-                        {/* {view === VIEW_PROFIT && (
-                            <SalesCard
-                                totalCups={totalCups}
-                                selectedProductId={selectedProductId}
-                                onFilterChange={setSelectedProductId}
-                                products={products}
-                                soldProducts={soldProducts}
-                                totalRevenue={totalRevenue}
-                                productStats={productStats}
-                                lineChartData={lineChartData}
-                            />
-                        )} */}
-
                         {(view === VIEW_ALL || view === VIEW_PROFIT) && !isStaff && (
                             <FinanceCards
                                 totalRevenue={totalRevenue}
@@ -689,16 +680,28 @@ export default function DailyReportPage() {
                                 isSaving={isSavingShift}
                                 onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } })}
                                 salesCard={
-                                    <SalesCard
-                                        totalCups={totalCups}
-                                        selectedProductId={selectedProductId}
-                                        onFilterChange={setSelectedProductId}
-                                        products={products}
-                                        soldProducts={soldProducts}
-                                        totalRevenue={totalRevenue}
-                                        productStats={productStats}
-                                        lineChartData={lineChartData}
-                                    />
+                                    <div className="flex flex-col gap-4">
+                                        <SalesCard
+                                            totalCups={totalCups}
+                                            selectedProductId={selectedProductId}
+                                            onFilterChange={setSelectedProductId}
+                                            products={products}
+                                            soldProducts={soldProducts}
+                                            totalRevenue={totalRevenue}
+                                            productStats={productStats}
+                                            lineChartData={lineChartData}
+                                            showChart={!isRangeScope}
+                                        />
+                                        {isRangeScope && (
+                                            <DayPerformanceChart
+                                                orders={displayOrders}
+                                                range={scope}
+                                                start={rangeStart}
+                                                end={rangeEnd}
+                                                products={products}
+                                            />
+                                        )}
+                                    </div>
                                 }
                             />
                         )}

@@ -14,6 +14,7 @@ export default function SalesCard({
     totalRevenue,
     productStats,
     lineChartData,
+    showChart = true,
 }) {
     const selectedProduct = selectedProductId !== 'all' ? products.find(p => p.id === selectedProductId) : null
     const singleStats = selectedProduct && productStats?.[selectedProductId] ? productStats[selectedProductId] : null
@@ -174,10 +175,11 @@ export default function SalesCard({
                 </div>
             )}
 
+            {/* Revenue chart — hidden on range scopes (bar chart shown separately) */}
+            {showChart && (<>
             {/* Divider */}
             <div className="h-[1px] bg-border/30 -mx-1" />
 
-            {/* Revenue chart */}
             <div>
                 <div className="flex justify-between items-center mb-2 pl-1">
                     <h3 className="text-[11px] font-black uppercase text-text-secondary tracking-widest">Dòng tiền theo giờ</h3>
@@ -238,6 +240,7 @@ export default function SalesCard({
                     </div>
                 )}
             </div>
+            </>)}
         </div>
     )
 }

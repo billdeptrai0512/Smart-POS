@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { BarChart, Bar, XAxis, ResponsiveContainer, Cell, Tooltip } from 'recharts'
 import { formatVND } from '../../utils'
-import { startOfDayVN, endOfDayVN, addDaysVN } from '../../utils/dateVN'
 
 const DAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
 
@@ -29,29 +28,14 @@ function buildWeekData(orders, start, countMap) {
     return slots
 }
 
-function buildMonthData(orders, start, end, countMap) {
-    const slots = []
-    let wStart = startOfDayVN(start)
-    let wNum = 1
-    while (wStart <= end) {
-        const wEnd = endOfDayVN(addDaysVN(wStart, 6))
-        slots.push({ label: `T${wNum}`, wStart: new Date(wStart), wEnd: new Date(Math.min(wEnd.getTime(), end.getTime())), cups: 0, revenue: 0 })
-        wStart = addDaysVN(wStart, 7)
-        wNum++
-    }
-    // PERF: bin orders by week-index O(1) instead of slots.find() O(M) per order.
-    // baseMs = midnight of week 1's start day; week index = floor((d - baseMs) / 7d).
-    const WEEK_MS = 7 * 86400000
-    const baseDay = startOfDayVN(slots[0]?.wStart || start)
-    const baseMs = baseDay.getTime()
+// Month: aggregate every order by day-of-week → 7 columns T2..CN, so each column
+// is the total of all that weekday across the month (not one bar per week).
+function buildWeekdayData(orders, countMap) {
+    const slots = DAY_LABELS.map(label => ({ label, cups: 0, revenue: 0 }))
     orders.forEach(o => {
-        const d = new Date(o.created_at)
-        const idx = Math.floor((d.getTime() - baseMs) / WEEK_MS)
-        if (idx < 0 || idx >= slots.length) return
-        const slot = slots[idx]
-        if (d < slot.wStart || d > slot.wEnd) return // boundary guard for partial-week clamping
-        slot.cups += countableQty(o.order_items, countMap)
-        slot.revenue += o.total
+        const idx = (new Date(o.created_at).getDay() + 6) % 7 // 0=Mon … 6=Sun
+        slots[idx].cups += countableQty(o.order_items, countMap)
+        slots[idx].revenue += o.total
     })
     return slots
 }
@@ -80,7 +64,7 @@ export default function DayPerformanceChart({ orders, range, start, end, product
     const data = useMemo(() => {
         if (!start) return []
         if (range === 'week') return buildWeekData(orders, start, countMap)
-        if (range === 'month') return buildMonthData(orders, start, end, countMap)
+        if (range === 'month') return buildWeekdayData(orders, countMap)
         return []
     }, [orders, range, start, end, countMap])
 
@@ -102,7 +86,7 @@ export default function DayPerformanceChart({ orders, range, start, end, product
         <div className="bg-surface rounded-[24px] p-4 shadow-sm border border-border/60 flex flex-col gap-3">
             <div className="flex items-center justify-between">
                 <h3 className="text-[12px] font-black uppercase text-text-secondary">
-                    Hiệu suất theo {range === 'week' ? 'ngày' : 'tuần'}
+                    Hiệu suất theo ngày
                 </h3>
                 {bestDay.cups > 0 && (
                     <span className="text-[11px] font-bold text-warning">

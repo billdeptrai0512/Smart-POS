@@ -20,6 +20,7 @@ export default function POSPage() {
         cart, activeCartItemId, setActiveCartItemId,
         handleAddItem, handleRemoveCartItem, handleToggleExtra, handleConfirm,
         total, hasOrder, isSubmitting,
+        discount, setDiscount, discountAmount, finalTotal,
         isOnline,
         toast, handleLoadHistory, lastOrder,
         enabledStickyExtraIds,
@@ -72,6 +73,10 @@ export default function POSPage() {
                 productExtras={productExtras}
                 enabledStickyExtraIds={enabledStickyExtraIds}
                 onToggleStickyExtra={handleToggleStickyExtra}
+                discount={discount}
+                discountAmount={discountAmount}
+                finalTotal={finalTotal}
+                onApplyDiscount={setDiscount}
             />
 
             <Toast toast={toast} />

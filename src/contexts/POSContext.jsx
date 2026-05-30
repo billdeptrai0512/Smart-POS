@@ -44,6 +44,8 @@ export function POSProvider() {
 
     const [cart, setCart] = useState(() => loadLocalJSON(STORAGE_KEYS.CART, []))
     const [activeCartItemId, setActiveCartItemId] = useState(null)
+    // Per-order discount, ephemeral (resets after each confirm). type: 'percent' | 'amount'
+    const [discount, setDiscount] = useState({ type: 'percent', value: 0 })
     const [enabledStickyExtraIds, setEnabledStickyExtraIds] = useState([])
     const [revenue, setRevenue] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.REVENUE)) || 0)
     const [totalCost, setTotalCost] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.TOTAL_COST)) || 0)
@@ -283,6 +285,14 @@ export function POSProvider() {
     const orderCount = cart.reduce((sum, item) => sum + item.quantity, 0)
     const hasOrder = cart.length > 0
 
+    // Discount: clamp % to 100 and amount to subtotal so finalTotal never goes negative.
+    const discountAmount = !discount.value
+        ? 0
+        : discount.type === 'percent'
+            ? Math.round(total * Math.min(discount.value, 100) / 100)
+            : Math.min(discount.value, total)
+    const finalTotal = Math.max(0, total - discountAmount)
+
     // ---- Handlers ----
     function handleAddItem(product) {
         const cartItemId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9)
@@ -296,10 +306,13 @@ export function POSProvider() {
             extras: [...stickyExtras]
         }])
         setActiveCartItemId(cartItemId)
+        // Cart composition changed → clear any applied discount so it must be re-entered.
+        setDiscount(d => ({ ...d, value: 0 }))
     }
 
     function handleRemoveCartItem(cartItemId) {
         setCart(prev => prev.filter(item => item.cartItemId !== cartItemId))
+        setDiscount(d => ({ ...d, value: 0 }))
     }
 
     function handleToggleStickyExtra(extra) {
@@ -329,6 +342,8 @@ export function POSProvider() {
 
             return nextState
         })
+        // Order total changed → clear any applied discount.
+        if (cart.length) setDiscount(d => ({ ...d, value: 0 }))
     }
 
     function handleToggleExtra(extra) {
@@ -345,6 +360,8 @@ export function POSProvider() {
             next[targetIndex] = { ...targetItem, extras: newExtras }
             return next
         })
+        // Order total changed → clear any applied discount.
+        if (cart.length) setDiscount(d => ({ ...d, value: 0 }))
     }
 
     async function handleConfirm() {
@@ -361,7 +378,7 @@ export function POSProvider() {
 
         // Optimistic: update UI immediately
         const savedCart = [...cart]
-        const savedTotal = total
+        const savedTotal = finalTotal
         const savedOrderCount = orderCount
         const countableQty = cart.reduce((sum, item) => {
             const prod = products?.find(p => p.id === item.productId)
@@ -374,6 +391,7 @@ export function POSProvider() {
         setLastOrder(buildLastOrderFromCart(savedCart, savedTotal))
         setCart([])
         setActiveCartItemId(null)
+        setDiscount(d => ({ ...d, value: 0 }))
         showToast('Tạo thành công', 'success')
 
         // Submit in background (with COGS snapshot)
@@ -505,9 +523,10 @@ export function POSProvider() {
         handleAddItem, handleRemoveCartItem, handleToggleExtra, handleToggleStickyExtra, handleConfirm,
         enabledStickyExtraIds, setEnabledStickyExtraIds,
         total, orderCount, hasOrder, isSubmitting,
+        discount, setDiscount, discountAmount, finalTotal,
         lastOrder,
         toast, showToast,
-    }), [cart, activeCartItemId, enabledStickyExtraIds, total, orderCount, hasOrder, isSubmitting, lastOrder, toast, showToast])
+    }), [cart, activeCartItemId, enabledStickyExtraIds, total, orderCount, hasOrder, isSubmitting, discount, discountAmount, finalTotal, lastOrder, toast, showToast])
 
     const statsValue = useMemo(() => ({
         revenue, totalCost, cupsSold, inventory, isOnline,

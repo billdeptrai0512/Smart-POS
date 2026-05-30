@@ -4,7 +4,7 @@ export default function MiniCart({ cart, activeCartItemId, onSelectItem, onRemov
     if (cart.length === 0) return null
 
     return (
-        <div className="shrink-0 bg-surface border-t border-border/80 p-4 max-h-[30vh] overflow-y-auto">
+        <div className="shrink-0 bg-surface border-t border-border/80 px-6 py-4 max-h-[30vh] overflow-y-auto">
             <div className="flex flex-col gap-2">
                 {cart.map(item => {
                     const extrasPrice = item.extras.reduce((sum, e) => sum + e.price, 0)
