@@ -373,6 +373,7 @@ export function POSProvider() {
         // Optimistic: update UI immediately
         const savedCart = [...cart]
         const savedTotal = finalTotal
+        const savedDiscount = discountAmount
         const savedOrderCount = orderCount
         const countableQty = cart.reduce((sum, item) => {
             const prod = products?.find(p => p.id === item.productId)
@@ -390,7 +391,7 @@ export function POSProvider() {
 
         // Submit in background (with COGS snapshot)
         if (navigator.onLine && supabase) {
-            submitOrder(savedCart, savedTotal, null, addressId, cartCost, costPerItem, profile?.name).then(res => {
+            submitOrder(savedCart, savedTotal, null, addressId, cartCost, costPerItem, profile?.name, savedDiscount).then(res => {
                 localOrderIds.current.add(res.id)
             }).catch((err) => {
                 // Only fallback to offline for genuine network errors
@@ -400,7 +401,7 @@ export function POSProvider() {
                         unitCost: costPerItem[item.cartItemId] || 0,
                         extraIds: (item.extras || []).map(e => e.id).filter(Boolean)
                     }))
-                    addPendingOrder(enrichedCart, savedTotal, null, addressId, cartCost, profile?.name)
+                    addPendingOrder(enrichedCart, savedTotal, null, addressId, cartCost, profile?.name, savedDiscount)
                     showToast('Lỗi mạng – đã lưu offline', 'warning')
                 } else {
                     showError(err, 'Tạo đơn hàng')
@@ -412,7 +413,7 @@ export function POSProvider() {
                 unitCost: costPerItem[item.cartItemId] || 0,
                 extraIds: (item.extras || []).map(e => e.id)
             }))
-            addPendingOrder(enrichedCart, savedTotal, null, addressId, cartCost, profile?.name)
+            addPendingOrder(enrichedCart, savedTotal, null, addressId, cartCost, profile?.name, savedDiscount)
             showToast(`Lưu offline (${getPendingCount()} đơn chờ)`, 'warning')
         }
         setIsSubmitting(false)

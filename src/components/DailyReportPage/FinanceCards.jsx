@@ -17,6 +17,7 @@ import { buildCategoryBreakdown } from '../../utils/expenseCategoryBreakdown'
 //     (soft-deleted) fall back to "Chi phí khác" of the same group_section.
 export default function FinanceCards({
     totalRevenue,
+    totalDiscount = 0,
     totalCOGS,
     netProfit,
     yesterdayNetProfit,
@@ -53,10 +54,10 @@ export default function FinanceCards({
 
     return (
         <div className="grid grid-cols-2 gap-3.5">
-            {/* 1. DOANH THU */}
+            {/* 1. DOANH THU — "Bán hàng" is gross (net + discount); "Doanh thu thuần" stays net. */}
             <SimpleCard title="Doanh thu" totalLabel="Doanh thu thuần" totalAmount={totalRevenue} totalTone="success">
-                <LineItem label="· Bán hàng" amount={totalRevenue} />
-                <LineItem label="· Giảm giá" amount={0} />
+                <LineItem label="· Bán hàng" amount={totalRevenue + totalDiscount} />
+                <LineItem label="· Giảm giá" amount={-totalDiscount || 0} />
             </SimpleCard>
 
             {/* 2. GIÁ VỐN (COGS) */}

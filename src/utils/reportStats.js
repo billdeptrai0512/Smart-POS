@@ -59,7 +59,7 @@ export function aggregateOrderStats({
     selectedProductId = 'all',
     useTotalCostShortcut = false,
 }) {
-    let totalRevenue = 0, totalCOGS = 0, totalCups = 0
+    let totalRevenue = 0, totalDiscount = 0, totalCOGS = 0, totalCups = 0
     const productStats = {}
     const soldProducts = new Set()
     const hourlyRevenue = {}, hourlyOrders = {}
@@ -71,6 +71,7 @@ export function aggregateOrderStats({
         if (o.deleted_at) continue
         const orderTotal = o.total || 0
         totalRevenue += orderTotal
+        totalDiscount += o.discount_amount || o.discountAmount || 0
 
         const createdAt = o.created_at || o.createdAt
         let hour = null
@@ -133,7 +134,7 @@ export function aggregateOrderStats({
         }
     }
 
-    return { totalRevenue, totalCOGS, totalCups, productStats, soldProducts, hourlyRevenue, hourlyOrders, activeHours }
+    return { totalRevenue, totalDiscount, totalCOGS, totalCups, productStats, soldProducts, hourlyRevenue, hourlyOrders, activeHours }
 }
 
 // Builds the hourly cumulative line-chart series from aggregator output. Daily-only.

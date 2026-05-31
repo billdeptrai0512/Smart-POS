@@ -254,7 +254,7 @@ export default function DailyReportPage() {
     const extraMaps = useMemo(() => buildExtraMaps(productExtras), [productExtras])
 
     // All heavy stats: only reruns when orders/recipes/products change, NOT on UI state changes
-    const { totalRevenue, totalCOGS, productStats, soldProducts, lineChartData, offlineToday } = useMemo(() => {
+    const { totalRevenue, totalDiscount, totalCOGS, productStats, soldProducts, lineChartData, offlineToday } = useMemo(() => {
         const pending = scope !== 'day' || offset !== 0 ? [] : getPendingOrders()
         const offlineToday = pending.filter(o => isSameDayVN(new Date(o.createdAt), new Date()))
 
@@ -269,6 +269,7 @@ export default function DailyReportPage() {
 
         return {
             totalRevenue: agg.totalRevenue,
+            totalDiscount: agg.totalDiscount,
             totalCOGS: agg.totalCOGS,
             productStats: agg.productStats,
             soldProducts: agg.soldProducts,
@@ -652,6 +653,7 @@ export default function DailyReportPage() {
                         {(view === VIEW_ALL || view === VIEW_PROFIT) && !isStaff && (
                             <FinanceCards
                                 totalRevenue={totalRevenue}
+                                totalDiscount={totalDiscount}
                                 totalCOGS={totalCOGS}
                                 netProfit={netProfit}
                                 yesterdayNetProfit={yesterdayNetProfit}

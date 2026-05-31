@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { splitExpenses } from './reportStats'
+import { splitExpenses, aggregateOrderStats } from './reportStats'
 
 describe('splitExpenses (thực chi model)', () => {
     it('sums non-refill expenses into dailyExpense', () => {
@@ -66,5 +66,42 @@ describe('splitExpenses (thực chi model)', () => {
         expect(splitExpenses(null)).toEqual({
             dailyExpense: 0, refillNvl: 0, refillFreeForm: 0, refillTotal: 0,
         })
+    })
+})
+
+describe('aggregateOrderStats discount', () => {
+    const base = {
+        productMap: new Map(),
+        extraPriceMap: {},
+        extraNameMap: {},
+        recipes: [],
+        extraIngredients: [],
+        ingredientCosts: {},
+    }
+
+    it('sums discount_amount into totalDiscount; totalRevenue stays net', () => {
+        const orders = [
+            { total: 12000, discount_amount: 4000, order_items: [] },
+            { total: 16000, discount_amount: 0, order_items: [] },
+        ]
+        const { totalRevenue, totalDiscount } = aggregateOrderStats({ orders, ...base })
+        expect(totalRevenue).toBe(28000) // net (already-discounted) totals
+        expect(totalDiscount).toBe(4000)
+    })
+
+    it('reads the offline-shaped discountAmount field too', () => {
+        const orders = [{ total: 9000, discountAmount: 1000, cart: [] }]
+        const { totalDiscount } = aggregateOrderStats({ orders, ...base })
+        expect(totalDiscount).toBe(1000)
+    })
+
+    it('skips deleted orders', () => {
+        const orders = [
+            { total: 12000, discount_amount: 4000, deleted_at: '2026-05-31T00:00:00Z', order_items: [] },
+            { total: 16000, discount_amount: 2000, order_items: [] },
+        ]
+        const { totalRevenue, totalDiscount } = aggregateOrderStats({ orders, ...base })
+        expect(totalRevenue).toBe(16000)
+        expect(totalDiscount).toBe(2000)
     })
 })

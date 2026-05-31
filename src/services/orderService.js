@@ -81,6 +81,7 @@ export async function fetchTodayOrders(addressId) {
             id,
             total,
             total_cost,
+            discount_amount,
             payment_method,
             created_at,
             deleted_at,
@@ -113,12 +114,13 @@ export async function fetchTodayOrders(addressId) {
 // Submit a complete order to Supabase using RPC for atomic transaction
 // totalCost: tổng giá vốn của bill (snapshot)
 // costPerItem: Map<cartItemId, unitCost> giá vốn mỗi dòng (snapshot)
-export async function submitOrder(cart, total, paymentMethod = null, addressId = null, totalCost = 0, costPerItem = {}, staffName = null) {
+export async function submitOrder(cart, total, paymentMethod = null, addressId = null, totalCost = 0, costPerItem = {}, staffName = null, discountAmount = 0) {
     invalidateReportCache(addressId)
     if (localRepo.isGuest()) {
         return localRepo.submitLocalOrder({
             total,
             total_cost: Math.round(totalCost),
+            discount_amount: Math.round(discountAmount),
             payment_method: paymentMethod,
             address_id: addressId,
             staff_name: staffName,
@@ -135,6 +137,7 @@ export async function submitOrder(cart, total, paymentMethod = null, addressId =
     const orderPayload = {
         total,
         total_cost: Math.round(totalCost),
+        discount_amount: Math.round(discountAmount),
         payment_method: paymentMethod,
         address_id: addressId,
         staff_name: staffName,
@@ -173,6 +176,7 @@ export async function bulkSubmitOrders(ordersArray) {
     const payload = ordersArray.map(o => ({
         total: o.total,
         total_cost: o.totalCost || 0,
+        discount_amount: o.discountAmount || 0,
         payment_method: o.paymentMethod,
         address_id: o.addressId,
         created_at: o.createdAt,

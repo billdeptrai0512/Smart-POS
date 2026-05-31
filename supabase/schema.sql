@@ -82,8 +82,9 @@ CREATE TABLE IF NOT EXISTS ingredient_costs (
 CREATE TABLE IF NOT EXISTS orders (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   address_id UUID REFERENCES addresses(id) ON DELETE CASCADE,
-  total INTEGER NOT NULL, -- total in VND
+  total INTEGER NOT NULL, -- total in VND (net, after discount)
   total_cost INTEGER NOT NULL DEFAULT 0,
+  discount_amount INTEGER NOT NULL DEFAULT 0, -- per-order discount applied at POS
   payment_method TEXT,
   staff_name TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
@@ -362,10 +363,11 @@ BEGIN
     -- use provided created_at if exists, else now()
     new_order_time := COALESCE((order_rec->>'created_at')::TIMESTAMPTZ, now());
 
-    INSERT INTO orders (total, total_cost, payment_method, address_id, staff_name, created_at)
+    INSERT INTO orders (total, total_cost, discount_amount, payment_method, address_id, staff_name, created_at)
     VALUES (
       (order_rec->>'total')::INTEGER,
       COALESCE((order_rec->>'total_cost')::INTEGER, 0),
+      COALESCE((order_rec->>'discount_amount')::INTEGER, 0),
       order_rec->>'payment_method',
       (order_rec->>'address_id')::UUID,
       order_rec->>'staff_name',
