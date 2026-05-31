@@ -384,7 +384,7 @@ BEGIN
         (item_rec->>'quantity')::INTEGER,
         item_rec->>'options',
         COALESCE((item_rec->>'unit_cost')::INTEGER, 0),
-        COALESCE(item_rec->'extra_ids', '[]'::JSONB)::UUID[]
+        COALESCE(item_rec->'extra_ids', '[]'::JSONB)
       );
     END LOOP;
   END LOOP;
