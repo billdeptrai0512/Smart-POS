@@ -62,6 +62,8 @@ export default function AddExpenseModal({
                     disabled={isSubmitting}
                 />
 
+                <div className="h-px bg-border/60 rounded-full" />
+
                 <input
                     ref={nameRef}
                     type="text"

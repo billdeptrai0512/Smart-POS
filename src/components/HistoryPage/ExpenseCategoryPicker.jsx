@@ -14,13 +14,10 @@ export default function ExpenseCategoryPicker({
 }) {
     const operating = categories.filter(c => c.group_section !== 'overhead')
     const overhead = categories.filter(c => c.group_section === 'overhead')
-    const selected = categories.find(c => c.id === selectedId)
 
-    // Expand the group that owns the current selection; if none, default to
-    // operating since that's the common bucket for daily expenses.
-    const [openGroup, setOpenGroup] = useState(() =>
-        selected ? (selected.group_section === 'overhead' ? 'overhead' : 'operating') : 'operating'
-    )
+    // Start collapsed — both dropdowns show their current selection (if any) but
+    // neither auto-expands when the modal opens.
+    const [openGroup, setOpenGroup] = useState(null)
 
     const toggleGroup = (group) => setOpenGroup(prev => prev === group ? null : group)
     const handlePick = (id) => {
