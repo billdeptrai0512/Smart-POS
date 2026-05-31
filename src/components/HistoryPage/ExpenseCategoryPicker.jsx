@@ -29,7 +29,7 @@ export default function ExpenseCategoryPicker({
     }
 
     return (
-        <div className="grid grid-cols-2 gap-3 items-start">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-3 items-start">
             <GroupDropdown
                 label="Vận hành"
                 group="operating"
@@ -96,7 +96,7 @@ function GroupDropdown({ label, group, items, selectedId, isOpen, onToggle, onPi
                             <span className="truncate">{selected.name}</span>
                         </span>
                     ) : (
-                        <span className="text-[14px] font-medium text-text-secondary/60">Chọn nhãn…</span>
+                        <span className="text-[14px] font-medium text-text-secondary/60 truncate">Chọn nhãn…</span>
                     )}
                     <ChevronDown
                         size={16}
