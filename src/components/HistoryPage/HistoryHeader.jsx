@@ -1,5 +1,7 @@
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import HistoryTabsBar from './HistoryTabsBar'
+import DatePicker from '../common/DatePicker'
+import { formatIsoShort } from '../common/datePickerUtils'
 
 export default function HistoryHeader({
     rangeLabel, totalCups, scope, isReadOnly,
@@ -13,6 +15,9 @@ export default function HistoryHeader({
     onPrevDay, onNextDay, onDateChange, onEndDatePick, hasManualPick,
     // Custom range mode
     customRange, onCustomStartChange, onCustomEndChange,
+    // Preset chips inside the DatePicker popover (Hôm nay / Tuần này / Tháng này).
+    // Page maps preset.scope back to its own scope state.
+    onPresetSelect,
     // Optional slot: extra row rendered below the tabs bar inside the sticky
     // header (e.g. DailyReportPage's Dòng tiền / Tồn kho / Lợi nhuận filter).
     belowTabs,
@@ -34,13 +39,13 @@ export default function HistoryHeader({
                             <DayPicker
                                 dayInputValue={dayInputValue}
                                 dayCustomDate={dayCustomDate}
-                                rangeLabel={rangeLabel}
                                 todayISO={todayISO}
                                 canGoForwardDay={canGoForwardDay}
                                 onPrev={onPrevDay}
                                 onNext={onNextDay}
                                 onChange={onDateChange}
                                 onEndDatePick={onEndDatePick}
+                                onPresetSelect={onPresetSelect}
                                 hasManualPick={hasManualPick}
                             />
                         ) : scope === 'custom' ? (
@@ -49,6 +54,7 @@ export default function HistoryHeader({
                                 todayISO={todayISO}
                                 onStartChange={onCustomStartChange}
                                 onEndChange={onCustomEndChange}
+                                onPresetSelect={onPresetSelect}
                             />
                         ) : (
                             <RangeNav
@@ -56,10 +62,11 @@ export default function HistoryHeader({
                                 canGoForward={canGoForward}
                                 onPrev={onOffsetPrev}
                                 onNext={onOffsetNext}
+                                onPresetSelect={onPresetSelect}
                             />
                         )
                     ) : (
-                        <span className="text-[12px] font-bold text-text/80 leading-none mt-1 tabular-nums">{totalCups} ly</span>
+                        <span className="text-[12px] font-bold text-text/80 leading-none tabular-nums">{totalCups} ly</span>
                     )}
                 </div>
 
@@ -77,14 +84,24 @@ export default function HistoryHeader({
     )
 }
 
-function DayPicker({ dayInputValue, dayCustomDate, rangeLabel, todayISO, canGoForwardDay, onPrev, onNext, onChange, onEndDatePick, hasManualPick }) {
+// Dashed-underline chip shared by every header date control. DatePicker calls
+// the returned fn with (label, toggle); pass `labelOverride` when the chip text
+// differs from the picker's own value (range endpoints show '—' until set).
+function chipTrigger({ labelOverride, className = '' } = {}) {
+    return (label, toggle) => (
+        <button
+            type="button"
+            onClick={toggle}
+            className={`text-[12px] font-bold text-text/80 leading-none tabular-nums underline decoration-dashed decoration-primary/40 underline-offset-4 ${className}`}
+        >
+            {labelOverride ?? label}
+        </button>
+    )
+}
+
+function DayPicker({ dayInputValue, dayCustomDate, todayISO, canGoForwardDay, onPrev, onNext, onChange, onEndDatePick, onPresetSelect, hasManualPick }) {
     // Surface "→ ngày" chip only after a manual calendar pick — chevron stepping must NOT trigger it.
     const showEndChip = hasManualPick && !!dayCustomDate && dayCustomDate < todayISO
-    const display = dayCustomDate
-        ? (showEndChip
-            ? `${dayCustomDate.split('-')[2]}/${dayCustomDate.split('-')[1]}`
-            : `${dayCustomDate.split('-')[2]}/${dayCustomDate.split('-')[1]}/${dayCustomDate.split('-')[0]}`)
-        : rangeLabel
     return (
         <div className="flex items-center gap-1 pointer-events-auto mt-0.5">
             {!showEndChip && (
@@ -95,34 +112,33 @@ function DayPicker({ dayInputValue, dayCustomDate, rangeLabel, todayISO, canGoFo
                     <ChevronLeft size={14} strokeWidth={2.5} />
                 </button>
             )}
-            <div className="relative flex items-center justify-center px-1">
-                <input
-                    type="date"
-                    value={dayInputValue}
-                    onChange={(e) => onChange(e.target.value)}
-                    max={todayISO}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                />
-                <span className="text-[12px] font-bold text-text/80 leading-none tabular-nums underline decoration-dashed decoration-primary/40 underline-offset-4 relative z-0 pointer-events-none">
-                    {display}
-                </span>
-            </div>
+            <DatePicker
+                value={dayInputValue}
+                max={todayISO}
+                onChange={onChange}
+                onPresetSelect={onPresetSelect}
+                trigger={chipTrigger()}
+            />
             {showEndChip && (
                 <>
                     <span className="text-[11px] font-bold text-text-secondary leading-none">→</span>
-                    <div className="relative flex items-center justify-center px-1">
-                        <input
-                            type="date"
-                            value={dayCustomDate}
-                            min={dayCustomDate}
-                            max={todayISO}
-                            onChange={(e) => onEndDatePick?.(e.target.value)}
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                        />
-                        <span className="text-[11px] font-bold text-text-dim leading-none italic underline decoration-dotted decoration-text-dim/40 underline-offset-4 relative z-0 pointer-events-none">
-                            ngày
-                        </span>
-                    </div>
+                    <DatePicker
+                        value={dayCustomDate}
+                        min={dayCustomDate}
+                        max={todayISO}
+                        onChange={onEndDatePick}
+                        presets={false}
+                        align="end"
+                        trigger={(_label, toggle) => (
+                            <button
+                                type="button"
+                                onClick={toggle}
+                                className="text-[11px] font-bold text-text-dim leading-none italic underline decoration-dotted decoration-text-dim/40 underline-offset-4"
+                            >
+                                ngày
+                            </button>
+                        )}
+                    />
                 </>
             )}
             {!showEndChip && (
@@ -137,38 +153,33 @@ function DayPicker({ dayInputValue, dayCustomDate, rangeLabel, todayISO, canGoFo
     )
 }
 
-function CustomRangePicker({ customRange, todayISO, onStartChange, onEndChange }) {
-    const fmtDisplay = (iso) => iso ? `${iso.split('-')[2]}/${iso.split('-')[1]}` : '—'
+function CustomRangePicker({ customRange, todayISO, onStartChange, onEndChange, onPresetSelect }) {
     const startISO = customRange?.startISO || todayISO
     const endISO = customRange?.endISO || todayISO
     return (
         <div className="flex items-center gap-1.5 pointer-events-auto mt-0.5">
-            <DateInputChip value={startISO} max={endISO} onChange={onStartChange} label={fmtDisplay(customRange?.startISO)} />
-            <span className="text-[11px] font-bold text-text-secondary leading-none">→</span>
-            <DateInputChip value={endISO} min={startISO} max={todayISO} onChange={onEndChange} label={fmtDisplay(customRange?.endISO)} />
-        </div>
-    )
-}
-
-function DateInputChip({ value, min, max, onChange, label }) {
-    return (
-        <div className="relative flex items-center justify-center px-1">
-            <input
-                type="date"
-                value={value}
-                min={min}
-                max={max}
-                onChange={(e) => onChange(e.target.value)}
-                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+            <DatePicker
+                value={startISO}
+                max={endISO}
+                onChange={onStartChange}
+                onPresetSelect={onPresetSelect}
+                trigger={chipTrigger({ labelOverride: formatIsoShort(customRange?.startISO) })}
             />
-            <span className="text-[12px] font-bold text-text/80 leading-none tabular-nums underline decoration-dashed decoration-primary/40 underline-offset-4 relative z-0 pointer-events-none">
-                {label}
-            </span>
+            <span className="text-[11px] font-bold text-text-secondary leading-none">→</span>
+            <DatePicker
+                value={endISO}
+                min={startISO}
+                max={todayISO}
+                onChange={onEndChange}
+                onPresetSelect={onPresetSelect}
+                align="end"
+                trigger={chipTrigger({ labelOverride: formatIsoShort(customRange?.endISO) })}
+            />
         </div>
     )
 }
 
-function RangeNav({ rangeLabel, canGoForward, onPrev, onNext }) {
+function RangeNav({ rangeLabel, canGoForward, onPrev, onNext, onPresetSelect }) {
     return (
         <div className="flex items-center gap-1 pointer-events-auto mt-0.5">
             <button
@@ -177,7 +188,12 @@ function RangeNav({ rangeLabel, canGoForward, onPrev, onNext }) {
             >
                 <ChevronLeft size={14} strokeWidth={2.5} />
             </button>
-            <span className="text-[12px] font-bold text-text/80 leading-none tabular-nums">{rangeLabel}</span>
+            {/* Week/month scope owns the rangeLabel text — picker here is presets-only
+                (no onChange ⇒ DatePicker hides the grid, shows just the quick chips). */}
+            <DatePicker
+                onPresetSelect={onPresetSelect}
+                trigger={chipTrigger({ labelOverride: rangeLabel })}
+            />
             <button
                 onClick={() => canGoForward && onNext()}
                 className={`w-5 h-5 flex items-center justify-center rounded-full transition-colors ${canGoForward ? 'text-text-secondary hover:text-primary active:text-primary' : 'text-text-dim opacity-30 cursor-default'}`}

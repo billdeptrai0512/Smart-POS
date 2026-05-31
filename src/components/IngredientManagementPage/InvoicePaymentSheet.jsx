@@ -2,6 +2,7 @@ import { useState } from 'react'
 import MoneyInput from '../common/MoneyInput'
 import { formatVND, formatVNDInput, parseVNDInput } from '../../utils'
 import { dateStringVN } from '../../utils/dateVN'
+import DatePicker from '../common/DatePicker'
 
 // Bottom-sheet form to record a payment against an existing refill invoice.
 // Caller provides the invoice row (already includes nested `payments`).
@@ -66,12 +67,21 @@ export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfir
 
                     <div className="flex flex-col gap-1.5">
                         <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Ngày trả</label>
-                        <input
-                            type="date"
+                        <DatePicker
                             value={paidDate}
                             max={today}
-                            onChange={e => setPaidDate(e.target.value)}
-                            className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[14px] font-bold text-text focus:outline-none focus:border-primary/50"
+                            onChange={setPaidDate}
+                            presets={false}
+                            align="start"
+                            trigger={(label, toggle) => (
+                                <button
+                                    type="button"
+                                    onClick={toggle}
+                                    className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[14px] font-bold text-text text-left hover:border-primary/50 transition-colors"
+                                >
+                                    {label}
+                                </button>
+                            )}
                         />
                     </div>
 

@@ -1,6 +1,8 @@
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import HistoryTabsBar from '../HistoryPage/HistoryTabsBar'
+import DatePicker from '../common/DatePicker'
+import { formatIsoDisplay } from '../common/datePickerUtils'
 import { startOfDayVN, endOfDayVN, startOfWeekVN, startOfMonthVN, endOfMonthVN, addDaysVN, dateStringVN } from '../../utils/dateVN'
 
 // Display "dd/mm" using VN-local components.
@@ -103,21 +105,24 @@ export default function ReportHeader({ onBack, onForward, selectedRange = 'day',
                                 >
                                     <ChevronLeft size={14} strokeWidth={2.5} />
                                 </button>
-                                <div className="relative flex items-center justify-center px-1">
-                                    <input
-                                        type="date"
-                                        value={inputValue}
-                                        onChange={(e) => {
-                                            if (e.target.value >= todayISO) onCustomDateChange?.(null)
-                                            else onCustomDateChange?.(e.target.value)
-                                        }}
-                                        max={todayISO}
-                                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                                    />
-                                    <span className="text-[12px] font-bold text-text/80 leading-none tabular-nums underline decoration-dashed decoration-primary/40 underline-offset-4 relative z-0 pointer-events-none">
-                                        {customDate ? `${customDate.split('-')[2]}/${customDate.split('-')[1]}/${customDate.split('-')[0]}` : subtitle}
-                                    </span>
-                                </div>
+                                <DatePicker
+                                    value={inputValue}
+                                    max={todayISO}
+                                    onChange={(iso) => {
+                                        if (iso >= todayISO) onCustomDateChange?.(null)
+                                        else onCustomDateChange?.(iso)
+                                    }}
+                                    presets={false}
+                                    trigger={(_label, toggle) => (
+                                        <button
+                                            type="button"
+                                            onClick={toggle}
+                                            className="text-[12px] font-bold text-text/80 leading-none tabular-nums underline decoration-dashed decoration-primary/40 underline-offset-4"
+                                        >
+                                            {customDate ? formatIsoDisplay(customDate) : subtitle}
+                                        </button>
+                                    )}
+                                />
                                 <button
                                     onClick={handleNextDay}
                                     className={`w-5 h-5 flex items-center justify-center rounded-full transition-colors ${canGoForwardDay ? 'text-text-secondary hover:text-primary active:text-primary' : 'text-text-dim opacity-30 cursor-default'}`}

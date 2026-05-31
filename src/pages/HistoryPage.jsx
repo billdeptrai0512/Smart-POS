@@ -4,6 +4,7 @@ import { calculateProductCost, parseVNDInput } from '../utils'
 import { getPendingOrders, removePendingOrder } from '../hooks/useOfflineSync'
 import { dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { calcRangeWithLabel, offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
+import { applyPresetToScope } from '../components/common/datePickerUtils'
 import { useHistoryRangeFetch } from '../hooks/useHistoryRangeFetch'
 import { useFormatHistoryOrders } from '../hooks/useFormatHistoryOrders'
 import { useAddress } from '../contexts/AddressContext'
@@ -409,6 +410,7 @@ export default function HistoryPage() {
                 customRange={customRange}
                 onCustomStartChange={handleCustomStartChange}
                 onCustomEndChange={handleCustomEndChange}
+                onPresetSelect={(preset) => applyPresetToScope(preset, { setScope, setOffset, setHasManualPick, setCustomRange })}
             />
 
             {activeTab === 'orders' && (

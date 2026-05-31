@@ -13,6 +13,7 @@ import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogs
 import { ingredientLabel } from '../utils/ingredients'
 import { startOfDayVN, dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
+import { applyPresetToScope } from '../components/common/datePickerUtils'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import SalesCard from '../components/DailyReportPage/SalesCard'
 import DayPerformanceChart from '../components/DailyReportPage/DayPerformanceChart'
@@ -248,12 +249,8 @@ export default function DailyReportPage() {
     // Picker presets (Hôm nay / Tuần này / Tháng này) reset scope to the preset's
     // bucket so the page reuses the existing offset-based fetch path instead of
     // forcing a custom-range query when the user already meant "the current period".
-    const handlePickerPreset = (preset) => {
-        setScope(preset.scope)
-        setOffset(0)
-        setHasManualPick(false)
-        setCustomRange(null)
-    }
+    const handlePickerPreset = (preset) =>
+        applyPresetToScope(preset, { setScope, setOffset, setHasManualPick, setCustomRange })
 
     const isReady = !isLoadingHistory && isAsyncReady
 

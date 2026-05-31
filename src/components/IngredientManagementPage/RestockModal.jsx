@@ -4,6 +4,7 @@ import { ingredientLabel } from '../../utils/ingredients'
 import MoneyInput from '../common/MoneyInput'
 import { parseVNDInput, formatVND, formatVNDInput } from '../../utils'
 import { dateStringVN } from '../../utils/dateVN'
+import DatePicker from '../common/DatePicker'
 
 export default function RestockModal({ ingredient, unit, packSize, packUnit, onConfirm, onClose }) {
     const today = dateStringVN()
@@ -102,12 +103,21 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, onC
                         {/* Ngày mua */}
                         <div className="flex items-center justify-between gap-3">
                             <span className="text-[12px] font-bold text-text-secondary">Ngày mua</span>
-                            <input
-                                type="date"
+                            <DatePicker
                                 value={purchaseDate}
                                 max={today}
-                                onChange={e => setPurchaseDate(e.target.value)}
-                                className="w-32 bg-surface border border-border/60 rounded-[8px] px-3 py-1.5 text-[13px] font-bold text-text focus:outline-none focus:border-primary/50"
+                                onChange={setPurchaseDate}
+                                presets={false}
+                                align="end"
+                                trigger={(label, toggle) => (
+                                    <button
+                                        type="button"
+                                        onClick={toggle}
+                                        className="w-32 bg-surface border border-border/60 rounded-[8px] px-3 py-1.5 text-[13px] font-bold text-text text-center hover:border-primary/50 transition-colors"
+                                    >
+                                        {label}
+                                    </button>
+                                )}
                             />
                         </div>
                         {isBackdated && (
