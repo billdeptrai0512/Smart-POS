@@ -165,6 +165,22 @@ export async function fetchStaffByManager(managerId) {
     return data
 }
 
+// Promote (staff → manager) or demote (manager → staff) a team member.
+// Authorization is enforced server-side by the set_team_member_role RPC.
+export async function setTeamMemberRole(userId, role) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase.rpc('set_team_member_role', { p_user_id: userId, p_role: role })
+    if (error) throw error
+}
+
+// Hard-delete a team member's profile. Authorization is enforced server-side
+// by the remove_team_member RPC.
+export async function removeTeamMember(userId) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase.rpc('remove_team_member', { p_user_id: userId })
+    if (error) throw error
+}
+
 
 // Sign out
 export async function signOut() {

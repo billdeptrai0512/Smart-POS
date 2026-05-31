@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Users, Copy, Check, Loader, UserPlus, Shield, LinkIcon } from 'lucide-react'
+import { Users, Copy, Check, Loader, UserPlus, Shield, MoreVertical, ArrowUp, ArrowDown, Trash2, X } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
 
@@ -43,6 +43,95 @@ function InviteLink({ link, expiry }) {
     )
 }
 
+// Slide-up sheet for managing one member: promote/demote + remove, each behind a confirm tap.
+function MemberActionSheet({ member, onSetRole, onRemove, onClose }) {
+    const [pending, setPending] = useState(null) // { type, role, message, danger }
+    const [busy, setBusy] = useState(false)
+    const [err, setErr] = useState('')
+
+    const isStaff = member.role === 'staff'
+    const roleAction = isStaff
+        ? { type: 'promote', role: 'manager', label: 'Thăng lên quản lý', icon: ArrowUp, message: `Thăng "${member.name}" lên quản lý?` }
+        : { type: 'demote', role: 'staff', label: 'Hạ xuống nhân viên', icon: ArrowDown, message: `Hạ "${member.name}" xuống nhân viên?` }
+
+    async function handleConfirm() {
+        setBusy(true)
+        setErr('')
+        try {
+            if (pending.type === 'remove') await onRemove(member.id)
+            else await onSetRole(member.id, pending.role)
+            onClose()
+        } catch (e) {
+            setErr(e?.message || 'Thao tác thất bại')
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={() => !busy && onClose()}>
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+            <div
+                className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
+                onClick={e => e.stopPropagation()}
+            >
+                <div className="flex items-center justify-between">
+                    <span className="text-[16px] font-black text-text truncate">{member.name}</span>
+                    <button
+                        onClick={onClose}
+                        disabled={busy}
+                        className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all disabled:opacity-50 shrink-0"
+                    >
+                        <X size={16} />
+                    </button>
+                </div>
+
+                {pending ? (
+                    <div className="flex flex-col gap-4">
+                        <p className="text-[14px] font-medium text-text-secondary">{pending.message}</p>
+                        <ErrorBanner message={err} small />
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => { setPending(null); setErr('') }}
+                                disabled={busy}
+                                className="flex-1 py-3 rounded-[12px] bg-surface-light border border-border/60 text-text text-[14px] font-black hover:bg-bg transition-colors disabled:opacity-50 uppercase"
+                            >
+                                Huỷ
+                            </button>
+                            <button
+                                onClick={handleConfirm}
+                                disabled={busy}
+                                className={`flex-1 py-3 rounded-[12px] text-[14px] font-black transition-colors disabled:opacity-50 uppercase flex items-center justify-center gap-1.5 ${pending.danger
+                                    ? 'bg-danger text-white hover:bg-danger/90'
+                                    : 'bg-primary text-bg hover:bg-primary/90'}`}
+                            >
+                                {busy ? <><Loader size={13} className="animate-spin" /> Đang xử lý...</> : 'Xác nhận'}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex flex-col gap-2">
+                        <button
+                            onClick={() => setPending(roleAction)}
+                            className="w-full py-3 px-3 rounded-[12px] bg-surface-light border border-border/60 text-text text-[14px] font-bold hover:bg-bg transition-colors flex items-center gap-2.5"
+                        >
+                            <roleAction.icon size={16} className="text-primary" />
+                            {roleAction.label}
+                        </button>
+                        <button
+                            onClick={() => setPending({ type: 'remove', danger: true, message: `Xoá "${member.name}" khỏi cửa hàng? Hành động này không thể hoàn tác.` })}
+                            className="w-full py-3 px-3 rounded-[12px] bg-danger/10 border border-danger/20 text-danger text-[14px] font-bold hover:bg-danger/15 transition-colors flex items-center gap-2.5"
+                        >
+                            <Trash2 size={16} />
+                            Xoá khỏi cửa hàng
+                        </button>
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
+
 const TABS = [
     { key: 'staff', label: 'Nhân viên', role: 'staff', icon: UserPlus },
     { key: 'co-manager', label: 'Quản lý', role: 'co-manager', icon: Shield },
@@ -50,11 +139,12 @@ const TABS = [
 
 export default function StaffTab({
     staffList, staffLoading, error,
-    onGenerateInvite,
-    staffInviteLink, staffInviteExpiry, generatingStaffLink,
-    coManagerInviteLink, coManagerInviteExpiry, generatingCoManagerLink,
+    staffInviteLink, staffInviteExpiry,
+    coManagerInviteLink, coManagerInviteExpiry,
+    onSetMemberRole, onRemoveMember,
+    subTab, setSubTab,
 }) {
-    const [subTab, setSubTab] = useState('staff')
+    const [actionMember, setActionMember] = useState(null)
 
     const staffMembers = staffList.filter(s => s.role === 'staff')
     const coManagers = staffList.filter(s => s.role === 'manager')
@@ -63,8 +153,6 @@ export default function StaffTab({
     const isStaffTab = subTab === 'staff'
     const link = isStaffTab ? staffInviteLink : coManagerInviteLink
     const expiry = isStaffTab ? staffInviteExpiry : coManagerInviteExpiry
-    const generating = isStaffTab ? generatingStaffLink : generatingCoManagerLink
-    const ActiveIcon = isStaffTab ? UserPlus : Shield
 
     return (
         <div className="space-y-3">
@@ -119,34 +207,35 @@ export default function StaffTab({
                                     </span>
                                 </div>
                                 <span className="flex-1 text-text text-sm font-bold truncate">{member.name}</span>
+                                <button
+                                    onClick={() => setActionMember(member)}
+                                    className="w-8 h-8 flex items-center justify-center rounded-full text-text-secondary hover:bg-surface-light hover:text-text active:scale-95 transition-all shrink-0"
+                                    title="Tuỳ chọn"
+                                >
+                                    <MoreVertical size={16} />
+                                </button>
                             </div>
                         ))}
                     </div>
                 )}
             </div>
 
-            {/* Invite section */}
-            <div className="bg-surface border border-border/60 rounded-[20px] p-2 space-y-3">
+            {/* Generated invite link (button to generate lives in the bottom bar) */}
+            {(link || error) && (
+                <div className="bg-surface border border-border/60 rounded-[20px] p-2 space-y-3">
+                    {link && <InviteLink link={link} expiry={expiry} />}
+                    <ErrorBanner message={error} small />
+                </div>
+            )}
 
-                {link ? (
-                    <InviteLink link={link} expiry={expiry} />
-                ) : (
-                    <button
-                        onClick={() => onGenerateInvite(isStaffTab ? 'staff' : 'co-manager')}
-                        disabled={generating}
-                        className="w-full py-3 rounded-[14px] bg-primary/10 border border-primary/20 text-primary font-black text-sm hover:bg-primary/15 active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                        {generating
-                            ? <><Loader size={14} className="animate-spin" /> Đang tạo...</>
-                            : isStaffTab
-                                ? 'Mời nhân viên'
-                                : 'Mời quản lý'
-                        }
-                    </button>
-                )}
-
-                <ErrorBanner message={error} small />
-            </div>
+            {actionMember && (
+                <MemberActionSheet
+                    member={actionMember}
+                    onSetRole={onSetMemberRole}
+                    onRemove={onRemoveMember}
+                    onClose={() => setActionMember(null)}
+                />
+            )}
         </div>
     )
 }

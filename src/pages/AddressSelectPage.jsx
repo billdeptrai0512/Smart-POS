@@ -3,11 +3,10 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAddressStats } from '../contexts/AddressStatsContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { createInviteToken, fetchDefaultIngredientSort } from '../services/authService'
+import { createInviteToken, fetchDefaultIngredientSort, setTeamMemberRole, removeTeamMember } from '../services/authService'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
-import { LogOut, Loader, Plus, X } from 'lucide-react'
+import { LogOut, Loader, Plus, X, UserPlus } from 'lucide-react'
 import Skeleton from '../components/common/Skeleton'
-import FabActionMenu from '../components/common/FabActionMenu'
 import BackupModal from '../components/AddressSelectPage/BackupModal'
 import AddressHeader from '../components/AddressSelectPage/AddressHeader'
 import BranchGrid from '../components/AddressSelectPage/BranchGrid'
@@ -16,11 +15,12 @@ import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 
 export default function AddressSelectPage() {
     const { addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading, fetchError } = useAddress()
-    const { cupsMap, revenueMap, sessionsMap, staffList, staffLoading, statsLoading } = useAddressStats()
+    const { cupsMap, revenueMap, sessionsMap, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
     const { signOut, profile, isStaff, isAdmin, isGuest } = useAuth()
     const navigate = useNavigate()
 
     const [activeTab, setActiveTab] = useState('branches')
+    const [staffSubTab, setStaffSubTab] = useState('staff')
     const [error, setError] = useState('')
     const [backupSource, setBackupSource] = useState(null)
     const [newAddressName, setNewAddressName] = useState('')
@@ -148,6 +148,16 @@ export default function AddressSelectPage() {
         }
     }
 
+    async function handleSetMemberRole(memberId, role) {
+        await setTeamMemberRole(memberId, role)
+        await refreshStaff()
+    }
+
+    async function handleRemoveMember(memberId) {
+        await removeTeamMember(memberId)
+        await refreshStaff()
+    }
+
     async function handleSignOut() {
         await signOut()
         navigate('/login', { replace: true })
@@ -174,7 +184,9 @@ export default function AddressSelectPage() {
         )
     }
 
-    const showCreateFab = !isStaff && activeTab === 'branches'
+    const showCreate = !isStaff && activeTab === 'branches'
+    const showInvite = activeTab === 'staff' && !isStaff && !isGuest
+    const inviteGenerating = staffSubTab === 'staff' ? generatingStaffLink : generatingCoManagerLink
 
     return (
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
@@ -191,7 +203,7 @@ export default function AddressSelectPage() {
                 managerCount={managerCount}
             />
 
-            <div className={`flex-1 overflow-y-auto px-4 pt-4 hide-scrollbar ${showCreateFab ? 'pb-24' : 'pb-8'}`}>
+            <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4 hide-scrollbar">
                 {/* ── BRANCHES TAB ── */}
                 {(activeTab === 'branches' || isStaff) && (
                     <BranchGrid
@@ -227,40 +239,50 @@ export default function AddressSelectPage() {
                         staffList={staffList}
                         staffLoading={staffLoading}
                         error={error}
-                        onGenerateInvite={handleGenerateInvite}
                         staffInviteLink={staffInviteLink}
                         staffInviteExpiry={staffInviteExpiry}
-                        generatingStaffLink={generatingStaffLink}
                         coManagerInviteLink={coManagerInviteLink}
                         coManagerInviteExpiry={coManagerInviteExpiry}
-                        generatingCoManagerLink={generatingCoManagerLink}
+                        onSetMemberRole={handleSetMemberRole}
+                        onRemoveMember={handleRemoveMember}
+                        subTab={staffSubTab}
+                        setSubTab={setStaffSubTab}
                     />
                 )}
-
-                {/* Sign out — matches the "Sắp xếp" pill on /recipes */}
-                <div className="flex justify-center mt-6">
-                    <button
-                        onClick={handleSignOut}
-                        className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center justify-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light hover:text-danger active:scale-95 transition-all shadow-sm"
-                    >
-                        <LogOut size={13} />
-                        Đăng xuất
-                    </button>
-                </div>
             </div>
 
-            {/* Floating action — opens create-address modal (mirrors /recipes, /ingredients) */}
-            {showCreateFab && (
-                <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-50">
-                    <div className="flex justify-end px-4 pb-[max(env(safe-area-inset-bottom),16px)] pointer-events-auto">
-                        <FabActionMenu
-                            items={[
-                                { key: 'create', icon: <Plus size={14} />, label: 'Tạo địa chỉ', onClick: () => setShowCreateModal(true) },
-                            ]}
-                        />
-                    </div>
-                </div>
-            )}
+            {/* Bottom action bar — Đăng xuất (left) + primary CTA (right) */}
+            <div className="shrink-0 flex items-stretch justify-between gap-3 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),16px)] bg-surface border-t border-border/60">
+                <button
+                    onClick={handleSignOut}
+                    className="flex-1 flex items-center justify-center gap-2 whitespace-nowrap rounded-[12px] border border-border/60 bg-bg px-4 py-3 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light hover:text-danger active:scale-95 transition-all"
+                >
+                    <LogOut size={16} />
+                    Đăng xuất
+                </button>
+
+                {showCreate && (
+                    <button
+                        onClick={() => setShowCreateModal(true)}
+                        className="flex-1 flex items-center justify-center gap-2 whitespace-nowrap rounded-[12px] bg-primary px-4 py-3 text-[13px] font-black uppercase text-bg hover:bg-primary/90 active:scale-95 transition-all"
+                    >
+                        <Plus size={16} />
+                        Tạo địa chỉ
+                    </button>
+                )}
+
+                {showInvite && (
+                    <button
+                        onClick={() => handleGenerateInvite(staffSubTab === 'co-manager' ? 'co-manager' : 'staff')}
+                        disabled={inviteGenerating}
+                        className="flex-1 flex items-center justify-center gap-2 whitespace-nowrap rounded-[12px] bg-primary px-4 py-3 text-[13px] font-black uppercase text-bg hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-50"
+                    >
+                        {inviteGenerating
+                            ? <><Loader size={14} className="animate-spin" /> Đang tạo...</>
+                            : <><UserPlus size={16} /> {staffSubTab === 'staff' ? 'Mời nhân viên' : 'Mời quản lý'}</>}
+                    </button>
+                )}
+            </div>
 
             {/* Slide-up Tạo địa chỉ mới modal */}
             {showCreateModal && (
