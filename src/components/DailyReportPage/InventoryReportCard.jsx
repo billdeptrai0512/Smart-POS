@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertTriangle, ChevronDown, ChevronUp, Info } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Info } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
 import { formatPackedQty } from '../../utils/inventory'
 import { formatVND } from '../../utils'
@@ -8,17 +8,25 @@ import { formatVND } from '../../utils'
 // Chưa nhập first (needs action), then anomalies (Hụt/Dư), then Khớp (done).
 const STATUS_PRIORITY = { pending: 0, loss: 1, excess: 2, match: 3 }
 
-function computeRowStatus({ inventoryValue, restockValue, openingValue, openingFallback, used }) {
-    const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
+const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
+
+// Hao hụt = Thực tế − Lý thuyết. Returns null when staff hasn't counted Cuối kỳ yet
+// (inventoryValue empty/undefined) — caller treats null as "pending", not 0.
+function computeHaoHut({ inventoryValue, restockValue, openingValue, openingFallback, used }) {
     const hasActual = inventoryValue !== undefined && inventoryValue !== ''
-    if (!hasActual) return 'pending'
+    if (!hasActual) return null
     const restockNum = r1(restockValue)
     const openingDisplay = openingValue ?? (openingFallback !== undefined && openingFallback !== null ? String(openingFallback) : '')
     const openingNum = r1(openingDisplay)
     const usedNum = r1(used)
     const thucTe = r1(inventoryValue)
     const lyThuyet = r1(openingNum + restockNum - usedNum)
-    const haoHut = r1(thucTe - lyThuyet)
+    return r1(thucTe - lyThuyet)
+}
+
+function computeRowStatus(args) {
+    const haoHut = computeHaoHut(args)
+    if (haoHut == null) return 'pending'
     if (haoHut === 0) return 'match'
     if (haoHut < 0) return 'loss'
     return 'excess'
@@ -95,8 +103,41 @@ export default function InventoryReportCard({
         return ingredientLabel(a.ingredient).localeCompare(ingredientLabel(b.ingredient))
     })
 
+    // Tổng giá trị hao hụt — sum |Hao hụt × unit_cost| over rows that came up short,
+    // computed against LIVE inputs so the header summary tracks what staff is counting now.
+    let totalLossValue = 0
+    for (const ing of sortedList) {
+        const haoHut = computeHaoHut({
+            inventoryValue: inventoryInputs[ing.ingredient],
+            restockValue: restockInputs[ing.ingredient],
+            openingValue: openingInputs[ing.ingredient],
+            openingFallback: openingStock[ing.ingredient],
+            used: lookupByLabel(ing.ingredient, usedMap),
+        })
+        if (haoHut != null && haoHut < 0) totalLossValue += Math.abs(haoHut) * (Number(ing.unit_cost) || 0)
+    }
+
+    // Số NVL đã kiểm (có nhập Cuối kỳ) — drives header summary, song song với
+    // "X món · Y đã soạn" của ShiftPrepCard.
+    const countedCount = sortedList.reduce((n, ing) => {
+        const v = inventoryInputs[ing.ingredient]
+        return n + (v !== undefined && v !== '' ? 1 : 0)
+    }, 0)
+
     return (
-        <div className="bg-surface rounded-[20px] p-3 border border-border/60 shadow-sm space-y-3">
+        <div className="bg-surface rounded-[20px] p-3 border border-border/60 shadow-sm">
+            {/* Header đồng bộ với ShiftPrepCard: icon + tiêu đề trái, tổng hao hụt phải. */}
+            <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-1.5">
+                    <ClipboardList size={15} className="text-primary shrink-0" />
+                    <span className="text-[12px] font-black uppercase tracking-widest text-text">Hao hụt</span>
+                </div>
+                <span className="text-[11px] font-bold text-text-secondary tabular-nums">
+                    {sortedList.length} món · {countedCount} đã kiểm
+                </span>
+            </div>
+
+            <div className="flex flex-col">
             {sortedList.map(ing => (
                 <IngredientRow
                     key={`${ing.ingredient}-${baselineVersion}`}
@@ -119,6 +160,17 @@ export default function InventoryReportCard({
                     onInventoryChange={onInventoryChange}
                 />
             ))}
+            </div>
+
+            {/* Footer tổng — tiền hao hụt cộng dồn, chỉ hiện khi đã kiểm ít nhất 1 NVL. */}
+            {countedCount > 0 && (
+                <div className="flex items-center justify-between pt-3 mt-1 border-t border-border/40">
+                    <span className="text-[12px] font-bold text-text-secondary">Tổng cộng</span>
+                    <span className={`text-[14px] font-black tabular-nums ${totalLossValue > 0 ? 'text-danger' : 'text-text-secondary'}`}>
+                        {totalLossValue > 0 ? '-' : ''}{formatVND(Math.round(totalLossValue))}
+                    </span>
+                </div>
+            )}
         </div>
     )
 }
@@ -158,9 +210,6 @@ function IngredientRow({
     const packUnit = ing.pack_unit
     const fmt = (n) => formatPackedQty(n, packSize, packUnit, unit, { compact: true })
     const openingDisplay = openingValue ?? (openingFallback !== undefined && openingFallback !== null ? String(openingFallback) : '')
-
-    // Round to 1 decimal so noisy float math doesn't surface in the UI.
-    const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
 
     // Over-report detection: if staff types restock > kho tổng available, the difference
     // becomes a phantom deficit that absorbs future NHẬP KHO. Surface it inline.
@@ -230,13 +279,13 @@ function IngredientRow({
     }[badge.tone]
 
     return (
-        <div className="border-b border-border/20 last:border-0 pb-2.5 last:pb-0">
+        <div className="border-b border-border/20 last:border-0">
             <button
                 type="button"
                 onClick={() => setOpen(o => !o)}
-                className="w-full flex items-center justify-between gap-2 py-1 group"
+                className="w-full flex items-center justify-between gap-2 py-2.5 group"
             >
-                <span className="text-[15px] font-bold text-text text-left">{ingredientLabel(ing.ingredient)}</span>
+                <span className="text-[14px] font-bold text-text text-left">{ingredientLabel(ing.ingredient)}</span>
                 <div className="flex items-center gap-2 shrink-0">
                     <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border tabular-nums ${badgeToneCls}`}>
                         {badge.text}
@@ -248,7 +297,7 @@ function IngredientRow({
                 </div>
             </button>
 
-            {!open ? null : (<>
+            {!open ? null : (<div className="pb-3">
                 {/* Row 1 — warehouse level */}
                 <div className="grid grid-cols-3 gap-2">
                     <ColumnInput
@@ -365,7 +414,7 @@ function IngredientRow({
                         </span>
                     </div>
                 )}
-            </>)}
+            </div>)}
         </div>
     )
 }

@@ -1,15 +1,16 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { usePOS } from '../contexts/POSContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { calculateProductCost, formatVNDInput, parseVNDInput } from '../utils'
 import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
-import { fetchDailyReportContext } from '../services/orderService'
+import { fetchDailyReportContext, fetchLastWeekSameDayOrderItems } from '../services/orderService'
 import { useShiftClosingSave } from '../hooks/useShiftClosingSave'
 import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
 import { useDailyReportData } from '../hooks/useDailyReportData'
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogsByCategory, calculateLossValue } from '../utils/inventory'
+import { ingredientLabel } from '../utils/ingredients'
 import { startOfDayVN, dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
@@ -20,6 +21,7 @@ import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import { fetchExpenseCategories } from '../services/expenseService'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
 import InventoryReportCard from '../components/DailyReportPage/InventoryReportCard'
+import ShiftPrepCard from '../components/DailyReportPage/ShiftPrepCard'
 import RangeLossCard from '../components/DailyReportPage/RangeLossCard'
 import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY } from '../components/DailyReportPage/ReportViewFilter'
 import HistoryFooter from '../components/HistoryPage/HistoryFooter'
@@ -31,6 +33,12 @@ import UpsellSheet from '../components/common/UpsellSheet'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
 import { shiftFinalizedKey } from '../constants/storageKeys'
+
+// Đọc tick "đã soạn" từ localStorage (bền qua reload/đóng tab), theo address+ngày.
+function readPrep(key) {
+    if (!key) return {}
+    try { return JSON.parse(localStorage.getItem(key)) || {} } catch { return {} }
+}
 
 export default function DailyReportPage() {
     const navigate = useNavigate()
@@ -104,7 +112,30 @@ export default function DailyReportPage() {
     // the hook so DailyReportPage stays focused on render orchestration. todayISO
     // drives existingClosing refetch on midnight rollover.
     const inventory = useShiftInventoryState(selectedAddress?.id, selectedAddress?.ingredient_sort_order, todayISO)
-    const [inventoryTab, setInventoryTab] = useState('report') // 'report' | 'refill'
+
+    // Same-day-last-week order items — feeds the refill forecast ("Bổ sung mai")
+    // inside InventoryReportCard. Today scope only; cached per address+day.
+    const [lastWeekItems, setLastWeekItems] = useState([])
+
+    // "Soạn cho mai" tick state — lifted here (chứ không nằm trong ShiftPrepCard) vì nó
+    // là một điều kiện để chốt ca. Lưu localStorage theo address+ngày; re-seed bằng cách
+    // so khớp key trong render (không dùng effect → tránh cascading render).
+    const prepStorageKey = isTodayScope && selectedAddress?.id ? `shiftPrep_${selectedAddress.id}_${todayISO}` : null
+    const [prepChecked, setPrepChecked] = useState(() => readPrep(prepStorageKey))
+    const [seenPrepKey, setSeenPrepKey] = useState(prepStorageKey)
+    if (prepStorageKey !== seenPrepKey) {
+        setSeenPrepKey(prepStorageKey)
+        setPrepChecked(readPrep(prepStorageKey))
+    }
+    const togglePrep = useCallback((ingredient) => {
+        setPrepChecked(prev => {
+            const next = { ...prev, [ingredient]: !prev[ingredient] }
+            if (prepStorageKey) {
+                try { localStorage.setItem(prepStorageKey, JSON.stringify(next)) } catch { /* storage full */ }
+            }
+            return next
+        })
+    }, [prepStorageKey])
 
     // Expense categories — feed dynamic rows into FinanceCards. Refetched per
     // address; new tags added in /history are picked up on next mount or after
@@ -139,11 +170,10 @@ export default function DailyReportPage() {
         setTransferInput(isTodaysClosing && shiftClosing.actual_transfer != null ? formatVNDInput(shiftClosing.actual_transfer) : '')
     }, [isTodayScope, todayISO, shiftClosing?.id, shiftClosing?.actual_cash, shiftClosing?.actual_transfer, shiftClosing?.closed_at])
 
-    // Pure-derived finalize flag — true iff persisted shift_closing has cash + transfer
-    // entered AND every ingredient in the recipe list has Cuối kỳ (remaining) counted.
-    // No localStorage source of truth, no manual "Xác nhận chốt ca" button: if staff
-    // later clears a Cuối kỳ value and re-saves, the badge unsets itself.
-    const isShiftFinalized = useMemo(() => {
+    // Base chốt-ca: persisted shift_closing có cash + transfer VÀ mọi NVL đã đếm Cuối kỳ.
+    // Điều kiện "đã hoàn tất" đầy đủ (gồm 'đã soạn cho mai') ghép thêm bên dưới sau refillList,
+    // vì allPrepDone phụ thuộc refillList — xem isShiftFinalized.
+    const cashAndCountDone = useMemo(() => {
         if (!isTodaysClosing) return false
         if (shiftClosing.actual_cash == null || shiftClosing.actual_transfer == null) return false
         const report = shiftClosing.inventory_report
@@ -154,35 +184,6 @@ export default function DailyReportPage() {
         for (const row of report) remainingByIng[row.ingredient] = row.remaining
         return list.every(ing => remainingByIng[ing.ingredient] != null)
     }, [isTodaysClosing, shiftClosing?.actual_cash, shiftClosing?.actual_transfer, shiftClosing?.inventory_report, inventory.ingredientsList])
-
-    // Sync the derived flag to localStorage so HistoryPage can classify subsequent
-    // operational expenses as "Sau ca" without needing to refetch shift_closing.
-    useEffect(() => {
-        if (!isTodayScope || !selectedAddress?.id) return
-        const key = shiftFinalizedKey(selectedAddress.id, todayISO)
-        if (isShiftFinalized) {
-            if (!localStorage.getItem(key)) localStorage.setItem(key, Date.now().toString())
-        } else {
-            localStorage.removeItem(key)
-        }
-    }, [isShiftFinalized, isTodayScope, selectedAddress?.id, todayISO])
-
-    // Breakdown of what's still missing — drives the status banner so staff
-    // can see exactly which boxes block finalize instead of just "not done yet".
-    const finalizeMissing = useMemo(() => {
-        if (!isTodayScope) return null
-        const parts = []
-        const report = isTodaysClosing && Array.isArray(shiftClosing?.inventory_report)
-            ? shiftClosing.inventory_report : []
-        const remainingByIng = {}
-        for (const row of report) remainingByIng[row.ingredient] = row.remaining
-        const list = inventory.ingredientsList || []
-        const uncounted = list.filter(ing => remainingByIng[ing.ingredient] == null).length
-        if (list.length > 0 && uncounted > 0) parts.push(`${uncounted} nguyên liệu chưa đếm`)
-        if (!isTodaysClosing || shiftClosing.actual_cash == null) parts.push('chưa nhập tiền mặt')
-        if (!isTodaysClosing || shiftClosing.actual_transfer == null) parts.push('chưa nhập chuyển khoản')
-        return parts
-    }, [isTodayScope, isTodaysClosing, shiftClosing?.actual_cash, shiftClosing?.actual_transfer, shiftClosing?.inventory_report, inventory.ingredientsList])
 
     // Week/month scopes show the per-day/per-week bar chart instead of the hourly line.
     const isRangeScope = scope === 'week' || scope === 'month'
@@ -243,6 +244,15 @@ export default function DailyReportPage() {
         const start = customRange?.startISO || iso
         const safeEnd = iso > todayISO ? todayISO : (iso < start ? start : iso)
         setCustomRange({ startISO: start, endISO: safeEnd })
+    }
+    // Picker presets (Hôm nay / Tuần này / Tháng này) reset scope to the preset's
+    // bucket so the page reuses the existing offset-based fetch path instead of
+    // forcing a custom-range query when the user already meant "the current period".
+    const handlePickerPreset = (preset) => {
+        setScope(preset.scope)
+        setOffset(0)
+        setHasManualPick(false)
+        setCustomRange(null)
     }
 
     const isReady = !isLoadingHistory && isAsyncReady
@@ -305,7 +315,7 @@ export default function DailyReportPage() {
         return cups
     }, [displayOrders, offlineToday, selectedProductId, productMap])
 
-    const { dailyExpense, refillNvl, refillFreeForm } = useMemo(
+    const { dailyExpense, refillFreeForm } = useMemo(
         () => splitExpenses(displayExpenses),
         [displayExpenses]
     )
@@ -494,6 +504,75 @@ export default function DailyReportPage() {
         [todayOrderItems, recipes, extraIngredients]
     )
 
+    // Fetch same-day-last-week orders once per address (today scope only). The service
+    // caches by address+day, so this is cheap on re-mounts.
+    useEffect(() => {
+        if (!isTodayScope || !selectedAddress?.id) { setLastWeekItems([]); return }
+        let alive = true
+        fetchLastWeekSameDayOrderItems(selectedAddress.id)
+            .then(items => { if (alive) setLastWeekItems(items || []) })
+            .catch(() => { if (alive) setLastWeekItems([]) })
+        return () => { alive = false }
+    }, [isTodayScope, selectedAddress?.id])
+
+    const lastWeekUsedMap = useMemo(() => {
+        const items = lastWeekItems.map(i => ({
+            productId: i.product_id,
+            qty: i.quantity,
+            extras: (i.extra_ids || []).map(id => ({ id })),
+        }))
+        return calculateEstimatedConsumption(items, recipes, extraIngredients)
+    }, [lastWeekItems, recipes, extraIngredients])
+
+    // "Soạn cho mai" list — món cần bổ sung lên xe, tính theo Cuối kỳ (live) staff vừa đếm.
+    // Mục tiêu = max(dự báo hôm nay, cùng kỳ tuần trước, mức tồn tối thiểu); chỉ liệt kê
+    // ingredient đã đếm (có inventoryInputs) và còn thiếu so với mục tiêu.
+    const refillList = useMemo(() => {
+        const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
+        const byLabel = (ingredient, map) => {
+            if (map[ingredient] != null) return map[ingredient]
+            const label = ingredientLabel(ingredient).toLowerCase()
+            for (const [k, v] of Object.entries(map)) if (k !== ingredient && ingredientLabel(k).toLowerCase() === label) return v
+            return 0
+        }
+        const out = []
+        for (const ing of inventory.ingredientsList || []) {
+            const inv = inventory.inventoryInputs[ing.ingredient]
+            if (inv === undefined || inv === '') continue // chưa đếm Cuối kỳ
+            const actual = r1(inv)
+            const rawTarget = Math.max(r1(byLabel(ing.ingredient, usedMap)), r1(byLabel(ing.ingredient, lastWeekUsedMap)))
+            const minStock = Number(ing.min_stock) || 0
+            if (actual >= minStock && actual >= rawTarget) continue
+            const finalRefill = r1(Math.max(minStock - actual, rawTarget - actual))
+            if (finalRefill <= 0) continue
+            const packSize = Number(ing.pack_size) || 0
+            out.push({
+                ingredient: ing.ingredient,
+                finalRefill,
+                packsNeeded: packSize > 0 ? Math.ceil(finalRefill / packSize) : 0,
+                packUnit: ing.pack_unit,
+                unit: ing.unit,
+            })
+        }
+        return out
+    }, [inventory.ingredientsList, inventory.inventoryInputs, usedMap, lastWeekUsedMap])
+
+    // Chốt ca đầy đủ = cash + counted + đã soạn hết đồ lên xe cho mai.
+    // refillList rỗng (kho đủ, không cần soạn) ⇒ coi như đã soạn xong.
+    const allPrepDone = refillList.length === 0 || refillList.every(it => prepChecked[it.ingredient])
+    const isShiftFinalized = cashAndCountDone && allPrepDone
+
+    // Sync cờ chốt ca → localStorage để HistoryPage phân loại chi phí phát sinh sau là "Sau ca".
+    useEffect(() => {
+        if (!isTodayScope || !selectedAddress?.id) return
+        const key = shiftFinalizedKey(selectedAddress.id, todayISO)
+        if (isShiftFinalized) {
+            if (!localStorage.getItem(key)) localStorage.setItem(key, Date.now().toString())
+        } else {
+            localStorage.removeItem(key)
+        }
+    }, [isShiftFinalized, isTodayScope, selectedAddress?.id, todayISO])
+
     const consumptionBreakdown = useMemo(
         () => calculateConsumptionBreakdown(todayOrderItems, recipes, extraIngredients, products, productExtras),
         [todayOrderItems, recipes, extraIngredients, products, productExtras]
@@ -632,6 +711,7 @@ export default function DailyReportPage() {
                 customRange={customRange}
                 onCustomStartChange={handleCustomStartChange}
                 onCustomEndChange={handleCustomEndChange}
+                onPresetSelect={handlePickerPreset}
                 belowTabs={<ReportViewFilter value={view} onChange={setView} />}
             />
 
@@ -717,78 +797,40 @@ export default function DailyReportPage() {
                                     </div>
                                 )}
 
-                                {/* Today: editable inventory report + refill forecast tabs. */}
+                                {/* Today: editable inventory report — hao hụt + refill ("Bổ sung mai") merged per row. */}
                                 {/* Past date: read-only audit + refill view via InventoryRefillCard. */}
                                 {isTodayScope ? (
                                     <div className="flex flex-col gap-3">
-                                        {isShiftFinalized ? (
+                                        {isShiftFinalized && (
                                             <div className="flex items-center justify-center gap-2 bg-success/10 border border-success/30 px-3 py-2 rounded-[10px] text-success">
                                                 <span className="text-[12px] font-bold uppercase tracking-wide">✓ Đã hoàn tất ca hôm nay</span>
                                             </div>
-                                        ) : finalizeMissing && finalizeMissing.length > 0 ? (
-                                            <div className="flex items-start gap-2 bg-warning/10 border border-warning/30 px-3 py-2 rounded-[10px] text-warning">
-                                                <span className="text-[12px] font-bold leading-snug">
-                                                    <span className="uppercase tracking-wide">Chưa hoàn tất:</span>{' '}
-                                                    {finalizeMissing.join(' · ')}
-                                                </span>
-                                            </div>
-                                        ) : null}
-
-                                        <div className="flex p-1 bg-surface-light rounded-[12px] gap-1 w-full">
-                                            <button
-                                                onClick={() => setInventoryTab('report')}
-                                                className={`flex-1 py-1.5 rounded-[10px] uppercase text-[13px] font-bold transition-all ${inventoryTab === 'report' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
-                                            >
-                                                Hao hụt
-                                            </button>
-                                            <button
-                                                onClick={() => setInventoryTab('refill')}
-                                                className={`flex-1 py-1.5 rounded-[10px] uppercase text-[13px] font-bold transition-all ${inventoryTab === 'refill' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
-                                            >
-                                                Bổ sung
-                                            </button>
-                                        </div>
-
-                                        {inventoryTab === 'report' ? (
-                                            <InventoryReportCard
-                                                ingredientsList={inventory.ingredientsList}
-                                                isLoading={inventory.isLoadingIngredients}
-                                                openingStock={inventory.openingStock}
-                                                openingInputs={inventory.openingInputs}
-                                                openingLocked={inventory.openingLocked}
-                                                restockInputs={inventory.restockInputs}
-                                                inventoryInputs={inventory.inventoryInputs}
-                                                warehouseStocks={inventory.effectiveWarehouseStocks}
-                                                ingredientUnits={Object.fromEntries(inventory.ingredientsList.map(i => [i.ingredient, i.unit]))}
-                                                usedMap={usedMap}
-                                                consumptionBreakdown={consumptionBreakdown}
-                                                ingredientToProduct={ingredientToProduct}
-                                                canUnlock={!isStaff}
-                                                isSubmitting={isSavingShift}
-                                                baselineInputs={inventory.baselineSnapshot}
-                                                baselineVersion={inventory.baselineVersion}
-                                                onOpeningChange={inventory.onOpeningChange}
-                                                onOpeningLock={inventory.onOpeningLock}
-                                                onRestockChange={inventory.onRestockChange}
-                                                onInventoryChange={inventory.onInventoryChange}
-                                            />
-                                        ) : (
-                                            <InventoryRefillCard
-                                                shiftClosing={shiftClosing}
-                                                yesterdayClosing={yesterdayClosing}
-                                                todayOrders={displayOrders}
-                                                offlineToday={offlineToday}
-                                                recipes={recipes}
-                                                extraIngredients={extraIngredients}
-                                                selectedAddress={selectedAddress}
-                                                products={products}
-                                                productExtras={productExtras}
-                                                ingredientUnits={ingredientUnits}
-                                                isPastDate={false}
-                                                canAccessAudit={hasFeature(activeModules, 'lossAudit')}
-                                                forcedTab="refill"
-                                            />
                                         )}
+
+                                        <InventoryReportCard
+                                            ingredientsList={inventory.ingredientsList}
+                                            isLoading={inventory.isLoadingIngredients}
+                                            openingStock={inventory.openingStock}
+                                            openingInputs={inventory.openingInputs}
+                                            openingLocked={inventory.openingLocked}
+                                            restockInputs={inventory.restockInputs}
+                                            inventoryInputs={inventory.inventoryInputs}
+                                            warehouseStocks={inventory.effectiveWarehouseStocks}
+                                            ingredientUnits={Object.fromEntries(inventory.ingredientsList.map(i => [i.ingredient, i.unit]))}
+                                            usedMap={usedMap}
+                                            consumptionBreakdown={consumptionBreakdown}
+                                            ingredientToProduct={ingredientToProduct}
+                                            canUnlock={!isStaff}
+                                            isSubmitting={isSavingShift}
+                                            baselineInputs={inventory.baselineSnapshot}
+                                            baselineVersion={inventory.baselineVersion}
+                                            onOpeningChange={inventory.onOpeningChange}
+                                            onOpeningLock={inventory.onOpeningLock}
+                                            onRestockChange={inventory.onRestockChange}
+                                            onInventoryChange={inventory.onInventoryChange}
+                                        />
+
+                                        <ShiftPrepCard items={refillList} checked={prepChecked} onToggle={togglePrep} />
                                     </div>
                                 ) : scope === 'day' ? (
                                     <InventoryRefillCard
@@ -840,7 +882,7 @@ export default function DailyReportPage() {
                 Stacked when both appear (view = all + both dirty). */}
             {isTodayScope && (
                 (((view === VIEW_ALL || view === VIEW_CASHFLOW) && cashDirty) ||
-                 ((view === VIEW_ALL || view === VIEW_INVENTORY) && inventoryTab === 'report' && inventory.isDirty)) && (
+                 ((view === VIEW_ALL || view === VIEW_INVENTORY) && inventory.isDirty)) && (
                     <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
                         <div className="flex flex-col items-end gap-2 px-4 mb-[72px] pointer-events-auto">
                             {(view === VIEW_ALL || view === VIEW_CASHFLOW) && cashDirty && (
@@ -852,7 +894,7 @@ export default function DailyReportPage() {
                                     {isSavingShift ? 'Đang lưu...' : 'Lưu thực thu'}
                                 </button>
                             )}
-                            {(view === VIEW_ALL || view === VIEW_INVENTORY) && inventoryTab === 'report' && inventory.isDirty && (
+                            {(view === VIEW_ALL || view === VIEW_INVENTORY) && inventory.isDirty && (
                                 <button
                                     onClick={handleSaveInventory}
                                     disabled={isSavingShift}
