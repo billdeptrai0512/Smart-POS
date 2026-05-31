@@ -97,7 +97,11 @@ export default function OrderFooter({ cart, activeCartItemId, total, hasOrder, i
                                 Giảm giá
                             </button>
                         )}
-                        <span className="text-text-secondary text-sm font-bold uppercase tracking-wider">Tổng cộng</span>
+                        {/* Hidden on ultra-narrow screens (e.g. Z Fold cover ~280px) where the
+                            Giảm giá pill + label + price can't share one row — the bold total
+                            number is self-evidently the total there. nowrap prevents a mid-word
+                            "Tổng / Cộng" split on the borderline. */}
+                        <span className="text-text-secondary text-sm font-bold uppercase tracking-wider whitespace-nowrap hidden min-[360px]:inline">Tổng cộng</span>
                     </div>
                     <div className="flex flex-col items-end shrink-0">
                         <span className="text-text font-black text-2xl tabular-nums tracking-tight">
