@@ -12,8 +12,6 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, onC
     const [qty, setQty] = useState('')
     const [subtotal, setSubtotal] = useState('')
     const [purchaseDate, setPurchaseDate] = useState(today)
-    // Cost fields — collapsed by default to keep form ngắn cho trường hợp typical.
-    const [showCostBlock, setShowCostBlock] = useState(false)
     const [discountMode, setDiscountMode] = useState('amount') // 'amount' | 'percent'
     const [discountInput, setDiscountInput] = useState('')
     const [extraCostInput, setExtraCostInput] = useState('')
@@ -98,118 +96,108 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, onC
                     </button>
                 </div>
 
-                {/* Single-inflow reminder — this modal is the only legit way to add to kho tổng */}
-                <p className="text-[11px] text-text-secondary leading-snug bg-primary/5 border border-primary/15 rounded-[10px] px-3 py-2">
-                    Mọi nguyên liệu mua về <span className="font-bold text-text">phải nhập qua đây</span> để kho tổng khớp sổ.
-                    Đừng để hàng thẳng lên quầy không qua hệ thống.
-                </p>
-
                 {/* Form */}
                 <div className="flex flex-col gap-4">
-                    {/* Quantity */}
-                    <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between">
-                            <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">
-                                Số lượng nhập
-                            </label>
-                            {hasPack && (
-                                <div className="flex items-center gap-1 bg-surface-light border border-border/60 rounded-lg p-0.5">
-                                    <button
-                                        onClick={() => setUsePackMode(true)}
-                                        className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${usePackMode ? 'bg-primary text-white' : 'text-text-secondary hover:text-text'}`}
-                                    >
-                                        {packUnit}
-                                    </button>
-                                    <button
-                                        onClick={() => setUsePackMode(false)}
-                                        className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${!usePackMode ? 'bg-primary text-white' : 'text-text-secondary hover:text-text'}`}
-                                    >
-                                        {unit}
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                        <div className="relative flex items-center">
+                    <div className="flex flex-col gap-3 p-3 bg-surface-light rounded-[14px] border border-border/40">
+                        {/* Ngày mua */}
+                        <div className="flex items-center justify-between gap-3">
+                            <span className="text-[12px] font-bold text-text-secondary">Ngày mua</span>
                             <input
-                                type="number"
-                                autoFocus
-                                placeholder="0"
-                                value={qty}
-                                onChange={e => setQty(e.target.value)}
-                                className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 pr-16 text-[16px] font-black text-text placeholder:text-text-secondary/30 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
+                                type="date"
+                                value={purchaseDate}
+                                max={today}
+                                onChange={e => setPurchaseDate(e.target.value)}
+                                className="w-32 bg-surface border border-border/60 rounded-[8px] px-3 py-1.5 text-[13px] font-bold text-text focus:outline-none focus:border-primary/50"
                             />
-                            <div className="absolute right-4 pointer-events-none flex flex-col items-end">
-                                <span className="text-[14px] font-bold text-text-secondary">{activeUnit}</span>
-                                {usePackMode && qty && Number(qty) > 0 && (
-                                    <span className="text-[10px] text-text-dim tabular-nums leading-none">={actualQty}{unit}</span>
-                                )}
-                            </div>
                         </div>
-                    </div>
-
-                    {/* Subtotal */}
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">
-                            Tổng tiền hàng
-                        </label>
-                        <MoneyInput
-                            value={subtotal}
-                            onChange={setSubtotal}
-                            onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
-                            size="lg"
-                        />
-                    </div>
-
-                    {/* Purchase date */}
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">
-                            Ngày mua
-                        </label>
-                        <input
-                            type="date"
-                            value={purchaseDate}
-                            max={today}
-                            onChange={e => setPurchaseDate(e.target.value)}
-                            className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[14px] font-bold text-text focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all"
-                        />
                         {isBackdated && (
-                            <p className="text-[11px] text-warning leading-snug">
-                                Sẽ ghi nhập kho vào ngày {purchaseDate.split('-').reverse().join('/')}, không phải hôm nay.
+                            <p className="text-[11px] text-warning leading-snug text-right">
+                                Sẽ ghi vào ngày {purchaseDate.split('-').reverse().join('/')}, không phải hôm nay.
                             </p>
                         )}
-                    </div>
 
-                    {/* Toggle cost block — giữ form ngắn cho case typical (trả full, không giảm giá, không phí ship) */}
-                    <button
-                        onClick={() => setShowCostBlock(s => !s)}
-                        className="text-[12px] font-bold text-primary hover:underline self-start"
-                    >
-                        {showCostBlock ? '− Ẩn tuỳ chọn giảm giá / công nợ' : '+ Có giảm giá, phí nhập, hoặc ghi nợ?'}
-                    </button>
-
-                    {showCostBlock && (
-                        <div className="flex flex-col gap-3 p-3 bg-surface-light rounded-[14px] border border-border/40">
-                            {/* Discount */}
-                            <div className="flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[12px] font-bold text-text-secondary">Giảm giá</span>
+                        {/* Số lượng nhập */}
+                        <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/40">
+                            <div className="flex items-center gap-2">
+                                <span className="text-[12px] font-bold text-text-secondary">Số lượng nhập</span>
+                                {hasPack && (
                                     <div className="flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
                                         <button
-                                            onClick={() => { if (discountMode !== 'amount') { setDiscountMode('amount'); setDiscountInput('') } }}
-                                            className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${discountMode === 'amount' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                            onClick={() => { if (!usePackMode) { setUsePackMode(true); setQty('') } }}
+                                            className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${usePackMode ? 'bg-primary text-white' : 'text-text-secondary'}`}
                                         >
-                                            đ
+                                            {packUnit}
                                         </button>
                                         <button
-                                            onClick={() => { if (discountMode !== 'percent') { setDiscountMode('percent'); setDiscountInput('') } }}
-                                            className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${discountMode === 'percent' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                            onClick={() => { if (usePackMode) { setUsePackMode(false); setQty('') } }}
+                                            className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${!usePackMode ? 'bg-primary text-white' : 'text-text-secondary'}`}
                                         >
-                                            %
+                                            {unit}
                                         </button>
                                     </div>
+                                )}
+                            </div>
+                            <div className="flex flex-col items-end gap-0.5">
+                                {usePackMode && qty && Number(qty) > 0 && (
+                                    <span className="text-[10px] text-text-dim tabular-nums leading-none">= {actualQty} {unit}</span>
+                                )}
+                                <div className="relative flex items-center">
+                                    <input
+                                        type="number"
+                                        autoFocus
+                                        placeholder="0"
+                                        value={qty}
+                                        onChange={e => setQty(e.target.value)}
+                                        className="w-32 bg-surface border border-border/60 rounded-[8px] px-3 py-1.5 pr-10 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
+                                    />
+                                    <span className="absolute right-3 pointer-events-none text-[11px] font-bold text-text-secondary">{activeUnit}</span>
                                 </div>
-                                {discountMode === 'percent' ? (
+                            </div>
+                        </div>
+
+                        {/* Tổng tiền hàng */}
+                        <div className="flex items-center justify-between gap-3">
+                            <span className="text-[12px] font-bold text-text-secondary">Tổng tiền hàng</span>
+                            <MoneyInput
+                                value={subtotal}
+                                onChange={setSubtotal}
+                                onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
+                                size="sm"
+                                className="w-32"
+                            />
+                        </div>
+
+                        {/* Chi phí thêm */}
+                        <div className="flex items-center justify-between gap-3">
+                            <span className="text-[12px] font-bold text-text-secondary">Chi phí thêm</span>
+                            <MoneyInput value={extraCostInput} onChange={setExtraCostInput} size="sm" className="w-32" />
+                        </div>
+
+                        {/* Giảm giá */}
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                                <span className="text-[12px] font-bold text-text-secondary">Giảm giá</span>
+                                <div className="flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
+                                    <button
+                                        onClick={() => { if (discountMode !== 'amount') { setDiscountMode('amount'); setDiscountInput('') } }}
+                                        className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${discountMode === 'amount' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                    >
+                                        đ
+                                    </button>
+                                    <button
+                                        onClick={() => { if (discountMode !== 'percent') { setDiscountMode('percent'); setDiscountInput('') } }}
+                                        className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${discountMode === 'percent' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                    >
+                                        %
+                                    </button>
+                                </div>
+                            </div>
+                            {discountMode === 'percent' ? (
+                                <div className="flex flex-col items-end gap-0.5">
+                                    {discountAmount > 0 && (
+                                        <span className="text-[10px] text-text-dim tabular-nums leading-none">= {formatVND(discountAmount)}</span>
+                                    )}
                                     <input
                                         type="number"
                                         min="0"
@@ -221,74 +209,84 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, onC
                                             const v = e.target.value
                                             if (v === '' || (Number(v) >= 0 && Number(v) <= 100)) setDiscountInput(v)
                                         }}
-                                        className="w-24 bg-surface border border-border/60 rounded-[8px] px-3 py-1.5 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        className="w-32 bg-surface border border-border/60 rounded-[8px] px-3 py-1.5 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     />
-                                ) : (
-                                    <MoneyInput value={discountInput} onChange={setDiscountInput} size="sm" className="w-32" />
+                                </div>
+                            ) : (
+                                <MoneyInput value={discountInput} onChange={setDiscountInput} size="sm" className="w-32" />
+                            )}
+                        </div>
+
+                        {/* Tổng cộng */}
+                        <div className="flex items-center justify-between gap-3">
+                            <span className="text-[12px] font-bold text-text-secondary">Tổng cộng</span>
+                            <span className="text-[14px] font-black text-primary tabular-nums">{formatVND(amountDue)}</span>
+                        </div>
+
+                        {/* Đã thanh toán + quick toggle Đủ/Nợ */}
+                        <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/40">
+                            <div className="flex items-center gap-2">
+                                <span className="text-[12px] font-bold text-text-secondary">Đã thanh toán</span>
+                                {amountDue > 0 && (
+                                    <div className="flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
+                                        <button
+                                            onClick={() => { setUserTouchedPaid(false) }}
+                                            className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${paidNum >= amountDue ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                        >
+                                            Đủ
+                                        </button>
+                                        <button
+                                            onClick={() => { setPaidInput(''); setUserTouchedPaid(true) }}
+                                            className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${paidNum < amountDue ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                        >
+                                            Nợ
+                                        </button>
+                                    </div>
                                 )}
                             </div>
+                            <MoneyInput
+                                value={paidInput}
+                                onChange={v => { setUserTouchedPaid(true); setPaidInput(v) }}
+                                onBlur={() => { if (paidNum > amountDue && amountDue > 0) setPaidInput(formatVNDInput(amountDue)) }}
+                                size="sm"
+                                className="w-32"
+                            />
+                        </div>
 
-                            {/* Extra cost */}
-                            <div className="flex items-center justify-between gap-3">
-                                <span className="text-[12px] font-bold text-text-secondary">Chi phí nhập</span>
-                                <MoneyInput value={extraCostInput} onChange={setExtraCostInput} size="sm" className="w-32" />
-                            </div>
-
-                            {/* Cần trả NCC */}
-                            <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/40">
-                                <span className="text-[12px] font-bold text-text-secondary">Cần trả NCC</span>
-                                <span className="text-[14px] font-black text-primary tabular-nums">{formatVND(amountDue)}</span>
-                            </div>
-
-                            {/* Tiền trả NCC */}
-                            <div className="flex items-center justify-between gap-3">
-                                <span className="text-[12px] font-bold text-text-secondary">Tiền trả Nhà cung cấp</span>
-                                <MoneyInput
-                                    value={paidInput}
-                                    onChange={v => { setUserTouchedPaid(true); setPaidInput(v) }}
-                                    size="sm"
-                                    className="w-32"
-                                />
-                            </div>
-
-                            {/* Phương thức trả */}
+                        {/* Phương thức trả — chỉ hiện khi có thanh toán */}
+                        {paidNum > 0 && (
                             <div className="flex items-center justify-between gap-3">
                                 <span className="text-[12px] font-bold text-text-secondary">Phương thức trả</span>
-                                <div className="flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
+                                <div className="w-32 flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
                                     <button
                                         onClick={() => setPaymentMethod('cash')}
-                                        className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'cash' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                        className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'cash' ? 'bg-primary text-white' : 'text-text-secondary'}`}
                                     >
                                         Tiền mặt
                                     </button>
                                     <button
                                         onClick={() => setPaymentMethod('transfer')}
-                                        className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                        className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}
                                     >
-                                        Chuyển khoản
+                                        Bank
                                     </button>
                                 </div>
                             </div>
+                        )}
 
-                            {/* Owing preview */}
-                            {owing > 0 && (
-                                <div className="flex items-center justify-between gap-3 px-3 py-2 bg-warning/10 border border-warning/20 rounded-[10px]">
-                                    <span className="text-[12px] font-bold text-warning">Còn nợ sau lần này</span>
-                                    <span className="text-[14px] font-black text-warning tabular-nums">{formatVND(owing)}</span>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Preview đơn giá theo Cần trả NCC (vốn thực tế) */}
-                    {qty && Number(qty) > 0 && amountDue > 0 && (
-                        <div className="flex items-center justify-between px-4 py-2.5 bg-primary/5 border border-primary/10 rounded-[12px]">
-                            <span className="text-[12px] font-bold text-text-secondary">Đơn giá mới</span>
-                            <span className="text-[14px] font-black text-primary tabular-nums">
-                                {Math.round(amountDue / actualQty).toLocaleString('vi-VN')}đ / {unit}
-                            </span>
-                        </div>
-                    )}
+                        {/* Còn nợ / Đã trả đủ */}
+                        {owing > 0 ? (
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-[12px] font-bold text-text-secondary">Còn nợ</span>
+                                <span className="text-[14px] font-black text-warning tabular-nums">{formatVND(owing)}</span>
+                            </div>
+                        ) : paidNum > 0 && amountDue > 0 ? (
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-[12px] font-bold text-text-secondary">Trạng thái</span>
+                                <span className="text-[14px] font-black text-success tabular-nums">Đã trả đủ ✓</span>
+                            </div>
+                        ) : null}
+                    </div>
                 </div>
 
                 {/* Submit */}

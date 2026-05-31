@@ -11,7 +11,7 @@ import {
     syncIngredientKey,
     fetchIngredientStocks, processIngredientRestock, fetchIngredientDeficits, fetchIngredientDailyContext,
 } from '../services/orderService'
-import { sortIngredients, ingredientLabel, getIngredientUnit, normalizeIngredientCategory } from '../utils/ingredients'
+import { sortIngredients, ingredientLabel, getIngredientUnit, normalizeIngredientCategory, normalizeIngredientKey } from '../utils/ingredients'
 import { parseVNDInput } from '../utils'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
@@ -25,8 +25,6 @@ import { detectKeyMismatches } from '../utils/ingredientKeySync'
 import { useToast } from '../hooks/useToast'
 import Toast from '../components/POSPage/Toast'
 import { keySyncDismissedKey, orphanIgnoredKey } from '../constants/storageKeys'
-
-const normalizeKey = (raw) => raw.trim().toLowerCase().replace(/\s+/g, '_')
 
 // Module-level scroll cache. Set when user opens a card to drill into
 // /ingredients/:key; consumed once on next mount of /ingredients (back nav).
@@ -261,7 +259,7 @@ export default function IngredientManagementPage() {
 
     async function handleCreateIngredient() {
         if (!newName.trim()) return
-        const key = normalizeKey(newName)
+        const key = normalizeIngredientKey(newName)
         const unit = newUnit || 'đv'
         const cost = parseVNDInput(newCost)
         setSaving(true)
@@ -503,8 +501,17 @@ export default function IngredientManagementPage() {
                     packUnit={configByIngredient.get(restockIngredient)?.pack_unit}
                     onClose={() => setRestockIngredient(null)}
                     onConfirm={async ({ ingredient: ing, qty, subtotal, discount, extraCost, paid, paymentMethod, purchaseDate }) => {
+                        // beforeStock only used by guest / default-address paths;
+                        // the address RPC computes its own authoritative snapshot.
+                        // Only include when the stocks fetch has actually resolved
+                        // for this ingredient — avoid baking in a fake 0 baseline.
+                        const stockRow = stockByIngredient.get(ing)
+                        const snapshot = stockRow
+                            ? { beforeStock: stockRow.warehouse_stock }
+                            : {}
                         const result = await processIngredientRestock(selectedAddress?.id, ing, qty, profile?.name, {
                             subtotal, discount, extraCost, paid, paymentMethod, purchaseDate,
+                            ...snapshot,
                         })
                         await Promise.all([loadStocks(), refreshProducts?.(), refreshTodayExpenses?.()])
                         return result

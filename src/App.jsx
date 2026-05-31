@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { Routes, Route, Navigate, Outlet, useSearchParams, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AddressProvider, useAddress } from './contexts/AddressContext'
 import { AddressStatsProvider } from './contexts/AddressStatsContext'
@@ -18,7 +18,6 @@ const HistoryPage = lazy(() => import('./pages/HistoryPage'))
 const RecipeMenuPage = lazy(() => import('./pages/RecipeMenuPage'))
 const RecipeIngredientPage = lazy(() => import('./pages/RecipeIngredientPage'))
 const DailyReportPage = lazy(() => import('./pages/DailyReportPage'))
-const RangeReportPage = lazy(() => import('./pages/RangeReportPage'))
 const IngredientManagementPage = lazy(() => import('./pages/IngredientManagementPage'))
 const IngredientDetailPage = lazy(() => import('./pages/IngredientDetailPage'))
 
@@ -32,6 +31,15 @@ function PageLoading() {
       </div>
     </div>
   )
+}
+
+// Legacy /range-report entry — folded into /daily-report's range mode. Preserve
+// the requested range (and any nav state) by seeding scope on the redirect.
+function RangeReportRedirect() {
+  const [params] = useSearchParams()
+  const { state } = useLocation()
+  const scope = params.get('range') === 'month' ? 'month' : 'week'
+  return <Navigate to="/daily-report" replace state={{ ...state, scope }} />
 }
 
 // Protected route: allows both authenticated users and active guest sessions
@@ -78,7 +86,7 @@ export default function App() {
                         <Route path="/history" element={<HistoryPage />} />
                         <Route path="/shift-closing" element={<Navigate to="/daily-report" replace state={{ initialView: 'inventory' }} />} />
                         <Route path="/daily-report" element={<DailyReportPage />} />
-                        <Route path="/range-report" element={<RangeReportPage />} />
+                        <Route path="/range-report" element={<RangeReportRedirect />} />
                         <Route path="/expenses" element={<Navigate to="/history" replace />} />
                         {/* Feature-level permission routes (anyone can view, managers can edit) */}
                         <Route path="/recipes" element={<RecipeMenuPage />} />

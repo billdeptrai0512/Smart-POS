@@ -26,6 +26,14 @@ export function sortIngredients(a, b, customOrderArray) {
     return a.localeCompare(b)
 }
 
+// Canonical ingredient key: lower-case, snake_case. Used at every rename site
+// so a user-typed display name ("Cà Phê") always lands on the same DB key as
+// the auto-seeded one ("cà_phê"). Trim + lower + spaces→underscore is enough
+// because the DB column is `text` and accepts any unicode word chars.
+export function normalizeIngredientKey(raw) {
+    return String(raw || '').trim().toLowerCase().replace(/\s+/g, '_')
+}
+
 export function ingredientLabel(key) {
     if (INGREDIENT_NAMES[key]) return INGREDIENT_NAMES[key]
     const name = key.replace(/_/g, ' ')

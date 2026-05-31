@@ -1,0 +1,191 @@
+-- Snapshot warehouse stock at write-time so /ingredient Nhật ký can render
+-- "Tồn: X → Y" honestly for each refill/adjustment. Historical rows (created
+-- before this migration) won't have the snapshot — UI degrades gracefully.
+--
+-- Why server-side: the JS callers send the value the user saw when they opened
+-- the modal, but two concurrent staff edits would race. The RPC reads the
+-- CURRENT stock inside the same transaction as the insert, so its snapshot is
+-- authoritative. The adjust-stock path doesn't have an RPC yet, so JS callers
+-- pass the value they observed — close enough for a single-staff coffee cart.
+
+BEGIN;
+
+DROP FUNCTION IF EXISTS process_ingredient_restock(
+    UUID, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ, NUMERIC, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ
+);
+
+CREATE OR REPLACE FUNCTION process_ingredient_restock(
+    p_address_id    UUID,
+    p_ingredient    TEXT,
+    p_qty           NUMERIC,
+    p_subtotal      NUMERIC,
+    p_staff_name    TEXT,
+    p_created_at    TIMESTAMPTZ DEFAULT NULL,
+    p_discount      NUMERIC DEFAULT 0,
+    p_extra_cost    NUMERIC DEFAULT 0,
+    p_initial_payment NUMERIC DEFAULT NULL,
+    p_payment_method TEXT DEFAULT 'cash',
+    p_paid_at       TIMESTAMPTZ DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_current_stock NUMERIC;
+    v_old_unit_cost NUMERIC;
+    v_new_unit_cost NUMERIC;
+    v_expense_id    UUID;
+    v_payment_id    UUID;
+    v_display_name  TEXT;
+    v_amount        NUMERIC;
+    v_paid          NUMERIC;
+    v_created_at    TIMESTAMPTZ;
+    v_before_stock  NUMERIC;
+    v_after_stock   NUMERIC;
+BEGIN
+    IF COALESCE(p_discount, 0) < 0 THEN
+        RAISE EXCEPTION 'discount cannot be negative (got %)', p_discount;
+    END IF;
+    IF COALESCE(p_extra_cost, 0) < 0 THEN
+        RAISE EXCEPTION 'extra_cost cannot be negative (got %)', p_extra_cost;
+    END IF;
+    v_amount     := COALESCE(p_subtotal, 0) - COALESCE(p_discount, 0) + COALESCE(p_extra_cost, 0);
+    IF v_amount < 0 THEN v_amount := 0; END IF;
+    v_paid       := COALESCE(p_initial_payment, v_amount);
+    IF v_paid < 0 THEN v_paid := 0; END IF;
+    IF v_paid > v_amount THEN v_paid := v_amount; END IF;
+    v_created_at := COALESCE(p_created_at, NOW());
+    IF p_paid_at IS NOT NULL AND p_paid_at < v_created_at - interval '1 minute' THEN
+        RAISE EXCEPTION 'paid_at (%) cannot be before created_at (%)', p_paid_at, v_created_at;
+    END IF;
+
+    -- 1. Tồn hiện tại (counter remaining từ shift_closing gần nhất).
+    SELECT COALESCE(
+        (SELECT (elem->>'remaining')::NUMERIC
+         FROM jsonb_array_elements(inventory_report) AS elem
+         WHERE (elem->>'ingredient')::TEXT = p_ingredient
+         LIMIT 1),
+        0
+    )
+    INTO v_current_stock
+    FROM shift_closings
+    WHERE address_id = p_address_id AND inventory_report IS NOT NULL
+    ORDER BY created_at DESC
+    LIMIT 1;
+
+    IF v_current_stock IS NULL OR v_current_stock < 0 THEN v_current_stock := 0; END IF;
+
+    -- Snapshot warehouse-side. The RPC's v_current_stock above is the COUNTER
+    -- (latest shift_closing remaining). For Nhật ký's "Tồn X → Y" we want the
+    -- WAREHOUSE balance, which is Σ refills − Σ restocks-to-counter on or after
+    -- the first refill. Use the same recipe fetchIngredientStocks does.
+    WITH refills AS (
+        SELECT created_at, COALESCE((metadata->>'qty')::NUMERIC, 0) AS qty
+        FROM expenses
+        WHERE address_id = p_address_id
+          AND is_refill = true
+          AND metadata->>'ingredient' = p_ingredient
+    ),
+    first_refill AS (
+        SELECT MIN(created_at) AS first_at FROM refills WHERE qty IS NOT NULL
+    ),
+    restocks AS (
+        SELECT COALESCE((elem->>'restock')::NUMERIC, 0) AS qty
+        FROM shift_closings sc, jsonb_array_elements(sc.inventory_report) AS elem
+        WHERE sc.address_id = p_address_id
+          AND sc.inventory_report IS NOT NULL
+          AND (elem->>'ingredient')::TEXT = p_ingredient
+          AND sc.created_at >= (SELECT first_at FROM first_refill)
+    )
+    SELECT ROUND(GREATEST(
+        0,
+        COALESCE((SELECT SUM(qty) FROM refills), 0)
+            - COALESCE((SELECT SUM(qty) FROM restocks), 0)
+    )::numeric, 1)
+    INTO v_before_stock;
+
+    -- Round both sides to 1 decimal so the Nhật ký card matches what the user
+    -- saw on the Tồn kho row when they opened the form.
+    v_after_stock := ROUND(v_before_stock + COALESCE(p_qty, 0), 1);
+
+    -- 2. Giá vốn hiện tại
+    SELECT COALESCE(unit_cost, 0)
+    INTO v_old_unit_cost
+    FROM ingredient_costs
+    WHERE address_id = p_address_id AND ingredient = p_ingredient;
+
+    IF v_old_unit_cost IS NULL THEN v_old_unit_cost := 0; END IF;
+
+    -- 3. WAC dùng v_amount
+    IF (v_current_stock + p_qty) > 0 THEN
+        v_new_unit_cost := ROUND(((v_current_stock * v_old_unit_cost) + v_amount) / (v_current_stock + p_qty));
+    ELSE
+        v_new_unit_cost := v_old_unit_cost;
+    END IF;
+
+    UPDATE ingredient_costs
+    SET unit_cost = v_new_unit_cost
+    WHERE address_id = p_address_id AND ingredient = p_ingredient;
+
+    v_display_name := INITCAP(REPLACE(p_ingredient, '_', ' '));
+
+    INSERT INTO expenses (
+        address_id, name, amount, is_fixed, is_refill, payment_method,
+        staff_name, metadata, discount_amount, extra_cost, created_at
+    ) VALUES (
+        p_address_id,
+        v_display_name,
+        v_amount,
+        false,
+        true,
+        p_payment_method,
+        p_staff_name,
+        jsonb_build_object(
+            'ingredient',    p_ingredient,
+            'qty',           p_qty,
+            'subtotal',      p_subtotal,
+            'old_unit_cost', v_old_unit_cost,
+            'new_unit_cost', v_new_unit_cost,
+            'before_stock',  v_before_stock,
+            'after_stock',   v_after_stock
+        ),
+        COALESCE(p_discount, 0),
+        COALESCE(p_extra_cost, 0),
+        v_created_at
+    ) RETURNING id INTO v_expense_id;
+
+    IF v_paid > 0 THEN
+        INSERT INTO expense_payments (
+            expense_id, address_id, amount, payment_method, staff_name, paid_at
+        ) VALUES (
+            v_expense_id,
+            p_address_id,
+            v_paid,
+            COALESCE(p_payment_method, 'cash'),
+            p_staff_name,
+            COALESCE(p_paid_at, v_created_at)
+        ) RETURNING id INTO v_payment_id;
+    END IF;
+
+    RETURN jsonb_build_object(
+        'success',       true,
+        'expense_id',    v_expense_id,
+        'payment_id',    v_payment_id,
+        'amount',        v_amount,
+        'paid',          v_paid,
+        'owing',         v_amount - v_paid,
+        'old_unit_cost', v_old_unit_cost,
+        'new_unit_cost', v_new_unit_cost,
+        'before_stock',  v_before_stock,
+        'after_stock',   v_after_stock
+    );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION process_ingredient_restock(
+    UUID, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ, NUMERIC, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ
+) TO authenticated;
+
+COMMIT;

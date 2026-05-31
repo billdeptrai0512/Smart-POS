@@ -146,10 +146,12 @@ export async function upsertIngredientCost(ingredient, unitCost, addressId = nul
     if (unit) payload.unit = unit
     if (addressId) payload.address_id = addressId
 
-    if (opts.packSize !== undefined) payload.pack_size = opts.packSize || null
-    if (opts.packUnit !== undefined) payload.pack_unit = opts.packUnit || null
-    if (opts.minStock !== undefined) payload.min_stock = opts.minStock || null
-    if (opts.category !== undefined) payload.category = opts.category || null
+    // `??` so an explicit 0 / '' passed by the UI is preserved.
+    // Caller passes null/undefined when intentionally clearing the field.
+    if (opts.packSize !== undefined) payload.pack_size = opts.packSize ?? null
+    if (opts.packUnit !== undefined) payload.pack_unit = opts.packUnit ?? null
+    if (opts.minStock !== undefined) payload.min_stock = opts.minStock ?? null
+    if (opts.category !== undefined) payload.category = opts.category ?? null
 
     let { error } = await supabase
         .from('ingredient_costs')
@@ -282,7 +284,7 @@ export async function fetchIngredientStocks(addressId) {
             supabase
                 .from('expenses')
                 .select('created_at, metadata')
-        ).eq('is_refill', true)
+        ).eq('is_refill', true).limit(10000)  // disaster cap; RPC path has no such ceiling.
     ])
 
     const counter = {}
@@ -476,24 +478,35 @@ function computeDeficits(refills, closings) {
 // Tạo 1 expense `is_refill=true, amount=0, metadata.adjustment=true, qty=delta` —
 // được sum vào Σrefill_qty của fetchIngredientStocks → warehouse +delta.
 // Không động unit_cost (giá vốn giữ nguyên). Filter `metadata.adjustment` ra khỏi tab Đi chợ ở client.
-export async function adjustIngredientStock(addressId, ingredient, delta, staffName) {
-    if (localRepo.isGuest()) {
-        const displayName = `Hiệu chỉnh tồn ${ingredient}`
-        return await insertExpense(displayName, 0, addressId, false, staffName, true, 'cash', { ingredient, qty: delta, adjustment: true })
-    }
-    if (!supabase) throw new Error('No Supabase connection')
+//
+// opts.beforeStock: warehouse stock the user saw when initiating the edit. Stored
+// in metadata as `before_stock` + derived `after_stock = before + delta` so the
+// Nhật ký card can render "Tồn X → Y" honestly. Best-effort — two concurrent
+// edits would race, but for a 1–3 staff coffee cart that's an acceptable
+// approximation. Caller passes `null` / omits when the value isn't known.
+export async function adjustIngredientStock(addressId, ingredient, delta, staffName, opts = {}) {
     if (!Number.isFinite(delta) || delta === 0) return null
     const displayName = `Hiệu chỉnh tồn ${ingredient}`
-    return await insertExpense(
-        displayName,
-        0,
-        addressId,
-        false,
-        staffName,
-        true,
-        'cash',
-        { ingredient, qty: delta, adjustment: true }
-    )
+    const meta = { ingredient, qty: delta, adjustment: true }
+    if (Number.isFinite(opts?.beforeStock)) {
+        // 1-decimal round matches the Tồn kho display, so the snapshot reads
+        // identically to what the user saw on the row when they opened edit.
+        const before = roundStock(Number(opts.beforeStock))
+        meta.before_stock = before
+        meta.after_stock = roundStock(before + delta)
+    }
+    if (localRepo.isGuest()) {
+        return await insertExpense(displayName, 0, addressId, false, staffName, true, 'cash', meta)
+    }
+    if (!supabase) throw new Error('No Supabase connection')
+    return await insertExpense(displayName, 0, addressId, false, staffName, true, 'cash', meta)
+}
+
+// Stock numbers are stored as floats (WAC math can produce arbitrary precision).
+// Card UI rounds to 1 decimal; persist the same precision so historical reads
+// don't reveal accumulated float noise.
+function roundStock(x) {
+    return Math.round(x * 10) / 10
 }
 
 // Process a restock: updates COGS, ghi nhận invoice + (optional) payment.
@@ -513,9 +526,17 @@ export async function processIngredientRestock(addressId, ingredient, qty, staff
     const {
         subtotal = 0, discount = 0, extraCost = 0,
         paid = null, paymentMethod = 'cash', purchaseDate = null,
+        beforeStock = null,
     } = opts
     const amountDue = Math.max(0, Number(subtotal) - Number(discount) + Number(extraCost))
     const paidAmount = paid == null ? amountDue : Math.max(0, Math.min(Number(paid), amountDue))
+    // Snapshot only on non-RPC paths (guest / default-address). The address RPC
+    // computes its own authoritative snapshot inside the same transaction.
+    const buildSnapshotMeta = (base) => {
+        if (!Number.isFinite(Number(beforeStock))) return base
+        const b = roundStock(Number(beforeStock))
+        return { ...base, before_stock: b, after_stock: roundStock(b + Number(qty || 0)) }
+    }
 
     let result
     if (localRepo.isGuest()) {
@@ -526,7 +547,7 @@ export async function processIngredientRestock(addressId, ingredient, qty, staff
         const displayName = `Đi chợ: ${ingredient}`
         const invoice = await insertExpense(
             displayName, amountDue, addressId, false, staffName, true, paymentMethod,
-            { ingredient, qty, subtotal },
+            buildSnapshotMeta({ ingredient, qty, subtotal }),
             null, purchaseDate,
             { discount_amount: discount, extra_cost: extraCost }
         )
@@ -569,12 +590,25 @@ export async function processIngredientRestock(addressId, ingredient, qty, staff
             const unitCost = Number(qty) > 0 ? Math.round(amountDue / Number(qty)) : 0
             await upsertIngredientCost(ingredient, unitCost, null)
             const displayName = `Đi chợ: ${ingredient}`
-            result = await insertExpense(
+            const invoice = await insertExpense(
                 displayName, amountDue, null, false, staffName, true, paymentMethod,
-                { ingredient, qty, subtotal },
+                buildSnapshotMeta({ ingredient, qty, subtotal }),
                 null, purchaseDate,
                 { discount_amount: discount, extra_cost: extraCost }
             )
+            // Mirror the RPC contract: paid portion lands in expense_payments so the
+            // owing math reads the same on the template as on a real address.
+            if (paidAmount > 0 && invoice?.id && supabase) {
+                await supabase.from('expense_payments').insert({
+                    expense_id: invoice.id,
+                    address_id: null,
+                    amount: paidAmount,
+                    payment_method: paymentMethod,
+                    staff_name: staffName,
+                    paid_at: purchaseDate || new Date().toISOString(),
+                })
+            }
+            result = { success: true, expense_id: invoice?.id, amount: amountDue, paid: paidAmount, owing: amountDue - paidAmount }
         }
     }
     invalidateReportCache(addressId)

@@ -369,7 +369,7 @@ export default function HistoryPage() {
         // returns to the entry point (e.g. /addresses) instead of cycling through tab toggles.
         const navState = { from: backTo }
         if (scope === 'week' || scope === 'month') {
-            navigate(`/range-report?range=${scope}`, { replace: true, state: { ...navState, offset } })
+            navigate('/daily-report', { replace: true, state: { ...navState, scope, offset } })
         } else if (offset !== 0) {
             const d = new Date()
             d.setDate(d.getDate() + offset)

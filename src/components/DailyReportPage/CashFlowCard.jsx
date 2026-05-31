@@ -1,5 +1,6 @@
 import { formatVND, parseVNDInput } from '../../utils'
 import { ingredientLabel } from '../../utils/ingredients'
+import { isSameDayVN } from '../../utils/dateVN'
 
 export default function CashFlowCard({
     actualCash = 0,
@@ -64,13 +65,8 @@ export default function CashFlowCard({
     const invoiceCreatedById = new Map(
         (expenses || []).filter(e => e.is_refill).map(e => [e.id, e.created_at])
     )
-    const isSameDayLocal = (a, b) => {
-        if (!a || !b) return false
-        const da = new Date(a), db = new Date(b)
-        return da.getFullYear() === db.getFullYear()
-            && da.getMonth() === db.getMonth()
-            && da.getDate() === db.getDate()
-    }
+    // Bucket comparisons must use VN-tz dates — browser-local getFullYear/Month/Date
+    // would flip the bucket near midnight UTC for any non-VN device.
     const groupByInvoice = (list) => {
         const byName = new Map()
         for (const p of list) {
@@ -97,7 +93,7 @@ export default function CashFlowCard({
     const debtRepayments = []
     for (const p of nvlPayments) {
         const invCreated = invoiceCreatedById.get(p.expense_id)
-        if (invCreated && isSameDayLocal(invCreated, p.paid_at)) purchaseToday.push(p)
+        if (invCreated && isSameDayVN(invCreated, p.paid_at)) purchaseToday.push(p)
         else debtRepayments.push(p)
     }
     const nvlGrouped = groupByInvoice(purchaseToday)

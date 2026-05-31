@@ -119,7 +119,14 @@ function KiemKeModal({ deficits, ingredientUnits, configByIngredient, addressId,
                 // Skipping near-zero deltas avoids no-op writes.
                 const delta = actual - d.deficit
                 if (!Number.isFinite(delta) || Math.abs(delta) < 0.0001) continue
-                await adjustIngredientStock(addressId ?? null, d.ingredient, delta, staffName || 'Kiểm kê')
+                // Pass the RAW (unclamped) warehouse as beforeStock so the audit
+                // entry shows "Tồn -5 → 50" — the honest "sheet was broken at -5,
+                // physical count is 50" story. The displayed warehouse on /ingredients
+                // is max(0, raw), but for the kiểm kê log the raw value is what
+                // the manager needs to see.
+                await adjustIngredientStock(addressId ?? null, d.ingredient, delta, staffName || 'Kiểm kê', {
+                    beforeStock: d.deficit,
+                })
             }
             setDone(true)
             setTimeout(() => onResolved?.(), 800)
