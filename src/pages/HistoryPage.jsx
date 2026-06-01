@@ -369,13 +369,15 @@ export default function HistoryPage() {
                 />
             )}
 
-            {/* FAB: Add expense — floating bottom-right, same style as sort button in /recipes */}
+            {/* FAB: Add expense — floating bottom-right, matching the /recipes & /ingredients
+                FAB position (the date-picker footer is gone, so it sits flush to the bottom). */}
             {activeTab === 'expense' && !isReadOnly && (
-                <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
-                    <div className="flex justify-end px-4 mb-[72px] pointer-events-auto">
+                <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-50">
+                    <div className="flex justify-end px-4 pb-[max(env(safe-area-inset-bottom),16px)] pointer-events-auto">
                         <button
                             onClick={() => setShowAddModal(true)}
-                            className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
+                            aria-label="Thêm chi phí"
+                            className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center justify-center text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
                         >
                             <Plus size={18} />
                         </button>
