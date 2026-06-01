@@ -231,16 +231,23 @@ export default function IngredientDetailPage() {
 
     async function handleCancelRestock(entry) {
         const qty = entry?.metadata?.qty || 0
+        const isAdjust = !!entry?.metadata?.adjustment
         const label = ingredientLabel(ingredientKey)
-        if (!window.confirm(
-            `Hủy phiếu nhập ${qty > 0 ? '+' : ''}${qty} ${unit} ${label}?\n` +
-            `Tồn kho sẽ giảm lại ${qty} ${unit}, hoàn tiền đã trả, và tính lại giá vốn.`
-        )) return
+        const qtyStr = `${qty > 0 ? '+' : ''}${qty} ${unit}`
+        // Reverting a +454 restock removes 454; reverting a −454 adjustment adds 454 back.
+        const revertStr = `${qty > 0 ? '−' : '+'}${Math.abs(qty)} ${unit}`
+        const head = isAdjust
+            ? `Hủy hiệu chỉnh ${qtyStr} ${label}?`
+            : `Hủy phiếu nhập ${qtyStr} ${label}?`
+        const detail = isAdjust
+            ? `Tồn kho sẽ thay đổi ${revertStr} để hoàn lại hiện trạng.`
+            : `Tồn kho ${revertStr}, hoàn tiền đã trả, và tính lại giá vốn.`
+        if (!window.confirm(`${head}\n${detail}`)) return
         setSaving(true)
         try {
             await cancelRestock(selectedAddress?.id, entry.id, profile?.name)
             await Promise.all([reloadHistory(), reloadStock(), refreshProducts?.(), refreshTodayExpenses?.()])
-        } catch (err) { showError(err, 'Hủy phiếu nhập kho') }
+        } catch (err) { showError(err, isAdjust ? 'Hủy hiệu chỉnh tồn' : 'Hủy phiếu nhập kho') }
         finally { setSaving(false) }
     }
 

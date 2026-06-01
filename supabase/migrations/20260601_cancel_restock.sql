@@ -38,6 +38,7 @@ DECLARE
     v_total_cost    NUMERIC;
     v_new_unit_cost NUMERIC;
     v_before_stock  NUMERIC;
+    v_deleted       INT;
 BEGIN
     IF p_address_id IS NULL OR p_expense_id IS NULL THEN
         RAISE EXCEPTION 'p_address_id and p_expense_id are required';
@@ -96,9 +97,21 @@ BEGIN
     INTO v_before_stock;
 
     -- 1. Delete the row (CASCADE removes its expense_payments → reverses any cash-out).
+    --    Guard against a double-cancel race: if another request already deleted it,
+    --    bail BEFORE inserting a duplicate audit row / re-touching WAC.
     DELETE FROM expenses WHERE id = p_expense_id AND address_id = p_address_id;
+    GET DIAGNOSTICS v_deleted = ROW_COUNT;
+    IF v_deleted = 0 THEN
+        RAISE EXCEPTION 'Entry % was already cancelled', p_expense_id;
+    END IF;
 
     -- 2. Recompute WAC over the REMAINING real purchases (exclude adjustments + amount=0).
+    --    NOTE: this is a full-history average (Σcost / Σqty), NOT the incremental
+    --    moving-average that process_ingredient_restock uses (which weights by the
+    --    on-hand counter at restock time). They differ by design — per the product
+    --    decision "tính lại giá vốn từ đầu" when cancelling — so unit_cost may shift
+    --    to a value the normal restock path wouldn't produce. Acceptable for a
+    --    small cart; revisit if exact moving-average lineage is ever required.
     SELECT COALESCE(SUM(COALESCE((metadata->>'qty')::NUMERIC, 0)), 0),
            COALESCE(SUM(amount), 0)
     INTO v_total_qty, v_total_cost
