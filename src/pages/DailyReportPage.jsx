@@ -59,9 +59,15 @@ export default function DailyReportPage() {
     const { selectedAddress } = useAddress()
     const initialDate = location.state?.initialDate || null
 
-    const [scope, setScope] = useState('day')
-    const [offset, setOffset] = useState(0)
-    const [customRange, setCustomRange] = useState(null)
+    // Scope/offset/range are carried across the Nhật ký ↔ Báo cáo tab switch so a
+    // week/month/custom selection stays put instead of snapping back to "hôm nay".
+    const initialScope = ['day', 'week', 'month', 'custom'].includes(location.state?.scope) ? location.state.scope : 'day'
+    const initialOffset = typeof location.state?.offset === 'number' ? location.state.offset : 0
+    const initialCustomRange = location.state?.customRange?.startISO ? location.state.customRange : null
+
+    const [scope, setScope] = useState(initialScope)
+    const [offset, setOffset] = useState(initialOffset)
+    const [customRange, setCustomRange] = useState(initialCustomRange)
     const [hasManualPick, setHasManualPick] = useState(false)
     const [showLossUpsell, setShowLossUpsell] = useState(false)
 
@@ -704,12 +710,12 @@ export default function DailyReportPage() {
             <HistoryHeader
                 rangeLabel={rangeLabel}
                 scope={scope}
-                onBack={() => goToMenuStep('report', -1, { navigate, backTo })}
-                onForward={() => goToMenuStep('report', +1, { navigate, backTo })}
+                onBack={() => goToMenuStep('report', -1, { navigate, backTo, scopeState: { scope, offset, customRange } })}
+                onForward={() => goToMenuStep('report', +1, { navigate, backTo, scopeState: { scope, offset, customRange } })}
                 activeTab="report"
                 onTabSelect={(tab) => {
                     if (tab === 'report') return
-                    navigate('/history', { replace: true, state: { from: backTo, tab } })
+                    navigate('/history', { replace: true, state: { from: backTo, tab, scope, offset, customRange } })
                 }}
                 canGoForward={offset < 0}
                 onOffsetPrev={() => setOffset(p => p - 1)}

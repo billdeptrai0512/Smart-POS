@@ -47,10 +47,11 @@ export default function HistoryPage() {
     const expensesToView = location.state?.expensesToView  // read-only past date list
     const isReadOnly = location.state?.isReadOnly || false
     const backTo = location.state?.from || '/pos'
-    // Scope/offset hand-off from RangeReport footer (Tuần/Tháng) so the manager keeps
-    // their date window when toggling tabs.
-    const initialScope = ['day', 'week', 'month'].includes(location.state?.scope) ? location.state.scope : 'day'
+    // Scope/offset/range hand-off so the date window stays put when toggling tabs
+    // (Nhật ký ↔ Báo cáo) or arriving from RangeReport.
+    const initialScope = ['day', 'week', 'month', 'custom'].includes(location.state?.scope) ? location.state.scope : 'day'
     const initialOffset = typeof location.state?.offset === 'number' ? location.state.offset : 0
+    const initialCustomRange = location.state?.customRange?.startISO ? location.state.customRange : null
 
     // ─── UI state ─────────────────────────────────────────────────────
     const [activeTab, setActiveTab] = useState(initialTab)
@@ -58,7 +59,7 @@ export default function HistoryPage() {
 
     const [scope, setScope] = useState(initialScope)
     const [offset, setOffset] = useState(initialOffset)
-    const [customRange, setCustomRange] = useState(null) // { startISO, endISO } when scope === 'custom'
+    const [customRange, setCustomRange] = useState(initialCustomRange) // { startISO, endISO } when scope === 'custom'
     // True only when user picked a past day via the calendar input (not via chevrons).
     // Gates the "→ ngày" end-pick chip so chevron-stepping doesn't surface the range UI.
     const [hasManualPick, setHasManualPick] = useState(false)
@@ -362,11 +363,14 @@ export default function HistoryPage() {
     }
 
     const handleReportNav = () => {
-        if (scope === 'custom') return // RangeReport for custom range is a follow-up task
         // Tab-switch within the Nhật-ký/Báo-cáo dashboard: use replace so the back button
         // returns to the entry point (e.g. /addresses) instead of cycling through tab toggles.
+        // Carry the full date selection (scope/offset/customRange) so /daily-report opens
+        // on the same window instead of resetting to "hôm nay".
         const navState = { from: backTo }
-        if (scope === 'week' || scope === 'month') {
+        if (scope === 'custom') {
+            navigate('/daily-report', { replace: true, state: { ...navState, scope, customRange } })
+        } else if (scope === 'week' || scope === 'month') {
             navigate('/daily-report', { replace: true, state: { ...navState, scope, offset } })
         } else if (offset !== 0) {
             const d = new Date()

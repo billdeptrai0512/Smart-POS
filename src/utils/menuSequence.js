@@ -44,9 +44,11 @@ export const menuPrev = (key) => menuStep(key, -1)
 //   ctx.setActiveTab  — HistoryPage: switch orders/expense in place
 //   ctx.setViewMode   — IngredientManagementPage: switch main/packaging in place
 //   ctx.goReport      — HistoryPage: scope-aware /daily-report nav (handleReportNav)
+//   ctx.scopeState    — { scope, offset, customRange } carried into /history so the
+//                       date window survives the Báo cáo → Thu nhập/Chi phí jump
 export function goToMenuStep(currentKey, dir, ctx) {
     const target = menuStep(currentKey, dir)
-    const { navigate, backTo, setActiveTab, setViewMode, goReport } = ctx
+    const { navigate, backTo, setActiveTab, setViewMode, goReport, scopeState } = ctx
 
     // Off the end of the line → leave the dashboard.
     if (!target) { navigate(MENU_BOUNDARY_ROUTE); return }
@@ -61,11 +63,11 @@ export function goToMenuStep(currentKey, dir, ctx) {
 
     switch (target.route) {
         case '/history':
-            navigate('/history', { state: { from: backTo, tab: target.tab } })
+            navigate('/history', { state: { from: backTo, tab: target.tab, ...scopeState } })
             break
         case '/daily-report':
             if (goReport) goReport()
-            else navigate('/daily-report', { state: { from: backTo } })
+            else navigate('/daily-report', { state: { from: backTo, ...scopeState } })
             break
         case '/ingredients':
             navigate('/ingredients', { state: { from: backTo, viewMode: target.viewMode } })
