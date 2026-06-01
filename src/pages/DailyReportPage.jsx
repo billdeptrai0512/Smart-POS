@@ -25,7 +25,6 @@ import InventoryReportCard from '../components/DailyReportPage/InventoryReportCa
 import ShiftPrepCard from '../components/DailyReportPage/ShiftPrepCard'
 import RangeLossCard from '../components/DailyReportPage/RangeLossCard'
 import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY } from '../components/DailyReportPage/ReportViewFilter'
-import HistoryFooter from '../components/HistoryPage/HistoryFooter'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useEntitlement, hasFeature } from '../hooks/useEntitlement'
@@ -244,6 +243,26 @@ export default function DailyReportPage() {
             setScope('custom')
         }
     }
+    // Shift the custom range by its own width (the ‹ › arrows beside the range chip).
+    // dir = -1 (earlier) | +1 (later). End is clamped to today; when the forward
+    // shift would cross today, the whole window is pinned to end at today so the
+    // span stays constant. Span includes both endpoints (inclusive).
+    const handleShiftRange = (dir) => {
+        if (scope !== 'custom' || !customRange?.startISO) return
+        const MS = 86_400_000
+        const start = new Date(`${customRange.startISO}T00:00:00+07:00`)
+        const end = new Date(`${customRange.endISO}T00:00:00+07:00`)
+        const spanDays = Math.round((end - start) / MS) // inclusive width − 1
+        let newStart = new Date(start.getTime() + dir * (spanDays + 1) * MS)
+        let newEnd = new Date(end.getTime() + dir * (spanDays + 1) * MS)
+        if (dir > 0 && dateStringVN(newEnd) > todayISO) {
+            newEnd = new Date(`${todayISO}T00:00:00+07:00`)
+            newStart = new Date(newEnd.getTime() - spanDays * MS)
+        }
+        setCustomRange({ startISO: dateStringVN(newStart), endISO: dateStringVN(newEnd) })
+    }
+    const canShiftRangeForward = scope === 'custom' && !!customRange?.endISO && customRange.endISO < todayISO
+
     // Picker presets (Hôm nay / Tuần này / Tháng này) reset scope to the preset's
     // bucket so the page reuses the existing offset-based fetch path instead of
     // forcing a custom-range query when the user already meant "the current period".
@@ -701,8 +720,9 @@ export default function DailyReportPage() {
                 onNextDay={handleNextDay}
                 customRange={customRange}
                 onRangeChange={handleRangeChange}
+                onShiftRange={handleShiftRange}
+                canShiftRangeForward={canShiftRangeForward}
                 onPresetSelect={handlePickerPreset}
-                belowTabs={<ReportViewFilter value={view} onChange={setView} />}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-6 pb-6 space-y-4 bg-bg">
@@ -898,16 +918,12 @@ export default function DailyReportPage() {
                 )
             )}
 
-            <HistoryFooter
-                scope={scope}
-                onScopeChange={(range) => {
-                    if (range !== scope) {
-                        setScope(range)
-                        setOffset(0)
-                        setHasManualPick(false)
-                    }
-                }}
-            />
+            {/* Footer = report view switcher (Dòng tiền / Tồn kho / Lợi nhuận).
+                Replaces the old scope bar; scope is now driven entirely by the
+                header date control + its presets. */}
+            <div className="shrink-0 bg-surface/80 backdrop-blur-md border-t border-border/40 px-4 py-2.5 pb-[max(env(safe-area-inset-bottom),10px)]">
+                <ReportViewFilter value={view} onChange={setView} isStaff={isStaff} />
+            </div>
             <Toast toast={toast} />
             <UpsellSheet
                 open={showLossUpsell}

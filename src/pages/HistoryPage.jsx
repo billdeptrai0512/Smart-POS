@@ -15,7 +15,6 @@ import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import OrdersList from '../components/HistoryPage/OrdersList'
 import ExpensePanel from '../components/HistoryPage/ExpensePanel'
 import AddExpenseModal from '../components/HistoryPage/AddExpenseModal'
-import HistoryFooter from '../components/HistoryPage/HistoryFooter'
 import { shiftFinalizedKey } from '../constants/storageKeys'
 import { Plus } from 'lucide-react'
 import { fetchExpenseCategories, insertExpenseCategory, updateExpenseCategory, deleteExpenseCategory } from '../services/expenseService'
@@ -148,14 +147,6 @@ export default function HistoryPage() {
     const isTodayScope = scope === 'day' && offset === 0
     const isCustomScope = scope === 'custom'
 
-    // ─── Custom range handlers ────────────────────────────────────────
-    // Tab change: always exits custom mode and resets offset.
-    const handleScopeChange = (next) => {
-        setOffset(0)
-        setScope(next)
-        setHasManualPick(false)
-    }
-
     // Unified calendar emits {startISO, endISO}. Equal endpoints = single day →
     // day scope via offset; different = real range → custom scope. End clamped to today.
     const handleRangeChange = ({ startISO, endISO }) => {
@@ -173,6 +164,25 @@ export default function HistoryPage() {
             setHasManualPick(false)
             setScope('custom')
         }
+    }
+
+    // Shift the custom range by its own width (the ‹ › arrows beside the range
+    // chip). dir = -1 earlier | +1 later; end clamped to today (pins window when
+    // a forward shift would cross today). Span inclusive of both endpoints.
+    const handleShiftRange = (dir) => {
+        if (scope !== 'custom' || !customRange?.startISO) return
+        const MS = 86_400_000
+        const today = getLocalISO(new Date())
+        const start = new Date(`${customRange.startISO}T00:00:00+07:00`)
+        const end = new Date(`${customRange.endISO}T00:00:00+07:00`)
+        const spanDays = Math.round((end - start) / MS)
+        let newStart = new Date(start.getTime() + dir * (spanDays + 1) * MS)
+        let newEnd = new Date(end.getTime() + dir * (spanDays + 1) * MS)
+        if (dir > 0 && getLocalISO(newEnd) > today) {
+            newEnd = new Date(`${today}T00:00:00+07:00`)
+            newStart = new Date(newEnd.getTime() - spanDays * MS)
+        }
+        setCustomRange({ startISO: getLocalISO(newStart), endISO: getLocalISO(newEnd) })
     }
 
     // ─── Day-mode date picker ─────────────────────────────────────────
@@ -391,6 +401,8 @@ export default function HistoryPage() {
                 onNextDay={handleNextDay}
                 customRange={customRange}
                 onRangeChange={handleRangeChange}
+                onShiftRange={handleShiftRange}
+                canShiftRangeForward={scope === 'custom' && !!customRange?.endISO && customRange.endISO < todayISO}
                 onPresetSelect={(preset) => applyPresetToScope(preset, { setScope, setOffset, setHasManualPick, setCustomRange })}
             />
 
@@ -457,12 +469,6 @@ export default function HistoryPage() {
                     onAmountChange={setCostAmount}
                 />
             )}
-
-            <HistoryFooter
-                scope={scope}
-                isReadOnly={isReadOnly}
-                onScopeChange={handleScopeChange}
-            />
         </div>
     )
 }

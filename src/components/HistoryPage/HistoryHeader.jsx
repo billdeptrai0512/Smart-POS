@@ -2,7 +2,7 @@
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import HistoryTabsBar from './HistoryTabsBar'
 import DatePicker from '../common/DatePicker'
-import { formatIsoShort } from '../common/datePickerUtils'
+import { formatIsoShort, formatIsoDisplay } from '../common/datePickerUtils'
 
 export default function HistoryHeader({
     rangeLabel, totalCups, scope, isReadOnly,
@@ -16,6 +16,8 @@ export default function HistoryHeader({
     dayInputValue, todayISO, canGoForwardDay,
     onPrevDay, onNextDay,
     customRange, onRangeChange,
+    // Range scope: ‹ › shift the whole window by its own width.
+    onShiftRange, canShiftRangeForward,
     // Preset chips inside the DatePicker popover (Hôm nay / Tuần này / Tháng này).
     // Page maps preset.scope back to its own scope state.
     onPresetSelect,
@@ -54,6 +56,8 @@ export default function HistoryHeader({
                                 onPrevDay={onPrevDay}
                                 onNextDay={onNextDay}
                                 onRangeChange={onRangeChange}
+                                onShiftRange={onShiftRange}
+                                canShiftRangeForward={canShiftRangeForward}
                                 onPresetSelect={onPresetSelect}
                             />
                         )
@@ -93,28 +97,34 @@ function chipTrigger({ labelOverride } = {}) {
 
 // Unified day + custom-range control. Always a range-mode calendar: same day
 // twice → single day, two days → range. The page decides scope from the emitted
-// endpoints. Day-stepping chevrons flank the chip ONLY in single-day scope
-// (stepping a multi-day range by one day isn't meaningful).
-function DateRangePicker({ scope, dayInputValue, customRange, todayISO, canGoForwardDay, onPrevDay, onNextDay, onRangeChange, onPresetSelect }) {
+// endpoints. Chevrons flank the chip in BOTH scopes:
+//   • day scope    → step one day (onPrevDay / onNextDay).
+//   • custom scope → shift the whole window by its own width (onShiftRange ∓1).
+// The forward chevron is disabled once the window already touches today.
+function DateRangePicker({ scope, dayInputValue, customRange, todayISO, canGoForwardDay, onPrevDay, onNextDay, onRangeChange, onShiftRange, canShiftRangeForward, onPresetSelect }) {
     const isDay = scope === 'day'
     // Feed the calendar the current selection so it highlights correctly: in day
     // scope that's a zero-width {day, day} range; in custom scope the real range.
     const value = isDay
         ? { startISO: dayInputValue, endISO: dayInputValue }
         : (customRange?.startISO ? customRange : null)
+    // Single day → full dd/mm/yyyy; range → compact dd/mm – dd/mm.
     const label = isDay
-        ? formatIsoShort(dayInputValue)
+        ? formatIsoDisplay(dayInputValue)
         : (value ? `${formatIsoShort(value.startISO)} – ${formatIsoShort(value.endISO)}` : 'Chọn ngày')
+
+    const onPrev = isDay ? onPrevDay : () => onShiftRange?.(-1)
+    const onNext = isDay ? onNextDay : () => onShiftRange?.(1)
+    const canForward = isDay ? canGoForwardDay : canShiftRangeForward
+
     return (
         <div className="flex items-center gap-1 pointer-events-auto mt-0.5">
-            {isDay && (
-                <button
-                    onClick={onPrevDay}
-                    className="w-5 h-5 flex items-center justify-center rounded-full text-text-secondary hover:text-primary active:text-primary transition-colors"
-                >
-                    <ChevronLeft size={14} strokeWidth={2.5} />
-                </button>
-            )}
+            <button
+                onClick={onPrev}
+                className="w-5 h-5 flex items-center justify-center rounded-full text-text-secondary hover:text-primary active:text-primary transition-colors"
+            >
+                <ChevronLeft size={14} strokeWidth={2.5} />
+            </button>
             <DatePicker
                 range
                 value={value}
@@ -123,14 +133,12 @@ function DateRangePicker({ scope, dayInputValue, customRange, todayISO, canGoFor
                 onPresetSelect={onPresetSelect}
                 trigger={chipTrigger({ labelOverride: label })}
             />
-            {isDay && (
-                <button
-                    onClick={onNextDay}
-                    className={`w-5 h-5 flex items-center justify-center rounded-full transition-colors ${canGoForwardDay ? 'text-text-secondary hover:text-primary active:text-primary' : 'text-text-dim opacity-30 cursor-default'}`}
-                >
-                    <ChevronRight size={14} strokeWidth={2.5} />
-                </button>
-            )}
+            <button
+                onClick={() => canForward && onNext()}
+                className={`w-5 h-5 flex items-center justify-center rounded-full transition-colors ${canForward ? 'text-text-secondary hover:text-primary active:text-primary' : 'text-text-dim opacity-30 cursor-default'}`}
+            >
+                <ChevronRight size={14} strokeWidth={2.5} />
+            </button>
         </div>
     )
 }
