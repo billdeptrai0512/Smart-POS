@@ -599,13 +599,18 @@ export async function processIngredientRestock(addressId, ingredient, qty, staff
             // Mirror the RPC contract: paid portion lands in expense_payments so the
             // owing math reads the same on the template as on a real address.
             if (paidAmount > 0 && invoice?.id && supabase) {
+                // Backdated restock: created_at must match paid_at, else the
+                // chk_payment_paid_at_not_before_created constraint rejects the row
+                // (created_at would default to NOW() while paid_at is in the past).
+                const paidAtISO = purchaseDate || new Date().toISOString()
                 await supabase.from('expense_payments').insert({
                     expense_id: invoice.id,
                     address_id: null,
                     amount: paidAmount,
                     payment_method: paymentMethod,
                     staff_name: staffName,
-                    paid_at: purchaseDate || new Date().toISOString(),
+                    paid_at: paidAtISO,
+                    created_at: paidAtISO,
                 })
             }
             result = { success: true, expense_id: invoice?.id, amount: amountDue, paid: paidAmount, owing: amountDue - paidAmount }
