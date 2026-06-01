@@ -38,6 +38,7 @@ export default function DatePicker({
     onPresetSelect,
     presets = true,
     extraPresets = [],
+    activePresetKey,   // highlight the matching quick-preset chip (e.g. 'week' | 'month' | 'today')
     range = false,
     trigger,
     align = 'center',
@@ -226,16 +227,23 @@ export default function DatePicker({
                                 </div>
                             )}
                             <div className="grid grid-cols-3 gap-1.5">
-                                {presetList.map(p => (
-                                    <button
-                                        key={p.key}
-                                        type="button"
-                                        onClick={() => handlePreset(p)}
-                                        className="px-2 py-1.5 rounded-lg bg-surface-light border border-border/60 text-[11px] font-bold text-text-secondary text-center hover:bg-primary/10 hover:text-primary hover:border-primary/40 transition-colors"
-                                    >
-                                        {p.label}
-                                    </button>
-                                ))}
+                                {presetList.map(p => {
+                                    const active = p.key === activePresetKey
+                                    return (
+                                        <button
+                                            key={p.key}
+                                            type="button"
+                                            onClick={() => handlePreset(p)}
+                                            className={`px-2 py-1.5 rounded-lg border text-[11px] font-bold text-center transition-colors ${
+                                                active
+                                                    ? 'bg-primary text-black border-primary'
+                                                    : 'bg-surface-light border-border/60 text-text-secondary hover:bg-primary/10 hover:text-primary hover:border-primary/40'
+                                            }`}
+                                        >
+                                            {p.label}
+                                        </button>
+                                    )
+                                })}
                                 {extraPresets.map(p => (
                                     <button
                                         key={p.key}

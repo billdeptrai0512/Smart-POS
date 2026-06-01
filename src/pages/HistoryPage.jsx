@@ -394,6 +394,8 @@ export default function HistoryPage() {
                 }}
                 onOffsetPrev={() => setOffset(p => p - 1)}
                 onOffsetNext={() => setOffset(p => p + 1)}
+                rangeStartISO={rangeStart ? getLocalISO(rangeStart) : undefined}
+                rangeEndISO={rangeEnd ? getLocalISO(rangeEnd) : undefined}
                 dayInputValue={dayInputValue}
                 todayISO={todayISO}
                 canGoForwardDay={canGoForwardDay}

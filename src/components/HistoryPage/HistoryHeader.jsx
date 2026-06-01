@@ -9,8 +9,10 @@ export default function HistoryHeader({
     onBack, onForward,
     // Tabs row (moved from footer)
     activeTab, onTabSelect,
-    // Week/month mode
+    // Week/month mode — chevrons step by one period; the calendar still renders
+    // with the active period highlighted + its preset chip selected.
     canGoForward, onOffsetPrev, onOffsetNext,
+    rangeStartISO, rangeEndISO,
     // Day + custom share ONE range calendar. Tap a day then the same day again
     // → single day (scope 'day'); tap two different days → range (scope 'custom').
     dayInputValue, todayISO, canGoForwardDay,
@@ -38,29 +40,25 @@ export default function HistoryHeader({
                 <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
                     <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Nhật ký</span>
                     {!isReadOnly ? (
-                        scope === 'week' || scope === 'month' ? (
-                            <RangeNav
-                                rangeLabel={rangeLabel}
-                                canGoForward={canGoForward}
-                                onPrev={onOffsetPrev}
-                                onNext={onOffsetNext}
-                                onPresetSelect={onPresetSelect}
-                            />
-                        ) : (
-                            <DateRangePicker
-                                scope={scope}
-                                dayInputValue={dayInputValue}
-                                customRange={customRange}
-                                todayISO={todayISO}
-                                canGoForwardDay={canGoForwardDay}
-                                onPrevDay={onPrevDay}
-                                onNextDay={onNextDay}
-                                onRangeChange={onRangeChange}
-                                onShiftRange={onShiftRange}
-                                canShiftRangeForward={canShiftRangeForward}
-                                onPresetSelect={onPresetSelect}
-                            />
-                        )
+                        <DateRangePicker
+                            scope={scope}
+                            rangeLabel={rangeLabel}
+                            rangeStartISO={rangeStartISO}
+                            rangeEndISO={rangeEndISO}
+                            dayInputValue={dayInputValue}
+                            customRange={customRange}
+                            todayISO={todayISO}
+                            canGoForwardDay={canGoForwardDay}
+                            canGoForward={canGoForward}
+                            onPrevDay={onPrevDay}
+                            onNextDay={onNextDay}
+                            onOffsetPrev={onOffsetPrev}
+                            onOffsetNext={onOffsetNext}
+                            onRangeChange={onRangeChange}
+                            onShiftRange={onShiftRange}
+                            canShiftRangeForward={canShiftRangeForward}
+                            onPresetSelect={onPresetSelect}
+                        />
                     ) : (
                         <span className="text-[12px] font-bold text-text/80 leading-none tabular-nums">{totalCups} ly</span>
                     )}
@@ -95,27 +93,45 @@ function chipTrigger({ labelOverride } = {}) {
     )
 }
 
-// Unified day + custom-range control. Always a range-mode calendar: same day
-// twice → single day, two days → range. The page decides scope from the emitted
-// endpoints. Chevrons flank the chip in BOTH scopes:
-//   • day scope    → step one day (onPrevDay / onNextDay).
-//   • custom scope → shift the whole window by its own width (onShiftRange ∓1).
-// The forward chevron is disabled once the window already touches today.
-function DateRangePicker({ scope, dayInputValue, customRange, todayISO, canGoForwardDay, onPrevDay, onNextDay, onRangeChange, onShiftRange, canShiftRangeForward, onPresetSelect }) {
+// One calendar control for ALL scopes. The grid always renders (range mode) with
+// the current selection highlighted; chevrons + chip label adapt per scope:
+//   • day    → chip dd/mm/yyyy, chevrons step ±1 day, picking 2 days → custom.
+//   • week   → chip + highlight the week range, chevrons step ±1 week (offset),
+//              "Tuần này" preset chip shown active.
+//   • month  → same as week but ±1 month, "Tháng này" active.
+//   • custom → chip dd/mm–dd/mm, chevrons shift the window by its own width.
+function DateRangePicker({
+    scope, rangeLabel, rangeStartISO, rangeEndISO,
+    dayInputValue, customRange, todayISO,
+    canGoForwardDay, canGoForward, canShiftRangeForward,
+    onPrevDay, onNextDay, onOffsetPrev, onOffsetNext, onShiftRange,
+    onRangeChange, onPresetSelect,
+}) {
     const isDay = scope === 'day'
-    // Feed the calendar the current selection so it highlights correctly: in day
-    // scope that's a zero-width {day, day} range; in custom scope the real range.
+    const isPeriod = scope === 'week' || scope === 'month'
+
+    // Calendar selection to highlight: day = zero-width range; week/month = the
+    // period's ISO bounds; custom = the user's range.
     const value = isDay
         ? { startISO: dayInputValue, endISO: dayInputValue }
-        : (customRange?.startISO ? customRange : null)
-    // Single day → full dd/mm/yyyy; range → compact dd/mm – dd/mm.
+        : isPeriod
+            ? (rangeStartISO && rangeEndISO ? { startISO: rangeStartISO, endISO: rangeEndISO } : null)
+            : (customRange?.startISO ? customRange : null)
+
+    // Chip label per scope.
     const label = isDay
         ? formatIsoDisplay(dayInputValue)
-        : (value ? `${formatIsoShort(value.startISO)} – ${formatIsoShort(value.endISO)}` : 'Chọn ngày')
+        : isPeriod
+            ? rangeLabel
+            : (value ? `${formatIsoShort(value.startISO)} – ${formatIsoShort(value.endISO)}` : 'Chọn ngày')
 
-    const onPrev = isDay ? onPrevDay : () => onShiftRange?.(-1)
-    const onNext = isDay ? onNextDay : () => onShiftRange?.(1)
-    const canForward = isDay ? canGoForwardDay : canShiftRangeForward
+    // Chevron behaviour per scope.
+    const onPrev = isDay ? onPrevDay : isPeriod ? onOffsetPrev : () => onShiftRange?.(-1)
+    const onNext = isDay ? onNextDay : isPeriod ? onOffsetNext : () => onShiftRange?.(1)
+    const canForward = isDay ? canGoForwardDay : isPeriod ? canGoForward : canShiftRangeForward
+
+    // Active preset chip (so week/month show the toggle focus).
+    const activePresetKey = isPeriod ? scope : (isDay && dayInputValue === todayISO ? 'today' : undefined)
 
     return (
         <div className="flex items-center gap-1 pointer-events-auto mt-0.5">
@@ -131,36 +147,12 @@ function DateRangePicker({ scope, dayInputValue, customRange, todayISO, canGoFor
                 max={todayISO}
                 onChange={onRangeChange}
                 onPresetSelect={onPresetSelect}
+                activePresetKey={activePresetKey}
                 trigger={chipTrigger({ labelOverride: label })}
             />
             <button
                 onClick={() => canForward && onNext()}
                 className={`w-5 h-5 flex items-center justify-center rounded-full transition-colors ${canForward ? 'text-text-secondary hover:text-primary active:text-primary' : 'text-text-dim opacity-30 cursor-default'}`}
-            >
-                <ChevronRight size={14} strokeWidth={2.5} />
-            </button>
-        </div>
-    )
-}
-
-function RangeNav({ rangeLabel, canGoForward, onPrev, onNext, onPresetSelect }) {
-    return (
-        <div className="flex items-center gap-1 pointer-events-auto mt-0.5">
-            <button
-                onClick={onPrev}
-                className="w-5 h-5 flex items-center justify-center rounded-full text-text-secondary hover:text-primary active:text-primary transition-colors"
-            >
-                <ChevronLeft size={14} strokeWidth={2.5} />
-            </button>
-            {/* Week/month scope owns the rangeLabel text — picker here is presets-only
-                (no onChange ⇒ DatePicker hides the grid, shows just the quick chips). */}
-            <DatePicker
-                onPresetSelect={onPresetSelect}
-                trigger={chipTrigger({ labelOverride: rangeLabel })}
-            />
-            <button
-                onClick={() => canGoForward && onNext()}
-                className={`w-5 h-5 flex items-center justify-center rounded-full transition-colors ${canGoForward ? 'text-text-secondary hover:text-primary active:text-primary' : 'text-text-dim opacity-30 cursor-default'}`}
             >
                 <ChevronRight size={14} strokeWidth={2.5} />
             </button>

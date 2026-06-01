@@ -713,6 +713,8 @@ export default function DailyReportPage() {
                 canGoForward={offset < 0}
                 onOffsetPrev={() => setOffset(p => p - 1)}
                 onOffsetNext={() => setOffset(p => p + 1)}
+                rangeStartISO={rangeStart ? dateStringVN(rangeStart) : undefined}
+                rangeEndISO={rangeEnd ? dateStringVN(rangeEnd) : undefined}
                 dayInputValue={dayInputValue}
                 todayISO={todayISO}
                 canGoForwardDay={canGoForwardDay}
