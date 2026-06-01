@@ -653,21 +653,22 @@ export async function recordInvoicePayment(addressId, expenseId, amount, payment
     return result
 }
 
-// Hủy một phiếu nhập kho → hoàn lại tồn + tiền + giá vốn (xem migration cancel_restock).
-// Xóa expense refill (CASCADE xóa payments → đảo cash-out), tính lại WAC từ các phiếu
-// còn lại, và ghi 1 dòng audit qty=0 "Đã hủy phiếu nhập". Chỉ nhận phiếu nhập kho thật
-// (is_refill && !adjustment).
+// Hủy một phiếu nhập kho HOẶC phiếu hiệu chỉnh tồn → hoàn lại tồn + tiền + giá vốn
+// (xem migration cancel_restock). Xóa expense (CASCADE xóa payments → đảo cash-out),
+// tính lại WAC từ các phiếu mua thật còn lại, và ghi 1 dòng audit qty=0. Không nhận
+// các dòng cancel-marker (metadata.cancel_restock).
 export async function cancelRestock(addressId, expenseId, staffName = null) {
     if (!expenseId) throw new Error('expenseId is required')
     let result
     if (localRepo.isGuest()) {
         const all = localRepo.fetchAllLocalExpenses(addressId)
         const target = all.find(e => e.id === expenseId)
-        if (!target || !target.is_refill || target.metadata?.adjustment) {
-            throw new Error('Không phải phiếu nhập kho hợp lệ')
+        if (!target || !target.is_refill || target.metadata?.cancel_restock) {
+            throw new Error('Không phải phiếu nhập kho / hiệu chỉnh hợp lệ')
         }
         const ingredient = target.metadata?.ingredient
         const cancelledQty = Number(target.metadata?.qty) || 0
+        const wasAdjustment = !!target.metadata?.adjustment
         // 1. Xóa expense + payments của nó.
         localRepo.deleteLocalExpense(expenseId)
         localRepo.deleteLocalExpensePaymentsByExpense(expenseId)
@@ -680,11 +681,12 @@ export async function cancelRestock(addressId, expenseId, staffName = null) {
             await upsertIngredientCost(ingredient, Math.round(totalCost / totalQty), addressId)
         }
         // 3. Dòng audit qty=0.
+        const label = wasAdjustment ? `Đã hủy hiệu chỉnh ${ingredient}` : `Đã hủy phiếu nhập ${ingredient}`
         await insertExpense(
-            `Đã hủy phiếu nhập ${ingredient}`, 0, addressId, false, staffName, true, 'cash',
+            label, 0, addressId, false, staffName, true, 'cash',
             { ingredient, qty: 0, adjustment: true, cancel_restock: true, cancelled_qty: cancelledQty }
         )
-        result = { success: true, ingredient, cancelled_qty: cancelledQty }
+        result = { success: true, ingredient, cancelled_qty: cancelledQty, was_adjustment: wasAdjustment }
     } else {
         if (!supabase) throw new Error('No Supabase connection')
         const params = { p_address_id: addressId, p_expense_id: expenseId }

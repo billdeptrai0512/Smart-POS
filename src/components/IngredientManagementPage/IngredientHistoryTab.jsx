@@ -108,122 +108,119 @@ function Stat({ label, value, tone }) {
 }
 
 // ── History card ────────────────────────────────────────────────────────────
+//
+// Three row types share one card, distinguished by metadata:
+//   • restock      — a purchase: qty + money + payment status + Hủy.
+//   • adjustment   — manual stock fix (amount 0): qty + "Hiệu chỉnh", no money. Cancellable.
+//   • cancel marker— the audit row a cancel leaves behind (cancel_restock=true): muted,
+//                    qty 0, no money, NOT cancellable.
+//
+// Layout (top → bottom): type tag + Hủy (corner) · hero qty + money · Tồn X→Y ·
+// context pills (restock only) · staff + datetime. One divider only, above the meta.
 function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock }) {
     const d = new Date(entry.created_at)
-    // Hardcode dd/mm — Chromium's `vi-VN, day: '2-digit', month: '2-digit'`
-    // renders "27 - 05" with literal spaces, Firefox/Safari render "27/05".
-    // Hardcoding keeps the footer visually identical across engines.
+    // Hardcode dd/mm — Chromium's vi-VN renders "27 - 05" with literal spaces.
     const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
     const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 
     const qty = entry.metadata?.qty || 0
-    const isAdjust = !!entry.metadata?.adjustment
+    const isCancelMarker = !!entry.metadata?.cancel_restock
+    const isAdjust = !!entry.metadata?.adjustment && !isCancelMarker
+    const isRestock = !entry.metadata?.adjustment
     const isTransfer = entry.payment_method === 'transfer'
-    const unitPrice = qty > 0 && !isAdjust ? Math.round(entry.amount / qty) : null
+    const unitPrice = qty > 0 && isRestock ? Math.round(entry.amount / qty) : null
 
-    // Optional snapshot — only present for events created after migration
-    // 20260529. Old rows render without the "Tồn X → Y" line.
     const beforeStock = entry.metadata?.before_stock
     const afterStock = entry.metadata?.after_stock
     const hasSnapshot = Number.isFinite(beforeStock) && Number.isFinite(afterStock)
 
     const paid = (entry.payments || []).reduce((s, p) => s + (p.amount || 0), 0)
     const owing = Math.max(0, (entry.amount || 0) - paid)
-    const status = isAdjust ? null
+    const status = !isRestock ? null
         : owing <= 0 ? 'paid'
         : paid <= 0 ? 'unpaid'
         : 'partial'
     const clickable = (status === 'unpaid' || status === 'partial') && !!onOpenPayment
+    // Restocks and adjustments can be cancelled; the cancel-marker audit row cannot.
+    const cancellable = !!onCancelRestock && !isCancelMarker
 
-    const qtyCls = qty > 0 ? 'text-success' : qty < 0 ? 'text-danger' : 'text-text'
-    const amountCls = isAdjust ? 'text-text-secondary' : 'text-danger'
+    const typeLabel = isCancelMarker ? 'Đã hủy' : isAdjust ? 'Hiệu chỉnh tồn' : 'Nhập kho'
+    const typeTone = isCancelMarker ? 'text-text-dim' : isAdjust ? 'text-warning' : 'text-primary'
+    const qtyCls = qty > 0 ? 'text-success' : qty < 0 ? 'text-danger' : 'text-text-dim'
 
     const innerCls = `bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 transition-all ${
-        clickable ? 'cursor-pointer hover:border-primary/40 active:scale-[0.99]' : ''
-    }`
+        isCancelMarker ? 'opacity-70' : ''
+    } ${clickable ? 'cursor-pointer hover:border-primary/40 active:scale-[0.99]' : ''}`
 
     const Body = (
         <>
-            {/* Hero: qty delta (left) + cash impact (right). Same shape as /history. */}
-            <div className="flex justify-between items-baseline">
-                <span className={`text-[16px] font-black tabular-nums ${qtyCls}`}>
-                    {qty > 0 ? '+' : ''}{qty} {unit}
+            {/* Row 0 — type tag (left) + cancel (corner). */}
+            <div className="flex items-center justify-between gap-2 -mt-0.5">
+                <span className={`text-[11px] font-black uppercase tracking-wider ${typeTone}`}>
+                    {typeLabel}
                 </span>
-                <span className={`text-[14px] font-black tabular-nums ${amountCls}`}>
-                    {isAdjust ? '0đ' : `-${formatVND(entry.amount)}`}
-                </span>
+                {cancellable && (
+                    <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onCancelRestock(entry) }}
+                        aria-label="Hủy phiếu"
+                        className="-mr-1 -mt-1 w-7 h-7 flex items-center justify-center rounded-lg text-text-dim hover:text-danger hover:bg-danger/10 active:scale-95 transition-all"
+                    >
+                        <Trash2 size={14} />
+                    </button>
+                )}
             </div>
 
-            {/* Tồn snapshot — secondary subtitle right under the hero so the eye
-                reads "delta → resulting stock" in one downward scan. Defensive
-                round-on-read in case any legacy entry slipped in with float
-                noise from WAC math. */}
+            {/* Hero — qty delta (left) + money (right; restock only). */}
+            <div className="flex justify-between items-baseline -mt-1">
+                <span className={`text-[18px] font-black tabular-nums ${qtyCls}`}>
+                    {qty > 0 ? '+' : ''}{qty} {unit}
+                </span>
+                {isRestock && (
+                    <span className="text-[14px] font-black tabular-nums text-danger">
+                        -{formatVND(entry.amount)}
+                    </span>
+                )}
+            </div>
+
+            {/* Tồn snapshot — "delta → resulting stock" in one downward scan. */}
             {hasSnapshot && (
-                <div className="text-[11px] font-medium text-text-dim tabular-nums -mt-1">
-                    Tồn kho: <span className="text-text-secondary">{Math.round(beforeStock * 10) / 10}</span>
+                <div className="text-[11px] font-medium text-text-dim tabular-nums -mt-0.5">
+                    Tồn kho <span className="text-text-secondary">{Math.round(beforeStock * 10) / 10}</span>
                     <span className="mx-1">→</span>
                     <span className="text-text font-bold">{Math.round(afterStock * 10) / 10}</span> {unit}
                 </div>
             )}
 
-            {/* Pills row — eye-2: what kind of event + payment context. */}
-            <div className="flex flex-wrap items-center gap-1.5 border-t border-border/40 pt-2">
-                {isAdjust ? (
-                    <Pill tone="warning">Hiệu chỉnh tồn</Pill>
-                ) : (
-                    <>
-                        {status === 'paid' && <Pill tone="success">Đã trả</Pill>}
-                        {status === 'partial' && (
-                            <Pill tone="neutral">Trả 1 phần · {formatVND(paid)}/{formatVND(entry.amount)}</Pill>
-                        )}
-                        {status === 'unpaid' && (
-                            <Pill tone="warning">Còn nợ {formatVND(owing)}</Pill>
-                        )}
-                        {unitPrice != null && (
-                            <Pill tone="neutral">{formatVND(unitPrice)}/{unit}</Pill>
-                        )}
-                        <Pill tone={isTransfer ? 'primary' : 'neutral'}>
-                            {isTransfer ? 'Chuyển khoản' : 'Tiền mặt'}
-                        </Pill>
-                    </>
-                )}
-            </div>
-
-            {/* Footer — eye-3: label + staff (left), datetime (right). */}
-            <div className="flex justify-between items-end mt-0.5">
-                <div className="flex flex-col gap-0.5 min-w-0">
-                    <span className="text-[13px] font-medium text-text truncate">
-                        {isAdjust ? 'Hiệu chỉnh tồn kho' : 'Nhập kho'}
-                    </span>
-                    {entry.staff_name && (
-                        <span className="text-[11px] font-bold text-text-secondary/70 truncate">
-                            {entry.staff_name}
-                        </span>
+            {/* Context pills — restock only (payment status + unit price + method). */}
+            {isRestock && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                    {status === 'paid' && <Pill tone="success">Đã trả</Pill>}
+                    {status === 'partial' && (
+                        <Pill tone="neutral">Trả 1 phần · {formatVND(paid)}/{formatVND(entry.amount)}</Pill>
                     )}
+                    {status === 'unpaid' && <Pill tone="warning">Còn nợ {formatVND(owing)}</Pill>}
+                    {unitPrice != null && <Pill tone="neutral">{formatVND(unitPrice)}/{unit}</Pill>}
+                    <Pill tone={isTransfer ? 'primary' : 'neutral'}>
+                        {isTransfer ? 'Chuyển khoản' : 'Tiền mặt'}
+                    </Pill>
                 </div>
-                <span className="text-[12px] font-bold text-text-dim tabular-nums shrink-0 leading-tight text-right">
+            )}
+
+            {/* Footer — staff (left) + datetime (right), above a hairline divider. */}
+            <div className="flex justify-between items-center gap-2 border-t border-border/40 pt-2 mt-0.5">
+                <span className="text-[11px] font-bold text-text-secondary/70 truncate">
+                    {entry.staff_name || '—'}
+                </span>
+                <span className="text-[12px] font-bold text-text-dim tabular-nums shrink-0">
                     {dateStr} · {timeStr}
                 </span>
             </div>
-
-            {/* Cancel — only real restock rows (not adjustments / cancel markers).
-                stopPropagation so it doesn't trigger the card's payment-sheet click. */}
-            {!isAdjust && onCancelRestock && (
-                <div className="flex justify-end border-t border-border/40 pt-2 mt-0.5">
-                    <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); onCancelRestock(entry) }}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold text-danger hover:bg-danger/10 active:scale-95 transition-all"
-                    >
-                        <Trash2 size={13} /> Hủy phiếu
-                    </button>
-                </div>
-            )}
         </>
     )
 
-    // Clickable cards use a div with role=button (not a real <button>) so the
-    // footer "Hủy phiếu" <button> can nest validly. Keyboard-activatable via Enter/Space.
+    // Clickable cards use div[role=button] (not <button>) so the corner cancel
+    // <button> nests validly. Keyboard-activatable via Enter/Space.
     return clickable ? (
         <div
             role="button"

@@ -1,18 +1,19 @@
 -- ==============================================================================================
--- cancel_restock: hủy một phiếu nhập kho và hoàn lại hiện trạng.
+-- cancel_restock: hủy một phiếu nhập kho HOẶC một phiếu hiệu chỉnh tồn, hoàn lại hiện trạng.
 --
--- A restock created: an expenses(is_refill) row (+qty into warehouse), its expense_payments
--- (cash-out), and a WAC update to ingredient_costs. Cancelling reverses all three:
---   1. Delete the refill expense  → its +qty leaves the warehouse sum (ON DELETE CASCADE also
---      removes the linked expense_payments, reversing the cash-out).
---   2. Recompute WAC from scratch over the ingredient's REMAINING refills (excludes adjustments
---      and amount=0 rows) so giá vốn reflects only the purchases that still stand.
---   3. Insert a qty=0 adjustment audit row ("Đã hủy phiếu nhập …") so the cancellation is
---      visible in Nhật ký without affecting stock (qty 0) or money (amount 0).
+-- A restock created: expenses(is_refill) row (+qty into warehouse) + expense_payments (cash-out)
+-- + a WAC update. A stock adjustment created: expenses(is_refill, adjustment, amount 0) with a
+-- ±qty delta and no payment. Cancelling either reverses everything:
+--   1. Delete the row → its ±qty leaves the warehouse sum (ON DELETE CASCADE also removes any
+--      linked expense_payments, reversing the cash-out for a paid restock).
+--   2. Recompute WAC from scratch over the ingredient's REMAINING real purchases (is_refill,
+--      not adjustment, amount > 0). Adjustments never affected WAC, so this is a no-op for them.
+--   3. Insert a qty=0 / amount=0 audit row ("Đã hủy …") so the cancellation is visible in Nhật ký
+--      without affecting stock or money.
 --
--- Stock is reversed purely by the delete — both stock aggregators (get_ingredient_stocks_v2
--- and the JS fallback) sum metadata.qty over is_refill rows, so removing the row removes its
--- contribution. No aggregator changes needed; the audit row is qty 0 = inert.
+-- Cannot cancel a cancel-marker row (metadata.cancel_restock = true) — nothing to reverse.
+-- Stock reverts purely via the delete; both aggregators (get_ingredient_stocks_v2 + JS fallback)
+-- sum metadata.qty over is_refill rows, so no aggregator change is needed.
 -- ==============================================================================================
 
 BEGIN;
@@ -31,6 +32,7 @@ DECLARE
     v_qty           NUMERIC;
     v_is_refill     BOOLEAN;
     v_is_adjustment BOOLEAN;
+    v_is_cancel     BOOLEAN;
     v_display_name  TEXT;
     v_total_qty     NUMERIC;
     v_total_cost    NUMERIC;
@@ -58,20 +60,22 @@ BEGIN
     SELECT (metadata->>'ingredient')::TEXT,
            COALESCE((metadata->>'qty')::NUMERIC, 0),
            is_refill,
-           COALESCE((metadata->>'adjustment')::BOOLEAN, false)
-    INTO v_ingredient, v_qty, v_is_refill, v_is_adjustment
+           COALESCE((metadata->>'adjustment')::BOOLEAN, false),
+           COALESCE((metadata->>'cancel_restock')::BOOLEAN, false)
+    INTO v_ingredient, v_qty, v_is_refill, v_is_adjustment, v_is_cancel
     FROM expenses
     WHERE id = p_expense_id AND address_id = p_address_id;
 
     IF v_ingredient IS NULL THEN
-        RAISE EXCEPTION 'Restock % not found for address %', p_expense_id, p_address_id;
+        RAISE EXCEPTION 'Entry % not found for address %', p_expense_id, p_address_id;
     END IF;
-    IF NOT v_is_refill OR v_is_adjustment THEN
-        RAISE EXCEPTION 'Expense % is not a cancellable restock', p_expense_id;
+    -- Both restocks and stock adjustments are cancellable; only the cancel-marker
+    -- audit rows (which have nothing to reverse) are rejected.
+    IF NOT v_is_refill OR v_is_cancel THEN
+        RAISE EXCEPTION 'Entry % is not a cancellable restock/adjustment', p_expense_id;
     END IF;
 
     -- Warehouse balance BEFORE the cancel (for the audit row's Tồn snapshot).
-    -- Same recipe as process_ingredient_restock: Σ refills − Σ counter-restocks after first refill.
     WITH refills AS (
         SELECT created_at, COALESCE((metadata->>'qty')::NUMERIC, 0) AS qty
         FROM expenses
@@ -91,7 +95,7 @@ BEGIN
     )::numeric, 1)
     INTO v_before_stock;
 
-    -- 1. Delete the refill (CASCADE removes its expense_payments → reverses cash-out).
+    -- 1. Delete the row (CASCADE removes its expense_payments → reverses any cash-out).
     DELETE FROM expenses WHERE id = p_expense_id AND address_id = p_address_id;
 
     -- 2. Recompute WAC over the REMAINING real purchases (exclude adjustments + amount=0).
@@ -112,9 +116,12 @@ BEGIN
         v_new_unit_cost := NULL; -- no purchases left; leave unit_cost untouched
     END IF;
 
-    -- 3. Audit row — qty 0 (stock-neutral), amount 0 (money-neutral), flagged adjustment so
-    --    it's filtered out of the Đi chợ tab but shows in Nhật ký as the cancellation marker.
-    v_display_name := 'Đã hủy phiếu nhập ' || INITCAP(REPLACE(v_ingredient, '_', ' '));
+    -- 3. Audit row — qty 0 (stock-neutral), amount 0 (money-neutral). after_stock reverses the
+    --    cancelled delta: before − v_qty works for both signs (a −454 adjustment → before + 454).
+    v_display_name := CASE WHEN v_is_adjustment
+        THEN 'Đã hủy hiệu chỉnh ' || INITCAP(REPLACE(v_ingredient, '_', ' '))
+        ELSE 'Đã hủy phiếu nhập ' || INITCAP(REPLACE(v_ingredient, '_', ' '))
+    END;
     INSERT INTO expenses (
         address_id, name, amount, is_fixed, is_refill, payment_method,
         staff_name, metadata
@@ -136,6 +143,7 @@ BEGIN
         'success',       true,
         'ingredient',    v_ingredient,
         'cancelled_qty', v_qty,
+        'was_adjustment', v_is_adjustment,
         'new_unit_cost', v_new_unit_cost
     );
 END;
