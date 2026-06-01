@@ -79,6 +79,7 @@ export default function HistoryPage() {
     const [expenseCategory, setExpenseCategory] = useState('expense')
     const [costName, setCostName] = useState('')
     const [costAmount, setCostAmount] = useState('')
+    const [expenseDate, setExpenseDate] = useState(() => getLocalISO()) // ngày chi, default hôm nay
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [selectedCategoryId, setSelectedCategoryId] = useState(null)
     const [expenseCategories, setExpenseCategories] = useState([])
@@ -114,6 +115,7 @@ export default function HistoryPage() {
             setCostAmount('')
             setExpenseCategory('expense')
             setSelectedCategoryId(null)
+            setExpenseDate(getLocalISO())
         }
     }, [showAddModal])
 
@@ -247,15 +249,19 @@ export default function HistoryPage() {
         setIsSubmitting(true)
         try {
             const tagId = selectedCategoryId || null
+            const today = getLocalISO()
+            // Backdate: anchor noon VN so it lands squarely on that day regardless of TZ.
+            // null = today → server default NOW() keeps the live timestamp.
+            const isBackdated = expenseDate && expenseDate !== today
+            const createdAt = isBackdated ? new Date(`${expenseDate}T12:00:00+07:00`).toISOString() : null
             // Auto-detect Trong ca vs Sau ca from shift_finalized flag — vẫn cần
             // để ExpensePanel badge phân biệt "Sau ca" cho expense vận hành.
-            const today = new Date().toISOString().split('T')[0]
             const isFinalized = selectedAddress?.id && !!localStorage.getItem(shiftFinalizedKey(selectedAddress.id, today))
             // Always insert as cash; user toggles payment on the row card after.
             if (isFinalized) {
-                await handleAddExpense(costName.trim(), amount, true, 'cash', { free_form: true }, false, tagId)
+                await handleAddExpense(costName.trim(), amount, true, 'cash', { free_form: true }, false, tagId, createdAt)
             } else {
-                await handleAddExpense(costName.trim(), amount, false, 'cash', {}, false, tagId)
+                await handleAddExpense(costName.trim(), amount, false, 'cash', {}, false, tagId, createdAt)
             }
             setShowAddModal(false)
         } catch { }
@@ -400,6 +406,8 @@ export default function HistoryPage() {
                     onCategoryChange={setExpenseCategory}
                     onNameChange={setCostName}
                     onAmountChange={setCostAmount}
+                    expenseDate={expenseDate}
+                    onDateChange={setExpenseDate}
                 />
             )}
         </div>

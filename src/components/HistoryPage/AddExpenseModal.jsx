@@ -2,11 +2,14 @@ import { useRef } from 'react'
 import { X } from 'lucide-react'
 import ExpenseCategoryPicker from './ExpenseCategoryPicker'
 import MoneyInput from '../common/MoneyInput'
+import DatePicker from '../common/DatePicker'
+import { formatIsoDisplay } from '../common/datePickerUtils'
 import { parseVNDInput } from '../../utils'
+import { dateStringVN } from '../../utils/dateVN'
 
-// Create flow: pick label → name → amount → submit. Payment defaults to cash
-// on insert; user toggles it on the expense card (ExpensePanel) after the row
-// appears — keeps this modal tight to the essential 3 fields.
+// Create flow: pick label → name → amount → (date) → submit. Payment defaults to
+// cash on insert; user toggles it on the expense card (ExpensePanel) after the row
+// appears. Ngày chi defaults to today; pick a past day to backdate the expense.
 export default function AddExpenseModal({
     expenseCategory, costName, costAmount, isSubmitting,
     // Tag picker
@@ -14,12 +17,16 @@ export default function AddExpenseModal({
     selectedCategoryId,
     onCategoryIdChange,
     onCreateCategory,
+    // Date (backdate support)
+    expenseDate, onDateChange,
     //
     onClose, onSubmit,
     onCategoryChange, onNameChange, onAmountChange,
 }) {
     const canSubmit = parseVNDInput(costAmount) > 0 && costName.trim() && !isSubmitting
     const submitColor = expenseCategory === 'fixed' ? 'bg-warning' : 'bg-danger'
+    const today = dateStringVN()
+    const isBackdated = expenseDate && expenseDate !== today
 
     const nameRef = useRef(null)
     const amountRef = useRef(null)
@@ -86,6 +93,32 @@ export default function AddExpenseModal({
                     inputRef={amountRef}
                     size="lg"
                 />
+
+                {/* Ngày chi — defaults today; pick a past day to backdate. */}
+                <div className="flex items-center justify-between gap-3">
+                    <span className="text-[12px] font-bold text-text-secondary">Ngày chi</span>
+                    <DatePicker
+                        value={expenseDate || today}
+                        max={today}
+                        onChange={onDateChange}
+                        presets={false}
+                        align="end"
+                        trigger={(label, toggle) => (
+                            <button
+                                type="button"
+                                onClick={toggle}
+                                className="w-36 bg-surface-light border border-border/60 rounded-[10px] px-3 py-2 text-[13px] font-bold text-text text-center hover:border-primary/50 transition-colors"
+                            >
+                                {formatIsoDisplay(expenseDate || today)}
+                            </button>
+                        )}
+                    />
+                </div>
+                {isBackdated && (
+                    <p className="-mt-2 text-[11px] text-warning leading-snug text-right">
+                        Sẽ ghi vào ngày {formatIsoDisplay(expenseDate)}, không phải hôm nay.
+                    </p>
+                )}
 
                 <button
                     onClick={() => canSubmit && onSubmit()}

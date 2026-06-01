@@ -452,12 +452,18 @@ export function POSProvider() {
         }
     }
 
-    async function handleAddExpense(name, amount, isRefill = false, paymentMethod = 'cash', metadata = {}, isFixed = false, categoryId = null) {
+    async function handleAddExpense(name, amount, isRefill = false, paymentMethod = 'cash', metadata = {}, isFixed = false, categoryId = null, createdAt = null) {
         if (!addressId) return
         try {
-            const expense = await insertExpense(name, amount, addressId, isFixed, profile?.name, isRefill, paymentMethod, metadata, categoryId)
-            setTodayExpenses(prev => [expense, ...prev])
-            if (!isFixed) setTotalCost(prev => prev + amount)
+            const expense = await insertExpense(name, amount, addressId, isFixed, profile?.name, isRefill, paymentMethod, metadata, categoryId, createdAt)
+            // Only fold into today's local list when it actually belongs to today —
+            // a backdated expense (createdAt in the past) shows up on its own day's
+            // range view, not today's. invalidateDailyContext below refreshes both.
+            const isToday = !createdAt || dateStringVN(new Date(createdAt)) === dateStringVN(new Date())
+            if (isToday) {
+                setTodayExpenses(prev => [expense, ...prev])
+                if (!isFixed) setTotalCost(prev => prev + amount)
+            }
             invalidateDailyContext(addressId)
             showToast(isFixed ? 'Đã ghi nhận thực chi cố định' : isRefill ? 'Đã thêm khoản mua nguyên vật liệu' : 'Đã thêm chi phí', 'success')
             return expense
