@@ -5,6 +5,7 @@ import { getPendingOrders, removePendingOrder } from '../hooks/useOfflineSync'
 import { dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { calcRangeWithLabel, offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
 import { applyPresetToScope } from '../components/common/datePickerUtils'
+import { goToMenuStep } from '../utils/menuSequence'
 import { useHistoryRangeFetch } from '../hooks/useHistoryRangeFetch'
 import { useFormatHistoryOrders } from '../hooks/useFormatHistoryOrders'
 import { useAddress } from '../contexts/AddressContext'
@@ -385,8 +386,8 @@ export default function HistoryPage() {
                 scope={scope}
                 isReadOnly={isReadOnly}
                 canGoForward={canGoForward}
-                onBack={() => navigate(backTo)}
-                onForward={() => navigate('/recipes')}
+                onBack={() => goToMenuStep(activeTab, -1, { navigate, backTo, setActiveTab, goReport: handleReportNav })}
+                onForward={() => goToMenuStep(activeTab, +1, { navigate, backTo, setActiveTab, goReport: handleReportNav })}
                 activeTab={activeTab}
                 onTabSelect={(tab) => {
                     if (tab === 'report') handleReportNav()

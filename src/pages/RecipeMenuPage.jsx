@@ -13,6 +13,7 @@ import SortableList from '../components/common/SortableList'
 import RecipeMenuHeader from '../components/RecipeMenuPage/RecipeMenuHeader'
 import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
+import { goToMenuStep } from '../utils/menuSequence'
 
 // Module-level scroll cache. Set when user clicks a product card to drill into
 // /recipes/:productId; consumed once on next mount of /recipes (back nav).
@@ -128,8 +129,8 @@ export default function RecipeMenuPage() {
 
             <RecipeMenuHeader
                 productCount={products.length}
-                onBack={() => navigate(backTo)}
-                onForward={() => navigate('/pos')}
+                onBack={() => goToMenuStep('recipes', -1, { navigate, backTo })}
+                onForward={() => goToMenuStep('recipes', +1, { navigate, backTo })}
                 activeTab="recipes"
                 onTabSelect={(key) => {
                     if (key === 'main' || key === 'packaging') {

@@ -25,6 +25,7 @@ import { detectKeyMismatches } from '../utils/ingredientKeySync'
 import { useToast } from '../hooks/useToast'
 import Toast from '../components/POSPage/Toast'
 import { keySyncDismissedKey, orphanIgnoredKey } from '../constants/storageKeys'
+import { goToMenuStep } from '../utils/menuSequence'
 
 // Module-level scroll cache. Set when user opens a card to drill into
 // /ingredients/:key; consumed once on next mount of /ingredients (back nav).
@@ -347,8 +348,8 @@ export default function IngredientManagementPage() {
             <IngredientsHeader
                 count={isSorting ? sortedIngredients.length : visibleIngredients.length}
                 isSorting={isSorting}
-                onBack={() => navigate(location.state?.from || '/history')}
-                onForward={() => navigate('/pos')}
+                onBack={() => goToMenuStep(viewMode, -1, { navigate, backTo: location.state?.from || '/history', setViewMode })}
+                onForward={() => goToMenuStep(viewMode, +1, { navigate, backTo: location.state?.from || '/history', setViewMode })}
                 activeTab={viewMode}
                 onTabSelect={(key) => {
                     if (key === 'recipes') navigate('/recipes', { state: location.state, replace: true })

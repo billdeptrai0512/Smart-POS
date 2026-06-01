@@ -14,6 +14,7 @@ import { ingredientLabel } from '../utils/ingredients'
 import { startOfDayVN, dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
 import { applyPresetToScope } from '../components/common/datePickerUtils'
+import { goToMenuStep } from '../utils/menuSequence'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import SalesCard from '../components/DailyReportPage/SalesCard'
 import DayPerformanceChart from '../components/DailyReportPage/DayPerformanceChart'
@@ -703,8 +704,8 @@ export default function DailyReportPage() {
             <HistoryHeader
                 rangeLabel={rangeLabel}
                 scope={scope}
-                onBack={() => navigate(backTo)}
-                onForward={() => navigate('/recipes')}
+                onBack={() => goToMenuStep('report', -1, { navigate, backTo })}
+                onForward={() => goToMenuStep('report', +1, { navigate, backTo })}
                 activeTab="report"
                 onTabSelect={(tab) => {
                     if (tab === 'report') return
