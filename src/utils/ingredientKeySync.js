@@ -42,8 +42,18 @@ export function detectKeyMismatches({
     }
 
     const orphanRecipeKeys         = [...recipeKeys].filter(k => !costKeys.has(k) && !ignored.has(k)).sort()
-    const orphanInventoryKeys      = [...inventoryKeys].filter(k => !costKeys.has(k) && !ignored.has(k)).sort()
     const orphanExtraIngredientKeys = [...extraIngKeys].filter(k => !costKeys.has(k) && !ignored.has(k)).sort()
+
+    // Inventory orphans are only flagged when STILL referenced by a live recipe or
+    // extra — i.e. an active money leak (counted + referenced + uncosted). A key that
+    // lives ONLY in historical shift_closings.inventory_report (no recipe, no extra)
+    // is stale audit data left behind after the ingredient was deleted; deleting an
+    // ingredient cleans costs/recipes/extras but can't rewrite immutable past closings,
+    // so without this guard a deleted ingredient would warn forever. Drop that noise.
+    const referencedKeys = new Set([...recipeKeys, ...extraIngKeys])
+    const orphanInventoryKeys = [...inventoryKeys]
+        .filter(k => !costKeys.has(k) && !ignored.has(k) && referencedKeys.has(k))
+        .sort()
 
     // Group all known keys by their display label (case-insensitive)
     const allKeys = new Set([...recipeKeys, ...costKeys, ...inventoryKeys, ...extraIngKeys])

@@ -539,9 +539,11 @@ export default function DailyReportPage() {
         return calculateEstimatedConsumption(items, recipes, extraIngredients)
     }, [lastWeekItems, recipes, extraIngredients])
 
-    // "Soạn cho mai" list — món cần bổ sung lên xe, tính theo Cuối kỳ (live) staff vừa đếm.
-    // Mục tiêu = max(dự báo hôm nay, cùng kỳ tuần trước, mức tồn tối thiểu); chỉ liệt kê
-    // ingredient đã đếm (có inventoryInputs) và còn thiếu so với mục tiêu.
+    // "Soạn cho mai" list — món cần soạn lên xe cho ca sáng, tính theo Cuối kỳ (live)
+    // staff vừa đếm. Mục tiêu = DỰ BÁO tiêu thụ ngày mai = max(dự báo hôm nay, cùng kỳ
+    // tuần trước). KHÔNG dùng min_stock: min_stock là ngưỡng cảnh báo tồn KHO, không phải
+    // lượng cần soạn ra quầy — kéo theo nó sẽ soạn dư so với nhu cầu thực. Chỉ liệt kê
+    // ingredient đã đếm (có inventoryInputs) và còn thiếu so với dự báo.
     const refillList = useMemo(() => {
         const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
         const byLabel = (ingredient, map) => {
@@ -555,11 +557,9 @@ export default function DailyReportPage() {
             const inv = inventory.inventoryInputs[ing.ingredient]
             if (inv === undefined || inv === '') continue // chưa đếm Cuối kỳ
             const actual = r1(inv)
-            const rawTarget = Math.max(r1(byLabel(ing.ingredient, usedMap)), r1(byLabel(ing.ingredient, lastWeekUsedMap)))
-            const minStock = Number(ing.min_stock) || 0
-            if (actual >= minStock && actual >= rawTarget) continue
-            const finalRefill = r1(Math.max(minStock - actual, rawTarget - actual))
-            if (finalRefill <= 0) continue
+            const forecast = Math.max(r1(byLabel(ing.ingredient, usedMap)), r1(byLabel(ing.ingredient, lastWeekUsedMap)))
+            const finalRefill = r1(forecast - actual)
+            if (finalRefill <= 0) continue // tồn cuối đã đủ cho dự báo ngày mai
             const packSize = Number(ing.pack_size) || 0
             out.push({
                 ingredient: ing.ingredient,
