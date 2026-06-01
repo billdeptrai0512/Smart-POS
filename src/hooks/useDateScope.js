@@ -1,9 +1,26 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { dateStringVN } from '../utils/dateVN'
 import { offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
 
 const MS_DAY = 86_400_000
 const VALID_SCOPES = ['day', 'week', 'month', 'custom']
+
+// Read a date selection out of URL search params. Returns null when there's no
+// usable scope param, so callers can fall back to nav-state / defaults.
+//   ?scope=week&offset=-1   ·   ?scope=custom&start=YYYY-MM-DD&end=YYYY-MM-DD
+function readParamsSeed(sp) {
+    const scope = sp.get('scope')
+    if (!VALID_SCOPES.includes(scope)) return null
+    if (scope === 'custom') {
+        const startISO = sp.get('start')
+        const endISO = sp.get('end')
+        if (!startISO || !endISO) return null
+        return { scope: 'custom', customRange: { startISO, endISO } }
+    }
+    const offset = Number(sp.get('offset'))
+    return { scope, offset: Number.isFinite(offset) ? offset : 0 }
+}
 
 // Single owner of the dashboard's date selection, shared by /history and
 // /daily-report so the two pages can never drift out of sync again (which is the
@@ -21,9 +38,12 @@ const VALID_SCOPES = ['day', 'week', 'month', 'custom']
 // Nhật ký ↔ Báo cáo tab switch. `hasManualPick` flags a calendar pick (vs chevron
 // stepping) for callers that care.
 export function useDateScope(initial) {
-    // `location.state` is often null (direct nav), so guard rather than rely on a
-    // default param — defaults only fill `undefined`, not an explicit null.
-    const seed = initial || {}
+    const [searchParams, setSearchParams] = useSearchParams()
+
+    // Initial state precedence: URL params (so refresh / shared links win) → nav
+    // state (location.state, for the tab-switch hand-off) → defaults. `location.state`
+    // is often null on direct nav, so guard rather than rely on a default param.
+    const seed = readParamsSeed(searchParams) || initial || {}
     const initialScope = VALID_SCOPES.includes(seed.scope) ? seed.scope : 'day'
     const initialOffset = typeof seed.offset === 'number' ? seed.offset : 0
     const initialCustomRange = seed.customRange?.startISO ? seed.customRange : null
@@ -32,6 +52,28 @@ export function useDateScope(initial) {
     const [offset, setOffset] = useState(initialOffset)
     const [customRange, setCustomRange] = useState(initialCustomRange)
     const [hasManualPick, setHasManualPick] = useState(false)
+
+    // Mirror the live selection into the URL (replace, so it doesn't spam history).
+    // Default day/offset-0 is the clean "no params" state. Other state survives a
+    // refresh and makes the view shareable/bookmarkable.
+    useEffect(() => {
+        const next = new URLSearchParams(searchParams)
+        // Clear any prior date params first.
+        ;['scope', 'offset', 'start', 'end'].forEach(k => next.delete(k))
+        if (scope === 'custom' && customRange?.startISO) {
+            next.set('scope', 'custom')
+            next.set('start', customRange.startISO)
+            next.set('end', customRange.endISO)
+        } else if (scope !== 'day' || offset !== 0) {
+            next.set('scope', scope)
+            if (offset !== 0) next.set('offset', String(offset))
+        }
+        // Only write if something actually changed (avoid a render loop).
+        if (next.toString() !== searchParams.toString()) {
+            setSearchParams(next, { replace: true })
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [scope, offset, customRange])
 
     // Recomputed every render so a session crossing VN midnight sees the new day.
     const todayISO = dateStringVN()
