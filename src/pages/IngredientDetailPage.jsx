@@ -7,7 +7,7 @@ import { usePOS } from '../contexts/POSContext'
 import {
     fetchIngredientRestockHistory, fetchIngredientStocks,
     deleteIngredientCost, upsertIngredientCost, renameIngredient,
-    adjustIngredientStock, recordInvoicePayment,
+    adjustIngredientStock, recordInvoicePayment, cancelRestock,
 } from '../services/orderService'
 import {
     ingredientLabel, getIngredientUnit,
@@ -229,6 +229,21 @@ export default function IngredientDetailPage() {
         finally { setSaving(false) }
     }
 
+    async function handleCancelRestock(entry) {
+        const qty = entry?.metadata?.qty || 0
+        const label = ingredientLabel(ingredientKey)
+        if (!window.confirm(
+            `Hủy phiếu nhập ${qty > 0 ? '+' : ''}${qty} ${unit} ${label}?\n` +
+            `Tồn kho sẽ giảm lại ${qty} ${unit}, hoàn tiền đã trả, và tính lại giá vốn.`
+        )) return
+        setSaving(true)
+        try {
+            await cancelRestock(selectedAddress?.id, entry.id, profile?.name)
+            await Promise.all([reloadHistory(), reloadStock(), refreshProducts?.(), refreshTodayExpenses?.()])
+        } catch (err) { showError(err, 'Hủy phiếu nhập kho') }
+        finally { setSaving(false) }
+    }
+
     async function handleDelete() {
         const label = ingredientLabel(ingredientKey)
         if (!window.confirm(`Xóa nguyên liệu "${label}"? Hành động này sẽ gỡ nó khỏi tất cả công thức liên quan.`)) return
@@ -286,6 +301,7 @@ export default function IngredientDetailPage() {
                         monthOffset={monthOffset}
                         onMonthChange={setMonthOffset}
                         onOpenPayment={canEdit ? setPaymentInvoice : null}
+                        onCancelRestock={canEdit ? handleCancelRestock : null}
                     />
                 )}
             </main>

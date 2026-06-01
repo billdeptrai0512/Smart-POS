@@ -219,6 +219,13 @@ export const insertLocalExpense = (payload) => {
 export const fetchAllLocalExpensePayments = (addressId) =>
     get(KEYS.EXPENSE_PAYMENTS).filter(p => p.address_id === addressId);
 
+// Remove every payment linked to an expense (mirrors the DB's ON DELETE CASCADE
+// on expense_payments.expense_id, used when cancelling a restock in guest mode).
+export const deleteLocalExpensePaymentsByExpense = (expenseId) => {
+    set(KEYS.EXPENSE_PAYMENTS, get(KEYS.EXPENSE_PAYMENTS).filter(p => p.expense_id !== expenseId));
+    return true;
+};
+
 export const insertLocalExpensePayment = (payload) => {
     const list = get(KEYS.EXPENSE_PAYMENTS);
     const newItem = { id: generateId(), created_at: new Date().toISOString(), paid_at: new Date().toISOString(), ...payload };

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
 import { formatVND } from '../../utils'
 
 // Monthly restock log for one ingredient. Card layout mirrors /history's
@@ -12,7 +12,7 @@ import { formatVND } from '../../utils'
 export default function IngredientHistoryTab({
     loading, summary, history, unit,
     monthLabel, monthOffset, onMonthChange,
-    onOpenPayment,
+    onOpenPayment, onCancelRestock,
 }) {
     const hasOwing = summary.totalOwing > 0
     return (
@@ -39,6 +39,7 @@ export default function IngredientHistoryTab({
                             entry={entry}
                             unit={unit}
                             onOpenPayment={onOpenPayment}
+                            onCancelRestock={onCancelRestock}
                         />
                     ))}
                 </div>
@@ -107,7 +108,7 @@ function Stat({ label, value, tone }) {
 }
 
 // ── History card ────────────────────────────────────────────────────────────
-function HistoryCard({ entry, unit, onOpenPayment }) {
+function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock }) {
     const d = new Date(entry.created_at)
     // Hardcode dd/mm — Chromium's `vi-VN, day: '2-digit', month: '2-digit'`
     // renders "27 - 05" with literal spaces, Firefox/Safari render "27/05".
@@ -204,13 +205,35 @@ function HistoryCard({ entry, unit, onOpenPayment }) {
                     {dateStr} · {timeStr}
                 </span>
             </div>
+
+            {/* Cancel — only real restock rows (not adjustments / cancel markers).
+                stopPropagation so it doesn't trigger the card's payment-sheet click. */}
+            {!isAdjust && onCancelRestock && (
+                <div className="flex justify-end border-t border-border/40 pt-2 mt-0.5">
+                    <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onCancelRestock(entry) }}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold text-danger hover:bg-danger/10 active:scale-95 transition-all"
+                    >
+                        <Trash2 size={13} /> Hủy phiếu
+                    </button>
+                </div>
+            )}
         </>
     )
 
+    // Clickable cards use a div with role=button (not a real <button>) so the
+    // footer "Hủy phiếu" <button> can nest validly. Keyboard-activatable via Enter/Space.
     return clickable ? (
-        <button type="button" onClick={() => onOpenPayment(entry)} className={`text-left ${innerCls}`}>
+        <div
+            role="button"
+            tabIndex={0}
+            onClick={() => onOpenPayment(entry)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenPayment(entry) } }}
+            className={`text-left ${innerCls}`}
+        >
             {Body}
-        </button>
+        </div>
     ) : (
         <div className={innerCls}>{Body}</div>
     )

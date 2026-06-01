@@ -652,3 +652,47 @@ export async function recordInvoicePayment(addressId, expenseId, amount, payment
     invalidateReportCache(addressId)
     return result
 }
+
+// Hủy một phiếu nhập kho → hoàn lại tồn + tiền + giá vốn (xem migration cancel_restock).
+// Xóa expense refill (CASCADE xóa payments → đảo cash-out), tính lại WAC từ các phiếu
+// còn lại, và ghi 1 dòng audit qty=0 "Đã hủy phiếu nhập". Chỉ nhận phiếu nhập kho thật
+// (is_refill && !adjustment).
+export async function cancelRestock(addressId, expenseId, staffName = null) {
+    if (!expenseId) throw new Error('expenseId is required')
+    let result
+    if (localRepo.isGuest()) {
+        const all = localRepo.fetchAllLocalExpenses(addressId)
+        const target = all.find(e => e.id === expenseId)
+        if (!target || !target.is_refill || target.metadata?.adjustment) {
+            throw new Error('Không phải phiếu nhập kho hợp lệ')
+        }
+        const ingredient = target.metadata?.ingredient
+        const cancelledQty = Number(target.metadata?.qty) || 0
+        // 1. Xóa expense + payments của nó.
+        localRepo.deleteLocalExpense(expenseId)
+        localRepo.deleteLocalExpensePaymentsByExpense(expenseId)
+        // 2. Tính lại WAC từ các phiếu mua thật còn lại.
+        const remaining = localRepo.fetchAllLocalExpenses(addressId)
+            .filter(e => e.is_refill && e.metadata?.ingredient === ingredient && !e.metadata?.adjustment && e.amount > 0)
+        const totalQty = remaining.reduce((s, e) => s + (Number(e.metadata?.qty) || 0), 0)
+        const totalCost = remaining.reduce((s, e) => s + (Number(e.amount) || 0), 0)
+        if (totalQty > 0) {
+            await upsertIngredientCost(ingredient, Math.round(totalCost / totalQty), addressId)
+        }
+        // 3. Dòng audit qty=0.
+        await insertExpense(
+            `Đã hủy phiếu nhập ${ingredient}`, 0, addressId, false, staffName, true, 'cash',
+            { ingredient, qty: 0, adjustment: true, cancel_restock: true, cancelled_qty: cancelledQty }
+        )
+        result = { success: true, ingredient, cancelled_qty: cancelledQty }
+    } else {
+        if (!supabase) throw new Error('No Supabase connection')
+        const params = { p_address_id: addressId, p_expense_id: expenseId }
+        if (staffName) params.p_staff_name = staffName
+        const { data, error } = await supabase.rpc('cancel_restock', params)
+        if (error) throw error
+        result = data
+    }
+    invalidateReportCache(addressId)
+    return result
+}
