@@ -109,53 +109,68 @@ function Stat({ label, value, tone }) {
 
 // ── History card ────────────────────────────────────────────────────────────
 //
-// Three row types share one card, distinguished by metadata:
-//   • restock      — a purchase: qty + money + payment status + Hủy.
-//   • adjustment   — manual stock fix (amount 0): qty + "Hiệu chỉnh", no money. Cancellable.
-//   • cancel marker— the audit row a cancel leaves behind (cancel_restock=true): muted,
-//                    qty 0, no money, NOT cancellable.
+// Two live row types + a cancelled overlay (like a deleted order in /history):
+//   • restock    — a purchase: qty + money + payment status + Hủy.
+//   • adjustment — manual stock fix (amount 0): qty + "Hiệu chỉnh", no money. Cancellable.
+//   • cancelled  — either of the above after Hủy: zeroed in the DB (qty/amount 0) but the
+//                  ORIGINAL numbers live in metadata.cancelled_qty/_amount, shown struck-
+//                  through under a "ĐÃ HỦY" corner badge + grayscale. Not cancellable again.
 //
-// Layout (top → bottom): type tag + Hủy (corner) · hero qty + money · Tồn X→Y ·
-// context pills (restock only) · staff + datetime. One divider only, above the meta.
+// Layout: ĐÃ HỦY badge (if cancelled) · type tag + Hủy (corner) · hero qty + money ·
+// Tồn X→Y · context pills (restock only) · staff + datetime above a hairline divider.
 function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock }) {
     const d = new Date(entry.created_at)
     // Hardcode dd/mm — Chromium's vi-VN renders "27 - 05" with literal spaces.
     const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
     const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 
-    const qty = entry.metadata?.qty || 0
-    const isCancelMarker = !!entry.metadata?.cancel_restock
-    const isAdjust = !!entry.metadata?.adjustment && !isCancelMarker
-    const isRestock = !entry.metadata?.adjustment
+    const cancelled = !!entry.metadata?.cancelled
+    const cancelledBy = entry.metadata?.cancelled_by
+    const isAdjust = !!entry.metadata?.adjustment
+    const isRestock = !isAdjust
     const isTransfer = entry.payment_method === 'transfer'
-    const unitPrice = qty > 0 && isRestock ? Math.round(entry.amount / qty) : null
+
+    // When cancelled the row is zeroed in the DB; display the ORIGINAL figures.
+    const qty = cancelled ? (Number(entry.metadata?.cancelled_qty) || 0) : (entry.metadata?.qty || 0)
+    const amount = cancelled ? (Number(entry.metadata?.cancelled_amount) || 0) : (entry.amount || 0)
+    const unitPrice = qty > 0 && isRestock ? Math.round(amount / qty) : null
 
     const beforeStock = entry.metadata?.before_stock
     const afterStock = entry.metadata?.after_stock
     const hasSnapshot = Number.isFinite(beforeStock) && Number.isFinite(afterStock)
 
+    // Payment status only meaningful on a live restock (cancelled rows have no payments left).
     const paid = (entry.payments || []).reduce((s, p) => s + (p.amount || 0), 0)
-    const owing = Math.max(0, (entry.amount || 0) - paid)
-    const status = !isRestock ? null
+    const owing = Math.max(0, amount - paid)
+    const status = (!isRestock || cancelled) ? null
         : owing <= 0 ? 'paid'
         : paid <= 0 ? 'unpaid'
         : 'partial'
     const clickable = (status === 'unpaid' || status === 'partial') && !!onOpenPayment
-    // Restocks and adjustments can be cancelled; the cancel-marker audit row cannot.
-    const cancellable = !!onCancelRestock && !isCancelMarker
+    const cancellable = !!onCancelRestock && !cancelled
 
-    const typeLabel = isCancelMarker ? 'Đã hủy' : isAdjust ? 'Hiệu chỉnh tồn' : 'Nhập kho'
-    const typeTone = isCancelMarker ? 'text-text-dim' : isAdjust ? 'text-warning' : 'text-primary'
-    const qtyCls = qty > 0 ? 'text-success' : qty < 0 ? 'text-danger' : 'text-text-dim'
+    const typeLabel = isAdjust ? 'Hiệu chỉnh tồn' : 'Nhập kho'
+    const typeTone = cancelled ? 'text-text-dim' : isAdjust ? 'text-warning' : 'text-primary'
+    const qtyCls = cancelled ? 'text-text-dim line-through'
+        : qty > 0 ? 'text-success' : qty < 0 ? 'text-danger' : 'text-text-dim'
+    const moneyCls = cancelled ? 'text-text-dim line-through' : 'text-danger'
 
-    const innerCls = `bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 transition-all ${
-        isCancelMarker ? 'opacity-70' : ''
+    const innerCls = `bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden transition-all ${
+        cancelled ? 'opacity-50 grayscale select-none' : ''
     } ${clickable ? 'cursor-pointer hover:border-primary/40 active:scale-[0.99]' : ''}`
 
     const Body = (
         <>
-            {/* Row 0 — type tag (left) + cancel (corner). */}
-            <div className="flex items-center justify-between gap-2 -mt-0.5">
+            {/* Cancelled corner badge — same treatment as a deleted order. */}
+            {cancelled && (
+                <div className="absolute top-0 left-0 bg-danger/20 text-danger text-[10px] font-black px-3 py-1 rounded-br-[14px] uppercase tracking-wider z-10">
+                    ĐÃ HỦY {cancelledBy ? `BỞI ${String(cancelledBy).toUpperCase()}` : ''}
+                </div>
+            )}
+
+            {/* Row 0 — type tag (left) + cancel (corner). Pushed down a touch when the
+                ĐÃ HỦY badge occupies the top-left. */}
+            <div className={`flex items-center justify-between gap-2 -mt-0.5 ${cancelled ? 'mt-4' : ''}`}>
                 <span className={`text-[11px] font-black uppercase tracking-wider ${typeTone}`}>
                     {typeLabel}
                 </span>
@@ -177,8 +192,8 @@ function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock }) {
                     {qty > 0 ? '+' : ''}{qty} {unit}
                 </span>
                 {isRestock && (
-                    <span className="text-[14px] font-black tabular-nums text-danger">
-                        -{formatVND(entry.amount)}
+                    <span className={`text-[14px] font-black tabular-nums ${moneyCls}`}>
+                        -{formatVND(amount)}
                     </span>
                 )}
             </div>
@@ -192,12 +207,12 @@ function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock }) {
                 </div>
             )}
 
-            {/* Context pills — restock only (payment status + unit price + method). */}
-            {isRestock && (
+            {/* Context pills — live restock only (payment status + unit price + method). */}
+            {isRestock && !cancelled && (
                 <div className="flex flex-wrap items-center gap-1.5">
                     {status === 'paid' && <Pill tone="success">Đã trả</Pill>}
                     {status === 'partial' && (
-                        <Pill tone="neutral">Trả 1 phần · {formatVND(paid)}/{formatVND(entry.amount)}</Pill>
+                        <Pill tone="neutral">Trả 1 phần · {formatVND(paid)}/{formatVND(amount)}</Pill>
                     )}
                     {status === 'unpaid' && <Pill tone="warning">Còn nợ {formatVND(owing)}</Pill>}
                     {unitPrice != null && <Pill tone="neutral">{formatVND(unitPrice)}/{unit}</Pill>}

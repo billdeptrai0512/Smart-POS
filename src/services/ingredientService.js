@@ -663,29 +663,38 @@ export async function cancelRestock(addressId, expenseId, staffName = null) {
     if (localRepo.isGuest()) {
         const all = localRepo.fetchAllLocalExpenses(addressId)
         const target = all.find(e => e.id === expenseId)
-        if (!target || !target.is_refill || target.metadata?.cancel_restock) {
+        if (!target || !target.is_refill) {
             throw new Error('Không phải phiếu nhập kho / hiệu chỉnh hợp lệ')
         }
+        if (target.metadata?.cancelled) throw new Error('Phiếu đã bị hủy')
         const ingredient = target.metadata?.ingredient
         const cancelledQty = Number(target.metadata?.qty) || 0
+        const cancelledAmount = Number(target.amount) || 0
         const wasAdjustment = !!target.metadata?.adjustment
-        // 1. Xóa expense + payments của nó.
-        localRepo.deleteLocalExpense(expenseId)
+        // 1. Zero-out tại chỗ + cờ cancelled (giữ dòng trong nhật ký). Số gốc cất trong metadata.
+        localRepo.updateLocalExpense(expenseId, {
+            amount: 0,
+            metadata: {
+                ...target.metadata,
+                qty: 0,
+                cancelled: true,
+                cancelled_at: new Date().toISOString(),
+                cancelled_by: staffName,
+                cancelled_qty: cancelledQty,
+                cancelled_amount: cancelledAmount,
+            },
+        })
+        // 2. Xóa payments của phiếu (đảo cash-out).
         localRepo.deleteLocalExpensePaymentsByExpense(expenseId)
-        // 2. Tính lại WAC từ các phiếu mua thật còn lại.
+        // 3. Tính lại WAC từ các phiếu mua thật còn lại (loại adjustment + cancelled + amount 0).
         const remaining = localRepo.fetchAllLocalExpenses(addressId)
-            .filter(e => e.is_refill && e.metadata?.ingredient === ingredient && !e.metadata?.adjustment && e.amount > 0)
+            .filter(e => e.is_refill && e.metadata?.ingredient === ingredient
+                && !e.metadata?.adjustment && !e.metadata?.cancelled && e.amount > 0)
         const totalQty = remaining.reduce((s, e) => s + (Number(e.metadata?.qty) || 0), 0)
         const totalCost = remaining.reduce((s, e) => s + (Number(e.amount) || 0), 0)
         if (totalQty > 0) {
             await upsertIngredientCost(ingredient, Math.round(totalCost / totalQty), addressId)
         }
-        // 3. Dòng audit qty=0.
-        const label = wasAdjustment ? `Đã hủy hiệu chỉnh ${ingredient}` : `Đã hủy phiếu nhập ${ingredient}`
-        await insertExpense(
-            label, 0, addressId, false, staffName, true, 'cash',
-            { ingredient, qty: 0, adjustment: true, cancel_restock: true, cancelled_qty: cancelledQty }
-        )
         result = { success: true, ingredient, cancelled_qty: cancelledQty, was_adjustment: wasAdjustment }
     } else {
         if (!supabase) throw new Error('No Supabase connection')
