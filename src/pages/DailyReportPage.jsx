@@ -228,23 +228,20 @@ export default function DailyReportPage() {
         if (dateStringVN(d) >= todayISO) { setOffset(0); setHasManualPick(false) }
         else { setHasManualPick(false); setOffsetFromISO(dateStringVN(d)) }
     }
-    const handleDayEndPick = (endISO) => {
-        if (!dayCustomDate || !endISO || endISO <= dayCustomDate) return
-        const cappedEnd = endISO > todayISO ? todayISO : endISO
-        setCustomRange({ startISO: dayCustomDate, endISO: cappedEnd })
+    // Enter custom-range scope from the day picker's "Khoảng ngày" chip, seeded
+    // with the last 7 days so the range calendar opens on something sensible.
+    const handleEnterCustomRange = () => {
+        const start = dateStringVN(addDaysVN(new Date(), -6))
+        setCustomRange({ startISO: start, endISO: todayISO })
+        setHasManualPick(false)
         setScope('custom')
     }
-    const handleCustomStartChange = (iso) => {
-        if (!iso) return
-        const clampedEnd = customRange?.endISO || iso
-        const safeStart = iso > clampedEnd ? clampedEnd : (iso > todayISO ? todayISO : iso)
-        setCustomRange({ startISO: safeStart, endISO: clampedEnd })
-    }
-    const handleCustomEndChange = (iso) => {
-        if (!iso) return
-        const start = customRange?.startISO || iso
-        const safeEnd = iso > todayISO ? todayISO : (iso < start ? start : iso)
-        setCustomRange({ startISO: start, endISO: safeEnd })
+    // Single range-calendar emits both endpoints at once; clamp end to today.
+    const handleCustomRangeChange = ({ startISO, endISO }) => {
+        if (!startISO || !endISO) return
+        const safeEnd = endISO > todayISO ? todayISO : endISO
+        const safeStart = startISO > safeEnd ? safeEnd : startISO
+        setCustomRange({ startISO: safeStart, endISO: safeEnd })
     }
     // Picker presets (Hôm nay / Tuần này / Tháng này) reset scope to the preset's
     // bucket so the page reuses the existing offset-based fetch path instead of
@@ -697,17 +694,14 @@ export default function DailyReportPage() {
                 onOffsetPrev={() => setOffset(p => p - 1)}
                 onOffsetNext={() => setOffset(p => p + 1)}
                 dayInputValue={dayInputValue}
-                dayCustomDate={dayCustomDate}
                 todayISO={todayISO}
                 canGoForwardDay={canGoForwardDay}
                 onPrevDay={handlePrevDay}
                 onNextDay={handleNextDay}
                 onDateChange={handleManualDatePick}
-                onEndDatePick={handleDayEndPick}
-                hasManualPick={hasManualPick}
                 customRange={customRange}
-                onCustomStartChange={handleCustomStartChange}
-                onCustomEndChange={handleCustomEndChange}
+                onCustomRangeChange={handleCustomRangeChange}
+                onEnterCustomRange={handleEnterCustomRange}
                 onPresetSelect={handlePickerPreset}
                 belowTabs={<ReportViewFilter value={view} onChange={setView} />}
             />

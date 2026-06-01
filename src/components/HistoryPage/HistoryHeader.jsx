@@ -11,10 +11,10 @@ export default function HistoryHeader({
     // Week/month mode
     canGoForward, onOffsetPrev, onOffsetNext,
     // Day mode (picker)
-    dayInputValue, dayCustomDate, todayISO, canGoForwardDay,
-    onPrevDay, onNextDay, onDateChange, onEndDatePick, hasManualPick,
-    // Custom range mode
-    customRange, onCustomStartChange, onCustomEndChange,
+    dayInputValue, todayISO, canGoForwardDay,
+    onPrevDay, onNextDay, onDateChange,
+    // Custom range mode — single range calendar (tap start, tap end).
+    customRange, onCustomRangeChange, onEnterCustomRange,
     // Preset chips inside the DatePicker popover (Hôm nay / Tuần này / Tháng này).
     // Page maps preset.scope back to its own scope state.
     onPresetSelect,
@@ -38,22 +38,19 @@ export default function HistoryHeader({
                         scope === 'day' ? (
                             <DayPicker
                                 dayInputValue={dayInputValue}
-                                dayCustomDate={dayCustomDate}
                                 todayISO={todayISO}
                                 canGoForwardDay={canGoForwardDay}
                                 onPrev={onPrevDay}
                                 onNext={onNextDay}
                                 onChange={onDateChange}
-                                onEndDatePick={onEndDatePick}
                                 onPresetSelect={onPresetSelect}
-                                hasManualPick={hasManualPick}
+                                onEnterCustomRange={onEnterCustomRange}
                             />
                         ) : scope === 'custom' ? (
                             <CustomRangePicker
                                 customRange={customRange}
                                 todayISO={todayISO}
-                                onStartChange={onCustomStartChange}
-                                onEndChange={onCustomEndChange}
+                                onRangeChange={onCustomRangeChange}
                                 onPresetSelect={onPresetSelect}
                             />
                         ) : (
@@ -87,93 +84,61 @@ export default function HistoryHeader({
 // Dashed-underline chip shared by every header date control. DatePicker calls
 // the returned fn with (label, toggle); pass `labelOverride` when the chip text
 // differs from the picker's own value (range endpoints show '—' until set).
-function chipTrigger({ labelOverride, className = '' } = {}) {
+function chipTrigger({ labelOverride } = {}) {
     return (label, toggle) => (
         <button
             type="button"
             onClick={toggle}
-            className={`text-[12px] font-bold text-text/80 leading-none tabular-nums underline decoration-dashed decoration-primary/40 underline-offset-4 ${className}`}
+            className="text-[12px] font-bold text-text/80 leading-none tabular-nums underline decoration-dashed decoration-primary/40 underline-offset-4"
         >
             {labelOverride ?? label}
         </button>
     )
 }
 
-function DayPicker({ dayInputValue, dayCustomDate, todayISO, canGoForwardDay, onPrev, onNext, onChange, onEndDatePick, onPresetSelect, hasManualPick }) {
-    // Surface "→ ngày" chip only after a manual calendar pick — chevron stepping must NOT trigger it.
-    const showEndChip = hasManualPick && !!dayCustomDate && dayCustomDate < todayISO
+function DayPicker({ dayInputValue, todayISO, canGoForwardDay, onPrev, onNext, onChange, onPresetSelect, onEnterCustomRange }) {
+    // "Khoảng ngày" chip in the preset row switches the page into custom-range scope.
+    const extraPresets = onEnterCustomRange
+        ? [{ key: 'custom', label: 'Khoảng ngày', onClick: onEnterCustomRange }]
+        : []
     return (
         <div className="flex items-center gap-1 pointer-events-auto mt-0.5">
-            {!showEndChip && (
-                <button
-                    onClick={onPrev}
-                    className="w-5 h-5 flex items-center justify-center rounded-full text-text-secondary hover:text-primary active:text-primary transition-colors"
-                >
-                    <ChevronLeft size={14} strokeWidth={2.5} />
-                </button>
-            )}
+            <button
+                onClick={onPrev}
+                className="w-5 h-5 flex items-center justify-center rounded-full text-text-secondary hover:text-primary active:text-primary transition-colors"
+            >
+                <ChevronLeft size={14} strokeWidth={2.5} />
+            </button>
             <DatePicker
                 value={dayInputValue}
                 max={todayISO}
                 onChange={onChange}
                 onPresetSelect={onPresetSelect}
+                extraPresets={extraPresets}
                 trigger={chipTrigger()}
             />
-            {showEndChip && (
-                <>
-                    <span className="text-[11px] font-bold text-text-secondary leading-none">→</span>
-                    <DatePicker
-                        value={dayCustomDate}
-                        min={dayCustomDate}
-                        max={todayISO}
-                        onChange={onEndDatePick}
-                        presets={false}
-                        align="end"
-                        trigger={(_label, toggle) => (
-                            <button
-                                type="button"
-                                onClick={toggle}
-                                className="text-[11px] font-bold text-text-dim leading-none italic underline decoration-dotted decoration-text-dim/40 underline-offset-4"
-                            >
-                                ngày
-                            </button>
-                        )}
-                    />
-                </>
-            )}
-            {!showEndChip && (
-                <button
-                    onClick={onNext}
-                    className={`w-5 h-5 flex items-center justify-center rounded-full transition-colors ${canGoForwardDay ? 'text-text-secondary hover:text-primary active:text-primary' : 'text-text-dim opacity-30 cursor-default'}`}
-                >
-                    <ChevronRight size={14} strokeWidth={2.5} />
-                </button>
-            )}
+            <button
+                onClick={onNext}
+                className={`w-5 h-5 flex items-center justify-center rounded-full transition-colors ${canGoForwardDay ? 'text-text-secondary hover:text-primary active:text-primary' : 'text-text-dim opacity-30 cursor-default'}`}
+            >
+                <ChevronRight size={14} strokeWidth={2.5} />
+            </button>
         </div>
     )
 }
 
-function CustomRangePicker({ customRange, todayISO, onStartChange, onEndChange, onPresetSelect }) {
-    const startISO = customRange?.startISO || todayISO
-    const endISO = customRange?.endISO || todayISO
+function CustomRangePicker({ customRange, todayISO, onRangeChange, onPresetSelect }) {
+    const value = customRange?.startISO ? customRange : null
+    const label = value ? `${formatIsoShort(value.startISO)} – ${formatIsoShort(value.endISO)}` : 'Chọn khoảng'
     return (
-        <div className="flex items-center gap-1.5 pointer-events-auto mt-0.5">
+        <div className="flex items-center pointer-events-auto mt-0.5">
             <DatePicker
-                value={startISO}
-                max={endISO}
-                onChange={onStartChange}
-                onPresetSelect={onPresetSelect}
-                trigger={chipTrigger({ labelOverride: formatIsoShort(customRange?.startISO) })}
-            />
-            <span className="text-[11px] font-bold text-text-secondary leading-none">→</span>
-            <DatePicker
-                value={endISO}
-                min={startISO}
+                range
+                value={value}
                 max={todayISO}
-                onChange={onEndChange}
+                onChange={onRangeChange}
                 onPresetSelect={onPresetSelect}
-                align="end"
-                trigger={chipTrigger({ labelOverride: formatIsoShort(customRange?.endISO) })}
+                trigger={chipTrigger({ labelOverride: label })}
             />
         </div>
     )

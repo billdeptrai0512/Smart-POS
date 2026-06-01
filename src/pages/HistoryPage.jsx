@@ -156,24 +156,14 @@ export default function HistoryPage() {
         setHasManualPick(false)
     }
 
-    const handleCustomStartChange = (iso) => {
-        if (!iso) return
-        const clampedEnd = customRange?.endISO || iso
-        // start must be <= end and <= today
-        const safeStart = iso > clampedEnd ? clampedEnd : (iso > todayISORef() ? todayISORef() : iso)
-        setCustomRange({ startISO: safeStart, endISO: clampedEnd })
+    // Single range-calendar emits both endpoints at once; clamp end to today.
+    const handleCustomRangeChange = ({ startISO, endISO }) => {
+        if (!startISO || !endISO) return
+        const today = getLocalISO(new Date())
+        const safeEnd = endISO > today ? today : endISO
+        const safeStart = startISO > safeEnd ? safeEnd : startISO
+        setCustomRange({ startISO: safeStart, endISO: safeEnd })
     }
-
-    const handleCustomEndChange = (iso) => {
-        if (!iso) return
-        const start = customRange?.startISO || iso
-        const today = todayISORef()
-        const safeEnd = iso > today ? today : (iso < start ? start : iso)
-        setCustomRange({ startISO: start, endISO: safeEnd })
-    }
-
-    // todayISO is declared below; stable getter via fresh call avoids forward-ref churn
-    function todayISORef() { return getLocalISO(new Date()) }
 
     // ─── Day-mode date picker ─────────────────────────────────────────
     const todayISO = getLocalISO(new Date())
@@ -204,13 +194,12 @@ export default function HistoryPage() {
         setOffsetFromISO(getLocalISO(next))
     }
 
-    // Day mode: user extends single-day selection into a range by picking an end date.
-    // If end > start, switch implicitly to 'custom' scope (no tab highlighted).
-    const handleDayEndPick = (endISO) => {
-        if (!dayCustomDate || !endISO) return
-        if (endISO <= dayCustomDate) return // not a forward range — keep day mode
-        const cappedEnd = endISO > todayISO ? todayISO : endISO
-        setCustomRange({ startISO: dayCustomDate, endISO: cappedEnd })
+    // Enter custom-range scope from the day picker's "Khoảng ngày" chip, seeded
+    // with the last 7 days.
+    const handleEnterCustomRange = () => {
+        const start = dateStringVN(addDaysVN(new Date(), -6))
+        setCustomRange({ startISO: start, endISO: todayISO })
+        setHasManualPick(false)
         setScope('custom')
     }
 
@@ -399,17 +388,14 @@ export default function HistoryPage() {
                 onOffsetPrev={() => setOffset(p => p - 1)}
                 onOffsetNext={() => setOffset(p => p + 1)}
                 dayInputValue={dayInputValue}
-                dayCustomDate={dayCustomDate}
                 todayISO={todayISO}
                 canGoForwardDay={canGoForwardDay}
                 onPrevDay={handlePrevDay}
                 onNextDay={handleNextDay}
                 onDateChange={handleManualDatePick}
-                onEndDatePick={handleDayEndPick}
-                hasManualPick={hasManualPick}
                 customRange={customRange}
-                onCustomStartChange={handleCustomStartChange}
-                onCustomEndChange={handleCustomEndChange}
+                onCustomRangeChange={handleCustomRangeChange}
+                onEnterCustomRange={handleEnterCustomRange}
                 onPresetSelect={(preset) => applyPresetToScope(preset, { setScope, setOffset, setHasManualPick, setCustomRange })}
             />
 
