@@ -1,3 +1,4 @@
+// Unified day + custom-range date control via DatePicker (range mode).
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import HistoryTabsBar from './HistoryTabsBar'
 import DatePicker from '../common/DatePicker'
@@ -10,11 +11,11 @@ export default function HistoryHeader({
     activeTab, onTabSelect,
     // Week/month mode
     canGoForward, onOffsetPrev, onOffsetNext,
-    // Day mode (picker)
+    // Day + custom share ONE range calendar. Tap a day then the same day again
+    // → single day (scope 'day'); tap two different days → range (scope 'custom').
     dayInputValue, todayISO, canGoForwardDay,
-    onPrevDay, onNextDay, onDateChange,
-    // Custom range mode — single range calendar (tap start, tap end).
-    customRange, onCustomRangeChange, onEnterCustomRange,
+    onPrevDay, onNextDay,
+    customRange, onRangeChange,
     // Preset chips inside the DatePicker popover (Hôm nay / Tuần này / Tháng này).
     // Page maps preset.scope back to its own scope state.
     onPresetSelect,
@@ -35,30 +36,24 @@ export default function HistoryHeader({
                 <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
                     <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Nhật ký</span>
                     {!isReadOnly ? (
-                        scope === 'day' ? (
-                            <DayPicker
-                                dayInputValue={dayInputValue}
-                                todayISO={todayISO}
-                                canGoForwardDay={canGoForwardDay}
-                                onPrev={onPrevDay}
-                                onNext={onNextDay}
-                                onChange={onDateChange}
-                                onPresetSelect={onPresetSelect}
-                                onEnterCustomRange={onEnterCustomRange}
-                            />
-                        ) : scope === 'custom' ? (
-                            <CustomRangePicker
-                                customRange={customRange}
-                                todayISO={todayISO}
-                                onRangeChange={onCustomRangeChange}
-                                onPresetSelect={onPresetSelect}
-                            />
-                        ) : (
+                        scope === 'week' || scope === 'month' ? (
                             <RangeNav
                                 rangeLabel={rangeLabel}
                                 canGoForward={canGoForward}
                                 onPrev={onOffsetPrev}
                                 onNext={onOffsetNext}
+                                onPresetSelect={onPresetSelect}
+                            />
+                        ) : (
+                            <DateRangePicker
+                                scope={scope}
+                                dayInputValue={dayInputValue}
+                                customRange={customRange}
+                                todayISO={todayISO}
+                                canGoForwardDay={canGoForwardDay}
+                                onPrevDay={onPrevDay}
+                                onNextDay={onNextDay}
+                                onRangeChange={onRangeChange}
                                 onPresetSelect={onPresetSelect}
                             />
                         )
@@ -96,42 +91,30 @@ function chipTrigger({ labelOverride } = {}) {
     )
 }
 
-function DayPicker({ dayInputValue, todayISO, canGoForwardDay, onPrev, onNext, onChange, onPresetSelect, onEnterCustomRange }) {
-    // "Khoảng ngày" chip in the preset row switches the page into custom-range scope.
-    const extraPresets = onEnterCustomRange
-        ? [{ key: 'custom', label: 'Khoảng ngày', onClick: onEnterCustomRange }]
-        : []
+// Unified day + custom-range control. Always a range-mode calendar: same day
+// twice → single day, two days → range. The page decides scope from the emitted
+// endpoints. Day-stepping chevrons flank the chip ONLY in single-day scope
+// (stepping a multi-day range by one day isn't meaningful).
+function DateRangePicker({ scope, dayInputValue, customRange, todayISO, canGoForwardDay, onPrevDay, onNextDay, onRangeChange, onPresetSelect }) {
+    const isDay = scope === 'day'
+    // Feed the calendar the current selection so it highlights correctly: in day
+    // scope that's a zero-width {day, day} range; in custom scope the real range.
+    const value = isDay
+        ? { startISO: dayInputValue, endISO: dayInputValue }
+        : (customRange?.startISO ? customRange : null)
+    const label = isDay
+        ? formatIsoShort(dayInputValue)
+        : (value ? `${formatIsoShort(value.startISO)} – ${formatIsoShort(value.endISO)}` : 'Chọn ngày')
     return (
         <div className="flex items-center gap-1 pointer-events-auto mt-0.5">
-            <button
-                onClick={onPrev}
-                className="w-5 h-5 flex items-center justify-center rounded-full text-text-secondary hover:text-primary active:text-primary transition-colors"
-            >
-                <ChevronLeft size={14} strokeWidth={2.5} />
-            </button>
-            <DatePicker
-                value={dayInputValue}
-                max={todayISO}
-                onChange={onChange}
-                onPresetSelect={onPresetSelect}
-                extraPresets={extraPresets}
-                trigger={chipTrigger()}
-            />
-            <button
-                onClick={onNext}
-                className={`w-5 h-5 flex items-center justify-center rounded-full transition-colors ${canGoForwardDay ? 'text-text-secondary hover:text-primary active:text-primary' : 'text-text-dim opacity-30 cursor-default'}`}
-            >
-                <ChevronRight size={14} strokeWidth={2.5} />
-            </button>
-        </div>
-    )
-}
-
-function CustomRangePicker({ customRange, todayISO, onRangeChange, onPresetSelect }) {
-    const value = customRange?.startISO ? customRange : null
-    const label = value ? `${formatIsoShort(value.startISO)} – ${formatIsoShort(value.endISO)}` : 'Chọn khoảng'
-    return (
-        <div className="flex items-center pointer-events-auto mt-0.5">
+            {isDay && (
+                <button
+                    onClick={onPrevDay}
+                    className="w-5 h-5 flex items-center justify-center rounded-full text-text-secondary hover:text-primary active:text-primary transition-colors"
+                >
+                    <ChevronLeft size={14} strokeWidth={2.5} />
+                </button>
+            )}
             <DatePicker
                 range
                 value={value}
@@ -140,6 +123,14 @@ function CustomRangePicker({ customRange, todayISO, onRangeChange, onPresetSelec
                 onPresetSelect={onPresetSelect}
                 trigger={chipTrigger({ labelOverride: label })}
             />
+            {isDay && (
+                <button
+                    onClick={onNextDay}
+                    className={`w-5 h-5 flex items-center justify-center rounded-full transition-colors ${canGoForwardDay ? 'text-text-secondary hover:text-primary active:text-primary' : 'text-text-dim opacity-30 cursor-default'}`}
+                >
+                    <ChevronRight size={14} strokeWidth={2.5} />
+                </button>
+            )}
         </div>
     )
 }

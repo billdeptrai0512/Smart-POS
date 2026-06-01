@@ -25,8 +25,8 @@ const WEEKDAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
 //                  Omit to hide the grid entirely (presets-only popover).
 //   onPresetSelect (preset)=>void — fired when a quick-preset chip is tapped.
 //   presets        boolean — show the built-in Hôm nay/Tuần này/Tháng này row.
-//   extraPresets   [{ key, label, onClick }] — caller chips appended to the row
-//                  (e.g. "Khoảng ngày" to switch into custom-range scope).
+//   extraPresets   [{ key, label, onClick }] — optional caller chips appended to
+//                  the preset row (generic; unused by the header today).
 //   range          boolean — enable two-tap range selection.
 //   trigger        (label, toggle) => ReactNode — the chip/button that opens it.
 //   align          'center' | 'start' | 'end' — popover horizontal alignment.
@@ -87,6 +87,9 @@ export default function DatePicker({
             setOpen(false)
             return
         }
+        // Range mode, two-tap: first tap arms the start, second tap commits.
+        // Tapping the SAME day twice → start === end → caller treats it as a
+        // single-day selection; two different days → a real range.
         if (!pendingStart) {
             setPendingStart(iso)
             return
@@ -170,7 +173,7 @@ export default function DatePicker({
                             {/* Range hint while waiting for the second tap */}
                             {range && pendingStart && (
                                 <div className="mb-2 text-center text-[10px] font-bold text-primary">
-                                    Chọn ngày kết thúc (bắt đầu: {formatIsoShort(pendingStart)})
+                                    Chọn ngày kết thúc · chạm lại {formatIsoShort(pendingStart)} nếu chỉ 1 ngày
                                 </div>
                             )}
 

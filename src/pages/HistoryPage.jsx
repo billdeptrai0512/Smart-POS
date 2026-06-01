@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { calculateProductCost, parseVNDInput } from '../utils'
 import { getPendingOrders, removePendingOrder } from '../hooks/useOfflineSync'
-import { dateStringVN, isSameDayVN, addDaysVN } from '../utils/dateVN'
+import { dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { calcRangeWithLabel, offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
 import { applyPresetToScope } from '../components/common/datePickerUtils'
 import { useHistoryRangeFetch } from '../hooks/useHistoryRangeFetch'
@@ -156,13 +156,23 @@ export default function HistoryPage() {
         setHasManualPick(false)
     }
 
-    // Single range-calendar emits both endpoints at once; clamp end to today.
-    const handleCustomRangeChange = ({ startISO, endISO }) => {
+    // Unified calendar emits {startISO, endISO}. Equal endpoints = single day →
+    // day scope via offset; different = real range → custom scope. End clamped to today.
+    const handleRangeChange = ({ startISO, endISO }) => {
         if (!startISO || !endISO) return
         const today = getLocalISO(new Date())
         const safeEnd = endISO > today ? today : endISO
         const safeStart = startISO > safeEnd ? safeEnd : startISO
-        setCustomRange({ startISO: safeStart, endISO: safeEnd })
+        if (safeStart === safeEnd) {
+            setCustomRange(null)
+            setScope('day')
+            setHasManualPick(true)
+            setOffsetFromISO(safeStart)
+        } else {
+            setCustomRange({ startISO: safeStart, endISO: safeEnd })
+            setHasManualPick(false)
+            setScope('custom')
+        }
     }
 
     // ─── Day-mode date picker ─────────────────────────────────────────
@@ -174,11 +184,6 @@ export default function HistoryPage() {
     const setOffsetFromISO = (iso) => {
         if (!iso || iso >= todayISO) { setOffset(0); setHasManualPick(false); return }
         setOffset(offsetFromISO(iso, todayISO))
-    }
-    // Calendar pick: flag manual so the "→ ngày" end chip can appear.
-    const handleManualDatePick = (iso) => {
-        setHasManualPick(true)
-        setOffsetFromISO(iso)
     }
     const handlePrevDay = () => {
         setHasManualPick(false)
@@ -194,14 +199,6 @@ export default function HistoryPage() {
         setOffsetFromISO(getLocalISO(next))
     }
 
-    // Enter custom-range scope from the day picker's "Khoảng ngày" chip, seeded
-    // with the last 7 days.
-    const handleEnterCustomRange = () => {
-        const start = dateStringVN(addDaysVN(new Date(), -6))
-        setCustomRange({ startISO: start, endISO: todayISO })
-        setHasManualPick(false)
-        setScope('custom')
-    }
 
     // ─── Range data fetchers ──────────────────────────────────────────
     const { rangeExpenses, rangeOrders, isLoadingRange, isLoadingRangeOrders, patchExpense: patchRangeExpense } = useHistoryRangeFetch({
@@ -392,10 +389,8 @@ export default function HistoryPage() {
                 canGoForwardDay={canGoForwardDay}
                 onPrevDay={handlePrevDay}
                 onNextDay={handleNextDay}
-                onDateChange={handleManualDatePick}
                 customRange={customRange}
-                onCustomRangeChange={handleCustomRangeChange}
-                onEnterCustomRange={handleEnterCustomRange}
+                onRangeChange={handleRangeChange}
                 onPresetSelect={(preset) => applyPresetToScope(preset, { setScope, setOffset, setHasManualPick, setCustomRange })}
             />
 

@@ -11,7 +11,7 @@ import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
 import { useDailyReportData } from '../hooks/useDailyReportData'
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogsByCategory, calculateLossValue } from '../utils/inventory'
 import { ingredientLabel } from '../utils/ingredients'
-import { startOfDayVN, dateStringVN, isSameDayVN, addDaysVN } from '../utils/dateVN'
+import { startOfDayVN, dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
 import { applyPresetToScope } from '../components/common/datePickerUtils'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
@@ -217,7 +217,6 @@ export default function DailyReportPage() {
         if (!iso || iso >= todayISO) { setOffset(0); setHasManualPick(false); return }
         setOffset(offsetFromISO(iso, todayISO))
     }
-    const handleManualDatePick = (iso) => { setHasManualPick(true); setOffsetFromISO(iso) }
     const handlePrevDay = () => {
         setHasManualPick(false)
         const d = new Date(); d.setDate(d.getDate() + offset - 1)
@@ -228,20 +227,22 @@ export default function DailyReportPage() {
         if (dateStringVN(d) >= todayISO) { setOffset(0); setHasManualPick(false) }
         else { setHasManualPick(false); setOffsetFromISO(dateStringVN(d)) }
     }
-    // Enter custom-range scope from the day picker's "Khoảng ngày" chip, seeded
-    // with the last 7 days so the range calendar opens on something sensible.
-    const handleEnterCustomRange = () => {
-        const start = dateStringVN(addDaysVN(new Date(), -6))
-        setCustomRange({ startISO: start, endISO: todayISO })
-        setHasManualPick(false)
-        setScope('custom')
-    }
-    // Single range-calendar emits both endpoints at once; clamp end to today.
-    const handleCustomRangeChange = ({ startISO, endISO }) => {
+    // Unified calendar emits {startISO, endISO}. Equal endpoints = single day →
+    // day scope via offset; different = real range → custom scope. End clamped to today.
+    const handleRangeChange = ({ startISO, endISO }) => {
         if (!startISO || !endISO) return
         const safeEnd = endISO > todayISO ? todayISO : endISO
         const safeStart = startISO > safeEnd ? safeEnd : startISO
-        setCustomRange({ startISO: safeStart, endISO: safeEnd })
+        if (safeStart === safeEnd) {
+            setCustomRange(null)
+            setScope('day')
+            setHasManualPick(true)
+            setOffsetFromISO(safeStart)
+        } else {
+            setCustomRange({ startISO: safeStart, endISO: safeEnd })
+            setHasManualPick(false)
+            setScope('custom')
+        }
     }
     // Picker presets (Hôm nay / Tuần này / Tháng này) reset scope to the preset's
     // bucket so the page reuses the existing offset-based fetch path instead of
@@ -698,10 +699,8 @@ export default function DailyReportPage() {
                 canGoForwardDay={canGoForwardDay}
                 onPrevDay={handlePrevDay}
                 onNextDay={handleNextDay}
-                onDateChange={handleManualDatePick}
                 customRange={customRange}
-                onCustomRangeChange={handleCustomRangeChange}
-                onEnterCustomRange={handleEnterCustomRange}
+                onRangeChange={handleRangeChange}
                 onPresetSelect={handlePickerPreset}
                 belowTabs={<ReportViewFilter value={view} onChange={setView} />}
             />
