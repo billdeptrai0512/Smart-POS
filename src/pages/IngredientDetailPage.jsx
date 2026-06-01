@@ -249,7 +249,7 @@ export default function IngredientDetailPage() {
             <IngredientDetailHeader
                 title={titleLabel}
                 subtitle={`Tồn: ${stockSubtitle}`}
-                onBack={() => navigate(location.state?.from || '/ingredients', { state: { viewMode: location.state?.viewMode } })}
+                onBack={() => navigate('/ingredients', { state: location.state })}
                 onDelete={canEdit ? handleDelete : null}
                 viewMode={viewMode}
                 onViewModeChange={setViewMode}
