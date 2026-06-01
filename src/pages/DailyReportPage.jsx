@@ -11,9 +11,8 @@ import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
 import { useDailyReportData } from '../hooks/useDailyReportData'
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogsByCategory, calculateLossValue } from '../utils/inventory'
 import { ingredientLabel } from '../utils/ingredients'
-import { startOfDayVN, dateStringVN, isSameDayVN } from '../utils/dateVN'
-import { offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
-import { applyPresetToScope } from '../components/common/datePickerUtils'
+import { dateStringVN, isSameDayVN } from '../utils/dateVN'
+import { useDateScope } from '../hooks/useDateScope'
 import { goToMenuStep } from '../utils/menuSequence'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import SalesCard from '../components/DailyReportPage/SalesCard'
@@ -59,29 +58,24 @@ export default function DailyReportPage() {
     const { selectedAddress } = useAddress()
     const initialDate = location.state?.initialDate || null
 
-    // Scope/offset/range are carried across the Nhật ký ↔ Báo cáo tab switch so a
-    // week/month/custom selection stays put instead of snapping back to "hôm nay".
-    const initialScope = ['day', 'week', 'month', 'custom'].includes(location.state?.scope) ? location.state.scope : 'day'
-    const initialOffset = typeof location.state?.offset === 'number' ? location.state.offset : 0
-    const initialCustomRange = location.state?.customRange?.startISO ? location.state.customRange : null
+    // Date selection (scope/offset/customRange + every transition handler) lives in
+    // the shared hook so /daily-report and /history stay in lock-step. Seeded from
+    // nav state so a week/month/custom window survives the Nhật ký ↔ Báo cáo switch.
+    const date = useDateScope(location.state)
+    const {
+        scope, offset, customRange, hasManualPick,
+        dayInputValue, canGoForwardDay, canGoForwardPeriod, navState: dateNavState,
+        goPrevDay, goNextDay, goOffsetPrev, goOffsetNext,
+        applyRange, shiftRange, canShiftRangeForward, applyPreset, goToDate,
+    } = date
 
-    const [scope, setScope] = useState(initialScope)
-    const [offset, setOffset] = useState(initialOffset)
-    const [customRange, setCustomRange] = useState(initialCustomRange)
-    const [hasManualPick, setHasManualPick] = useState(false)
     const [showLossUpsell, setShowLossUpsell] = useState(false)
 
-    // Seed customDate if navigated with it
+    // Deep-link: open on a specific past date passed via nav state (e.g. from a
+    // "xem ngày X" link). Runs once; the hook clamps future dates to today.
     useEffect(() => {
-        if (initialDate) {
-            const today = dateStringVN(new Date())
-            if (initialDate !== today) {
-                const target = new Date(initialDate + 'T00:00:00+07:00')
-                const start = startOfDayVN()
-                setOffset(Math.round((target - start) / 86400000))
-                setHasManualPick(true)
-            }
-        }
+        if (initialDate && initialDate !== dateStringVN(new Date())) goToDate(initialDate)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialDate])
 
     // All server-data state (shift closing, yesterday comparison, range data,
@@ -201,11 +195,6 @@ export default function DailyReportPage() {
     // Payments của ngày scope hiện tại — driver chính của cashflow refill (paid_at-based).
     const displayPayments = isTodayScope ? (todayPayments || []) : (apiPayments || [])
 
-    const dayCustomDate = useMemo(() => dayCustomDateOf(scope, offset), [scope, offset])
-
-    const dayInputValue = dayCustomDate || todayISO
-    const canGoForwardDay = dayInputValue < todayISO
-
     const rangeLabel = useMemo(() => {
         const fmt = d => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
         if (scope === 'day') {
@@ -217,64 +206,7 @@ export default function DailyReportPage() {
             return `${sStr[2]}/${sStr[1]} – ${eStr[2]}/${eStr[1]}`
         }
         return `${fmt(rangeStart)} – ${fmt(rangeEnd)}`
-    }, [scope, offset, rangeStart, rangeEnd, customRange])
-
-    const setOffsetFromISO = (iso) => {
-        if (!iso || iso >= todayISO) { setOffset(0); setHasManualPick(false); return }
-        setOffset(offsetFromISO(iso, todayISO))
-    }
-    const handlePrevDay = () => {
-        setHasManualPick(false)
-        const d = new Date(); d.setDate(d.getDate() + offset - 1)
-        setOffsetFromISO(dateStringVN(d))
-    }
-    const handleNextDay = () => {
-        const d = new Date(); d.setDate(d.getDate() + offset + 1)
-        if (dateStringVN(d) >= todayISO) { setOffset(0); setHasManualPick(false) }
-        else { setHasManualPick(false); setOffsetFromISO(dateStringVN(d)) }
-    }
-    // Unified calendar emits {startISO, endISO}. Equal endpoints = single day →
-    // day scope via offset; different = real range → custom scope. End clamped to today.
-    const handleRangeChange = ({ startISO, endISO }) => {
-        if (!startISO || !endISO) return
-        const safeEnd = endISO > todayISO ? todayISO : endISO
-        const safeStart = startISO > safeEnd ? safeEnd : startISO
-        if (safeStart === safeEnd) {
-            setCustomRange(null)
-            setScope('day')
-            setHasManualPick(true)
-            setOffsetFromISO(safeStart)
-        } else {
-            setCustomRange({ startISO: safeStart, endISO: safeEnd })
-            setHasManualPick(false)
-            setScope('custom')
-        }
-    }
-    // Shift the custom range by its own width (the ‹ › arrows beside the range chip).
-    // dir = -1 (earlier) | +1 (later). End is clamped to today; when the forward
-    // shift would cross today, the whole window is pinned to end at today so the
-    // span stays constant. Span includes both endpoints (inclusive).
-    const handleShiftRange = (dir) => {
-        if (scope !== 'custom' || !customRange?.startISO) return
-        const MS = 86_400_000
-        const start = new Date(`${customRange.startISO}T00:00:00+07:00`)
-        const end = new Date(`${customRange.endISO}T00:00:00+07:00`)
-        const spanDays = Math.round((end - start) / MS) // inclusive width − 1
-        let newStart = new Date(start.getTime() + dir * (spanDays + 1) * MS)
-        let newEnd = new Date(end.getTime() + dir * (spanDays + 1) * MS)
-        if (dir > 0 && dateStringVN(newEnd) > todayISO) {
-            newEnd = new Date(`${todayISO}T00:00:00+07:00`)
-            newStart = new Date(newEnd.getTime() - spanDays * MS)
-        }
-        setCustomRange({ startISO: dateStringVN(newStart), endISO: dateStringVN(newEnd) })
-    }
-    const canShiftRangeForward = scope === 'custom' && !!customRange?.endISO && customRange.endISO < todayISO
-
-    // Picker presets (Hôm nay / Tuần này / Tháng này) reset scope to the preset's
-    // bucket so the page reuses the existing offset-based fetch path instead of
-    // forcing a custom-range query when the user already meant "the current period".
-    const handlePickerPreset = (preset) =>
-        applyPresetToScope(preset, { setScope, setOffset, setHasManualPick, setCustomRange })
+    }, [scope, rangeStart, rangeEnd, customRange])
 
     const isReady = !isLoadingHistory && isAsyncReady
 
@@ -710,28 +642,28 @@ export default function DailyReportPage() {
             <HistoryHeader
                 rangeLabel={rangeLabel}
                 scope={scope}
-                onBack={() => goToMenuStep('report', -1, { navigate, backTo, scopeState: { scope, offset, customRange } })}
-                onForward={() => goToMenuStep('report', +1, { navigate, backTo, scopeState: { scope, offset, customRange } })}
+                onBack={() => goToMenuStep('report', -1, { navigate, backTo, scopeState: dateNavState })}
+                onForward={() => goToMenuStep('report', +1, { navigate, backTo, scopeState: dateNavState })}
                 activeTab="report"
                 onTabSelect={(tab) => {
                     if (tab === 'report') return
-                    navigate('/history', { replace: true, state: { from: backTo, tab, scope, offset, customRange } })
+                    navigate('/history', { replace: true, state: { from: backTo, tab, ...dateNavState } })
                 }}
-                canGoForward={offset < 0}
-                onOffsetPrev={() => setOffset(p => p - 1)}
-                onOffsetNext={() => setOffset(p => p + 1)}
+                canGoForward={canGoForwardPeriod}
+                onOffsetPrev={goOffsetPrev}
+                onOffsetNext={goOffsetNext}
                 rangeStartISO={rangeStart ? dateStringVN(rangeStart) : undefined}
                 rangeEndISO={rangeEnd ? dateStringVN(rangeEnd) : undefined}
                 dayInputValue={dayInputValue}
                 todayISO={todayISO}
                 canGoForwardDay={canGoForwardDay}
-                onPrevDay={handlePrevDay}
-                onNextDay={handleNextDay}
+                onPrevDay={goPrevDay}
+                onNextDay={goNextDay}
                 customRange={customRange}
-                onRangeChange={handleRangeChange}
-                onShiftRange={handleShiftRange}
+                onRangeChange={applyRange}
+                onShiftRange={shiftRange}
                 canShiftRangeForward={canShiftRangeForward}
-                onPresetSelect={handlePickerPreset}
+                onPresetSelect={applyPreset}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-6 pb-6 space-y-4 bg-bg">

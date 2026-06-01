@@ -15,6 +15,7 @@ const getLatestCommitMessage = () => {
 export default defineConfig({
   test: {
     environment: 'node',
+    exclude: ['**/node_modules/**', '**/.claude/worktrees/**', '**/dist/**'],
   },
   define: {
     '__APP_UPDATE_LOG__': JSON.stringify(getLatestCommitMessage()),
