@@ -6,7 +6,7 @@ import { parseVNDInput, formatVND, formatVNDInput } from '../../utils'
 import { dateStringVN } from '../../utils/dateVN'
 import DatePicker from '../common/DatePicker'
 
-export default function RestockModal({ ingredient, unit, packSize, packUnit, onConfirm, onClose }) {
+export default function RestockModal({ ingredient, unit, packSize, packUnit, cashClosedToday = false, onConfirm, onClose }) {
     const today = dateStringVN()
     const hasPack = !!(packSize && packUnit)
     const [usePackMode, setUsePackMode] = useState(hasPack)
@@ -19,6 +19,11 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, onC
     const [paidInput, setPaidInput] = useState('')
     const [userTouchedPaid, setUserTouchedPaid] = useState(false)
     const [paymentMethod, setPaymentMethod] = useState('cash')
+    // cash_phase: tiền mặt mua TRƯỚC khi chốt ca tiền thực thu thì rút từ doanh thu trong
+    // ca ('in_shift' → cộng vào Thực thu); SAU chốt là tiêu tiền đã đếm ('post_close').
+    // Mặc định theo trạng thái đã chốt tiền hôm nay hay chưa. Lưu cố định trên phiếu.
+    const [cashPhase, setCashPhase] = useState(cashClosedToday ? 'post_close' : 'in_shift')
+    const [userTouchedPhase, setUserTouchedPhase] = useState(false)
     const [submitting, setSubmitting] = useState(false)
 
     const activeUnit = usePackMode ? packUnit : unit
@@ -51,6 +56,16 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, onC
     const isValid = qty && Number(qty) > 0 && subtotalNum > 0 && amountDue > 0
     const isBackdated = purchaseDate && purchaseDate !== today
 
+    // Mặc định cash_phase: chốt rồi hôm nay, hoặc nhập lùi ngày (quá khứ) → 'post_close';
+    // còn lại (đang trong ca, chưa chốt) → 'in_shift'. Không ghi đè nếu user đã tự chọn.
+    useEffect(() => {
+        if (userTouchedPhase) return
+        setCashPhase(cashClosedToday || isBackdated ? 'post_close' : 'in_shift')
+    }, [cashClosedToday, isBackdated, userTouchedPhase])
+
+    // Chỉ tiền mặt mới ảnh hưởng két (CK không cộng Thực thu) → chỉ hỏi phase khi trả tiền mặt.
+    const showPhaseToggle = paymentMethod === 'cash' && paidNum > 0
+
     const handleSubmit = async () => {
         if (!isValid || submitting) return
         setSubmitting(true)
@@ -63,6 +78,9 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, onC
                 extraCost: extraCostNum,
                 paid: Math.min(paidNum, amountDue),
                 paymentMethod,
+                // Phân loại cố định trên phiếu: chỉ 'in_shift' (tiền mặt, trước chốt) mới
+                // cộng vào Thực thu. CK / sau chốt → 'post_close'.
+                cashPhase: paymentMethod === 'cash' ? cashPhase : 'post_close',
                 // Chỉ truyền khi user đổi sang ngày khác hôm nay — giữ default NOW() server-side.
                 // Anchor noon VN để rơi gọn vào ngày đó bất chấp TZ của client/DB.
                 purchaseDate: isBackdated ? new Date(`${purchaseDate}T12:00:00+07:00`).toISOString() : null,
@@ -279,6 +297,28 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, onC
                                         className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}
                                     >
                                         Bank
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Phân loại dòng tiền — chỉ hỏi khi trả TIỀN MẶT. 'Trong ca' = rút từ
+                            doanh thu bán hàng trước khi chốt ca tiền → cộng vào Thực thu. */}
+                        {showPhaseToggle && (
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-[12px] font-bold text-text-secondary">Lấy từ tiền</span>
+                                <div className="w-32 flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
+                                    <button
+                                        onClick={() => { setUserTouchedPhase(true); setCashPhase('in_shift') }}
+                                        className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${cashPhase === 'in_shift' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                    >
+                                        Trong ca
+                                    </button>
+                                    <button
+                                        onClick={() => { setUserTouchedPhase(true); setCashPhase('post_close') }}
+                                        className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${cashPhase === 'post_close' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                    >
+                                        Sau chốt
                                     </button>
                                 </div>
                             </div>

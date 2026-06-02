@@ -10,7 +10,6 @@ export default function CashFlowCard({
     refillFreeForm = 0,
     expenses = [],
     payments = [],   // NEW: expense_payments của ngày này (cash-out thực, theo paid_at)
-    cashClosedAt = null,  // mốc "chốt ca tiền thực thu" (null = chưa chốt → mọi khoản là trước chốt)
     onDailyExpenseClick,
     salesCard,
     // Inline-edit props (today scope on /daily-report). When `editable` is true the
@@ -47,14 +46,14 @@ export default function CashFlowCard({
     const shiftExpenses = (expenses || []).filter(e => !e.is_refill)
     const afterShiftOps = (expenses || []).filter(e => e.is_refill && e.metadata?.free_form)
 
-    // 1. Thực thu / Thực nhận — phân loại tiền mặt theo mốc chốt ca tiền (cashClosedAt):
-    //    trước chốt → cộng vào Thực thu (dựng lại doanh thu tiền mặt); sau chốt → trừ
-    //    Thực nhận. Xem computeCashFlowTotals để biết lý do double-count. CK luôn trừ
-    //    Thực nhận, không cộng Thực thu.
+    // 1. Thực thu / Thực nhận — phân loại tiền mặt theo cờ `cash_phase` lưu trên từng
+    //    phiếu NVL (đặt lúc nhập kho): in_shift → cộng Thực thu (dựng lại doanh thu tiền
+    //    mặt); sau chốt / phiếu cũ → trừ Thực nhận. Xem computeCashFlowTotals. CK luôn
+    //    trừ Thực nhận, không cộng Thực thu.
     const {
         actualTotal, takeHomeCash, takeHomeTransfer, takeHome,
         inShiftRefillCash, inShiftOpsCash,
-    } = computeCashFlowTotals({ liveCash, liveTransfer, payments, shiftExpenses, cashClosedAt })
+    } = computeCashFlowTotals({ liveCash, liveTransfer, payments, shiftExpenses })
 
     // Roll up NVL payments by ingredient/name, tách thành 2 nhóm:
     //   - todayPurchases: payment paid_at cùng ngày invoice (= đi chợ trả ngay/1 phần ngay)

@@ -110,6 +110,29 @@ export async function fetchTodayShiftClosing(addressId) {
     return data
 }
 
+// Đã "chốt ca tiền thực thu" hôm nay chưa? Dùng để default phân loại tiền mặt khi nhập
+// kho (chưa chốt → 'in_shift', đã chốt → 'post_close'). Phòng thủ: cột chưa migrate
+// hoặc lỗi → coi như CHƯA chốt (false) → mặc định 'in_shift'.
+export async function fetchCashClosedToday(addressId) {
+    if (!addressId) return false
+    if (localRepo.isGuest()) {
+        const sc = localRepo.fetchLocalShiftClosing(addressId, new Date().toISOString())
+        return !!sc?.cash_closed_at
+    }
+    if (!supabase) return false
+    const startOfDay = startOfDayVN()
+    const { data, error } = await supabase
+        .from('shift_closings')
+        .select('cash_closed_at')
+        .eq('address_id', addressId)
+        .gte('closed_at', startOfDay.toISOString())
+        .order('closed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    if (error || !data) return false
+    return !!data.cash_closed_at
+}
+
 // Fetch the most recent shift closing BEFORE today (for opening stock)
 export async function fetchYesterdayShiftClosing(addressId) {
     if (localRepo.isGuest()) return localRepo.fetchLocalYesterdayShiftClosing(addressId)

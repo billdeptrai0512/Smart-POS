@@ -526,8 +526,11 @@ export async function processIngredientRestock(addressId, ingredient, qty, staff
     const {
         subtotal = 0, discount = 0, extraCost = 0,
         paid = null, paymentMethod = 'cash', purchaseDate = null,
-        beforeStock = null,
+        beforeStock = null, cashPhase = 'post_close',
     } = opts
+    // Cờ phân loại dòng tiền lưu cố định trên phiếu. Chỉ 'in_shift' (tiền mặt mua trước
+    // chốt ca tiền) mới cộng vào Thực thu; mọi giá trị khác → 'post_close'.
+    const phase = cashPhase === 'in_shift' ? 'in_shift' : 'post_close'
     const amountDue = Math.max(0, Number(subtotal) - Number(discount) + Number(extraCost))
     const paidAmount = paid == null ? amountDue : Math.max(0, Math.min(Number(paid), amountDue))
     // Snapshot only on non-RPC paths (guest / default-address). The address RPC
@@ -547,7 +550,7 @@ export async function processIngredientRestock(addressId, ingredient, qty, staff
         const displayName = `Đi chợ: ${ingredient}`
         const invoice = await insertExpense(
             displayName, amountDue, addressId, false, staffName, true, paymentMethod,
-            buildSnapshotMeta({ ingredient, qty, subtotal }),
+            buildSnapshotMeta({ ingredient, qty, subtotal, cash_phase: phase }),
             null, purchaseDate,
             { discount_amount: discount, extra_cost: extraCost }
         )
@@ -576,12 +579,20 @@ export async function processIngredientRestock(addressId, ingredient, qty, staff
                 p_extra_cost: extraCost,
                 p_initial_payment: paidAmount,
                 p_payment_method: paymentMethod,
+                p_cash_phase: phase,
             }
             if (purchaseDate) {
                 params.p_created_at = purchaseDate
                 params.p_paid_at = purchaseDate
             }
-            const { data, error } = await supabase.rpc('process_ingredient_restock', params)
+            let { data, error } = await supabase.rpc('process_ingredient_restock', params)
+            // Pre-migration: RPC chưa có p_cash_phase → PostgREST không khớp overload
+            // (PGRST202). Retry bỏ param để nhập kho vẫn chạy (phiếu sẽ thiếu cờ → sau chốt).
+            if (error && (error.code === 'PGRST202' || /cash_phase/i.test(error.message || ''))) {
+                const retry = { ...params }
+                delete retry.p_cash_phase
+                ;({ data, error } = await supabase.rpc('process_ingredient_restock', retry))
+            }
             if (error) throw error
             result = data
         } else {
@@ -592,7 +603,7 @@ export async function processIngredientRestock(addressId, ingredient, qty, staff
             const displayName = `Đi chợ: ${ingredient}`
             const invoice = await insertExpense(
                 displayName, amountDue, null, false, staffName, true, paymentMethod,
-                buildSnapshotMeta({ ingredient, qty, subtotal }),
+                buildSnapshotMeta({ ingredient, qty, subtotal, cash_phase: phase }),
                 null, purchaseDate,
                 { discount_amount: discount, extra_cost: extraCost }
             )

@@ -707,7 +707,6 @@ export default function DailyReportPage() {
                                 refillFreeForm={refillFreeForm}
                                 expenses={displayExpenses}
                                 payments={displayPayments}
-                                cashClosedAt={shiftClosing?.cash_closed_at || null}
                                 editable={isTodayScope}
                                 cashInput={cashInput}
                                 transferInput={transferInput}

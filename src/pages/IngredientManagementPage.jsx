@@ -11,6 +11,7 @@ import {
     syncIngredientKey,
     fetchIngredientStocks, processIngredientRestock, fetchIngredientDeficits, fetchIngredientDailyContext,
 } from '../services/orderService'
+import { fetchCashClosedToday } from '../services/reportService'
 import { sortIngredients, ingredientLabel, getIngredientUnit, normalizeIngredientCategory, normalizeIngredientKey } from '../utils/ingredients'
 import { parseVNDInput } from '../utils'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
@@ -89,6 +90,15 @@ export default function IngredientManagementPage() {
     // Stock & modals
     const [ingredientStocks, setIngredientStocks] = useState([])
     const [restockIngredient, setRestockIngredient] = useState(null)
+    // Đã chốt ca tiền hôm nay chưa → default phân loại tiền mặt khi nhập kho. Fetch khi
+    // mở modal nhập kho để luôn tươi (user có thể vừa chốt ở /daily-report).
+    const [cashClosedToday, setCashClosedToday] = useState(false)
+    useEffect(() => {
+        if (!restockIngredient) return
+        let alive = true
+        fetchCashClosedToday(selectedAddress?.id).then(v => { if (alive) setCashClosedToday(!!v) })
+        return () => { alive = false }
+    }, [restockIngredient, selectedAddress?.id])
     const [showKeySync, setShowKeySync] = useState(false)
     const [dismissedSig, setDismissedSig] = useState('')
     const [stockDeficits, setStockDeficits] = useState([])
@@ -500,8 +510,9 @@ export default function IngredientManagementPage() {
                     unit={getIngredientUnit(restockIngredient, ingredientUnits[restockIngredient])}
                     packSize={configByIngredient.get(restockIngredient)?.pack_size}
                     packUnit={configByIngredient.get(restockIngredient)?.pack_unit}
+                    cashClosedToday={cashClosedToday}
                     onClose={() => setRestockIngredient(null)}
-                    onConfirm={async ({ ingredient: ing, qty, subtotal, discount, extraCost, paid, paymentMethod, purchaseDate }) => {
+                    onConfirm={async ({ ingredient: ing, qty, subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate }) => {
                         // beforeStock only used by guest / default-address paths;
                         // the address RPC computes its own authoritative snapshot.
                         // Only include when the stocks fetch has actually resolved
@@ -511,7 +522,7 @@ export default function IngredientManagementPage() {
                             ? { beforeStock: stockRow.warehouse_stock }
                             : {}
                         const result = await processIngredientRestock(selectedAddress?.id, ing, qty, profile?.name, {
-                            subtotal, discount, extraCost, paid, paymentMethod, purchaseDate,
+                            subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate,
                             ...snapshot,
                         })
                         await Promise.all([loadStocks(), refreshProducts?.(), refreshTodayExpenses?.()])
