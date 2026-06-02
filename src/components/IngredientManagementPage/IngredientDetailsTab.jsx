@@ -13,6 +13,7 @@ import { INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 // (we just close the edit affordance optimistically before awaiting).
 export default function IngredientDetailsTab({
     nameLabel, unit, cost, category, packSize, packUnit, minStock, currentStock,
+    countInAudit = true,
     canEdit, saving,
     onSaveName,         // (newDisplayName: string) => Promise
     onSaveStock,        // (newTotal: number)      => Promise
@@ -20,6 +21,7 @@ export default function IngredientDetailsTab({
     onSaveCost,         // (newCost: number)       => Promise
     onSaveMinStock,     // (newMin: number)        => Promise
     onChangeCategory,   // (newCat: string)        => Promise (still controlled — single tap)
+    onToggleAudit,      // (next: boolean)         => Promise (hiện khi kiểm kê hao hụt)
     onConfigurePack,    // ()                      => void   (opens modal)
 }) {
     const hasPack = !!(packSize && packUnit)
@@ -58,6 +60,7 @@ export default function IngredientDetailsTab({
                         onSave={onSaveMinStock}
                     />
                 )}
+                <AuditRow value={countInAudit} canEdit={canEdit} saving={saving} onToggle={onToggleAudit} />
             </section>
         </div>
     )
@@ -275,6 +278,26 @@ function PackRow({ hasPack, packSize, packUnit, unit, canEdit, onConfigure }) {
             ) : (
                 <span className="text-[13px] text-text-dim italic">Chưa thiết lập</span>
             )}
+        </Row>
+    )
+}
+
+// ── Kiểm kê hao hụt (toggle) ─────────────────────────────────────────────────
+// Bật = nguyên liệu này hiện trong list kiểm kê hao hụt lúc chốt ca. Tắt cho thứ
+// không cần đếm cuối ca (vd vật tư cố định). Single-tap switch, lưu ngay.
+function AuditRow({ value, canEdit, saving, onToggle }) {
+    return (
+        <Row label="Kiểm kê hao hụt">
+            <button
+                type="button"
+                role="switch"
+                aria-checked={value}
+                disabled={!canEdit || saving}
+                onClick={() => canEdit && onToggle?.(!value)}
+                className={`relative w-10 h-6 rounded-full transition-colors shrink-0 ${value ? 'bg-primary' : 'bg-border'} ${canEdit ? 'cursor-pointer' : 'cursor-default opacity-60'}`}
+            >
+                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all ${value ? 'left-[18px]' : 'left-0.5'}`} />
+            </button>
         </Row>
     )
 }

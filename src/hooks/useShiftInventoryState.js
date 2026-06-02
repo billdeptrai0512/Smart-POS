@@ -139,7 +139,11 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         if (!addressId) { setIsLoadingIngredients(false); return }
         setIsLoadingIngredients(true)
         fetchIngredientCostsWithUnits(addressId).then(list => {
-            const sorted = [...list].sort((a, b) => sortIngredients(a.ingredient, b.ingredient, ingredientSortOrder))
+            // Loại nguyên liệu được tắt "kiểm kê hao hụt" (count_in_audit === false).
+            // Thiếu cờ (phiếu cũ / chưa migrate) → mặc định hiện.
+            const sorted = [...list]
+                .filter(r => r.count_in_audit !== false)
+                .sort((a, b) => sortIngredients(a.ingredient, b.ingredient, ingredientSortOrder))
             setIngredientsList(sorted)
         }).finally(() => setIsLoadingIngredients(false))
     }, [addressId, ingredientSortOrder])

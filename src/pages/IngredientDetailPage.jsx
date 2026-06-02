@@ -71,6 +71,8 @@ export default function IngredientDetailPage() {
     // a stored 0 stays as 0). See ingredientService.upsertIngredientCost for the
     // matching write-side rule.
     const minStock = config.min_stock ?? null
+    // Mặc định true (chưa migrate / phiếu cũ → vẫn kiểm kê).
+    const countInAudit = config.count_in_audit ?? true
     const currentStock = stockData?.current_stock ?? null
 
     // Stocks only depend on address+key — refetching on month-arrow taps would
@@ -131,6 +133,16 @@ export default function IngredientDetailPage() {
             await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, unit, { category: newCat })
             refreshProducts?.()
         } catch (err) { showError(err, 'Lưu nhóm nguyên liệu') }
+        finally { setSaving(false) }
+    }
+
+    async function saveCountInAudit(next) {
+        if (next === countInAudit) return
+        setSaving(true)
+        try {
+            await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, unit, { countInAudit: next })
+            refreshProducts?.()
+        } catch (err) { showError(err, 'Lưu thiết lập kiểm kê') }
         finally { setSaving(false) }
     }
 
@@ -288,6 +300,7 @@ export default function IngredientDetailPage() {
                         packUnit={packUnit}
                         minStock={minStock}
                         currentStock={currentStock}
+                        countInAudit={countInAudit}
                         canEdit={canEdit}
                         saving={saving}
                         onSaveName={saveName}
@@ -296,6 +309,7 @@ export default function IngredientDetailPage() {
                         onSaveCost={saveCost}
                         onSaveMinStock={saveMinStock}
                         onChangeCategory={saveCategory}
+                        onToggleAudit={saveCountInAudit}
                         onConfigurePack={() => setPackModalOpen(true)}
                     />
                 ) : (

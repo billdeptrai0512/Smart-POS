@@ -95,19 +95,18 @@ export async function fetchIngredientCostsAndUnits(addressId) {
     // rows DO NOT propagate to existing active addresses.
     // Try with category first; fall back to legacy SELECT if migration
     // 20260523_add_ingredient_category.sql isn't deployed yet (Postgres 42703).
-    const runQuery = async (withCategory) => {
-        const cols = withCategory
-            ? 'ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock, category'
-            : 'ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock'
+    const BASE = 'ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock'
+    const runQuery = async (cols) => {
         let q = supabase.from('ingredient_costs').select(cols)
         q = addressId ? q.eq('address_id', addressId) : q.is('address_id', null)
         return await q
     }
 
-    let { data, error } = await runQuery(true)
-    if (error && error.code === '42703') {
-        ({ data, error } = await runQuery(false))
-    }
+    // Try newest schema first, degrade column-by-column on undefined_column (42703)
+    // so the page still loads if count_in_audit / category migrations aren't deployed.
+    let { data, error } = await runQuery(`${BASE}, category, count_in_audit`)
+    if (error?.code === '42703') ({ data, error } = await runQuery(`${BASE}, category`))
+    if (error?.code === '42703') ({ data, error } = await runQuery(BASE))
     if (error) {
         console.error('fetchIngredientCostsAndUnits error:', error)
         return { costs: {}, units: {}, rows: [] }
@@ -120,7 +119,7 @@ export async function fetchIngredientCostsAndUnits(addressId) {
     for (const d of data) {
         costs[d.ingredient] = d.unit_cost
         units[d.ingredient] = d.unit || 'đv'
-        rows.push({ ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, min_stock: d.min_stock, category: d.category || null })
+        rows.push({ ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, min_stock: d.min_stock, category: d.category || null, count_in_audit: d.count_in_audit ?? true })
     }
     return { costs, units, rows }
 }
@@ -152,16 +151,28 @@ export async function upsertIngredientCost(ingredient, unitCost, addressId = nul
     if (opts.packUnit !== undefined) payload.pack_unit = opts.packUnit ?? null
     if (opts.minStock !== undefined) payload.min_stock = opts.minStock ?? null
     if (opts.category !== undefined) payload.category = opts.category ?? null
+    if (opts.countInAudit !== undefined) payload.count_in_audit = !!opts.countInAudit
 
-    let { error } = await supabase
+    const upsert = (body) => supabase
         .from('ingredient_costs')
-        .upsert(payload, { onConflict: 'ingredient,address_id' })
-    // Retry without `category` if migration 20260523 isn't deployed yet.
-    if (error && error.code === '42703' && 'category' in payload) {
+        .upsert(body, { onConflict: 'ingredient,address_id' })
+    // PostgREST trả PGRST204 ("could not find column in schema cache") khi WRITE cột
+    // chưa migrate; Postgres trả 42703. Bắt cả hai + dò tên cột để degrade an toàn.
+    const missingCol = (error, col) =>
+        !!error && (error.code === 'PGRST204' || error.code === '42703' || new RegExp(col).test(error.message || ''))
+
+    let { error } = await upsert(payload)
+    // Degrade dần nếu cột optional chưa migrate: bỏ count_in_audit trước, rồi category.
+    if (missingCol(error, 'count_in_audit') && 'count_in_audit' in payload) {
+        const { count_in_audit: _a, ...rest } = payload
+        ;({ error } = await upsert(rest))
+        if (missingCol(error, 'category') && 'category' in rest) {
+            const { category: _c, ...rest2 } = rest
+            ;({ error } = await upsert(rest2))
+        }
+    } else if (missingCol(error, 'category') && 'category' in payload) {
         const { category: _drop, ...rest } = payload
-        ;({ error } = await supabase
-            .from('ingredient_costs')
-            .upsert(rest, { onConflict: 'ingredient,address_id' }))
+        ;({ error } = await upsert(rest))
     }
     if (error) throw error
 }
