@@ -21,6 +21,7 @@ export default function MoneyInput({
     inputRef,
     size = 'md',           // 'sm' (history row) | 'md' (default) | 'lg' (hero amount)
     align = 'right',       // 'right' (default) | 'left' | 'center'
+    weight = 'bold',       // 'bold' (default) | 'medium' — đồng bộ với input text thường
     className = '',
 }) {
     const sizeCls = {
@@ -30,6 +31,7 @@ export default function MoneyInput({
     }[size] || 'px-3 py-2.5 text-[14px]'
 
     const alignCls = align === 'left' ? 'text-left' : align === 'center' ? 'text-center' : 'text-right'
+    const weightCls = weight === 'medium' ? 'font-medium' : 'font-bold'
 
     return (
         <div className={`relative flex items-center bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden ${className}`}>
@@ -44,7 +46,7 @@ export default function MoneyInput({
                 placeholder={placeholder}
                 disabled={disabled}
                 autoFocus={autoFocus}
-                className={`w-full bg-transparent ${sizeCls} ${alignCls} font-bold text-text tabular-nums placeholder:text-text-secondary/40 focus:outline-none disabled:opacity-50`}
+                className={`w-full bg-transparent ${sizeCls} ${alignCls} ${weightCls} text-text tabular-nums placeholder:text-text-secondary/40 focus:outline-none disabled:opacity-50`}
             />
             {value && (
                 <span className="text-[12px] font-bold text-text-secondary pr-2.5 shrink-0 pointer-events-none">đ</span>

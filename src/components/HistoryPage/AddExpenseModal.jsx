@@ -109,7 +109,7 @@ export default function AddExpenseModal({
                             amountRef.current?.focus()
                         }
                     }}
-                    className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[15px] font-medium text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary/50"
+                    className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[16px] font-medium text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary/50"
                 />
 
                 <MoneyInput
@@ -118,6 +118,9 @@ export default function AddExpenseModal({
                     onKeyDown={e => { if (e.key === 'Enter') canSubmit && onSubmit() }}
                     inputRef={amountRef}
                     size="lg"
+                    align="left"
+                    weight="medium"
+                    placeholder="Số tiền..."
                 />
 
                 <button
