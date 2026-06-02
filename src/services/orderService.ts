@@ -12,11 +12,10 @@
 // Supabase rows are still unmodeled (typed `any`) until the DB schema is generated.
 
 import { supabase } from '../lib/supabaseClient'
-// localRepository / dateVN / cache are still untyped JS; treat them as `any` at this
-// boundary until they're converted (JS inference here is unreliable — e.g. a `= null`
-// default makes a param infer as the `null` type). Remove the cast once converted.
-import * as localRepoModule from './localRepository'
-const localRepo: any = localRepoModule
+// Use the namespace import directly (live binding). Do NOT alias it to a top-level
+// `const` — that snapshots the binding at module-init time and, under the barrel's
+// circular imports, captures `undefined` (prod crash: "reading 'isGuest' of undefined").
+import * as localRepo from './localRepository'
 import { startOfDayVN, dateStringVN } from '../utils/dateVN'
 import { reportCache, invalidateReportCache } from './cache'
 import type { UUID, CartItem, CostPerItem, OrderPayload, TodayStats } from '../types/domain'
@@ -222,7 +221,9 @@ export async function bulkSubmitOrders(ordersArray: any[]): Promise<boolean> {
 // Soft Delete an order. addressId unknown — flush all.
 export async function deleteOrder(orderId: UUID, staffName: string | null = null): Promise<boolean> {
     invalidateReportCache(null)
-    if (localRepo.isGuest()) return localRepo.deleteLocalOrder(orderId, staffName)
+    // localRepository is untyped JS; its `= null` defaults make tsc infer params as `null`.
+    // Cast the fn (lazy, at call time — safe under circular imports) until it's converted.
+    if (localRepo.isGuest()) return (localRepo.deleteLocalOrder as any)(orderId, staffName)
     if (!supabase) throw new Error('No Supabase connection')
 
     const { error: orderError } = await supabase
@@ -240,7 +241,7 @@ export async function fetchYesterdayOrders(addressId: UUID | null): Promise<any>
     if (localRepo.isGuest()) {
         const yesterday = new Date()
         yesterday.setDate(yesterday.getDate() - 1)
-        return localRepo.fetchLocalOrders(addressId, yesterday.toISOString())
+        return (localRepo.fetchLocalOrders as any)(addressId, yesterday.toISOString())
     }
     if (!supabase) return []
     const today = startOfDayVN()
