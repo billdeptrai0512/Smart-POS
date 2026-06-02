@@ -3,6 +3,15 @@ import { ingredientLabel } from '../../utils/ingredients'
 import { isSameDayVN } from '../../utils/dateVN'
 import { computeCashFlowTotals } from '../../utils/reportStats'
 
+// Viết hoa chữ cái đầu ('đ' → 'Đ' được toUpperCase xử lý đúng cho tiếng Việt).
+const capFirst = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
+// Hậu tố " · DD/MM" theo ngày tạo — đồng bộ với list "Mua nguyên liệu / bao bì".
+const dayMonthSuffix = (ts) => {
+    if (!ts) return ''
+    const d = new Date(ts)
+    return isNaN(d) ? '' : ` · ${d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`
+}
+
 export default function CashFlowCard({
     actualCash = 0,
     actualTransfer = 0,
@@ -179,7 +188,7 @@ export default function CashFlowCard({
                     {shiftExpenses.length > 0 ? (
                         shiftExpenses.map((e) => (
                             <div key={e.id} className="flex justify-between items-center">
-                                <span className="text-[12px] font-bold text-text-secondary">· {e.name || 'Chi phí khác'}</span>
+                                <span className="text-[12px] font-bold text-text-secondary">· {capFirst(e.name || 'Chi phí khác')}{dayMonthSuffix(e.created_at)}</span>
                                 <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(e.amount)}</span>
                             </div>
                         ))
@@ -195,7 +204,7 @@ export default function CashFlowCard({
                     {afterShiftOps.length > 0 ? (
                         afterShiftOps.map((e) => (
                             <div key={e.id} className="flex justify-between items-center">
-                                <span className="text-[12px] font-bold text-text-secondary">· {e.name || 'Chi phí khác'}</span>
+                                <span className="text-[12px] font-bold text-text-secondary">· {capFirst(e.name || 'Chi phí khác')}{dayMonthSuffix(e.created_at)}</span>
                                 <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(e.amount)}</span>
                             </div>
                         ))
