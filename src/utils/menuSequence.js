@@ -8,15 +8,20 @@
 //   tab      — HistoryPage activeTab ('orders' | 'expense')
 //   viewMode — IngredientManagementPage viewMode ('main' | 'packaging')
 export const MENU_SEQUENCE = [
-    { key: 'orders',    route: '/history',      tab: 'orders' },     // Thu nhập
-    { key: 'expense',   route: '/history',      tab: 'expense' },    // Chi phí
-    { key: 'report',    route: '/daily-report' },                    // Báo cáo
-    { key: 'recipes',   route: '/recipes' },                         // Công thức
-    { key: 'main',      route: '/ingredients',  viewMode: 'main' },  // Nguyên liệu
-    { key: 'packaging', route: '/ingredients',  viewMode: 'packaging' }, // Bao bì
+    { key: 'orders', route: '/history', tab: 'orders' },     // Thu nhập
+    { key: 'recipes', route: '/recipes', viewMode: 'main' },  // Nguyên liệu
 ]
 
-const indexOfKey = (key) => MENU_SEQUENCE.findIndex(s => s.key === key)
+const KEY_MAP = {
+    expense: 'orders',
+    report: 'orders',
+    main: 'recipes',
+    packaging: 'recipes',
+}
+
+const resolveKey = (key) => KEY_MAP[key] || key
+
+const indexOfKey = (key) => MENU_SEQUENCE.findIndex(s => s.key === resolveKey(key))
 
 // Where the arrows land when stepping off either end of the sequence.
 export const MENU_BOUNDARY_ROUTE = '/pos'
@@ -48,12 +53,21 @@ export const menuPrev = (key) => menuStep(key, -1)
 //                       date window survives the Báo cáo → Thu nhập/Chi phí jump
 export function goToMenuStep(currentKey, dir, ctx) {
     const target = menuStep(currentKey, dir)
-    const { navigate, backTo, setActiveTab, setViewMode, goReport, scopeState } = ctx
+    const { navigate, backTo, setActiveTab, setViewMode, goReport, scopeState, wizard } = ctx
+
+    // If not in wizard mode and going back, return directly to the entry point (backTo).
+    if (dir === -1 && !wizard) {
+        navigate(backTo || MENU_BOUNDARY_ROUTE)
+        return
+    }
 
     // Off the end of the line → leave the dashboard.
-    if (!target) { navigate(MENU_BOUNDARY_ROUTE); return }
+    if (!target) {
+        navigate(dir === -1 ? (backTo || MENU_BOUNDARY_ROUTE) : MENU_BOUNDARY_ROUTE)
+        return
+    }
 
-    const cur = MENU_SEQUENCE.find(s => s.key === currentKey)
+    const cur = MENU_SEQUENCE.find(s => s.key === resolveKey(currentKey))
 
     // Same route → flip local state, no navigation.
     if (cur && target.route === cur.route) {
@@ -63,16 +77,12 @@ export function goToMenuStep(currentKey, dir, ctx) {
 
     switch (target.route) {
         case '/history':
-            navigate('/history', { state: { from: backTo, tab: target.tab, ...scopeState } })
+            navigate('/history', { state: { from: backTo, tab: target.tab, wizard: true, ...scopeState } })
             break
-        case '/daily-report':
-            if (goReport) goReport()
-            else navigate('/daily-report', { state: { from: backTo, ...scopeState } })
-            break
-        case '/ingredients':
-            navigate('/ingredients', { state: { from: backTo, viewMode: target.viewMode } })
+        case '/recipes':
+            navigate('/recipes', { state: { from: backTo, wizard: true } })
             break
         default:
-            navigate(target.route, { state: { from: backTo } })
+            navigate(target.route, { state: { from: backTo, wizard: true } })
     }
 }

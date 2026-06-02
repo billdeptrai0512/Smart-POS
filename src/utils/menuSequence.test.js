@@ -5,26 +5,22 @@ import {
 } from './menuSequence'
 
 describe('MENU_SEQUENCE shape', () => {
-    it('is the 6-stop dashboard line in order', () => {
+    it('is the 2-stop dashboard line in order', () => {
         expect(MENU_SEQUENCE.map(s => s.key)).toEqual([
-            'orders', 'expense', 'report', 'recipes', 'main', 'packaging',
+            'orders', 'recipes',
         ])
     })
 })
 
 describe('menuStep (bounded line, not a loop)', () => {
     it('steps forward through adjacent stops', () => {
-        expect(menuStep('orders', +1).key).toBe('expense')
-        expect(menuStep('expense', +1).key).toBe('report')
-        expect(menuStep('report', +1).key).toBe('recipes')
-        expect(menuStep('main', +1).key).toBe('packaging')
+        expect(menuStep('orders', +1).key).toBe('recipes')
     })
     it('steps backward through adjacent stops', () => {
-        expect(menuStep('packaging', -1).key).toBe('main')
-        expect(menuStep('report', -1).key).toBe('expense')
+        expect(menuStep('recipes', -1).key).toBe('orders')
     })
-    it('returns null past the last stop (goNext from Bao bì)', () => {
-        expect(menuStep('packaging', +1)).toBeNull()
+    it('returns null past the last stop (goNext from Nguyên liệu)', () => {
+        expect(menuStep('recipes', +1)).toBeNull()
     })
     it('returns null before the first stop (goBack from Thu nhập)', () => {
         expect(menuStep('orders', -1)).toBeNull()
@@ -33,9 +29,18 @@ describe('menuStep (bounded line, not a loop)', () => {
         expect(menuStep('nope', +1).key).toBe('orders')
         expect(menuStep(undefined, -1).key).toBe('orders')
     })
+    it('resolves legacy or non-wizard keys to their closest stops', () => {
+        expect(menuStep('expense', +1).key).toBe('recipes')
+        expect(menuStep('expense', -1)).toBeNull()
+        expect(menuStep('report', +1).key).toBe('recipes')
+        expect(menuStep('main', +1)).toBeNull()
+        expect(menuStep('main', -1).key).toBe('orders')
+        expect(menuStep('packaging', +1)).toBeNull()
+        expect(menuStep('packaging', -1).key).toBe('orders')
+    })
     it('menuNext / menuPrev are thin wrappers', () => {
-        expect(menuNext('orders').key).toBe('expense')
-        expect(menuPrev('expense').key).toBe('orders')
+        expect(menuNext('orders').key).toBe('recipes')
+        expect(menuPrev('recipes').key).toBe('orders')
     })
 })
 
@@ -49,66 +54,31 @@ describe('goToMenuStep', () => {
         ...over,
     })
 
-    it('exits to /pos stepping off the start (orders ‹ back)', () => {
-        const ctx = makeCtx()
+    it('exits to backTo stepping off the start (orders ‹ back)', () => {
+        const ctx = makeCtx({ backTo: '/address' })
         goToMenuStep('orders', -1, ctx)
+        expect(ctx.navigate).toHaveBeenCalledWith('/address')
+    })
+
+    it('exits to /pos stepping off the end (main › fwd)', () => {
+        const ctx = makeCtx({ backTo: '/address' })
+        goToMenuStep('main', +1, ctx)
         expect(ctx.navigate).toHaveBeenCalledWith(MENU_BOUNDARY_ROUTE)
     })
 
-    it('exits to /pos stepping off the end (packaging › fwd)', () => {
+    it('cross-route to /recipes navigates with from state', () => {
         const ctx = makeCtx()
-        goToMenuStep('packaging', +1, ctx)
-        expect(ctx.navigate).toHaveBeenCalledWith(MENU_BOUNDARY_ROUTE)
-    })
-
-    it('same-route tab flip (orders→expense) sets activeTab, no navigation', () => {
-        const ctx = makeCtx()
-        goToMenuStep('orders', +1, ctx)
-        expect(ctx.setActiveTab).toHaveBeenCalledWith('expense')
-        expect(ctx.navigate).not.toHaveBeenCalled()
-    })
-
-    it('same-route view flip (packaging→main) sets viewMode, no navigation', () => {
-        const ctx = makeCtx()
-        goToMenuStep('packaging', -1, ctx)
-        expect(ctx.setViewMode).toHaveBeenCalledWith('main')
-        expect(ctx.navigate).not.toHaveBeenCalled()
-    })
-
-    it('cross-route to /daily-report prefers goReport when provided', () => {
-        const ctx = makeCtx()
-        goToMenuStep('expense', +1, ctx) // → report
-        expect(ctx.goReport).toHaveBeenCalledTimes(1)
-        expect(ctx.navigate).not.toHaveBeenCalled()
-    })
-
-    it('cross-route to /daily-report falls back to navigate + scopeState when no goReport', () => {
-        const ctx = makeCtx({ goReport: undefined, scopeState: { scope: 'week', offset: -1 } })
-        goToMenuStep('expense', +1, ctx)
-        expect(ctx.navigate).toHaveBeenCalledWith('/daily-report', {
-            state: { from: '/pos', scope: 'week', offset: -1 },
+        goToMenuStep('orders', +1, ctx) // orders → recipes
+        expect(ctx.navigate).toHaveBeenCalledWith('/recipes', {
+            state: { from: '/pos', wizard: true },
         })
     })
 
-    it('report → recipes navigates with from state', () => {
-        const ctx = makeCtx()
-        goToMenuStep('report', +1, ctx)
-        expect(ctx.navigate).toHaveBeenCalledWith('/recipes', { state: { from: '/pos' } })
-    })
-
-    it('recipes → ingredients carries viewMode', () => {
-        const ctx = makeCtx()
-        goToMenuStep('recipes', +1, ctx) // → main
-        expect(ctx.navigate).toHaveBeenCalledWith('/ingredients', {
-            state: { from: '/pos', viewMode: 'main' },
-        })
-    })
-
-    it('report ‹ back to /history carries scopeState (the desync-fix path)', () => {
-        const ctx = makeCtx({ scopeState: { scope: 'custom', customRange: { startISO: '2026-05-10', endISO: '2026-05-14' } } })
-        goToMenuStep('report', -1, ctx) // → expense (/history)
+    it('cross-route back to /history from main navigates with state', () => {
+        const ctx = makeCtx({ wizard: true })
+        goToMenuStep('main', -1, ctx) // main → orders
         expect(ctx.navigate).toHaveBeenCalledWith('/history', {
-            state: { from: '/pos', tab: 'expense', scope: 'custom', customRange: { startISO: '2026-05-10', endISO: '2026-05-14' } },
+            state: { from: '/pos', tab: 'orders', wizard: true },
         })
     })
 })
