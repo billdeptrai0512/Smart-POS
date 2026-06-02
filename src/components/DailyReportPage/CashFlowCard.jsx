@@ -53,7 +53,7 @@ export default function CashFlowCard({
     const {
         actualTotal, takeHomeCash, takeHomeTransfer, takeHome,
         inShiftRefillCash, inShiftOpsCash,
-    } = computeCashFlowTotals({ liveCash, liveTransfer, payments, shiftExpenses })
+    } = computeCashFlowTotals({ liveCash, liveTransfer, payments, shiftExpenses, afterShiftExpenses: afterShiftOps })
 
     // Roll up NVL payments by ingredient/name, tách thành 2 nhóm:
     //   - todayPurchases: payment paid_at cùng ngày invoice (= đi chợ trả ngay/1 phần ngay)

@@ -58,11 +58,14 @@ export function splitExpenses(expenses) {
 //   liveCash / liveTransfer : số tiền mặt / CK đang dùng để tính (đếm được hoặc đang gõ)
 //   payments       : expense_payments của ngày (NVL/refill + trả nợ + free_form sau ca)
 //   shiftExpenses  : expenses non-refill của ngày ("chi trong ca" ad-hoc, không có payment riêng)
+//   afterShiftExpenses : expenses is_refill + free_form ("Sau chốt ca", vd đồ cúng) — tiền
+//                        mặt tiêu SAU khi đếm tiền, KHÔNG có payment riêng → trừ Thực nhận.
 export function computeCashFlowTotals({
     liveCash = 0,
     liveTransfer = 0,
     payments = [],
     shiftExpenses = [],
+    afterShiftExpenses = [],
 }) {
     let inShiftRefillCash = 0  // NVL/đi chợ trả tiền mặt TRƯỚC chốt (cash_phase='in_shift')
     let inShiftOpsCash = 0     // chi phí "trong ca" (non-refill) — luôn cộng Thực thu
@@ -82,6 +85,14 @@ export function computeCashFlowTotals({
     for (const e of shiftExpenses || []) {
         if (e.metadata?.adjustment) continue
         inShiftOpsCash += Number(e.amount) || 0
+    }
+    // Chi phí "Sau chốt ca" (free_form): tiêu tiền đã đếm → trừ Thực nhận. Không có payment
+    // riêng nên tính từ amount của expense. CK trừ ở Thực nhận CK, tiền mặt ở Thực nhận TM.
+    for (const e of afterShiftExpenses || []) {
+        if (e.metadata?.adjustment) continue
+        const amt = Number(e.amount) || 0
+        if (e.payment_method === 'transfer') transferRefill += amt
+        else postCloseCashOut += amt
     }
 
     const inShiftCashOut = inShiftRefillCash + inShiftOpsCash

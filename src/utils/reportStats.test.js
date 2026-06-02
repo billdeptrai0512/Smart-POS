@@ -113,6 +113,19 @@ describe('computeCashFlowTotals (cờ cash_phase trên từng phiếu)', () => {
         expect(r.takeHomeCash).toBe(665000)   // 850 − 185 (như cũ)
     })
 
+    it('chi phí "Sau chốt ca" (free_form, không payment): trừ Thực nhận, không cộng Thực thu', () => {
+        // Đồ cúng 85k sau chốt — bug cũ: bị bỏ sót khỏi Thực nhận.
+        const r = computeCashFlowTotals({
+            liveCash: 13057000, liveTransfer: 3670000,
+            payments: [postClose(7476000)],
+            shiftExpenses: [],
+            afterShiftExpenses: [{ amount: 85000, payment_method: 'cash', is_refill: true, metadata: { free_form: true } }],
+        })
+        expect(r.postCloseCashOut).toBe(7561000)      // 7.476 + 85
+        expect(r.takeHomeCash).toBe(5496000)          // 13.057 − 7.561
+        expect(r.actualTotal).toBe(16727000)          // 13.057 + 3.670 (free_form KHÔNG cộng Thực thu)
+    })
+
     it('CK trả NCC: luôn trừ Thực nhận CK, không cộng Thực thu (kể cả cờ in_shift)', () => {
         const r = computeCashFlowTotals({
             liveCash: 850000, liveTransfer: 237000,
