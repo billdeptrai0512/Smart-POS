@@ -375,6 +375,7 @@ export function POSProvider() {
         const savedTotal = finalTotal
         const savedDiscount = discountAmount
         const savedOrderCount = orderCount
+        const prevLastOrder = lastOrder
         const countableQty = cart.reduce((sum, item) => {
             const prod = products?.find(p => p.id === item.productId)
             if (prod?.count_as_cup === false) return sum
@@ -404,6 +405,14 @@ export function POSProvider() {
                     addPendingOrder(enrichedCart, savedTotal, null, addressId, cartCost, profile?.name, savedDiscount)
                     showToast('Lỗi mạng – đã lưu offline', 'warning')
                 } else {
+                    // Genuine write failure (RLS / constraint / server), not a network drop.
+                    // Roll back the optimistic counters so revenue/cups/cost don't drift.
+                    // (Cart/discount are left untouched — the submit is async and staff may
+                    // already be building the next order; clobbering it would lose data.)
+                    setRevenue(prev => prev - savedTotal)
+                    setTotalCost(prev => Math.max(0, prev - cartCost))
+                    setCupsSold(prev => Math.max(0, prev - countableQty))
+                    setLastOrder(prevLastOrder)
                     showError(err, 'Tạo đơn hàng')
                 }
             })
