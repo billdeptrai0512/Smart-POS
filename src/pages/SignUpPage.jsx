@@ -65,7 +65,6 @@ export default function SignUpPage() {
                             value={name}
                             onChange={e => setName(e.target.value)}
                             required
-                            autoFocus
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
                             placeholder=""
                         />
@@ -99,7 +98,7 @@ export default function SignUpPage() {
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full py-3 rounded-[14px] bg-primary text-black/80 font-bold text-sm hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full py-3 rounded-[14px] bg-primary text-black/80 uppercase font-bold text-sm hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {loading ? 'Đang tạo...' : 'Tạo tài khoản'}
                     </button>

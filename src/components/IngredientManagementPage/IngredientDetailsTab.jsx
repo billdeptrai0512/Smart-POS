@@ -60,8 +60,6 @@ export default function IngredientDetailsTab({
                     onSave={onSaveStock}
                 />
                 <CostRow cost={cost} unit={unit} canEdit={canEdit} onSave={onSaveCost} />
-
-
                 <AuditRow value={countInAudit} canEdit={canEdit} saving={saving} onToggle={onToggleAudit} />
             </section>
         </div>
@@ -283,12 +281,12 @@ function PackRow({ hasPack, packSize, packUnit, unit, canEdit, onConfigure }) {
     )
 }
 
-// ── Kiểm kê hao hụt (toggle) ─────────────────────────────────────────────────
+// ── Kiểm kê tồn kho (toggle) ─────────────────────────────────────────────────
 // Bật = nguyên liệu này hiện trong list kiểm kê hao hụt lúc chốt ca. Tắt cho thứ
 // không cần đếm cuối ca (vd vật tư cố định). Single-tap switch, lưu ngay.
 function AuditRow({ value, canEdit, saving, onToggle }) {
     return (
-        <Row label="Kiểm kê hao hụt">
+        <Row label="Kiểm kê tồn kho">
             <button
                 type="button"
                 role="switch"

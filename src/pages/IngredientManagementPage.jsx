@@ -396,7 +396,7 @@ export default function IngredientManagementPage() {
                         onMove={moveIngredient}
                     />
                 ) : (
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="flex flex-col gap-2.5">
                         {visibleIngredients.map(ingredient => {
                             const cfg = configByIngredient.get(ingredient)
                             return (
@@ -424,7 +424,7 @@ export default function IngredientManagementPage() {
                             )
                         })}
                         {visibleIngredients.length === 0 && (
-                            <p className="col-span-2 text-text-secondary text-[13px] text-center py-6">
+                            <p className="text-text-secondary text-[13px] text-center py-6">
                                 {allIngredients.length === 0 ? 'Chưa có nguyên liệu nào.' : 'Chưa có nguyên liệu trong nhóm này.'}
                             </p>
                         )}

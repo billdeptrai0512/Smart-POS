@@ -136,12 +136,47 @@ export const upsertLocalRecipe = (payload) => {
     set(KEYS.RECIPES, recipes);
 };
 
-export const fetchLocalIngredientCosts = (addressId) => get(KEYS.INGREDIENT_COSTS).filter(i => i.address_id === addressId || i.address_id === null);
+export const fetchLocalIngredientCosts = (addressId) => {
+    const list = get(KEYS.INGREDIENT_COSTS).filter(i => i.address_id === addressId || i.address_id === null);
+    return list.map(item => ({
+        ingredient: item.ingredient,
+        unit: item.unit || 'đv',
+        unit_cost: item.unit_cost !== undefined ? item.unit_cost : item.unitCost,
+        pack_size: item.pack_size !== undefined ? item.pack_size : item.packSize,
+        pack_unit: item.pack_unit !== undefined ? item.pack_unit : item.packUnit,
+        min_stock: item.min_stock !== undefined ? item.min_stock : item.minStock,
+        category: item.category,
+        count_in_audit: item.count_in_audit !== undefined ? item.count_in_audit : (item.countInAudit !== undefined ? item.countInAudit : true)
+    }));
+};
+
 export const upsertLocalIngredientCost = (payload) => {
     const items = get(KEYS.INGREDIENT_COSTS);
     const idx = items.findIndex(i => i.ingredient === payload.ingredient && i.address_id === payload.address_id);
-    if (idx >= 0) items[idx] = { ...items[idx], ...payload };
-    else items.push(payload);
+    
+    const mapped = {
+        ingredient: payload.ingredient,
+        unit_cost: payload.unit_cost !== undefined ? payload.unit_cost : payload.unitCost,
+        address_id: payload.address_id,
+        unit: payload.unit,
+    };
+    
+    const packSize = payload.pack_size !== undefined ? payload.pack_size : payload.packSize;
+    if (packSize !== undefined) mapped.pack_size = packSize;
+    
+    const packUnit = payload.pack_unit !== undefined ? payload.pack_unit : payload.packUnit;
+    if (packUnit !== undefined) mapped.pack_unit = packUnit;
+    
+    const minStock = payload.min_stock !== undefined ? payload.min_stock : payload.minStock;
+    if (minStock !== undefined) mapped.min_stock = minStock;
+    
+    if (payload.category !== undefined) mapped.category = payload.category;
+    
+    const countInAudit = payload.count_in_audit !== undefined ? payload.count_in_audit : payload.countInAudit;
+    if (countInAudit !== undefined) mapped.count_in_audit = countInAudit;
+
+    if (idx >= 0) items[idx] = { ...items[idx], ...mapped };
+    else items.push(mapped);
     set(KEYS.INGREDIENT_COSTS, items);
 };
 
