@@ -61,6 +61,32 @@ export default function AddExpenseModal({
                     </button>
                 </div>
 
+                {/* Ngày chi — lên đầu modal, full-width. Mặc định hôm nay; chọn ngày quá khứ để ghi lùi. */}
+                <div className="flex flex-col gap-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-dim">Ngày chi</span>
+                    <DatePicker
+                        value={expenseDate || today}
+                        max={today}
+                        onChange={onDateChange}
+                        presets={false}
+                        align="start"
+                        trigger={(label, toggle) => (
+                            <button
+                                type="button"
+                                onClick={toggle}
+                                className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[14px] font-bold text-text text-left hover:border-primary/40 transition-all"
+                            >
+                                {formatIsoDisplay(expenseDate || today)}
+                            </button>
+                        )}
+                    />
+                    {isBackdated && (
+                        <p className="text-[11px] text-warning leading-snug">
+                            Sẽ ghi vào ngày {formatIsoDisplay(expenseDate)}, không phải hôm nay.
+                        </p>
+                    )}
+                </div>
+
                 <ExpenseCategoryPicker
                     categories={expenseCategories}
                     selectedId={selectedCategoryId}
@@ -93,32 +119,6 @@ export default function AddExpenseModal({
                     inputRef={amountRef}
                     size="lg"
                 />
-
-                {/* Ngày chi — defaults today; pick a past day to backdate. */}
-                <div className="flex items-center justify-between gap-3">
-                    <span className="text-[12px] font-bold text-text-secondary">Ngày chi</span>
-                    <DatePicker
-                        value={expenseDate || today}
-                        max={today}
-                        onChange={onDateChange}
-                        presets={false}
-                        align="end"
-                        trigger={(label, toggle) => (
-                            <button
-                                type="button"
-                                onClick={toggle}
-                                className="w-36 bg-surface-light border border-border/60 rounded-[10px] px-3 py-2 text-[13px] font-bold text-text text-center hover:border-primary/50 transition-colors"
-                            >
-                                {formatIsoDisplay(expenseDate || today)}
-                            </button>
-                        )}
-                    />
-                </div>
-                {isBackdated && (
-                    <p className="-mt-2 text-[11px] text-warning leading-snug text-right">
-                        Sẽ ghi vào ngày {formatIsoDisplay(expenseDate)}, không phải hôm nay.
-                    </p>
-                )}
 
                 <button
                     onClick={() => canSubmit && onSubmit()}
