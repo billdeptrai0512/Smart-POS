@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { splitExpenses, aggregateOrderStats } from './reportStats'
+import { splitExpenses, aggregateOrderStats, computeCashFlowTotals } from './reportStats'
 
 describe('splitExpenses (thực chi model)', () => {
     it('sums non-refill expenses into dailyExpense', () => {
@@ -66,6 +66,84 @@ describe('splitExpenses (thực chi model)', () => {
         expect(splitExpenses(null)).toEqual({
             dailyExpense: 0, refillNvl: 0, refillFreeForm: 0, refillTotal: 0,
         })
+    })
+})
+
+describe('computeCashFlowTotals (phân loại theo chốt ca tiền)', () => {
+    const CLOSE = '2026-06-02T15:00:00+07:00'
+    const before = '2026-06-02T10:00:00+07:00'
+    const after = '2026-06-02T18:00:00+07:00'
+
+    it('chưa chốt (null): NVL + chi trong ca tiền mặt đều cộng vào Thực thu, không trừ Thực nhận', () => {
+        // User case: tiền mặt 850, CK 237, tiền nhà 50 (ops), matcha 185 (NVL cash)
+        const r = computeCashFlowTotals({
+            liveCash: 850000, liveTransfer: 237000,
+            payments: [{ amount: 185000, payment_method: 'cash', paid_at: before }],
+            shiftExpenses: [{ amount: 50000, created_at: before }],
+            cashClosedAt: null,
+        })
+        expect(r.inShiftCashOut).toBe(235000)
+        expect(r.postCloseCashOut).toBe(0)
+        expect(r.actualTotal).toBe(1322000)   // 850 + 237 + 235
+        expect(r.takeHomeCash).toBe(850000)   // không trừ lặp
+        expect(r.takeHome).toBe(1087000)      // 850 + 237
+    })
+
+    it('đã chốt, mua SAU chốt: không cộng Thực thu, trừ Thực nhận', () => {
+        const r = computeCashFlowTotals({
+            liveCash: 850000, liveTransfer: 237000,
+            payments: [{ amount: 185000, payment_method: 'cash', paid_at: after }],
+            shiftExpenses: [{ amount: 50000, created_at: before }],
+            cashClosedAt: CLOSE,
+        })
+        expect(r.inShiftCashOut).toBe(50000)      // chỉ tiền nhà trước chốt
+        expect(r.postCloseCashOut).toBe(185000)   // matcha sau chốt
+        expect(r.actualTotal).toBe(1137000)       // 850 + 237 + 50
+        expect(r.takeHomeCash).toBe(665000)       // 850 − 185
+        expect(r.takeHome).toBe(902000)
+    })
+
+    it('đã chốt, mua TRƯỚC chốt: cộng Thực thu, không trừ Thực nhận', () => {
+        const r = computeCashFlowTotals({
+            liveCash: 850000, liveTransfer: 237000,
+            payments: [{ amount: 185000, payment_method: 'cash', paid_at: before }],
+            shiftExpenses: [],
+            cashClosedAt: CLOSE,
+        })
+        expect(r.inShiftCashOut).toBe(185000)
+        expect(r.postCloseCashOut).toBe(0)
+        expect(r.actualTotal).toBe(1272000)   // 850 + 237 + 185
+        expect(r.takeHomeCash).toBe(850000)
+    })
+
+    it('CK trả NCC: luôn trừ Thực nhận CK, không cộng Thực thu (bất kể phase)', () => {
+        const r = computeCashFlowTotals({
+            liveCash: 850000, liveTransfer: 237000,
+            payments: [{ amount: 100000, payment_method: 'transfer', paid_at: before }],
+            shiftExpenses: [],
+            cashClosedAt: null,
+        })
+        expect(r.transferRefill).toBe(100000)
+        expect(r.inShiftCashOut).toBe(0)
+        expect(r.actualTotal).toBe(1087000)        // không cộng CK refill
+        expect(r.takeHomeTransfer).toBe(137000)    // 237 − 100
+        expect(r.takeHome).toBe(987000)            // 850 + 137
+    })
+
+    it('bỏ qua payment adjustment', () => {
+        const r = computeCashFlowTotals({
+            liveCash: 100000, liveTransfer: 0,
+            payments: [{ amount: 999, payment_method: 'cash', paid_at: before, invoice_metadata: { adjustment: true } }],
+            shiftExpenses: [],
+            cashClosedAt: null,
+        })
+        expect(r.inShiftCashOut).toBe(0)
+        expect(r.actualTotal).toBe(100000)
+    })
+
+    it('input rỗng', () => {
+        const r = computeCashFlowTotals({ liveCash: 0, liveTransfer: 0 })
+        expect(r).toMatchObject({ actualTotal: 0, takeHomeCash: 0, takeHomeTransfer: 0, takeHome: 0 })
     })
 })
 

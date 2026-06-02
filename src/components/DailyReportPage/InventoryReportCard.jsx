@@ -251,9 +251,14 @@ function IngredientRow({
     }
 
     // Tổng cộng cell text: total cups across all variants that consumed this ingredient
-    // today (sum of breakdown[*].qty). Tap the cell to expand the per-variant breakdown.
+    // today (sum of breakdown[*].qty). Variants with totalAmount === 0 (e.g. size LỚN /
+    // BÌNH NHỎ that don't draw on this unit) are excluded — counting them would inflate
+    // the cup total above "Sử dụng" even though they consumed nothing. Tap to expand.
     const totalCupsUsing = hasBreakdown
-        ? Object.values(breakdown).reduce((sum, e) => sum + (Number(e.qty) || 0), 0)
+        ? Object.values(breakdown).reduce(
+            (sum, e) => sum + ((Number(e.totalAmount) || 0) > 0 ? (Number(e.qty) || 0) : 0),
+            0,
+        )
         : 0
     const totalCupsText = totalCupsUsing > 0 ? `${totalCupsUsing} ly` : '—'
 
@@ -347,6 +352,7 @@ function IngredientRow({
                 {expanded && hasBreakdown && (
                     <div className="mt-2 px-3 py-2 bg-surface-light rounded-[10px] border border-border/40 flex flex-col gap-1">
                         {Object.values(breakdown)
+                            .filter((e) => (Number(e.totalAmount) || 0) > 0)
                             .sort((a, b) => b.totalAmount - a.totalAmount)
                             .map((entry, i) => (
                                 <div key={i} className="flex items-center justify-between">

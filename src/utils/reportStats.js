@@ -40,6 +40,75 @@ export function splitExpenses(expenses) {
     return { dailyExpense, refillNvl, refillFreeForm, refillTotal: refillNvl + refillFreeForm }
 }
 
+// Dòng tiền tiền-mặt phân theo mốc "chốt ca tiền thực thu" (cash_closed_at).
+//
+// Bối cảnh: actual_cash là tiền mặt ĐẾM ĐƯỢC tại thời điểm chốt. Mọi khoản chi tiền
+// mặt rút từ két TRƯỚC khi chốt đã làm hụt số đếm được → phải cộng lại để dựng lại
+// doanh thu tiền mặt (Thực thu). Khoản chi SAU khi chốt là lấy tiền đã đếm ra tiêu →
+// trừ vào Thực nhận (tiền mang về). cash_closed_at == null ⇒ chưa chốt ⇒ mọi khoản
+// coi như "trước chốt" (mặc định là chi trong ca).
+//
+// Chuyển khoản không động đến két: actual_transfer là doanh thu CK gộp (chưa trừ NCC)
+// nên CK luôn trừ ở Thực nhận, không bao giờ cộng vào Thực thu — không áp logic phase.
+//
+// Inputs:
+//   liveCash / liveTransfer : số tiền mặt / CK đang dùng để tính (đếm được hoặc đang gõ)
+//   payments       : expense_payments của ngày (NVL/refill + trả nợ + free_form sau ca)
+//   shiftExpenses  : expenses non-refill của ngày ("chi trong ca" ad-hoc, không có payment riêng)
+//   cashClosedAt   : ISO string mốc chốt tiền, hoặc null/undefined nếu chưa chốt
+export function computeCashFlowTotals({
+    liveCash = 0,
+    liveTransfer = 0,
+    payments = [],
+    shiftExpenses = [],
+    cashClosedAt = null,
+}) {
+    const closeMs = cashClosedAt ? new Date(cashClosedAt).getTime() : null
+    // Trước chốt khi: chưa có mốc, hoặc thời điểm chi < mốc. Thiếu timestamp → coi trước chốt.
+    const isBeforeClose = (ts) => {
+        if (closeMs == null) return true
+        if (!ts) return true
+        return new Date(ts).getTime() < closeMs
+    }
+
+    let inShiftRefillCash = 0  // NVL/đi chợ trả tiền mặt TRƯỚC chốt
+    let inShiftOpsCash = 0     // chi phí "trong ca" (non-refill) TRƯỚC chốt
+    let postCloseCashOut = 0   // mọi khoản tiền mặt lấy ra SAU chốt (trừ Thực nhận)
+    let transferRefill = 0     // CK trả NCC (luôn trừ Thực nhận CK)
+
+    for (const p of payments || []) {
+        if (p.invoice_metadata?.adjustment) continue
+        const amt = Number(p.amount) || 0
+        if (p.payment_method === 'transfer') { transferRefill += amt; continue }
+        if (isBeforeClose(p.paid_at)) inShiftRefillCash += amt
+        else postCloseCashOut += amt
+    }
+    // Chi phí non-refill ("chi trong ca") không có payment riêng → dùng amount + created_at.
+    // Coi như tiền mặt từ két (đại đa số là vậy); phase theo thời điểm tạo.
+    for (const e of shiftExpenses || []) {
+        if (e.metadata?.adjustment) continue
+        const amt = Number(e.amount) || 0
+        if (isBeforeClose(e.created_at)) inShiftOpsCash += amt
+        else postCloseCashOut += amt
+    }
+
+    const inShiftCashOut = inShiftRefillCash + inShiftOpsCash
+    const actualTotal = liveCash + liveTransfer + inShiftCashOut
+    const takeHomeCash = Math.max(0, liveCash - postCloseCashOut)
+    const takeHomeTransfer = Math.max(0, liveTransfer - transferRefill)
+    return {
+        actualTotal,
+        takeHomeCash,
+        takeHomeTransfer,
+        takeHome: takeHomeCash + takeHomeTransfer,
+        inShiftCashOut,
+        inShiftRefillCash,
+        inShiftOpsCash,
+        postCloseCashOut,
+        transferRefill,
+    }
+}
+
 // Walks orders once and returns aggregated stats shared by Daily/Range reports.
 //
 // Handles both shapes:

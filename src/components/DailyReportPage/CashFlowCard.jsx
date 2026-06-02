@@ -1,6 +1,7 @@
 import { formatVND, parseVNDInput } from '../../utils'
 import { ingredientLabel } from '../../utils/ingredients'
 import { isSameDayVN } from '../../utils/dateVN'
+import { computeCashFlowTotals } from '../../utils/reportStats'
 
 export default function CashFlowCard({
     actualCash = 0,
@@ -9,6 +10,7 @@ export default function CashFlowCard({
     refillFreeForm = 0,
     expenses = [],
     payments = [],   // NEW: expense_payments của ngày này (cash-out thực, theo paid_at)
+    cashClosedAt = null,  // mốc "chốt ca tiền thực thu" (null = chưa chốt → mọi khoản là trước chốt)
     onDailyExpenseClick,
     salesCard,
     // Inline-edit props (today scope on /daily-report). When `editable` is true the
@@ -26,22 +28,14 @@ export default function CashFlowCard({
     const liveCash = editable ? (parseVNDInput(cashInput) || 0) : actualCash
     const liveTransfer = editable ? (parseVNDInput(transferInput) || 0) : actualTransfer
 
-    // 1. Thực thu = Tiền mặt + Chuyển khoản + Chi phí phát sinh trong ca
-    const actualTotal = liveCash + liveTransfer + (dailyExpense || 0)
-
-    // Cash-out NVL theo paid_at — payments[] đã được filter ngày bởi report RPC.
-    // Trước đây tính từ refill expenses (theo created_at), nay chuyển sang payments
-    // để khi user ghi nợ thì cash-out chỉ xảy ra vào ngày thật sự trả.
-    let cashRefill = 0, transferRefill = 0
-    const nvlPayments = []        // payments cho refill NVL (loại trừ free_form)
-    const freeFormPayments = []   // payments cho "sau chốt ca" free_form
+    // Payments của ngày (đã filter theo paid_at bởi report RPC). Tách nhóm để HIỂN THỊ:
+    //   nvlPayments      = đi chợ NVL (loại free_form)
+    //   freeFormPayments = chi "sau chốt ca" free_form
+    const nvlPayments = []
+    const freeFormPayments = []
     for (const p of payments || []) {
-        const isFreeForm = !!p.invoice_metadata?.free_form
-        const isAdjustment = !!p.invoice_metadata?.adjustment
-        if (isAdjustment) continue
-        if (p.payment_method === 'transfer') transferRefill += p.amount || 0
-        else cashRefill += p.amount || 0
-        if (isFreeForm) freeFormPayments.push(p)
+        if (p.invoice_metadata?.adjustment) continue
+        if (p.invoice_metadata?.free_form) freeFormPayments.push(p)
         else nvlPayments.push(p)
     }
     const refillNvlPaid = nvlPayments.reduce((s, p) => s + (p.amount || 0), 0)
@@ -50,12 +44,17 @@ export default function CashFlowCard({
     // 2. Tổng chi phí — dùng số thực trả (paid_at-based), không tính nghĩa vụ chưa trả.
     const totalExpenses = (dailyExpense || 0) + (refillFreeForm || refillFreeFormPaid) + refillNvlPaid
 
-    const takeHomeCash = Math.max(0, liveCash - cashRefill)
-    const takeHomeTransfer = Math.max(0, liveTransfer - transferRefill)
-    const takeHome = takeHomeCash + takeHomeTransfer
-
     const shiftExpenses = (expenses || []).filter(e => !e.is_refill)
     const afterShiftOps = (expenses || []).filter(e => e.is_refill && e.metadata?.free_form)
+
+    // 1. Thực thu / Thực nhận — phân loại tiền mặt theo mốc chốt ca tiền (cashClosedAt):
+    //    trước chốt → cộng vào Thực thu (dựng lại doanh thu tiền mặt); sau chốt → trừ
+    //    Thực nhận. Xem computeCashFlowTotals để biết lý do double-count. CK luôn trừ
+    //    Thực nhận, không cộng Thực thu.
+    const {
+        actualTotal, takeHomeCash, takeHomeTransfer, takeHome,
+        inShiftRefillCash, inShiftOpsCash,
+    } = computeCashFlowTotals({ liveCash, liveTransfer, payments, shiftExpenses, cashClosedAt })
 
     // Roll up NVL payments by ingredient/name, tách thành 2 nhóm:
     //   - todayPurchases: payment paid_at cùng ngày invoice (= đi chợ trả ngay/1 phần ngay)
@@ -149,9 +148,19 @@ export default function CashFlowCard({
                             Chi trong ca
                         </span>
                         <span className="text-[13px] font-bold text-warning tabular-nums">
-                            {formatVND(dailyExpense || 0)}
+                            {formatVND(inShiftOpsCash)}
                         </span>
                     </div>
+                    {/* NVL/đi chợ trả tiền mặt TRƯỚC chốt cũng là tiền rút từ két trong ca →
+                        cộng vào Thực thu. Hiện riêng để tổng nhìn ra được phần cộng lại. */}
+                    {inShiftRefillCash > 0 && (
+                        <div className="flex justify-between items-center">
+                            <span className="text-[12px] font-bold text-text-secondary">Mua NVL trong ca</span>
+                            <span className="text-[13px] font-bold text-warning tabular-nums">
+                                {formatVND(inShiftRefillCash)}
+                            </span>
+                        </div>
+                    )}
                 </div>
                 <div className="w-full h-[1px] bg-border/60 rounded-full my-3" />
                 <div className="flex justify-between items-center mt-1 pl-1">
@@ -199,7 +208,7 @@ export default function CashFlowCard({
                 <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
 
                 <div className="flex flex-col gap-1 pl-1">
-                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Đi chợ hôm nay</span>
+                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Mua nguyên liệu / bao bì</span>
                     {nvlGrouped.length > 0 ? (
                         nvlGrouped.map((row) => (
                             <div key={row.key} className="flex justify-between items-center">

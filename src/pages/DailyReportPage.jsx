@@ -612,6 +612,9 @@ export default function DailyReportPage() {
             system_total_revenue: systemTotalRevenue,
             actual_cash: parseVNDInput(cashInput) || 0,
             actual_transfer: parseVNDInput(transferInput) || 0,
+            // "Lưu thực thu" = chốt ca tiền. Đặt mốc lần đầu, giữ nguyên các lần sửa số
+            // sau (không dời mốc, để các khoản chi giữa 2 lần lưu không bị đổi phân loại).
+            cash_closed_at: shiftClosing?.cash_closed_at || new Date().toISOString(),
         }
         // On insert we also need inventory_report (empty if not provided yet) and a note;
         // on update we preserve whatever the existing row has — only the cash fields change.
@@ -704,6 +707,7 @@ export default function DailyReportPage() {
                                 refillFreeForm={refillFreeForm}
                                 expenses={displayExpenses}
                                 payments={displayPayments}
+                                cashClosedAt={shiftClosing?.cash_closed_at || null}
                                 editable={isTodayScope}
                                 cashInput={cashInput}
                                 transferInput={transferInput}

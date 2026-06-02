@@ -5,16 +5,33 @@ import { reportCache, historicalCache, invalidateReportCache } from './cache'
 
 // ---- Shift Closing CRUD ----
 
+// Self-heal khi cột cash_closed_at chưa được migrate: lưu phần còn lại thay vì làm vỡ
+// "Lưu thực thu". PostgREST trả PGRST204 ("could not find column ... in schema cache")
+// cho WRITE cột lạ; Postgres trả 42703 ("undefined_column"). Bắt cả hai + dò message.
+function isMissingCashClosedAt(error) {
+    if (!error) return false
+    if (error.code === 'PGRST204' || error.code === '42703') return true
+    return /cash_closed_at/i.test(error.message || '')
+}
+function omitCashClosedAt(data) {
+    const rest = { ...data }
+    delete rest.cash_closed_at
+    return rest
+}
+
 // Insert a shift closing record
 export async function insertShiftClosing(data) {
     invalidateReportCache(data?.address_id)
     if (localRepo.isGuest()) return localRepo.upsertLocalShiftClosing(data)
     if (!supabase) throw new Error('No Supabase connection')
-    const { data: row, error } = await supabase
+    let { data: row, error } = await supabase
         .from('shift_closings')
         .insert(data)
         .select()
         .single()
+    if (isMissingCashClosedAt(error) && 'cash_closed_at' in data) {
+        ;({ data: row, error } = await supabase.from('shift_closings').insert(omitCashClosedAt(data)).select().single())
+    }
     if (error) throw error
     return row
 }
@@ -24,14 +41,32 @@ export async function updateShiftClosing(id, data) {
     invalidateReportCache(data?.address_id || null)
     if (localRepo.isGuest()) return localRepo.upsertLocalShiftClosing(data)
     if (!supabase) throw new Error('No Supabase connection')
-    const { data: row, error } = await supabase
+    let { data: row, error } = await supabase
         .from('shift_closings')
         .update(data)
         .eq('id', id)
         .select()
         .single()
+    if (isMissingCashClosedAt(error) && 'cash_closed_at' in data) {
+        ;({ data: row, error } = await supabase.from('shift_closings').update(omitCashClosedAt(data)).eq('id', id).select().single())
+    }
     if (error) throw error
     return row
+}
+
+// get_*_report RPCs liệt kê cột shift_closing tường minh nên KHÔNG trả cash_closed_at.
+// Đọc bổ sung bằng 1 PK lookup nhẹ rồi gắn vào shift_closing. Phòng thủ: nếu cột chưa
+// migrate (42703) thì coi như null (chưa chốt → mọi khoản là trước chốt).
+async function attachCashClosedAt(data) {
+    const id = data?.shift_closing?.id
+    if (!id || !supabase) return data
+    const { data: row, error } = await supabase
+        .from('shift_closings')
+        .select('cash_closed_at')
+        .eq('id', id)
+        .single()
+    if (!error && row) data.shift_closing.cash_closed_at = row.cash_closed_at || null
+    return data
 }
 
 // Fetch shift closings within a date range (for summing cash/transfer)
@@ -233,7 +268,7 @@ export async function fetchDailyReportContext(addressId) {
         if (!supabase) return {}
         const { data, error } = await supabase.rpc('get_daily_report_context', { p_address_id: addressId })
         if (error) throw error
-        return data || {}
+        return await attachCashClosedAt(data || {})
     })
 }
 
@@ -264,7 +299,7 @@ export async function fetchReportByDate(addressId, dateStr) {
         if (!supabase) return {}
         const { data, error } = await supabase.rpc('get_report_by_date', { p_address_id: addressId, p_date: dateStr })
         if (error) throw error
-        return data || {}
+        return await attachCashClosedAt(data || {})
     })
 }
 
