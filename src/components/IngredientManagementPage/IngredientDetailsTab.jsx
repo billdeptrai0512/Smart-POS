@@ -28,19 +28,9 @@ export default function IngredientDetailsTab({
     return (
         <div className="flex flex-col gap-3">
             <section className="bg-surface rounded-[18px] border border-border/60 p-4 flex flex-col divide-y divide-border/40">
-                <NameRow value={nameLabel} canEdit={canEdit} onSave={onSaveName} />
-                <StockRow
-                    currentStock={currentStock}
-                    unit={unit}
-                    hasPack={hasPack}
-                    packSize={packSize}
-                    packUnit={packUnit}
-                    canEdit={canEdit}
-                    onSave={onSaveStock}
-                />
-                <UnitRow value={unit} canEdit={canEdit} onSave={onSaveUnit} />
-                <CostRow cost={cost} unit={unit} canEdit={canEdit} onSave={onSaveCost} />
                 <CategoryRow value={category} canEdit={canEdit} saving={saving} onChange={onChangeCategory} />
+                <NameRow value={nameLabel} canEdit={canEdit} onSave={onSaveName} />
+                <UnitRow value={unit} canEdit={canEdit} onSave={onSaveUnit} />
                 <PackRow
                     hasPack={hasPack}
                     packSize={packSize}
@@ -60,6 +50,18 @@ export default function IngredientDetailsTab({
                         onSave={onSaveMinStock}
                     />
                 )}
+                <StockRow
+                    currentStock={currentStock}
+                    unit={unit}
+                    hasPack={hasPack}
+                    packSize={packSize}
+                    packUnit={packUnit}
+                    canEdit={canEdit}
+                    onSave={onSaveStock}
+                />
+                <CostRow cost={cost} unit={unit} canEdit={canEdit} onSave={onSaveCost} />
+
+
                 <AuditRow value={countInAudit} canEdit={canEdit} saving={saving} onToggle={onToggleAudit} />
             </section>
         </div>
@@ -266,7 +268,6 @@ function PackRow({ hasPack, packSize, packUnit, unit, canEdit, onConfigure }) {
                     className={`flex items-center gap-2 text-[13px] font-bold text-text tabular-nums ${canEdit ? 'hover:text-primary cursor-pointer' : 'cursor-default'}`}
                 >
                     <span>1 {packUnit} = {packSize} {unit}</span>
-                    {canEdit && <Pencil size={12} className="text-text-dim" />}
                 </button>
             ) : canEdit ? (
                 <button
