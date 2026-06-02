@@ -306,7 +306,7 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, cas
                             doanh thu bán hàng trước khi chốt ca tiền → cộng vào Thực thu. */}
                         {showPhaseToggle && (
                             <div className="flex items-center justify-between gap-3">
-                                <span className="text-[12px] font-bold text-text-secondary">Lấy từ tiền</span>
+                                <span className="text-[12px] font-bold text-text-secondary">Thời điểm</span>
                                 <div className="w-32 flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
                                     <button
                                         onClick={() => { setUserTouchedPhase(true); setCashPhase('in_shift') }}
@@ -318,7 +318,7 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, cas
                                         onClick={() => { setUserTouchedPhase(true); setCashPhase('post_close') }}
                                         className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${cashPhase === 'post_close' ? 'bg-primary text-white' : 'text-text-secondary'}`}
                                     >
-                                        Sau chốt
+                                        Sau chốt ca
                                     </button>
                                 </div>
                             </div>
