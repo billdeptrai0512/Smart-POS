@@ -645,8 +645,8 @@ export default function DailyReportPage() {
             <HistoryHeader
                 rangeLabel={rangeLabel}
                 scope={scope}
-                onBack={() => goToMenuStep('report', -1, { navigate, backTo, scopeState: dateNavState })}
-                onForward={() => goToMenuStep('report', +1, { navigate, backTo, scopeState: dateNavState })}
+                onBack={() => goToMenuStep('report', -1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard })}
+                onForward={() => goToMenuStep('report', +1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard })}
                 activeTab="report"
                 onTabSelect={(tab) => {
                     if (tab === 'report') return

@@ -172,6 +172,7 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, cas
                                 <div className="relative flex items-center">
                                     <input
                                         type="number"
+                                        step="any"
                                         autoFocus
                                         placeholder="0"
                                         value={qty}

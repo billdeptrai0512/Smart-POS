@@ -320,8 +320,8 @@ export default function HistoryPage() {
                 scope={scope}
                 isReadOnly={isReadOnly}
                 canGoForward={canGoForwardPeriod}
-                onBack={() => goToMenuStep(activeTab, -1, { navigate, backTo, setActiveTab, goReport: handleReportNav })}
-                onForward={() => goToMenuStep(activeTab, +1, { navigate, backTo, setActiveTab, goReport: handleReportNav })}
+                onBack={() => goToMenuStep(activeTab, -1, { navigate, backTo, setActiveTab, goReport: handleReportNav, wizard: location.state?.wizard })}
+                onForward={() => goToMenuStep(activeTab, +1, { navigate, backTo, setActiveTab, goReport: handleReportNav, wizard: location.state?.wizard })}
                 activeTab={activeTab}
                 onTabSelect={(tab) => {
                     if (tab === 'report') handleReportNav()

@@ -129,8 +129,8 @@ export default function RecipeMenuPage() {
 
             <RecipeMenuHeader
                 productCount={products.length}
-                onBack={() => goToMenuStep('recipes', -1, { navigate, backTo })}
-                onForward={() => goToMenuStep('recipes', +1, { navigate, backTo })}
+                onBack={() => goToMenuStep('recipes', -1, { navigate, backTo, wizard: location.state?.wizard })}
+                onForward={() => goToMenuStep('recipes', +1, { navigate, backTo, wizard: location.state?.wizard })}
                 activeTab="recipes"
                 onTabSelect={(key) => {
                     if (key === 'main' || key === 'packaging') {

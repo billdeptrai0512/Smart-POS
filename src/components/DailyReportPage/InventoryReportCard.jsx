@@ -114,7 +114,10 @@ export default function InventoryReportCard({
             openingFallback: openingStock[ing.ingredient],
             used: lookupByLabel(ing.ingredient, usedMap),
         })
-        if (haoHut != null && haoHut < 0) totalLossValue += Math.abs(haoHut) * (Number(ing.unit_cost) || 0)
+        if (haoHut != null && haoHut < 0) {
+            const rawCost = Math.abs(haoHut) * (Number(ing.unit_cost) || 0)
+            totalLossValue += Math.ceil(rawCost / 1000) * 1000
+        }
     }
 
     // Số NVL đã kiểm (có nhập Cuối kỳ) — drives header summary, song song với
@@ -240,7 +243,12 @@ function IngredientRow({
     // Money value of the discrepancy = |Hao hụt| × unit_cost. Render absolute number
     // tinted by sign so the negative magnitude is implicit in the tone.
     const unitCost = Number(ing.unit_cost) || 0
-    const giaTri = haoHut != null && unitCost > 0 ? Math.round(haoHut * unitCost) : null
+    let giaTri = null
+    if (haoHut != null && unitCost > 0) {
+        const rawCost = Math.abs(haoHut * unitCost)
+        const roundedCost = Math.ceil(rawCost / 1000) * 1000
+        giaTri = haoHut < 0 ? -roundedCost : roundedCost
+    }
 
     // Cups-equivalent label: how many drinks of the dominant product the |Hao hụt|
     // could have made. Skips ingredients where amountPerCup is missing/1 (cup/lid passthrough).
