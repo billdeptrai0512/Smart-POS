@@ -20,6 +20,21 @@ export default defineConfig({
   define: {
     '__APP_UPDATE_LOG__': JSON.stringify(getLatestCommitMessage()),
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Split stable vendor code into named chunks so they stay cache-valid
+        // across the frequent app deploys (only app code hash changes).
+        // Vite 8 / rolldown requires the function form of manualChunks.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('@supabase')) return 'vendor-supabase'
+          if (id.includes('recharts') || id.includes('/d3-') || id.includes('victory-vendor')) return 'vendor-charts'
+          if (id.includes('react-router') || id.includes('react-dom') || id.includes('/react/') || id.includes('scheduler')) return 'vendor-react'
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),

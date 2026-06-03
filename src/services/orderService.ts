@@ -7,25 +7,32 @@
 // Existing call sites still import everything from `services/orderService` —
 // the barrel re-exports at the bottom keep that working. Prefer the focused
 // imports in new code.
+//
+// Incremental TS: public signatures are typed against src/types/domain. Raw
+// Supabase rows are still unmodeled (typed `any`) until the DB schema is generated.
 
 import { supabase } from '../lib/supabaseClient'
+// Use the namespace import directly (live binding). Do NOT alias it to a top-level
+// `const` — that snapshots the binding at module-init time and, under the barrel's
+// circular imports, captures `undefined` (prod crash: "reading 'isGuest' of undefined").
 import * as localRepo from './localRepository'
 import { startOfDayVN, dateStringVN } from '../utils/dateVN'
 import { reportCache, invalidateReportCache } from './cache'
+import type { UUID, CartItem, CostPerItem, OrderPayload, TodayStats } from '../types/domain'
 
 // ---- Orders ----
 
 // Fetch today's revenue + cups (cups excludes products with count_as_cup=false).
 // Uses the get_today_stats RPC which aggregates in Postgres — payload is a
 // single row, no N+1 product join over the wire. Legacy fallback below.
-export async function fetchTodayStats(addressId) {
+export async function fetchTodayStats(addressId: UUID | null): Promise<TodayStats> {
     if (localRepo.isGuest()) {
         const orders = localRepo.fetchLocalOrders(addressId)
         let revenue = 0, cups = 0
-        orders.forEach(o => {
+        orders.forEach((o: any) => {
             if (!o.deleted_at) revenue += Number(o.total || 0)
             const items = o.order_items || o.items || []
-            items.forEach(i => {
+            items.forEach((i: any) => {
                 // In local mode, we don't have the products table join easily,
                 // so we assume everything is a cup unless specified in seeding.
                 // For demo, this is fine.
@@ -60,9 +67,9 @@ export async function fetchTodayStats(addressId) {
     if (legacyError) { console.error('fetchTodayStats legacy error:', legacyError); return { revenue: 0, cups: 0 } }
 
     let revenue = 0, cups = 0
-    ;(legacyData || []).forEach(o => {
+    ;(legacyData || []).forEach((o: any) => {
         revenue += Number(o.total || 0)
-        ;(o.order_items || []).forEach(i => {
+        ;(o.order_items || []).forEach((i: any) => {
             if (i.products?.count_as_cup !== false) cups += Number(i.quantity || 0)
         })
     })
@@ -70,7 +77,7 @@ export async function fetchTodayStats(addressId) {
 }
 
 // Fetch all orders for today, newest first (optionally scoped by address)
-export async function fetchTodayOrders(addressId) {
+export async function fetchTodayOrders(addressId: UUID | null): Promise<any> {
     if (localRepo.isGuest()) return localRepo.fetchLocalOrders(addressId)
     if (!supabase) return []
     const today = startOfDayVN()
@@ -114,7 +121,16 @@ export async function fetchTodayOrders(addressId) {
 // Submit a complete order to Supabase using RPC for atomic transaction
 // totalCost: tổng giá vốn của bill (snapshot)
 // costPerItem: Map<cartItemId, unitCost> giá vốn mỗi dòng (snapshot)
-export async function submitOrder(cart, total, paymentMethod = null, addressId = null, totalCost = 0, costPerItem = {}, staffName = null, discountAmount = 0) {
+export async function submitOrder(
+    cart: CartItem[],
+    total: number,
+    paymentMethod: string | null = null,
+    addressId: UUID | null = null,
+    totalCost = 0,
+    costPerItem: CostPerItem = {},
+    staffName: string | null = null,
+    discountAmount = 0
+): Promise<{ id: string | null }> {
     invalidateReportCache(addressId)
     if (localRepo.isGuest()) {
         return localRepo.submitLocalOrder({
@@ -134,7 +150,7 @@ export async function submitOrder(cart, total, paymentMethod = null, addressId =
     }
     if (!supabase) throw new Error('No Supabase connection')
 
-    const orderPayload = {
+    const orderPayload: OrderPayload = {
         total,
         total_cost: Math.round(totalCost),
         discount_amount: Math.round(discountAmount),
@@ -142,8 +158,8 @@ export async function submitOrder(cart, total, paymentMethod = null, addressId =
         address_id: addressId,
         staff_name: staffName,
         items: cart.map(item => {
-            const optionsText = item.extras?.length > 0 ? item.extras.map(e => e.name).join(', ') : null;
-            const extraIds = item.extras?.length > 0 ? item.extras.map(e => e.id).filter(Boolean) : [];
+            const optionsText = item.extras?.length > 0 ? item.extras.map(e => e.name).join(', ') : null
+            const extraIds = item.extras?.length > 0 ? item.extras.map(e => e.id).filter(Boolean) : []
             return {
                 product_id: item.productId,
                 quantity: item.quantity,
@@ -164,16 +180,16 @@ export async function submitOrder(cart, total, paymentMethod = null, addressId =
 }
 
 // Bulk submit offline orders in ONE HTTP Request
-export async function bulkSubmitOrders(ordersArray) {
+export async function bulkSubmitOrders(ordersArray: any[]): Promise<boolean> {
     // Mixed addresses possible — flush all to be safe.
     invalidateReportCache(null)
     if (localRepo.isGuest()) {
-        ordersArray.forEach(o => localRepo.submitLocalOrder(o))
+        ordersArray.forEach((o: any) => localRepo.submitLocalOrder(o))
         return true
     }
     if (!supabase) throw new Error('No Supabase connection')
 
-    const payload = ordersArray.map(o => ({
+    const payload = ordersArray.map((o: any) => ({
         total: o.total,
         total_cost: o.totalCost || 0,
         discount_amount: o.discountAmount || 0,
@@ -181,9 +197,9 @@ export async function bulkSubmitOrders(ordersArray) {
         address_id: o.addressId,
         created_at: o.createdAt,
         staff_name: o.staffName,
-        items: o.orderItems.map(item => {
-            const optionsText = item.extras?.length > 0 ? item.extras.map(e => e.name).join(', ') : null;
-            const extraIds = item.extras?.length > 0 ? item.extras.map(e => e.id).filter(Boolean) : (item.extraIds || []).filter(Boolean);
+        items: o.orderItems.map((item: any) => {
+            const optionsText = item.extras?.length > 0 ? item.extras.map((e: any) => e.name).join(', ') : null
+            const extraIds = item.extras?.length > 0 ? item.extras.map((e: any) => e.id).filter(Boolean) : (item.extraIds || []).filter(Boolean)
             return {
                 product_id: item.productId,
                 quantity: item.quantity,
@@ -203,9 +219,11 @@ export async function bulkSubmitOrders(ordersArray) {
 }
 
 // Soft Delete an order. addressId unknown — flush all.
-export async function deleteOrder(orderId, staffName = null) {
+export async function deleteOrder(orderId: UUID, staffName: string | null = null): Promise<boolean> {
     invalidateReportCache(null)
-    if (localRepo.isGuest()) return localRepo.deleteLocalOrder(orderId, staffName)
+    // localRepository is untyped JS; its `= null` defaults make tsc infer params as `null`.
+    // Cast the fn (lazy, at call time — safe under circular imports) until it's converted.
+    if (localRepo.isGuest()) return (localRepo.deleteLocalOrder as any)(orderId, staffName)
     if (!supabase) throw new Error('No Supabase connection')
 
     const { error: orderError } = await supabase
@@ -219,11 +237,11 @@ export async function deleteOrder(orderId, staffName = null) {
 }
 
 // Fetch all orders for yesterday (start of yesterday to start of today), scoped by address
-export async function fetchYesterdayOrders(addressId) {
+export async function fetchYesterdayOrders(addressId: UUID | null): Promise<any> {
     if (localRepo.isGuest()) {
         const yesterday = new Date()
         yesterday.setDate(yesterday.getDate() - 1)
-        return localRepo.fetchLocalOrders(addressId, yesterday.toISOString())
+        return (localRepo.fetchLocalOrders as any)(addressId, yesterday.toISOString())
     }
     if (!supabase) return []
     const today = startOfDayVN()
@@ -259,16 +277,16 @@ export async function fetchYesterdayOrders(addressId) {
 }
 
 // Fetch orders within a date range for an address (same structure as fetchTodayOrders)
-export async function fetchOrdersByRange(addressId, start, end) {
+export async function fetchOrdersByRange(addressId: UUID | null, start: Date, end: Date): Promise<any> {
     return reportCache.through([addressId, 'ordersByRange', start.toISOString(), end.toISOString()], async () => {
         if (localRepo.isGuest()) {
             const sMs = start.getTime(), eMs = end.getTime()
             return localRepo.fetchAllLocalOrders(addressId)
-                .filter(o => {
+                .filter((o: any) => {
                     const t = new Date(o.created_at).getTime()
                     return t >= sMs && t <= eMs
                 })
-                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+                .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         }
         if (!supabase) return []
         let query = supabase
@@ -285,12 +303,12 @@ export async function fetchOrdersByRange(addressId, start, end) {
 }
 
 // Fetch the most recent order today for an address (with items + product names)
-export async function fetchLatestOrder(addressId) {
+export async function fetchLatestOrder(addressId: UUID | null): Promise<any> {
     if (localRepo.isGuest()) {
         const todayStr = dateStringVN()
         const today = localRepo.fetchAllLocalOrders(addressId)
-            .filter(o => dateStringVN(new Date(o.created_at)) === todayStr)
-            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+            .filter((o: any) => dateStringVN(new Date(o.created_at)) === todayStr)
+            .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         return today[0] || null
     }
     if (!supabase) return null
