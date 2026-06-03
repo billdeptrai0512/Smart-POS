@@ -186,8 +186,7 @@ export async function upsertIngredientCost(ingredient, unitCost, addressId = nul
 //   costs_action ∈ 'renamed' | 'merged' | 'none' | 'noop'
 export async function syncIngredientKey(addressId, oldKey, newKey) {
     if (localRepo.isGuest()) {
-        await localRepo.renameLocalIngredient(oldKey, newKey)
-        return { recipes_updated: 0, closings_updated: 0, expenses_updated: 0, costs_action: 'renamed' }
+        return localRepo.renameLocalIngredient(addressId, oldKey, newKey)
     }
     if (!supabase) throw new Error('No Supabase connection')
     if (!addressId) throw new Error('addressId required for syncIngredientKey')

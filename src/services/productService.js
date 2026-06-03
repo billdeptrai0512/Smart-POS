@@ -1,6 +1,5 @@
 import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
-import { STORAGE_KEYS } from '../constants/storageKeys'
 
 // ---- Products CRUD ----
 
@@ -87,15 +86,7 @@ export async function insertProduct(name, price, addressId = null) {
 // addressId kept for call-site clarity / future RLS scoping; today it's not
 // used because each address owns its own product rows.
 export async function removeProductFromAddress(productId, _addressId) {
-    if (localRepo.isGuest()) {
-        const products = localRepo.getGuestDataForSync().products;
-        const idx = products.findIndex(p => p.id === productId);
-        if (idx >= 0) {
-            products[idx].is_active = false;
-            localStorage.setItem(STORAGE_KEYS.GUEST_PRODUCTS, JSON.stringify(products));
-        }
-        return true;
-    }
+    if (localRepo.isGuest()) return localRepo.deleteLocalProduct(productId)
     if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase.from('products').update({ is_active: false }).eq('id', productId)
     if (error) throw error

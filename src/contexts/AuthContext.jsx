@@ -152,9 +152,14 @@ export function AuthProvider({ children }) {
 
     const signIn = useCallback(async (username, password) => {
         const data = await authSignIn(username, password)
-        // Auth state change listener will handle setting user/profile
+        // Auth state change listener will handle setting user/profile.
+        // Transition from guest sandbox → real account: clear local guest data so stale
+        // guest_* keys don't linger (signUp / signUpWithInvite already do this). Only after
+        // a SUCCESSFUL sign-in, so a failed attempt doesn't wipe an active guest session.
+        clearGuestData()
+        setIsGuest(false)
         return data
-    }, [])
+    }, [setIsGuest])
 
     const signOut = useCallback(async () => {
         if (profile?.id) await removeSession(profile.id)

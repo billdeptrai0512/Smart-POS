@@ -184,7 +184,25 @@ export async function bulkSubmitOrders(ordersArray: any[]): Promise<boolean> {
     // Mixed addresses possible — flush all to be safe.
     invalidateReportCache(null)
     if (localRepo.isGuest()) {
-        ordersArray.forEach((o: any) => localRepo.submitLocalOrder(o))
+        // Map the offline-queue shape (camelCase: orderItems / addressId / totalCost) to the
+        // localRepo row shape (order_items / address_id / total_cost), same as submitOrder does.
+        // Without this, fetchLocalOrders filters on `address_id` and never sees these orders →
+        // a guest's offline orders silently vanish after sync.
+        ordersArray.forEach((o: any) => localRepo.submitLocalOrder({
+            total: o.total,
+            total_cost: o.totalCost || 0,
+            discount_amount: o.discountAmount || 0,
+            payment_method: o.paymentMethod,
+            address_id: o.addressId,
+            staff_name: o.staffName,
+            created_at: o.createdAt,
+            order_items: (o.orderItems || []).map((item: any) => ({
+                product_id: item.productId,
+                quantity: item.quantity,
+                options: item.extras?.length > 0 ? item.extras.map((e: any) => e.name).join(', ') : null,
+                unit_cost: Math.round(item.unitCost || 0),
+            })),
+        }))
         return true
     }
     if (!supabase) throw new Error('No Supabase connection')

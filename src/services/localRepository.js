@@ -337,27 +337,74 @@ export const fetchLocalIngredientStocks = (addressId) => {
     });
 };
 
-export const renameLocalIngredient = (oldKey, newKey) => {
-    // 1. Costs
+// Rename (or merge) an ingredient key across the same 4 stores the sync_ingredient_key
+// RPC touches: ingredient_costs, recipes, shift_closings.inventory_report, expenses.metadata.
+// Always-merge mode: if newKey already exists in ingredient_costs for this address, the
+// oldKey cost row is dropped (newKey kept canonical) — mirrors migration 20260519/20260520.
+// Scoped by address_id like every other guest helper. Returns the same shape as the RPC.
+export const renameLocalIngredient = (addressId, oldKey, newKey) => {
+    if (!oldKey || !newKey) {
+        return { recipes_updated: 0, closings_updated: 0, expenses_updated: 0, costs_action: 'none' };
+    }
+    if (oldKey === newKey) {
+        return { recipes_updated: 0, closings_updated: 0, expenses_updated: 0, costs_action: 'noop' };
+    }
+
+    // 1. ingredient_costs — rename or merge
     const costs = get(KEYS.INGREDIENT_COSTS);
-    if (costs[oldKey] !== undefined) {
-        costs[newKey] = costs[oldKey];
-        delete costs[oldKey];
-        set(KEYS.INGREDIENT_COSTS, costs);
+    const oldIdx = costs.findIndex(c => c.ingredient === oldKey && c.address_id === addressId);
+    const newExists = costs.some(c => c.ingredient === newKey && c.address_id === addressId);
+    let costsAction = 'none';
+    if (oldIdx >= 0 && newExists) {
+        costs.splice(oldIdx, 1);          // merge: drop old, keep newKey as canonical
+        costsAction = 'merged';
+    } else if (oldIdx >= 0) {
+        costs[oldIdx] = { ...costs[oldIdx], ingredient: newKey };
+        costsAction = 'renamed';
     }
-    // 2. Units
-    const units = get(KEYS.INGREDIENT_UNITS);
-    if (units[oldKey] !== undefined) {
-        units[newKey] = units[oldKey];
-        delete units[oldKey];
-        set(KEYS.INGREDIENT_UNITS, units);
-    }
-    // 3. Recipes
+    set(KEYS.INGREDIENT_COSTS, costs);
+
+    // 2. recipes — straight rename
     const recipes = get(KEYS.RECIPES);
+    let recipesUpdated = 0;
     recipes.forEach(r => {
-        if (r.ingredient === oldKey) r.ingredient = newKey;
+        if (r.address_id === addressId && r.ingredient === oldKey) {
+            r.ingredient = newKey;
+            recipesUpdated++;
+        }
     });
     set(KEYS.RECIPES, recipes);
+
+    // 3. shift_closings.inventory_report (array of { ingredient, remaining, restock, ... })
+    const closings = get(KEYS.SHIFT_CLOSINGS);
+    let closingsUpdated = 0;
+    closings.forEach(sc => {
+        if (sc.address_id !== addressId || !Array.isArray(sc.inventory_report)) return;
+        let touched = false;
+        sc.inventory_report.forEach(elem => {
+            if (elem && elem.ingredient === oldKey) { elem.ingredient = newKey; touched = true; }
+        });
+        if (touched) closingsUpdated++;
+    });
+    set(KEYS.SHIFT_CLOSINGS, closings);
+
+    // 4. expenses.metadata.ingredient (refill rows reference the ingredient by key)
+    const expenses = get(KEYS.EXPENSES);
+    let expensesUpdated = 0;
+    expenses.forEach(e => {
+        if (e.address_id === addressId && e.metadata && e.metadata.ingredient === oldKey) {
+            e.metadata = { ...e.metadata, ingredient: newKey };
+            expensesUpdated++;
+        }
+    });
+    set(KEYS.EXPENSES, expenses);
+
+    return {
+        recipes_updated: recipesUpdated,
+        closings_updated: closingsUpdated,
+        expenses_updated: expensesUpdated,
+        costs_action: costsAction,
+    };
 };
 
 // Local fixed_costs CRUD removed — see expenseService.js comment.
@@ -464,6 +511,9 @@ export const getGuestDataForSync = () => {
 
 export const clearGuestData = () => {
     Object.values(KEYS).forEach(k => localStorage.removeItem(k));
+    // KEY_GUEST_INGREDIENT_SORT lives outside KEYS, so clear it explicitly — otherwise a
+    // stale guest sort order leaks into the next guest session or a real account.
+    localStorage.removeItem(KEY_GUEST_INGREDIENT_SORT);
 };
 
 // --- Missing Product & Order Helpers ---
@@ -486,6 +536,18 @@ export const updateLocalProductSortOrder = (orderedProductIds) => {
         if (p) p.sort_order = index;
     });
     set(KEYS.PRODUCTS, products);
+};
+
+// Soft-delete a product (mirror of the remote `is_active = false` write). Lives here so
+// callers never reach into localStorage with an out-of-module key constant.
+export const deleteLocalProduct = (productId) => {
+    const products = get(KEYS.PRODUCTS);
+    const idx = products.findIndex(p => p.id === productId);
+    if (idx >= 0) {
+        products[idx].is_active = false;
+        set(KEYS.PRODUCTS, products);
+    }
+    return true;
 };
 
 export const updateLocalExpense = (id, updates) => {
