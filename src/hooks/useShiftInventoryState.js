@@ -5,6 +5,7 @@ import {
     fetchIngredientStocks,
 } from '../services/orderService'
 import { supabase } from '../lib/supabaseClient'
+import { isGuest } from '../services/localRepository'
 import { sortIngredients } from '../utils/ingredients'
 import { dateStringVN } from '../utils/dateVN'
 
@@ -150,7 +151,10 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
 
     // ── Realtime broadcast: sync input edits across devices ──────────────────
     useEffect(() => {
-        if (!addressId || !supabase) return
+        // Guests are local-only and ALL share the same demo address id, so they'd all
+        // join one channel (`shift-closing-demo-address-uuid-123`) and leak each other's
+        // keystrokes. Skip Realtime entirely for guests.
+        if (!addressId || !supabase || isGuest()) return
         const channel = supabase.channel(`shift-closing-${addressId}`, {
             config: { broadcast: { self: false } }
         })

@@ -318,6 +318,7 @@ export async function fetchDefaultIngredientSort() {
 
 // Upsert active session when user enters POS
 export async function upsertSession(userId, addressId) {
+    if (isGuest()) return  // guest is local-only — never write active_sessions (non-UUID ids)
     if (!supabase) return
     const { error } = await supabase
         .from('active_sessions')
@@ -330,6 +331,7 @@ export async function upsertSession(userId, addressId) {
 
 // Remove session on signout
 export async function removeSession(userId) {
+    if (isGuest()) return  // guest is local-only — never touch active_sessions
     if (!supabase) return
     const { error } = await supabase
         .from('active_sessions')

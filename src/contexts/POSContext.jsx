@@ -31,7 +31,7 @@ export function usePOS() {
 export function POSProvider() {
     const { products, recipes, ingredientCosts, extraIngredients, productExtras } = useProducts()
     const { selectedAddress } = useAddress()
-    const { profile } = useAuth()
+    const { profile, isGuest } = useAuth()
     const addressId = selectedAddress?.id
 
     const localOrderIds = useRef(new Set())
@@ -147,7 +147,9 @@ export function POSProvider() {
     // refetched on visibilitychange instead of via a dedicated realtime channel.
     // fetchTodayStats is debounced to coalesce bursty INSERT events.
     useEffect(() => {
-        if (!supabase || !addressId) return
+        // Guests never write orders to the DB (local-only) and all share the demo
+        // address id, so there's nothing to subscribe to — skip the websocket.
+        if (!supabase || !addressId || isGuest) return
 
         let ordersChannel = null
         let statsTimer = null
@@ -209,7 +211,7 @@ export function POSProvider() {
             document.removeEventListener('visibilitychange', handleVisibility)
             unsubscribe()
         }
-    }, [addressId])
+    }, [addressId, isGuest])
 
     // ---- Heartbeat for active_sessions ----
     useEffect(() => {
