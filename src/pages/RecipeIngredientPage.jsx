@@ -305,14 +305,6 @@ export default function RecipeIngredientPage() {
                 onBack={() => navigate('/recipes', { state: location.state })}
                 onSavePrice={saveProductPrice}
                 onDeleteFromMenu={handleDeleteFromMenu}
-                onTabSelect={(key) => {
-                    if (key === 'main' || key === 'packaging') {
-                        navigate('/ingredients', { state: { ...location.state, viewMode: key }, replace: true })
-                    } else {
-                        // 'recipes' — go back to the list (we're inside a product detail).
-                        navigate('/recipes', { state: location.state, replace: true })
-                    }
-                }}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-bg">

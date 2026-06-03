@@ -312,7 +312,7 @@ export function calculateLossValue({
             const diff = Math.round((item.remaining - theoretical) * 10) / 10
             const diffValue = diff * (costByIngredient.get(item.ingredient) || 0)
             if (diffValue < 0) {
-                totalLoss += Math.ceil(Math.abs(diffValue) / 1000) * 1000
+                totalLoss += Math.abs(diffValue)
             }
         }
     })

@@ -12,6 +12,7 @@ import { dateStringVN } from '../../utils/dateVN'
 // appears. Ngày chi defaults to today; pick a past day to backdate the expense.
 export default function AddExpenseModal({
     expenseCategory, costName, costAmount, isSubmitting,
+    isAfterShift, onAfterShiftChange,
     // Tag picker
     expenseCategories = [],
     selectedCategoryId,
@@ -85,6 +86,27 @@ export default function AddExpenseModal({
                             Sẽ ghi vào ngày {formatIsoDisplay(expenseDate)}, không phải hôm nay.
                         </p>
                     )}
+                </div>
+
+                {/* Thời điểm (Timing Toggle) */}
+                <div className="flex items-center justify-between gap-3">
+                    <span className="text-[12px] font-bold text-text-secondary">Thời điểm</span>
+                    <div className="w-48 flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
+                        <button
+                            type="button"
+                            onClick={() => onAfterShiftChange?.(false)}
+                            className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${!isAfterShift ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                        >
+                            Trong ca
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => onAfterShiftChange?.(true)}
+                            className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${isAfterShift ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                        >
+                            Sau chốt ca
+                        </button>
+                    </div>
                 </div>
 
                 <ExpenseCategoryPicker

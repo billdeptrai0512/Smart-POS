@@ -37,8 +37,8 @@ export default function IngredientCostItem({
     const isOutStock = currentStock !== null && currentStock <= 0
     const isLowStock = currentStock !== null && currentStock > 0 && currentStock < (minStock || 0)
 
-    const borderClass = isOutStock ? 'border-danger/40' : isLowStock ? 'border-warning/40' : 'border-border/60'
-    const textClass = isOutStock ? 'text-danger' : isLowStock ? 'text-warning' : 'text-text'
+    const borderClass = isOutStock ? 'border-danger/40' : isLowStock ? 'border-danger/40' : 'border-border/60'
+    const textClass = isOutStock ? 'text-danger' : isLowStock ? 'text-danger' : 'text-text'
 
     return (
         <div
@@ -81,7 +81,7 @@ export default function IngredientCostItem({
                     <span className="ml-auto text-[10px] font-black text-danger uppercase tracking-wide bg-danger/10 px-1.5 py-0.5 rounded-md">Hết</span>
                 )}
                 {isLowStock && (
-                    <span className="ml-auto text-[10px] font-black text-warning uppercase tracking-wide bg-warning/10 px-1.5 py-0.5 rounded-md">Sắp hết</span>
+                    <span className="ml-auto text-[10px] font-black text-danger uppercase tracking-wide bg-danger/10 px-1.5 py-0.5 rounded-md">Sắp hết</span>
                 )}
             </div>
 

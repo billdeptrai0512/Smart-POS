@@ -175,17 +175,16 @@ export default function RangeLossCard({
                 const diff = Math.round((actual - theoretical) * 10) / 10;
 
                 const diffValue = diff * unitCost;
-                const roundedDiffValue = diffValue < 0 ? -Math.ceil(Math.abs(diffValue) / 1000) * 1000 : diffValue;
 
                 if (!totalLossPerIngredient[item.ingredient]) {
                     totalLossPerIngredient[item.ingredient] = { diff: 0, diffValue: 0, daily: [] };
                 }
 
                 totalLossPerIngredient[item.ingredient].diff += diff;
-                totalLossPerIngredient[item.ingredient].diffValue += roundedDiffValue;
-                totalLossPerIngredient[item.ingredient].daily.push({ dayStr, diff, diffValue: roundedDiffValue });
+                totalLossPerIngredient[item.ingredient].diffValue += diffValue;
+                totalLossPerIngredient[item.ingredient].daily.push({ dayStr, diff, diffValue });
 
-                if (diffValue < 0) totalLossValue += Math.ceil(Math.abs(diffValue) / 1000) * 1000;
+                if (diffValue < 0) totalLossValue += Math.abs(diffValue);
             });
         });
 

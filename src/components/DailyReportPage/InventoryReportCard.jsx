@@ -116,7 +116,7 @@ export default function InventoryReportCard({
         })
         if (haoHut != null && haoHut < 0) {
             const rawCost = Math.abs(haoHut) * (Number(ing.unit_cost) || 0)
-            totalLossValue += Math.ceil(rawCost / 1000) * 1000
+            totalLossValue += rawCost
         }
     }
 
@@ -246,8 +246,7 @@ function IngredientRow({
     let giaTri = null
     if (haoHut != null && unitCost > 0) {
         const rawCost = Math.abs(haoHut * unitCost)
-        const roundedCost = Math.ceil(rawCost / 1000) * 1000
-        giaTri = haoHut < 0 ? -roundedCost : roundedCost
+        giaTri = haoHut < 0 ? -rawCost : rawCost
     }
 
     // Cups-equivalent label: how many drinks of the dominant product the |Hao hụt|

@@ -16,7 +16,7 @@ import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import OrdersList from '../components/HistoryPage/OrdersList'
 import ExpensePanel from '../components/HistoryPage/ExpensePanel'
 import AddExpenseModal from '../components/HistoryPage/AddExpenseModal'
-import { shiftFinalizedKey } from '../constants/storageKeys'
+import { shiftFinalizedKey, cashClosedKey } from '../constants/storageKeys'
 import { Plus } from 'lucide-react'
 import { fetchExpenseCategories, insertExpenseCategory, updateExpenseCategory, deleteExpenseCategory } from '../services/expenseService'
 
@@ -83,6 +83,7 @@ export default function HistoryPage() {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [selectedCategoryId, setSelectedCategoryId] = useState(null)
     const [expenseCategories, setExpenseCategories] = useState([])
+    const [isAfterShift, setIsAfterShift] = useState(false)
 
     // Fetch tags on mount + whenever the modal opens (cache-backed). Card list
     // also needs categories to resolve the tag chip on each ExpenseCard, so we
@@ -108,7 +109,7 @@ export default function HistoryPage() {
         setSelectedCategoryId(fallback?.id || null)
     }, [showAddModal, expenseCategories, selectedCategoryId, expenseCategory])
 
-    // Reset form when modal closes
+    // Reset form when modal closes; seed isAfterShift from current finalized state
     useEffect(() => {
         if (!showAddModal) {
             setCostName('')
@@ -116,8 +117,17 @@ export default function HistoryPage() {
             setExpenseCategory('expense')
             setSelectedCategoryId(null)
             setExpenseDate(getLocalISO())
+            setIsAfterShift(false)
+        } else {
+            // Default toggle to "Sau chốt ca" when shift or cash is already closed
+            const today = getLocalISO()
+            const finalized = selectedAddress?.id && (
+                !!localStorage.getItem(shiftFinalizedKey(selectedAddress.id, today)) ||
+                !!localStorage.getItem(cashClosedKey(selectedAddress.id, today))
+            )
+            setIsAfterShift(!!finalized)
         }
-    }, [showAddModal])
+    }, [showAddModal, selectedAddress?.id])
 
     const handleCreateCategory = useCallback(async ({ name, group_section }) => {
         if (!selectedAddress?.id) return null
@@ -254,11 +264,8 @@ export default function HistoryPage() {
             // null = today → server default NOW() keeps the live timestamp.
             const isBackdated = expenseDate && expenseDate !== today
             const createdAt = isBackdated ? new Date(`${expenseDate}T12:00:00+07:00`).toISOString() : null
-            // Auto-detect Trong ca vs Sau ca from shift_finalized flag — vẫn cần
-            // để ExpensePanel badge phân biệt "Sau ca" cho expense vận hành.
-            const isFinalized = selectedAddress?.id && !!localStorage.getItem(shiftFinalizedKey(selectedAddress.id, today))
-            // Always insert as cash; user toggles payment on the row card after.
-            if (isFinalized) {
+            // User explicitly picks "Sau chốt ca" via toggle — no more auto-detection.
+            if (isAfterShift) {
                 await handleAddExpense(costName.trim(), amount, true, 'cash', { free_form: true }, false, tagId, createdAt)
             } else {
                 await handleAddExpense(costName.trim(), amount, false, 'cash', {}, false, tagId, createdAt)
@@ -397,6 +404,8 @@ export default function HistoryPage() {
                     costName={costName}
                     costAmount={costAmount}
                     isSubmitting={isSubmitting}
+                    isAfterShift={isAfterShift}
+                    onAfterShiftChange={setIsAfterShift}
                     expenseCategories={expenseCategories}
                     selectedCategoryId={selectedCategoryId}
                     onCategoryIdChange={setSelectedCategoryId}

@@ -32,7 +32,7 @@ import UpsellPage from '../components/common/UpsellPage'
 import UpsellSheet from '../components/common/UpsellSheet'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
-import { shiftFinalizedKey } from '../constants/storageKeys'
+import { shiftFinalizedKey, cashClosedKey } from '../constants/storageKeys'
 
 // Đọc tick "đã soạn" từ localStorage (bền qua reload/đóng tab), theo address+ngày.
 function readPrep(key) {
@@ -525,6 +525,18 @@ export default function DailyReportPage() {
             localStorage.removeItem(key)
         }
     }, [isShiftFinalized, isTodayScope, selectedAddress?.id, todayISO])
+
+    // Sync cờ chốt ca tiền → localStorage để HistoryPage nhận diện đã chốt két.
+    useEffect(() => {
+        if (!isTodayScope || !selectedAddress?.id) return
+        const key = cashClosedKey(selectedAddress.id, todayISO)
+        const isCashClosed = isTodaysClosing && shiftClosing?.cash_closed_at != null
+        if (isCashClosed) {
+            if (!localStorage.getItem(key)) localStorage.setItem(key, Date.now().toString())
+        } else {
+            localStorage.removeItem(key)
+        }
+    }, [isTodaysClosing, shiftClosing?.cash_closed_at, isTodayScope, selectedAddress?.id, todayISO])
 
     const consumptionBreakdown = useMemo(
         () => calculateConsumptionBreakdown(todayOrderItems, recipes, extraIngredients, products, productExtras),

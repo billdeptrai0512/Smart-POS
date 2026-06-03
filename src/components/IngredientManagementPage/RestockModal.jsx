@@ -171,12 +171,15 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, cas
                                 )}
                                 <div className="relative flex items-center">
                                     <input
-                                        type="number"
-                                        step="any"
+                                        type="text"
+                                        inputMode="decimal"
                                         autoFocus
                                         placeholder="0"
                                         value={qty}
-                                        onChange={e => setQty(e.target.value)}
+                                        onChange={e => {
+                                            const v = e.target.value.replace(',', '.')
+                                            if (v === '' || /^\d*\.?\d*$/.test(v)) setQty(v)
+                                        }}
                                         className="w-32 bg-surface border border-border/60 rounded-[8px] px-3 py-1.5 pr-10 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                         onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
                                     />

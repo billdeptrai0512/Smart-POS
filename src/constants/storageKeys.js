@@ -44,6 +44,10 @@ export const cacheKey = (addressId, name) => `cache_${name}_${addressId}`
 export const shiftFinalizedKey = (addressId, dateStr) =>
     `shift_finalized_${addressId}_${dateStr}`
 
+// Cash closing flag, scoped to (addressId, dateYYYYMMDD).
+export const cashClosedKey = (addressId, dateStr) =>
+    `cash_closed_${addressId}_${dateStr}`
+
 // Ingredient key-sync warning dismissal, per address.
 export const keySyncDismissedKey = (addressId) => `key_sync_dismissed_${addressId}`
 

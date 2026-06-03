@@ -249,10 +249,21 @@ export default function IngredientManagementPage() {
     // Card grid shows only the active category tab. Uncategorized (null) → 'main';
     // legacy 'tools' → 'packaging' (see normalizeIngredientCategory). Keeps no NVL hidden.
     const visibleIngredients = useMemo(() => {
-        return allIngredients.filter(ing => {
+        const filtered = allIngredients.filter(ing => {
             return normalizeIngredientCategory(configByIngredient.get(ing)?.category) === viewMode
         })
-    }, [allIngredients, configByIngredient, viewMode])
+        // Sort: hết (out) → sắp hết (low) → bình thường. Skip if no alerts.
+        const getStockPriority = (ing) => {
+            const stock = stockByIngredient.get(ing)?.current_stock ?? null
+            const minStock = configByIngredient.get(ing)?.min_stock || 0
+            if (stock !== null && stock <= 0) return 0        // hết
+            if (stock !== null && stock > 0 && stock < minStock) return 1  // sắp hết
+            return 2                                          // bình thường
+        }
+        const hasAlerts = filtered.some(ing => getStockPriority(ing) < 2)
+        if (!hasAlerts) return filtered
+        return [...filtered].sort((a, b) => getStockPriority(a) - getStockPriority(b))
+    }, [allIngredients, configByIngredient, viewMode, stockByIngredient])
 
     // ─── Action handlers ───────────────────────────────────────────────
     async function saveCost(ingredient, newCostVal) {
