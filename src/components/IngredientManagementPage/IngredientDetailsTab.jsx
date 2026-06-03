@@ -132,7 +132,7 @@ function StockRow({ currentStock, unit, hasPack, packSize, packUnit, canEdit, on
                         type="text"
                         inputMode="decimal"
                         value={input}
-                        onChange={e => setInput(e.target.value.replace(/[^\d.]/g, ''))}
+                        onChange={e => setInput(e.target.value.replace(',', '.').replace(/[^\d.]/g, ''))}
                         onBlur={commit}
                         onKeyDown={e => {
                             if (e.key === 'Enter') commit()
@@ -317,7 +317,7 @@ function MinStockRow({ minStock, unit, hasPack, packSize, packUnit, canEdit, onS
     }
     const commit = () => {
         setEditing(false)
-        const raw = String(input).replace(/[^\d]/g, '')
+        const raw = String(input).replace(',', '.').replace(/[^\d.]/g, '')
         onSave?.(raw ? Number(raw) : 0)
     }
     return (
@@ -327,9 +327,9 @@ function MinStockRow({ minStock, unit, hasPack, packSize, packUnit, canEdit, onS
                     <input
                         autoFocus
                         type="text"
-                        inputMode="numeric"
+                        inputMode="decimal"
                         value={input}
-                        onChange={e => setInput(e.target.value.replace(/[^\d]/g, ''))}
+                        onChange={e => setInput(e.target.value.replace(',', '.').replace(/[^\d.]/g, ''))}
                         onBlur={commit}
                         onKeyDown={e => {
                             if (e.key === 'Enter') commit()

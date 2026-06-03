@@ -88,8 +88,11 @@ export function computeCashFlowTotals({
     }
     // Chi phí "Sau chốt ca" (free_form): tiêu tiền đã đếm → trừ Thực nhận. Không có payment
     // riêng nên tính từ amount của expense. CK trừ ở Thực nhận CK, tiền mặt ở Thực nhận TM.
+    // Nếu expense đã có payment trong `payments` (hành vi mới sau migration công nợ)
+    // thì bỏ qua để tránh double-count.
     for (const e of afterShiftExpenses || []) {
         if (e.metadata?.adjustment) continue
+        if (e.id && (payments || []).some(p => p.expense_id === e.id)) continue
         const amt = Number(e.amount) || 0
         if (e.payment_method === 'transfer') transferRefill += amt
         else postCloseCashOut += amt
