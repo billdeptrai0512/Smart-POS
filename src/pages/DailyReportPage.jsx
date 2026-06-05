@@ -27,9 +27,8 @@ import RangeLossCard from '../components/DailyReportPage/RangeLossCard'
 import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY } from '../components/DailyReportPage/ReportViewFilter'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
-import { useEntitlement, hasFeature } from '../hooks/useEntitlement'
-import UpsellPage from '../components/common/UpsellPage'
-import UpsellSheet from '../components/common/UpsellSheet'
+import { useEntitlement, hasModule } from '../hooks/useEntitlement'
+import SubscriptionScreen from '../components/common/SubscriptionScreen'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
 import { shiftFinalizedKey, cashClosedKey } from '../constants/storageKeys'
@@ -69,7 +68,6 @@ export default function DailyReportPage() {
         applyRange, shiftRange, canShiftRangeForward, applyPreset, goToDate,
     } = date
 
-    const [showLossUpsell, setShowLossUpsell] = useState(false)
 
     // Deep-link: open on a specific past date passed via nav state (e.g. from a
     // "xem ngày X" link). Runs once; the hook clamps future dates to today.
@@ -648,8 +646,22 @@ export default function DailyReportPage() {
         }
     }
 
-    if (!entitlementLoading && !hasFeature(activeModules, 'reports')) {
-        return <UpsellPage required="basic" backTo="/history" />
+    // Gate theo từng view: view hiện tại = 1 module. Nếu module đó chưa mua →
+    // early-return NGUYÊN trang đăng ký gói (chrome riêng, back về /pos) thay vì
+    // bọc panel trong header/footer báo cáo. Cùng UI với route /subscription.
+    const viewModule = view === VIEW_CASHFLOW ? 'cashflow'
+        : view === VIEW_INVENTORY ? 'inventory'
+        : view === VIEW_PROFIT ? 'finance'
+        : null
+    if (!entitlementLoading && viewModule && !hasModule(activeModules, viewModule)) {
+        return (
+            <SubscriptionScreen
+                backTo="/pos"
+                preselectModule={viewModule}
+                preselectAddressId={selectedAddress?.id}
+                onDone={() => window.location.reload()}
+            />
+        )
     }
 
     return (
@@ -811,11 +823,11 @@ export default function DailyReportPage() {
                                         productExtras={productExtras}
                                         ingredientUnits={ingredientUnits}
                                         isPastDate={true}
-                                        canAccessAudit={hasFeature(activeModules, 'lossAudit')}
                                     />
                                 ) : (
                                     // Range scopes (week/month/custom): aggregate loss across all
                                     // closings in the period — mirrors what /range-report shows.
+                                    // Hao hụt thuộc module 'inventory' → đã mở khoá khi tới được đây.
                                     <RangeLossCard
                                         orders={apiOrders}
                                         shiftClosings={apiShiftClosings}
@@ -823,8 +835,7 @@ export default function DailyReportPage() {
                                         recipes={recipes}
                                         extraIngredients={extraIngredients}
                                         ingredientUnits={ingredientUnits}
-                                        isLocked={!hasFeature(activeModules, 'lossAudit')}
-                                        onUnlockClick={() => setShowLossUpsell(true)}
+                                        isLocked={false}
                                     />
                                 )}
                             </>
@@ -881,11 +892,6 @@ export default function DailyReportPage() {
                 <ReportViewFilter value={view} onChange={setView} isStaff={isStaff} />
             </div>
             <Toast toast={toast} />
-            <UpsellSheet
-                open={showLossUpsell}
-                onClose={() => setShowLossUpsell(false)}
-                required="pro"
-            />
         </div>
     )
 }

@@ -13,6 +13,7 @@ const LoginPage = lazy(() => import('./pages/LoginPage'))
 const SignUpPage = lazy(() => import('./pages/SignUpPage'))
 const StaffInvitePage = lazy(() => import('./pages/StaffInvitePage'))
 const AddressSelectPage = lazy(() => import('./pages/AddressSelectPage'))
+const SubscriptionPage = lazy(() => import('./pages/SubscriptionPage'))
 const POSPage = lazy(() => import('./pages/POSPage'))
 const HistoryPage = lazy(() => import('./pages/HistoryPage'))
 const RecipeMenuPage = lazy(() => import('./pages/RecipeMenuPage'))
@@ -79,6 +80,7 @@ export default function App() {
               <Route element={<AddressProvider />}>
                 <Route element={<AddressStatsProvider />}>
                   <Route path="/addresses" element={<AddressSelectPage />} />
+                  <Route path="/subscription" element={<SubscriptionPage />} />
                   <Route element={<RequireAddress />}>
                     <Route element={<ProductProvider />}>
                       <Route element={<POSProvider />}>

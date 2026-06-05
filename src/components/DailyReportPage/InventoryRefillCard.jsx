@@ -2,10 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateRefillTarget } from '../../utils/inventory';
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients';
 import { fetchLastWeekSameDayOrderItems } from '../../services/orderService';
-import { ChevronDown, Lock } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useProducts } from '../../contexts/ProductContext';
 import { formatVND } from '../../utils';
-import UpsellSheet from '../common/UpsellSheet';
 
 // Fallback: if exact ingredient key has no consumption, try matching by display label.
 // This handles the case where recipes use 'condensed_milk_ml' but inventory tracks 'sữa_đặc'
@@ -32,7 +31,6 @@ export default function InventoryRefillCard({
     productExtras = {},
     ingredientUnits = {},
     isPastDate = false,
-    canAccessAudit = true,   // false khi tier === 'basic' (Pro feature)
     forcedTab,               // when set, lock activeTab + hide tab nav (used by /daily-report inventory "Bổ sung" sub-tab)
 }) {
     const { ingredientConfigs = [] } = useProducts() || {};
@@ -41,7 +39,6 @@ export default function InventoryRefillCard({
     const [activeTab, setActiveTab] = useState(forcedTab || 'audit');
     const [expandedRows, setExpandedRows] = useState({});
     const [isLossExpanded, setIsLossExpanded] = useState(false);
-    const [showAuditUpsell, setShowAuditUpsell] = useState(false);
 
     const toggleRow = (ingredient) => {
         setExpandedRows(prev => ({ ...prev, [ingredient]: !prev[ingredient] }));
@@ -270,23 +267,12 @@ export default function InventoryRefillCard({
             {!forcedTab && !isPastDate ? (
                 <div className="flex flex-col gap-3 border-b border-border/40 pb-3">
                     <div className="flex p-1 bg-surface-light rounded-[12px] gap-1 w-full">
-                        {canAccessAudit ? (
-                            <button
-                                onClick={() => setActiveTab('audit')}
-                                className={`flex-1 py-1.5 rounded-[10px] uppercase text-[13px] font-bold transition-all ${activeTab === 'audit' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
-                            >
-                                Hao hụt
-                            </button>
-                        ) : (
-                            <button
-                                id="audit-tab-upsell-btn"
-                                onClick={() => setShowAuditUpsell(true)}
-                                className="flex-1 py-1.5 rounded-[10px] uppercase text-[13px] font-bold transition-all text-text-secondary/50 flex items-center justify-center gap-1.5 hover:text-primary/70"
-                            >
-                                <Lock size={11} className="text-primary/60" />
-                                Hao hụt
-                            </button>
-                        )}
+                        <button
+                            onClick={() => setActiveTab('audit')}
+                            className={`flex-1 py-1.5 rounded-[10px] uppercase text-[13px] font-bold transition-all ${activeTab === 'audit' ? 'bg-surface text-text shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
+                        >
+                            Hao hụt
+                        </button>
                         <button
                             onClick={() => setActiveTab('refill')}
                             className={`flex-1 py-1.5 rounded-[10px] uppercase text-[13px] font-bold transition-all flex items-center justify-center gap-1 ${activeTab === 'refill' ? 'bg-primary/70 text-white shadow-sm' : 'text-text-secondary/70 hover:text-text'}`}
@@ -416,13 +402,6 @@ export default function InventoryRefillCard({
                     )}
                 </div>
             )}
-
-            {/* UpsellSheet for audit tab */}
-            <UpsellSheet
-                open={showAuditUpsell}
-                onClose={() => setShowAuditUpsell(false)}
-                required="pro"
-            />
 
             {/* Refill Tab */}
             {activeTab === 'refill' && (

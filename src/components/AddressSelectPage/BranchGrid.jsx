@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
     Pencil, Trash2, ClipboardCopy, MoreHorizontal, X,
     Coffee, Loader, FileText,
@@ -7,7 +8,6 @@ import {
 import ErrorBanner from '../common/ErrorBanner'
 import { formatVND } from '../../utils'
 import SubscriptionBadge from './SubscriptionBadge'
-import UpsellSheet from '../common/UpsellSheet'
 
 export default function BranchGrid({
     addresses, fetchError, cupsMap, revenueMap, sessionsMap, statsLoading,
@@ -19,8 +19,8 @@ export default function BranchGrid({
     const [renaming, setRenaming] = useState(false)
     const [deletingAddressId, setDeletingAddressId] = useState(null)
     const [expandedActionsId, setExpandedActionsId] = useState(null) // which card has the 3-action menu open
-    const [upsellForAddress, setUpsellForAddress] = useState(null)
     const submitGuardRef = useRef(false)
+    const navigate = useNavigate()
 
     async function handleRename(e, addrId) {
         e.preventDefault()
@@ -119,7 +119,9 @@ export default function BranchGrid({
                                         {/* Subscription status badge */}
                                         <SubscriptionBadge
                                             addressId={addr.id}
-                                            onRenewClick={() => setUpsellForAddress(addr.id)}
+                                            onRenewClick={() => navigate('/subscription', {
+                                                state: { preselectAddressId: addr.id, from: '/addresses' },
+                                            })}
                                         />
                                         {hasStats && (
                                             <div className="flex flex-col  gap-1 mt-2">
@@ -268,13 +270,6 @@ export default function BranchGrid({
             </div>
 
             <ErrorBanner message={error} small className="mb-3" />
-
-            {/* UpsellSheet — opens when user clicks a subscription banner */}
-            <UpsellSheet
-                open={!!upsellForAddress}
-                onClose={() => setUpsellForAddress(null)}
-                required="basic"
-            />
         </>
     )
 }

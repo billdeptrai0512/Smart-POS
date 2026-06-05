@@ -8,15 +8,18 @@ import { startOfDayVN } from '../../utils/dateVN'
  *
  * Khi MONETIZATION_ENABLED=false → không render gì (ẩn hoàn toàn).
  *
- * Trạng thái hiển thị theo §6.C của MONETIZATION.md:
- *   - tier=pro/basic, còn > 3 ngày → "Pro · còn X ngày" (mờ, nhỏ)
- *   - còn ≤ 3 ngày               → "Pro · còn X ngày — Gia hạn" (warning, click → upsell)
- *   - hết hạn (tier=null)        → "Hết hạn — Gia hạn ngay" (danger, nổi bật)
- *   - trial active               → "Dùng thử · còn X ngày" (primary)
+ * Mô hình 3 module (cashflow/inventory/finance) — xem MONETIZATION.md §6.B:
+ *   - đủ 3 module, còn > 3 ngày  → "Trọn bộ · còn X ngày" (mờ, nhỏ)
+ *   - 1–2 module, còn > 3 ngày   → "N/3 gói · còn X ngày" (mờ, nhỏ)
+ *   - còn ≤ 3 ngày               → "… · còn X ngày — Gia hạn" (warning, click → /subscription)
+ *   - không còn gói nào          → "Mở khoá báo cáo" (primary, click → /subscription)
+ *
+ * ⚠️ Render bằng <span> (không phải <button>) vì badge nằm BÊN TRONG button card
+ *    của BranchGrid — button lồng button gây hydration error. span + onClick hợp lệ.
  *
  * Props:
  *   addressId: UUID
- *   onRenewClick: () => void   — mở UpsellSheet (passed from parent)
+ *   onRenewClick: () => void   — điều hướng tới /subscription (passed from parent)
  */
 export default function SubscriptionBadge({ addressId, onRenewClick }) {
     const [activeTiers, setActiveTiers] = useState([])
@@ -44,15 +47,19 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
     // ── Tính số ngày còn lại ────────────────────────────────────────────────────
     const today = startOfDayVN()
 
+    const handleClick = (e) => { e.stopPropagation(); onRenewClick?.() }
+
     if (activeTiers.length === 0) {
         return (
-            <button
-                id={`sub-badge-expired-${addressId}`}
-                onClick={(e) => { e.stopPropagation(); onRenewClick?.() }}
-                className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-danger/15 border border-danger/25 hover:bg-danger/25 active:scale-95 transition-all"
+            <span
+                id={`sub-badge-locked-${addressId}`}
+                role="button"
+                tabIndex={0}
+                onClick={handleClick}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/15 border border-primary/30 hover:bg-primary/25 active:scale-95 transition-all cursor-pointer"
             >
-                <span className="text-[10px] font-black text-danger">Hết hạn — Gia hạn ngay</span>
-            </button>
+                <span className="text-[10px] font-black text-primary">Mở khoá báo cáo</span>
+            </span>
         )
     }
 
@@ -65,25 +72,23 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
         }
     })
 
-    const hasBasic = activeTiers.some(t => t.tier === 'basic')
-    const hasPro = activeTiers.some(t => t.tier === 'pro')
-    let tierLabel = 'Chưa có'
-    if (hasBasic && hasPro) tierLabel = 'Full'
-    else if (hasBasic) tierLabel = 'Basic'
-    else if (hasPro) tierLabel = 'Pro'
+    const count = activeTiers.length
+    const tierLabel = count >= 3 ? 'Trọn bộ' : `${count}/3 gói`
 
     // ── Còn ≤ 3 ngày → warning + gia hạn ────────────────────────────────────
     if (minDaysLeft <= 3) {
         return (
-            <button
+            <span
                 id={`sub-badge-expiring-${addressId}`}
-                onClick={(e) => { e.stopPropagation(); onRenewClick?.() }}
-                className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/10 border border-warning/25 hover:bg-warning/20 active:scale-95 transition-all"
+                role="button"
+                tabIndex={0}
+                onClick={handleClick}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/10 border border-warning/25 hover:bg-warning/20 active:scale-95 transition-all cursor-pointer"
             >
                 <span className="text-[10px] font-black text-warning">
                     {tierLabel} · còn {minDaysLeft} ngày — Gia hạn
                 </span>
-            </button>
+            </span>
         )
     }
 
@@ -91,7 +96,7 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
     return (
         <span
             id={`sub-badge-active-${addressId}`}
-            className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-light"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-light"
         >
             <span className="text-[10px] font-medium text-text-dim">{tierLabel} · còn {minDaysLeft} ngày</span>
         </span>
