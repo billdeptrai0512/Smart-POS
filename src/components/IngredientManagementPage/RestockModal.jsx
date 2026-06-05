@@ -26,7 +26,6 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, cas
     const [userTouchedPhase, setUserTouchedPhase] = useState(false)
     const [submitting, setSubmitting] = useState(false)
 
-    const activeUnit = usePackMode ? packUnit : unit
     const actualQty = usePackMode ? Number(qty) * packSize : Number(qty)
     const subtotalNum = parseVNDInput(subtotal)
     const extraCostNum = parseVNDInput(extraCostInput)
@@ -120,7 +119,7 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, cas
                     <div className="flex flex-col gap-3 p-3 bg-surface-light rounded-[14px] border border-border/40">
                         {/* Ngày mua */}
                         <div className="flex items-center justify-between gap-3">
-                            <span className="text-[12px] font-bold text-text-secondary">Ngày mua</span>
+                            <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Ngày mua</span>
                             <DatePicker
                                 value={purchaseDate}
                                 max={today}
@@ -144,32 +143,14 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, cas
                             </p>
                         )}
 
-                        {/* Số lượng nhập */}
+                        {/* Số lượng nhập — toggle đơn vị nằm trong ô, sát phải */}
                         <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/40">
-                            <div className="flex items-center gap-2">
-                                <span className="text-[12px] font-bold text-text-secondary">Số lượng nhập</span>
-                                {hasPack && (
-                                    <div className="flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
-                                        <button
-                                            onClick={() => { if (!usePackMode) { setUsePackMode(true); setQty('') } }}
-                                            className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${usePackMode ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                                        >
-                                            {packUnit}
-                                        </button>
-                                        <button
-                                            onClick={() => { if (usePackMode) { setUsePackMode(false); setQty('') } }}
-                                            className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${!usePackMode ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                                        >
-                                            {unit}
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
+                            <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Số lượng</span>
                             <div className="flex flex-col items-end gap-0.5">
                                 {usePackMode && qty && Number(qty) > 0 && (
                                     <span className="text-[10px] text-text-dim tabular-nums leading-none">= {actualQty} {unit}</span>
                                 )}
-                                <div className="relative flex items-center">
+                                <div className="flex items-center bg-surface border border-border/60 rounded-[8px] overflow-hidden focus-within:border-primary/50 transition-colors w-40">
                                     <input
                                         type="text"
                                         inputMode="decimal"
@@ -180,17 +161,34 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, cas
                                             const v = e.target.value.replace(',', '.')
                                             if (v === '' || /^\d*\.?\d*$/.test(v)) setQty(v)
                                         }}
-                                        className="w-32 bg-surface border border-border/60 rounded-[8px] px-3 py-1.5 pr-10 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        className="w-full bg-transparent px-3 py-2 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                         onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
                                     />
-                                    <span className="absolute right-3 pointer-events-none text-[11px] font-bold text-text-secondary">{activeUnit}</span>
+                                    {hasPack ? (
+                                        <div className="flex items-center gap-0.5 mr-1.5 shrink-0 bg-surface-light border border-border/60 rounded-md p-0.5">
+                                            <button
+                                                onClick={() => { if (!usePackMode) { setUsePackMode(true); setQty('') } }}
+                                                className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${usePackMode ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                            >
+                                                {packUnit}
+                                            </button>
+                                            <button
+                                                onClick={() => { if (usePackMode) { setUsePackMode(false); setQty('') } }}
+                                                className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${!usePackMode ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                            >
+                                                {unit}
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <span className="text-[11px] font-bold text-text-secondary pr-3 shrink-0 pointer-events-none">{unit}</span>
+                                    )}
                                 </div>
                             </div>
                         </div>
 
                         {/* Tổng tiền hàng */}
                         <div className="flex items-center justify-between gap-3">
-                            <span className="text-[12px] font-bold text-text-secondary">Tổng tiền hàng</span>
+                            <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Tổng tiền</span>
                             <MoneyInput
                                 value={subtotal}
                                 onChange={setSubtotal}
@@ -202,80 +200,61 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, cas
 
                         {/* Chi phí thêm */}
                         <div className="flex items-center justify-between gap-3">
-                            <span className="text-[12px] font-bold text-text-secondary">Chi phí thêm</span>
+                            <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Chi phí</span>
                             <MoneyInput value={extraCostInput} onChange={setExtraCostInput} size="sm" className="w-32" />
                         </div>
 
-                        {/* Giảm giá */}
+                        {/* Giảm giá — toggle đ/% nằm trong ô, sát phải */}
                         <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                                <span className="text-[12px] font-bold text-text-secondary">Giảm giá</span>
-                                <div className="flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
-                                    <button
-                                        onClick={() => { if (discountMode !== 'amount') { setDiscountMode('amount'); setDiscountInput('') } }}
-                                        className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${discountMode === 'amount' ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                                    >
-                                        đ
-                                    </button>
-                                    <button
-                                        onClick={() => { if (discountMode !== 'percent') { setDiscountMode('percent'); setDiscountInput('') } }}
-                                        className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${discountMode === 'percent' ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                                    >
-                                        %
-                                    </button>
-                                </div>
-                            </div>
-                            {discountMode === 'percent' ? (
-                                <div className="flex flex-col items-end gap-0.5">
-                                    {discountAmount > 0 && (
-                                        <span className="text-[10px] text-text-dim tabular-nums leading-none">= {formatVND(discountAmount)}</span>
-                                    )}
+                            <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Giảm giá</span>
+                            <div className="flex flex-col items-end gap-0.5">
+                                {discountMode === 'percent' && discountAmount > 0 && (
+                                    <span className="text-[10px] text-text-dim tabular-nums leading-none">= {formatVND(discountAmount)}</span>
+                                )}
+                                <div className="flex items-center bg-surface-light border border-border/60 rounded-[12px] overflow-hidden focus-within:border-primary/40 transition-colors w-40">
                                     <input
-                                        type="number"
-                                        min="0"
-                                        max="100"
+                                        type="text"
+                                        inputMode="numeric"
                                         value={discountInput}
                                         placeholder="0"
-                                        // Clamp ngay tại input để CHECK ở RPC không phải catch.
+                                        // percent: clamp 0–100 ngay tại input (CHECK ở RPC không phải catch); amount: format nghìn.
                                         onChange={e => {
-                                            const v = e.target.value
-                                            if (v === '' || (Number(v) >= 0 && Number(v) <= 100)) setDiscountInput(v)
+                                            if (discountMode === 'percent') {
+                                                const v = e.target.value
+                                                if (v === '' || (Number(v) >= 0 && Number(v) <= 100)) setDiscountInput(v)
+                                            } else {
+                                                setDiscountInput(formatVNDInput(e.target.value))
+                                            }
                                         }}
-                                        className="w-32 bg-surface border border-border/60 rounded-[8px] px-3 py-1.5 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        className="w-full bg-transparent px-3 py-2 text-[13px] font-bold text-text text-right tabular-nums placeholder:text-text-secondary/40 focus:outline-none"
                                     />
+                                    <div className="flex items-center gap-0.5 mr-1.5 shrink-0 bg-surface border border-border/60 rounded-md p-0.5">
+                                        <button
+                                            onClick={() => { if (discountMode !== 'amount') { setDiscountMode('amount'); setDiscountInput('') } }}
+                                            className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${discountMode === 'amount' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                        >
+                                            đ
+                                        </button>
+                                        <button
+                                            onClick={() => { if (discountMode !== 'percent') { setDiscountMode('percent'); setDiscountInput('') } }}
+                                            className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${discountMode === 'percent' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                        >
+                                            %
+                                        </button>
+                                    </div>
                                 </div>
-                            ) : (
-                                <MoneyInput value={discountInput} onChange={setDiscountInput} size="sm" className="w-32" />
-                            )}
+                            </div>
                         </div>
 
                         {/* Tổng cộng */}
                         <div className="flex items-center justify-between gap-3">
-                            <span className="text-[12px] font-bold text-text-secondary">Tổng cộng</span>
+                            <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Tổng cộng</span>
                             <span className="text-[14px] font-black text-primary tabular-nums">{formatVND(amountDue)}</span>
                         </div>
 
-                        {/* Đã thanh toán + quick toggle Đủ/Nợ */}
+                        {/* Đã thanh toán — trạng thái đủ/nợ hiển thị ở dòng Trạng thái bên dưới */}
                         <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/40">
-                            <div className="flex items-center gap-2">
-                                <span className="text-[12px] font-bold text-text-secondary">Đã thanh toán</span>
-                                {amountDue > 0 && (
-                                    <div className="flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
-                                        <button
-                                            onClick={() => { setUserTouchedPaid(false) }}
-                                            className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${paidNum >= amountDue ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                                        >
-                                            Đủ
-                                        </button>
-                                        <button
-                                            onClick={() => { setPaidInput(''); setUserTouchedPaid(true) }}
-                                            className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${paidNum < amountDue ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                                        >
-                                            Nợ
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
+                            <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Đã thanh toán</span>
                             <MoneyInput
                                 value={paidInput}
                                 onChange={v => { setUserTouchedPaid(true); setPaidInput(v) }}
@@ -285,10 +264,23 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, cas
                             />
                         </div>
 
-                        {/* Phương thức trả — chỉ hiện khi có thanh toán */}
+                        {/* Còn nợ / Đã trả đủ */}
+                        {owing > 0 ? (
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Còn nợ</span>
+                                <span className="text-[14px] font-black text-warning tabular-nums">{formatVND(owing)}</span>
+                            </div>
+                        ) : paidNum > 0 && amountDue > 0 ? (
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Trạng thái</span>
+                                <span className="text-[14px] font-black text-success tabular-nums">Đã trả đủ ✓</span>
+                            </div>
+                        ) : null}
+
+                        {/* Phương thức — chỉ hiện khi có thanh toán */}
                         {paidNum > 0 && (
                             <div className="flex items-center justify-between gap-3">
-                                <span className="text-[12px] font-bold text-text-secondary">Phương thức trả</span>
+                                <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Phương thức</span>
                                 <div className="w-32 flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
                                     <button
                                         onClick={() => setPaymentMethod('cash')}
@@ -310,36 +302,23 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, cas
                             doanh thu bán hàng trước khi chốt ca tiền → cộng vào Thực thu. */}
                         {showPhaseToggle && (
                             <div className="flex items-center justify-between gap-3">
-                                <span className="text-[12px] font-bold text-text-secondary">Thời điểm</span>
+                                <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Thời điểm</span>
                                 <div className="w-32 flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
                                     <button
                                         onClick={() => { setUserTouchedPhase(true); setCashPhase('in_shift') }}
-                                        className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${cashPhase === 'in_shift' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                        className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold whitespace-nowrap transition-all ${cashPhase === 'in_shift' ? 'bg-primary text-white' : 'text-text-secondary'}`}
                                     >
                                         Trong ca
                                     </button>
                                     <button
                                         onClick={() => { setUserTouchedPhase(true); setCashPhase('post_close') }}
-                                        className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${cashPhase === 'post_close' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                        className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold whitespace-nowrap transition-all ${cashPhase === 'post_close' ? 'bg-primary text-white' : 'text-text-secondary'}`}
                                     >
-                                        Sau chốt ca
+                                        Sau chốt
                                     </button>
                                 </div>
                             </div>
                         )}
-
-                        {/* Còn nợ / Đã trả đủ */}
-                        {owing > 0 ? (
-                            <div className="flex items-center justify-between gap-3">
-                                <span className="text-[12px] font-bold text-text-secondary">Còn nợ</span>
-                                <span className="text-[14px] font-black text-warning tabular-nums">{formatVND(owing)}</span>
-                            </div>
-                        ) : paidNum > 0 && amountDue > 0 ? (
-                            <div className="flex items-center justify-between gap-3">
-                                <span className="text-[12px] font-bold text-text-secondary">Trạng thái</span>
-                                <span className="text-[14px] font-black text-success tabular-nums">Đã trả đủ ✓</span>
-                            </div>
-                        ) : null}
                     </div>
                 </div>
 

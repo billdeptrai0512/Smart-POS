@@ -45,10 +45,10 @@ export default function FabActionMenu({ items = [] }) {
                 onClick={() => setOpen(o => !o)}
                 aria-expanded={open}
                 aria-label={open ? 'Đóng menu' : 'Mở menu hành động'}
-                className={`rounded-[12px] px-4 py-2.5 flex items-center justify-center text-[13px] font-bold text-text-secondary active:scale-95 transition-all shadow-sm border ${
+                className={`rounded-[12px] px-4 py-2.5 flex items-center justify-center text-[13px] font-bold active:scale-95 transition-all border ${
                     open
-                        ? 'bg-surface-light border-primary/40 text-primary'
-                        : 'bg-surface border-border/60 hover:bg-surface-light'
+                        ? 'bg-surface-light border-primary/40 text-primary shadow-sm'
+                        : 'bg-primary border-primary text-bg shadow-lg shadow-primary/30 hover:bg-primary/90'
                 }`}
             >
                 {open ? <X size={18} /> : <MoreHorizontal size={18} />}

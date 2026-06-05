@@ -90,7 +90,7 @@ export default function AddExpenseModal({
 
                 {/* Thời điểm (Timing Toggle) */}
                 <div className="flex items-center justify-between gap-3">
-                    <span className="text-[12px] font-bold text-text-secondary">Thời điểm</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-dim">Thời điểm</span>
                     <div className="w-48 flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
                         <button
                             type="button"
