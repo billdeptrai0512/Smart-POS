@@ -3,6 +3,7 @@ import { AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Info } from 'luci
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
 import { formatPackedQty } from '../../utils/inventory'
 import { formatVND } from '../../utils'
+import CollapsibleCard from './CollapsibleCard'
 
 // Status priority for sorting collapsed list. Lower = render earlier.
 // Chưa nhập first (needs action), then anomalies (Hụt/Dư), then Khớp (done).
@@ -56,6 +57,7 @@ export default function InventoryReportCard({
     // re-order rows while staff is mid-edit; row key includes baselineVersion so
     // every row remounts (→ collapses) right after a successful save.
     baselineInputs, baselineVersion = 0,
+    open = true, onToggleOpen,
     onOpeningChange, onOpeningLock, onRestockChange, onInventoryChange,
 }) {
     if (isLoading) {
@@ -128,18 +130,13 @@ export default function InventoryReportCard({
     }, 0)
 
     return (
-        <div className="bg-surface rounded-[20px] p-3 border border-border/60 shadow-sm">
-            {/* Header đồng bộ với ShiftPrepCard: icon + tiêu đề trái, tổng hao hụt phải. */}
-            <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-1.5">
-                    <ClipboardList size={15} className="text-primary shrink-0" />
-                    <span className="text-[12px] font-black uppercase tracking-widest text-text">Hao hụt</span>
-                </div>
-                <span className="text-[11px] font-bold text-text-secondary tabular-nums">
-                    {sortedList.length} món · {countedCount} đã kiểm
-                </span>
-            </div>
-
+        <CollapsibleCard
+            icon={<ClipboardList size={15} className="text-primary shrink-0" />}
+            title="Hao hụt"
+            count={`${countedCount}/${sortedList.length}`}
+            open={open}
+            onToggle={onToggleOpen}
+        >
             <div className="flex flex-col">
             {sortedList.map(ing => (
                 <IngredientRow
@@ -174,7 +171,7 @@ export default function InventoryReportCard({
                     </span>
                 </div>
             )}
-        </div>
+        </CollapsibleCard>
     )
 }
 
