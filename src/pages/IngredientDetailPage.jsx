@@ -318,6 +318,8 @@ export default function IngredientDetailPage() {
                         summary={summary}
                         history={history}
                         unit={unit}
+                        packSize={packSize}
+                        packUnit={packUnit}
                         monthLabel={monthLabel}
                         monthOffset={monthOffset}
                         onMonthChange={setMonthOffset}

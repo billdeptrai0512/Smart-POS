@@ -5,12 +5,13 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { calculateProductCost, formatVNDInput, parseVNDInput } from '../utils'
 import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
-import { fetchDailyReportContext, fetchLastWeekSameDayOrderItems } from '../services/orderService'
+import { fetchDailyReportContext, fetchLastWeekSameDayOrderItems, processIngredientRestock } from '../services/orderService'
+import { fetchCashClosedToday } from '../services/reportService'
 import { useShiftClosingSave } from '../hooks/useShiftClosingSave'
 import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
 import { useDailyReportData } from '../hooks/useDailyReportData'
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogsByCategory, calculateLossValue } from '../utils/inventory'
-import { ingredientLabel } from '../utils/ingredients'
+import { ingredientLabel, getIngredientUnit } from '../utils/ingredients'
 import { dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { useDateScope } from '../hooks/useDateScope'
 import { goToMenuStep } from '../utils/menuSequence'
@@ -23,6 +24,7 @@ import { fetchExpenseCategories } from '../services/expenseService'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
 import InventoryReportCard from '../components/DailyReportPage/InventoryReportCard'
 import ShiftPrepCard from '../components/DailyReportPage/ShiftPrepCard'
+import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import RangeLossCard from '../components/DailyReportPage/RangeLossCard'
 import { Truck, Package } from 'lucide-react'
 import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY } from '../components/DailyReportPage/ReportViewFilter'
@@ -35,18 +37,15 @@ import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
 import { shiftFinalizedKey, cashClosedKey } from '../constants/storageKeys'
 
-// Đọc tick "đã soạn" từ localStorage (bền qua reload/đóng tab), theo address+ngày.
-function readPrep(key) {
-    if (!key) return {}
-    try { return JSON.parse(localStorage.getItem(key)) || {} } catch { return {} }
-}
+// "Soạn cho hôm nay" coi là đã làm khi Nhập thêm (restock) khác 0 — rỗng/0 = chưa soạn.
+const isPrepFilled = (v) => v !== undefined && v !== null && v !== '' && Number(v) !== 0
 
 export default function DailyReportPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const backTo = location.state?.from || '/history'
-    const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits, ingredientConfigs } = useProducts()
-    const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory } = usePOS()
+    const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits, ingredientConfigs, refreshProducts } = useProducts()
+    const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, refreshTodayExpenses } = usePOS()
     const { isStaff, profile } = useAuth()
     const { activeModules, loading: entitlementLoading } = useEntitlement()
     const { toast, showToast, showError } = useToast()
@@ -119,44 +118,26 @@ export default function DailyReportPage() {
     // inside InventoryReportCard. Today scope only; cached per address+day.
     const [lastWeekItems, setLastWeekItems] = useState([])
 
-    // "Soạn cho mai" tick state — lifted here (chứ không nằm trong ShiftPrepCard) vì nó
-    // là một điều kiện để chốt ca. Lưu localStorage theo address+ngày; re-seed bằng cách
-    // so khớp key trong render (không dùng effect → tránh cascading render).
-    const prepStorageKey = isTodayScope && selectedAddress?.id ? `shiftPrep_${selectedAddress.id}_${todayISO}` : null
-    const [prepChecked, setPrepChecked] = useState(() => readPrep(prepStorageKey))
-    const [seenPrepKey, setSeenPrepKey] = useState(prepStorageKey)
-    if (prepStorageKey !== seenPrepKey) {
-        setSeenPrepKey(prepStorageKey)
-        setPrepChecked(readPrep(prepStorageKey))
-    }
-    const togglePrep = useCallback((ingredient) => {
-        setPrepChecked(prev => {
-            const next = { ...prev, [ingredient]: !prev[ingredient] }
-            if (prepStorageKey) {
-                try { localStorage.setItem(prepStorageKey, JSON.stringify(next)) } catch { /* storage full */ }
-            }
-            return next
-        })
-    }, [prepStorageKey])
+    // "Soạn cho hôm nay" KHÔNG còn tick state riêng: checkbox suy ra từ Nhập thêm
+    // (restock) và tick chỉ là lối tắt set/clear restock. restock đã sync Realtime nên
+    // multi-device tự đồng bộ. Xem prepCheckedDerived / togglePrepRestock dưới prepTodayList.
 
-    // "Chuẩn bị tồn kho" tick state — song song với prepChecked (lưu riêng key). Không
-    // gate chốt ca, chỉ để đánh dấu đã đi chợ đắp kho cho mai.
-    const warehousePrepStorageKey = isTodayScope && selectedAddress?.id ? `warehousePrep_${selectedAddress.id}_${todayISO}` : null
-    const [warehousePrepChecked, setWarehousePrepChecked] = useState(() => readPrep(warehousePrepStorageKey))
-    const [seenWarehousePrepKey, setSeenWarehousePrepKey] = useState(warehousePrepStorageKey)
-    if (warehousePrepStorageKey !== seenWarehousePrepKey) {
-        setSeenWarehousePrepKey(warehousePrepStorageKey)
-        setWarehousePrepChecked(readPrep(warehousePrepStorageKey))
-    }
-    const toggleWarehousePrep = useCallback((ingredient) => {
-        setWarehousePrepChecked(prev => {
-            const next = { ...prev, [ingredient]: !prev[ingredient] }
-            if (warehousePrepStorageKey) {
-                try { localStorage.setItem(warehousePrepStorageKey, JSON.stringify(next)) } catch { /* storage full */ }
-            }
-            return next
-        })
-    }, [warehousePrepStorageKey])
+    // "Chuẩn bị tồn kho" giờ actionable: bấm nút + ở mỗi dòng để mở phiếu Nhập kho cho
+    // NVL/bao bì tương ứng (tái dùng RestockModal của /ingredients). "Đã chuẩn bị" suy ra
+    // từ tồn kho đạt target (món tự rớt khỏi list sau khi nhập), không còn tick thủ công.
+    // Không gate chốt ca. cashClosedToday refetch khi mở modal để phân loại dòng tiền đúng.
+    const [restockIngredient, setRestockIngredient] = useState(null)
+    const [cashClosedToday, setCashClosedToday] = useState(false)
+    useEffect(() => {
+        if (!restockIngredient) return
+        let alive = true
+        fetchCashClosedToday(selectedAddress?.id).then(v => { if (alive) setCashClosedToday(!!v) })
+        // Reload tồn ngay khi mở modal → thấy số kho mới nhất trước khi mua, thu hẹp cửa sổ
+        // mua trùng giữa nhiều máy (tồn không sync realtime).
+        inventory.reloadStocks?.()
+        return () => { alive = false }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [restockIngredient, selectedAddress?.id])
 
     // Expense categories — feed dynamic rows into FinanceCards. Refetched per
     // address; new tags added in /history are picked up on next mount or after
@@ -317,8 +298,13 @@ export default function DailyReportPage() {
         // Daily scope: today's single closing + yesterday as the opening source.
         // Range scope: all closings in the period + prev-period closings.
         const isDayScope = scope === 'day'
+        // Hôm nay: chỉ dùng shiftClosing khi closed_at ĐÚNG là hôm nay — qua nửa đêm server
+        // có thể còn trả phiếu hôm qua (ranh giới TZ/RPC); không chặn thì "Hao hụt / hủy" giữ
+        // số cũ của hôm qua. Ngày quá khứ (offset<0): dùng phiếu đã fetch của ngày đó.
+        const usableClosing = !isDayScope ? null
+            : (shiftClosing && (!isTodayScope || isTodaysClosing)) ? shiftClosing : null
         const closings = isDayScope
-            ? (shiftClosing ? [shiftClosing] : [])
+            ? (usableClosing ? [usableClosing] : [])
             : (apiShiftClosings || [])
         if (closings.length === 0) return 0
 
@@ -351,13 +337,15 @@ export default function DailyReportPage() {
         const prevClosings = isDayScope
             ? (yesterdayClosing ? [yesterdayClosing] : [])
             : (prevShiftClosings || [])
-        return calculateLossValue({
+        // Làm tròn về VND nguyên (hao hụt = qty lẻ × giá vốn nên hay ra .5) → row + tổng
+        // giá vốn + lợi nhuận đều dùng số nguyên nhất quán, không còn hiển thị "...,5đ".
+        return Math.round(calculateLossValue({
             shiftClosings: closings,
             prevShiftClosings: prevClosings,
             dailyConsumption,
             ingredientConfigs,
-        })
-    }, [scope, shiftClosing, yesterdayClosing, apiShiftClosings, prevShiftClosings, apiOrders, displayOrders, offlineToday, recipes, extraIngredients, ingredientConfigs])
+        }))
+    }, [scope, isTodayScope, isTodaysClosing, shiftClosing, yesterdayClosing, apiShiftClosings, prevShiftClosings, apiOrders, displayOrders, offlineToday, recipes, extraIngredients, ingredientConfigs])
 
     // P&L = Revenue - COGS - Hao hụt - Tất cả chi phí thực chi. NVL không trừ (đã nằm trong COGS).
     const netProfit = totalRevenue - totalCOGS - lossValue - operationalExpense
@@ -514,13 +502,17 @@ export default function DailyReportPage() {
         const need = r1Inv(target - have)
         if (need <= 0) return null
         const packSize = Number(ing.pack_size) || 0
+        const needPacks = packSize > 0 ? Math.ceil(need / packSize) : 0
         return {
             ingredient: ing.ingredient,
             have,
             need,
-            needPacks: packSize > 0 ? Math.ceil(need / packSize) : 0,
+            needPacks,
             unit: ing.unit,
             packUnit: ing.pack_unit,
+            // Lượng đổ vào Nhập thêm khi tick "đã soạn" = số quy đổi nguyên bịch
+            // (số bịch × quy cách). Không có quy cách bịch thì dùng đúng "Cần".
+            fillQty: needPacks > 0 ? r1Inv(needPacks * packSize) : need,
         }
     }
 
@@ -533,11 +525,36 @@ export default function DailyReportPage() {
             const oRaw = inventory.openingInputs[ing.ingredient]
             const opening = r1Inv(oRaw !== undefined && oRaw !== '' ? oRaw : (inventory.openingStock[ing.ingredient] ?? 0))
             const item = toPrepItem(ing, opening, forecastFor(ing.ingredient))
-            if (item) out.push(item)
+            if (item) {
+                // Kho tổng hiện có (warehouse_stock thực tế, KHÔNG phải số đầu ca) để rút ra
+                // quầy. Lookup theo key trực tiếp; null nếu NVL không theo dõi kho.
+                const wh = (inventory.warehouseStocks || {})[ing.ingredient]
+                item.warehouse = wh != null ? r1Inv(wh) : null
+                out.push(item)
+            }
         }
         return out
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [inventory.ingredientsList, inventory.openingInputs, inventory.openingStock, usedMap, lastWeekUsedMap])
+    }, [inventory.ingredientsList, inventory.openingInputs, inventory.openingStock, inventory.warehouseStocks, usedMap, lastWeekUsedMap])
+
+    // Tick "Soạn cho hôm nay" ↔ Nhập thêm (restock) — liên kết 2 chiều, restock là
+    // nguồn sự thật duy nhất (đã sync Realtime → multi-device tự đồng bộ):
+    //   • checkbox suy ra từ restock (≠ 0 ⇒ đã soạn);
+    //   • tick = đổ số quy đổi nguyên bịch vào restock; untick = clear.
+    const prepFillMap = useMemo(
+        () => Object.fromEntries(prepTodayList.map(it => [it.ingredient, it.fillQty])),
+        [prepTodayList],
+    )
+    const prepCheckedDerived = useMemo(() => {
+        const m = {}
+        for (const it of prepTodayList) m[it.ingredient] = isPrepFilled(inventory.restockInputs[it.ingredient])
+        return m
+    }, [prepTodayList, inventory.restockInputs])
+    const togglePrepRestock = useCallback((ingredient) => {
+        const filled = isPrepFilled(inventory.restockInputs[ingredient])
+        inventory.onRestockChange(ingredient, filled ? '' : String(prepFillMap[ingredient] ?? ''))
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [inventory.restockInputs, inventory.onRestockChange, prepFillMap])
 
     // "Chuẩn bị tồn kho" — cho mai: đủ hàng để mai SOẠN RA BÁN không? Liên kết 3 card:
     // mai bán từ TỔNG tồn = kho tổng + tồn quầy cuối ca (số ② Hao hụt vừa đếm). Thiếu thì mua.
@@ -574,14 +591,16 @@ export default function DailyReportPage() {
 
     // Chốt ca đầy đủ = cash + counted + đã soạn cho hôm nay + đã chuẩn bị tồn kho cho mai.
     // List rỗng (đủ tồn, không cần làm gì) ⇒ coi như đã xong phần đó.
-    const allPrepDone = prepTodayList.length === 0 || prepTodayList.every(it => prepChecked[it.ingredient])
-    const allWarehousePrepDone = warehousePrepList.length === 0 || warehousePrepList.every(it => warehousePrepChecked[it.ingredient])
+    const allPrepDone = prepTodayList.length === 0 || prepTodayList.every(it => isPrepFilled(inventory.restockInputs[it.ingredient]))
+    // "Chuẩn bị tồn kho" tính là xong khi danh sách mua RỖNG — tức đã nhập kho đủ target cho
+    // mai (hoặc kho vốn đã đủ). Không còn tick thủ công nên đây là điều kiện trung thực.
+    const allWarehousePrepDone = warehousePrepList.length === 0
     const isShiftFinalized = cashAndCountDone && allPrepDone && allWarehousePrepDone
 
     // Accordion 3 card Tồn kho: mặc định chỉ mở card của BƯỚC hiện tại trong flow.
     //   chưa soạn xong → 'prep'; soạn xong, chưa kiểm xong → 'audit'; kiểm xong → 'warehouse'.
-    // Khi sang bước mới thì tự mở card bước đó (sync trong render, không dùng effect — giống
-    // cách re-seed prepChecked); user vẫn bấm header để mở card khác trong cùng bước.
+    // Khi sang bước mới thì tự mở card bước đó (sync trong render, không dùng effect qua
+    // seenStage); user vẫn bấm header để mở card khác trong cùng bước.
     const allCounted = (inventory.ingredientsList?.length || 0) > 0 &&
         inventory.ingredientsList.every(ing => {
             const v = inventory.inventoryInputs[ing.ingredient]
@@ -853,11 +872,12 @@ export default function DailyReportPage() {
                                             title="Soạn cho hôm nay"
                                             icon={<Truck size={15} className="text-primary shrink-0" />}
                                             packVerb="Lấy"
+                                            haveLabel="Quầy"
                                             emptyTitle="Đủ hàng cho hôm nay!"
                                             emptyHint="Tồn quầy đầu ca đã đủ cho dự báo bán hôm nay."
                                             items={prepTodayList}
-                                            checked={prepChecked}
-                                            onToggle={togglePrep}
+                                            checked={prepCheckedDerived}
+                                            onToggle={togglePrepRestock}
                                             open={expandedCard === 'prep'}
                                             onToggleOpen={() => toggleCard('prep')}
                                         />
@@ -891,11 +911,11 @@ export default function DailyReportPage() {
                                             title="Chuẩn bị tồn kho"
                                             icon={<Package size={15} className="text-primary shrink-0" />}
                                             packVerb="Mua"
+                                            haveLabel="Tồn kho"
                                             emptyTitle="Kho tổng đủ cho mai!"
                                             emptyHint="Không cần đi chợ đắp thêm cho ngày mai."
                                             items={warehousePrepList}
-                                            checked={warehousePrepChecked}
-                                            onToggle={toggleWarehousePrep}
+                                            onRestock={setRestockIngredient}
                                             open={expandedCard === 'warehouse'}
                                             onToggleOpen={() => toggleCard('warehouse')}
                                         />
@@ -994,6 +1014,31 @@ export default function DailyReportPage() {
                 onClose={() => setShowLossUpsell(false)}
                 required="pro"
             />
+
+            {/* Nhập kho từ card "Chuẩn bị tồn kho" — tái dùng RestockModal của /ingredients. */}
+            {restockIngredient && (() => {
+                const cfg = (inventory.ingredientsList || []).find(i => i.ingredient === restockIngredient)
+                return (
+                    <RestockModal
+                        ingredient={restockIngredient}
+                        unit={getIngredientUnit(restockIngredient, ingredientUnits[restockIngredient])}
+                        packSize={cfg?.pack_size}
+                        packUnit={cfg?.pack_unit}
+                        cashClosedToday={cashClosedToday}
+                        onClose={() => setRestockIngredient(null)}
+                        onConfirm={async ({ ingredient: ing, qty, subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate }) => {
+                            const wh = (inventory.warehouseStocks || {})[ing]
+                            const snapshot = wh != null ? { beforeStock: wh } : {}
+                            const result = await processIngredientRestock(selectedAddress?.id, ing, qty, profile?.name, {
+                                subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate,
+                                ...snapshot,
+                            })
+                            await Promise.all([inventory.reloadStocks?.(), refreshProducts?.(), refreshTodayExpenses?.()])
+                            return result
+                        }}
+                    />
+                )
+            })()}
         </div>
     )
 }

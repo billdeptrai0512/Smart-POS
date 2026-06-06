@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
 import { formatVND } from '../../utils'
+import { formatPackedQty } from '../../utils/inventory'
 
 // Monthly restock log for one ingredient. Card layout mirrors /history's
 // ExpenseCard so the eye scans the same shape across pages:
@@ -11,6 +12,7 @@ import { formatVND } from '../../utils'
 // the sheet via onOpenPayment). Adjustment rows are non-clickable (no $ owed).
 export default function IngredientHistoryTab({
     loading, summary, history, unit,
+    packSize, packUnit,
     monthLabel, monthOffset, onMonthChange,
     onOpenPayment, onCancelRestock,
 }) {
@@ -20,7 +22,7 @@ export default function IngredientHistoryTab({
             <MonthNav monthLabel={monthLabel} monthOffset={monthOffset} onMonthChange={onMonthChange} />
 
             {!loading && summary.count > 0 && (
-                <SummaryStrip summary={summary} unit={unit} hasOwing={hasOwing} />
+                <SummaryStrip summary={summary} unit={unit} packSize={packSize} packUnit={packUnit} hasOwing={hasOwing} />
             )}
 
             {loading ? (
@@ -71,14 +73,14 @@ function MonthNav({ monthLabel, monthOffset, onMonthChange }) {
 }
 
 // ── Summary strip ───────────────────────────────────────────────────────────
-function SummaryStrip({ summary, unit, hasOwing }) {
+function SummaryStrip({ summary, unit, packSize, packUnit, hasOwing }) {
     // Grid 2×2 khi có nợ (gọn trên mobile), 1×3 khi không nợ.
     // "Tiền nhập" = nghĩa vụ phát sinh trong tháng (theo created_at).
     // "Đã trả" = cash-out NVL trong tháng (theo paid_at, có thể trả cho invoice tháng khác).
     return (
         <div className={`bg-surface rounded-[16px] border border-border/60 p-4 grid gap-3 ${hasOwing ? 'grid-cols-2' : 'grid-cols-3'}`}>
             <Stat label="Tiền nhập" value={formatVND(summary.totalSpent)} />
-            <Stat label="Lượng nhập" value={`${summary.totalQty} ${unit}`} />
+            <Stat label="Lượng nhập" value={formatPackedQty(summary.totalQty, packSize, packUnit, unit, { compact: true })} />
             {!hasOwing ? (
                 <Stat label="TB/đơn vị" value={formatVND(summary.avgPrice)} tone="primary" />
             ) : (

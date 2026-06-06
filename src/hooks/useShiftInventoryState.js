@@ -104,9 +104,11 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
     // input against the available kho tổng.
     // Refetches on tab visibility regain so a /ingredients → + Nhập kho mid-shift
     // reflects here without manual refresh.
-    useEffect(() => {
-        if (!addressId) return
-        const load = () => fetchIngredientStocks(addressId).then(rows => {
+    // Exposed so callers can refresh after writing stock (e.g. Nhập kho từ /daily-report)
+    // — the warehouse balances then reflect the new purchase without a tab switch.
+    const reloadStocks = useCallback(() => {
+        if (!addressId) return Promise.resolve()
+        return fetchIngredientStocks(addressId).then(rows => {
             const counters = {}, openings = {}, warehouses = {}
                 ; (rows || []).forEach(r => {
                     if (typeof r.counter_stock === 'number') {
@@ -129,11 +131,15 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
                 return openings
             })
         })
-        load()
-        const onVis = () => { if (document.visibilityState === 'visible') load() }
+    }, [addressId])
+
+    useEffect(() => {
+        if (!addressId) return
+        reloadStocks()
+        const onVis = () => { if (document.visibilityState === 'visible') reloadStocks() }
         document.addEventListener('visibilitychange', onVis)
         return () => document.removeEventListener('visibilitychange', onVis)
-    }, [addressId])
+    }, [addressId, reloadStocks])
 
     // ── Ingredient list with units (for sort + per-row metadata) ─────────────
     useEffect(() => {
@@ -295,7 +301,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         openingInputs, openingLocked, restockInputs, inventoryInputs,
         // fetched / derived
         ingredientsList, isLoadingIngredients,
-        openingStock, warehouseStocks, effectiveWarehouseStocks,
+        openingStock, warehouseStocks, effectiveWarehouseStocks, reloadStocks,
         existingClosing, setExistingClosing,
         isLoadingExisting,
         restockOverflowIngredients,
