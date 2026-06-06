@@ -48,9 +48,9 @@ export default function ShiftPrepCard({
                 <div className="flex flex-col">
                     {items.map(it => {
                         const isDone = !!checked[it.ingredient]
-                        // Kho tổng không đủ cho lượng sẽ rút ra (số quy đổi nguyên bịch) →
-                        // tô đỏ để báo trước: tick vào sẽ "Vượt kho tổng" và chặn Lưu.
-                        const shortfall = it.warehouse != null && it.warehouse < (it.fillQty ?? it.need)
+                        // Kho không đủ cho NHU CẦU hôm nay (kho < Cần) → tô đỏ: soạn hết kho
+                        // vẫn thiếu, cần mua thêm. Tick chỉ lấy tối đa kho (không chặn Lưu nữa).
+                        const shortfall = it.warehouse != null && it.warehouse < it.need
                         return (
                             <button
                                 key={it.ingredient}

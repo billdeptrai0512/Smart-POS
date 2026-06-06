@@ -142,10 +142,12 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
     }, [addressId, reloadStocks])
 
     // ── Ingredient list with units (for sort + per-row metadata) ─────────────
-    useEffect(() => {
-        if (!addressId) { setIsLoadingIngredients(false); return }
+    // Exposed (như reloadStocks) để refresh sau khi Nhập kho làm đổi giá vốn bình quân —
+    // cột "Giá trị" hao hụt (= lượng × unit_cost) mới tươi mà không cần vào lại trang.
+    const reloadIngredients = useCallback(() => {
+        if (!addressId) { setIsLoadingIngredients(false); return Promise.resolve() }
         setIsLoadingIngredients(true)
-        fetchIngredientCostsWithUnits(addressId).then(list => {
+        return fetchIngredientCostsWithUnits(addressId).then(list => {
             // Loại nguyên liệu được tắt "kiểm kê hao hụt" (count_in_audit === false).
             // Thiếu cờ (phiếu cũ / chưa migrate) → mặc định hiện.
             const sorted = [...list]
@@ -154,6 +156,8 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
             setIngredientsList(sorted)
         }).finally(() => setIsLoadingIngredients(false))
     }, [addressId, ingredientSortOrder])
+
+    useEffect(() => { reloadIngredients() }, [reloadIngredients])
 
     // ── Realtime broadcast: sync input edits across devices ──────────────────
     useEffect(() => {
@@ -301,7 +305,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         openingInputs, openingLocked, restockInputs, inventoryInputs,
         // fetched / derived
         ingredientsList, isLoadingIngredients,
-        openingStock, warehouseStocks, effectiveWarehouseStocks, reloadStocks,
+        openingStock, warehouseStocks, effectiveWarehouseStocks, reloadStocks, reloadIngredients,
         existingClosing, setExistingClosing,
         isLoadingExisting,
         restockOverflowIngredients,

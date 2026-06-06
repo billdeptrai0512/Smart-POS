@@ -541,8 +541,14 @@ export default function DailyReportPage() {
     // nguồn sự thật duy nhất (đã sync Realtime → multi-device tự đồng bộ):
     //   • checkbox suy ra từ restock (≠ 0 ⇒ đã soạn);
     //   • tick = đổ số quy đổi nguyên bịch vào restock; untick = clear.
+    // Fill khi tick = số quy đổi nguyên bịch, nhưng KẸP theo kho thực có — không lấy nhiều
+    // hơn kho đang có → không bao giờ "Vượt kho tổng" / chặn Lưu, số fill khớp với "Kho".
+    // Kho null (NVL không theo dõi kho) → giữ nguyên fillQty.
     const prepFillMap = useMemo(
-        () => Object.fromEntries(prepTodayList.map(it => [it.ingredient, it.fillQty])),
+        () => Object.fromEntries(prepTodayList.map(it => [
+            it.ingredient,
+            it.warehouse != null ? Math.min(it.fillQty, it.warehouse) : it.fillQty,
+        ])),
         [prepTodayList],
     )
     const prepCheckedDerived = useMemo(() => {
@@ -552,7 +558,9 @@ export default function DailyReportPage() {
     }, [prepTodayList, inventory.restockInputs])
     const togglePrepRestock = useCallback((ingredient) => {
         const filled = isPrepFilled(inventory.restockInputs[ingredient])
-        inventory.onRestockChange(ingredient, filled ? '' : String(prepFillMap[ingredient] ?? ''))
+        const fill = prepFillMap[ingredient]
+        // tick: đổ lượng đã kẹp theo kho; kho = 0 (fill ≤ 0) → giữ nguyên "chưa soạn".
+        inventory.onRestockChange(ingredient, filled ? '' : (fill > 0 ? String(fill) : ''))
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [inventory.restockInputs, inventory.onRestockChange, prepFillMap])
 
@@ -597,6 +605,18 @@ export default function DailyReportPage() {
     const allWarehousePrepDone = warehousePrepList.length === 0
     const isShiftFinalized = cashAndCountDone && allPrepDone && allWarehousePrepDone
 
+    // Latch: một khi ca đã hoàn tất trong ngày thì KHÓA lại — forecast nhích lên do đơn
+    // muộn sẽ không "mở lại" ca nữa. Cờ lưu localStorage theo địa chỉ+ngày (đúng key
+    // HistoryPage đọc để phân loại "Sau ca"). Sang ngày mới → key mới → tự reset.
+    const finalizedKey = isTodayScope && selectedAddress?.id ? shiftFinalizedKey(selectedAddress.id, todayISO) : null
+    const [finalizedLatched, setFinalizedLatched] = useState(() => !!(finalizedKey && localStorage.getItem(finalizedKey)))
+    const [seenFinalizedKey, setSeenFinalizedKey] = useState(finalizedKey)
+    if (finalizedKey !== seenFinalizedKey) {
+        setSeenFinalizedKey(finalizedKey)
+        setFinalizedLatched(!!(finalizedKey && localStorage.getItem(finalizedKey)))
+    }
+    const shiftDone = isShiftFinalized || finalizedLatched
+
     // Accordion 3 card Tồn kho: mặc định chỉ mở card của BƯỚC hiện tại trong flow.
     //   chưa soạn xong → 'prep'; soạn xong, chưa kiểm xong → 'audit'; kiểm xong → 'warehouse'.
     // Khi sang bước mới thì tự mở card bước đó (sync trong render, không dùng effect qua
@@ -615,16 +635,13 @@ export default function DailyReportPage() {
     }
     const toggleCard = (id) => setExpandedCard(cur => (cur === id ? null : id))
 
-    // Sync cờ chốt ca → localStorage để HistoryPage phân loại chi phí phát sinh sau là "Sau ca".
+    // Đạt điều kiện hoàn tất LẦN ĐẦU → ghi cờ + khóa, KHÔNG tự gỡ (đơn muộn không mở lại ca).
+    // HistoryPage đọc cờ này để phân loại chi phí phát sinh sau là "Sau ca".
     useEffect(() => {
-        if (!isTodayScope || !selectedAddress?.id) return
-        const key = shiftFinalizedKey(selectedAddress.id, todayISO)
-        if (isShiftFinalized) {
-            if (!localStorage.getItem(key)) localStorage.setItem(key, Date.now().toString())
-        } else {
-            localStorage.removeItem(key)
-        }
-    }, [isShiftFinalized, isTodayScope, selectedAddress?.id, todayISO])
+        if (!finalizedKey || finalizedLatched || !isShiftFinalized) return
+        localStorage.setItem(finalizedKey, Date.now().toString())
+        setFinalizedLatched(true)
+    }, [isShiftFinalized, finalizedKey, finalizedLatched])
 
     // Sync cờ chốt ca tiền → localStorage để HistoryPage nhận diện đã chốt két.
     useEffect(() => {
@@ -920,7 +937,7 @@ export default function DailyReportPage() {
                                             onToggleOpen={() => toggleCard('warehouse')}
                                         />
 
-                                        {isShiftFinalized && (
+                                        {shiftDone && (
                                             <div className="flex items-center justify-center gap-2 bg-success/10 border border-success/30 px-3 py-2 rounded-[10px] text-success">
                                                 <span className="text-[12px] font-bold uppercase tracking-wide">✓ Đã hoàn tất ca hôm nay</span>
                                             </div>
@@ -1033,7 +1050,7 @@ export default function DailyReportPage() {
                                 subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate,
                                 ...snapshot,
                             })
-                            await Promise.all([inventory.reloadStocks?.(), refreshProducts?.(), refreshTodayExpenses?.()])
+                            await Promise.all([inventory.reloadStocks?.(), inventory.reloadIngredients?.(), refreshProducts?.(), refreshTodayExpenses?.()])
                             return result
                         }}
                     />
