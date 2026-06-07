@@ -728,14 +728,31 @@ export default function DailyReportPage() {
         return sum
     }, [isTodayScope, todayOrders, offlineToday])
 
+    // Có thay đổi chưa lưu ở khu Tồn kho / Thực thu (today scope) → cảnh báo trước khi rời,
+    // chống mất tick/soạn (chỉ bền sau khi Lưu, không còn localStorage).
+    const hasUnsaved = isTodayScope && (inventory.isDirty || cashDirty)
+    useEffect(() => {
+        if (!hasUnsaved) return
+        const handler = (e) => { e.preventDefault(); e.returnValue = '' }
+        window.addEventListener('beforeunload', handler)
+        return () => window.removeEventListener('beforeunload', handler)
+    }, [hasUnsaved])
+    // Bọc các thao tác rời trang (back / đổi tab) — xác nhận nếu còn thay đổi chưa lưu.
+    const guardLeave = (proceed) => {
+        if (hasUnsaved && !window.confirm('Còn thay đổi chưa lưu trong báo cáo. Rời trang và bỏ các thay đổi?')) return
+        proceed()
+    }
+
     const handleSaveInventory = async () => {
         if (!selectedAddress?.id) return
         if (inventory.restockOverflowIngredients.length > 0) {
             window.alert(`Không thể lưu: ${inventory.restockOverflowIngredients.length} nguyên liệu có "Lấy ra" vượt quá kho tổng. Vào /ingredients → + Nhập kho trước, hoặc giảm số "Lấy ra".`)
             return
         }
-        // Confirm before committing — chốt ca is coarse and not easily reversible.
-        if (!window.confirm(inventory.existingClosing?.id ? 'Cập nhật báo cáo tồn kho?' : 'Xác nhận lưu báo cáo?')) return
+        // Chỉ confirm khi lưu có CHUYỂN KHO (restock đổi) — vì lúc đó trừ kho tổng thật
+        // server-side. Lưu chỉ-đếm (Đầu/Cuối kỳ) không động tồn → bỏ confirm cho mượt.
+        if (inventory.restockDirty
+            && !window.confirm(inventory.existingClosing?.id ? 'Cập nhật báo cáo (có chuyển kho ra quầy)?' : 'Lưu báo cáo (có chuyển kho ra quầy)?')) return
 
         const inventoryReport = inventory.buildInventoryReport()
         // Cash/transfer/note are owned by the cashflow card — only seed defaults on first
@@ -808,12 +825,12 @@ export default function DailyReportPage() {
             <HistoryHeader
                 rangeLabel={rangeLabel}
                 scope={scope}
-                onBack={() => goToMenuStep('report', -1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard })}
+                onBack={() => guardLeave(() => goToMenuStep('report', -1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard }))}
                 onForward={() => goToMenuStep('report', +1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard })}
                 activeTab="report"
                 onTabSelect={(tab) => {
                     if (tab === 'report') return
-                    navigate('/history', { replace: true, state: { from: backTo, tab, ...dateNavState } })
+                    guardLeave(() => navigate('/history', { replace: true, state: { from: backTo, tab, ...dateNavState } }))
                 }}
                 canGoForward={canGoForwardPeriod}
                 onOffsetPrev={goOffsetPrev}
@@ -858,7 +875,7 @@ export default function DailyReportPage() {
                                 expenseCategories={expenseCategories}
                                 cogsByCategory={cogsByCategory}
                                 lossValue={lossValue}
-                                onRecipesClick={() => navigate('/recipes', { state: { from: '/daily-report' } })}
+                                onRecipesClick={() => guardLeave(() => navigate('/recipes', { state: { from: '/daily-report' } }))}
                             />
                         )}
 
@@ -876,7 +893,7 @@ export default function DailyReportPage() {
                                 onCashChange={(v) => setCashInput(formatVNDInput(v))}
                                 onTransferChange={(v) => setTransferInput(formatVNDInput(v))}
                                 isSaving={isSavingShift}
-                                onDailyExpenseClick={() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } })}
+                                onDailyExpenseClick={() => guardLeave(() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } }))}
                                 salesCard={
                                     <div className="flex flex-col gap-4">
                                         <SalesCard
@@ -918,6 +935,18 @@ export default function DailyReportPage() {
                                 {/* Past date: read-only audit + refill view via InventoryRefillCard. */}
                                 {isTodayScope ? (
                                     <div className="flex flex-col gap-3">
+                                        {/* Chỉ báo trạng thái lưu — Chưa lưu (dirty) / Đã lưu (đã có phiếu & sạch). */}
+                                        {(inventory.isDirty || inventory.existingClosing?.id) && (
+                                            <div className="flex justify-end -mb-1">
+                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide border ${
+                                                    inventory.isDirty
+                                                        ? 'bg-warning/10 text-warning border-warning/30'
+                                                        : 'bg-success/10 text-success border-success/30'}`}>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${inventory.isDirty ? 'bg-warning animate-pulse' : 'bg-success'}`} />
+                                                    {inventory.isDirty ? 'Chưa lưu' : 'Đã lưu'}
+                                                </span>
+                                            </div>
+                                        )}
                                         {/* Flow trong ngày: ① Soạn cho hôm nay → ② Hao hụt (cuối ca) → ③ Chuẩn bị tồn kho (cho mai) */}
                                         <ShiftPrepCard
                                             title="Soạn cho hôm nay"

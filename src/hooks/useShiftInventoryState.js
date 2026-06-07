@@ -225,6 +225,17 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [openingInputs, openingLocked, restockInputs, inventoryInputs, baselineVersion])
 
+    // Restock có đổi so với baseline không. Lưu có restock thay đổi = chuyển kho ra quầy
+    // (trừ kho tổng server-side) → cần confirm; lưu chỉ-đếm (Đầu/Cuối kỳ) thì không.
+    const restockDirty = useMemo(() => {
+        const norm = (v) => (v === undefined || v === null || v === '' ? null : String(v))
+        const a = restockInputs, b = baselineRef.current.restock || {}
+        const keys = new Set([...Object.keys(a || {}), ...Object.keys(b)])
+        for (const k of keys) if (norm(a?.[k]) !== norm(b[k])) return true
+        return false
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [restockInputs, baselineVersion])
+
     // Save handlers call this after a successful save so current inputs become
     // the new baseline → button hides again, ready for the next edit.
     const resetDirty = useCallback(() => {
@@ -310,7 +321,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         isLoadingExisting,
         restockOverflowIngredients,
         // dirty tracking (derived from baseline comparison; resetDirty after save)
-        isDirty, resetDirty,
+        isDirty, restockDirty, resetDirty,
         // last-persisted snapshot (bumps on load / save / lock) — used by the card to
         // sort and to remount rows so they auto-collapse after a successful save.
         baselineSnapshot, baselineVersion,
