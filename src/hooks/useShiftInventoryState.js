@@ -104,9 +104,11 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
     // input against the available kho tổng.
     // Refetches on tab visibility regain so a /ingredients → + Nhập kho mid-shift
     // reflects here without manual refresh.
-    useEffect(() => {
-        if (!addressId) return
-        const load = () => fetchIngredientStocks(addressId).then(rows => {
+    // Exposed so callers can refresh after writing stock (e.g. Nhập kho từ /daily-report)
+    // — the warehouse balances then reflect the new purchase without a tab switch.
+    const reloadStocks = useCallback(() => {
+        if (!addressId) return Promise.resolve()
+        return fetchIngredientStocks(addressId).then(rows => {
             const counters = {}, openings = {}, warehouses = {}
                 ; (rows || []).forEach(r => {
                     if (typeof r.counter_stock === 'number') {
@@ -129,17 +131,23 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
                 return openings
             })
         })
-        load()
-        const onVis = () => { if (document.visibilityState === 'visible') load() }
-        document.addEventListener('visibilitychange', onVis)
-        return () => document.removeEventListener('visibilitychange', onVis)
     }, [addressId])
 
-    // ── Ingredient list with units (for sort + per-row metadata) ─────────────
     useEffect(() => {
-        if (!addressId) { setIsLoadingIngredients(false); return }
+        if (!addressId) return
+        reloadStocks()
+        const onVis = () => { if (document.visibilityState === 'visible') reloadStocks() }
+        document.addEventListener('visibilitychange', onVis)
+        return () => document.removeEventListener('visibilitychange', onVis)
+    }, [addressId, reloadStocks])
+
+    // ── Ingredient list with units (for sort + per-row metadata) ─────────────
+    // Exposed (như reloadStocks) để refresh sau khi Nhập kho làm đổi giá vốn bình quân —
+    // cột "Giá trị" hao hụt (= lượng × unit_cost) mới tươi mà không cần vào lại trang.
+    const reloadIngredients = useCallback(() => {
+        if (!addressId) { setIsLoadingIngredients(false); return Promise.resolve() }
         setIsLoadingIngredients(true)
-        fetchIngredientCostsWithUnits(addressId).then(list => {
+        return fetchIngredientCostsWithUnits(addressId).then(list => {
             // Loại nguyên liệu được tắt "kiểm kê hao hụt" (count_in_audit === false).
             // Thiếu cờ (phiếu cũ / chưa migrate) → mặc định hiện.
             const sorted = [...list]
@@ -148,6 +156,8 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
             setIngredientsList(sorted)
         }).finally(() => setIsLoadingIngredients(false))
     }, [addressId, ingredientSortOrder])
+
+    useEffect(() => { reloadIngredients() }, [reloadIngredients])
 
     // ── Realtime broadcast: sync input edits across devices ──────────────────
     useEffect(() => {
@@ -214,6 +224,17 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         )
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [openingInputs, openingLocked, restockInputs, inventoryInputs, baselineVersion])
+
+    // Restock có đổi so với baseline không. Lưu có restock thay đổi = chuyển kho ra quầy
+    // (trừ kho tổng server-side) → cần confirm; lưu chỉ-đếm (Đầu/Cuối kỳ) thì không.
+    const restockDirty = useMemo(() => {
+        const norm = (v) => (v === undefined || v === null || v === '' ? null : String(v))
+        const a = restockInputs, b = baselineRef.current.restock || {}
+        const keys = new Set([...Object.keys(a || {}), ...Object.keys(b)])
+        for (const k of keys) if (norm(a?.[k]) !== norm(b[k])) return true
+        return false
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [restockInputs, baselineVersion])
 
     // Save handlers call this after a successful save so current inputs become
     // the new baseline → button hides again, ready for the next edit.
@@ -295,12 +316,12 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         openingInputs, openingLocked, restockInputs, inventoryInputs,
         // fetched / derived
         ingredientsList, isLoadingIngredients,
-        openingStock, warehouseStocks, effectiveWarehouseStocks,
+        openingStock, warehouseStocks, effectiveWarehouseStocks, reloadStocks, reloadIngredients,
         existingClosing, setExistingClosing,
         isLoadingExisting,
         restockOverflowIngredients,
         // dirty tracking (derived from baseline comparison; resetDirty after save)
-        isDirty, resetDirty,
+        isDirty, restockDirty, resetDirty,
         // last-persisted snapshot (bumps on load / save / lock) — used by the card to
         // sort and to remount rows so they auto-collapse after a successful save.
         baselineSnapshot, baselineVersion,
