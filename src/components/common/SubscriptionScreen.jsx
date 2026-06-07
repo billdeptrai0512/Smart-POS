@@ -16,8 +16,8 @@ import SubscriptionPanel from './SubscriptionPanel'
  * Props: backTo, preselectModule, preselectAddressId, onDone
  */
 const PERIOD_TABS = [
-    { key: 'month', label: 'Theo tháng' },
-    { key: 'year', label: 'Theo năm' },
+    { key: 'month', label: 'Tháng' },
+    { key: 'year', label: 'Năm' },
 ]
 
 export default function SubscriptionScreen({ backTo = '/addresses', preselectModule, preselectAddressId, onDone }) {
@@ -26,39 +26,29 @@ export default function SubscriptionScreen({ backTo = '/addresses', preselectMod
 
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg">
-            {/* Header — style đồng bộ với HistoryHeader của /history */}
-            <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => navigate(backTo)}
-                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
-                    >
-                        <ArrowLeft size={20} strokeWidth={2.5} />
-                    </button>
+            {/* Header 1 hàng: [back] [chip tiêu đề] [toggle chu kỳ bên phải] */}
+            <header className="shrink-0 pt-5 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex items-center px-4 gap-2.5">
+                <button
+                    onClick={() => navigate(backTo)}
+                    className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none shrink-0"
+                >
+                    <ArrowLeft size={20} strokeWidth={2.5} />
+                </button>
 
-                    <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex items-center justify-center text-center">
-                        <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Đăng ký gói</span>
-                    </div>
+                <span className="flex-1 min-w-0 text-[15px] font-black text-text truncate">Đăng ký gói</span>
 
-                    {/* Spacer để chip tiêu đề căn giữa giống /history (back ↔ forward) */}
-                    <div className="w-10 h-10 shrink-0" aria-hidden="true" />
-                </div>
-
-                {/* Tabs row = chu kỳ thanh toán */}
-                <div className="bg-surface-light border border-border/50 rounded-[14px] flex p-1 gap-1 shadow-sm">
+                {/* Toggle chu kỳ — compact, bên phải header */}
+                <div className="shrink-0 bg-surface-light border border-border/50 rounded-[12px] flex p-0.5 gap-0.5 shadow-sm">
                     {PERIOD_TABS.map(tab => {
                         const active = period === tab.key
                         return (
                             <button
                                 key={tab.key}
                                 onClick={() => setPeriod(tab.key)}
-                                className={`flex-1 flex items-center justify-center py-2 rounded-[10px] transition-all duration-200
-                                    ${active ? 'bg-primary shadow-sm' : 'hover:bg-border/30'}`}
+                                className={`px-3 py-1.5 rounded-[9px] text-[11px] font-black uppercase tracking-wide transition-all duration-150
+                                    ${active ? 'bg-primary text-bg shadow-sm' : 'text-text-secondary hover:text-text'}`}
                             >
-                                <span className={`text-[11px] font-black uppercase tracking-wider transition-colors
-                                    ${active ? 'text-bg' : 'text-text-secondary'}`}>
-                                    {tab.label}
-                                </span>
+                                {tab.label}
                             </button>
                         )
                     })}

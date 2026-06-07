@@ -8,9 +8,9 @@ import { startOfDayVN } from '../../utils/dateVN'
  *
  * Khi MONETIZATION_ENABLED=false → không render gì (ẩn hoàn toàn).
  *
- * Mô hình 3 module (cashflow/inventory/finance) — xem MONETIZATION.md §6.B:
- *   - đủ 3 module, còn > 3 ngày  → "Trọn bộ · còn X ngày" (mờ, nhỏ)
- *   - 1–2 module, còn > 3 ngày   → "N/3 gói · còn X ngày" (mờ, nhỏ)
+ * Mô hình 2 module (cashflow/inventory) — xem MONETIZATION.md §6.B:
+ *   - đủ 2 module, còn > 3 ngày  → "Trọn bộ · còn X ngày" (mờ, nhỏ)
+ *   - 1/2 module, còn > 3 ngày   → "1/2 gói · còn X ngày" (mờ, nhỏ)
  *   - còn ≤ 3 ngày               → "… · còn X ngày — Gia hạn" (warning, click → /subscription)
  *   - không còn gói nào          → "Mở khoá báo cáo" (primary, click → /subscription)
  *
@@ -73,7 +73,7 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
     })
 
     const count = activeTiers.length
-    const tierLabel = count >= 3 ? 'Trọn bộ' : `${count}/3 gói`
+    const tierLabel = count >= 2 ? 'Trọn bộ' : `${count}/2 gói`
 
     // ── Còn ≤ 3 ngày → warning + gia hạn ────────────────────────────────────
     if (minDaysLeft <= 3) {

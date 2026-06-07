@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Check, QrCode, Loader2, ShieldCheck } from 'lucide-react'
+import { Check, QrCode, Loader2, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { supabase } from '../../lib/supabaseClient'
+import { usePaymentListener } from '../../hooks/usePaymentListener'
 import { formatVND } from '../../utils'
 import {
     MODULE_KEYS, MODULE_META, PRICE, PERIOD_LABEL, PERIOD_MONTHS,
@@ -31,6 +32,19 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
         preselectModule ? [preselectModule] : [...MODULE_KEYS]
     )
     const [isMocking, setIsMocking] = useState(false)
+    const [confirmed, setConfirmed] = useState(false)
+    const [branchQuery, setBranchQuery] = useState('')
+
+    // Realtime listener: webhook SePay → Edge Function → INSERT address_subscriptions
+    // → đẩy về đây → tự xác nhận + mở khoá. Theo dõi mọi chi nhánh của owner.
+    usePaymentListener({
+        addressIds: addresses.map(a => a.id),
+        enabled: !confirmed,
+        onConfirmed: () => {
+            setConfirmed(true)
+            setTimeout(() => { onDone ? onDone() : window.location.reload() }, 1600)
+        },
+    })
 
     const toggleAddress = (id) => setSelectedAddressIds(prev =>
         prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
@@ -42,10 +56,16 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
     const toggleAllAddresses = () =>
         setSelectedAddressIds(allAddressesSelected ? [] : addresses.map(a => a.id))
 
+    // Nhiều chi nhánh → bật search + cuộn nội bộ (xem MONETIZATION.md, hỏi UI >25 CN).
+    const manyBranches = addresses.length > 6
+    const filteredAddresses = branchQuery.trim()
+        ? addresses.filter(a => normalizeText(a.name).includes(normalizeText(branchQuery)))
+        : addresses
+
     // ── Tính tiền ────────────────────────────────────────────────────────────────
     const moduleCount = selectedModules.length
     const addrCount = selectedAddressIds.length
-    const isBundle = moduleCount === 3
+    const isBundle = moduleCount === MODULE_KEYS.length   // chọn đủ cả 2 → giá bundle
     const perAddress = isBundle ? PRICE.bundle[period] : PRICE.module[period] * moduleCount
     const originalPerAddress = PRICE.module[period] * moduleCount        // giá nếu mua lẻ
     const total = perAddress * addrCount
@@ -61,7 +81,7 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
             const validTo = new Date(today)
             validTo.setMonth(validTo.getMonth() + PERIOD_MONTHS[period])
             const iso = (d) => d.toISOString().split('T')[0]
-            const amountPer = isBundle ? Math.round(perAddress / 3) : PRICE.module[period]
+            const amountPer = isBundle ? Math.round(perAddress / moduleCount) : PRICE.module[period]
 
             const rows = selectedAddressIds.flatMap(addressId =>
                 selectedModules.map(tier => ({
@@ -87,107 +107,122 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
 
     return (
         <div className="flex flex-col gap-5 animate-fade-in">
-            {/* ── Chọn báo cáo (thẻ cao cấp) ─────────────────────────────────────── */}
-            <section className="flex flex-col gap-3">
-                <SectionHeader title="Chọn báo cáo" hint={isBundle ? undefined : 'Chọn đủ 3 để nhận giá trọn bộ'} />
+            {/* ── 1. Chọn báo cáo — 2 cột, không cần label ───────────────────────── */}
+            <div className="grid grid-cols-2 gap-2">
+                {MODULE_KEYS.map((key, i) => {
+                    const m = MODULE_META[key]
+                    const Icon = m.icon
+                    const active = selectedModules.includes(key)
+                    return (
+                        <button
+                            key={key}
+                            onClick={() => toggleModule(key)}
+                            style={{ animationDelay: `${i * 40}ms` }}
+                            className={`relative flex flex-col items-center text-center gap-1.5 rounded-[16px] border px-2 py-3 transition-all duration-200 animate-scale-up
+                                ${active
+                                    ? 'border-primary/70 bg-primary/[0.06] shadow-[0_0_20px_rgba(245,158,11,0.10)]'
+                                    : 'border-border/60 bg-surface-light hover:border-border-light'}`}
+                        >
+                            {/* Check nhỏ góc khi chọn */}
+                            <span className={`absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center transition-all
+                                ${active ? 'bg-primary' : 'border border-border-light'}`}>
+                                {active && <Check size={10} className="text-bg" strokeWidth={4} />}
+                            </span>
 
-                <div className="grid grid-cols-3 gap-2">
-                    {MODULE_KEYS.map((key, i) => {
-                        const m = MODULE_META[key]
-                        const Icon = m.icon
-                        const active = selectedModules.includes(key)
-                        return (
-                            <button
-                                key={key}
-                                onClick={() => toggleModule(key)}
-                                style={{ animationDelay: `${i * 40}ms` }}
-                                className={`relative flex flex-col items-center text-center gap-1.5 rounded-[16px] border px-2 py-3 transition-all duration-200 animate-scale-up
-                                    ${active
-                                        ? 'border-primary/70 bg-primary/[0.06] shadow-[0_0_20px_rgba(245,158,11,0.10)]'
-                                        : 'border-border/60 bg-surface-light hover:border-border-light'}`}
+                            <span
+                                className={`w-10 h-10 rounded-[13px] flex items-center justify-center transition-all
+                                    ${active ? 'shadow-[0_0_14px_rgba(245,158,11,0.25)]' : ''}`}
+                                style={{ background: active ? GOLD : 'rgba(245,158,11,0.10)' }}
                             >
-                                {/* Check nhỏ góc khi chọn */}
-                                <span className={`absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center transition-all
-                                    ${active ? 'bg-primary' : 'border border-border-light'}`}>
-                                    {active && <Check size={10} className="text-bg" strokeWidth={4} />}
-                                </span>
+                                <Icon size={18} className={active ? 'text-bg' : 'text-primary'} strokeWidth={2.3} />
+                            </span>
 
-                                <span
-                                    className={`w-10 h-10 rounded-[13px] flex items-center justify-center transition-all
-                                        ${active ? 'shadow-[0_0_14px_rgba(245,158,11,0.25)]' : ''}`}
-                                    style={{ background: active ? GOLD : 'rgba(245,158,11,0.10)' }}
-                                >
-                                    <Icon size={18} className={active ? 'text-bg' : 'text-primary'} strokeWidth={2.3} />
-                                </span>
+                            <span className="text-[12.5px] font-black text-text leading-tight">{m.label}</span>
+                            <span className="text-[10.5px] font-bold text-primary tabular-nums">{formatVND(PRICE.module[period])}</span>
+                        </button>
+                    )
+                })}
+            </div>
 
-                                <span className="text-[12.5px] font-black text-text leading-tight">{m.label}</span>
-                                <span className="text-[10.5px] font-bold text-primary tabular-nums">{formatVND(PRICE.module[period])}</span>
-                            </button>
-                        )
-                    })}
-                </div>
-
-            </section>
-
-            {/* ── Áp dụng cho chi nhánh ──────────────────────────────────────────── */}
-            <section className="flex flex-col gap-3">
+            {/* ── 2. Chi nhánh (áp dụng ở đâu) ────────────────────────────────────── */}
+            <section className="flex flex-col gap-2.5">
                 <SectionHeader
-                    title="Áp dụng cho chi nhánh"
+                    title="Chi nhánh"
+                    hint={addresses.length > 0 ? `${addrCount}/${addresses.length}` : undefined}
                     action={addresses.length > 1 && (
-                        <button onClick={toggleAllAddresses} className="text-[11px] font-black text-primary uppercase tracking-wide">
+                        <button onClick={toggleAllAddresses} className="text-[11px] font-black text-primary uppercase tracking-wide whitespace-nowrap">
                             {allAddressesSelected ? 'Bỏ tất cả' : 'Tất cả'}
                         </button>
                     )}
                 />
-                <div className="flex flex-col gap-1.5">
-                    {addresses.map(addr => {
+
+                {/* Search — chỉ khi nhiều chi nhánh */}
+                {manyBranches && (
+                    <input
+                        type="text"
+                        value={branchQuery}
+                        onChange={e => setBranchQuery(e.target.value)}
+                        placeholder="Tìm chi nhánh…"
+                        className="w-full px-3 py-2 rounded-[10px] bg-surface-light border border-border/60 text-text text-[13px] placeholder:text-text-dim focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
+                    />
+                )}
+
+                <div className={`flex flex-col gap-1.5 ${manyBranches ? 'max-h-[240px] overflow-y-auto pr-0.5' : ''}`}>
+                    {filteredAddresses.map(addr => {
                         const active = selectedAddressIds.includes(addr.id)
                         return (
                             <button
                                 key={addr.id}
                                 onClick={() => toggleAddress(addr.id)}
-                                className={`w-full text-left rounded-[12px] border px-2.5 py-1.5 flex items-center gap-2.5 transition-all duration-150
+                                className={`w-full text-left rounded-[12px] border px-3 py-2 transition-all duration-150
                                     ${active
                                         ? 'border-primary bg-primary/[0.07] shadow-[0_0_14px_rgba(245,158,11,0.12)]'
                                         : 'border-border/60 bg-surface-light hover:border-border-light'}`}
                             >
-                                <span className={`w-7 h-7 rounded-[9px] flex items-center justify-center shrink-0 text-[10.5px] font-black transition-colors
-                                    ${active ? 'bg-primary/20 text-primary' : 'bg-surface-hover text-text-secondary'}`}>
-                                    {initials(addr.name)}
-                                </span>
-                                <span className={`flex-1 min-w-0 text-[13px] font-bold truncate transition-colors ${active ? 'text-text' : 'text-text-secondary'}`}>
+                                <span className={`block min-w-0 text-[13px] font-bold truncate transition-colors ${active ? 'text-text' : 'text-text-secondary'}`}>
                                     {addr.name}
                                 </span>
                             </button>
                         )
                     })}
-                    {addresses.length === 0 && (
-                        <p className="text-[12px] text-text-secondary py-2">Chưa có chi nhánh nào.</p>
+                    {filteredAddresses.length === 0 && (
+                        <p className="text-[12px] text-text-secondary py-2">
+                            {addresses.length === 0 ? 'Chưa có chi nhánh nào.' : 'Không tìm thấy chi nhánh.'}
+                        </p>
                     )}
                 </div>
             </section>
 
-            {/* ── QR thanh toán ──────────────────────────────────────────────────── */}
-            <section className="flex flex-col gap-3">
-                <SectionHeader title="Quét mã thanh toán" />
-                <div className="relative mx-auto w-full max-w-[170px] aspect-square rounded-[20px] bg-surface-light border border-border/60 flex flex-col items-center justify-center gap-2 text-text-dim overflow-hidden">
+            {/* ── 3. Thanh toán — QR (cuối, canh giữa) ────────────────────────────── */}
+            <section className="flex flex-col items-center gap-3">
+                <p className="text-[12px] font-black text-text uppercase tracking-wider text-center">Quét mã thanh toán</p>
+                <div className={`relative w-full max-w-[170px] aspect-square rounded-[20px] border flex flex-col items-center justify-center gap-2 overflow-hidden transition-colors
+                    ${confirmed ? 'bg-success-soft/60 border-success/40 text-success' : 'bg-surface-light border-border/60 text-text-dim'}`}>
                     {/* Corner brackets — khung kiểu quét mã */}
                     <Corner className="top-3 left-3 border-t-2 border-l-2 rounded-tl-[8px]" />
                     <Corner className="top-3 right-3 border-t-2 border-r-2 rounded-tr-[8px]" />
                     <Corner className="bottom-3 left-3 border-b-2 border-l-2 rounded-bl-[8px]" />
                     <Corner className="bottom-3 right-3 border-b-2 border-r-2 rounded-br-[8px]" />
-                    <QrCode size={44} strokeWidth={1.5} />
-                    <p className="text-[11px] font-medium px-6 text-center">Mã QR hiện sau khi xác nhận</p>
+                    {confirmed ? (
+                        <>
+                            <CheckCircle2 size={48} strokeWidth={1.8} className="animate-scale-up" />
+                            <p className="text-[11px] font-bold px-6 text-center">Đã nhận thanh toán — đang mở khoá…</p>
+                        </>
+                    ) : (
+                        <>
+                            <QrCode size={44} strokeWidth={1.5} />
+                            <p className="text-[11px] font-medium px-6 text-center">Mã QR hiện sau khi xác nhận</p>
+                        </>
+                    )}
                 </div>
+                {/* Trạng thái listener realtime */}
+                {!confirmed && (
+                    <span className="inline-flex items-center gap-1.5 text-[10.5px] text-text-secondary">
+                        <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                        Đang chờ xác nhận chuyển khoản tự động…
+                    </span>
+                )}
             </section>
-
-            {/* ── POS guarantee ──────────────────────────────────────────────────── */}
-            <div className="flex items-start gap-2.5 rounded-[14px] bg-success-soft/60 border border-success/20 p-3">
-                <ShieldCheck size={15} className="text-success mt-0.5 shrink-0" />
-                <p className="text-[11.5px] text-success/90 leading-relaxed">
-                    <span className="font-black">POS & chốt ca luôn hoạt động</span> — quán vẫn bán hàng bình thường khi chưa đăng ký.
-                </p>
-            </div>
 
             {/* ── Hoá đơn (dính đáy). Thanh toán xác nhận qua webhook (quét QR ở trên),
                    nên KHÔNG có nút "Thanh toán" — chỉ tổng kết + (admin) mock. ─────── */}
@@ -230,13 +265,13 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
 
 function SectionHeader({ title, hint, action }) {
     return (
-        <div className="flex items-center justify-between px-0.5">
-            <div className="flex items-center gap-2.5">
-                <span className="w-1 h-3.5 rounded-full bg-primary/70" />
-                <p className="text-[12px] font-black text-text uppercase tracking-wider">{title}</p>
-                {hint && <span className="text-[10px] text-text-dim normal-case font-medium tracking-normal">{hint}</span>}
+        <div className="flex items-center justify-between gap-2 px-0.5">
+            <div className="flex items-center gap-2.5 min-w-0">
+                <span className="w-1 h-3.5 rounded-full bg-primary/70 shrink-0" />
+                <p className="text-[12px] font-black text-text uppercase tracking-wider whitespace-nowrap">{title}</p>
+                {hint && <span className="text-[10px] text-text-dim normal-case font-medium tracking-normal truncate">{hint}</span>}
             </div>
-            {action}
+            {action && <div className="shrink-0">{action}</div>}
         </div>
     )
 }
@@ -249,10 +284,7 @@ function Corner({ className }) {
     return <span className={`absolute w-4 h-4 border-primary/40 ${className}`} />
 }
 
-// Lấy 1–2 chữ cái đầu các từ có nghĩa làm avatar chi nhánh.
-function initials(name = '') {
-    const parts = name.trim().split(/\s+/).filter(Boolean)
-    if (parts.length === 0) return '?'
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+// Chuẩn hoá để search không phân biệt hoa/thường & dấu tiếng Việt.
+function normalizeText(s = '') {
+    return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd')
 }
