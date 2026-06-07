@@ -309,7 +309,13 @@ export function POSProvider() {
     }
 
     function handleRemoveCartItem(cartItemId) {
-        setCart(prev => prev.filter(item => item.cartItemId !== cartItemId))
+        const next = cart.filter(item => item.cartItemId !== cartItemId)
+        setCart(next)
+        // Xoá đúng món đang focus → nhảy focus sang món mới nhất còn lại (món trên
+        // cùng của MiniCart, cũng là nơi chọn extra áp vào). Hết món → bỏ focus.
+        if (cartItemId === activeCartItemId) {
+            setActiveCartItemId(next.length ? next[next.length - 1].cartItemId : null)
+        }
         clearDiscount()
     }
 

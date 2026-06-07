@@ -193,72 +193,62 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
                 </div>
             </section>
 
-            {/* ── 3. Thanh toán — QR (cuối, canh giữa) ────────────────────────────── */}
-            <section className="flex flex-col items-center gap-3">
-                <p className="text-[12px] font-black text-text uppercase tracking-wider text-center">Quét mã thanh toán</p>
-                <div className={`relative w-full max-w-[170px] aspect-square rounded-[20px] border flex flex-col items-center justify-center gap-2 overflow-hidden transition-colors
-                    ${confirmed ? 'bg-success-soft/60 border-success/40 text-success' : 'bg-surface-light border-border/60 text-text-dim'}`}>
-                    {/* Corner brackets — khung kiểu quét mã */}
-                    <Corner className="top-3 left-3 border-t-2 border-l-2 rounded-tl-[8px]" />
-                    <Corner className="top-3 right-3 border-t-2 border-r-2 rounded-tr-[8px]" />
-                    <Corner className="bottom-3 left-3 border-b-2 border-l-2 rounded-bl-[8px]" />
-                    <Corner className="bottom-3 right-3 border-b-2 border-r-2 rounded-br-[8px]" />
-                    {confirmed ? (
-                        <>
-                            <CheckCircle2 size={48} strokeWidth={1.8} className="animate-scale-up" />
-                            <p className="text-[11px] font-bold px-6 text-center">Đã nhận thanh toán — đang mở khoá…</p>
-                        </>
-                    ) : (
-                        <>
-                            <QrCode size={44} strokeWidth={1.5} />
-                            <p className="text-[11px] font-medium px-6 text-center">Mã QR hiện sau khi xác nhận</p>
-                        </>
-                    )}
+            {/* ── 3. Thanh toán — 1 card gắn kết: QR + tổng cộng + status ────────── */}
+            <section className="flex flex-col gap-2.5">
+                <SectionHeader title="Thanh toán" />
+                <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3.5">
+                    <div className="flex items-center gap-3.5">
+                        {/* QR trái */}
+                        <div className={`relative w-[96px] aspect-square shrink-0 rounded-[14px] border flex items-center justify-center overflow-hidden transition-colors
+                            ${confirmed ? 'bg-success-soft/60 border-success/40 text-success' : 'bg-surface-light border-border/60 text-text-dim'}`}>
+                            <Corner className="top-2 left-2 border-t-2 border-l-2 rounded-tl-[6px]" />
+                            <Corner className="top-2 right-2 border-t-2 border-r-2 rounded-tr-[6px]" />
+                            <Corner className="bottom-2 left-2 border-b-2 border-l-2 rounded-bl-[6px]" />
+                            <Corner className="bottom-2 right-2 border-b-2 border-r-2 rounded-br-[6px]" />
+                            {confirmed
+                                ? <CheckCircle2 size={34} strokeWidth={1.8} className="animate-scale-up" />
+                                : <QrCode size={34} strokeWidth={1.5} />}
+                        </div>
+
+                        {/* Tổng cộng — căn trái, phân tầng rõ */}
+                        <div className="flex-1 min-w-0 flex flex-col items-start text-left">
+                            <p className="text-[9.5px] font-black uppercase tracking-[0.12em] text-text-secondary">Tổng cộng</p>
+                            <p className="text-[16px] font-black leading-none mt-1 mb-2 bg-clip-text text-transparent" style={{ backgroundImage: GOLD }}>
+                                {formatVND(total)}
+                            </p>
+                            <div className="text-[11px] text-text-secondary tabular-nums leading-[1.45]">
+                                <p>1 {PERIOD_LABEL[period]}</p>
+                                <p>{moduleCount} báo cáo</p>
+                                <p>{addrCount} chi nhánh</p>
+                            </div>
+                            {savings > 0 && (
+                                <span className="mt-1.5 text-[11px] font-bold text-success tabular-nums whitespace-nowrap">
+                                    Tiết kiệm {formatVND(savings)}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* status — cùng card, ngăn bằng hairline */}
+                    <div className={`flex items-center gap-1.5 mt-3 pt-3 border-t border-border/40 text-[10.5px] ${confirmed ? 'text-success font-bold' : 'text-text-secondary'}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full bg-success shrink-0 ${confirmed ? '' : 'animate-pulse'}`} />
+                        {confirmed ? 'Đã nhận thanh toán — đang mở khoá…' : 'Đang chờ xác nhận chuyển khoản tự động…'}
+                    </div>
                 </div>
-                {/* Trạng thái listener realtime */}
-                {!confirmed && (
-                    <span className="inline-flex items-center gap-1.5 text-[10.5px] text-text-secondary">
-                        <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                        Đang chờ xác nhận chuyển khoản tự động…
-                    </span>
-                )}
             </section>
 
-            {/* ── Hoá đơn (dính đáy). Thanh toán xác nhận qua webhook (quét QR ở trên),
-                   nên KHÔNG có nút "Thanh toán" — chỉ tổng kết + (admin) mock. ─────── */}
-            <div className="sticky bottom-0 -mx-4 px-4 pt-3 bg-bg/85 backdrop-blur-md border-t border-border/50 pb-[max(env(safe-area-inset-bottom),12px)]">
-                {/* Nhãn */}
-                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-text-dim">Tổng cộng</p>
-
-                {/* Tổng tiền + meta inline (chu kỳ · báo cáo · chi nhánh) */}
-                <div className="flex items-baseline flex-wrap gap-x-1.5 gap-y-0.5 mt-0.5">
-                    <span
-                        className="text-[22px] font-black leading-none bg-clip-text text-transparent"
-                        style={{ backgroundImage: GOLD }}
-                    >
-                        {formatVND(total)}
-                    </span>
-                    <span className="text-[10.5px] text-text-secondary tabular-nums">
-                        / {PERIOD_LABEL[period]}<Dot />{moduleCount} báo cáo<Dot />{addrCount} chi nhánh
-                    </span>
-                    {savings > 0 && (
-                        <span className="text-[10.5px]">
-                            <Dot /><span className="text-text-dim line-through">{formatVND(originalTotal)}</span>
-                            <span className="text-success font-bold ml-1">tiết kiệm {formatVND(savings)}</span>
-                        </span>
-                    )}
-                </div>
-
-                {isAdmin && (
+            {/* ── Footer dính đáy: chỉ nút Mock (Admin). User thường xác nhận qua webhook. ── */}
+            {isAdmin && (
+                <div className="sticky bottom-0 -mx-4 px-4 pt-3 bg-bg/85 backdrop-blur-md border-t border-border/50 pb-[max(env(safe-area-inset-bottom),12px)]">
                     <button
                         onClick={handleMockPayment}
                         disabled={isMocking || !canSubmit}
-                        className="w-full mt-2.5 py-2 rounded-[12px] bg-red-500/10 text-red-500 text-[12px] font-bold hover:bg-red-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                        className="w-full py-2.5 rounded-[12px] bg-red-500/10 text-red-500 text-[12px] font-bold hover:bg-red-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                         {isMocking ? <Loader2 size={14} className="animate-spin" /> : 'Mock mở khoá (Admin)'}
                     </button>
-                )}
-            </div>
+                </div>
+            )}
         </div>
     )
 }
@@ -274,10 +264,6 @@ function SectionHeader({ title, hint, action }) {
             {action && <div className="shrink-0">{action}</div>}
         </div>
     )
-}
-
-function Dot() {
-    return <span className="mx-1.5 text-text-dim">·</span>
 }
 
 function Corner({ className }) {

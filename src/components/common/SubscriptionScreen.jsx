@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ArrowRightLeft } from 'lucide-react'
 import SubscriptionPanel from './SubscriptionPanel'
 
 /**
  * SubscriptionScreen — trang đăng ký gói full-screen DÙNG CHUNG.
- * Header thiết kế theo style /history (HistoryHeader): nút back bo góc + chip
- * tiêu đề ở giữa + thanh tab bên dưới. **Tab = chu kỳ** (Theo tháng / Theo năm)
- * → period state ở đây, truyền xuống panel (controlled).
+ * Header form giống /history (HistoryHeader): nút back bo góc trái + chip tiêu đề
+ * canh giữa + nút bên phải. Nút phải = toggle chu kỳ Tháng/Năm (gộp vào vị trí
+ * "next" của history). period state ở đây, truyền xuống panel (controlled).
  *
  * Một UI duy nhất cho mọi luồng:
  *   - Route /subscription (từ SubscriptionBadge) → backTo = /addresses
@@ -15,19 +15,14 @@ import SubscriptionPanel from './SubscriptionPanel'
  *
  * Props: backTo, preselectModule, preselectAddressId, onDone
  */
-const PERIOD_TABS = [
-    { key: 'month', label: 'Tháng' },
-    { key: 'year', label: 'Năm' },
-]
-
 export default function SubscriptionScreen({ backTo = '/addresses', preselectModule, preselectAddressId, onDone }) {
     const navigate = useNavigate()
     const [period, setPeriod] = useState('month')
 
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg">
-            {/* Header 1 hàng: [back] [chip tiêu đề] [toggle chu kỳ bên phải] */}
-            <header className="shrink-0 pt-5 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex items-center px-4 gap-2.5">
+            {/* Header form /history: [back] [chip canh giữa] [toggle chu kỳ = nút phải] */}
+            <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex items-center px-4 gap-3">
                 <button
                     onClick={() => navigate(backTo)}
                     className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none shrink-0"
@@ -35,24 +30,21 @@ export default function SubscriptionScreen({ backTo = '/addresses', preselectMod
                     <ArrowLeft size={20} strokeWidth={2.5} />
                 </button>
 
-                <span className="flex-1 min-w-0 text-[15px] font-black text-text truncate">Đăng ký gói</span>
-
-                {/* Toggle chu kỳ — compact, bên phải header */}
-                <div className="shrink-0 bg-surface-light border border-border/50 rounded-[12px] flex p-0.5 gap-0.5 shadow-sm">
-                    {PERIOD_TABS.map(tab => {
-                        const active = period === tab.key
-                        return (
-                            <button
-                                key={tab.key}
-                                onClick={() => setPeriod(tab.key)}
-                                className={`px-3 py-1.5 rounded-[9px] text-[11px] font-black uppercase tracking-wide transition-all duration-150
-                                    ${active ? 'bg-primary text-bg shadow-sm' : 'text-text-secondary hover:text-text'}`}
-                            >
-                                {tab.label}
-                            </button>
-                        )
-                    })}
+                <div className="flex-1 min-w-0 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2.5 flex items-center justify-center text-center">
+                    <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Đăng ký gói</span>
                 </div>
+
+                {/* Nút phải = toggle chu kỳ (gộp Tháng/Năm vào vị trí nút "next") */}
+                <button
+                    onClick={() => setPeriod(period === 'month' ? 'year' : 'month')}
+                    className="shrink-0 h-10 pl-3 pr-2.5 flex items-center gap-1.5 rounded-[14px] bg-surface-light border border-border/60 hover:bg-border/40 active:scale-95 transition-all shadow-sm focus:outline-none"
+                    title="Đổi chu kỳ tháng / năm"
+                >
+                    <span className="text-[12px] font-black text-primary uppercase tracking-wide">
+                        {period === 'month' ? 'Tháng' : 'Năm'}
+                    </span>
+                    <ArrowRightLeft size={13} className="text-text-secondary" strokeWidth={2.5} />
+                </button>
             </header>
 
             <div className="flex-1 overflow-y-auto px-4 pt-4">
