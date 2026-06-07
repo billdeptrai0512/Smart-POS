@@ -1,5 +1,6 @@
-import { useLocation } from 'react-router-dom'
+import { useLocation, Navigate } from 'react-router-dom'
 import SubscriptionScreen from '../components/common/SubscriptionScreen'
+import { MONETIZATION_ENABLED_FLAG } from '../hooks/useEntitlement'
 
 /**
  * SubscriptionPage — route /subscription. Vỏ mỏng đọc nav state rồi render
@@ -10,6 +11,11 @@ import SubscriptionScreen from '../components/common/SubscriptionScreen'
  */
 export default function SubscriptionPage() {
     const location = useLocation()
+
+    if (!MONETIZATION_ENABLED_FLAG) {
+        return <Navigate to="/pos" replace />
+    }
+
     return (
         <SubscriptionScreen
             backTo={location.state?.from || '/addresses'}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { usePOS } from '../contexts/POSContext'
 import { useProducts } from '../contexts/ProductContext'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { calculateProductCost, formatVNDInput, parseVNDInput } from '../utils'
 import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
@@ -30,8 +30,7 @@ import { Truck, Package } from 'lucide-react'
 import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY } from '../components/DailyReportPage/ReportViewFilter'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
-import { useEntitlement, hasModule } from '../hooks/useEntitlement'
-import SubscriptionScreen from '../components/common/SubscriptionScreen'
+import { useEntitlement, hasModule, MONETIZATION_ENABLED_FLAG } from '../hooks/useEntitlement'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
 import { shiftFinalizedKey, cashClosedKey } from '../constants/storageKeys'
@@ -822,13 +821,16 @@ export default function DailyReportPage() {
         : view === VIEW_INVENTORY ? 'inventory'
             : view === VIEW_PROFIT ? 'cashflow'
                 : null
-    if (!entitlementLoading && viewModule && !hasModule(activeModules, viewModule)) {
+    if (MONETIZATION_ENABLED_FLAG && !entitlementLoading && viewModule && !hasModule(activeModules, viewModule)) {
         return (
-            <SubscriptionScreen
-                backTo="/pos"
-                preselectModule={viewModule}
-                preselectAddressId={selectedAddress?.id}
-                onDone={() => window.location.reload()}
+            <Navigate
+                to="/subscription"
+                replace
+                state={{
+                    preselectModule: viewModule,
+                    preselectAddressId: selectedAddress?.id,
+                    from: '/pos',
+                }}
             />
         )
     }
@@ -952,8 +954,8 @@ export default function DailyReportPage() {
                                         {(inventory.isDirty || inventory.existingClosing?.id) && (
                                             <div className="flex justify-end -mb-1">
                                                 <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide border ${inventory.isDirty
-                                                        ? 'bg-warning/10 text-warning border-warning/30'
-                                                        : 'bg-success/10 text-success border-success/30'}`}>
+                                                    ? 'bg-warning/10 text-warning border-warning/30'
+                                                    : 'bg-success/10 text-success border-success/30'}`}>
                                                     <span className={`w-1.5 h-1.5 rounded-full ${inventory.isDirty ? 'bg-warning animate-pulse' : 'bg-success'}`} />
                                                     {inventory.isDirty ? 'Chưa lưu' : 'Đã lưu'}
                                                 </span>
@@ -1102,11 +1104,7 @@ export default function DailyReportPage() {
                 <ReportViewFilter value={view} onChange={setView} isStaff={isStaff} />
             </div>
             <Toast toast={toast} />
-            <UpsellSheet
-                open={showLossUpsell}
-                onClose={() => setShowLossUpsell(false)}
-                required="pro"
-            />
+
 
             {/* Nhập kho từ card "Chuẩn bị tồn kho" — tái dùng RestockModal của /ingredients. */}
             {restockIngredient && (() => {
