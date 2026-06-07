@@ -10,39 +10,38 @@ Mọi feature mới phải follow doc này thay vì nghĩ lại từ đầu.
 **Trục tính phí**: theo `address_id` × chu kỳ × **module**.
 Một owner có nhiều xe (address) → mỗi xe trả phí riêng biệt cho từng module.
 
-### 3 module độc lập
+### 2 module độc lập
 
-Không còn mô hình tier basic/pro. Thay bằng **3 module mua riêng**, mỗi module khoá đúng 1 view trong trang báo cáo:
+Không còn tier basic/pro. **2 sản phẩm mua riêng** (gộp 2026-06-06: Báo cáo/Lợi nhuận vào Dòng tiền):
 
-| Module     | Tên hiển thị | Bao gồm                                                            | View         |
-|------------|--------------|--------------------------------------------------------------------|--------------|
-| `cashflow` | Dòng tiền    | Thực thu/chi tiền mặt, chuyển khoản, số ly bán (SalesCard)         | `cashflow`   |
-| `inventory`| Tồn kho      | Nhập/tồn + **hao hụt (Loss Audit)** + gợi ý đi chợ                  | `inventory`  |
-| `finance`  | Báo cáo      | P&L, doanh thu, COGS, lợi nhuận (FinanceCards)                      | `profit`     |
+| Module     | Tên hiển thị | Bao gồm                                                            | View khoá          |
+|------------|--------------|--------------------------------------------------------------------|--------------------|
+| `cashflow` | Dòng tiền    | Thực thu/chi, chuyển khoản, số ly bán **+ P&L/lãi lỗ/COGS**         | `cashflow` + `profit` |
+| `inventory`| Tồn kho      | Nhập/tồn + **hao hụt (Loss Audit)** + gợi ý đi chợ                  | `inventory`        |
 
-**Hao hụt (Loss Audit)** — trước là gói `pro` riêng — nay **gộp vào module `inventory`**. Mua Tồn kho là có luôn audit + RangeLossCard.
-
-Mỗi module **độc lập hoàn toàn**: mua cái nào mở view đó, không cái nào là tiền đề của cái nào.
+- **`cashflow` ("Dòng tiền") mở khoá CẢ 2 view**: Dòng tiền VÀ Lợi nhuận. (Trang báo cáo vẫn có 3 tab UI, nhưng tab Lợi nhuận gate bằng quyền `cashflow`.)
+- **Hao hụt (Loss Audit)** gộp vào `inventory` — mua Tồn kho là có luôn audit + RangeLossCard.
+- 2 module **độc lập**: mua cái nào mở cái đó, không cái nào là tiền đề.
 
 ### Bảng giá
 
-| SKU                         | / tháng (`months=1`) | / năm (`months=12`) |
-|-----------------------------|---------------------:|--------------------:|
-| 1 module / 1 chi nhánh      | 88,888đ              | 888,888đ            |
-| **Bundle cả 3** / 1 chi nhánh | **222,888đ**       | **2,222,888đ**      |
-| Toàn bộ chi nhánh           | × số chi nhánh       | × số chi nhánh      |
+| SKU                          | / tháng (`months=1`) | / năm (`months=12`) |
+|------------------------------|---------------------:|--------------------:|
+| 1 module / 1 chi nhánh       | 88,888đ              | 888,888đ            |
+| **Trọn bộ cả 2** / 1 chi nhánh | **166,888đ**       | **1,666,888đ**      |
+| Toàn bộ chi nhánh            | × số chi nhánh       | × số chi nhánh      |
 
-- **Năm ≈ 10 tháng** (tặng ~2 tháng) — khuyến khích trả dài.
-- **Bundle** rẻ hơn mua lẻ (lẻ gộp tháng = 266,664đ → tiết kiệm ~44k; lẻ gộp năm = 2,666,664đ → tiết kiệm ~444k).
-- **Bundle & all-branches chỉ là tiện ích checkout**: 1 lần trả → tạo nhiều `address_subscriptions` row (1 row/module/address). Entitlement luôn check **per-module per-address**; bundle/all-branches KHÔNG phải 1 giá trị tier lưu trong DB.
-- All-branches = nhân theo số chi nhánh đang có; mỗi chi nhánh nhận đủ row tương ứng.
+- **Năm ≈ 10 tháng** (tặng ~2 tháng).
+- **Trọn bộ** rẻ hơn lẻ (lẻ gộp tháng = 177,776đ → tiết kiệm 10,888đ; năm = 1,777,776đ → tiết kiệm ~111k).
+- **Trọn bộ & all-branches chỉ là tiện ích checkout**: 1 lần trả → tạo nhiều `address_subscriptions` row (1 row/module/address). Entitlement luôn check **per-module per-address**; KHÔNG lưu "bundle" thành 1 giá trị tier.
+- All-branches = nhân theo số chi nhánh; mỗi chi nhánh nhận đủ row.
 
-**Không có "Free tier" vĩnh viễn cho báo cáo.** Khi sub 1 module hết hạn, view đó rớt về khoá —
-nhưng các tính năng vận hành cốt lõi (POS, chốt ca, kho, công thức) và các module khác vẫn chạy bình thường.
+**Không có "Free tier" vĩnh viễn cho báo cáo.** Khi sub 1 module hết hạn, view đó khoá —
+POS/chốt ca/kho/công thức và module còn lại vẫn chạy bình thường.
 
 ### Trial
 
-- **Trial tự động 3 ngày** full cả 3 module ngay khi tạo địa chỉ đầu tiên.
+- **Trial tự động 3 ngày** full cả 2 module ngay khi tạo địa chỉ đầu tiên.
 - Không bind vào phone (Phase 1); sẽ bind phone ở Phase 2.
 - Hết trial: từng module rớt về khoá cho tới khi user thanh toán.
 - Chống abuse: phone OTP bắt buộc lúc signup (xem §3).
@@ -51,22 +50,21 @@ nhưng các tính năng vận hành cốt lõi (POS, chốt ca, kho, công thứ
 
 ## 2. Feature Matrix
 
-| Feature                                  | free | `cashflow` | `inventory` | `finance` |
-|------------------------------------------|:----:|:----------:|:-----------:|:---------:|
-| Tạo đơn, menu, recipe, nguyên liệu       |  ✓   |     ✓      |     ✓       |    ✓      |
-| Chốt ca (shift closing)                  |  ✓   |     ✓      |     ✓       |    ✓      |
-| Lịch sử đơn (HistoryPage)                |  ✓   |     ✓      |     ✓       |    ✓      |
-| View **Dòng tiền** — CashFlowCard + SalesCard |  |     ✓      |             |           |
-| View **Dòng tiền** — Day Performance Chart |    |     ✓      |             |           |
-| View **Tồn kho** — InventoryReportCard / Refill |  |          |     ✓       |           |
-| View **Tồn kho** — Gợi ý đi chợ (Refill tab) |  |            |     ✓       |           |
-| View **Tồn kho** — Audit tab + RangeLossCard (hao hụt) | |        |     ✓       |           |
-| View **Báo cáo** — FinanceCards / P&L    |      |            |             |    ✓      |
+| Feature                                  | free | `cashflow` | `inventory` |
+|------------------------------------------|:----:|:----------:|:-----------:|
+| Tạo đơn, menu, recipe, nguyên liệu       |  ✓   |     ✓      |     ✓       |
+| Chốt ca (shift closing)                  |  ✓   |     ✓      |     ✓       |
+| Lịch sử đơn (HistoryPage)                |  ✓   |     ✓      |     ✓       |
+| View **Dòng tiền** — CashFlowCard + SalesCard |  |     ✓      |             |
+| View **Dòng tiền** — Day Performance Chart |    |     ✓      |             |
+| View **Lợi nhuận** — FinanceCards / P&L / COGS |  |   ✓      |             |
+| View **Tồn kho** — InventoryReportCard / Refill |  |          |     ✓       |
+| View **Tồn kho** — Gợi ý đi chợ (Refill tab) |  |            |     ✓       |
+| View **Tồn kho** — Audit tab + RangeLossCard (hao hụt) | |        |     ✓       |
 
 Khi quyết định feature mới — xếp vào view nào thì thuộc module đó:
-- Liên quan tiền mặt/thu chi/số ly bán → **`cashflow`**.
+- Liên quan tiền mặt/thu chi/số ly bán **hoặc** lãi/lỗ/COGS/P&L → **`cashflow`** (Dòng tiền gộp luôn tài chính).
 - Liên quan tồn/nhập/hao hụt/đi chợ → **`inventory`**.
-- Liên quan lãi/lỗ/COGS/P&L → **`finance`**.
 - Tác vụ vận hành thiết yếu (không xem được dữ liệu sẽ không bán được hàng) → **free** (không gate).
 
 ---
@@ -297,8 +295,8 @@ Backend:
   5. INSERT address_subscriptions với valid_from/to tính theo quy tắc gia hạn
   6. UPDATE payment_intents SET status='paid', sepay_tx_id, paid_at
   ↓
-Frontend (đang poll mỗi 5s, hoặc realtime sub trên payment_intents):
-  Thấy status='paid' → reload entitlement → unlock UI
+Frontend (POLL-WHILE-PENDING — xem §7.1): poll payment_intents 3–5s/lần
+  CHỈ trong lúc có intent pending → thấy status='paid' → reload entitlement → unlock UI
 ```
 
 ### Webhook handler (Supabase Edge Function)
@@ -332,6 +330,42 @@ serve(async (req) => {
 - **Amount sai** (user gõ thiếu/thừa): tolerance ±1000đ. Lệch lớn hơn → status='manual_review', không tự cộng sub.
 - **Reference không match**: log + email admin. User có thể gửi screenshot CK.
 - **Intent expired** (>30 phút) trước khi user CK: status = 'expired' bằng cron job. Webhook gặp expired ref → từ chối, gợi ý user tạo intent mới.
+- **Webhook mất / mạng rớt giữa chừng** ⚠️ rủi ro nặng nhất (mất tiền thật): client không nhận được tín hiệu → kẹt. → bắt buộc có **poll-while-pending** (tự bắt kịp ở lần poll sau) + **admin reconciliation** (đối soát thủ công).
+- **Race gia hạn** (2 webhook cùng address): tính `valid_from = max(today, latest.valid_to + 1)` phải nằm trong RPC với `SELECT … FOR UPDATE`.
+- **Bundle/all-branches**: 1 lần CK ghi nhiều row (module × chi nhánh) phải **atomic** theo 1 intent — `confirm_payment` insert tất cả trong cùng transaction.
+
+### 7.1 — Cơ chế chờ xác nhận: chọn **c + a** (quyết định 2026-06-06)
+
+Khi bật payment (Phase 3) làm **c (backend) + a (poll-while-pending)**, KHÔNG dùng realtime cho payment.
+
+- **c — Backend (bắt buộc, là phần "sản xuất" dữ liệu):** Edge Function `sepay-webhook` + RPC `confirm_payment` (atomic, idempotent) + RPC `create_payment_intent` + sinh QR VietQR. Listener/poll chỉ là phần "tiêu thụ" → vô nghĩa nếu thiếu c.
+- **a — Frontend (poll-while-pending):** khi có `payment_intents.status='pending'` → poll 3–5s/lần, dừng khi `paid`/`expired`.
+
+**Vì sao poll-while-pending, không phải realtime:**
+
+| | Poll-while-pending (chọn) | Realtime (`postgres_changes`) |
+|---|---|---|
+| Mạnh | Đơn giản · scale ngang vô hạn (stateless) · **sống sót khi mất mạng** · không đụng quota realtime · qua mọi proxy | Tức thì <1s |
+| Yếu | Trễ ≤5s (vô nghĩa vì CK ngân hàng đã mất 5–30s mới tới) | Quota ~500 conn (Pro) · RLS auth-check mỗi event × mỗi client · **mất event khi rớt** · bottleneck ở ~10k đồng thời |
+
+Payment là sự kiện **tần suất thấp, thời lượng giới hạn** → 5s trễ không đáng; realtime mua lấy ~4s nhưng kéo theo mọi rủi ro scale + mất-event. Giữ realtime cho thứ cần tức thì thật (orders), không phải "đợi 1 cú chuyển khoản".
+
+**Về 10.000 manager đồng thời:** logic DB/RPC chịu được (payment rời rạc, write nhẹ, idempotent). Nút thắt là **tầng chờ**: realtime KHÔNG đạt 10k (quota + per-event auth); poll-while-pending đạt vì stateless. Edge Function cần **transaction-mode pooler** để khỏi cạn connection khi burst.
+
+**⚠️ Trạng thái hiện tại:** `src/hooks/usePaymentListener.js` (realtime) đang là **PLACEHOLDER** — sẽ **thay bằng poll-while-pending** khi làm c. Đừng coi realtime listener là bản production.
+
+### 7.2 — Quyết định HIỆN TẠI: chưa build c (2026-06-06)
+
+**Chưa làm c bây giờ.** Lý do:
+1. **Timing (§9 rollout gate):** payment chỉ bật ở Phase 2–3, sau core ổn ≥6 tuần + ≥1 tín hiệu validation. Build webhook bây giờ = hạ tầng nằm chờ hàng tháng.
+2. **Không test/deploy được:** SePay cần tài khoản + API key + đăng ký webhook URL + deploy Edge Function — phụ thuộc creds & thao tác của owner; viết "mù" dễ lệch khi SePay đổi format.
+3. **Tránh tối ưu non:** soft-launch (vài chục → vài trăm quán) thì cơ chế hiện tại dư sức; chưa cần đụng 10k.
+
+**Việc rẻ-mà-cứu-rủi-ro nên làm TRƯỚC public (không phải c):**
+- **Server-side kill switch** đọc `app_config` (flip không cần redeploy) — hiện kill switch là build-time env client.
+- **Admin reconciliation** (đối soát thủ công) — cứu edge case webhook mất = mất tiền thật.
+
+→ Tóm lại: commit nền tảng đã có; để **c + a** lại đúng thời điểm Phase 3.
 
 ---
 
@@ -339,15 +373,17 @@ serve(async (req) => {
 
 | # | Quyết định | Note |
 |---|---|---|
-| 1 | **3 module độc lập** (`cashflow`/`inventory`/`finance`), không còn tier basic/pro | Hao hụt gộp vào `inventory` |
-| 2 | **Trial 3 ngày full 3 module** (Phase 1 bind user; Phase 2 bind phone — 1 phone = 1 trial) | Owner tạo address #2 không nhận lại trial (sau khi có phone) |
-| 3 | **Năm = 888,888đ/module (~10 tháng)**; **Bundle 3** = 222,888đ/th · 2,222,888đ/năm | Chiết khấu bundle; năm tặng ~2 tháng |
+| 1 | **2 module** (`cashflow`/`inventory`), không còn tier basic/pro. Gộp 2026-06-06: Báo cáo/Lợi nhuận vào `cashflow` | Hao hụt ở `inventory`; `cashflow` mở cả view Dòng tiền + Lợi nhuận |
+| 2 | **Trial 3 ngày full 2 module** (Phase 1 bind user; Phase 2 bind phone — 1 phone = 1 trial) | Owner tạo address #2 không nhận lại trial (sau khi có phone) |
+| 3 | **Năm = 888,888đ/module (~10 tháng)**; **Trọn bộ 2** = 166,888đ/th · 1,666,888đ/năm | Chiết khấu trọn bộ; năm tặng ~2 tháng |
 | 4 | **All-branches = nhân theo số chi nhánh**, không giảm theo số lượng | Tạo row cho mọi address trong 1 lần trả |
 | 5 | **Không refund, không prorating** | Đơn giản v1 |
 | 6 | **Gia hạn nối tiếp** theo module (§4); module độc lập, không có quan hệ upgrade/downgrade | Mỗi module có valid_to riêng |
 | 7 | **Status banner ở address card** (xem §6.B) — không banner header trên main app | KH thấy ngay từ Address Select |
 | 8 | **Admin override**: RPC `admin_set_subscription(address_id, module, valid_to)` + UI admin | v1 cần cho support thủ công |
 | 9 | **Mặc định OFF** — global flag (§9). Build infra trước, bật khi đủ signal | Tránh charge user khi chưa đủ ổn |
+| 10 | **Chờ xác nhận thanh toán = poll-while-pending**, KHÔNG realtime (§7.1) | Scale tới 10k, sống sót mất mạng; realtime listener hiện tại chỉ là placeholder |
+| 11 | **Chưa build payment backend (c) lúc này** (§7.2) | Để Phase 3; trước public chỉ cần server-side kill switch + admin reconciliation |
 
 ---
 
@@ -474,7 +510,16 @@ Hoàn toàn khả thi để bắt đầu làm Feature Flag, Schema, Trial grant 
   - Badge → `navigate('/subscription', { state })`; tab Báo cáo bị khoá → nhúng thẳng `<SubscriptionPanel>` (không điều hướng, cùng UI).
   - 🗑️ Xoá `UpsellGate.jsx` + `UpsellSheet.jsx` + `UpsellPage.jsx` (dead). Gỡ audit-upsell trong `InventoryRefillCard`.
 
-**⚡ Trạng thái Phase 1b: HOÀN THÀNH** — 3 module gate per-view + trang đăng ký gói thống nhất, verify OK trên main:5173 (flag ON). Thanh toán QR/SePay vẫn placeholder (Phase 3).
+**⚡ Trạng thái Phase 1b: HOÀN THÀNH** — gate per-view + trang đăng ký gói thống nhất, verify OK trên main:5173 (flag ON). Thanh toán QR/SePay vẫn placeholder (Phase 3).
+
+### Phase 1c: Gộp 3 → 2 module (2026-06-06)
+*Gộp Báo cáo/Lợi nhuận (finance) vào Dòng tiền (cashflow). Còn 2 sản phẩm bán.*
+
+- [x] **Migration** `supabase/migrations/20260606_monetization_two_modules.sql` — trigger trial cấp 2 module, gộp `finance→cashflow`, CHECK còn `('cashflow','inventory')` cho cả 2 bảng.
+- [x] `constants/monetization.js` — `MODULE_KEYS=['cashflow','inventory']`; `cashflow` meta gộp tài chính; `PRICE.bundle = 166,888đ/th · 1,666,888đ/năm`.
+- [x] `useEntitlement.MODULES` → 2 module. `DailyReportPage` — view Lợi nhuận (profit) gate bằng quyền `cashflow`.
+- [x] `SubscriptionPanel` — lưới **2 cột**, bundle khi chọn đủ 2 (`moduleCount===MODULE_KEYS.length`). `SubscriptionBadge` → `Trọn bộ`/`1/2 gói`.
+- [x] Realtime listener (`usePaymentListener`) + migration `20260603_realtime_address_subscriptions.sql` (Phase 3 / Bước 10 — frontend phần). ⚠️ là **placeholder**, sẽ thay bằng poll-while-pending (xem §7.1).
 
 ### Phase 2: Phone OTP (chống trial abuse)
 
@@ -486,7 +531,11 @@ Hoàn toàn khả thi để bắt đầu làm Feature Flag, Schema, Trial grant 
 *Mục tiêu: Tự động hóa thanh toán, gia hạn, và công cụ quản trị tay.*
 
 - [ ] **Bước 9 (Webhook):** Setup SePay Edge Function webhook + RPC `confirm_payment` atomic (nhớ logic check `app_config` để an toàn test).
-- [ ] **Bước 10 (QR & Polling):** Sinh QR chuyển khoản phía client, tạo UI đợi thanh toán và thiết lập polling/realtime sub trên `payment_intents`.
+- [~] **Bước 10 (QR & Realtime):**
+  - [x] **Frontend listener** xong: `src/hooks/usePaymentListener.js` — Realtime sub `address_subscriptions` INSERT cho các chi nhánh của owner; nhúng vào `SubscriptionPanel` khi render (trạng thái "đang chờ" + "đã nhận → mở khoá").
+  - [x] Migration `20260603_realtime_address_subscriptions.sql` — bật Realtime publication + REPLICA IDENTITY FULL cho bảng.
+  - [ ] Sinh **QR động** (VietQR) encode `reference` + amount sau khi tạo `payment_intent`.
+  - [ ] (Tuỳ chọn) fallback polling nếu Realtime rớt.
 - [ ] **Bước 11 (Admin Control):** Viết RPC `admin_set_subscription` và tạo trang UI đơn giản cho Admin can thiệp gói cước thủ công.
 
 ### Phase 4: Optimization
