@@ -40,6 +40,12 @@ import { shiftFinalizedKey, cashClosedKey } from '../constants/storageKeys'
 // "Soạn cho hôm nay" coi là đã làm khi Nhập thêm (restock) khác 0 — rỗng/0 = chưa soạn.
 const isPrepFilled = (v) => v !== undefined && v !== null && v !== '' && Number(v) !== 0
 
+// Đọc map cờ từ localStorage (theo address+ngày), bền qua reload.
+function readMap(key) {
+    if (!key) return {}
+    try { return JSON.parse(localStorage.getItem(key)) || {} } catch { return {} }
+}
+
 export default function DailyReportPage() {
     const navigate = useNavigate()
     const location = useLocation()
@@ -138,6 +144,31 @@ export default function DailyReportPage() {
         return () => { alive = false }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [restockIngredient, selectedAddress?.id])
+
+    // "Bỏ qua" từng món Soạn — trạng thái "đã xem, không cần lấy" để vẫn hoàn tất ca mà
+    // không phải nhập hàng thừa (vd dự báo thừa 1 cái). Luôn hủy bỏ qua được (bấm lại) khi
+    // thật sự cần nhập. Bỏ qua ⇄ nhập thêm loại trừ nhau. Lưu localStorage theo địa chỉ+ngày.
+    const prepSkippedKey = isTodayScope && selectedAddress?.id ? `prepSkipped_${selectedAddress.id}_${todayISO}` : null
+    const [prepSkipped, setPrepSkipped] = useState(() => readMap(prepSkippedKey))
+    const [seenSkippedKey, setSeenSkippedKey] = useState(prepSkippedKey)
+    if (prepSkippedKey !== seenSkippedKey) {
+        setSeenSkippedKey(prepSkippedKey)
+        setPrepSkipped(readMap(prepSkippedKey))
+    }
+    const setSkip = useCallback((ingredient, val) => {
+        setPrepSkipped(prev => {
+            const next = { ...prev }
+            if (val) next[ingredient] = true; else delete next[ingredient]
+            if (prepSkippedKey) { try { localStorage.setItem(prepSkippedKey, JSON.stringify(next)) } catch { /* full */ } }
+            return next
+        })
+    }, [prepSkippedKey])
+    const toggleSkip = useCallback((ingredient) => {
+        const willSkip = !prepSkipped[ingredient]
+        setSkip(ingredient, willSkip)
+        if (willSkip) inventory.onRestockChange(ingredient, '') // bỏ qua → xóa restock đã nhập (loại trừ nhau)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [prepSkipped, setSkip, inventory.onRestockChange])
 
     // Expense categories — feed dynamic rows into FinanceCards. Refetched per
     // address; new tags added in /history are picked up on next mount or after
@@ -561,8 +592,10 @@ export default function DailyReportPage() {
         const fill = prepFillMap[ingredient]
         // tick: đổ lượng đã kẹp theo kho; kho = 0 (fill ≤ 0) → giữ nguyên "chưa soạn".
         inventory.onRestockChange(ingredient, filled ? '' : (fill > 0 ? String(fill) : ''))
+        // nhập thêm ⇄ bỏ qua loại trừ nhau: vừa nhập thì hủy "bỏ qua".
+        if (!filled && fill > 0 && prepSkipped[ingredient]) setSkip(ingredient, false)
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [inventory.restockInputs, inventory.onRestockChange, prepFillMap])
+    }, [inventory.restockInputs, inventory.onRestockChange, prepFillMap, prepSkipped, setSkip])
 
     // "Chuẩn bị tồn kho" — cho mai: đủ hàng để mai SOẠN RA BÁN không? Liên kết 3 card:
     // mai bán từ TỔNG tồn = kho tổng + tồn quầy cuối ca (số ② Hao hụt vừa đếm). Thiếu thì mua.
@@ -599,7 +632,8 @@ export default function DailyReportPage() {
 
     // Chốt ca đầy đủ = cash + counted + đã soạn cho hôm nay + đã chuẩn bị tồn kho cho mai.
     // List rỗng (đủ tồn, không cần làm gì) ⇒ coi như đã xong phần đó.
-    const allPrepDone = prepTodayList.length === 0 || prepTodayList.every(it => isPrepFilled(inventory.restockInputs[it.ingredient]))
+    // Mỗi món coi là xong khi đã nhập thêm HOẶC đã bỏ qua ("đã xem, không cần lấy").
+    const allPrepDone = prepTodayList.length === 0 || prepTodayList.every(it => isPrepFilled(inventory.restockInputs[it.ingredient]) || prepSkipped[it.ingredient])
     // "Chuẩn bị tồn kho" tính là xong khi danh sách mua RỖNG — tức đã nhập kho đủ target cho
     // mai (hoặc kho vốn đã đủ). Không còn tick thủ công nên đây là điều kiện trung thực.
     const allWarehousePrepDone = warehousePrepList.length === 0
@@ -895,6 +929,8 @@ export default function DailyReportPage() {
                                             items={prepTodayList}
                                             checked={prepCheckedDerived}
                                             onToggle={togglePrepRestock}
+                                            skipped={prepSkipped}
+                                            onSkip={toggleSkip}
                                             open={expandedCard === 'prep'}
                                             onToggleOpen={() => toggleCard('prep')}
                                         />
