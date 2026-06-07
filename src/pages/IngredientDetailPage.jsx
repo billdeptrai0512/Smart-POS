@@ -93,7 +93,7 @@ export default function IngredientDetailPage() {
     }, [selectedAddress?.id, ingredientKey, fromDate, toDate])
 
     const summary = useMemo(() => {
-        let totalSpent = 0, totalQty = 0, qtyForAvg = 0, totalOwing = 0, totalPaidInMonth = 0
+        let totalSpent = 0, totalQty = 0, totalOwing = 0, totalPaidInMonth = 0
         // `fromDate` / `toDate` xác định cửa sổ tháng đang xem — payments có paid_at
         // trong cửa sổ này được tính vào "Đã trả" của tháng. Một payment có thể trả
         // cho invoice tháng khác, nên paid không = invoice.amount khớp 1-1.
@@ -103,7 +103,6 @@ export default function IngredientDetailPage() {
             totalSpent += e.amount || 0
             const qty = e.metadata?.qty || 0
             totalQty += qty
-            if (!e.metadata?.adjustment) qtyForAvg += qty
             const paid = (e.payments || []).reduce((s, p) => s + (p.amount || 0), 0)
             totalOwing += Math.max(0, (e.amount || 0) - paid)
             for (const p of e.payments || []) {
@@ -111,8 +110,7 @@ export default function IngredientDetailPage() {
                 if (t >= monthStartMs && t <= monthEndMs) totalPaidInMonth += p.amount || 0
             }
         })
-        const avgPrice = qtyForAvg > 0 ? Math.round(totalSpent / qtyForAvg) : 0
-        return { totalSpent, totalQty, avgPrice, totalOwing, totalPaidInMonth, count: history.length }
+        return { totalSpent, totalQty, totalOwing, totalPaidInMonth, count: history.length }
     }, [history, fromDate, toDate])
 
     async function reloadStock() {

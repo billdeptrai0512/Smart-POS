@@ -40,6 +40,8 @@ export default function IngredientHistoryTab({
                             key={entry.id}
                             entry={entry}
                             unit={unit}
+                            packSize={packSize}
+                            packUnit={packUnit}
                             onOpenPayment={onOpenPayment}
                             onCancelRestock={onCancelRestock}
                         />
@@ -74,16 +76,14 @@ function MonthNav({ monthLabel, monthOffset, onMonthChange }) {
 
 // ── Summary strip ───────────────────────────────────────────────────────────
 function SummaryStrip({ summary, unit, packSize, packUnit, hasOwing }) {
-    // Grid 2×2 khi có nợ (gọn trên mobile), 1×3 khi không nợ.
-    // "Tiền nhập" = nghĩa vụ phát sinh trong tháng (theo created_at).
+    // Luôn 2 cột: Tổng tiền nhập | Số lượng nhập. Khi có nợ thêm hàng 2: Đã trả | Còn nợ.
+    // "Tổng tiền nhập" = nghĩa vụ phát sinh trong tháng (theo created_at).
     // "Đã trả" = cash-out NVL trong tháng (theo paid_at, có thể trả cho invoice tháng khác).
     return (
-        <div className={`bg-surface rounded-[16px] border border-border/60 p-4 grid gap-3 ${hasOwing ? 'grid-cols-2' : 'grid-cols-3'}`}>
-            <Stat label="Tiền nhập" value={formatVND(summary.totalSpent)} />
-            <Stat label="Lượng nhập" value={formatPackedQty(summary.totalQty, packSize, packUnit, unit, { compact: true })} />
-            {!hasOwing ? (
-                <Stat label="TB/đơn vị" value={formatVND(summary.avgPrice)} tone="primary" />
-            ) : (
+        <div className="bg-surface rounded-[16px] border border-border/60 p-4 grid gap-3 grid-cols-2">
+            <Stat label="Tổng tiền nhập" value={formatVND(summary.totalSpent)} />
+            <Stat label="Số lượng nhập" value={formatPackedQty(summary.totalQty, packSize, packUnit, unit, { compact: true })} />
+            {hasOwing && (
                 <>
                     <Stat label="Đã trả" value={formatVND(summary.totalPaidInMonth)} tone="success" />
                     <Stat label="Còn nợ" value={formatVND(summary.totalOwing)} tone="warning" />
@@ -120,7 +120,7 @@ function Stat({ label, value, tone }) {
 //
 // Layout: ĐÃ HỦY badge (if cancelled) · type tag + Hủy (corner) · hero qty + money ·
 // Tồn X→Y · context pills (restock only) · staff + datetime above a hairline divider.
-function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock }) {
+function HistoryCard({ entry, unit, packSize, packUnit, onOpenPayment, onCancelRestock }) {
     const d = new Date(entry.created_at)
     // Hardcode dd/mm — Chromium's vi-VN renders "27 - 05" with literal spaces.
     const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -136,6 +136,14 @@ function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock }) {
     const qty = cancelled ? (Number(entry.metadata?.cancelled_qty) || 0) : (entry.metadata?.qty || 0)
     const amount = cancelled ? (Number(entry.metadata?.cancelled_amount) || 0) : (entry.amount || 0)
     const unitPrice = qty > 0 && isRestock ? Math.round(amount / qty) : null
+
+    // Hiệu chỉnh tồn ≥ 1 quy cách → ghi rõ quy đổi: "-2 hộp = -2568 ml". Dưới 1 quy cách
+    // (hoặc không có quy cách) → giữ base unit. Phiếu nhập giữ hiển thị base như cũ.
+    const ps = Number(packSize) || 0
+    const showPackAdjust = isAdjust && ps > 0 && !!packUnit && Math.abs(qty) >= ps
+    const heroQty = showPackAdjust
+        ? `${qty > 0 ? '+' : ''}${formatPackedQty(qty, packSize, packUnit, unit, { compact: true })} = ${qty > 0 ? '+' : ''}${qty} ${unit}`
+        : `${qty > 0 ? '+' : ''}${qty} ${unit}`
 
     const beforeStock = entry.metadata?.before_stock
     const afterStock = entry.metadata?.after_stock
@@ -191,7 +199,7 @@ function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock }) {
             {/* Hero — qty delta (left) + money (right; restock only). */}
             <div className="flex justify-between items-baseline -mt-1">
                 <span className={`text-[18px] font-black tabular-nums ${qtyCls}`}>
-                    {qty > 0 ? '+' : ''}{qty} {unit}
+                    {heroQty}
                 </span>
                 {isRestock && (
                     <span className={`text-[14px] font-black tabular-nums ${moneyCls}`}>
