@@ -730,9 +730,10 @@ export default function DailyReportPage() {
     // Gate theo từng view: view hiện tại = 1 module. Nếu module đó chưa mua →
     // early-return NGUYÊN trang đăng ký gói (chrome riêng, back về /pos) thay vì
     // bọc panel trong header/footer báo cáo. Cùng UI với route /subscription.
+    // Gộp: view Lợi nhuận (profit) nay thuộc cùng module 'cashflow' với Dòng tiền.
     const viewModule = view === VIEW_CASHFLOW ? 'cashflow'
         : view === VIEW_INVENTORY ? 'inventory'
-        : view === VIEW_PROFIT ? 'finance'
+        : view === VIEW_PROFIT ? 'cashflow'
         : null
     if (!entitlementLoading && viewModule && !hasModule(activeModules, viewModule)) {
         return (

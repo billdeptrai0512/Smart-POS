@@ -6,16 +6,15 @@ import { useAuth } from '../contexts/AuthContext'
 // ─── Kill switch (build-time constant) ───────────────────────────────────────
 const MONETIZATION_ENABLED = import.meta.env.VITE_MONETIZATION_ENABLED === 'true'
 
-// ─── 3 module độc lập (xem docs/MONETIZATION.md §1) ──────────────────────────
-//   cashflow  → view Dòng tiền  (CashFlowCard + SalesCard)
-//   inventory → view Tồn kho    (nhập/tồn + hao hụt/Loss Audit + gợi ý đi chợ)
-//   finance   → view Báo cáo    (FinanceCards / P&L)
-export const MODULES = ['cashflow', 'inventory', 'finance']
+// ─── 2 module độc lập (xem docs/MONETIZATION.md §1) ──────────────────────────
+//   cashflow  → "Dòng tiền": mở khoá CẢ view Dòng tiền LẪN view Lợi nhuận (P&L)
+//   inventory → "Tồn kho": nhập/tồn + hao hụt/Loss Audit + gợi ý đi chợ
+export const MODULES = ['cashflow', 'inventory']
 
 /**
  * Kiểm tra address đang chọn có sở hữu 1 module cụ thể không.
- * @param {string[]} activeModules - vd: ['cashflow', 'finance']
- * @param {string}   module        - 'cashflow' | 'inventory' | 'finance'
+ * @param {string[]} activeModules - vd: ['cashflow', 'inventory']
+ * @param {string}   module        - 'cashflow' | 'inventory'
  * @returns {boolean}
  */
 export function hasModule(activeModules, module) {
