@@ -132,15 +132,18 @@ function LineItem({ label, amount }) {
 }
 
 function ProfitBanner({ label, amount, onClick, children }) {
+    // Lợi nhuận âm → tô đỏ (danger) như NetProfitCard, không cứng màu xanh.
+    const isPositive = amount >= 0
     return (
         <div
             onClick={onClick}
-            className="col-span-2 bg-success/[0.03] border-success/30 hover:bg-success/[0.06] active:scale-[0.98] transition-all rounded-[24px] p-5 shadow-sm border flex flex-col justify-center relative overflow-hidden group cursor-pointer"
+            className={`col-span-2 active:scale-[0.98] transition-all rounded-[24px] p-5 shadow-sm border flex flex-col justify-center relative overflow-hidden group cursor-pointer
+                ${isPositive ? 'bg-success/[0.03] border-success/30 hover:bg-success/[0.06]' : 'bg-danger/[0.03] border-danger/30 hover:bg-danger/[0.06]'}`}
         >
-            <div className="absolute top-0 left-0 w-1.5 h-full bg-success/60" />
+            <div className={`absolute top-0 left-0 w-1.5 h-full ${isPositive ? 'bg-success/60' : 'bg-danger/60'}`} />
             <div className="flex justify-between items-center pl-1">
                 <span className="text-[13px] font-black text-text uppercase tracking-wide">{label}</span>
-                <span className="text-[16px] font-black text-success tabular-nums">{formatVND(amount)}</span>
+                <span className={`text-[16px] font-black tabular-nums ${isPositive ? 'text-success' : 'text-danger'}`}>{formatVND(amount)}</span>
             </div>
             {children}
         </div>
