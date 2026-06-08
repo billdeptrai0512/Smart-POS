@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { usePOS } from '../contexts/POSContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
@@ -160,12 +160,33 @@ export default function DailyReportPage() {
             return next
         })
     }, [prepSkippedKey])
+    // Soạn tick/skip tự lưu (không cần bấm "Lưu báo cáo" riêng). Debounce gom nhiều
+    // tick liên tiếp thành 1 lần lưu — tránh đụng guard isSaving (lưu chồng bị bỏ) và
+    // tránh remount storm. handleSaveInvRef trỏ bản handleSaveInventory mới nhất nên
+    // timer luôn chạy đúng state hiện tại. autoSavePending ẩn FAB trong lúc chờ để user
+    // không bấm "Lưu" thủ công (kèm confirm) đè lên auto-lưu.
+    const handleSaveInvRef = useRef(null)
+    const autoSaveTimerRef = useRef(null)
+    const [autoSavePending, setAutoSavePending] = useState(false)
+    const triggerAutoSave = useCallback(() => {
+        setAutoSavePending(true)
+        clearTimeout(autoSaveTimerRef.current)
+        autoSaveTimerRef.current = setTimeout(async () => {
+            try { await handleSaveInvRef.current?.({ silent: true }) }
+            finally { setAutoSavePending(false) }
+        }, 450)
+    }, [])
+    useEffect(() => () => clearTimeout(autoSaveTimerRef.current), [])
     const toggleSkip = useCallback((ingredient) => {
         const willSkip = !prepSkipped[ingredient]
         setSkip(ingredient, willSkip)
-        if (willSkip) inventory.onRestockChange(ingredient, '') // bỏ qua → xóa restock đã nhập (loại trừ nhau)
+        // Bỏ qua khi đang có restock đã nhập → xóa (loại trừ nhau) rồi tự lưu.
+        if (willSkip && isPrepFilled(inventory.restockInputs[ingredient])) {
+            inventory.onRestockChange(ingredient, '')
+            triggerAutoSave()
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [prepSkipped, setSkip, inventory.onRestockChange])
+    }, [prepSkipped, setSkip, inventory.restockInputs, inventory.onRestockChange, triggerAutoSave])
 
     // Expense categories — feed dynamic rows into FinanceCards. Refetched per
     // address; new tags added in /history are picked up on next mount or after
@@ -587,12 +608,15 @@ export default function DailyReportPage() {
     const togglePrepRestock = useCallback((ingredient) => {
         const filled = isPrepFilled(inventory.restockInputs[ingredient])
         const fill = prepFillMap[ingredient]
-        // tick: đổ lượng đã kẹp theo kho; kho = 0 (fill ≤ 0) → giữ nguyên "chưa soạn".
-        inventory.onRestockChange(ingredient, filled ? '' : (fill > 0 ? String(fill) : ''))
+        // tick: đổ lượng đã kẹp theo kho; kho = 0 (fill ≤ 0) → không soạn được, bỏ qua.
+        const next = filled ? '' : (fill > 0 ? String(fill) : '')
+        if (!filled && next === '') return
+        inventory.onRestockChange(ingredient, next)
         // nhập thêm ⇄ bỏ qua loại trừ nhau: vừa nhập thì hủy "bỏ qua".
         if (!filled && fill > 0 && prepSkipped[ingredient]) setSkip(ingredient, false)
+        triggerAutoSave() // soạn tick/untick tự lưu, không cần bấm "Lưu báo cáo"
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [inventory.restockInputs, inventory.onRestockChange, prepFillMap, prepSkipped, setSkip])
+    }, [inventory.restockInputs, inventory.onRestockChange, prepFillMap, prepSkipped, setSkip, triggerAutoSave])
 
     // "Chuẩn bị tồn kho" — cho mai: đủ hàng để mai SOẠN RA BÁN không? Liên kết 3 card:
     // mai bán từ TỔNG tồn = kho tổng + tồn quầy cuối ca (số ② Hao hụt vừa đếm). Thiếu thì mua.
@@ -660,7 +684,10 @@ export default function DailyReportPage() {
     const activeStage = !allPrepDone ? 'prep' : !allCounted ? 'audit' : 'warehouse'
     const [expandedCard, setExpandedCard] = useState(activeStage)
     const [seenStage, setSeenStage] = useState(activeStage)
-    if (activeStage !== seenStage) {
+    // Chỉ auto-mở card của bước hiện tại khi KHÔNG có thay đổi chưa lưu. Nếu đang gõ
+    // (vd nhập Cuối kỳ làm allCounted lật), chuyển bước sẽ đóng card đang gõ → mất
+    // focus/state; hoãn lại tới khi lưu xong (isDirty = false).
+    if (activeStage !== seenStage && !inventory.isDirty) {
         setSeenStage(activeStage)
         setExpandedCard(activeStage)
     }
@@ -740,15 +767,16 @@ export default function DailyReportPage() {
         proceed()
     }
 
-    const handleSaveInventory = async () => {
+    const handleSaveInventory = async ({ silent = false } = {}) => {
         if (!selectedAddress?.id) return
+        if (silent && !inventory.isDirty) return // auto-lưu: không có gì đổi thì thôi
         if (inventory.restockOverflowIngredients.length > 0) {
-            window.alert(`Không thể lưu: ${inventory.restockOverflowIngredients.length} nguyên liệu có "Lấy ra" vượt quá kho tổng. Vào /ingredients → + Nhập kho trước, hoặc giảm số "Lấy ra".`)
+            // Auto-lưu không bật alert (để FAB hiện cho user tự lưu & thấy cảnh báo).
+            if (!silent) window.alert(`Không thể lưu: ${inventory.restockOverflowIngredients.length} nguyên liệu có "Lấy ra" vượt quá kho tổng. Vào /ingredients → + Nhập kho trước, hoặc giảm số "Lấy ra".`)
             return
         }
-        // Chỉ confirm khi lưu có CHUYỂN KHO (restock đổi) — vì lúc đó trừ kho tổng thật
-        // server-side. Lưu chỉ-đếm (Đầu/Cuối kỳ) không động tồn → bỏ confirm cho mượt.
-        if (inventory.restockDirty
+        // Chỉ confirm khi lưu THỦ CÔNG có CHUYỂN KHO (restock đổi) — auto-lưu soạn bỏ qua.
+        if (!silent && inventory.restockDirty
             && !window.confirm(inventory.existingClosing?.id ? 'Cập nhật báo cáo (có chuyển kho ra quầy)?' : 'Lưu báo cáo (có chuyển kho ra quầy)?')) return
 
         const inventoryReport = inventory.buildInventoryReport()
@@ -767,19 +795,30 @@ export default function DailyReportPage() {
         }
 
         try {
-            await saveShiftClosing(payload, {
+            const saved = await saveShiftClosing(payload, {
                 existingId: inventory.existingClosing?.id,
             })
+            // save() trả null khi bị bỏ qua do đang lưu việc khác (cờ isSaving dùng chung
+            // với "Lưu thực thu"). Giữ nguyên dirty để thử lại, không báo thành công giả.
+            if (!saved) return
             showToast('Đã lưu báo cáo tồn kho', 'success')
             inventory.resetDirty()
-            // Refresh shift_closing so future edits land as updates instead of inserts.
-            const fresh = await fetchDailyReportContext(selectedAddress.id)
+            // Refresh shift_closing (để lần sửa sau là update, không insert) VÀ tồn kho.
+            // Kho tổng được suy ra từ restock, nên bỏ tick "Soạn" trả kho lại server-side;
+            // không reload thì warehouseStocks kẹt giá trị cũ (vd Kho 0) khiến tick lại bị
+            // prepFillMap clamp về 0 → không soạn lại được.
+            const [fresh] = await Promise.all([
+                fetchDailyReportContext(selectedAddress.id),
+                inventory.reloadStocks(),
+            ])
             setShiftClosing(fresh?.shift_closing || null)
             if (fresh?.shift_closing) inventory.setExistingClosing(fresh.shift_closing)
         } catch (err) {
             showError(err, 'Lưu báo cáo tồn kho')
         }
     }
+    // Ref tới bản handleSaveInventory mới nhất để timer auto-lưu gọi đúng state hiện tại.
+    handleSaveInvRef.current = handleSaveInventory
 
     const handleSaveCashflow = async () => {
         if (!selectedAddress?.id) return
@@ -800,9 +839,12 @@ export default function DailyReportPage() {
             payload.note = ''
         }
         try {
-            await saveShiftClosing(payload, {
+            const saved = await saveShiftClosing(payload, {
                 existingId: shiftClosing?.id,
             })
+            // save() trả null khi bị bỏ qua do đang lưu việc khác → không báo thành công giả,
+            // giữ cashDirty để user bấm lại.
+            if (!saved) return
             showToast('Đã lưu thực thu', 'success')
             // Refetch shift_closing so display + pre-fill sync. invalidateDailyContext
             // inside the hook already cleared the cache, so the network is hit fresh.
@@ -1071,7 +1113,7 @@ export default function DailyReportPage() {
                 Stacked when both appear (view = all + both dirty). */}
             {isTodayScope && (
                 (((view === VIEW_ALL || view === VIEW_CASHFLOW) && cashDirty) ||
-                    ((view === VIEW_ALL || view === VIEW_INVENTORY) && inventory.isDirty)) && (
+                    ((view === VIEW_ALL || view === VIEW_INVENTORY) && inventory.isDirty && !autoSavePending)) && (
                     <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
                         <div className="flex flex-col items-end gap-2 px-4 mb-[72px] pointer-events-auto">
                             {(view === VIEW_ALL || view === VIEW_CASHFLOW) && cashDirty && (
@@ -1083,9 +1125,9 @@ export default function DailyReportPage() {
                                     {isSavingShift ? 'Đang lưu...' : 'Lưu thực thu'}
                                 </button>
                             )}
-                            {(view === VIEW_ALL || view === VIEW_INVENTORY) && inventory.isDirty && (
+                            {(view === VIEW_ALL || view === VIEW_INVENTORY) && inventory.isDirty && !autoSavePending && (
                                 <button
-                                    onClick={handleSaveInventory}
+                                    onClick={() => handleSaveInventory()}
                                     disabled={isSavingShift}
                                     className="bg-primary text-black rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider hover:bg-primary/90 active:scale-95 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
