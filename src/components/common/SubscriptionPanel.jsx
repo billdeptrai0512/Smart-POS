@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Check, QrCode, Loader2, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
@@ -32,6 +32,25 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
         preselectModule ? [preselectModule] : [...MODULE_KEYS]
     )
     const [isMocking, setIsMocking] = useState(false)
+    const [isResetting, setIsResetting] = useState(false)
+
+    // Trạng thái gói hiện tại của TỪNG chi nhánh → phân biệt đã mở / chưa ngay trong picker.
+    // Dùng cùng RPC với badge (get_address_entitlement) để khớp CURRENT_DATE của DB.
+    const [modulesByAddr, setModulesByAddr] = useState({})
+    useEffect(() => {
+        let cancelled = false
+        if (!addresses.length) { setModulesByAddr({}); return }
+        Promise.all(addresses.map(a =>
+            supabase
+                .rpc('get_address_entitlement', { p_address_id: a.id })
+                .then(({ data }) => {
+                    const rows = Array.isArray(data) ? data : (data ? [data] : [])
+                    return [a.id, rows.map(r => r.tier)]
+                })
+                .catch(() => [a.id, []])
+        )).then(entries => { if (!cancelled) setModulesByAddr(Object.fromEntries(entries)) })
+        return () => { cancelled = true }
+    }, [addresses])
     const [confirmed, setConfirmed] = useState(false)
     const [branchQuery, setBranchQuery] = useState('')
 
@@ -77,31 +96,41 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
         if (!canSubmit) return
         setIsMocking(true)
         try {
-            const today = new Date()
-            const validTo = new Date(today)
-            validTo.setMonth(validTo.getMonth() + PERIOD_MONTHS[period])
-            const iso = (d) => d.toISOString().split('T')[0]
+            // Cấp/gia hạn qua RPC admin_set_subscription (SECURITY DEFINER, guard is_admin_auth).
+            // RPC tự áp quy tắc gia hạn nối tiếp (§4) cho từng chi nhánh × module.
             const amountPer = isBundle ? Math.round(perAddress / moduleCount) : PRICE.module[period]
-
-            const rows = selectedAddressIds.flatMap(addressId =>
-                selectedModules.map(tier => ({
-                    address_id: addressId,
-                    tier,
-                    valid_from: iso(today),
-                    valid_to: iso(validTo),
-                    months: PERIOD_MONTHS[period],
-                    amount_paid: amountPer,
-                    note: 'admin_mock',
-                }))
-            )
-
-            const { error } = await supabase.from('address_subscriptions').insert(rows)
+            const { error } = await supabase.rpc('admin_set_subscription', {
+                p_address_ids: selectedAddressIds,
+                p_modules: selectedModules,
+                p_months: PERIOD_MONTHS[period],
+                p_amount_paid: amountPer,
+                p_note: 'admin_override',
+            })
             if (error) throw error
             if (onDone) onDone()
             else window.location.reload()
         } catch (err) {
             alert('Lỗi: ' + err.message)
             setIsMocking(false)
+        }
+    }
+
+    // Reset (dev/test): xoá sub của các chi nhánh đã chọn → về lại trạng thái khoá.
+    const handleReset = async () => {
+        if (!selectedAddressIds.length || isResetting) return
+        if (!window.confirm('Xoá toàn bộ gói của chi nhánh đã chọn? (chỉ dùng để dev/test)')) return
+        setIsResetting(true)
+        try {
+            const { error } = await supabase.rpc('admin_reset_subscription', {
+                p_address_ids: selectedAddressIds,
+                p_modules: null,   // null = xoá hết module
+            })
+            if (error) throw error
+            if (onDone) onDone()
+            else window.location.reload()
+        } catch (err) {
+            alert('Lỗi: ' + err.message)
+            setIsResetting(false)
         }
     }
 
@@ -170,6 +199,12 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
                 <div className={`flex flex-col gap-1.5 ${manyBranches ? 'max-h-[240px] overflow-y-auto pr-0.5' : ''}`}>
                     {filteredAddresses.map(addr => {
                         const active = selectedAddressIds.includes(addr.id)
+                        const mods = modulesByAddr[addr.id] || []
+                        const statusChip = mods.length >= MODULE_KEYS.length
+                            ? <span className="shrink-0 text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-success-soft/60 text-success">Trọn bộ</span>
+                            : mods.length > 0
+                                ? <span className="shrink-0 text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-warning/15 text-warning">{mods.length}/{MODULE_KEYS.length} gói</span>
+                                : <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-surface text-text-dim">Chưa mở</span>
                         return (
                             <button
                                 key={addr.id}
@@ -179,8 +214,11 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
                                         ? 'border-primary bg-primary/[0.07] shadow-[0_0_14px_rgba(245,158,11,0.12)]'
                                         : 'border-border/60 bg-surface-light hover:border-border-light'}`}
                             >
-                                <span className={`block min-w-0 text-[13px] font-bold truncate transition-colors ${active ? 'text-text' : 'text-text-secondary'}`}>
-                                    {addr.name}
+                                <span className="flex items-center justify-between gap-2">
+                                    <span className={`min-w-0 text-[13px] font-bold truncate transition-colors ${active ? 'text-text' : 'text-text-secondary'}`}>
+                                        {addr.name}
+                                    </span>
+                                    {statusChip}
                                 </span>
                             </button>
                         )
@@ -237,15 +275,22 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
                 </div>
             </section>
 
-            {/* ── Footer dính đáy: chỉ nút Mock (Admin). User thường xác nhận qua webhook. ── */}
+            {/* ── Footer dính đáy: nút Mock + Reset (Admin). User thường xác nhận qua webhook. ── */}
             {isAdmin && (
-                <div className="sticky bottom-0 -mx-4 px-4 pt-3 bg-bg/85 backdrop-blur-md border-t border-border/50 pb-[max(env(safe-area-inset-bottom),12px)]">
+                <div className="sticky bottom-0 -mx-4 px-4 pt-3 bg-bg/85 backdrop-blur-md border-t border-border/50 pb-[max(env(safe-area-inset-bottom),12px)] flex flex-col gap-2">
                     <button
                         onClick={handleMockPayment}
-                        disabled={isMocking || !canSubmit}
+                        disabled={isMocking || isResetting || !canSubmit}
                         className="w-full py-2.5 rounded-[12px] bg-red-500/10 text-red-500 text-[12px] font-bold hover:bg-red-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                         {isMocking ? <Loader2 size={14} className="animate-spin" /> : 'Mock mở khoá (Admin)'}
+                    </button>
+                    <button
+                        onClick={handleReset}
+                        disabled={isMocking || isResetting || !selectedAddressIds.length}
+                        className="w-full py-2 rounded-[12px] bg-surface-light text-text-secondary text-[11px] font-bold hover:bg-border/40 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                        {isResetting ? <Loader2 size={14} className="animate-spin" /> : 'Reset gói (Admin · dev)'}
                     </button>
                 </div>
             )}

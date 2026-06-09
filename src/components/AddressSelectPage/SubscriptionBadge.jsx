@@ -92,11 +92,14 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
         )
     }
 
-    // ── Active, còn > 3 ngày → hiển thị nhỏ, mờ ────────────────────────────
+    // ── Active, còn > 3 ngày → hiển thị nhỏ, mờ (vẫn bấm vào /subscription để quản lý) ──
     return (
         <span
             id={`sub-badge-active-${addressId}`}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-light"
+            role="button"
+            tabIndex={0}
+            onClick={handleClick}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-light hover:bg-border/40 active:scale-95 transition-all cursor-pointer"
         >
             <span className="text-[10px] font-medium text-text-dim">{tierLabel} · còn {minDaysLeft} ngày</span>
         </span>

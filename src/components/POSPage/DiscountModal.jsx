@@ -75,7 +75,6 @@ export default function DiscountModal({ open, onClose, subtotal, discount, onApp
                             <input
                                 type="text"
                                 inputMode="numeric"
-                                autoFocus
                                 value={input}
                                 onChange={e => handleInput(e.target.value)}
                                 placeholder="0"

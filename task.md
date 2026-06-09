@@ -1,25 +1,21 @@
 # Task / Reminder — Monetization
 
-> Ưu tiên hiện tại: **thiết kế UI trước**. Chưa apply migration, chưa build payment backend.
+> Ưu tiên hiện tại: **thiết kế UI trước**. Chưa build payment backend.
 > Nguồn chi tiết: `docs/MONETIZATION.md`.
 
-## ⚠️ Cần chạy lên Supabase (CHƯA apply) — chạy theo thứ tự
-Cả 2 đều idempotent, an toàn (prod + dev chung 1 DB). Dán vào Supabase SQL editor:
+## ✅ Migration — đã apply hết (2026-06-08)
+Toàn bộ migration monetization đã chạy lên Supabase. Verify đạt: `address_subscriptions_tier_check`
+= `CHECK (tier IN ('cashflow','inventory'))`; bảng sub/intent đang rỗng (chưa bán gói nào).
 
-1. `supabase/migrations/20260603_realtime_address_subscriptions.sql`
-   — bật Realtime cho `address_subscriptions` (để payment listener nhận event).
-2. `supabase/migrations/20260606_monetization_two_modules.sql`
-   — gộp 3→2 module: `finance → cashflow`, CHECK còn `('cashflow','inventory')`, trigger trial cấp 2 module.
+Đã apply: `20260511_monetization_phase1.sql`, `20260512_monetization_trial_trigger.sql`,
+`20260520_security_hardening.sql`, `20260603_monetization_three_modules.sql`,
+`20260603_realtime_address_subscriptions.sql`, `20260606_monetization_two_modules.sql`.
 
-✅ Đã apply trước đó: `20260511_monetization_phase1.sql`, `20260512_monetization_trial_trigger.sql`,
-   `20260520_security_hardening.sql`, `20260603_monetization_three_modules.sql`.
-
-**Verify sau khi chạy** (SQL editor):
-```sql
-SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
-WHERE conrelid = 'address_subscriptions'::regclass AND contype='c';   -- CHECK phải là ('cashflow','inventory')
-SELECT tier, count(*) FROM address_subscriptions GROUP BY tier;        -- không còn 'finance'
-```
+## ⚠️ Cần chạy lên Supabase (CHƯA apply)
+1. `supabase/migrations/20260608_admin_set_subscription.sql`
+   — RPC `admin_set_subscription` (mở khoá thủ công cho admin). An toàn: chỉ tạo function.
+2. Set role admin cho tài khoản của bạn (chạy khi đang đăng nhập):
+   `UPDATE users SET role = 'admin' WHERE auth_id = auth.uid();`
 
 ## Trạng thái flag
 - Local `.env`: `VITE_MONETIZATION_ENABLED=true` (để build/xem UI gate).

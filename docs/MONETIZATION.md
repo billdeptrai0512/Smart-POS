@@ -536,7 +536,11 @@ Hoàn toàn khả thi để bắt đầu làm Feature Flag, Schema, Trial grant 
   - [x] Migration `20260603_realtime_address_subscriptions.sql` — bật Realtime publication + REPLICA IDENTITY FULL cho bảng.
   - [ ] Sinh **QR động** (VietQR) encode `reference` + amount sau khi tạo `payment_intent`.
   - [ ] (Tuỳ chọn) fallback polling nếu Realtime rớt.
-- [ ] **Bước 11 (Admin Control):** Viết RPC `admin_set_subscription` và tạo trang UI đơn giản cho Admin can thiệp gói cước thủ công.
+- [~] **Bước 11 (Admin Control):** RPC `admin_set_subscription` + mở khoá thủ công.
+  - [x] RPC `admin_set_subscription(p_address_ids[], p_modules[], p_months, p_amount_paid, p_note)` — SECURITY DEFINER, guard `is_admin_auth`, quy tắc gia hạn nối tiếp (§4), all-or-nothing. Migration `20260608_admin_set_subscription.sql`.
+  - [x] RPC `admin_reset_subscription(p_address_ids[], p_modules[]=NULL)` — xoá sub để dev/test lại flow gate (cùng migration). `p_modules=NULL` → xoá hết module.
+  - [x] `SubscriptionPanel` (chỉ admin): nút "Mock mở khoá" gọi `admin_set_subscription` (thay client insert vào bảng chỉ có RLS SELECT) + nút "Reset gói" gọi `admin_reset_subscription`.
+  - [ ] Trang dashboard đối soát (list `payment_intents` pending vs sao kê) — hoãn tới Phase 3 vì chưa có webhook thì bảng intent luôn rỗng.
 
 ### Phase 4: Optimization
 *Mục tiêu: Tối ưu chi phí khi có lượng người dùng lớn.*

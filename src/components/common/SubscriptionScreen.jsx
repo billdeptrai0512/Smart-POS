@@ -30,20 +30,18 @@ export default function SubscriptionScreen({ backTo = '/addresses', preselectMod
                     <ArrowLeft size={20} strokeWidth={2.5} />
                 </button>
 
-                <div className="flex-1 min-w-0 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2.5 flex items-center justify-center text-center">
-                    <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Đăng ký gói</span>
-                </div>
-
-                {/* Nút phải = toggle chu kỳ (gộp Tháng/Năm vào vị trí nút "next") */}
+                {/* Pill gộp: tiêu đề "Đăng ký gói" + toggle chu kỳ. Click → đổi Tháng/Năm. */}
                 <button
                     onClick={() => setPeriod(period === 'month' ? 'year' : 'month')}
-                    className="shrink-0 h-10 pl-3 pr-2.5 flex items-center gap-1.5 rounded-[14px] bg-surface-light border border-border/60 hover:bg-border/40 active:scale-95 transition-all shadow-sm focus:outline-none"
                     title="Đổi chu kỳ tháng / năm"
+                    className="flex-1 min-w-0 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-3 py-2.5 flex items-center justify-center gap-2 hover:bg-primary/10 active:scale-[0.99] transition-all focus:outline-none"
                 >
-                    <span className="text-[12px] font-black text-primary uppercase tracking-wide">
-                        {period === 'month' ? 'Tháng' : 'Năm'}
+                    <span className="shrink-0 flex items-center gap-1.5">
+                        <span className="text-[12px] font-black text-primary uppercase tracking-wide">
+                            Đăng ký gói {period === 'month' ? 'Tháng' : 'Năm'}
+                        </span>
+                        <ArrowRightLeft size={13} className="text-text-secondary" strokeWidth={2.5} />
                     </span>
-                    <ArrowRightLeft size={13} className="text-text-secondary" strokeWidth={2.5} />
                 </button>
             </header>
 
