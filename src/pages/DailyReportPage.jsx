@@ -803,6 +803,10 @@ export default function DailyReportPage() {
             if (!saved) return
             showToast('Đã lưu báo cáo tồn kho', 'success')
             inventory.resetDirty()
+            // Chốt id từ row server trả về NGAY → lần lưu kế tiếp UPDATE đúng phiếu này,
+            // không INSERT trùng (refetch dưới có thể trễ/null do replication lag → tạo
+            // 2 phiếu cùng ngày, restock bị cộng đôi khi tính kho tổng).
+            if (saved.id) inventory.setExistingClosing(saved)
             // Refresh shift_closing (để lần sửa sau là update, không insert) VÀ tồn kho.
             // Kho tổng được suy ra từ restock, nên bỏ tick "Soạn" trả kho lại server-side;
             // không reload thì warehouseStocks kẹt giá trị cũ (vd Kho 0) khiến tick lại bị
@@ -811,7 +815,7 @@ export default function DailyReportPage() {
                 fetchDailyReportContext(selectedAddress.id),
                 inventory.reloadStocks(),
             ])
-            setShiftClosing(fresh?.shift_closing || null)
+            setShiftClosing(fresh?.shift_closing || saved)
             if (fresh?.shift_closing) inventory.setExistingClosing(fresh.shift_closing)
         } catch (err) {
             showError(err, 'Lưu báo cáo tồn kho')
@@ -848,8 +852,10 @@ export default function DailyReportPage() {
             showToast('Đã lưu thực thu', 'success')
             // Refetch shift_closing so display + pre-fill sync. invalidateDailyContext
             // inside the hook already cleared the cache, so the network is hit fresh.
+            // Fallback về `saved` (row vừa ghi, có id) để giữ id phòng refetch trễ/null →
+            // tránh INSERT phiếu trùng ở lần lưu kế.
             const fresh = await fetchDailyReportContext(selectedAddress.id)
-            setShiftClosing(fresh?.shift_closing || null)
+            setShiftClosing(fresh?.shift_closing || saved)
         } catch (err) {
             showError(err, 'Lưu thực thu')
         }

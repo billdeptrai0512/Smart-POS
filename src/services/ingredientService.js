@@ -519,6 +519,56 @@ function roundStock(x) {
     return Math.round(x * 10) / 10
 }
 
+// Đặt tồn QUẦY (counter) = số đếm tuyệt đối, bằng cách ghi `remaining` của NVL vào
+// phiếu chốt ca MỚI NHẤT — cùng nguồn dữ liệu mà card Hao hụt đọc/ghi, nên số ở
+// /ingredients và số chốt ca luôn khớp nhau. Trả null nếu chưa có phiếu chốt nào.
+export async function setCounterStock(addressId, ingredient, newRemaining) {
+    if (!addressId || !ingredient) return null
+    if (!Number.isFinite(newRemaining) || newRemaining < 0) return null
+    const remaining = roundStock(newRemaining)
+    const applyToReport = (report) => {
+        const arr = Array.isArray(report) ? report : []
+        let found = false
+        const next = arr.map(item => {
+            if (item?.ingredient === ingredient) { found = true; return { ...item, remaining } }
+            return item
+        })
+        if (!found) next.push({ ingredient, remaining })
+        return next
+    }
+
+    if (localRepo.isGuest()) {
+        const latest = localRepo.fetchAllLocalShiftClosings(addressId)
+            .filter(c => c.inventory_report != null)
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
+        if (!latest) return null
+        invalidateReportCache(addressId)
+        return localRepo.upsertLocalShiftClosing({ ...latest, inventory_report: applyToReport(latest.inventory_report) })
+    }
+    if (!supabase) throw new Error('No Supabase connection')
+
+    const { data: latest, error } = await supabase
+        .from('shift_closings')
+        .select('id, inventory_report')
+        .eq('address_id', addressId)
+        .not('inventory_report', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    if (error) throw error
+    if (!latest) return null
+
+    const { data: row, error: upErr } = await supabase
+        .from('shift_closings')
+        .update({ inventory_report: applyToReport(latest.inventory_report) })
+        .eq('id', latest.id)
+        .select()
+        .single()
+    if (upErr) throw upErr
+    invalidateReportCache(addressId)
+    return row
+}
+
 // Process a restock: updates COGS, ghi nhận invoice + (optional) payment.
 //
 // opts: {

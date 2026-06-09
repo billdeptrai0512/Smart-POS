@@ -12,11 +12,13 @@ import { INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 // Save callbacks are async-friendly: parent decides what to do on success/failure
 // (we just close the edit affordance optimistically before awaiting).
 export default function IngredientDetailsTab({
-    nameLabel, unit, cost, category, packSize, packUnit, minStock, currentStock,
+    nameLabel, unit, cost, category, packSize, packUnit, minStock,
+    warehouseStock, counterStock, currentStock,
     countInAudit = true,
     canEdit, saving,
     onSaveName,         // (newDisplayName: string) => Promise
-    onSaveStock,        // (newTotal: number)      => Promise
+    onSaveWarehouse,    // (newWarehouse: number)  => Promise  (Kho sau)
+    onSaveCounter,      // (newCounter: number)    => Promise  (Tồn quầy → ghi remaining ca mới nhất)
     onSaveUnit,         // (newUnit: string)       => Promise
     onSaveCost,         // (newCost: number)       => Promise
     onSaveMinStock,     // (newMin: number)        => Promise
@@ -26,8 +28,9 @@ export default function IngredientDetailsTab({
 }) {
     const hasPack = !!(packSize && packUnit)
     return (
-        <div className="flex flex-col gap-3">
-            <section className="bg-surface rounded-[18px] border border-border/60 p-4 flex flex-col divide-y divide-border/40">
+        <div className="flex flex-col gap-4">
+            {/* Panel 1 — Thông tin: thuộc tính NVL/bao bì (không phải số tồn). */}
+            <Panel title="Thông tin">
                 <CategoryRow value={category} canEdit={canEdit} saving={saving} onChange={onChangeCategory} />
                 <NameRow value={nameLabel} canEdit={canEdit} onSave={onSaveName} />
                 <UnitRow value={unit} canEdit={canEdit} onSave={onSaveUnit} />
@@ -50,17 +53,40 @@ export default function IngredientDetailsTab({
                         onSave={onSaveMinStock}
                     />
                 )}
-                <StockRow
-                    currentStock={currentStock}
-                    unit={unit}
-                    hasPack={hasPack}
-                    packSize={packSize}
-                    packUnit={packUnit}
-                    canEdit={canEdit}
-                    onSave={onSaveStock}
-                />
                 <CostRow cost={cost} unit={unit} canEdit={canEdit} onSave={onSaveCost} />
+            </Panel>
+
+            {/* Panel 2 — Kiểm kê: Tồn kho (warehouse) + Tồn quầy (counter) sửa độc lập,
+                nhập số tuyệt đối. Tổng cộng = chỉ đọc (= kho + quầy). */}
+            <Panel title="Kiểm kê">
+                <QtyRow
+                    label="Tồn kho" value={warehouseStock} unit={unit}
+                    hasPack={hasPack} packSize={packSize} packUnit={packUnit}
+                    canEdit={canEdit} editable onSave={onSaveWarehouse}
+                />
+                <QtyRow
+                    label="Tồn quầy" value={counterStock} unit={unit}
+                    hasPack={hasPack} packSize={packSize} packUnit={packUnit}
+                    canEdit={canEdit} editable onSave={onSaveCounter}
+                />
+                <QtyRow
+                    label="Tổng cộng" value={currentStock} unit={unit}
+                    hasPack={hasPack} packSize={packSize} packUnit={packUnit}
+                    canEdit={canEdit} editable={false} valueClass="text-primary"
+                />
                 <AuditRow value={countInAudit} canEdit={canEdit} saving={saving} onToggle={onToggleAudit} />
+            </Panel>
+        </div>
+    )
+}
+
+// ── Panel (titled section card) ─────────────────────────────────────────────
+function Panel({ title, children }) {
+    return (
+        <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-black uppercase tracking-widest text-text-secondary px-1">{title}</span>
+            <section className="bg-surface rounded-[18px] border border-border/60 p-4 flex flex-col divide-y divide-border/40">
+                {children}
             </section>
         </div>
     )
@@ -109,13 +135,15 @@ function NameRow({ value, canEdit, onSave }) {
     )
 }
 
-// ── Stock ───────────────────────────────────────────────────────────────────
-function StockRow({ currentStock, unit, hasPack, packSize, packUnit, canEdit, onSave }) {
+// ── Stock qty row (Kho sau / Tồn quầy / Tổng tồn) ───────────────────────────
+// editable=false → chỉ đọc (dùng cho "Tổng tồn"). editable + canEdit → tap để nhập
+// SỐ TUYỆT ĐỐI (đếm được bao nhiêu nhập bấy nhiêu); parent tự quy ra delta/ghi.
+function QtyRow({ label, value, unit, hasPack, packSize, packUnit, canEdit, editable = true, onSave, valueClass = 'text-text' }) {
     const [editing, setEditing] = useState(false)
     const [input, setInput] = useState('')
+    const tappable = editable && canEdit
     const start = () => {
-        const v = currentStock !== null ? Math.round(currentStock * 10) / 10 : 0
-        setInput(String(v))
+        setInput(String(value != null ? Math.round(value * 10) / 10 : 0))
         setEditing(true)
     }
     const commit = () => {
@@ -124,8 +152,8 @@ function StockRow({ currentStock, unit, hasPack, packSize, packUnit, canEdit, on
         if (Number.isFinite(num) && num >= 0) onSave?.(num)
     }
     return (
-        <Row label="Tồn kho">
-            {editing && canEdit ? (
+        <Row label={label}>
+            {editing && tappable ? (
                 <div className="flex items-center gap-1">
                     <input
                         autoFocus
@@ -145,15 +173,15 @@ function StockRow({ currentStock, unit, hasPack, packSize, packUnit, canEdit, on
             ) : (
                 <div className="flex flex-col items-end gap-0.5 leading-tight">
                     <button
-                        onClick={canEdit ? start : undefined}
-                        className={`text-[14px] font-black text-text tabular-nums ${canEdit ? 'cursor-pointer hover:text-primary' : 'cursor-default'}`}
+                        onClick={tappable ? start : undefined}
+                        className={`text-[14px] font-black tabular-nums ${valueClass} ${tappable ? 'cursor-pointer hover:text-primary' : 'cursor-default'}`}
                     >
-                        {currentStock !== null ? Math.round(currentStock * 10) / 10 : '—'}
+                        {value != null ? Math.round(value * 10) / 10 : '—'}
                         <span className="text-text-dim font-medium ml-1">{unit}</span>
                     </button>
-                    {hasPack && currentStock !== null && currentStock >= packSize && (
+                    {hasPack && value != null && value >= packSize && (
                         <span className="text-[11px] font-medium text-text-dim tabular-nums">
-                            = {formatPackedQty(currentStock, packSize, packUnit, unit, { compact: true })}
+                            = {formatPackedQty(value, packSize, packUnit, unit, { compact: true })}
                         </span>
                     )}
                 </div>

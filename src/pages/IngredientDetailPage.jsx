@@ -7,7 +7,7 @@ import { usePOS } from '../contexts/POSContext'
 import {
     fetchIngredientRestockHistory, fetchIngredientStocks,
     deleteIngredientCost, upsertIngredientCost, renameIngredient,
-    adjustIngredientStock, recordInvoicePayment, cancelRestock,
+    adjustIngredientStock, setCounterStock, recordInvoicePayment, cancelRestock,
 } from '../services/orderService'
 import {
     ingredientLabel, getIngredientUnit,
@@ -165,24 +165,32 @@ export default function IngredientDetailPage() {
         finally { setSaving(false) }
     }
 
-    async function saveStock(newTotal) {
-        const current = currentStock || 0
-        const delta = newTotal - current
+    // Sửa KHO SAU (warehouse) = nhập số tuyệt đối. delta so với kho sau hiện tại
+    // (KHÔNG so với tổng) → chỉ tác động warehouse, không đụng quầy.
+    async function saveWarehouse(newWarehouse) {
+        const current = stockData?.warehouse_stock ?? 0
+        const delta = newWarehouse - current
         if (delta === 0) return
         setSaving(true)
         try {
-            // Snapshot the WAREHOUSE side, not current_stock (which includes the
-            // counter). The Nhật ký card renders the warehouse trajectory; that's
-            // what staff need to reason about when reviewing past adjustments.
-            // Only pass beforeStock when stocks are loaded — a pre-load save would
-            // otherwise snapshot a fake 0 baseline. The metadata then writes no
-            // snapshot for this entry; UI degrades gracefully.
-            const snapshotOpts = stockData
-                ? { beforeStock: stockData.warehouse_stock }
-                : {}
+            // Snapshot kho sau để Nhật ký vẽ "Tồn X → Y". Chỉ truyền khi stocks đã load.
+            const snapshotOpts = stockData ? { beforeStock: stockData.warehouse_stock } : {}
             await adjustIngredientStock(selectedAddress?.id, ingredientKey, delta, profile?.name, snapshotOpts)
             await Promise.all([reloadStock(), refreshTodayExpenses?.()])
-        } catch (err) { showError(err, 'Hiệu chỉnh tồn') }
+        } catch (err) { showError(err, 'Hiệu chỉnh kho sau') }
+        finally { setSaving(false) }
+    }
+
+    // Sửa TỒN QUẦY (counter) = nhập số tuyệt đối. Ghi thẳng `remaining` vào phiếu
+    // chốt mới nhất → khớp với số chốt ca ở Hao hụt.
+    async function saveCounter(newCounter) {
+        if (newCounter === (stockData?.counter_stock ?? 0)) return
+        setSaving(true)
+        try {
+            const res = await setCounterStock(selectedAddress?.id, ingredientKey, newCounter)
+            if (!res) { showError(new Error('Chưa có phiếu chốt ca nào để ghi tồn quầy.'), 'Sửa tồn quầy'); return }
+            await reloadStock()
+        } catch (err) { showError(err, 'Sửa tồn quầy') }
         finally { setSaving(false) }
     }
 
@@ -297,12 +305,15 @@ export default function IngredientDetailPage() {
                         packSize={packSize}
                         packUnit={packUnit}
                         minStock={minStock}
+                        warehouseStock={stockData?.warehouse_stock ?? null}
+                        counterStock={stockData?.counter_stock ?? null}
                         currentStock={currentStock}
                         countInAudit={countInAudit}
                         canEdit={canEdit}
                         saving={saving}
                         onSaveName={saveName}
-                        onSaveStock={saveStock}
+                        onSaveWarehouse={saveWarehouse}
+                        onSaveCounter={saveCounter}
                         onSaveUnit={saveUnit}
                         onSaveCost={saveCost}
                         onSaveMinStock={saveMinStock}

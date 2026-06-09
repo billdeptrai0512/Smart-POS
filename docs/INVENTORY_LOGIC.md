@@ -1,56 +1,151 @@
-# Inventory & COGS Architecture
+# Logic Tồn Kho & COGS
 
-## Hai dòng chảy tách biệt
+Tài liệu này mô tả CÁCH app tính tồn kho nguyên liệu / bao bì và giá vốn. Đọc xong bạn sẽ
+trả lời được: *"Con số tồn ở `/ingredients` từ đâu ra, và khi nó lệch thực tế thì sửa ở đâu?"*
 
-### 1. Đi chợ (Mua hàng → Kho tổng)
-- **Nơi thực hiện**: `/ingredients` → nút **+ Nhập kho** trên từng card → RestockModal.
-- **Tác dụng**:
-  - Tạo `expenses` với `is_refill=true` (`metadata.ingredient`, `metadata.qty`, `metadata.price`).
-  - Cập nhật `ingredient_costs.unit_cost` bằng Weighted Average.
-  - **Tăng kho tổng** (xem mục "Nguồn dữ liệu" bên dưới).
-- **Không** đi qua `/shift-closing`. Đây là dòng tăng kho tổng duy nhất.
+---
 
-### 2. Chốt ca (Kiểm kê thực tế tại quầy)
-- **Nơi thực hiện**: `/shift-closing` — màn hình chốt ca tại quầy bán.
-- **3 trường / nguyên liệu** (lưu trong `shift_closings.inventory_report[]`):
-  - `opening` — Tồn đầu ca tại quầy (kế thừa từ `remaining` ca trước).
-  - `restock` — **Nhập thêm**: lượng rút từ kho tổng → quầy trong ca này. Đây là dòng **giảm** kho tổng.
-  - `remaining` — Tồn cuối thực đếm tại quầy. Là **ground truth** của kho quầy.
+## 1. Mô hình 2 kho + 2 dòng chảy
 
-## Công thức tồn kho hiển thị trên `/ingredients`
+App KHÔNG lưu một con số "tồn kho" cố định. Mọi thứ được **suy ra** từ 2 bảng dữ liệu gốc:
+`expenses` (đi chợ) và `shift_closings` (chốt ca). Có **2 kho** và **2 dòng chảy** tách biệt:
+
+```
+            ┌────────────────────────┐         ┌────────────────────────┐
+            │   KHO TỔNG (kho sau)    │         │     QUẦY (kho trước)    │
+            │   warehouse_stock      │         │     counter_stock      │
+            │   = SUY RA, không đếm   │         │   = ĐẾM TAY mỗi ca      │
+            └───────────┬────────────┘         └───────────┬────────────┘
+                        │                                   │
+   (A) ĐI CHỢ / NHẬP KHO│                  (B) NHẬP THÊM    │  (C) BÁN HÀNG
+   +qty vào kho tổng    │   ──── rút kho ────►              │  trừ dần ở quầy
+                        ▼            ra quầy                ▼
+            warehouse += refill        warehouse −= restock   remaining = đếm tay cuối ca
+                                       counter   += restock
+```
+
+| | Dòng chảy | Nơi thao tác | Tác dụng |
+|---|---|---|---|
+| **A** | **Đi chợ / Nhập kho** | `/ingredients` → **+ Nhập kho** | `expenses (is_refill=true)`, cập nhật giá vốn WAC, **+ kho tổng**. Dòng **DUY NHẤT** làm tăng kho tổng. |
+| **B** | **Nhập thêm (rút ra quầy)** | `/daily-report` thẻ **Hao hụt**, cột `Nhập thêm` | Ghi `restock` trong `shift_closings.inventory_report[]`. Chuyển hàng **kho tổng → quầy**: **− kho tổng, + quầy**. |
+| **C** | **Bán hàng** | `/pos` | Trừ dần ở quầy. Thể hiện qua `remaining` (đếm tay cuối ca). |
+
+`shift_closings.inventory_report[]` lưu 3 trường / nguyên liệu:
+- `opening` — tồn quầy **đầu ca** (kế thừa `remaining` ca trước).
+- `restock` — **Nhập thêm**: lượng rút từ kho tổng ra quầy ca này (dòng **B**).
+- `remaining` — tồn quầy **cuối ca**, **ĐẾM TAY**. Đây là **ground truth** của quầy.
+
+---
+
+## 2. Công thức hiển thị ở `/ingredients`
 
 ```
 current_stock = warehouse_stock + counter_stock
 ```
 
-Trong đó:
-- `warehouse_stock = max(0, Σ refill_qty − Σ restock_post_first_refill)`
-  - `Σ refill_qty` — tổng `metadata.qty` của tất cả expenses `is_refill=true` (tính theo từng nguyên liệu, theo `address_id`).
-  - `Σ restock_post_first_refill` — tổng `restock` từ tất cả `shift_closings.inventory_report[]`, **chỉ tính các shift xảy ra sau lần refill đầu tiên** của nguyên liệu đó. Restock trước thời điểm refill đầu được coi là tiêu thụ tồn pre-system → bỏ qua.
-  - Clamp `≥ 0` để tránh số âm khi dữ liệu lịch sử thiếu refill.
-- `counter_stock = remaining` của shift_closing **gần nhất** (theo `created_at` desc).
+### 2.1 `warehouse_stock` (kho tổng)
+```
+warehouse_stock = max(0,  Σ refill_qty  −  Σ restock_post_first_refill)
+```
+- `Σ refill_qty` — tổng `metadata.qty` của mọi `expenses.is_refill=true` của NVL đó (theo `address_id`).
+  Phiếu **Hiệu chỉnh tồn** cũng là `is_refill` nhưng `qty` âm → tự động trừ vào tổng này.
+- `Σ restock_post_first_refill` — tổng `restock` của mọi `shift_closings`, **chỉ tính phiếu chốt
+  có `created_at ≥ lần Nhập kho ĐẦU TIÊN** của NVL đó. Restock trước mốc nhập kho đầu bị **bỏ qua**
+  (coi như tiêu thụ hàng "pre-system" chưa được khai báo).
+- Kẹp `≥ 0` để tránh âm khi dữ liệu lịch sử thiếu phiếu nhập.
+
+### 2.2 `counter_stock` (quầy) — CARRY-FORWARD
+```
+counter_stock = remaining KHÁC-NULL gần nhất của NVL đó (quét mọi phiếu chốt, created_at DESC)
+```
+- `remaining = null` nghĩa là **ca đó nhân viên không đếm** NVL này → app **giữ lần đếm thật gần
+  nhất**, KHÔNG kéo về 0. (Trước migration `20260609` RPC lấy null→0 gây tụt tồn oan — đã sửa.)
 
 ### Ví dụ (cà phê)
-- Ngày T-1: nhập kho qua `/ingredients` 10 000 g → expense refill, qty = 10 000.
-- Ca T: `opening = 610`, `restock = 1 000` (rút từ kho tổng), `remaining = 318`.
-- Hiển thị `/ingredients`: `(10 000 − 1 000) + 318 = 9 318 g`.
+- T-1: Nhập kho 10.000 g → `expenses` refill `qty=10.000`.
+- Ca T: `opening=610`, `restock=1.000` (rút ra quầy), `remaining=318` (đếm tay).
+- `/ingredients`: `(10.000 − 1.000) + 318 = 9.318 g`.
 
 ### Edge cases
-- **Chưa có shift_closing nào** → `counter_stock = 0` → display = `warehouse_stock` (kho tổng thuần).
-- **Chưa có refill nào** → `warehouse_stock = 0` → display = `counter_stock` (chỉ tồn quầy ca gần nhất).
-- **Shift đang mở (chưa chốt)** → `counter_stock` cố định ở giá trị shift đã chốt gần nhất; chỉ thay đổi khi ca mới được chốt. Refill mới (đi chợ) trong khoảng đó vẫn cộng ngay vào `warehouse_stock`.
+- **Chưa có phiếu chốt nào** → `counter_stock = 0` → hiển thị = `warehouse_stock`.
+- **Chưa có Nhập kho nào** → `warehouse_stock = 0` → hiển thị = `counter_stock`.
+- **Ca đang mở (chưa chốt)** → `counter_stock` đứng yên ở lần đếm gần nhất; chỉ đổi khi chốt ca
+  mới. Nhập kho (đi chợ) giữa chừng vẫn cộng ngay vào `warehouse_stock`.
 
-## Implementation
-- **JS**: [`fetchIngredientStocks`](../src/services/orderService.js) — đọc `shift_closings`, `expenses(is_refill=true)`, tính theo công thức trên. **Không** đọc `inventory.stock` hay `ingredients.stock` (cả hai đều không được duy trì).
-- **RPC** `process_ingredient_restock` — chỉ tạo expense + cập nhật `ingredient_costs.unit_cost`. Không update `inventory.stock`.
-- **Trigger** `subtract_stock_from_restock` (trên `shift_closings`) — đang trỏ sai bảng (`inventory` thay vì storage thực) và sai công thức. **Đang vô dụng** với logic hiện tại; có thể xóa khi tiện.
+---
 
-## Database Tables liên quan
-- `shift_closings` — `inventory_report` JSONB: `[{ingredient, opening, restock, remaining}]`, `created_at`, `address_id`.
-- `expenses` — `is_refill=true`, `metadata` JSONB: `{ingredient, qty, price, ...}`, `created_at`, `address_id`.
-- `ingredient_costs` — `ingredient`, `unit_cost`, `unit`, `address_id` (giá vốn theo Weighted Average).
+## 3. ⚠️ Hạn chế quan trọng: KHO TỔNG không được đối soát vật lý
+
+Đây là điểm yếu cốt lõi cần hiểu rõ:
+
+- **Quầy** được **đếm tay mỗi ca** (`remaining`) → tự đối soát, sai số không tích lũy.
+- **Kho tổng** thì **KHÔNG có đầu vào "đếm kho thực tế"** — nó hoàn toàn = `Σ mua − Σ rút ra quầy`.
+
+⇒ Bất kỳ hàng nào **rời kho tổng mà không qua "Nhập thêm"** sẽ thành **tồn ma vĩnh viễn**:
+- Nhân viên bốc thẳng từ thùng trong kho (không ghi Nhập thêm).
+- Vỡ, hỏng, thất thoát.
+- Đếm sai / nhập sai số lượng lúc mua.
+
+Sai số này **cộng dồn mãi** vì không có cơ chế kéo kho tổng về số đếm thật. Cách duy nhất hiện tại
+để chỉnh là **`/ingredients` → Hiệu chỉnh tồn** (tạo phiếu `is_refill` `qty` âm/dương).
+
+> **Ví dụ thật:** `ly_350ml` từng hiển thị 142 (kho tổng 100 + quầy 42) trong khi đếm thật ~35.
+> 100 ly "ma" là drift tích lũy 2 tháng do rút kho không ghi Nhập thêm. Sửa: Hiệu chỉnh tồn −100.
+
+*(Đang bàn giải pháp gốc: thêm chức năng "Kiểm kho thực tế" cho kho tổng — xem backlog.)*
+
+---
+
+## 4. Giá vốn (WAC — bình quân gia quyền)
+
+Mỗi lần Nhập kho, `process_ingredient_restock` cập nhật `ingredient_costs.unit_cost`:
+```
+unit_cost_mới = (tồn_trước × unit_cost_cũ + tiền_lô_mua) / (tồn_trước + qty_mua)
+```
+- Hủy phiếu (`cancel_restock`) hoặc xóa NVL → WAC được tính lại từ các phiếu mua thật còn lại
+  (loại phiếu đã hủy `cancelled=true` và phiếu Hiệu chỉnh `adjustment=true`).
+
+---
+
+## 5. Up-size & hệ số âm (extraIngredients)
+
+Khi khách lên Size L: công thức gốc đã cộng 1 `Ly nhỏ`, nên extra Up-size phải **+1 Ly lớn và −1
+Ly nhỏ** để cân đối. `extra_ingredients.amount` cho phép số âm làm việc bù trừ này.
+`calculateEstimatedConsumption` cộng `amount × quantity`, dọn các NVL kết quả = 0.
+Chi tiết + unit test: `tests/inventoryCalculation/` (chạy `npx vitest run tests/inventoryCalculation/inventory.test.js`).
+
+---
+
+## 6. Implementation (vị trí code)
+
+| Thành phần | Vị trí | Ghi chú |
+|---|---|---|
+| Tính tồn (đường nhanh) | RPC `get_ingredient_stocks_v2` | Đường chạy thật ở production. |
+| Tính tồn (fallback JS) | `src/services/ingredientService.js` → `fetchIngredientStocks` | Chỉ chạy khi RPC thiếu. Cùng công thức + carry-forward như RPC. |
+| Nhập kho + WAC | RPC `process_ingredient_restock` | Tạo expense refill, cập nhật `unit_cost`. KHÔNG đụng bảng `inventory`. |
+| Hủy phiếu | RPC `cancel_restock` | Zero-out tại chỗ (qty/amount → 0), giữ dòng + badge ĐÃ HỦY. |
+| Xóa NVL | RPC `delete_ingredient` | Dọn `ingredient_costs`/`recipes`/`extra_ingredients` + strip key khỏi snapshot. |
+| Tiêu hao theo công thức | `src/utils/inventory.js` → `calculateEstimatedConsumption` | Dùng cho cột Sử dụng / Hao hụt. |
+
+> **Lưu ý:** bảng `inventory`/`ingredients.stock` đã **bị bỏ** (migration `20260508_drop_legacy_inventory`).
+> Tồn kho KHÔNG đọc từ chúng. Trigger cũ `subtract_stock_from_restock` cũng đã bị drop — đừng tham chiếu.
+
+---
+
+## 7. Bảng dữ liệu liên quan
+
+- `shift_closings` — `inventory_report` JSONB `[{ingredient, opening, restock, remaining}]`, `created_at`, `address_id`, `actual_cash`, `actual_transfer`.
+- `expenses` — `is_refill=true`, `metadata` JSONB `{ingredient, qty, price, adjustment?, cancelled?, before_stock?, after_stock?}`, `created_at`, `address_id`.
+- `ingredient_costs` — `ingredient`, `unit_cost` (WAC), `unit`, `address_id`.
 - `recipes` — `product_id`, `ingredient`, `amount` (định mức/ly).
+- `extra_ingredients` — `extra_id`, `ingredient`, `amount` (cho phép âm — bù trừ up-size).
 
-## Lưu ý vận hành
-- Để kho tổng hiển thị đúng, **mọi lần mua nguyên liệu phải nhập qua `/ingredients` → + Nhập kho**. Không có nguồn dữ liệu thay thế.
-- Khi xảy ra mismatch, manager kiểm tra: refill đã đầy đủ chưa, restock có nhập đúng không, `unit_cost` có cần điều chỉnh không.
+---
+
+## 8. Khi tồn lệch thực tế — checklist
+
+1. So `current_stock` = `warehouse_stock` + `counter_stock`: **lệch nằm ở kho tổng hay quầy?**
+   (Xem tách số ở thẻ Soạn/Chuẩn bị tồn kho: "Kho X · Quầy Y".)
+2. **Lệch ở quầy** → kiểm tra `remaining` ca gần nhất có bị nhập sai / bỏ trống không.
+3. **Lệch ở kho tổng** → gần như chắc là drift (rút kho không ghi Nhập thêm / vỡ hỏng) → **Hiệu chỉnh tồn**.
+4. Kiểm Nhập kho có đủ phiếu không, có phiếu nào nhập nhầm số lượng / nhầm ngày không.
