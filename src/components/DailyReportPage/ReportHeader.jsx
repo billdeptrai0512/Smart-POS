@@ -28,8 +28,8 @@ export function getDateRange(range, offset = 0) {
             return { start, end: endOfDayVN(), days: Math.round((today.getTime() - start.getTime()) / 86_400_000) + 1 }
         }
         const end = endOfMonthVN(new Date(), offset)
-        // # days in that month = (end - start) / day + 1
-        const days = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1
+        // end is the last ms of the month, so (end - start) already rounds to # days
+        const days = Math.round((end.getTime() - start.getTime()) / 86_400_000)
         return { start, end, days }
     }
     return { start: startOfDayVN(), end: endOfDayVN(), days: 1 }
