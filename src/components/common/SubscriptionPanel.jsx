@@ -179,6 +179,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
     const handleMockPayment = async () => {
         if (!canSubmit) return
         setIsMocking(true)
+        setAdminError(null)
         try {
             // Cấp/gia hạn qua RPC admin_set_subscription (SECURITY DEFINER, guard is_admin_auth).
             // RPC tự áp quy tắc gia hạn nối tiếp (§4) cho từng chi nhánh.
@@ -190,8 +191,9 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                 p_note: 'admin_override',
             })
             if (error) throw error
-            if (onDone) onDone()
-            else window.location.reload()
+            // Đi cùng đường với webhook thật → hiện panel xác nhận (test được UI success).
+            setIsMocking(false)
+            handleConfirmed()
         } catch (err) {
             setAdminError('Lỗi: ' + err.message)
             setIsMocking(false)
@@ -209,6 +211,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
         }
         setConfirmReset(false)
         setIsResetting(true)
+        setAdminError(null)
         try {
             const { error } = await supabase.rpc('admin_reset_subscription', {
                 p_address_ids: selectedAddressIds,
