@@ -36,3 +36,6 @@ PROJECT.md
 .claude/worktrees/
 .claude/settings.local.json
 .env*.local
+
+# Supabase CLI scratch
+supabase/.temp/

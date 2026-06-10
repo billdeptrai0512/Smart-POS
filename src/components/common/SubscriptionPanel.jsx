@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { QrCode, Loader2, CheckCircle2, Copy, Check } from 'lucide-react'
+import { Loader2, CheckCircle2, Copy, Check } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { supabase } from '../../lib/supabaseClient'
@@ -35,9 +35,14 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
     }, [addresses, preselectAddressId, selectedAddress?.id])
     const [isMocking, setIsMocking] = useState(false)
     const [isResetting, setIsResetting] = useState(false)
+    const [confirmReset, setConfirmReset] = useState(false) // 2-step confirm (không dùng window.confirm — bị chặn trong webview)
+    const [adminError, setAdminError] = useState(null)
     const [confirmed, setConfirmed] = useState(false)
     const [branchQuery, setBranchQuery] = useState('')
     const [copied, setCopied] = useState(null) // 'stk' | 'noidung' | null
+    const [reference, setReference] = useState(null) // mã CK (SP<reference>) từ payment_intent
+    const [refError, setRefError] = useState(false)
+    const [refRetry, setRefRetry] = useState(0) // tăng → chạy lại effect tạo intent
 
     // valid_to (hạn) hiện tại của TỪNG chi nhánh → vừa hiện chip Đã mở/Chưa mở,
     // vừa tính "hiệu lực đến" sau khi trả (gia hạn nối tiếp). null = chưa có sub active.
@@ -112,23 +117,52 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
     const expiryLabel = (addrCount === 0 || !accessLoaded)
         ? null
         : distinctExpiry.length === 1
-            ? `Hiệu lực đến ${fmtDate(expiryDates[0])}`
+            ? `Sử dụng đến ${fmtDate(expiryDates[0])}`
             : 'Mỗi chi nhánh +6 tháng (nối tiếp)'
 
-    // ── Nội dung CK: chuẩn hoá tên chi nhánh để admin đối soát ────────────────────
-    const selectedNames = selectedAddressIds.map(id => addresses.find(a => a.id === id)?.name).filter(Boolean)
-    const transferContent = selectedNames.length === 0
-        ? ''
-        : selectedNames.length === 1
-            ? normalizeContent(selectedNames[0])
-            : `${normalizeContent(selectedNames[0])} +${selectedNames.length - 1}CN`
+    // ── Nội dung CK: 'SP' + reference của payment_intent (webhook SePay đối chiếu) ─
+    // Tạo intent khi đổi tập chi nhánh / số tiền → reference cố định cho lần CK này.
+    const selectedKey = [...selectedAddressIds].sort().join(',')
+    useEffect(() => {
+        if (addrCount === 0 || total <= 0 || !supabase) { setReference(null); return }
+        let cancelled = false
+        setRefError(false)
+        supabase
+            .rpc('create_payment_intent', { p_address_ids: selectedAddressIds, p_months: PLAN.months, p_amount: total })
+            .then(({ data, error }) => {
+                if (cancelled) return
+                setReference(error ? null : data)
+                setRefError(!!error)
+            })
+        return () => { cancelled = true }
+    }, [selectedKey, total, refRetry]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    const transferContent = reference ? `SP${reference}` : ''
+
+    // ── QR chuyển khoản (SePay): tự điền số tiền + nội dung ───────────────────────
+    const qrUrl = `https://qr.sepay.vn/img?bank=MBBank&acc=${BANK_INFO.accountNumber}&template=&amount=${total}&des=${encodeURIComponent(transferContent)}`
 
     const copy = async (text, key) => {
-        try {
-            await navigator.clipboard.writeText(text)
+        let ok = false
+        // Clipboard API: cần secure context (https/localhost) + document focus.
+        if (navigator.clipboard && window.isSecureContext) {
+            ok = await navigator.clipboard.writeText(text).then(() => true, () => false)
+        }
+        // Fallback (http/LAN, webview, mất focus): textarea + execCommand.
+        if (!ok) {
+            const ta = document.createElement('textarea')
+            ta.value = text
+            ta.style.position = 'fixed'
+            ta.style.opacity = '0'
+            document.body.appendChild(ta)
+            ta.focus(); ta.select()
+            try { ok = document.execCommand('copy') } catch { ok = false }
+            document.body.removeChild(ta)
+        }
+        if (ok) {
             setCopied(key)
             setTimeout(() => setCopied(null), 1500)
-        } catch { /* clipboard không khả dụng — bỏ qua */ }
+        }
     }
 
     const handleMockPayment = async () => {
@@ -148,15 +182,21 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
             if (onDone) onDone()
             else window.location.reload()
         } catch (err) {
-            alert('Lỗi: ' + err.message)
+            setAdminError('Lỗi: ' + err.message)
             setIsMocking(false)
         }
     }
 
     // Reset (dev/test): xoá sub của các chi nhánh đã chọn → về lại trạng thái khoá.
+    // 2-step confirm inline: window.confirm bị chặn/treo trong webview & preview panel.
     const handleReset = async () => {
         if (!selectedAddressIds.length || isResetting) return
-        if (!window.confirm('Xoá toàn bộ gói của chi nhánh đã chọn? (chỉ dùng để dev/test)')) return
+        if (!confirmReset) {
+            setConfirmReset(true)
+            setTimeout(() => setConfirmReset(false), 4000) // tự huỷ sau 4s nếu không bấm tiếp
+            return
+        }
+        setConfirmReset(false)
         setIsResetting(true)
         try {
             const { error } = await supabase.rpc('admin_reset_subscription', {
@@ -167,7 +207,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
             if (onDone) onDone()
             else window.location.reload()
         } catch (err) {
-            alert('Lỗi: ' + err.message)
+            setAdminError('Lỗi: ' + err.message)
             setIsResetting(false)
         }
     }
@@ -177,7 +217,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
             {/* ── Chi nhánh (áp dụng ở đâu) ───────────────────────────────────────── */}
             <section className="flex flex-col gap-2.5">
                 <SectionHeader
-                    title="Chi nhánh"
+                    title="Địa chỉ"
                     hint={addresses.length > 0 ? `${addrCount}/${addresses.length}` : undefined}
                     action={addresses.length > 1 && (
                         <button onClick={toggleAllAddresses} className="text-[11px] font-black text-primary uppercase tracking-wide whitespace-nowrap">
@@ -232,42 +272,67 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                 </div>
             </section>
 
+            <section className="flex flex-col gap-2.5">
+                <SectionHeader title="Thông tin" />
+                {addrCount > 0 ? (
+                    <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2">
+                        <CopyRow label="Số lượng" value={`${addrCount} địa chỉ`} />
+                        <CopyRow label="Thời hạn" value={PLAN.periodLabel} />
+
+                        {expiryLabel && (distinctExpiry.length === 1
+                            ? <CopyRow label="Sử dụng đến" value={fmtDate(expiryDates[0])} />
+                            : <CopyRow label="Hiệu lực" value="Mỗi chi nhánh +6 tháng (nối tiếp)" />)}
+                    </div>
+                ) : (
+                    <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3">
+                        <p className="text-[12px] text-text-secondary font-medium">Chọn chi nhánh để xem thông tin</p>
+                    </div>
+                )}
+            </section>
+
             {/* ── Thanh toán — 1 card gắn kết: QR + tổng cộng + status ───────────── */}
             <section className="flex flex-col gap-2.5">
                 <SectionHeader title="Thanh toán" />
                 <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3.5">
-                    <div className="flex items-center gap-3.5">
-                        {/* QR trái */}
-                        <div className={`relative w-[96px] aspect-square shrink-0 rounded-[14px] border flex items-center justify-center overflow-hidden transition-colors
+                    {/* QR — đứng giữa, một mình */}
+                    <div className="flex justify-center py-1">
+                        <div className={`relative w-[140px] aspect-square shrink-0 rounded-[16px] border flex items-center justify-center overflow-hidden transition-colors
                             ${confirmed ? 'bg-success-soft/60 border-success/40 text-success' : 'bg-surface-light border-border/60 text-text-dim'}`}>
                             <Corner className="top-2 left-2 border-t-2 border-l-2 rounded-tl-[6px]" />
                             <Corner className="top-2 right-2 border-t-2 border-r-2 rounded-tr-[6px]" />
                             <Corner className="bottom-2 left-2 border-b-2 border-l-2 rounded-bl-[6px]" />
                             <Corner className="bottom-2 right-2 border-b-2 border-r-2 rounded-br-[6px]" />
                             {confirmed
-                                ? <CheckCircle2 size={34} strokeWidth={1.8} className="animate-scale-up" />
-                                : <QrCode size={34} strokeWidth={1.5} />}
-                        </div>
-
-                        {/* Tổng cộng — căn trái, phân tầng rõ */}
-                        <div className="flex-1 min-w-0 flex flex-col items-start text-left">
-                            {addrCount === 0 ? (
-                                <p className="text-[12px] text-text-secondary font-medium">Chọn chi nhánh để tính tiền</p>
-                            ) : (
-                                <>
-                                    <p className="text-[9.5px] font-black uppercase tracking-[0.12em] text-text-secondary">Tổng cộng</p>
-                                    <p className="text-[16px] font-black leading-none mt-1 mb-2 bg-clip-text text-transparent" style={{ backgroundImage: GOLD }}>
-                                        {formatVND(total)}
-                                    </p>
-                                    <div className="text-[11px] text-text-secondary tabular-nums leading-[1.45]">
-                                        <p>{PLAN.periodLabel}</p>
-                                        <p>{addrCount} chi nhánh</p>
-                                        {expiryLabel && <p className="text-text font-bold">{expiryLabel}</p>}
-                                    </div>
-                                </>
-                            )}
+                                ? <CheckCircle2 size={40} strokeWidth={1.8} className="animate-scale-up" />
+                                : reference
+                                    ? <img src={qrUrl} alt="QR chuyển khoản" className="w-full h-full object-contain p-2.5 bg-white" />
+                                    : refError
+                                        ? (
+                                            <button onClick={() => setRefRetry(n => n + 1)} className="flex flex-col items-center gap-1 text-text-secondary">
+                                                <span className="text-[10px] font-bold">Không tạo được mã</span>
+                                                <span className="text-[10.5px] font-black text-primary">Thử lại</span>
+                                            </button>
+                                        )
+                                        : <Loader2 size={28} strokeWidth={1.8} className="animate-spin text-text-dim" />}
                         </div>
                     </div>
+
+                    {/* Thông tin thanh toán — tổng cộng + STK + tên + nội dung CK */}
+                    {addrCount > 0 ? (
+                        <div className="mt-3.5 pt-3.5 border-t border-border/40 flex flex-col gap-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-bold text-text-secondary shrink-0">Tổng cộng</span>
+                                <span className="text-[15px] font-black bg-clip-text text-transparent" style={{ backgroundImage: GOLD }}>{formatVND(total)}</span>
+                            </div>
+                            <div className="border-t border-border/30" />
+                            <CopyRow label="Ngân hàng" value={BANK_INFO.bank} />
+                            <CopyRow label="Tên tài khoản" value={BANK_INFO.accountName} />
+                            <CopyRow label="Số tài khoản" value={BANK_INFO.accountNumber} onCopy={() => copy(BANK_INFO.accountNumber, 'stk')} copied={copied === 'stk'} />
+                            <CopyRow label="Nội dung" value={transferContent} onCopy={() => copy(transferContent, 'noidung')} copied={copied === 'noidung'} />
+                        </div>
+                    ) : (
+                        <p className="mt-3.5 pt-3.5 border-t border-border/40 text-[12px] text-text-secondary font-medium">Chọn chi nhánh để tính tiền</p>
+                    )}
 
                     {/* status — cùng card, ngăn bằng hairline */}
                     <div className={`flex items-center gap-1.5 mt-3 pt-3 border-t border-border/40 text-[10.5px] ${confirmed ? 'text-success font-bold' : 'text-text-secondary'}`}>
@@ -275,18 +340,9 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                         {confirmed ? 'Đã nhận thanh toán — đang mở khoá…' : 'Đang chờ xác nhận chuyển khoản tự động…'}
                     </div>
                 </div>
-
-                {/* Hướng dẫn chuyển khoản (mở khoá tay) — STK + tên + nội dung CK */}
-                {addrCount > 0 && (
-                    <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2">
-                        <p className="text-[10px] font-black uppercase tracking-wide text-text-secondary">Chuyển khoản tới</p>
-                        <CopyRow label="Ngân hàng" value={BANK_INFO.bank} />
-                        <CopyRow label="Tên tài khoản" value={BANK_INFO.accountName} />
-                        <CopyRow label="Số tài khoản" value={BANK_INFO.accountNumber} onCopy={() => copy(BANK_INFO.accountNumber, 'stk')} copied={copied === 'stk'} />
-                        <CopyRow label="Nội dung" value={transferContent} onCopy={() => copy(transferContent, 'noidung')} copied={copied === 'noidung'} />
-                    </div>
-                )}
             </section>
+
+
 
             {/* ── Footer dính đáy: nút Mock + Reset (Admin). User thường xác nhận qua webhook. ── */}
             {isAdmin && (
@@ -301,10 +357,14 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                     <button
                         onClick={handleReset}
                         disabled={isMocking || isResetting || !selectedAddressIds.length}
-                        className="w-full py-2 rounded-[12px] bg-surface-light text-text-secondary text-[11px] font-bold hover:bg-border/40 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                        className={`w-full py-2 rounded-[12px] text-[11px] font-bold active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50
+                            ${confirmReset ? 'bg-red-500/15 text-red-500 hover:bg-red-500/25' : 'bg-surface-light text-text-secondary hover:bg-border/40'}`}
                     >
-                        {isResetting ? <Loader2 size={14} className="animate-spin" /> : 'Reset gói (Admin · dev)'}
+                        {isResetting
+                            ? <Loader2 size={14} className="animate-spin" />
+                            : confirmReset ? 'Bấm lần nữa để xoá gói đã chọn' : 'Reset gói (Admin · dev)'}
                     </button>
+                    {adminError && <p className="text-[10.5px] text-red-500 text-center">{adminError}</p>}
                 </div>
             )}
         </div>
@@ -351,12 +411,6 @@ function CopyRow({ label, value, onCopy, copied }) {
 // Chuẩn hoá để search không phân biệt hoa/thường & dấu tiếng Việt.
 function normalizeText(s = '') {
     return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd')
-}
-
-// Nội dung CK: bỏ dấu, viết HOA, chỉ giữ chữ-số-khoảng trắng (ngân hàng dễ đọc).
-function normalizeContent(s = '') {
-    return s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd')
-        .toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
 }
 
 // Cộng tháng, clamp về ngày cuối tháng nếu tràn — KHỚP Postgres `date + interval 'N months'`
