@@ -281,8 +281,8 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                     <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2">
                         <p className="text-[10px] font-black uppercase tracking-wide text-text-secondary">Chuyển khoản tới</p>
                         <CopyRow label="Ngân hàng" value={BANK_INFO.bank} />
-                        <CopyRow label="Số TK" value={BANK_INFO.accountNumber} onCopy={() => copy(BANK_INFO.accountNumber, 'stk')} copied={copied === 'stk'} />
-                        <CopyRow label="Chủ TK" value={BANK_INFO.accountName} />
+                        <CopyRow label="Tên tài khoản" value={BANK_INFO.accountName} />
+                        <CopyRow label="Số tài khoản" value={BANK_INFO.accountNumber} onCopy={() => copy(BANK_INFO.accountNumber, 'stk')} copied={copied === 'stk'} />
                         <CopyRow label="Nội dung" value={transferContent} onCopy={() => copy(transferContent, 'noidung')} copied={copied === 'noidung'} />
                     </div>
                 )}

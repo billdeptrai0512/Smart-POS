@@ -32,7 +32,7 @@ export const PLAN_FEATURES = [
  * ⚠️ ĐỔI THÀNH STK THẬT của bạn trước khi public.
  */
 export const BANK_INFO = {
-    bank: 'Vietcombank',
-    accountNumber: '0000000000',
-    accountName: 'NGUYEN VAN A',
+    bank: 'MB BANK',
+    accountNumber: '0902822192',
+    accountName: 'NGUYEN THIEN BANG',
 }
