@@ -255,19 +255,19 @@ export default function AddressSelectPage() {
             <div className="shrink-0 flex items-stretch justify-between gap-3 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),16px)] bg-surface border-t border-border/60">
                 <button
                     onClick={handleSignOut}
-                    className="flex-1 flex items-center justify-center gap-2 whitespace-nowrap rounded-[12px] border border-border/60 bg-bg px-4 py-3 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light hover:text-danger active:scale-95 transition-all"
+                    className="flex-1 min-w-0 flex items-center justify-center gap-2 rounded-[12px] border border-border/60 bg-bg px-4 py-3 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light hover:text-danger active:scale-95 transition-all"
                 >
-                    <LogOut size={16} />
-                    Đăng xuất
+                    <LogOut size={16} className="shrink-0" />
+                    <span className="truncate">Đăng xuất</span>
                 </button>
 
                 {showCreate && (
                     <button
                         onClick={() => setShowCreateModal(true)}
-                        className="flex-1 flex items-center justify-center gap-2 whitespace-nowrap rounded-[12px] bg-primary px-4 py-3 text-[13px] font-black uppercase text-bg hover:bg-primary/90 active:scale-95 transition-all"
+                        className="flex-1 min-w-0 flex items-center justify-center gap-2 rounded-[12px] bg-primary px-4 py-3 text-[13px] font-black uppercase text-bg hover:bg-primary/90 active:scale-95 transition-all"
                     >
-                        <Plus size={16} />
-                        Tạo địa chỉ
+                        <Plus size={16} className="shrink-0" />
+                        <span className="truncate">Tạo địa chỉ</span>
                     </button>
                 )}
 
@@ -275,11 +275,11 @@ export default function AddressSelectPage() {
                     <button
                         onClick={() => handleGenerateInvite(staffSubTab === 'co-manager' ? 'co-manager' : 'staff')}
                         disabled={inviteGenerating}
-                        className="flex-1 flex items-center justify-center gap-2 whitespace-nowrap rounded-[12px] bg-primary px-4 py-3 text-[13px] font-black uppercase text-bg hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-50"
+                        className="flex-1 min-w-0 flex items-center justify-center gap-2 rounded-[12px] bg-primary px-4 py-3 text-[13px] font-black uppercase text-bg hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-50"
                     >
                         {inviteGenerating
-                            ? <><Loader size={14} className="animate-spin" /> Đang tạo...</>
-                            : <><UserPlus size={16} /> {staffSubTab === 'staff' ? 'Mời nhân viên' : 'Mời quản lý'}</>}
+                            ? <><Loader size={14} className="animate-spin shrink-0" /> <span className="truncate">Đang tạo...</span></>
+                            : <><UserPlus size={16} className="shrink-0" /> <span className="truncate">{staffSubTab === 'staff' ? 'Mời nhân viên' : 'Mời quản lý'}</span></>}
                     </button>
                 )}
             </div>
