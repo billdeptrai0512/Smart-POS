@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { supabase } from '../../lib/supabaseClient'
 import { usePaymentListener } from '../../hooks/usePaymentListener'
+import { usePaymentPoll } from '../../hooks/usePaymentPoll'
 import { formatVND } from '../../utils'
 import { PLAN, ALL_TIER, BANK_INFO } from '../../constants/monetization'
 
@@ -70,15 +71,25 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
         return () => { cancelled = true }
     }, [addresses])
 
+    // Xác nhận thanh toán: hiện panel thành công, user tự bấm "Xong" (không auto-redirect).
+    const handleConfirmed = () => setConfirmed(true)
+
     // Realtime listener: webhook SePay → Edge Function → INSERT address_subscriptions
     // → đẩy về đây → tự xác nhận + mở khoá. Theo dõi mọi chi nhánh của owner.
     usePaymentListener({
         addressIds: addresses.map(a => a.id),
         enabled: !confirmed,
-        onConfirmed: () => {
-            setConfirmed(true)
-            setTimeout(() => { onDone ? onDone() : window.location.reload() }, 1600)
-        },
+        onConfirmed: handleConfirmed,
+    })
+
+    // Poll-while-pending (§7.1) — lưới an toàn khi realtime rớt đúng lúc webhook bắn:
+    // poll status của intent đang chờ, thấy 'paid' → confirm (guard chung `confirmed`).
+    // Intent hết hạn/huỷ → tạo intent mới (refRetry) để QR luôn dùng mã còn hiệu lực.
+    usePaymentPoll({
+        reference,
+        enabled: !confirmed,
+        onPaid: handleConfirmed,
+        onExpired: () => setRefRetry(n => n + 1),
     })
 
     const toggleAddress = (id) => setSelectedAddressIds(prev =>
@@ -212,6 +223,43 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
         }
     }
 
+    // ── Panel xác nhận thanh toán thành công ─────────────────────────────────────
+    // expiryDates tính từ validToByAddr TRƯỚC khi trả (gia hạn nối tiếp §4) = đúng
+    // hạn mới sau khi webhook insert sub. User tự bấm "Xong", không auto-redirect.
+    if (confirmed) {
+        return (
+            <div className="flex flex-col gap-4 animate-fade-in pt-4">
+                <div className="rounded-[18px] border border-success/30 bg-success-soft/40 px-4 py-7 flex flex-col items-center gap-3 text-center">
+                    <CheckCircle2 size={52} strokeWidth={1.6} className="text-success animate-scale-up" />
+                    <div>
+                        <p className="text-[16px] font-black text-text">Thanh toán thành công</p>
+                        <p className="text-[12px] text-text-secondary mt-1">
+                            Đã mở khoá {addrCount} chi nhánh · {formatVND(total)}
+                        </p>
+                    </div>
+                </div>
+
+                <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2">
+                    <p className="text-[10px] font-black uppercase tracking-wide text-text-secondary">Sử dụng đến</p>
+                    {selectedAddressIds.map(id => (
+                        <CopyRow
+                            key={id}
+                            label={addresses.find(a => a.id === id)?.name || '—'}
+                            value={fmtDate(newExpiryFor(id))}
+                        />
+                    ))}
+                </div>
+
+                <button
+                    onClick={() => { onDone ? onDone() : window.location.reload() }}
+                    className="w-full py-3 rounded-[12px] bg-primary text-bg text-[14px] font-black uppercase hover:bg-primary/90 active:scale-[0.98] transition-all"
+                >
+                    Xong
+                </button>
+            </div>
+        )
+    }
+
     return (
         <div className="flex flex-col gap-5 animate-fade-in">
             {/* ── Chi nhánh (áp dụng ở đâu) ───────────────────────────────────────── */}
@@ -296,24 +344,21 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                 <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3.5">
                     {/* QR — đứng giữa, một mình */}
                     <div className="flex justify-center py-1">
-                        <div className={`relative w-[140px] aspect-square shrink-0 rounded-[16px] border flex items-center justify-center overflow-hidden transition-colors
-                            ${confirmed ? 'bg-success-soft/60 border-success/40 text-success' : 'bg-surface-light border-border/60 text-text-dim'}`}>
+                        <div className="relative w-[140px] aspect-square shrink-0 rounded-[16px] border flex items-center justify-center overflow-hidden bg-surface-light border-border/60 text-text-dim">
                             <Corner className="top-2 left-2 border-t-2 border-l-2 rounded-tl-[6px]" />
                             <Corner className="top-2 right-2 border-t-2 border-r-2 rounded-tr-[6px]" />
                             <Corner className="bottom-2 left-2 border-b-2 border-l-2 rounded-bl-[6px]" />
                             <Corner className="bottom-2 right-2 border-b-2 border-r-2 rounded-br-[6px]" />
-                            {confirmed
-                                ? <CheckCircle2 size={40} strokeWidth={1.8} className="animate-scale-up" />
-                                : reference
-                                    ? <img src={qrUrl} alt="QR chuyển khoản" className="w-full h-full object-contain p-2.5 bg-white" />
-                                    : refError
-                                        ? (
-                                            <button onClick={() => setRefRetry(n => n + 1)} className="flex flex-col items-center gap-1 text-text-secondary">
-                                                <span className="text-[10px] font-bold">Không tạo được mã</span>
-                                                <span className="text-[10.5px] font-black text-primary">Thử lại</span>
-                                            </button>
-                                        )
-                                        : <Loader2 size={28} strokeWidth={1.8} className="animate-spin text-text-dim" />}
+                            {reference
+                                ? <img src={qrUrl} alt="QR chuyển khoản" className="w-full h-full object-contain p-2.5 bg-white" />
+                                : refError
+                                    ? (
+                                        <button onClick={() => setRefRetry(n => n + 1)} className="flex flex-col items-center gap-1 text-text-secondary">
+                                            <span className="text-[10px] font-bold">Không tạo được mã</span>
+                                            <span className="text-[10.5px] font-black text-primary">Thử lại</span>
+                                        </button>
+                                    )
+                                    : <Loader2 size={28} strokeWidth={1.8} className="animate-spin text-text-dim" />}
                         </div>
                     </div>
 
@@ -335,9 +380,9 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                     )}
 
                     {/* status — cùng card, ngăn bằng hairline */}
-                    <div className={`flex items-center gap-1.5 mt-3 pt-3 border-t border-border/40 text-[10.5px] ${confirmed ? 'text-success font-bold' : 'text-text-secondary'}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full bg-success shrink-0 ${confirmed ? '' : 'animate-pulse'}`} />
-                        {confirmed ? 'Đã nhận thanh toán — đang mở khoá…' : 'Đang chờ xác nhận chuyển khoản tự động…'}
+                    <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-border/40 text-[10.5px] text-text-secondary">
+                        <span className="w-1.5 h-1.5 rounded-full bg-success shrink-0 animate-pulse" />
+                        {'Đang chờ xác nhận chuyển khoản tự động…'}
                     </div>
                 </div>
             </section>
