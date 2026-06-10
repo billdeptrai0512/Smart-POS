@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Users, Copy, Check, Loader, UserPlus, Shield, MoreVertical, ArrowUp, ArrowDown, Trash2, X } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
+import MonetizationToggle from './MonetizationToggle'
 
 function InviteLink({ link, expiry }) {
     const [copied, setCopied] = useState(false)
@@ -156,6 +157,9 @@ export default function StaffTab({
 
     return (
         <div className="space-y-3">
+            {/* Admin-only: công tắc thu phí (server kill switch). Tự ẩn nếu không phải admin. */}
+            <MonetizationToggle />
+
             {/* Sub-tabs */}
             <div className="flex gap-2 bg-surface border border-border/60 rounded-[16px] p-1.5">
                 {TABS.map(tab => {

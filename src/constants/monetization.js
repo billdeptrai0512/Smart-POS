@@ -1,61 +1,38 @@
-// ─── Monetization — module metadata & pricing ────────────────────────────────
-// Single source of truth cho UI gate/upsell. Khớp docs/MONETIZATION.md §1.
-// Giá trị `tier` trong DB = key của MODULE_META (cashflow/inventory).
+// ─── Monetization — 1 gói all-access duy nhất ────────────────────────────────
+// Single source of truth cho UI checkout. Khớp docs/MONETIZATION.md §1.
 //
-// 2 sản phẩm (gộp Dòng tiền + Báo cáo/Lợi nhuận thành 1):
-//   cashflow  → "Dòng tiền": mở khoá CẢ view Dòng tiền LẪN view Lợi nhuận (P&L)
-//   inventory → "Tồn kho": view Tồn kho (gồm hao hụt)
+// 1 gói duy nhất mở khoá CẢ 3 view báo cáo (Dòng tiền + Lợi nhuận + Tồn kho).
+// Giá trị `tier` trong DB cho gói này = 'all'.
 
-import { Package, Wallet } from 'lucide-react'
+import { Wallet, TrendingUp, Package } from 'lucide-react'
 
-/** Thứ tự hiển thị + key module (khớp cột address_subscriptions.tier). */
-export const MODULE_KEYS = ['cashflow', 'inventory']
+/** Giá trị tier lưu trong address_subscriptions cho gói all-access. */
+export const ALL_TIER = 'all'
 
-/**
- * Meta cho từng module: nhãn, mô tả ngắn (1 câu giá trị), icon, và danh sách
- * tính năng hiển thị trong gate/sheet.
- */
-export const MODULE_META = {
-    cashflow: {
-        key: 'cashflow',
-        label: 'Dòng tiền',
-        icon: Wallet,
-        tagline: 'Thu chi, dòng tiền & lãi lỗ — bức tranh tài chính mỗi ngày.',
-        features: [
-            'Đối soát tiền mặt / chuyển khoản',
-            'Chi tiêu trong ngày & theo kỳ',
-            'Lợi nhuận ròng, doanh thu, giá vốn (COGS)',
-        ],
-    },
-    inventory: {
-        key: 'inventory',
-        label: 'Tồn kho',
-        icon: Package,
-        tagline: 'Quản lý nhập – tồn, soi hao hụt và gợi ý đi chợ.',
-        features: [
-            'Nhập / tồn / sử dụng nguyên liệu',
-            'Kiểm kê hao hụt theo ngày & kỳ',
-            'Gợi ý bổ sung (đi chợ) tự động',
-        ],
-    },
-}
-
-/**
- * Bảng giá (đơn vị đồng). Xem MONETIZATION.md §1.
- *   - module: 1 sản phẩm / 1 chi nhánh
- *   - bundle: cả 2 sản phẩm / 1 chi nhánh (có chiết khấu)
- *   - all-branches: nhân theo số chi nhánh (tính ở runtime)
- */
-export const PRICE = {
-    module: { month: 88888, year: 888888 },
-    bundle: { month: 166888, year: 1666888 },
+/** Gói duy nhất: 888,888đ / 6 tháng / 1 địa chỉ. */
+export const PLAN = {
+    months: 6,
+    price: 888888,
+    label: 'Trọn bộ báo cáo',
+    periodLabel: '6 tháng',
 }
 
 /** Số ngày trial mặc định (khớp trigger grant_trial_on_address_creation). */
-export const TRIAL_DAYS = 3
+export const TRIAL_DAYS = 7
 
-/** Nhãn chu kỳ hiển thị. */
-export const PERIOD_LABEL = { month: 'tháng', year: 'năm' }
+/** Các view được mở khoá — hiển thị "gồm gì" trong checkout. */
+export const PLAN_FEATURES = [
+    { icon: Wallet, label: 'Dòng tiền', desc: 'Thu chi, chuyển khoản, số ly bán' },
+    { icon: TrendingUp, label: 'Lợi nhuận', desc: 'Lãi lỗ, doanh thu, giá vốn (COGS)' },
+    { icon: Package, label: 'Tồn kho', desc: 'Nhập/tồn, hao hụt, gợi ý đi chợ' },
+]
 
-/** Số tháng tương ứng cho INSERT subscription. */
-export const PERIOD_MONTHS = { month: 1, year: 12 }
+/**
+ * Thông tin nhận chuyển khoản (mở khoá thủ công, giai đoạn chưa có webhook).
+ * ⚠️ ĐỔI THÀNH STK THẬT của bạn trước khi public.
+ */
+export const BANK_INFO = {
+    bank: 'Vietcombank',
+    accountNumber: '0000000000',
+    accountName: 'NGUYEN VAN A',
+}

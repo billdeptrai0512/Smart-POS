@@ -1,58 +1,69 @@
-import { useState, useEffect } from 'react'
-import { Check, QrCode, Loader2, CheckCircle2 } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { QrCode, Loader2, CheckCircle2, Copy, Check } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { supabase } from '../../lib/supabaseClient'
 import { usePaymentListener } from '../../hooks/usePaymentListener'
 import { formatVND } from '../../utils'
-import {
-    MODULE_KEYS, MODULE_META, PRICE, PERIOD_LABEL, PERIOD_MONTHS,
-} from '../../constants/monetization'
+import { PLAN, ALL_TIER, BANK_INFO } from '../../constants/monetization'
 
 // Gradient vàng thương hiệu (đồng bộ badge "developed by").
 const GOLD = 'linear-gradient(135deg, #f8c577, #f59e0b, #d4882f, #b8732a)'
 
 /**
- * SubscriptionPanel — thân trang đăng ký gói (checkout cao cấp).
- * Period là controlled prop (tabs ở SubscriptionScreen). Xem MONETIZATION.md §6.
+ * SubscriptionPanel — thân trang đăng ký gói (checkout).
+ * 1 gói duy nhất: 888,888đ / 6 tháng / 1 địa chỉ → mở khoá cả 3 view báo cáo.
+ * Multi-branch: chọn nhiều chi nhánh → tổng = giá × số chi nhánh.
  *
- * Props: period, preselectModule, preselectAddressId, onDone
+ * Props: preselectAddressId, onDone
  */
-export default function SubscriptionPanel({ period = 'month', preselectModule, preselectAddressId, onDone }) {
+export default function SubscriptionPanel({ preselectAddressId, onDone }) {
     const { isAdmin } = useAuth()
     const { addresses, selectedAddress } = useAddress()
 
-    const initialAddressId = preselectAddressId || selectedAddress?.id
+    const [selectedAddressIds, setSelectedAddressIds] = useState([])
 
-    const [selectedAddressIds, setSelectedAddressIds] = useState(() => {
-        if (initialAddressId) return [initialAddressId]
-        return addresses.length ? [addresses[0].id] : []
-    })
-    const [selectedModules, setSelectedModules] = useState(() =>
-        preselectModule ? [preselectModule] : [...MODULE_KEYS]
-    )
+    // Chọn sẵn chi nhánh đang xem (hoặc chi nhánh đầu) — chạy 1 lần khi addresses sẵn sàng.
+    // Dùng effect (không phải useState init) vì addresses load bất đồng bộ sau mount.
+    const didInit = useRef(false)
+    useEffect(() => {
+        if (didInit.current || !addresses.length) return
+        const want = preselectAddressId || selectedAddress?.id
+        const valid = want && addresses.some(a => a.id === want) ? want : addresses[0].id
+        setSelectedAddressIds([valid])
+        didInit.current = true
+    }, [addresses, preselectAddressId, selectedAddress?.id])
     const [isMocking, setIsMocking] = useState(false)
     const [isResetting, setIsResetting] = useState(false)
+    const [confirmed, setConfirmed] = useState(false)
+    const [branchQuery, setBranchQuery] = useState('')
+    const [copied, setCopied] = useState(null) // 'stk' | 'noidung' | null
 
-    // Trạng thái gói hiện tại của TỪNG chi nhánh → phân biệt đã mở / chưa ngay trong picker.
+    // valid_to (hạn) hiện tại của TỪNG chi nhánh → vừa hiện chip Đã mở/Chưa mở,
+    // vừa tính "hiệu lực đến" sau khi trả (gia hạn nối tiếp). null = chưa có sub active.
     // Dùng cùng RPC với badge (get_address_entitlement) để khớp CURRENT_DATE của DB.
-    const [modulesByAddr, setModulesByAddr] = useState({})
+    const [validToByAddr, setValidToByAddr] = useState({})
+    const [accessLoaded, setAccessLoaded] = useState(false)
     useEffect(() => {
         let cancelled = false
-        if (!addresses.length) { setModulesByAddr({}); return }
+        if (!addresses.length) { setValidToByAddr({}); setAccessLoaded(true); return }
+        setAccessLoaded(false)
         Promise.all(addresses.map(a =>
             supabase
                 .rpc('get_address_entitlement', { p_address_id: a.id })
                 .then(({ data }) => {
                     const rows = Array.isArray(data) ? data : (data ? [data] : [])
-                    return [a.id, rows.map(r => r.tier)]
+                    const vt = rows.reduce((mx, r) => (r.valid_to && (!mx || r.valid_to > mx) ? r.valid_to : mx), null)
+                    return [a.id, vt]
                 })
-                .catch(() => [a.id, []])
-        )).then(entries => { if (!cancelled) setModulesByAddr(Object.fromEntries(entries)) })
+                .catch(() => [a.id, null])
+        )).then(entries => {
+            if (cancelled) return
+            setValidToByAddr(Object.fromEntries(entries))
+            setAccessLoaded(true)
+        })
         return () => { cancelled = true }
     }, [addresses])
-    const [confirmed, setConfirmed] = useState(false)
-    const [branchQuery, setBranchQuery] = useState('')
 
     // Realtime listener: webhook SePay → Edge Function → INSERT address_subscriptions
     // → đẩy về đây → tự xác nhận + mở khoá. Theo dõi mọi chi nhánh của owner.
@@ -68,42 +79,69 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
     const toggleAddress = (id) => setSelectedAddressIds(prev =>
         prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     )
-    const toggleModule = (key) => setSelectedModules(prev =>
-        prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key]
-    )
     const allAddressesSelected = addresses.length > 0 && selectedAddressIds.length === addresses.length
     const toggleAllAddresses = () =>
         setSelectedAddressIds(allAddressesSelected ? [] : addresses.map(a => a.id))
 
-    // Nhiều chi nhánh → bật search + cuộn nội bộ (xem MONETIZATION.md, hỏi UI >25 CN).
+    // Nhiều chi nhánh → bật search + cuộn nội bộ.
     const manyBranches = addresses.length > 6
     const filteredAddresses = branchQuery.trim()
         ? addresses.filter(a => normalizeText(a.name).includes(normalizeText(branchQuery)))
         : addresses
 
-    // ── Tính tiền ────────────────────────────────────────────────────────────────
-    const moduleCount = selectedModules.length
+    // ── Tính tiền: giá cố định × số chi nhánh ────────────────────────────────────
     const addrCount = selectedAddressIds.length
-    const isBundle = moduleCount === MODULE_KEYS.length   // chọn đủ cả 2 → giá bundle
-    const perAddress = isBundle ? PRICE.bundle[period] : PRICE.module[period] * moduleCount
-    const originalPerAddress = PRICE.module[period] * moduleCount        // giá nếu mua lẻ
-    const total = perAddress * addrCount
-    const originalTotal = originalPerAddress * addrCount
-    const savings = originalTotal - total
-    const canSubmit = moduleCount > 0 && addrCount > 0
+    const total = PLAN.price * addrCount
+    const canSubmit = addrCount > 0
+
+    // ── Hiệu lực đến: tính theo quy tắc gia hạn nối tiếp (§4) ─────────────────────
+    // Đang có sub active → cộng tiếp sau hạn cũ; chưa có → tính từ hôm nay.
+    const newExpiryFor = (addrId) => {
+        const today = new Date(); today.setHours(0, 0, 0, 0)
+        let from = today
+        const vt = validToByAddr[addrId]
+        if (vt) {
+            const next = new Date(vt + 'T00:00:00'); next.setDate(next.getDate() + 1)
+            if (next > today) from = next
+        }
+        return addMonths(from, PLAN.months)
+    }
+    const fmtDate = (d) => d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    const expiryDates = selectedAddressIds.map(newExpiryFor)
+    const distinctExpiry = [...new Set(expiryDates.map(d => d.getTime()))]
+    const expiryLabel = (addrCount === 0 || !accessLoaded)
+        ? null
+        : distinctExpiry.length === 1
+            ? `Hiệu lực đến ${fmtDate(expiryDates[0])}`
+            : 'Mỗi chi nhánh +6 tháng (nối tiếp)'
+
+    // ── Nội dung CK: chuẩn hoá tên chi nhánh để admin đối soát ────────────────────
+    const selectedNames = selectedAddressIds.map(id => addresses.find(a => a.id === id)?.name).filter(Boolean)
+    const transferContent = selectedNames.length === 0
+        ? ''
+        : selectedNames.length === 1
+            ? normalizeContent(selectedNames[0])
+            : `${normalizeContent(selectedNames[0])} +${selectedNames.length - 1}CN`
+
+    const copy = async (text, key) => {
+        try {
+            await navigator.clipboard.writeText(text)
+            setCopied(key)
+            setTimeout(() => setCopied(null), 1500)
+        } catch { /* clipboard không khả dụng — bỏ qua */ }
+    }
 
     const handleMockPayment = async () => {
         if (!canSubmit) return
         setIsMocking(true)
         try {
             // Cấp/gia hạn qua RPC admin_set_subscription (SECURITY DEFINER, guard is_admin_auth).
-            // RPC tự áp quy tắc gia hạn nối tiếp (§4) cho từng chi nhánh × module.
-            const amountPer = isBundle ? Math.round(perAddress / moduleCount) : PRICE.module[period]
+            // RPC tự áp quy tắc gia hạn nối tiếp (§4) cho từng chi nhánh.
             const { error } = await supabase.rpc('admin_set_subscription', {
                 p_address_ids: selectedAddressIds,
-                p_modules: selectedModules,
-                p_months: PERIOD_MONTHS[period],
-                p_amount_paid: amountPer,
+                p_modules: [ALL_TIER],
+                p_months: PLAN.months,
+                p_amount_paid: PLAN.price,
                 p_note: 'admin_override',
             })
             if (error) throw error
@@ -123,7 +161,7 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
         try {
             const { error } = await supabase.rpc('admin_reset_subscription', {
                 p_address_ids: selectedAddressIds,
-                p_modules: null,   // null = xoá hết module
+                p_modules: null,   // null = xoá hết
             })
             if (error) throw error
             if (onDone) onDone()
@@ -136,44 +174,7 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
 
     return (
         <div className="flex flex-col gap-5 animate-fade-in">
-            {/* ── 1. Chọn báo cáo — 2 cột, không cần label ───────────────────────── */}
-            <div className="grid grid-cols-2 gap-2">
-                {MODULE_KEYS.map((key, i) => {
-                    const m = MODULE_META[key]
-                    const Icon = m.icon
-                    const active = selectedModules.includes(key)
-                    return (
-                        <button
-                            key={key}
-                            onClick={() => toggleModule(key)}
-                            style={{ animationDelay: `${i * 40}ms` }}
-                            className={`relative flex flex-col items-center text-center gap-1.5 rounded-[16px] border px-2 py-3 transition-all duration-200 animate-scale-up
-                                ${active
-                                    ? 'border-primary/70 bg-primary/[0.06] shadow-[0_0_20px_rgba(245,158,11,0.10)]'
-                                    : 'border-border/60 bg-surface-light hover:border-border-light'}`}
-                        >
-                            {/* Check nhỏ góc khi chọn */}
-                            <span className={`absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center transition-all
-                                ${active ? 'bg-primary' : 'border border-border-light'}`}>
-                                {active && <Check size={10} className="text-bg" strokeWidth={4} />}
-                            </span>
-
-                            <span
-                                className={`w-10 h-10 rounded-[13px] flex items-center justify-center transition-all
-                                    ${active ? 'shadow-[0_0_14px_rgba(245,158,11,0.25)]' : ''}`}
-                                style={{ background: active ? GOLD : 'rgba(245,158,11,0.10)' }}
-                            >
-                                <Icon size={18} className={active ? 'text-bg' : 'text-primary'} strokeWidth={2.3} />
-                            </span>
-
-                            <span className="text-[12.5px] font-black text-text leading-tight">{m.label}</span>
-                            <span className="text-[10.5px] font-bold text-primary tabular-nums">{formatVND(PRICE.module[period])}</span>
-                        </button>
-                    )
-                })}
-            </div>
-
-            {/* ── 2. Chi nhánh (áp dụng ở đâu) ────────────────────────────────────── */}
+            {/* ── Chi nhánh (áp dụng ở đâu) ───────────────────────────────────────── */}
             <section className="flex flex-col gap-2.5">
                 <SectionHeader
                     title="Chi nhánh"
@@ -199,11 +200,11 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
                 <div className={`flex flex-col gap-1.5 ${manyBranches ? 'max-h-[240px] overflow-y-auto pr-0.5' : ''}`}>
                     {filteredAddresses.map(addr => {
                         const active = selectedAddressIds.includes(addr.id)
-                        const mods = modulesByAddr[addr.id] || []
-                        const statusChip = mods.length >= MODULE_KEYS.length
-                            ? <span className="shrink-0 text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-success-soft/60 text-success">Trọn bộ</span>
-                            : mods.length > 0
-                                ? <span className="shrink-0 text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-warning/15 text-warning">{mods.length}/{MODULE_KEYS.length} gói</span>
+                        const hasAccess = !!validToByAddr[addr.id]
+                        const statusChip = !accessLoaded
+                            ? null
+                            : hasAccess
+                                ? <span className="shrink-0 text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-success-soft/60 text-success">Đã mở</span>
                                 : <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-surface text-text-dim">Chưa mở</span>
                         return (
                             <button
@@ -231,7 +232,7 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
                 </div>
             </section>
 
-            {/* ── 3. Thanh toán — 1 card gắn kết: QR + tổng cộng + status ────────── */}
+            {/* ── Thanh toán — 1 card gắn kết: QR + tổng cộng + status ───────────── */}
             <section className="flex flex-col gap-2.5">
                 <SectionHeader title="Thanh toán" />
                 <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3.5">
@@ -250,19 +251,20 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
 
                         {/* Tổng cộng — căn trái, phân tầng rõ */}
                         <div className="flex-1 min-w-0 flex flex-col items-start text-left">
-                            <p className="text-[9.5px] font-black uppercase tracking-[0.12em] text-text-secondary">Tổng cộng</p>
-                            <p className="text-[16px] font-black leading-none mt-1 mb-2 bg-clip-text text-transparent" style={{ backgroundImage: GOLD }}>
-                                {formatVND(total)}
-                            </p>
-                            <div className="text-[11px] text-text-secondary tabular-nums leading-[1.45]">
-                                <p>1 {PERIOD_LABEL[period]}</p>
-                                <p>{moduleCount} báo cáo</p>
-                                <p>{addrCount} chi nhánh</p>
-                            </div>
-                            {savings > 0 && (
-                                <span className="mt-1.5 text-[11px] font-bold text-success tabular-nums whitespace-nowrap">
-                                    Tiết kiệm {formatVND(savings)}
-                                </span>
+                            {addrCount === 0 ? (
+                                <p className="text-[12px] text-text-secondary font-medium">Chọn chi nhánh để tính tiền</p>
+                            ) : (
+                                <>
+                                    <p className="text-[9.5px] font-black uppercase tracking-[0.12em] text-text-secondary">Tổng cộng</p>
+                                    <p className="text-[16px] font-black leading-none mt-1 mb-2 bg-clip-text text-transparent" style={{ backgroundImage: GOLD }}>
+                                        {formatVND(total)}
+                                    </p>
+                                    <div className="text-[11px] text-text-secondary tabular-nums leading-[1.45]">
+                                        <p>{PLAN.periodLabel}</p>
+                                        <p>{addrCount} chi nhánh</p>
+                                        {expiryLabel && <p className="text-text font-bold">{expiryLabel}</p>}
+                                    </div>
+                                </>
                             )}
                         </div>
                     </div>
@@ -273,6 +275,17 @@ export default function SubscriptionPanel({ period = 'month', preselectModule, p
                         {confirmed ? 'Đã nhận thanh toán — đang mở khoá…' : 'Đang chờ xác nhận chuyển khoản tự động…'}
                     </div>
                 </div>
+
+                {/* Hướng dẫn chuyển khoản (mở khoá tay) — STK + tên + nội dung CK */}
+                {addrCount > 0 && (
+                    <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2">
+                        <p className="text-[10px] font-black uppercase tracking-wide text-text-secondary">Chuyển khoản tới</p>
+                        <CopyRow label="Ngân hàng" value={BANK_INFO.bank} />
+                        <CopyRow label="Số TK" value={BANK_INFO.accountNumber} onCopy={() => copy(BANK_INFO.accountNumber, 'stk')} copied={copied === 'stk'} />
+                        <CopyRow label="Chủ TK" value={BANK_INFO.accountName} />
+                        <CopyRow label="Nội dung" value={transferContent} onCopy={() => copy(transferContent, 'noidung')} copied={copied === 'noidung'} />
+                    </div>
+                )}
             </section>
 
             {/* ── Footer dính đáy: nút Mock + Reset (Admin). User thường xác nhận qua webhook. ── */}
@@ -315,7 +328,45 @@ function Corner({ className }) {
     return <span className={`absolute w-4 h-4 border-primary/40 ${className}`} />
 }
 
+function CopyRow({ label, value, onCopy, copied }) {
+    return (
+        <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] text-text-secondary shrink-0">{label}</span>
+            <span className="flex items-center gap-1.5 min-w-0">
+                <span className="text-[12px] font-bold text-text truncate">{value}</span>
+                {onCopy && (
+                    <button
+                        onClick={onCopy}
+                        title="Sao chép"
+                        className="shrink-0 w-6 h-6 flex items-center justify-center rounded-[8px] bg-surface-light border border-border/60 text-text-secondary hover:text-text active:scale-95 transition-all"
+                    >
+                        {copied ? <Check size={12} className="text-success" /> : <Copy size={12} />}
+                    </button>
+                )}
+            </span>
+        </div>
+    )
+}
+
 // Chuẩn hoá để search không phân biệt hoa/thường & dấu tiếng Việt.
 function normalizeText(s = '') {
     return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd')
+}
+
+// Nội dung CK: bỏ dấu, viết HOA, chỉ giữ chữ-số-khoảng trắng (ngân hàng dễ đọc).
+function normalizeContent(s = '') {
+    return s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd')
+        .toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+}
+
+// Cộng tháng, clamp về ngày cuối tháng nếu tràn — KHỚP Postgres `date + interval 'N months'`
+// (vd 31/08 + 6 tháng → 28/02, không cuộn sang 03/03 như Date.setMonth mặc định).
+function addMonths(date, months) {
+    const d = new Date(date)
+    const day = d.getDate()
+    d.setDate(1)
+    d.setMonth(d.getMonth() + months)
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+    d.setDate(Math.min(day, lastDay))
+    return d
 }

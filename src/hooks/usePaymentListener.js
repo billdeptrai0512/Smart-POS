@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
-import { MONETIZATION_ENABLED_FLAG } from './useEntitlement'
+import { useMonetizationEnabled } from './useEntitlement'
 
 /**
  * usePaymentListener — Realtime listener xác nhận thanh toán tự động.
@@ -21,6 +21,7 @@ import { MONETIZATION_ENABLED_FLAG } from './useEntitlement'
  */
 export function usePaymentListener({ addressIds = [], onConfirmed, enabled = true }) {
     const { isGuest } = useAuth()
+    const { enabled: monetizationEnabled } = useMonetizationEnabled()
     // Giữ callback mới nhất mà không phải re-subscribe mỗi lần nó đổi tham chiếu.
     const onConfirmedRef = useRef(onConfirmed)
     useEffect(() => { onConfirmedRef.current = onConfirmed }, [onConfirmed])
@@ -29,7 +30,7 @@ export function usePaymentListener({ addressIds = [], onConfirmed, enabled = tru
     const key = [...addressIds].sort().join(',')
 
     useEffect(() => {
-        if (!enabled || !MONETIZATION_ENABLED_FLAG || isGuest) return
+        if (!enabled || !monetizationEnabled || isGuest) return
         if (!supabase || !key) return
 
         const watched = new Set(key.split(','))
@@ -49,5 +50,5 @@ export function usePaymentListener({ addressIds = [], onConfirmed, enabled = tru
             .subscribe()
 
         return () => { supabase.removeChannel(channel) }
-    }, [key, enabled, isGuest])
+    }, [key, enabled, monetizationEnabled, isGuest])
 }

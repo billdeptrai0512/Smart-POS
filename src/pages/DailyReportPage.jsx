@@ -30,7 +30,7 @@ import { Truck, Package } from 'lucide-react'
 import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY } from '../components/DailyReportPage/ReportViewFilter'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
-import { useEntitlement, hasModule, MONETIZATION_ENABLED_FLAG } from '../hooks/useEntitlement'
+import { useEntitlement, hasModule } from '../hooks/useEntitlement'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
 import { shiftFinalizedKey, cashClosedKey } from '../constants/storageKeys'
@@ -51,7 +51,7 @@ export default function DailyReportPage() {
     const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits, ingredientConfigs, refreshProducts } = useProducts()
     const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, refreshTodayExpenses } = usePOS()
     const { isStaff, profile } = useAuth()
-    const { activeModules, loading: entitlementLoading } = useEntitlement()
+    const { activeModules, loading: entitlementLoading, enabled: monetizationEnabled } = useEntitlement()
     const { toast, showToast, showError } = useToast()
 
     // ── All hooks unconditional (Rules of Hooks) ──────────────────────────────
@@ -861,21 +861,16 @@ export default function DailyReportPage() {
         }
     }
 
-    // Gate theo từng view: view hiện tại = 1 module. Nếu module đó chưa mua →
-    // early-return NGUYÊN trang đăng ký gói (chrome riêng, back về /pos) thay vì
-    // bọc panel trong header/footer báo cáo. Cùng UI với route /subscription.
-    // Gộp: view Lợi nhuận (profit) nay thuộc cùng module 'cashflow' với Dòng tiền.
-    const viewModule = view === VIEW_CASHFLOW ? 'cashflow'
-        : view === VIEW_INVENTORY ? 'inventory'
-            : view === VIEW_PROFIT ? 'cashflow'
-                : null
-    if (MONETIZATION_ENABLED_FLAG && !entitlementLoading && viewModule && !hasModule(activeModules, viewModule)) {
+    // Gate: 1 gói all-access mở CẢ 3 view báo cáo. View nào trong nhóm báo cáo
+    // (Dòng tiền / Lợi nhuận / Tồn kho) mà address chưa có sub active → early-return
+    // NGUYÊN trang đăng ký gói (chrome riêng, back về /pos). Cùng UI với /subscription.
+    const needsAccess = view === VIEW_CASHFLOW || view === VIEW_INVENTORY || view === VIEW_PROFIT || view === VIEW_ALL
+    if (monetizationEnabled && !entitlementLoading && needsAccess && !hasModule(activeModules, 'all')) {
         return (
             <Navigate
                 to="/subscription"
                 replace
                 state={{
-                    preselectModule: viewModule,
                     preselectAddressId: selectedAddress?.id,
                     from: '/pos',
                 }}

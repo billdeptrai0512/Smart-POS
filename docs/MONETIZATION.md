@@ -7,43 +7,39 @@ Mọi feature mới phải follow doc này thay vì nghĩ lại từ đầu.
 
 ## 1. Mô hình tính phí
 
-**Trục tính phí**: theo `address_id` × chu kỳ × **module**.
-Một owner có nhiều xe (address) → mỗi xe trả phí riêng biệt cho từng module.
+> **🔄 ĐỔI MÔ HÌNH 2026-06-09: gộp về 1 gói all-access duy nhất.** Bỏ bán lẻ từng báo cáo,
+> bỏ chu kỳ tháng/năm. Phần "2 module" bên dưới là lịch sử, KHÔNG còn áp dụng.
 
-### 2 module độc lập
+**Trục tính phí**: theo `address_id`. Một owner có nhiều xe (address) → mỗi xe 1 gói riêng.
 
-Không còn tier basic/pro. **2 sản phẩm mua riêng** (gộp 2026-06-06: Báo cáo/Lợi nhuận vào Dòng tiền):
+### 1 gói all-access
 
-| Module     | Tên hiển thị | Bao gồm                                                            | View khoá          |
-|------------|--------------|--------------------------------------------------------------------|--------------------|
-| `cashflow` | Dòng tiền    | Thực thu/chi, chuyển khoản, số ly bán **+ P&L/lãi lỗ/COGS**         | `cashflow` + `profit` |
-| `inventory`| Tồn kho      | Nhập/tồn + **hao hụt (Loss Audit)** + gợi ý đi chợ                  | `inventory`        |
+**1 sản phẩm duy nhất.** Mua = mở khoá CẢ 3 view báo cáo:
 
-- **`cashflow` ("Dòng tiền") mở khoá CẢ 2 view**: Dòng tiền VÀ Lợi nhuận. (Trang báo cáo vẫn có 3 tab UI, nhưng tab Lợi nhuận gate bằng quyền `cashflow`.)
-- **Hao hụt (Loss Audit)** gộp vào `inventory` — mua Tồn kho là có luôn audit + RangeLossCard.
-- 2 module **độc lập**: mua cái nào mở cái đó, không cái nào là tiền đề.
+| Tier (DB) | Tên hiển thị | Mở khoá |
+|-----------|--------------|---------|
+| `all`     | Trọn bộ báo cáo | Dòng tiền (`cashflow`) + Lợi nhuận (`profit`) + Tồn kho (`inventory`, gồm hao hụt) |
+
+- **1 row `tier='all'`/address** = mở cả 3 view. Gate chỉ hỏi "address có sub active?" (`hasModule(activeModules, 'all')`), không phân biệt view.
+- POS/chốt ca/kho/công thức luôn **free** (không gate); chỉ 3 view báo cáo bị gate.
 
 ### Bảng giá
 
-| SKU                          | / tháng (`months=1`) | / năm (`months=12`) |
-|------------------------------|---------------------:|--------------------:|
-| 1 module / 1 chi nhánh       | 88,888đ              | 888,888đ            |
-| **Trọn bộ cả 2** / 1 chi nhánh | **166,888đ**       | **1,666,888đ**      |
-| Toàn bộ chi nhánh            | × số chi nhánh       | × số chi nhánh      |
+| SKU | Giá | Chu kỳ |
+|-----|----:|--------|
+| 1 gói / 1 chi nhánh | **888,888đ** | **6 tháng** (`months=6`) |
+| Nhiều chi nhánh | × số chi nhánh | 1 lần trả → 1 row/address |
 
-- **Năm ≈ 10 tháng** (tặng ~2 tháng).
-- **Trọn bộ** rẻ hơn lẻ (lẻ gộp tháng = 177,776đ → tiết kiệm 10,888đ; năm = 1,777,776đ → tiết kiệm ~111k).
-- **Trọn bộ & all-branches chỉ là tiện ích checkout**: 1 lần trả → tạo nhiều `address_subscriptions` row (1 row/module/address). Entitlement luôn check **per-module per-address**; KHÔNG lưu "bundle" thành 1 giá trị tier.
-- All-branches = nhân theo số chi nhánh; mỗi chi nhánh nhận đủ row.
+- **Chỉ 1 mức giá, 1 chu kỳ 6 tháng.** Không tháng/năm, không bundle/chiết khấu, không bán lẻ module.
+- **Multi-branch chỉ là tiện ích checkout**: 1 lần trả → tạo nhiều `address_subscriptions` row (1 row `'all'`/address). Entitlement check **per-address**.
 
-**Không có "Free tier" vĩnh viễn cho báo cáo.** Khi sub 1 module hết hạn, view đó khoá —
-POS/chốt ca/kho/công thức và module còn lại vẫn chạy bình thường.
+**Không có "Free tier" vĩnh viễn cho báo cáo.** Sub hết hạn → cả 3 view khoá; POS/chốt ca/kho/công thức vẫn chạy.
 
 ### Trial
 
-- **Trial tự động 3 ngày** full cả 2 module ngay khi tạo địa chỉ đầu tiên.
+- **Trial tự động 7 ngày** (đổi 3→7 ngày 2026-06-09: cho chủ quán thấy đủ dữ liệu trước khi cam kết 6 tháng) — 1 row `'all'` ngay khi tạo địa chỉ đầu tiên.
 - Không bind vào phone (Phase 1); sẽ bind phone ở Phase 2.
-- Hết trial: từng module rớt về khoá cho tới khi user thanh toán.
+- Hết trial: 3 view rớt về khoá cho tới khi thanh toán.
 - Chống abuse: phone OTP bắt buộc lúc signup (xem §3).
 
 ---
@@ -404,6 +400,13 @@ không cần OTP signup mỗi lần test. Khi flip ON, **chỉ thay đổi entit
 không đụng feature code.
 
 ### Implementation
+
+> ✅ **Đã implement (2026-06-09):** `useMonetizationEnabled()` trong `src/hooks/useEntitlement.js` —
+> hiệu lực = client(build `VITE_MONETIZATION_ENABLED`) **AND** server(`app_config.monetization_enabled`,
+> đọc runtime, cache module-level 1 request). Mọi consumer (DailyReportPage gate, SubscriptionBadge,
+> SubscriptionPage route, usePaymentListener) dùng `enabled` runtime → flip `app_config` là đổi cả UI,
+> **không cần redeploy**. Lỗi đọc config → fail-open OFF (không gate nhầm khách đã trả).
+> Còn lại cho Phase 3: RPC `confirm_payment` cũng phải check `app_config` đầu function.
 
 **Client** — env var build-time:
 ```sh

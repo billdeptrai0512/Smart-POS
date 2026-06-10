@@ -1,18 +1,17 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabaseClient'
-import { MONETIZATION_ENABLED_FLAG } from '../../hooks/useEntitlement'
+import { useMonetizationEnabled } from '../../hooks/useEntitlement'
 import { startOfDayVN } from '../../utils/dateVN'
 
 /**
  * SubscriptionBadge — hiển thị trạng thái gói cước cho từng address card.
  *
- * Khi MONETIZATION_ENABLED=false → không render gì (ẩn hoàn toàn).
+ * Khi monetization OFF → không render gì (ẩn hoàn toàn).
  *
- * Mô hình 2 module (cashflow/inventory) — xem MONETIZATION.md §6.B:
- *   - đủ 2 module, còn > 3 ngày  → "Trọn bộ · còn X ngày" (mờ, nhỏ)
- *   - 1/2 module, còn > 3 ngày   → "1/2 gói · còn X ngày" (mờ, nhỏ)
- *   - còn ≤ 3 ngày               → "… · còn X ngày — Gia hạn" (warning, click → /subscription)
- *   - không còn gói nào          → "Mở khoá báo cáo" (primary, click → /subscription)
+ * 1 gói all-access (xem MONETIZATION.md §6.B):
+ *   - active, còn > 3 ngày  → "Đã đăng ký · còn X ngày" (mờ, nhỏ, click → /subscription)
+ *   - active, còn ≤ 3 ngày  → "Còn X ngày — Gia hạn" (warning, click → /subscription)
+ *   - chưa có gói           → "Mở khoá báo cáo" (primary, click → /subscription)
  *
  * ⚠️ Render bằng <span> (không phải <button>) vì badge nằm BÊN TRONG button card
  *    của BranchGrid — button lồng button gây hydration error. span + onClick hợp lệ.
@@ -22,12 +21,13 @@ import { startOfDayVN } from '../../utils/dateVN'
  *   onRenewClick: () => void   — điều hướng tới /subscription (passed from parent)
  */
 export default function SubscriptionBadge({ addressId, onRenewClick }) {
+    const { enabled } = useMonetizationEnabled()
     const [activeTiers, setActiveTiers] = useState([])
     const [loaded, setLoaded] = useState(false)
 
-    // Không fetch gì khi kill switch OFF
+    // Không fetch gì khi monetization OFF (client build hoặc server app_config)
     useEffect(() => {
-        if (!MONETIZATION_ENABLED_FLAG || !addressId) {
+        if (!enabled || !addressId) {
             setLoaded(true)
             return
         }
@@ -39,10 +39,10 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
                 setActiveTiers(rows)
             })
             .finally(() => setLoaded(true))
-    }, [addressId])
+    }, [addressId, enabled])
 
-    // Kill switch OFF hoặc chưa load xong → không render
-    if (!MONETIZATION_ENABLED_FLAG || !loaded) return null
+    // Monetization OFF hoặc chưa load xong → không render
+    if (!enabled || !loaded) return null
 
     // ── Tính số ngày còn lại ────────────────────────────────────────────────────
     const today = startOfDayVN()
@@ -72,9 +72,6 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
         }
     })
 
-    const count = activeTiers.length
-    const tierLabel = count >= 2 ? 'Trọn bộ' : `${count}/2 gói`
-
     // ── Còn ≤ 3 ngày → warning + gia hạn ────────────────────────────────────
     if (minDaysLeft <= 3) {
         return (
@@ -86,7 +83,7 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/10 border border-warning/25 hover:bg-warning/20 active:scale-95 transition-all cursor-pointer"
             >
                 <span className="text-[10px] font-black text-warning">
-                    {tierLabel} · còn {minDaysLeft} ngày — Gia hạn
+                    Còn {minDaysLeft} ngày — Gia hạn
                 </span>
             </span>
         )
@@ -101,7 +98,7 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
             onClick={handleClick}
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-light hover:bg-border/40 active:scale-95 transition-all cursor-pointer"
         >
-            <span className="text-[10px] font-medium text-text-dim">{tierLabel} · còn {minDaysLeft} ngày</span>
+            <span className="text-[10px] font-medium text-text-dim">Đã đăng ký · còn {minDaysLeft} ngày</span>
         </span>
     )
 }
