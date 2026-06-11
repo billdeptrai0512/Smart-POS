@@ -271,13 +271,13 @@ export default function CashFlowCard({
                 <div className="flex flex-col gap-2.5 pl-2">
                     <div className="flex justify-between items-center">
                         <span className="text-[12px] font-bold text-text-secondary">Tiền mặt thực tế:</span>
-                        <span className="text-[13px] font-bold text-text tabular-nums">
+                        <span className={`text-[13px] font-bold tabular-nums ${takeHomeCash < 0 ? 'text-danger' : 'text-text'}`}>
                             {formatVND(takeHomeCash)}
                         </span>
                     </div>
                     <div className="flex justify-between items-center">
                         <span className="text-[12px] font-bold text-text-secondary">Chuyển khoản thực tế:</span>
-                        <span className="text-[13px] font-bold text-text tabular-nums">
+                        <span className={`text-[13px] font-bold tabular-nums ${takeHomeTransfer < 0 ? 'text-danger' : 'text-text'}`}>
                             {formatVND(takeHomeTransfer)}
                         </span>
                     </div>
@@ -287,7 +287,7 @@ export default function CashFlowCard({
 
                 <div className="flex justify-between items-center mt-1 pl-1">
                     <span className="text-[13px] font-black text-text uppercase tracking-wide">Tổng thực nhận</span>
-                    <span className="text-[16px] font-black text-success tabular-nums">
+                    <span className={`text-[16px] font-black tabular-nums ${takeHome < 0 ? 'text-danger' : 'text-success'}`}>
                         {formatVND(takeHome)}
                     </span>
                 </div>

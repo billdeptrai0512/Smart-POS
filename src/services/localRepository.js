@@ -263,7 +263,13 @@ export const deleteLocalExpensePaymentsByExpense = (expenseId) => {
 
 export const insertLocalExpensePayment = (payload) => {
     const list = get(KEYS.EXPENSE_PAYMENTS);
-    const newItem = { id: generateId(), created_at: new Date().toISOString(), paid_at: new Date().toISOString(), ...payload };
+    const paidAt = payload.paid_at || new Date().toISOString();
+    const newItem = {
+        id: generateId(),
+        created_at: paidAt,
+        paid_at: paidAt,
+        ...payload
+    };
     list.push(newItem);
     set(KEYS.EXPENSE_PAYMENTS, list);
     return newItem;
