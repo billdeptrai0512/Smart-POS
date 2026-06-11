@@ -40,15 +40,23 @@ DECLARE
     v_trial_to   DATE;
     v_addr       UUID;
 BEGIN
-    -- Chuẩn hoá: bỏ ký tự thừa, đưa về E.164 +84xxxxxxxxx.
-    v_phone := regexp_replace(COALESCE(p_phone, ''), '[^0-9+]', '', 'g');
-    IF v_phone ~ '^0\d{9}$' THEN
-        v_phone := '+84' || substr(v_phone, 2);
-    ELSIF v_phone ~ '^84\d{9}$' THEN
-        v_phone := '+' || v_phone;
-    ELSIF v_phone !~ '^\+84\d{9}$' THEN
-        RAISE EXCEPTION 'Số điện thoại không hợp lệ (cần dạng 0xxxxxxxxx)';
+    -- Chuẩn hoá về E.164 +84xxxxxxxxx (kiểu libphonenumber, region VN):
+    -- mọi biến thể của CÙNG 1 số phải ra CÙNG 1 chuỗi → unique index/trial_grants
+    -- so trùng chính xác, không thể lách trial bằng cách đổi cách viết.
+    v_phone := regexp_replace(COALESCE(p_phone, ''), '[^0-9]', '', 'g');  -- chỉ giữ digits
+    IF v_phone ~ '^00' THEN                       -- tiền tố quay quốc tế: 0084...
+        v_phone := substr(v_phone, 3);
     END IF;
+    IF v_phone ~ '^840\d{9}$' THEN                -- +84 0902... (thừa số 0 sau mã nước)
+        v_phone := substr(v_phone, 3);            -- → 0902...
+    ELSIF v_phone ~ '^84\d{9}$' THEN              -- 84902... / +84902...
+        v_phone := '0' || substr(v_phone, 3);     -- → 0902...
+    END IF;
+    -- Sau chuẩn hoá phải là di động VN 10 số: 0 + đầu số 3/5/7/8/9 + 8 số.
+    IF v_phone !~ '^0[35789]\d{8}$' THEN
+        RAISE EXCEPTION 'Số điện thoại không hợp lệ — cần số di động VN 10 số (vd: 0902822192)';
+    END IF;
+    v_phone := '+84' || substr(v_phone, 2);
 
     SELECT * INTO v_user FROM users WHERE auth_id = auth.uid();
     IF NOT FOUND THEN
