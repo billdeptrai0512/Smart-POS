@@ -112,12 +112,24 @@ export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfir
                         <MoneyInput value={amountInput} onChange={setAmountInput} size="lg" />
                     </div>
 
-                    {/* 5. Phương thức trả */}
-                    <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Phương thức trả</span>
-                        <div className="flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
-                            <button type="button" onClick={() => setPaymentMethod('cash')} className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'cash' ? 'bg-primary text-white' : 'text-text-secondary'}`}>Tiền mặt</button>
-                            <button type="button" onClick={() => setPaymentMethod('transfer')} className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}>Chuyển khoản</button>
+                    {/* 5. Phương thức */}
+                    <div className="flex items-center justify-between gap-3">
+                        <span className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Phương thức</span>
+                        <div className="w-48 flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
+                            <button
+                                type="button"
+                                onClick={() => setPaymentMethod('cash')}
+                                className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'cash' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                            >
+                                Tiền mặt
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setPaymentMethod('transfer')}
+                                className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                            >
+                                Bank
+                            </button>
                         </div>
                     </div>
                 </div>
