@@ -406,7 +406,9 @@ không đụng feature code.
 > đọc runtime, cache module-level 1 request). Mọi consumer (DailyReportPage gate, SubscriptionBadge,
 > SubscriptionPage route, usePaymentListener) dùng `enabled` runtime → flip `app_config` là đổi cả UI,
 > **không cần redeploy**. Lỗi đọc config → fail-open OFF (không gate nhầm khách đã trả).
-> Còn lại cho Phase 3: RPC `confirm_payment` cũng phải check `app_config` đầu function.
+> ✅ **2026-06-11:** RPC `confirm_payment` check `app_config` đầu function — OFF → trả
+> `'monetization_disabled'`, không ghi sub (migration `20260611_confirm_payment_killswitch_intent_expiry.sql`,
+> kèm cron pg_cron dọn intent pending quá hạn mỗi giờ).
 
 **Client** — env var build-time:
 ```sh
