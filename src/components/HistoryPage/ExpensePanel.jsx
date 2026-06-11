@@ -130,28 +130,12 @@ function ExpenseCard({ expense, category, isReadOnly, runningTotal, deletingExpI
                     <span className="font-black text-[14px] text-warning">
                         -{formatVND(expense.amount)}
                     </span>
-                    {category ? (
-                        <TagPill
-                            name={category.name}
-                            group={category.group_section}
-                            onClick={onTagClick ? () => onTagClick(expense) : null}
-                        />
-                    ) : expense.category_id ? (
-                        <TagPill
-                            name="Nhãn đã xoá"
-                            group="operating"
-                            muted
-                            strike
-                            onClick={onTagClick ? () => onTagClick(expense) : null}
-                        />
-                    ) : (
-                        <TagPill
-                            name="Chưa phân loại"
-                            group="operating"
-                            muted
-                            onClick={onTagClick ? () => onTagClick(expense) : null}
-                        />
-                    )}
+                    <Pill
+                        tone={isTransfer ? 'primary' : 'neutral'}
+                        onClick={onPaymentToggle ? () => onPaymentToggle(expense.id, isTransfer ? 'cash' : 'transfer') : null}
+                    >
+                        {isTransfer ? 'Chuyển khoản' : 'Tiền mặt'}
+                    </Pill>
                 </div>
                 {runningTotal != null && (
                     <span className="text-danger leading-none text-[14px] font-bold tabular-nums">
@@ -160,15 +144,31 @@ function ExpenseCard({ expense, category, isReadOnly, runningTotal, deletingExpI
                 )}
             </div>
 
-            {/* Meta pills row — timing + payment method. */}
+            {/* Meta pills row — tag (colored by group) + timing. */}
             <div className="flex flex-wrap items-center gap-1.5 border-t border-border/40 pt-2">
+                {category ? (
+                    <TagPill
+                        name={category.name}
+                        group={category.group_section}
+                        onClick={onTagClick ? () => onTagClick(expense) : null}
+                    />
+                ) : expense.category_id ? (
+                    <TagPill
+                        name="Nhãn đã xoá"
+                        group="operating"
+                        muted
+                        strike
+                        onClick={onTagClick ? () => onTagClick(expense) : null}
+                    />
+                ) : (
+                    <TagPill
+                        name="Chưa phân loại"
+                        group="operating"
+                        muted
+                        onClick={onTagClick ? () => onTagClick(expense) : null}
+                    />
+                )}
                 <Pill tone="neutral">{isAfterShift ? 'Sau ca' : 'Trong ca'}</Pill>
-                <Pill
-                    tone={isTransfer ? 'primary' : 'neutral'}
-                    onClick={onPaymentToggle ? () => onPaymentToggle(expense.id, isTransfer ? 'cash' : 'transfer') : null}
-                >
-                    {isTransfer ? 'Chuyển khoản' : 'Tiền mặt'}
-                </Pill>
             </div>
 
             <div className="flex justify-between items-stretch mb-1">

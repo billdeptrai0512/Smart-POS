@@ -111,27 +111,6 @@ export default function AddExpenseModal({
                     </div>
                 </div>
 
-                {/* Phương thức thanh toán (Toggle Tiền mặt / Chuyển khoản) */}
-                <div className="flex items-center justify-between gap-3">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Phương thức</span>
-                    <div className="w-48 flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
-                        <button
-                            type="button"
-                            onClick={() => onPaymentMethodChange?.('cash')}
-                            className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'cash' ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                        >
-                            Tiền mặt
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => onPaymentMethodChange?.('transfer')}
-                            className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                        >
-                            Chuyển khoản
-                        </button>
-                    </div>
-                </div>
-
                 <ExpenseCategoryPicker
                     categories={expenseCategories}
                     selectedId={selectedCategoryId}
@@ -139,8 +118,6 @@ export default function AddExpenseModal({
                     onCreate={onCreateCategory}
                     disabled={isSubmitting}
                 />
-
-                <div className="h-px bg-border/60 rounded-full" />
 
                 <input
                     ref={nameRef}
@@ -167,6 +144,27 @@ export default function AddExpenseModal({
                     weight="medium"
                     placeholder="Số tiền..."
                 />
+
+                {/* Phương thức thanh toán (Toggle Tiền mặt / Chuyển khoản) */}
+                <div className="flex items-center justify-between gap-3">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Phương thức</span>
+                    <div className="w-48 flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
+                        <button
+                            type="button"
+                            onClick={() => onPaymentMethodChange?.('cash')}
+                            className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'cash' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                        >
+                            Tiền mặt
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => onPaymentMethodChange?.('transfer')}
+                            className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                        >
+                            Chuyển khoản
+                        </button>
+                    </div>
+                </div>
 
                 <button
                     onClick={() => canSubmit && onSubmit()}
