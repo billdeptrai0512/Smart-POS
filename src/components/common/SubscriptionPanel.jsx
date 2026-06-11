@@ -123,13 +123,6 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
         return addMonths(from, PLAN.months)
     }
     const fmtDate = (d) => d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
-    const expiryDates = selectedAddressIds.map(newExpiryFor)
-    const distinctExpiry = [...new Set(expiryDates.map(d => d.getTime()))]
-    const expiryLabel = (addrCount === 0 || !accessLoaded)
-        ? null
-        : distinctExpiry.length === 1
-            ? `Sử dụng đến ${fmtDate(expiryDates[0])}`
-            : 'Mỗi chi nhánh +6 tháng (nối tiếp)'
 
     // ── Nội dung CK: 'SP' + reference của payment_intent (webhook SePay đối chiếu) ─
     // Tạo intent khi đổi tập chi nhánh / số tiền → reference cố định cho lần CK này.
@@ -227,7 +220,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
     }
 
     // ── Panel xác nhận thanh toán thành công ─────────────────────────────────────
-    // expiryDates tính từ validToByAddr TRƯỚC khi trả (gia hạn nối tiếp §4) = đúng
+    // newExpiryFor tính từ validToByAddr TRƯỚC khi trả (gia hạn nối tiếp §4) = đúng
     // hạn mới sau khi webhook insert sub. User tự bấm "Xong", không auto-redirect.
     if (confirmed) {
         return (
@@ -323,17 +316,17 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                 </div>
             </section>
 
+            {/* Mỗi chi nhánh 1 card — gia hạn nối tiếp nên hạn từng chi nhánh có thể khác nhau */}
             <section className="flex flex-col gap-2.5">
-                <SectionHeader title="Thông tin" />
+                <SectionHeader title="Thông tin" hint={addrCount > 0 ? `${addrCount} địa chỉ` : undefined} />
                 {addrCount > 0 ? (
-                    <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2">
-                        <CopyRow label="Số lượng" value={`${addrCount} địa chỉ`} />
-                        <CopyRow label="Thời hạn" value={PLAN.periodLabel} />
-
-                        {expiryLabel && (distinctExpiry.length === 1
-                            ? <CopyRow label="Sử dụng đến" value={fmtDate(expiryDates[0])} />
-                            : <CopyRow label="Hiệu lực" value="Mỗi chi nhánh +6 tháng (nối tiếp)" />)}
-                    </div>
+                    selectedAddressIds.map(id => (
+                        <div key={id} className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2">
+                            <CopyRow label="Địa chỉ" value={addresses.find(a => a.id === id)?.name || '—'} />
+                            <CopyRow label="Thời hạn" value={PLAN.periodLabel} />
+                            <CopyRow label="Sử dụng đến" value={accessLoaded ? fmtDate(newExpiryFor(id)) : '…'} />
+                        </div>
+                    ))
                 ) : (
                     <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3">
                         <p className="text-[12px] text-text-secondary font-medium">Chọn chi nhánh để xem thông tin</p>
