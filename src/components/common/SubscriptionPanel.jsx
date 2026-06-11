@@ -235,16 +235,14 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                     </div>
                 </div>
 
-                <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2">
-                    <p className="text-[10px] font-black uppercase tracking-wide text-text-secondary">Sử dụng đến</p>
-                    {selectedAddressIds.map(id => (
-                        <CopyRow
-                            key={id}
-                            label={addresses.find(a => a.id === id)?.name || '—'}
-                            value={fmtDate(newExpiryFor(id))}
-                        />
-                    ))}
-                </div>
+                {/* Mỗi chi nhánh 1 card xác nhận — khớp format panel Thông tin */}
+                {selectedAddressIds.map(id => (
+                    <div key={id} className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2">
+                        <CopyRow label="Địa chỉ" value={addresses.find(a => a.id === id)?.name || '—'} />
+                        <CopyRow label="Thời hạn" value={PLAN.periodLabel} />
+                        <CopyRow label="Sử dụng đến" value={fmtDate(newExpiryFor(id))} />
+                    </div>
+                ))}
 
                 <button
                     onClick={() => { onDone ? onDone() : window.location.reload() }}
