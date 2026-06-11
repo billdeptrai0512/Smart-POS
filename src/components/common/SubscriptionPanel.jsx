@@ -44,6 +44,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
     const [reference, setReference] = useState(null) // mã CK (SP<reference>) từ payment_intent
     const [refError, setRefError] = useState(false)
     const [refRetry, setRefRetry] = useState(0) // tăng → chạy lại effect tạo intent
+    const [reviewHold, setReviewHold] = useState(false) // CK sai số tiền → chờ admin duyệt tay
 
     // valid_to (hạn) hiện tại của TỪNG chi nhánh → vừa hiện chip Đã mở/Chưa mở,
     // vừa tính "hiệu lực đến" sau khi trả (gia hạn nối tiếp). null = chưa có sub active.
@@ -84,12 +85,16 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
 
     // Poll-while-pending (§7.1) — lưới an toàn khi realtime rớt đúng lúc webhook bắn:
     // poll status của intent đang chờ, thấy 'paid' → confirm (guard chung `confirmed`).
-    // Intent hết hạn/huỷ → tạo intent mới (refRetry) để QR luôn dùng mã còn hiệu lực.
+    // manual_review = đã nhận tiền nhưng sai số tiền → báo user chờ admin (KHÔNG lặng lẽ
+    // đổi mã QR mới). Hết hạn/huỷ → tạo intent mới để QR luôn dùng mã còn hiệu lực.
     usePaymentPoll({
         reference,
-        enabled: !confirmed,
+        enabled: !confirmed && !reviewHold,
         onPaid: handleConfirmed,
-        onExpired: () => setRefRetry(n => n + 1),
+        onExpired: (status) => {
+            if (status === 'manual_review') setReviewHold(true)
+            else setRefRetry(n => n + 1)
+        },
     })
 
     const toggleAddress = (id) => setSelectedAddressIds(prev =>
@@ -374,9 +379,27 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                     )}
 
                     {/* status — cùng card, ngăn bằng hairline */}
-                    <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-border/40 text-[10.5px] text-text-secondary">
-                        <span className="w-1.5 h-1.5 rounded-full bg-success shrink-0 animate-pulse" />
-                        {'Đang chờ xác nhận chuyển khoản tự động…'}
+                    <div className="mt-3 pt-3 border-t border-border/40 flex flex-col gap-1.5">
+                        {reviewHold ? (
+                            <div className="flex items-start gap-1.5 text-[10.5px] font-bold text-warning">
+                                <span className="w-1.5 h-1.5 rounded-full bg-warning shrink-0 mt-[3px]" />
+                                <span>Đã nhận chuyển khoản nhưng số tiền chưa khớp — admin sẽ kiểm tra và mở khoá thủ công.</span>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="flex items-center gap-1.5 text-[10.5px] text-text-secondary">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-success shrink-0 animate-pulse" />
+                                    Hệ thống tự xác nhận ngay khi nhận được tiền
+                                </div>
+                                {transferContent && (
+                                    <ul className="text-[10.5px] leading-[1.6] flex flex-col gap-0.5">
+                                        <li className="flex gap-1.5 text-warning"><span className="shrink-0">•</span><span>Chuyển đúng số tiền <b>{formatVND(total)}</b></span></li>
+                                        <li className="flex gap-1.5 text-warning"><span className="shrink-0">•</span><span>Ghi đúng nội dung <b>{transferContent}</b></span></li>
+                                        <li className="flex gap-1.5 text-text-secondary"><span className="shrink-0">•</span><span>Quét QR là đã điền sẵn cả hai</span></li>
+                                    </ul>
+                                )}
+                            </>
+                        )}
                     </div>
                 </div>
             </section>
