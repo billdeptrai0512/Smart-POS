@@ -196,6 +196,15 @@ export async function getSession() {
     return session
 }
 
+// Lưu SĐT cho tài khoản đang đăng nhập (RPC set_my_phone — chuẩn hoá +84,
+// lần đầu nhập sẽ bind/cấp trial theo quy tắc 1 SĐT = 1 trial).
+// Trả 'trial_granted' khi vừa kích hoạt 7 ngày dùng thử, ngược lại 'ok'.
+export async function setMyPhone(phone) {
+    const { data, error } = await supabase.rpc('set_my_phone', { p_phone: phone })
+    if (error) throw error
+    return data
+}
+
 // Fetch user profile by Supabase Auth user ID
 export async function fetchProfileByAuthId(authId) {
     if (!supabase) return null

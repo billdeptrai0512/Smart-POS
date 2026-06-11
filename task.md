@@ -19,6 +19,7 @@ Toàn bộ migration monetization đã chạy lên Supabase. Verify đạt: `add
    - `20260609_single_plan_all_access.sql` — gộp về 1 gói `tier='all'`, trial 7 ngày, convert data test cũ.
    - `20260610_sepay_payment_webhook.sql` — RPC `create_payment_intent` + `confirm_payment` (webhook SePay).
    - `20260611_confirm_payment_killswitch_intent_expiry.sql` — `confirm_payment` check server kill switch (OFF → không ghi sub) + cron pg_cron dọn intent pending quá hạn mỗi giờ.
+   - `20260611_phase2a_users_phone_trial_binding.sql` — `users.phone` + RPC `set_my_phone` + trigger trial bind theo SĐT (Giai đoạn A). ⚠️ Sau migration này: account chưa nhập SĐT tạo address sẽ KHÔNG có trial.
 2. Set role admin cho tài khoản của bạn (chạy khi đang đăng nhập):
    `UPDATE users SET role = 'admin' WHERE auth_id = auth.uid();`
 3. **Bật/tắt monetization runtime** (server kill switch, KHÔNG cần redeploy) — hoặc dùng nút toggle ở /addresses:
@@ -47,11 +48,11 @@ Bỏ bán lẻ module, bỏ chu kỳ tháng/năm, bỏ bundle. Trial 7 ngày. Mu
 > Mục tiêu: 1 SĐT = 1 trial duy nhất. Vá 2 lỗ hiện tại: tạo tài khoản mới nhận trial lại,
 > và xoá địa chỉ → tạo lại nhận trial lại (trigger hiện chỉ đếm số address của manager).
 
-### Giai đoạn A — thu SĐT sau khi tạo tài khoản (chưa cần OTP, chi phí 0đ)
-- [ ] Migration: thêm cột `phone` (TEXT, chuẩn hoá +84) vào bảng `users` + UNIQUE index (partial, `WHERE phone IS NOT NULL`).
-- [ ] UI: modal một lần sau đăng nhập cho manager chưa có phone + field trong trang tài khoản. Mồi: "Nhập SĐT để nhận 7 ngày dùng thử" — không ép.
-- [ ] Sửa trigger `grant_trial_on_address_creation`: chỉ cấp trial khi manager **có phone** VÀ phone **chưa có trong `trial_grants`** (bảng có sẵn từ `20260511`, chưa được nối); cấp xong INSERT `trial_grants(phone, address_id)`.
-- [ ] Backfill: tài khoản cũ đã nhận trial → khi họ nhập phone, ghi vào `trial_grants` luôn (không nhận thêm lần nữa).
+### Giai đoạn A — thu SĐT sau khi tạo tài khoản (chưa cần OTP, chi phí 0đ) — ✅ XONG 2026-06-11
+- [x] Migration `20260611_phase2a_users_phone_trial_binding.sql`: cột `users.phone` (E.164 +84) + UNIQUE index partial + RPC `set_my_phone` (chuẩn hoá, validate, xử lý trial) + trigger mới.
+- [x] UI (chốt với owner): field SĐT trong **modal tạo chi nhánh** khi chưa có phone (bảo đảm phone có TRƯỚC khi trigger trial chạy — bỏ trống = không trial) + **card Tài khoản ở tab Staff** (`AccountCard.jsx`) để xem/nhập/sửa. Cả 2 ẩn mồi trial khi monetization OFF.
+- [x] Trigger `grant_trial_on_address_creation`: chỉ cấp khi owner **có phone** VÀ phone **chưa có trong `trial_grants`**; bỏ check "address đầu tiên" (trial_grants = nguồn chân lý 1 SĐT = 1 trial).
+- [x] Backfill: `set_my_phone` lần đầu nhập số → nếu account đã từng nhận trial thì chỉ bind vào `trial_grants` (không cấp lại); nếu có address chưa từng có gói → cấp trial 7 ngày luôn (mồi "nhập SĐT = được trial" đúng cho cả user cũ).
 
 ### Giai đoạn B — verify SĐT bằng OTP (khi cần chống số ảo)
 - [ ] Bật Phone provider (Twilio) trong Supabase Auth (~1.200đ/SMS, ổn khi <100 OTP/tháng).

@@ -3,7 +3,8 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAddressStats } from '../contexts/AddressStatsContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { createInviteToken, fetchDefaultIngredientSort, setTeamMemberRole, removeTeamMember } from '../services/authService'
+import { createInviteToken, fetchDefaultIngredientSort, setTeamMemberRole, removeTeamMember, setMyPhone } from '../services/authService'
+import { useMonetizationEnabled } from '../hooks/useEntitlement'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { LogOut, Loader, Plus, X, UserPlus } from 'lucide-react'
 import Skeleton from '../components/common/Skeleton'
@@ -16,7 +17,8 @@ import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 export default function AddressSelectPage() {
     const { addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading, fetchError } = useAddress()
     const { cupsMap, revenueMap, sessionsMap, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
-    const { signOut, profile, isStaff, isAdmin, isGuest } = useAuth()
+    const { signOut, profile, refreshProfile, isStaff, isAdmin, isGuest } = useAuth()
+    const { enabled: monetizationEnabled } = useMonetizationEnabled()
     const navigate = useNavigate()
 
     const [activeTab, setActiveTab] = useState('branches')
@@ -24,6 +26,7 @@ export default function AddressSelectPage() {
     const [error, setError] = useState('')
     const [backupSource, setBackupSource] = useState(null)
     const [newAddressName, setNewAddressName] = useState('')
+    const [newPhone, setNewPhone] = useState('')
     const [creating, setCreating] = useState(false)
     const [showCreateModal, setShowCreateModal] = useState(false)
     const createGuardRef = useRef(false)
@@ -111,6 +114,10 @@ export default function AddressSelectPage() {
         handleSelect(addr)
     }
 
+    // Mồi nhập SĐT ngay trong modal tạo chi nhánh: trigger trial chỉ cấp khi
+    // owner ĐÃ có phone, nên phải lưu phone TRƯỚC khi insert address.
+    const needPhone = monetizationEnabled && !isGuest && !profile?.phone
+
     async function handleCreate() {
         if (!newAddressName.trim()) return
         if (createGuardRef.current) return
@@ -118,8 +125,13 @@ export default function AddressSelectPage() {
         setCreating(true)
         setError('')
         try {
+            if (needPhone && newPhone.trim()) {
+                await setMyPhone(newPhone.trim())
+                refreshProfile()
+            }
             await handleCreateNew(newAddressName.trim())
             setNewAddressName('')
+            setNewPhone('')
             setShowCreateModal(false)
         } catch (err) {
             setError(err.message || 'Không thể tạo địa chỉ')
@@ -312,6 +324,21 @@ export default function AddressSelectPage() {
                                 onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
                                 className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
                             />
+                            {needPhone && (
+                                <div className="flex flex-col gap-1.5">
+                                    <input
+                                        type="tel"
+                                        placeholder="Số điện thoại (vd: 0901234567)"
+                                        value={newPhone}
+                                        onChange={e => setNewPhone(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
+                                        className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
+                                    />
+                                    <p className="text-text-secondary text-[11px] px-1">
+                                        Nhập SĐT để nhận <span className="font-bold text-text">7 ngày dùng thử báo cáo</span> (1 SĐT = 1 lần). Bỏ trống nếu không cần.
+                                    </p>
+                                </div>
+                            )}
                             <button
                                 onClick={handleCreate}
                                 disabled={!newAddressName.trim() || creating}

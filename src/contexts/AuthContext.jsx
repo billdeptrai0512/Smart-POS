@@ -188,12 +188,15 @@ export function AuthProvider({ children }) {
         return data
     }, [])
 
+    // Re-fetch profile row (vd: sau khi lưu SĐT qua set_my_phone)
+    const refreshProfile = useCallback(() => loadProfile(user), [user, loadProfile])
+
     const isManager = profile?.role === 'manager' || profile?.role === 'co-manager'
     const isStaff = profile?.role === 'staff'
     const isAdmin = profile?.role === 'admin'
 
     return (
-        <AuthContext.Provider value={{ user, profile, loading, isGuest, setIsGuest, initGuestMode, signIn, signUp, signUpWithInvite, signOut, isManager, isStaff, isAdmin }}>
+        <AuthContext.Provider value={{ user, profile, loading, isGuest, setIsGuest, initGuestMode, signIn, signUp, signUpWithInvite, signOut, refreshProfile, isManager, isStaff, isAdmin }}>
             {children}
         </AuthContext.Provider>
     )

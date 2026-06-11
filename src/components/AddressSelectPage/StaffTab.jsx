@@ -3,6 +3,7 @@ import { Users, Copy, Check, Loader, UserPlus, Shield, MoreVertical, ArrowUp, Ar
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
 import MonetizationToggle from './MonetizationToggle'
+import AccountCard from './AccountCard'
 
 function InviteLink({ link, expiry }) {
     const [copied, setCopied] = useState(false)
@@ -157,6 +158,9 @@ export default function StaffTab({
 
     return (
         <div className="space-y-3">
+            {/* SĐT tài khoản (nhập/sửa — gắn trial 1 SĐT = 1 lần) */}
+            <AccountCard />
+
             {/* Admin-only: công tắc thu phí (server kill switch). Tự ẩn nếu không phải admin. */}
             <MonetizationToggle />
 
