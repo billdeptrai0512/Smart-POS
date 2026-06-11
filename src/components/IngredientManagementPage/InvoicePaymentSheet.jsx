@@ -13,6 +13,7 @@ export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfir
     const [amountInput, setAmountInput] = useState(formatVNDInput(owing))
     const [paymentMethod, setPaymentMethod] = useState('cash')
     const [paidDate, setPaidDate] = useState(today)
+    const [isAfterShift, setIsAfterShift] = useState(false)
     const amount = parseVNDInput(amountInput)
     const isValid = amount > 0 && amount <= owing
 
@@ -44,27 +45,8 @@ export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfir
                     </button>
                 </div>
 
-                <div className="flex flex-col gap-2 p-3 bg-warning/5 border border-warning/20 rounded-[12px]">
-                    <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-text-secondary">Hoá đơn gốc</span>
-                        <span className="text-[13px] font-bold text-text tabular-nums">{formatVND(invoice.amount)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-text-secondary">Đã trả</span>
-                        <span className="text-[13px] font-bold text-text tabular-nums">{formatVND(paidPrev)}</span>
-                    </div>
-                    <div className="flex items-center justify-between pt-1.5 border-t border-warning/20">
-                        <span className="text-[12px] font-black text-warning">Còn nợ</span>
-                        <span className="text-[15px] font-black text-warning tabular-nums">{formatVND(owing)}</span>
-                    </div>
-                </div>
-
                 <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Số tiền trả</label>
-                        <MoneyInput value={amountInput} onChange={setAmountInput} size="lg" />
-                    </div>
-
+                    {/* 1. Ngày trả (lên đầu) */}
                     <div className="flex flex-col gap-1.5">
                         <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Ngày trả</label>
                         <DatePicker
@@ -85,11 +67,57 @@ export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfir
                         />
                     </div>
 
+                    {/* 2. Thời điểm trả */}
+                    <div className="flex items-center justify-between gap-3">
+                        <span className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Thời điểm trả</span>
+                        <div className="w-48 flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
+                            <button
+                                type="button"
+                                onClick={() => setIsAfterShift(false)}
+                                className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${!isAfterShift ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                            >
+                                Trong ca
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setIsAfterShift(true)}
+                                className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${isAfterShift ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                            >
+                                Sau chốt ca
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3. Panel hoá đơn gốc - đã trả - còn nợ */}
+                <div className="flex flex-col gap-2 p-3 bg-warning/5 border border-warning/20 rounded-[12px]">
                     <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Phương thức</span>
+                        <span className="text-[11px] font-bold text-text-secondary">Hoá đơn gốc</span>
+                        <span className="text-[13px] font-bold text-text tabular-nums">{formatVND(invoice.amount)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-text-secondary">Đã trả</span>
+                        <span className="text-[13px] font-bold text-text tabular-nums">{formatVND(paidPrev)}</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1.5 border-t border-warning/20">
+                        <span className="text-[12px] font-black text-warning">Còn nợ</span>
+                        <span className="text-[15px] font-black text-warning tabular-nums">{formatVND(owing)}</span>
+                    </div>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                    {/* 4. Số tiền trả */}
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Số tiền trả</label>
+                        <MoneyInput value={amountInput} onChange={setAmountInput} size="lg" />
+                    </div>
+
+                    {/* 5. Phương thức trả */}
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Phương thức trả</span>
                         <div className="flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
-                            <button onClick={() => setPaymentMethod('cash')} className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'cash' ? 'bg-primary text-white' : 'text-text-secondary'}`}>Tiền mặt</button>
-                            <button onClick={() => setPaymentMethod('transfer')} className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}>Chuyển khoản</button>
+                            <button type="button" onClick={() => setPaymentMethod('cash')} className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'cash' ? 'bg-primary text-white' : 'text-text-secondary'}`}>Tiền mặt</button>
+                            <button type="button" onClick={() => setPaymentMethod('transfer')} className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}>Chuyển khoản</button>
                         </div>
                     </div>
                 </div>
@@ -105,3 +133,4 @@ export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfir
         </div>
     )
 }
+

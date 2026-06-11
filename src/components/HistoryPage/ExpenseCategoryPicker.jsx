@@ -27,7 +27,7 @@ export default function ExpenseCategoryPicker({
 
     return (
         <div className="flex flex-col gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-text-dim">Phân loại</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Phân loại</span>
 
             <div className="relative">
                 <button

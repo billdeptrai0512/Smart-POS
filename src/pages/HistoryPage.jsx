@@ -84,6 +84,7 @@ export default function HistoryPage() {
     const [selectedCategoryId, setSelectedCategoryId] = useState(null)
     const [expenseCategories, setExpenseCategories] = useState([])
     const [isAfterShift, setIsAfterShift] = useState(false)
+    const [paymentMethod, setPaymentMethod] = useState('cash')
 
     // Fetch tags on mount + whenever the modal opens (cache-backed). Card list
     // also needs categories to resolve the tag chip on each ExpenseCard, so we
@@ -118,6 +119,7 @@ export default function HistoryPage() {
             setSelectedCategoryId(null)
             setExpenseDate(getLocalISO())
             setIsAfterShift(false)
+            setPaymentMethod('cash')
         } else {
             // Default toggle to "Sau chốt ca" when shift or cash is already closed
             const today = getLocalISO()
@@ -266,9 +268,9 @@ export default function HistoryPage() {
             const createdAt = isBackdated ? new Date(`${expenseDate}T12:00:00+07:00`).toISOString() : null
             // User explicitly picks "Sau chốt ca" via toggle — no more auto-detection.
             if (isAfterShift) {
-                await handleAddExpense(costName.trim(), amount, true, 'cash', { free_form: true }, false, tagId, createdAt)
+                await handleAddExpense(costName.trim(), amount, true, paymentMethod, { free_form: true }, false, tagId, createdAt)
             } else {
-                await handleAddExpense(costName.trim(), amount, false, 'cash', {}, false, tagId, createdAt)
+                await handleAddExpense(costName.trim(), amount, false, paymentMethod, {}, false, tagId, createdAt)
             }
             setShowAddModal(false)
         } catch { }
@@ -417,6 +419,8 @@ export default function HistoryPage() {
                     onAmountChange={setCostAmount}
                     expenseDate={expenseDate}
                     onDateChange={setExpenseDate}
+                    paymentMethod={paymentMethod}
+                    onPaymentMethodChange={setPaymentMethod}
                 />
             )}
         </div>

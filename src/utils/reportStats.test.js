@@ -153,6 +153,17 @@ describe('computeCashFlowTotals (cờ cash_phase trên từng phiếu)', () => {
         const r = computeCashFlowTotals({ liveCash: 0, liveTransfer: 0 })
         expect(r).toMatchObject({ actualTotal: 0, takeHomeCash: 0, takeHomeTransfer: 0, takeHome: 0 })
     })
+
+    it('allows negative takeHome values when postCloseCashOut/transferRefill exceeds live cash/transfer', () => {
+        const r = computeCashFlowTotals({
+            liveCash: 10000, liveTransfer: 20000,
+            payments: [postClose(50000), inShift(60000, 'transfer')],
+            shiftExpenses: [],
+        })
+        expect(r.takeHomeCash).toBe(-40000)
+        expect(r.takeHomeTransfer).toBe(-40000)
+        expect(r.takeHome).toBe(-80000)
+    })
 })
 
 describe('aggregateOrderStats discount', () => {

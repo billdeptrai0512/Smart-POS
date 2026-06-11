@@ -126,9 +126,33 @@ function ExpenseCard({ expense, category, isReadOnly, runningTotal, deletingExpI
     return (
         <div className="bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden opacity-90">
             <div className="flex justify-between items-center mb-1">
-                <span className="font-black text-[14px] mt-1 text-warning">
-                    -{formatVND(expense.amount)}
-                </span>
+                <div className="flex items-center gap-2 mt-1">
+                    <span className="font-black text-[14px] text-warning">
+                        -{formatVND(expense.amount)}
+                    </span>
+                    {category ? (
+                        <TagPill
+                            name={category.name}
+                            group={category.group_section}
+                            onClick={onTagClick ? () => onTagClick(expense) : null}
+                        />
+                    ) : expense.category_id ? (
+                        <TagPill
+                            name="Nhãn đã xoá"
+                            group="operating"
+                            muted
+                            strike
+                            onClick={onTagClick ? () => onTagClick(expense) : null}
+                        />
+                    ) : (
+                        <TagPill
+                            name="Chưa phân loại"
+                            group="operating"
+                            muted
+                            onClick={onTagClick ? () => onTagClick(expense) : null}
+                        />
+                    )}
+                </div>
                 {runningTotal != null && (
                     <span className="text-danger leading-none text-[14px] font-bold tabular-nums">
                         -{formatVND(runningTotal)}
@@ -136,36 +160,8 @@ function ExpenseCard({ expense, category, isReadOnly, runningTotal, deletingExpI
                 )}
             </div>
 
-            {/* Meta pills row — tag (colored by group) + timing + payment method.
-                Sitting right after the divider so the eye reads:
-                amount → context → name.
-                Tag pill is clickable (when not read-only) → opens the re-tag sheet.
-                Distinguish 3 tag states: bound + active, orphan (category soft-deleted),
-                never-tagged (null). */}
+            {/* Meta pills row — timing + payment method. */}
             <div className="flex flex-wrap items-center gap-1.5 border-t border-border/40 pt-2">
-                {category ? (
-                    <TagPill
-                        name={category.name}
-                        group={category.group_section}
-                        onClick={onTagClick ? () => onTagClick(expense) : null}
-                    />
-                ) : expense.category_id ? (
-                    // category_id set but not in active list → soft-deleted
-                    <TagPill
-                        name="Nhãn đã xoá"
-                        group="operating"
-                        muted
-                        strike
-                        onClick={onTagClick ? () => onTagClick(expense) : null}
-                    />
-                ) : (
-                    <TagPill
-                        name="Chưa phân loại"
-                        group="operating"
-                        muted
-                        onClick={onTagClick ? () => onTagClick(expense) : null}
-                    />
-                )}
                 <Pill tone="neutral">{isAfterShift ? 'Sau ca' : 'Trong ca'}</Pill>
                 <Pill
                     tone={isTransfer ? 'primary' : 'neutral'}

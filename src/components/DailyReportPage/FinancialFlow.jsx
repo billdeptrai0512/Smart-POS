@@ -17,9 +17,8 @@ export default function FinancialFlow({
 }) {
     const totalExpenses = (dailyExpense || 0) + (refillFreeForm || 0) + (refillNvl || 0)
 
-    const takeHomeCash = Math.max(0, actualCash - refillTotal)
-    const remainingRefill = Math.max(0, refillTotal - actualCash)
-    const takeHomeTransfer = Math.max(0, actualTransfer - remainingRefill)
+    const takeHomeCash = actualCash - refillTotal
+    const takeHomeTransfer = actualTransfer
     const takeHome = takeHomeCash + takeHomeTransfer
 
     // Phân loại chi phí — bỏ filter `!e.is_fixed` vì legacy fixed expenses

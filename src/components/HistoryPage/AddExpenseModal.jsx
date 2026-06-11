@@ -20,6 +20,8 @@ export default function AddExpenseModal({
     onCreateCategory,
     // Date (backdate support)
     expenseDate, onDateChange,
+    // Payment method toggle
+    paymentMethod = 'cash', onPaymentMethodChange,
     //
     onClose, onSubmit,
     onCategoryChange, onNameChange, onAmountChange,
@@ -64,7 +66,7 @@ export default function AddExpenseModal({
 
                 {/* Ngày chi — lên đầu modal, full-width. Mặc định hôm nay; chọn ngày quá khứ để ghi lùi. */}
                 <div className="flex flex-col gap-1.5">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-dim">Ngày chi</span>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Ngày chi</span>
                     <DatePicker
                         value={expenseDate || today}
                         max={today}
@@ -90,7 +92,7 @@ export default function AddExpenseModal({
 
                 {/* Thời điểm (Timing Toggle) */}
                 <div className="flex items-center justify-between gap-3">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-dim">Thời điểm</span>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Thời điểm</span>
                     <div className="w-48 flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
                         <button
                             type="button"
@@ -105,6 +107,27 @@ export default function AddExpenseModal({
                             className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${isAfterShift ? 'bg-primary text-white' : 'text-text-secondary'}`}
                         >
                             Sau chốt ca
+                        </button>
+                    </div>
+                </div>
+
+                {/* Phương thức thanh toán (Toggle Tiền mặt / Chuyển khoản) */}
+                <div className="flex items-center justify-between gap-3">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Phương thức</span>
+                    <div className="w-48 flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
+                        <button
+                            type="button"
+                            onClick={() => onPaymentMethodChange?.('cash')}
+                            className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'cash' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                        >
+                            Tiền mặt
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => onPaymentMethodChange?.('transfer')}
+                            className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                        >
+                            Chuyển khoản
                         </button>
                     </div>
                 </div>

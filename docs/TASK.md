@@ -1,5 +1,12 @@
-[] Nhiều địa chỉ sử dụng chung 1 kho tồn tổng
-[] Tồn kho có 3 card 
-- Chuẩn bị tồn kho = Dự đoán nguyên liệu cần sử dụng ngày mai của địa chỉ - so sánh với số lượng tồn kho - nếu có nhiều chi nhánh sử dụng chung tồn kho thì cứ thế gấp lên để gợi ý mua để đắp vô tồn kho
-- Soạn cho hôm nay = Giống như Soạn cho mai hiện tại, nhưng mà nằm ở trên đầu trên cả hao hụt - flow mỗi ngày là kiểm tra hàng cần soạn cho hnay bán -> kiểm kê hao hụt cuối ca -> kiểm tra chuẩn bị tồn kho cho ngày mai
-- Hao hụt
+[] tôi muốn font label chi phí to và bold giống font size label của modal ghi nhận thanh toán công nợ
+
+[] fix modal trả công nợ -> làm giống với modal thêm chi phí -> chỉ dẫn là : 
+- đưa ngày trả lên row đầu + make sure không có bug nếu chọn ngày trong quá khứ
+- sau đó tới thời điểm trả 
+- sau đó tới panel ( hóa đơn gốc - đã trả - còn nợ ) có sẵn
+- sau đó tới số tiền trả 
+- sau đó tới phương thức trả
+
+[] thêm toggle tiền mặt và chuyển khoản vô chi phí modal -> đưa pill chi phí lên kế số tiền được cộng ở bên ngoài card đã tạo
+
+[] cho phép thực nhận tiền mặt và chuyển khoản bị âm nếu thực chi lớn hơn

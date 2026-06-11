@@ -100,8 +100,8 @@ export function computeCashFlowTotals({
 
     const inShiftCashOut = inShiftRefillCash + inShiftOpsCash
     const actualTotal = liveCash + liveTransfer + inShiftCashOut
-    const takeHomeCash = Math.max(0, liveCash - postCloseCashOut)
-    const takeHomeTransfer = Math.max(0, liveTransfer - transferRefill)
+    const takeHomeCash = liveCash - postCloseCashOut
+    const takeHomeTransfer = liveTransfer - transferRefill
     return {
         actualTotal,
         takeHomeCash,
