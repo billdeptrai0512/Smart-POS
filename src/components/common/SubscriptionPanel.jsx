@@ -381,15 +381,15 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                     {/* status — cùng card, ngăn bằng hairline */}
                     <div className="mt-3 pt-3 border-t border-border/40 flex flex-col gap-1.5">
                         {reviewHold ? (
-                            <div className="flex items-start gap-1.5 text-[10.5px] font-bold text-warning">
-                                <span className="w-1.5 h-1.5 rounded-full bg-warning shrink-0 mt-[3px]" />
+                            <div className="flex gap-1.5 text-[10.5px] leading-[1.6] font-bold text-warning">
+                                <span className="shrink-0">•</span>
                                 <span>Đã nhận chuyển khoản nhưng số tiền chưa khớp — admin sẽ kiểm tra và mở khoá thủ công.</span>
                             </div>
                         ) : (
                             <>
-                                <div className="flex items-center gap-1.5 text-[10.5px] text-text-secondary">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-success shrink-0 animate-pulse" />
-                                    Hệ thống tự xác nhận ngay khi nhận được tiền
+                                <div className="flex gap-1.5 text-[10.5px] leading-[1.6] text-text-secondary">
+                                    <span className="shrink-0 text-success animate-pulse">•</span>
+                                    <span>Hệ thống tự xác nhận ngay khi nhận được tiền</span>
                                 </div>
                                 {transferContent && (
                                     <ul className="text-[10.5px] leading-[1.6] flex flex-col gap-0.5">
