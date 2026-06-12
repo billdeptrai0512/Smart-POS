@@ -435,42 +435,107 @@ export async function fetchIngredientDailyContext(addressId) {
 // Lượt "rút từ kho ra quầy" của 1 nguyên liệu trong khoảng thời gian — chính là số
 // "Nhập thêm" (restock) ghi trong phiếu chốt ca (shift_closings.inventory_report).
 // Nhật ký NVL hiển thị mỗi phiếu có restock > 0 thành 1 card riêng (chuyển kho nội
-// bộ, không có tiền). Trả về [{ id, created_at, qty }] DESC theo created_at.
+// bộ, không có tiền).
+//
+// Snapshot "Tồn kho trước → sau" được DỰNG LẠI bằng replay toàn bộ lịch sử của
+// nguyên liệu (mọi phiếu nhập/hiệu chỉnh + mọi lượt rút, không chỉ tháng đang xem)
+// — cùng quy tắc với fetchIngredientStocks: rút TRƯỚC lần nhập kho đầu tiên không
+// trừ kho (snapshot để null). Vì vậy phải fetch full-history thay vì chỉ cửa sổ tháng.
+//
+// staff_name = người TẠO phiếu chốt ca (closed_by) — phiếu được người khác sửa
+// sau đó thì không có dấu vết, đành chịu (DB không ghi ai update).
+// Trả về [{ id, created_at, qty, before_stock, after_stock, staff_name }] DESC.
 export async function fetchIngredientWithdrawals(addressId, ingredient, fromDate, toDate) {
-    const mapClosings = (closings) => (closings || [])
-        .map(c => {
+    const replay = (refills, closings) => {
+        const events = []
+        for (const e of refills || []) {
+            if (e.metadata?.ingredient !== ingredient) continue
+            events.push({
+                t: new Date(e.created_at).getTime(),
+                kind: 'refill',
+                qty: Number(e.metadata?.qty) || 0,
+            })
+        }
+        for (const c of closings || []) {
             const report = Array.isArray(c.inventory_report) ? c.inventory_report : []
             const item = report.find(i => i?.ingredient === ingredient)
             const qty = Number(item?.restock) || 0
-            return qty > 0 ? { id: c.id || c.created_at, created_at: c.created_at, qty } : null
-        })
-        .filter(Boolean)
+            if (qty <= 0) continue
+            events.push({
+                t: new Date(c.created_at).getTime(),
+                kind: 'withdrawal',
+                qty,
+                id: c.id || c.created_at,
+                created_at: c.created_at,
+                staff_name: c.closer?.name || null,
+            })
+        }
+        // Cùng timestamp (hiếm): cho refill chạy trước để kho không âm giả.
+        events.sort((a, b) => a.t - b.t
+            || (a.kind === b.kind ? 0 : a.kind === 'refill' ? -1 : 1))
 
-    if (localRepo.isGuest()) {
         const fromMs = new Date(fromDate).getTime()
         const toMs = new Date(toDate).getTime()
-        return mapClosings(
-            localRepo.fetchAllLocalShiftClosings(addressId)
-                .filter(c => {
-                    const t = new Date(c.created_at).getTime()
-                    return t >= fromMs && t <= toMs
+        const out = []
+        let warehouse = 0
+        let started = false
+        for (const ev of events) {
+            if (ev.kind === 'refill') {
+                warehouse += ev.qty
+                started = true
+                continue
+            }
+            let before = null, after = null
+            if (started) {
+                before = roundStock(warehouse)
+                warehouse -= ev.qty
+                after = roundStock(warehouse)
+            }
+            if (ev.t >= fromMs && ev.t <= toMs) {
+                out.push({
+                    id: ev.id, created_at: ev.created_at, qty: ev.qty,
+                    before_stock: before, after_stock: after,
+                    staff_name: ev.staff_name,
                 })
-                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+            }
+        }
+        return out.reverse()
+    }
+
+    if (localRepo.isGuest()) {
+        return replay(
+            localRepo.fetchAllLocalExpenses(addressId).filter(e => e.is_refill),
+            localRepo.fetchAllLocalShiftClosings(addressId),
         )
     }
     if (!supabase || !addressId) return []
-    const { data, error } = await supabase
+    const closingsQuery = (sel) => supabase
         .from('shift_closings')
-        .select('id, created_at, inventory_report')
+        .select(sel)
         .eq('address_id', addressId)
-        .gte('created_at', fromDate)
-        .lte('created_at', toDate)
-        .order('created_at', { ascending: false })
-    if (error) {
-        console.error('fetchIngredientWithdrawals error:', error)
+    const [refillsRes, closingsRes] = await Promise.all([
+        supabase
+            .from('expenses')
+            .select('created_at, metadata')
+            .eq('address_id', addressId)
+            .eq('is_refill', true),
+        closingsQuery('id, created_at, inventory_report, closer:users!closed_by(name)'),
+    ])
+    if (refillsRes.error) {
+        console.error('fetchIngredientWithdrawals refills error:', refillsRes.error)
         return []
     }
-    return mapClosings(data)
+    let closings = closingsRes.data
+    if (closingsRes.error) {
+        // Join users thất bại (RLS/FK đổi tên) → fallback không có tên người chốt.
+        const retry = await closingsQuery('id, created_at, inventory_report')
+        if (retry.error) {
+            console.error('fetchIngredientWithdrawals closings error:', retry.error)
+            return []
+        }
+        closings = retry.data
+    }
+    return replay(refillsRes.data, closings)
 }
 
 // Compute raw warehouse balance per ingredient (Σ refill_qty − Σ restock_post_first_refill).

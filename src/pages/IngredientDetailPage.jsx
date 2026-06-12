@@ -97,7 +97,9 @@ export default function IngredientDetailPage() {
             is_withdrawal: true,
             amount: 0,
             payments: [],
-            metadata: { qty: w.qty },
+            staff_name: w.staff_name,
+            // before/after kho — card vẽ "Tồn kho X → Y" y hệt phiếu nhập/hiệu chỉnh.
+            metadata: { qty: w.qty, before_stock: w.before_stock, after_stock: w.after_stock },
         }))
         return [...hist, ...withdrawalEntries]
             .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))

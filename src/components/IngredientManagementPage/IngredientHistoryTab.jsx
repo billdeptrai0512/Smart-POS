@@ -218,13 +218,6 @@ function HistoryCard({ entry, unit, packSize, packUnit, onOpenPayment, onCancelR
                 )}
             </div>
 
-            {/* Chú thích lượt rút — đối chiếu được với cột "Nhập thêm" ở card hao hụt. */}
-            {isWithdrawal && (
-                <div className="text-[11px] font-medium text-text-dim -mt-0.5">
-                    Kho <span className="mx-0.5">→</span> Quầy · = &quot;Nhập thêm&quot; ở báo cáo ca
-                </div>
-            )}
-
             {/* Tồn snapshot — "delta → resulting stock" in one downward scan. */}
             {hasSnapshot && (
                 <div className="text-[11px] font-medium text-text-dim tabular-nums -mt-0.5">
