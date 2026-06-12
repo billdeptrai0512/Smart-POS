@@ -139,6 +139,22 @@ describe('computeCashFlowTotals (cờ cash_phase trên từng phiếu)', () => {
         expect(r.takeHome).toBe(987000)
     })
 
+    it('cờ cash_phase trên TỪNG payment ưu tiên hơn cờ của hoá đơn gốc', () => {
+        // Hoá đơn nhập 'in_shift', nhưng lần trả nợ này chọn "Sau chốt ca" → trừ Thực nhận.
+        const paidPostClose = { amount: 200000, payment_method: 'cash', cash_phase: 'post_close', invoice_metadata: { cash_phase: 'in_shift' } }
+        // Ngược lại: hoá đơn 'post_close', trả nợ "Trong ca" → cộng Thực thu.
+        const paidInShift = { amount: 100000, payment_method: 'cash', cash_phase: 'in_shift', invoice_metadata: { cash_phase: 'post_close' } }
+        const r = computeCashFlowTotals({
+            liveCash: 500000, liveTransfer: 0,
+            payments: [paidPostClose, paidInShift],
+            shiftExpenses: [],
+        })
+        expect(r.inShiftRefillCash).toBe(100000)
+        expect(r.postCloseCashOut).toBe(200000)
+        expect(r.actualTotal).toBe(600000)         // 500 + 100 in-shift
+        expect(r.takeHomeCash).toBe(300000)        // 500 − 200 post-close
+    })
+
     it('bỏ qua payment adjustment', () => {
         const r = computeCashFlowTotals({
             liveCash: 100000, liveTransfer: 0,

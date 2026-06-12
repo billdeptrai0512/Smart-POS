@@ -76,9 +76,11 @@ export function computeCashFlowTotals({
         if (p.invoice_metadata?.adjustment) continue
         const amt = Number(p.amount) || 0
         if (p.payment_method === 'transfer') { transferRefill += amt; continue }
-        // Chỉ phiếu được đánh dấu rõ 'in_shift' mới cộng vào Thực thu; còn lại (kể cả
-        // phiếu cũ không có cờ) → sau chốt → trừ Thực nhận. Bảo toàn lịch sử.
-        if (p.invoice_metadata?.cash_phase === 'in_shift') inShiftRefillCash += amt
+        // Cờ trên TỪNG payment (toggle Trong ca/Sau chốt ca lúc trả nợ) ưu tiên hơn cờ
+        // của hoá đơn gốc (gắn lúc nhập kho). Chỉ 'in_shift' rõ ràng mới cộng vào Thực thu;
+        // còn lại (kể cả phiếu cũ không có cờ) → sau chốt → trừ Thực nhận. Bảo toàn lịch sử.
+        const phase = p.cash_phase || p.invoice_metadata?.cash_phase
+        if (phase === 'in_shift') inShiftRefillCash += amt
         else postCloseCashOut += amt
     }
     // Chi phí non-refill ("chi trong ca") không có payment riêng → dùng amount.

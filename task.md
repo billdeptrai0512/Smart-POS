@@ -21,6 +21,7 @@ Toàn bộ migration monetization đã chạy lên Supabase. Verify đạt: `add
    - `20260611_confirm_payment_killswitch_intent_expiry.sql` — `confirm_payment` check server kill switch (OFF → không ghi sub) + cron pg_cron dọn intent pending quá hạn mỗi giờ.
    - `20260611_phase2a_users_phone_trial_binding.sql` — `users.phone` + RPC `set_my_phone` + trigger trial bind theo SĐT (Giai đoạn A). ⚠️ Sau migration này: account chưa nhập SĐT tạo address sẽ KHÔNG có trial.
    - `20260612_fix_invoice_payment_same_day.sql` — fix `record_invoice_payment` từ chối trả nợ cùng ngày tạo hoá đơn (so sánh theo NGÀY VN thay vì timestamp; client neo 12h trưa).
+   - `20260612_invoice_payment_cash_phase.sql` — toggle "Trong ca / Sau chốt ca" khi trả nợ NVL: cột `expense_payments.cash_phase` + `record_invoice_payment` nhận `p_cash_phase` (đã gồm fix ngày VN ở trên — chạy file này là đủ cả 2) + 3 report RPC trả thêm cờ này.
 2. Set role admin cho tài khoản của bạn (chạy khi đang đăng nhập):
    `UPDATE users SET role = 'admin' WHERE auth_id = auth.uid();`
 3. **Bật/tắt monetization runtime** (server kill switch, KHÔNG cần redeploy) — hoặc dùng nút toggle ở /addresses:

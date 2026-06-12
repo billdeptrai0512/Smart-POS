@@ -693,7 +693,9 @@ export async function processIngredientRestock(addressId, ingredient, qty, staff
 
 // Ghi nhận 1 lần trả nợ cho invoice đã tồn tại (từ Tab Nhật ký của ingredient).
 // `paidAt` ISO string — default NOW server-side.
-export async function recordInvoicePayment(addressId, expenseId, amount, paymentMethod = 'cash', staffName = null, paidAt = null) {
+// `cashPhase` 'in_shift' | 'post_close' — phân loại tiền mặt của LẦN TRẢ này
+// (độc lập với cờ cash_phase trên hoá đơn gốc lúc nhập kho).
+export async function recordInvoicePayment(addressId, expenseId, amount, paymentMethod = 'cash', staffName = null, paidAt = null, cashPhase = null) {
     if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
         throw new Error('amount must be > 0')
     }
@@ -706,6 +708,7 @@ export async function recordInvoicePayment(addressId, expenseId, amount, payment
             payment_method: paymentMethod,
             staff_name: staffName,
             paid_at: paidAt || new Date().toISOString(),
+            cash_phase: cashPhase,
         })
     } else {
         if (!supabase) throw new Error('No Supabase connection')
@@ -716,6 +719,7 @@ export async function recordInvoicePayment(addressId, expenseId, amount, payment
         }
         if (staffName) params.p_staff_name = staffName
         if (paidAt) params.p_paid_at = paidAt
+        if (cashPhase) params.p_cash_phase = cashPhase
         const { data, error } = await supabase.rpc('record_invoice_payment', params)
         if (error) throw error
         result = data

@@ -233,13 +233,13 @@ export default function IngredientDetailPage() {
         finally { setSaving(false) }
     }
 
-    async function handleRecordPayment({ amount, paymentMethod, paidAt }) {
+    async function handleRecordPayment({ amount, paymentMethod, paidAt, cashPhase }) {
         if (!paymentInvoice) return
         setSaving(true)
         try {
             await recordInvoicePayment(
                 selectedAddress?.id, paymentInvoice.id,
-                amount, paymentMethod, profile?.name, paidAt,
+                amount, paymentMethod, profile?.name, paidAt, cashPhase,
             )
             await Promise.all([reloadHistory(), refreshTodayExpenses?.()])
             setPaymentInvoice(null)

@@ -27,6 +27,7 @@ export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfir
             amount,
             paymentMethod,
             paidAt: new Date(`${paidDate}T12:00:00+07:00`).toISOString(),
+            cashPhase: isAfterShift ? 'post_close' : 'in_shift',
         })
     }
 
