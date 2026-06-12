@@ -23,6 +23,7 @@ Toàn bộ migration monetization đã chạy lên Supabase. Verify đạt: `add
    - `20260612_fix_invoice_payment_same_day.sql` — fix `record_invoice_payment` từ chối trả nợ cùng ngày tạo hoá đơn (so sánh theo NGÀY VN thay vì timestamp; client neo 12h trưa).
    - `20260612_invoice_payment_cash_phase.sql` — toggle "Trong ca / Sau chốt ca" khi trả nợ NVL: cột `expense_payments.cash_phase` + `record_invoice_payment` nhận `p_cash_phase` (đã gồm fix ngày VN ở trên — chạy file này là đủ cả 2) + 3 report RPC trả thêm cờ này.
    - `20260612_security_advisor_fixes.sql` — dọn Security Advisor đợt 4 (chạy SAU file cash_phase): search_path 3 report RPC + revoke anon + **vá 2 lỗ ownership guard** trên `process_ingredient_restock` / `record_invoice_payment`.
+   - `20260612_perf_advisor_fixes.sql` — dọn Performance Advisor: 5 policy wrap `(select auth.uid())` (initplan), tách `app_settings_admin_write` khỏi SELECT, 3 index FK monetization. Unused index GIỮ NGUYÊN (chủ đích — bảng còn nhỏ).
 2. Set role admin cho tài khoản của bạn (chạy khi đang đăng nhập):
    `UPDATE users SET role = 'admin' WHERE auth_id = auth.uid();`
 3. **Bật/tắt monetization runtime** (server kill switch, KHÔNG cần redeploy) — hoặc dùng nút toggle ở /addresses:
