@@ -20,6 +20,7 @@ Toàn bộ migration monetization đã chạy lên Supabase. Verify đạt: `add
    - `20260610_sepay_payment_webhook.sql` — RPC `create_payment_intent` + `confirm_payment` (webhook SePay).
    - `20260611_confirm_payment_killswitch_intent_expiry.sql` — `confirm_payment` check server kill switch (OFF → không ghi sub) + cron pg_cron dọn intent pending quá hạn mỗi giờ.
    - `20260611_phase2a_users_phone_trial_binding.sql` — `users.phone` + RPC `set_my_phone` + trigger trial bind theo SĐT (Giai đoạn A). ⚠️ Sau migration này: account chưa nhập SĐT tạo address sẽ KHÔNG có trial.
+   - `20260612_fix_invoice_payment_same_day.sql` — fix `record_invoice_payment` từ chối trả nợ cùng ngày tạo hoá đơn (so sánh theo NGÀY VN thay vì timestamp; client neo 12h trưa).
 2. Set role admin cho tài khoản của bạn (chạy khi đang đăng nhập):
    `UPDATE users SET role = 'admin' WHERE auth_id = auth.uid();`
 3. **Bật/tắt monetization runtime** (server kill switch, KHÔNG cần redeploy) — hoặc dùng nút toggle ở /addresses:
@@ -56,47 +57,10 @@ Bỏ bán lẻ module, bỏ chu kỳ tháng/năm, bỏ bundle. Trial 7 ngày. Mu
 
 ### Giai đoạn B — verify SĐT thật (chống nhập số bừa lấy trial)
 
-> **Nghiên cứu 2026-06-11 — hướng Zalo (0đ/lần verify, chọn làm hướng chính):**
->
-> **Phát hiện quan trọng:** "Đăng nhập Zalo" trên web (Social API OAuth v4) **KHÔNG trả SĐT**
-> — chỉ id/name/picture. Đường duy nhất lấy SĐT đã verify từ Zalo là **Zalo Mini App** với
-> API `getPhoneNumber`: user bấm "Cho phép" trong popup → mini app nhận `token` → server
-> đổi token lấy số thật qua `graph.zalo.me/v4.0/me/info` (headers: `access_token`, `code`=token,
-> `secret_key`). Không tốn phí per-call.
->
-> **Kiến trúc chọn: Mini App "vệ tinh" chỉ để verify SĐT** (web app vẫn là app chính):
-> ```
-> Web (AccountCard) bấm "Xác thực qua Zalo"
->   → tạo phone_verify_sessions (code 1 lần, hết hạn 10')
->   → hiện QR/deeplink https://zalo.me/s/<MINI_APP_ID>/?session=CODE
-> User mở trong Zalo → mini app gọi getAccessToken + getPhoneNumber (popup đồng ý)
->   → POST {session, access_token, token} về Edge Function zalo-phone-verify
-> Edge Function đổi token → SĐT thật → chuẩn hoá +84 → ghi users.phone + phone_verified_at
->   + chạy logic trial (tái dùng ruột set_my_phone)
-> Web poll-while-pending session (tái dùng pattern usePaymentPoll) → verified → refreshProfile
-> ```
->
-> **Điều kiện phía Zalo (việc của owner):** tài khoản Zalo đăng ký phải **eKYC** (CCCD trong app);
-> Mini App phải **liên kết + xác thực qua 1 OA**, mà xác thực OA cần **GPKD/hộ kinh doanh + CCCD
-> người đại diện** (duyệt ~3–5 ngày); quyền `getPhoneNumber` phải xin riêng và được duyệt.
-> ✅ Có **môi trường Testing** (danh sách tester) chạy được TRƯỚC khi duyệt → dev không bị chặn.
-> ⚠️ Nếu chưa có hộ KD/GPKD → đường Zalo kẹt ở xác thực OA; lúc đó fallback Twilio/eSMS (không cần pháp nhân).
-
-**Việc của owner (bạn):**
-- [ ] eKYC tài khoản Zalo cá nhân (xác thực CCCD trong app Zalo).
-- [ ] Tạo OA (miễn phí) + xác thực OA bằng hộ KD/GPKD (khi cần lên production).
-- [ ] Tạo Mini App trên developers.zalo.me → liên kết OA → xin quyền `getPhoneNumber` → thêm tester → (sau này) submit review.
-- [ ] Đưa `MINI_APP_ID` + `SECRET_KEY` vào Supabase secrets.
-
-**Việc của Claude:**
-- [ ] Migration: bảng `phone_verify_sessions` + cột `users.phone_verified_at` + RPC `confirm_verified_phone` (tái dùng chuẩn hoá + trial logic của `set_my_phone`).
-- [ ] Edge Function `zalo-phone-verify`: nhận token từ mini app → đổi lấy SĐT qua graph.zalo.me → bind vào user của session.
-- [ ] Mini App nhỏ (zmp-sdk, ~1 màn hình): nhận `session` param → getPhoneNumber → gọi Edge Function → báo thành công.
-- [ ] Web UI: nút "Xác thực qua Zalo" + QR/deeplink + poll trong `AccountCard`; nhập tay vẫn giữ làm fallback (số chưa verify = không trial khi bật chế độ strict).
-
-**Phương án dự phòng — OTP Twilio (giữ nguyên plan cũ, dùng nếu Zalo kẹt pháp nhân):**
-- [ ] Bật Phone provider (Twilio) trong Supabase Auth (~1.200đ/SMS, trial free cho dev/nội bộ).
-- [ ] Verify số đã nhập: `supabase.auth.updateUser({ phone })` + `verifyOtp` → phone verified gắn vào `auth.users`, **không đổi cách đăng nhập** hiện tại.
+→ **Plan chi tiết: `docs/phoneAuth.md`** (nghiên cứu 2026-06-11). Tóm tắt: hướng chính là
+**Zalo Mini App** `getPhoneNumber` (0đ/lần verify — web OAuth Zalo KHÔNG trả SĐT nên bị loại);
+fallback **Twilio OTP** nếu kẹt pháp nhân (xác thực OA cần hộ KD/GPKD).
+⏳ Chờ owner xác nhận có hộ KD/GPKD chưa → chốt Zalo hay Twilio trước.
 
 ### Giai đoạn C — SĐT làm phương thức đăng ký (trước khi mở đăng ký tự do)
 - [ ] SignUpPage: nhập SĐT → OTP → tạo tài khoản (`signInWithOtp`). Tài khoản cũ giữ username/password.

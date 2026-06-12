@@ -8,6 +8,8 @@ import DatePicker from '../common/DatePicker'
 // Caller provides the invoice row (already includes nested `payments`).
 export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfirm }) {
     const today = dateStringVN()
+    // Không cho chọn ngày trả trước ngày nhập hàng (RPC cũng chặn theo ngày VN).
+    const invoiceDate = invoice.created_at ? dateStringVN(new Date(invoice.created_at)) : undefined
     const paidPrev = (invoice.payments || []).reduce((s, p) => s + (p.amount || 0), 0)
     const owing = Math.max(0, (invoice.amount || 0) - paidPrev)
     const [amountInput, setAmountInput] = useState(formatVNDInput(owing))
@@ -51,6 +53,7 @@ export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfir
                         <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Ngày trả</label>
                         <DatePicker
                             value={paidDate}
+                            min={invoiceDate}
                             max={today}
                             onChange={setPaidDate}
                             presets={false}
