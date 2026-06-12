@@ -945,6 +945,7 @@ export default function DailyReportPage() {
                                 refillFreeForm={refillFreeForm}
                                 expenses={displayExpenses}
                                 payments={displayPayments}
+                                expenseCategories={expenseCategories}
                                 editable={isTodayScope}
                                 cashInput={cashInput}
                                 transferInput={transferInput}

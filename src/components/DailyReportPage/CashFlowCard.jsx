@@ -22,6 +22,7 @@ export default function CashFlowCard({
     refillFreeForm = 0,
     expenses = [],
     payments = [],   // NEW: expense_payments của ngày này (cash-out thực, theo paid_at)
+    expenseCategories = [],  // nhãn chi phí — nhóm section Vận hành theo tên nhãn
     onDailyExpenseClick,
     salesCard,
     // Inline-edit props (today scope on /daily-report). When `editable` is true the
@@ -111,9 +112,31 @@ export default function CashFlowCard({
         if (invCreated && isSameDayVN(invCreated, p.paid_at)) purchaseToday.push(p)
         else debtRepayments.push(p)
     }
-    // Phân loại đi chợ hôm nay theo nhóm nguyên liệu (main / packaging). Payment
-    // không có ingredient key (Trả NCC tự do) rơi về 'main' — cùng default với
-    // normalizeIngredientCategory. Nhóm rỗng không hiển thị.
+    // ── Section VẬN HÀNH — chi phí (trong ca + sau chốt ca) nhóm theo TÊN nhãn
+    // chi phí. category_id thiếu / nhãn đã xoá → rơi về "Chi phí khác". Mỗi nhãn
+    // là 1 dòng collapse; expand tách 2 phân nhóm Trong ca / Sau chốt ca.
+    const catById = new Map((expenseCategories || []).map(c => [c.id, c]))
+    const opsGroups = (() => {
+        const map = new Map()
+        const add = (e, phase) => {
+            const cat = catById.get(e.category_id)
+            const label = cat?.name || 'Chi phí khác'
+            const sortKey = cat ? (cat.sort_order ?? 100) : 999
+            let g = map.get(label)
+            if (!g) { g = { label, sortKey, inShift: [], postClose: [], total: 0 }; map.set(label, g) }
+            g[phase].push(e)
+            g.total += e.amount || 0
+            g.sortKey = Math.min(g.sortKey, sortKey)
+        }
+        for (const e of shiftExpenses) add(e, 'inShift')
+        for (const e of afterShiftOps) add(e, 'postClose')
+        return [...map.values()].sort((a, b) => a.sortKey - b.sortKey || a.label.localeCompare(b.label, 'vi'))
+    })()
+    const opsTotal = opsGroups.reduce((s, g) => s + g.total, 0)
+
+    // ── Section TỒN KHO — đi chợ hôm nay phân theo nhóm nguyên liệu (main /
+    // packaging; payment không có ingredient key rơi về 'main' — cùng default với
+    // normalizeIngredientCategory) + dòng Trả nợ cũ. Nhóm rỗng không hiển thị.
     const catByKey = new Map(
         (ingredientConfigs || []).map(c => [c.ingredient, normalizeIngredientCategory(c.category)])
     )
@@ -122,16 +145,23 @@ export default function CashFlowCard({
             (catByKey.get(p.invoice_metadata?.ingredient) || 'main') === cat.key
         )
         return {
-            ...cat,
+            key: cat.key,
+            label: cat.key === 'packaging' ? 'Mua bao bì' : 'Mua nguyên liệu',
             rows: groupByInvoice(pays),
             total: pays.reduce((s, p) => s + (p.amount || 0), 0),
         }
     }).filter(g => g.rows.length > 0)
-    const nvlTotal = nvlGroups.reduce((s, g) => s + g.total, 0)
-    const debtGrouped = groupByInvoice(debtRepayments).map(g => ({
-        // Strip date suffix khỏi tên cho debt group? Giữ luôn để rõ ngày invoice gốc.
-        ...g,
-    }))
+    const debtRows = groupByInvoice(debtRepayments)
+    const inventoryGroups = [
+        ...nvlGroups,
+        ...(debtRows.length > 0 ? [{
+            key: 'debt',
+            label: 'Trả nợ cũ',
+            rows: debtRows,
+            total: debtRepayments.reduce((s, p) => s + (p.amount || 0), 0),
+        }] : []),
+    ]
+    const inventoryTotal = inventoryGroups.reduce((s, g) => s + g.total, 0)
 
     return (
         <div className="flex flex-col gap-4">
@@ -203,113 +233,88 @@ export default function CashFlowCard({
                 </div>
             </div>
 
-            {/* PANEL 2: CHI PHÍ PHÁT SINH */}
+            {/* PANEL 2: THỰC CHI — 2 section (Vận hành / Tồn kho), mỗi section là
+                các dòng nhãn collapse; Tổng thực chi nằm cuối CÙNG PANEL (cùng kiểu
+                panel Thực nhận). Phân cấp cỡ chữ to dần từ trong ra ngoài:
+                món 11px medium → nhãn 12px bold → tổng section 13px black →
+                Tổng thực chi 14px black. */}
             <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
                 <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Thực chi</h3>
+
+                {/* SECTION: VẬN HÀNH */}
                 <div className="flex flex-col gap-1 pl-1">
-                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Trong ca</span>
-
-                    {shiftExpenses.length > 0 ? (
-                        shiftExpenses.map((e) => (
-                            <div key={e.id} className="flex justify-between items-center">
-                                <span className="text-[12px] font-bold text-text-secondary">· {capFirst(e.name || 'Chi phí khác')}{dayMonthSuffix(e.created_at)}</span>
-                                <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(e.amount)}</span>
-                            </div>
-                        ))
-                    ) : (
-                        <span className="text-[12px] text-text-secondary italic">Không có chi phí trong ca</span>
-                    )}
-                </div>
-
-                <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
-
-                <div className="flex flex-col gap-1 pl-1">
-                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Sau chốt ca</span>
-                    {afterShiftOps.length > 0 ? (
-                        afterShiftOps.map((e) => (
-                            <div key={e.id} className="flex justify-between items-center">
-                                <span className="text-[12px] font-bold text-text-secondary">· {capFirst(e.name || 'Chi phí khác')}{dayMonthSuffix(e.created_at)}</span>
-                                <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(e.amount)}</span>
-                            </div>
-                        ))
-                    ) : (
-                        <span className="text-[12px] text-text-secondary italic">Không có chi phí sau ca</span>
-                    )}
-                </div>
-
-                <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
-
-                <div className="flex flex-col gap-1 pl-1">
-                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Mua nguyên liệu / bao bì</span>
-                    {nvlGroups.length > 0 ? (
-                        <>
-                            {nvlGroups.map((g) => {
-                                const expanded = !!expandedCats[g.key]
-                                return (
-                                    <div key={g.key} className="flex flex-col gap-1">
-                                        {/* Hàng nhóm — mặc định collapse, bấm để xem từng món. */}
-                                        <button
-                                            type="button"
-                                            onClick={() => toggleCat(g.key)}
-                                            className="w-full flex justify-between items-center text-left hover:opacity-85 active:scale-[0.99] transition-all"
-                                        >
-                                            <span className="flex items-center gap-1 text-[12px] font-bold text-text-secondary">
-                                                {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                                                {g.label}
-                                                <span className="text-text-dim font-medium">({g.rows.length})</span>
-                                            </span>
-                                            <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(g.total)}</span>
-                                        </button>
-                                        {expanded && g.rows.map((row) => (
-                                            <div key={row.key} className="flex justify-between items-center pl-4">
-                                                <span className="text-[12px] font-bold text-text-secondary">
-                                                    · {row.name}
-                                                    {row.count > 1 && (
-                                                        <span className="ml-1 text-text-dim font-medium">×{row.count}</span>
-                                                    )}
-                                                </span>
-                                                <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(row.amount)}</span>
-                                            </div>
+                    <div className="flex justify-between items-center">
+                        <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest">Vận hành</span>
+                        {opsGroups.length > 0 && (
+                            <span className="text-[13px] font-black text-danger tabular-nums">-{formatVND(opsTotal)}</span>
+                        )}
+                    </div>
+                    {opsGroups.length > 0 ? (
+                        opsGroups.map((g) => (
+                            <CollapseGroup
+                                key={`op:${g.label}`}
+                                expanded={!!expandedCats[`op:${g.label}`]}
+                                onToggle={() => toggleCat(`op:${g.label}`)}
+                                label={g.label}
+                                count={g.inShift.length + g.postClose.length}
+                                total={g.total}
+                            >
+                                {g.inShift.length > 0 && (
+                                    <>
+                                        <span className="pl-4 text-[10px] font-black text-text-dim uppercase tracking-widest">Trong ca</span>
+                                        {g.inShift.map((e) => (
+                                            <ItemRow key={e.id} name={`${capFirst(e.name || 'Chi phí khác')}${dayMonthSuffix(e.created_at)}`} amount={e.amount} />
                                         ))}
-                                    </div>
-                                )
-                            })}
-                            {/* Tổng cộng cả mục — chỉ hiện khi có từ 2 nhóm (1 nhóm thì hàng nhóm đã là tổng). */}
-                            {nvlGroups.length > 1 && (
-                                <div className="flex justify-between items-center border-t border-border/40 pt-1 mt-0.5">
-                                    <span className="text-[12px] font-black text-text-secondary uppercase tracking-wide">Tổng cộng</span>
-                                    <span className="text-[13px] font-black text-danger tabular-nums">-{formatVND(nvlTotal)}</span>
-                                </div>
-                            )}
-                        </>
+                                    </>
+                                )}
+                                {g.postClose.length > 0 && (
+                                    <>
+                                        <span className="pl-4 text-[10px] font-black text-text-dim uppercase tracking-widest">Sau chốt ca</span>
+                                        {g.postClose.map((e) => (
+                                            <ItemRow key={e.id} name={`${capFirst(e.name || 'Chi phí khác')}${dayMonthSuffix(e.created_at)}`} amount={e.amount} />
+                                        ))}
+                                    </>
+                                )}
+                            </CollapseGroup>
+                        ))
+                    ) : (
+                        <span className="text-[12px] text-text-secondary italic">Không có chi phí vận hành</span>
+                    )}
+                </div>
+
+                <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
+
+                {/* SECTION: TỒN KHO */}
+                <div className="flex flex-col gap-1 pl-1">
+                    <div className="flex justify-between items-center">
+                        <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest">Tồn kho</span>
+                        {inventoryGroups.length > 0 && (
+                            <span className="text-[13px] font-black text-danger tabular-nums">-{formatVND(inventoryTotal)}</span>
+                        )}
+                    </div>
+                    {inventoryGroups.length > 0 ? (
+                        inventoryGroups.map((g) => (
+                            <CollapseGroup
+                                key={g.key}
+                                expanded={!!expandedCats[g.key]}
+                                onToggle={() => toggleCat(g.key)}
+                                label={g.label}
+                                count={g.rows.length}
+                                total={g.total}
+                            >
+                                {g.rows.map((row) => (
+                                    <ItemRow key={row.key} name={row.name} amount={row.amount} count={row.count} />
+                                ))}
+                            </CollapseGroup>
+                        ))
                     ) : (
                         <span className="text-[12px] text-text-secondary italic">Không có đi chợ trong ngày</span>
                     )}
                 </div>
 
-                {debtGrouped.length > 0 && (
-                    <>
-                        <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
-                        <div className="flex flex-col gap-1 pl-1">
-                            <span className="text-[10px] font-black text-warning uppercase tracking-widest">Trả nợ cũ</span>
-                            {debtGrouped.map((row) => (
-                                <div key={row.key} className="flex justify-between items-center">
-                                    <span className="text-[12px] font-bold text-text-secondary">
-                                        · {row.name}
-                                        {row.count > 1 && (
-                                            <span className="ml-1 text-text-dim font-medium">×{row.count}</span>
-                                        )}
-                                    </span>
-                                    <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(row.amount)}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </>
-                )}
-            </div>
+                <div className="w-full h-[1px] bg-border/60 rounded-full my-3" />
 
-            {/* PANEL 3: TỔNG CHI PHÍ */}
-            <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
+                {/* TỔNG THỰC CHI — cùng panel, cùng kiểu với Tổng thực nhận. */}
                 <div className="flex justify-between items-center mt-1 pl-1">
                     <span className="text-[13px] font-black text-text uppercase tracking-wide">Tổng thực chi</span>
                     <span className="text-[14px] font-black text-danger tabular-nums">
@@ -345,6 +350,42 @@ export default function CashFlowCard({
                     </span>
                 </div>
             </div>
+        </div>
+    )
+}
+
+// Dòng nhãn collapse trong panel Thực chi — chevron + tên (số món) + tổng tiền,
+// bấm để mở/đóng chi tiết (children). Cấp giữa của thang phân cấp: nhỏ hơn tổng
+// section (13px black), to hơn món bên trong (11px medium).
+function CollapseGroup({ expanded, onToggle, label, count, total, children }) {
+    return (
+        <div className="flex flex-col gap-1">
+            <button
+                type="button"
+                onClick={onToggle}
+                className="w-full flex justify-between items-center text-left hover:opacity-85 active:scale-[0.99] transition-all"
+            >
+                <span className="flex items-center gap-1 text-[12px] font-bold text-text-secondary">
+                    {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                    {label}
+                    <span className="text-text-dim font-medium">({count})</span>
+                </span>
+                <span className="text-[12px] font-bold text-danger tabular-nums">-{formatVND(total)}</span>
+            </button>
+            {expanded && children}
+        </div>
+    )
+}
+
+// Dòng món bên trong nhóm đã mở — cấp nhỏ nhất, thụt vào + nhạt hơn hàng nhãn.
+function ItemRow({ name, amount, count }) {
+    return (
+        <div className="flex justify-between items-center pl-4">
+            <span className="text-[11px] font-medium text-text-secondary/90">
+                · {name}
+                {count > 1 && <span className="ml-1 text-text-dim">×{count}</span>}
+            </span>
+            <span className="text-[11px] font-medium text-danger/80 tabular-nums">-{formatVND(amount)}</span>
         </div>
     )
 }
