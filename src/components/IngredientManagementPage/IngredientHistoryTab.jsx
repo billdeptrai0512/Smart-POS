@@ -111,10 +111,12 @@ function Stat({ label, value, tone }) {
 
 // ── History card ────────────────────────────────────────────────────────────
 //
-// Two live row types + a cancelled overlay (like a deleted order in /history):
+// Three live row types + a cancelled overlay (like a deleted order in /history):
 //   • restock    — a purchase: qty + money + payment status + Hủy.
 //   • adjustment — manual stock fix (amount 0): qty + "Hiệu chỉnh", no money. Cancellable.
-//   • cancelled  — either of the above after Hủy: zeroed in the DB (qty/amount 0) but the
+//   • withdrawal — "Rút ra quầy": số "Nhập thêm" ghi trong phiếu chốt ca (kho → quầy,
+//                  chuyển nội bộ). Không tiền, không pills, không Hủy (sửa ở báo cáo ca).
+//   • cancelled  — restock/adjustment sau Hủy: zeroed in the DB (qty/amount 0) but the
 //                  ORIGINAL numbers live in metadata.cancelled_qty/_amount, shown struck-
 //                  through under a "ĐÃ HỦY" corner badge + grayscale. Not cancellable again.
 //
@@ -128,8 +130,9 @@ function HistoryCard({ entry, unit, packSize, packUnit, onOpenPayment, onCancelR
 
     const cancelled = !!entry.metadata?.cancelled
     const cancelledBy = entry.metadata?.cancelled_by
+    const isWithdrawal = !!entry.is_withdrawal
     const isAdjust = !!entry.metadata?.adjustment
-    const isRestock = !isAdjust
+    const isRestock = !isAdjust && !isWithdrawal
     const isTransfer = entry.payment_method === 'transfer'
 
     // When cancelled the row is zeroed in the DB; display the ORIGINAL figures.
@@ -141,7 +144,10 @@ function HistoryCard({ entry, unit, packSize, packUnit, onOpenPayment, onCancelR
     // (hoặc không có quy cách) → giữ base unit. Phiếu nhập giữ hiển thị base như cũ.
     const ps = Number(packSize) || 0
     const showPackAdjust = isAdjust && ps > 0 && !!packUnit && Math.abs(qty) >= ps
-    const heroQty = showPackAdjust
+    // Rút ra quầy là chuyển nội bộ — không dấu +/− (tổng tồn không đổi).
+    const heroQty = isWithdrawal
+        ? `${qty} ${unit}`
+        : showPackAdjust
         ? `${qty > 0 ? '+' : ''}${formatPackedQty(qty, packSize, packUnit, unit, { compact: true })} = ${qty > 0 ? '+' : ''}${qty} ${unit}`
         : `${qty > 0 ? '+' : ''}${qty} ${unit}`
 
@@ -157,11 +163,15 @@ function HistoryCard({ entry, unit, packSize, packUnit, onOpenPayment, onCancelR
         : paid <= 0 ? 'unpaid'
         : 'partial'
     const clickable = (status === 'unpaid' || status === 'partial') && !!onOpenPayment
-    const cancellable = !!onCancelRestock && !cancelled
+    // Lượt rút sửa ở báo cáo ca (field Nhập thêm), không Hủy được từ Nhật ký.
+    const cancellable = !!onCancelRestock && !cancelled && !isWithdrawal
 
-    const typeLabel = isAdjust ? 'Hiệu chỉnh tồn' : 'Nhập kho'
-    const typeTone = cancelled ? 'text-text-dim' : isAdjust ? 'text-warning' : 'text-primary'
+    const typeLabel = isWithdrawal ? 'Rút ra quầy' : isAdjust ? 'Hiệu chỉnh tồn' : 'Nhập kho'
+    const typeTone = cancelled ? 'text-text-dim'
+        : isWithdrawal ? 'text-text-secondary'
+        : isAdjust ? 'text-warning' : 'text-primary'
     const qtyCls = cancelled ? 'text-text-dim line-through'
+        : isWithdrawal ? 'text-text'
         : qty > 0 ? 'text-success' : qty < 0 ? 'text-danger' : 'text-text-dim'
     const moneyCls = cancelled ? 'text-text-dim line-through' : 'text-danger'
 
@@ -207,6 +217,13 @@ function HistoryCard({ entry, unit, packSize, packUnit, onOpenPayment, onCancelR
                     </span>
                 )}
             </div>
+
+            {/* Chú thích lượt rút — đối chiếu được với cột "Nhập thêm" ở card hao hụt. */}
+            {isWithdrawal && (
+                <div className="text-[11px] font-medium text-text-dim -mt-0.5">
+                    Kho <span className="mx-0.5">→</span> Quầy · = &quot;Nhập thêm&quot; ở báo cáo ca
+                </div>
+            )}
 
             {/* Tồn snapshot — "delta → resulting stock" in one downward scan. */}
             {hasSnapshot && (

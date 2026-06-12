@@ -5,7 +5,7 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { usePOS } from '../contexts/POSContext'
 import {
-    fetchIngredientRestockHistory, fetchIngredientStocks,
+    fetchIngredientRestockHistory, fetchIngredientStocks, fetchIngredientWithdrawals,
     deleteIngredientCost, upsertIngredientCost, renameIngredient,
     adjustIngredientStock, setCounterStock, recordInvoicePayment, cancelRestock,
 } from '../services/orderService'
@@ -83,13 +83,32 @@ export default function IngredientDetailPage() {
             .then(stocks => setStockData(stocks.find(s => s.ingredient === ingredientKey)))
     }, [selectedAddress?.id, ingredientKey])
 
-    // History is scoped to the displayed month.
+    // History is scoped to the displayed month. Gồm 2 nguồn xen kẽ theo thời gian:
+    // phiếu nhập/hiệu chỉnh (expenses) + lượt "Rút ra quầy" (restock trong phiếu
+    // chốt ca). Lượt rút là chuyển kho nội bộ — không tiền, không payments.
+    const loadHistory = async () => {
+        const [hist, withdrawals] = await Promise.all([
+            fetchIngredientRestockHistory(selectedAddress.id, ingredientKey, fromDate, toDate),
+            fetchIngredientWithdrawals(selectedAddress.id, ingredientKey, fromDate, toDate),
+        ])
+        const withdrawalEntries = withdrawals.map(w => ({
+            id: `wd-${w.id}`,
+            created_at: w.created_at,
+            is_withdrawal: true,
+            amount: 0,
+            payments: [],
+            metadata: { qty: w.qty },
+        }))
+        return [...hist, ...withdrawalEntries]
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    }
     useEffect(() => {
         if (!selectedAddress?.id || !ingredientKey) return
         setLoading(true)
-        fetchIngredientRestockHistory(selectedAddress.id, ingredientKey, fromDate, toDate)
+        loadHistory()
             .then(setHistory)
             .finally(() => setLoading(false))
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedAddress?.id, ingredientKey, fromDate, toDate])
 
     const summary = useMemo(() => {
@@ -99,7 +118,11 @@ export default function IngredientDetailPage() {
         // cho invoice tháng khác, nên paid không = invoice.amount khớp 1-1.
         const monthStartMs = new Date(fromDate).getTime()
         const monthEndMs = new Date(toDate).getTime()
+        let purchaseCount = 0
         history.forEach(e => {
+            // Lượt rút ra quầy không phải mua hàng — không tính vào tổng tiền/lượng nhập.
+            if (e.is_withdrawal) return
+            purchaseCount += 1
             totalSpent += e.amount || 0
             const qty = e.metadata?.qty || 0
             totalQty += qty
@@ -110,7 +133,7 @@ export default function IngredientDetailPage() {
                 if (t >= monthStartMs && t <= monthEndMs) totalPaidInMonth += p.amount || 0
             }
         })
-        return { totalSpent, totalQty, totalOwing, totalPaidInMonth, count: history.length }
+        return { totalSpent, totalQty, totalOwing, totalPaidInMonth, count: purchaseCount }
     }, [history, fromDate, toDate])
 
     async function reloadStock() {
@@ -120,8 +143,7 @@ export default function IngredientDetailPage() {
     }
     async function reloadHistory() {
         if (!selectedAddress?.id) return
-        const hist = await fetchIngredientRestockHistory(selectedAddress.id, ingredientKey, fromDate, toDate)
-        setHistory(hist)
+        setHistory(await loadHistory())
     }
 
     // ── Save callbacks for child rows ───────────────────────────────────────

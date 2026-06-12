@@ -1,7 +1,10 @@
+import { useState } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { formatVND, parseVNDInput } from '../../utils'
-import { ingredientLabel } from '../../utils/ingredients'
+import { ingredientLabel, normalizeIngredientCategory, INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 import { isSameDayVN } from '../../utils/dateVN'
 import { computeCashFlowTotals } from '../../utils/reportStats'
+import { useProducts } from '../../contexts/ProductContext'
 
 // Viết hoa chữ cái đầu ('đ' → 'Đ' được toUpperCase xử lý đúng cho tiếng Việt).
 const capFirst = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
@@ -31,6 +34,11 @@ export default function CashFlowCard({
     onCashChange,
     onTransferChange,
 }) {
+    // Category (Nguyên liệu chính / Bao bì) của từng nguyên liệu — để phân loại
+    // mục "Mua nguyên liệu / bao bì" bên dưới. Mặc định collapse từng nhóm.
+    const { ingredientConfigs } = useProducts()
+    const [expandedCats, setExpandedCats] = useState({})
+    const toggleCat = (key) => setExpandedCats(prev => ({ ...prev, [key]: !prev[key] }))
     // When editing, totals/Thực nhận track the typed values so the user sees the impact
     // live before saving. Read-only mode falls back to the persisted (actualCash/Transfer) props.
     const liveCash = editable ? (parseVNDInput(cashInput) || 0) : actualCash
@@ -103,7 +111,23 @@ export default function CashFlowCard({
         if (invCreated && isSameDayVN(invCreated, p.paid_at)) purchaseToday.push(p)
         else debtRepayments.push(p)
     }
-    const nvlGrouped = groupByInvoice(purchaseToday)
+    // Phân loại đi chợ hôm nay theo nhóm nguyên liệu (main / packaging). Payment
+    // không có ingredient key (Trả NCC tự do) rơi về 'main' — cùng default với
+    // normalizeIngredientCategory. Nhóm rỗng không hiển thị.
+    const catByKey = new Map(
+        (ingredientConfigs || []).map(c => [c.ingredient, normalizeIngredientCategory(c.category)])
+    )
+    const nvlGroups = INGREDIENT_CATEGORIES.map(cat => {
+        const pays = purchaseToday.filter(p =>
+            (catByKey.get(p.invoice_metadata?.ingredient) || 'main') === cat.key
+        )
+        return {
+            ...cat,
+            rows: groupByInvoice(pays),
+            total: pays.reduce((s, p) => s + (p.amount || 0), 0),
+        }
+    }).filter(g => g.rows.length > 0)
+    const nvlTotal = nvlGroups.reduce((s, g) => s + g.total, 0)
     const debtGrouped = groupByInvoice(debtRepayments).map(g => ({
         // Strip date suffix khỏi tên cho debt group? Giữ luôn để rõ ngày invoice gốc.
         ...g,
@@ -217,18 +241,47 @@ export default function CashFlowCard({
 
                 <div className="flex flex-col gap-1 pl-1">
                     <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Mua nguyên liệu / bao bì</span>
-                    {nvlGrouped.length > 0 ? (
-                        nvlGrouped.map((row) => (
-                            <div key={row.key} className="flex justify-between items-center">
-                                <span className="text-[12px] font-bold text-text-secondary">
-                                    · {row.name}
-                                    {row.count > 1 && (
-                                        <span className="ml-1 text-text-dim font-medium">×{row.count}</span>
-                                    )}
-                                </span>
-                                <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(row.amount)}</span>
-                            </div>
-                        ))
+                    {nvlGroups.length > 0 ? (
+                        <>
+                            {nvlGroups.map((g) => {
+                                const expanded = !!expandedCats[g.key]
+                                return (
+                                    <div key={g.key} className="flex flex-col gap-1">
+                                        {/* Hàng nhóm — mặc định collapse, bấm để xem từng món. */}
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleCat(g.key)}
+                                            className="w-full flex justify-between items-center text-left hover:opacity-85 active:scale-[0.99] transition-all"
+                                        >
+                                            <span className="flex items-center gap-1 text-[12px] font-bold text-text-secondary">
+                                                {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                                                {g.label}
+                                                <span className="text-text-dim font-medium">({g.rows.length})</span>
+                                            </span>
+                                            <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(g.total)}</span>
+                                        </button>
+                                        {expanded && g.rows.map((row) => (
+                                            <div key={row.key} className="flex justify-between items-center pl-4">
+                                                <span className="text-[12px] font-bold text-text-secondary">
+                                                    · {row.name}
+                                                    {row.count > 1 && (
+                                                        <span className="ml-1 text-text-dim font-medium">×{row.count}</span>
+                                                    )}
+                                                </span>
+                                                <span className="text-[13px] font-bold text-danger tabular-nums">-{formatVND(row.amount)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )
+                            })}
+                            {/* Tổng cộng cả mục — chỉ hiện khi có từ 2 nhóm (1 nhóm thì hàng nhóm đã là tổng). */}
+                            {nvlGroups.length > 1 && (
+                                <div className="flex justify-between items-center border-t border-border/40 pt-1 mt-0.5">
+                                    <span className="text-[12px] font-black text-text-secondary uppercase tracking-wide">Tổng cộng</span>
+                                    <span className="text-[13px] font-black text-danger tabular-nums">-{formatVND(nvlTotal)}</span>
+                                </div>
+                            )}
+                        </>
                     ) : (
                         <span className="text-[12px] text-text-secondary italic">Không có đi chợ trong ngày</span>
                     )}

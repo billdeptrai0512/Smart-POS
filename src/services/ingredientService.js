@@ -432,6 +432,47 @@ export async function fetchIngredientDailyContext(addressId) {
     return result
 }
 
+// Lượt "rút từ kho ra quầy" của 1 nguyên liệu trong khoảng thời gian — chính là số
+// "Nhập thêm" (restock) ghi trong phiếu chốt ca (shift_closings.inventory_report).
+// Nhật ký NVL hiển thị mỗi phiếu có restock > 0 thành 1 card riêng (chuyển kho nội
+// bộ, không có tiền). Trả về [{ id, created_at, qty }] DESC theo created_at.
+export async function fetchIngredientWithdrawals(addressId, ingredient, fromDate, toDate) {
+    const mapClosings = (closings) => (closings || [])
+        .map(c => {
+            const report = Array.isArray(c.inventory_report) ? c.inventory_report : []
+            const item = report.find(i => i?.ingredient === ingredient)
+            const qty = Number(item?.restock) || 0
+            return qty > 0 ? { id: c.id || c.created_at, created_at: c.created_at, qty } : null
+        })
+        .filter(Boolean)
+
+    if (localRepo.isGuest()) {
+        const fromMs = new Date(fromDate).getTime()
+        const toMs = new Date(toDate).getTime()
+        return mapClosings(
+            localRepo.fetchAllLocalShiftClosings(addressId)
+                .filter(c => {
+                    const t = new Date(c.created_at).getTime()
+                    return t >= fromMs && t <= toMs
+                })
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        )
+    }
+    if (!supabase || !addressId) return []
+    const { data, error } = await supabase
+        .from('shift_closings')
+        .select('id, created_at, inventory_report')
+        .eq('address_id', addressId)
+        .gte('created_at', fromDate)
+        .lte('created_at', toDate)
+        .order('created_at', { ascending: false })
+    if (error) {
+        console.error('fetchIngredientWithdrawals error:', error)
+        return []
+    }
+    return mapClosings(data)
+}
+
 // Compute raw warehouse balance per ingredient (Σ refill_qty − Σ restock_post_first_refill).
 // Without the `max(0, ...)` clamp that fetchIngredientStocks applies. Negative values mean
 // staff over-reported restock OR bought outside the system — `/ingredients` surfaces these
