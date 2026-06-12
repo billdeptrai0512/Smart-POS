@@ -292,13 +292,6 @@ export default function CashFlowCard({
                     ) : (
                         <span className="text-[12px] text-text-secondary italic">Không có chi phí vận hành</span>
                     )}
-                    {/* Chú giải chấm hổ phách — chỉ hiện khi có chấm đang trên màn hình
-                        (ít nhất 1 nhãn đang mở có món sau chốt ca). */}
-                    {opsGroups.some(g => expandedCats[`op:${g.label}`] && g.postClose.length > 0) && (
-                        <span className="pl-4 pt-0.5 text-[10px] text-text-dim">
-                            <span className="text-warning text-[7px] align-[1px]">●</span> sau chốt ca
-                        </span>
-                    )}
                 </div>
 
                 <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
@@ -399,13 +392,13 @@ function CollapseGroup({ expanded, onToggle, label, count, total, children }) {
 }
 
 // Dòng món bên trong nhóm đã mở — cấp nhỏ nhất, thụt vào + nhạt hơn hàng nhãn.
-// Thứ tự `ngày · tên`; thời điểm đánh dấu bằng CHẤM ĐẦU DÒNG: sau chốt ca = chấm
-// hổ phách ●, trong ca = chấm xám mặc định. 0 width — tên không bị marker cắt.
+// Thứ tự `ngày · tên`; thời điểm đánh dấu bằng chấm ● đầu dòng cùng cỡ: sau chốt
+// ca = hổ phách, trong ca = xám. 0 width — tên không bị marker cắt.
 function ItemRow({ date, name, amount, count, afterClose = false }) {
     return (
         <div className="flex justify-between items-center gap-2 pl-4">
             <span className="text-[11px] font-medium text-text-secondary/90 min-w-0 truncate">
-                {afterClose ? <span className="text-warning text-[8px] align-[1.5px]">●</span> : '·'}
+                <span className={`text-[8px] align-[1.5px] ${afterClose ? 'text-warning' : 'text-text-dim'}`}>●</span>
                 {date && <span className="ml-1 text-text-dim tabular-nums">{date} ·</span>}
                 <span className="ml-1.5">{name}</span>
                 {count > 1 && <span className="ml-1 text-text-dim">×{count}</span>}
