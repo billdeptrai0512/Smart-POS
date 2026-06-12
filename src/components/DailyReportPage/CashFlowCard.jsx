@@ -114,7 +114,7 @@ export default function CashFlowCard({
     }
     // ── Section VẬN HÀNH — chi phí (trong ca + sau chốt ca) nhóm theo TÊN nhãn
     // chi phí. category_id thiếu / nhãn đã xoá → rơi về "Chi phí khác". Mỗi nhãn
-    // là 1 dòng collapse; expand tách 2 phân nhóm Trong ca / Sau chốt ca.
+    // là 1 dòng collapse; expand ra list phẳng, món sau chốt ca mang pill "Sau ca".
     const catById = new Map((expenseCategories || []).map(c => [c.id, c]))
     const opsGroups = (() => {
         const map = new Map()
@@ -259,22 +259,15 @@ export default function CashFlowCard({
                                 count={g.inShift.length + g.postClose.length}
                                 total={g.total}
                             >
-                                {g.inShift.length > 0 && (
-                                    <>
-                                        <span className="pl-4 text-[10px] font-black text-text-dim uppercase tracking-widest">Trong ca</span>
-                                        {g.inShift.map((e) => (
-                                            <ItemRow key={e.id} name={`${capFirst(e.name || 'Chi phí khác')}${dayMonthSuffix(e.created_at)}`} amount={e.amount} />
-                                        ))}
-                                    </>
-                                )}
-                                {g.postClose.length > 0 && (
-                                    <>
-                                        <span className="pl-4 text-[10px] font-black text-text-dim uppercase tracking-widest">Sau chốt ca</span>
-                                        {g.postClose.map((e) => (
-                                            <ItemRow key={e.id} name={`${capFirst(e.name || 'Chi phí khác')}${dayMonthSuffix(e.created_at)}`} amount={e.amount} />
-                                        ))}
-                                    </>
-                                )}
+                                {/* List phẳng: trong ca trước, sau chốt ca sau. Phase đánh dấu
+                                    bằng pill "Sau ca" trên từng món (trong ca = mặc định, không
+                                    pill) — không sub-header để đỡ ồn. */}
+                                {g.inShift.map((e) => (
+                                    <ItemRow key={e.id} name={`${capFirst(e.name || 'Chi phí khác')}${dayMonthSuffix(e.created_at)}`} amount={e.amount} />
+                                ))}
+                                {g.postClose.map((e) => (
+                                    <ItemRow key={e.id} name={`${capFirst(e.name || 'Chi phí khác')}${dayMonthSuffix(e.created_at)}`} amount={e.amount} afterClose />
+                                ))}
                             </CollapseGroup>
                         ))
                     ) : (
@@ -378,14 +371,20 @@ function CollapseGroup({ expanded, onToggle, label, count, total, children }) {
 }
 
 // Dòng món bên trong nhóm đã mở — cấp nhỏ nhất, thụt vào + nhạt hơn hàng nhãn.
-function ItemRow({ name, amount, count }) {
+// `afterClose` → pill "Sau ca" (trong ca là mặc định, không đánh dấu).
+function ItemRow({ name, amount, count, afterClose = false }) {
     return (
-        <div className="flex justify-between items-center pl-4">
-            <span className="text-[11px] font-medium text-text-secondary/90">
+        <div className="flex justify-between items-center gap-2 pl-4">
+            <span className="text-[11px] font-medium text-text-secondary/90 min-w-0 truncate">
                 · {name}
                 {count > 1 && <span className="ml-1 text-text-dim">×{count}</span>}
+                {afterClose && (
+                    <span className="ml-1.5 inline-flex items-center px-1.5 rounded-full text-[9px] font-bold border bg-warning/10 border-warning/30 text-warning align-[1px]">
+                        Sau ca
+                    </span>
+                )}
             </span>
-            <span className="text-[11px] font-medium text-danger/80 tabular-nums">-{formatVND(amount)}</span>
+            <span className="text-[11px] font-medium text-danger/80 tabular-nums shrink-0">-{formatVND(amount)}</span>
         </div>
     )
 }
