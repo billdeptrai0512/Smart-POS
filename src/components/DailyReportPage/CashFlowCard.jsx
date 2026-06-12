@@ -8,11 +8,11 @@ import { useProducts } from '../../contexts/ProductContext'
 
 // Viết hoa chữ cái đầu ('đ' → 'Đ' được toUpperCase xử lý đúng cho tiếng Việt).
 const capFirst = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
-// Hậu tố " · DD/MM" theo ngày tạo — đồng bộ với list "Mua nguyên liệu / bao bì".
-const dayMonthSuffix = (ts) => {
+// "DD/MM" theo timestamp — dòng món trong panel Thực chi mở đầu bằng ngày.
+const dayMonth = (ts) => {
     if (!ts) return ''
     const d = new Date(ts)
-    return isNaN(d) ? '' : ` · ${d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`
+    return isNaN(d) ? '' : d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
 }
 
 export default function CashFlowCard({
@@ -112,6 +112,22 @@ export default function CashFlowCard({
         if (invCreated && isSameDayVN(invCreated, p.paid_at)) purchaseToday.push(p)
         else debtRepayments.push(p)
     }
+
+    // Gộp đi chợ theo TÊN nguyên liệu, bỏ ngày (scope nhiều ngày tên lặp lại mỗi
+    // ngày → 1 dòng/nguyên liệu ×số lần + tổng, sắp theo tổng giảm dần). Chi tiết
+    // từng ngày xem ở Nhật ký của nguyên liệu đó.
+    const groupByIngredient = (list) => {
+        const byName = new Map()
+        for (const p of list) {
+            const ing = p.invoice_metadata?.ingredient
+            const name = ing ? ingredientLabel(ing) : (p.invoice_name || 'Trả NCC')
+            let g = byName.get(name)
+            if (!g) { g = { name, key: p.id, amount: 0, count: 0 }; byName.set(name, g) }
+            g.amount += p.amount || 0
+            g.count += 1
+        }
+        return [...byName.values()].sort((a, b) => b.amount - a.amount)
+    }
     // ── Section VẬN HÀNH — chi phí (trong ca + sau chốt ca) nhóm theo TÊN nhãn
     // chi phí. category_id thiếu / nhãn đã xoá → rơi về "Chi phí khác". Mỗi nhãn
     // là 1 dòng collapse; expand ra list phẳng, món sau chốt ca mang pill "Sau ca".
@@ -147,10 +163,13 @@ export default function CashFlowCard({
         return {
             key: cat.key,
             label: cat.key === 'packaging' ? 'Mua bao bì' : 'Mua nguyên liệu',
-            rows: groupByInvoice(pays),
+            rows: groupByIngredient(pays),
+            count: pays.length,
             total: pays.reduce((s, p) => s + (p.amount || 0), 0),
         }
     }).filter(g => g.rows.length > 0)
+    // Trả nợ cũ giữ nhóm theo hoá đơn (tên · ngày hoá đơn gốc) — ngày ở đây là
+    // thông tin chính ("trả nợ ngày nào"), không gộp theo tên.
     const debtRows = groupByInvoice(debtRepayments)
     const inventoryGroups = [
         ...nvlGroups,
@@ -158,6 +177,7 @@ export default function CashFlowCard({
             key: 'debt',
             label: 'Trả nợ cũ',
             rows: debtRows,
+            count: debtRepayments.length,
             total: debtRepayments.reduce((s, p) => s + (p.amount || 0), 0),
         }] : []),
     ]
@@ -259,14 +279,13 @@ export default function CashFlowCard({
                                 count={g.inShift.length + g.postClose.length}
                                 total={g.total}
                             >
-                                {/* List phẳng: trong ca trước, sau chốt ca sau. Phase đánh dấu
-                                    bằng pill "Sau ca" trên từng món (trong ca = mặc định, không
-                                    pill) — không sub-header để đỡ ồn. */}
+                                {/* List phẳng `ngày · thời điểm · tên`: trong ca trước (mặc định,
+                                    không pill), sau chốt ca sau với pill "Sau ca" giữa ngày và tên. */}
                                 {g.inShift.map((e) => (
-                                    <ItemRow key={e.id} name={`${capFirst(e.name || 'Chi phí khác')}${dayMonthSuffix(e.created_at)}`} amount={e.amount} />
+                                    <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} />
                                 ))}
                                 {g.postClose.map((e) => (
-                                    <ItemRow key={e.id} name={`${capFirst(e.name || 'Chi phí khác')}${dayMonthSuffix(e.created_at)}`} amount={e.amount} afterClose />
+                                    <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} afterClose />
                                 ))}
                             </CollapseGroup>
                         ))
@@ -292,9 +311,11 @@ export default function CashFlowCard({
                                 expanded={!!expandedCats[g.key]}
                                 onToggle={() => toggleCat(g.key)}
                                 label={g.label}
-                                count={g.rows.length}
+                                count={g.count}
                                 total={g.total}
                             >
+                                {/* Trả nợ cũ: tên kèm ngày hoá đơn gốc. Mua NVL/bao bì:
+                                    1 dòng/nguyên liệu ×số lần, không ngày. */}
                                 {g.rows.map((row) => (
                                     <ItemRow key={row.key} name={row.name} amount={row.amount} count={row.count} />
                                 ))}
@@ -371,18 +392,20 @@ function CollapseGroup({ expanded, onToggle, label, count, total, children }) {
 }
 
 // Dòng món bên trong nhóm đã mở — cấp nhỏ nhất, thụt vào + nhạt hơn hàng nhãn.
-// `afterClose` → pill "Sau ca" (trong ca là mặc định, không đánh dấu).
-function ItemRow({ name, amount, count, afterClose = false }) {
+// Thứ tự `ngày · thời điểm · tên`: `afterClose` → pill "Sau ca" chen giữa ngày
+// và tên (trong ca là mặc định, không đánh dấu).
+function ItemRow({ date, name, amount, count, afterClose = false }) {
     return (
         <div className="flex justify-between items-center gap-2 pl-4">
             <span className="text-[11px] font-medium text-text-secondary/90 min-w-0 truncate">
-                · {name}
-                {count > 1 && <span className="ml-1 text-text-dim">×{count}</span>}
+                ·{date && <span className="ml-1 text-text-dim tabular-nums">{date} ·</span>}
                 {afterClose && (
                     <span className="ml-1.5 inline-flex items-center px-1.5 rounded-full text-[9px] font-bold border bg-warning/10 border-warning/30 text-warning align-[1px]">
                         Sau ca
                     </span>
                 )}
+                <span className="ml-1.5">{name}</span>
+                {count > 1 && <span className="ml-1 text-text-dim">×{count}</span>}
             </span>
             <span className="text-[11px] font-medium text-danger/80 tabular-nums shrink-0">-{formatVND(amount)}</span>
         </div>
