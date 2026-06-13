@@ -201,8 +201,7 @@ function ExpenseCard({ expense, category, isReadOnly, runningTotal, deletingExpI
     )
 }
 
-// Tag chip with a colored dot — same visual language as ExpenseCategoryPicker
-// so manager recognizes it. Group section drives the dot color. Clickable when
+// Tag chip with a colored dot. Group section drives the dot color. Clickable when
 // onClick is provided (manager can re-tag); plain span otherwise (read-only).
 // `strike` is shown for orphan tags (category was soft-deleted).
 function TagPill({ name, group, muted = false, strike = false, onClick }) {
