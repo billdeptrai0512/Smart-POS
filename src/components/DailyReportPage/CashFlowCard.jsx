@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { formatVND, parseVNDInput } from '../../utils'
 import { ingredientLabel, normalizeIngredientCategory, INGREDIENT_CATEGORIES } from '../../utils/ingredients'
@@ -8,6 +8,11 @@ import { useProducts } from '../../contexts/ProductContext'
 
 // Viết hoa chữ cái đầu ('đ' → 'Đ' được toUpperCase xử lý đúng cho tiếng Việt).
 const capFirst = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
+// Phase 1 payment: cờ trên payment ưu tiên cờ hoá đơn gốc; chỉ 'in_shift' rõ ràng
+// mới là trong ca, còn lại (kể cả null/phiếu cũ) → sau chốt ca. Khớp reportStats.
+const paymentPhase = (p) => ((p.cash_phase || p.invoice_metadata?.cash_phase) === 'in_shift' ? 'in_shift' : 'post_close')
+// Phase của 1 NHÓM payment gộp: cả 2 loại → 'mixed'.
+const groupPhase = (hasIn, hasPost) => (hasIn && hasPost ? 'mixed' : hasIn ? 'in_shift' : 'post_close')
 // "DD/MM" theo timestamp — dòng món trong panel Thực chi mở đầu bằng ngày.
 const dayMonth = (ts) => {
     if (!ts) return ''
@@ -95,15 +100,13 @@ export default function CashFlowCard({
                 const d = new Date(invDate)
                 return `${name} · ${d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`
             })()
-            const prev = byName.get(display)
-            if (prev) {
-                prev.amount += p.amount || 0
-                prev.count += 1
-            } else {
-                byName.set(display, { name: display, amount: p.amount || 0, count: 1, key: p.id })
-            }
+            let g = byName.get(display)
+            if (!g) { g = { name: display, amount: 0, count: 0, key: p.id, hasIn: false, hasPost: false }; byName.set(display, g) }
+            g.amount += p.amount || 0
+            g.count += 1
+            if (paymentPhase(p) === 'in_shift') g.hasIn = true; else g.hasPost = true
         }
-        return [...byName.values()]
+        return [...byName.values()].map(g => ({ ...g, phase: groupPhase(g.hasIn, g.hasPost) }))
     }
     const purchaseToday = []
     const debtRepayments = []
@@ -122,11 +125,14 @@ export default function CashFlowCard({
             const ing = p.invoice_metadata?.ingredient
             const name = ing ? ingredientLabel(ing) : (p.invoice_name || 'Trả NCC')
             let g = byName.get(name)
-            if (!g) { g = { name, key: p.id, amount: 0, count: 0 }; byName.set(name, g) }
+            if (!g) { g = { name, key: p.id, amount: 0, count: 0, hasIn: false, hasPost: false }; byName.set(name, g) }
             g.amount += p.amount || 0
             g.count += 1
+            if (paymentPhase(p) === 'in_shift') g.hasIn = true; else g.hasPost = true
         }
-        return [...byName.values()].sort((a, b) => b.amount - a.amount)
+        return [...byName.values()]
+            .map(g => ({ ...g, phase: groupPhase(g.hasIn, g.hasPost) }))
+            .sort((a, b) => b.amount - a.amount)
     }
     // ── Section VẬN HÀNH — chi phí (trong ca + sau chốt ca) nhóm theo TÊN nhãn
     // chi phí. category_id thiếu / nhãn đã xoá → rơi về "Chi phí khác". Mỗi nhãn
@@ -279,13 +285,13 @@ export default function CashFlowCard({
                                 count={g.inShift.length + g.postClose.length}
                                 total={g.total}
                             >
-                                {/* List phẳng `ngày · tên`: trong ca trước (chấm xám mặc định),
-                                    sau chốt ca sau với chấm hổ phách ● đầu dòng. */}
+                                {/* List phẳng `ngày · tên`: trong ca trước (chấm xám), sau chốt
+                                    ca sau (chấm hổ phách). Bấm chấm ● xem chú thích phase. */}
                                 {g.inShift.map((e) => (
-                                    <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} />
+                                    <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="in_shift" />
                                 ))}
                                 {g.postClose.map((e) => (
-                                    <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} afterClose />
+                                    <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="post_close" />
                                 ))}
                             </CollapseGroup>
                         ))
@@ -315,9 +321,10 @@ export default function CashFlowCard({
                                 total={g.total}
                             >
                                 {/* Trả nợ cũ: tên kèm ngày hoá đơn gốc. Mua NVL/bao bì:
-                                    1 dòng/nguyên liệu ×số lần, không ngày. */}
+                                    1 dòng/nguyên liệu ×số lần, không ngày. Chấm ● = phase gộp
+                                    (mixed khi nhóm có cả trong ca lẫn sau chốt ca). */}
                                 {g.rows.map((row) => (
-                                    <ItemRow key={row.key} name={row.name} amount={row.amount} count={row.count} />
+                                    <ItemRow key={row.key} name={row.name} amount={row.amount} count={row.count} phase={row.phase} />
                                 ))}
                             </CollapseGroup>
                         ))
@@ -391,17 +398,56 @@ function CollapseGroup({ expanded, onToggle, label, count, total, children }) {
     )
 }
 
+// Chấm ● đầu dòng đánh dấu phase, BẤM ĐƯỢC → popup chú thích. Tách khỏi span tên
+// (span tên có `truncate`/overflow-hidden sẽ cắt mất popup). Màu: sau chốt ca /
+// mixed = hổ phách (đáng chú ý khi đối soát két), trong ca = xám.
+function PhaseDot({ phase }) {
+    const [open, setOpen] = useState(false)
+    const ref = useRef(null)
+    useEffect(() => {
+        if (!open) return
+        const onDown = (e) => { if (!ref.current?.contains(e.target)) setOpen(false) }
+        document.addEventListener('pointerdown', onDown)
+        return () => document.removeEventListener('pointerdown', onDown)
+    }, [open])
+    const isPost = phase === 'post_close' || phase === 'mixed'
+    const label = phase === 'mixed' ? 'Gồm chi phí trong ca và sau chốt ca'
+        : phase === 'post_close' ? 'Chi phí phát sinh sau chốt ca'
+        : 'Chi phí phát sinh trong ca'
+    return (
+        <span ref={ref} className="relative inline-flex shrink-0">
+            <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}
+                aria-label={label}
+                className={`leading-none text-[8px] ${isPost ? 'text-warning' : 'text-text-dim'} hover:opacity-70 active:scale-90 transition`}
+            >
+                ●
+            </button>
+            {open && (
+                <span
+                    role="tooltip"
+                    className="absolute left-0 bottom-full mb-1 z-30 whitespace-nowrap rounded-lg bg-surface-light border border-border/60 shadow-lg px-2 py-1 text-[10px] font-bold text-text-secondary"
+                >
+                    {label}
+                </span>
+            )}
+        </span>
+    )
+}
+
 // Dòng món bên trong nhóm đã mở — cấp nhỏ nhất, thụt vào + nhạt hơn hàng nhãn.
-// Thứ tự `ngày · tên`; thời điểm đánh dấu bằng chấm ● đầu dòng cùng cỡ: sau chốt
-// ca = hổ phách, trong ca = xám. 0 width — tên không bị marker cắt.
-function ItemRow({ date, name, amount, count, afterClose = false }) {
+// Thứ tự `● ngày · tên`; chấm đứng riêng (bấm xem phase), tên truncate độc lập.
+function ItemRow({ date, name, amount, count, phase = 'in_shift' }) {
     return (
         <div className="flex justify-between items-center gap-2 pl-4">
-            <span className="text-[11px] font-medium text-text-secondary/90 min-w-0 truncate">
-                <span className={`text-[8px] align-[1.5px] ${afterClose ? 'text-warning' : 'text-text-dim'}`}>●</span>
-                {date && <span className="ml-1 text-text-dim tabular-nums">{date} ·</span>}
-                <span className="ml-1.5">{name}</span>
-                {count > 1 && <span className="ml-1 text-text-dim">×{count}</span>}
+            <span className="flex items-center gap-1.5 min-w-0">
+                <PhaseDot phase={phase} />
+                <span className="text-[11px] font-medium text-text-secondary/90 min-w-0 truncate">
+                    {date && <span className="text-text-dim tabular-nums">{date} · </span>}
+                    {name}
+                    {count > 1 && <span className="ml-1 text-text-dim">×{count}</span>}
+                </span>
             </span>
             <span className="text-[11px] font-medium text-danger/80 tabular-nums shrink-0">-{formatVND(amount)}</span>
         </div>
