@@ -322,9 +322,24 @@ export default function DailyReportPage() {
         () => splitExpenses(displayExpenses),
         [displayExpenses]
     )
+    // Chi phí gắn nhãn nhóm "Ngoài kinh doanh" — KHÔNG vào lợi nhuận (tiền ra ngoài
+    // hoạt động KD). dailyExpense gom mọi non-refill nên phải trừ phần này ra khỏi P&L.
+    const nonOperatingExpense = useMemo(() => {
+        const nonOpIds = new Set(
+            (expenseCategories || []).filter(c => c.group_section === 'non_operating').map(c => c.id)
+        )
+        if (nonOpIds.size === 0) return 0
+        let sum = 0
+        for (const e of displayExpenses || []) {
+            if (e.is_refill || e.metadata?.adjustment) continue
+            if (e.category_id && nonOpIds.has(e.category_id)) sum += e.amount || 0
+        }
+        return sum
+    }, [displayExpenses, expenseCategories])
     // Vận hành tổng = trong ca + free-form sau ca (sau ca vẫn là vận hành, không phải NVL).
     // Thực chi: legacy is_fixed=true rows ĐÃ được splitExpenses cộng vào dailyExpense.
-    const operationalExpense = dailyExpense + refillFreeForm
+    // Trừ chi phí ngoài KD khỏi P&L; chi phí tồn kho thì GIỮ (là chi phí thật, ngoài COGS).
+    const operationalExpense = dailyExpense + refillFreeForm - nonOperatingExpense
 
     // ── COGS category breakdown + hao hụt ────────────────────────────────────
     // Map ingredient → category (null when migration 20260523 not deployed yet —

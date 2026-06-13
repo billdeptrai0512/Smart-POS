@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Plus, Check, ChevronDown } from 'lucide-react'
+import { EXPENSE_GROUPS, groupMeta } from '../../constants/expenseGroups'
 
-// Single dropdown gộp 2 nhóm. Trigger hiện nhãn đang chọn (chấm màu theo nhóm). Khi mở,
-// panel liệt kê 2 nhóm "Vận hành" / "Quản lý & khác", mỗi nhóm có list nhãn + "Thêm mới"
-// (inline-create suy nhóm từ section đang đứng). Chọn nhãn nào thì set selection + đóng.
+// Single dropdown gộp các nhóm nhãn. Trigger hiện nhãn đang chọn (chấm màu theo nhóm).
+// Khi mở, panel liệt kê từng nhóm (Vận hành / Quản lý / Tồn kho / Ngoài kinh doanh),
+// mỗi nhóm có list nhãn + "Thêm mới" (inline-create suy nhóm từ section đang đứng).
 export default function ExpenseCategoryPicker({
     categories,
     selectedId,
@@ -11,14 +12,15 @@ export default function ExpenseCategoryPicker({
     onCreate,
     disabled = false,
 }) {
-    const operating = categories.filter(c => c.group_section !== 'overhead')
-    const overhead = categories.filter(c => c.group_section === 'overhead')
+    // Nhãn legacy không khớp nhóm nào → coi như Vận hành.
+    const knownKeys = new Set(EXPENSE_GROUPS.map(g => g.key))
+    const chipsOf = (key) => categories.filter(c =>
+        c.group_section === key || (key === 'operating' && !knownKeys.has(c.group_section))
+    )
 
     const [open, setOpen] = useState(false)
     const selected = categories.find(c => c.id === selectedId)
-    const selectedDot = selected
-        ? (selected.group_section === 'overhead' ? 'bg-warning' : 'bg-danger')
-        : ''
+    const selectedDot = selected ? groupMeta(selected.group_section).dotCls : ''
 
     const handlePick = (id) => {
         onSelect(id)
@@ -54,27 +56,21 @@ export default function ExpenseCategoryPicker({
                     // Anchor above the trigger — modal pinned to viewport bottom, empty
                     // space sits above. Caps at 60vh + inner scroll for long lists.
                     <div className="absolute bottom-full left-0 right-0 mb-1.5 z-10 bg-surface border border-border/60 rounded-[12px] shadow-xl p-2 flex flex-col gap-2 max-h-[60vh] overflow-y-auto hide-scrollbar">
-                        <GroupSection
-                            label="Vận hành"
-                            group="operating"
-                            dotCls="bg-danger"
-                            items={operating}
-                            selectedId={selectedId}
-                            onPick={handlePick}
-                            onCreate={onCreate}
-                            disabled={disabled}
-                        />
-                        <div className="h-px bg-border/60 rounded-full mx-1" />
-                        <GroupSection
-                            label="Quản lý & khác"
-                            group="overhead"
-                            dotCls="bg-warning"
-                            items={overhead}
-                            selectedId={selectedId}
-                            onPick={handlePick}
-                            onCreate={onCreate}
-                            disabled={disabled}
-                        />
+                        {EXPENSE_GROUPS.map((g, i) => (
+                            <div key={g.key} className="flex flex-col gap-2">
+                                {i > 0 && <div className="h-px bg-border/60 rounded-full mx-1" />}
+                                <GroupSection
+                                    label={g.label}
+                                    group={g.key}
+                                    dotCls={g.dotCls}
+                                    items={chipsOf(g.key)}
+                                    selectedId={selectedId}
+                                    onPick={handlePick}
+                                    onCreate={onCreate}
+                                    disabled={disabled}
+                                />
+                            </div>
+                        ))}
                     </div>
                 )}
             </div>

@@ -31,7 +31,7 @@ export default function FinanceCards({
     // Σ|hao hụt × unit_cost| over the period — added on top of totalCOGS as a separate line.
     lossValue = 0,
 }) {
-    const { operatingRows, overheadRows, operatingTotal, overheadTotal } = useMemo(
+    const { operatingRows, overheadRows, inventoryRows, operatingTotal, overheadTotal, inventoryTotal } = useMemo(
         () => buildCategoryBreakdown({ expenses, expenseCategories }),
         [expenses, expenseCategories]
     )
@@ -50,7 +50,9 @@ export default function FinanceCards({
 
     const cogsTotal = totalCOGS + lossValue
     const grossProfit = totalRevenue - cogsTotal
-    const operatingProfit = grossProfit - operatingTotal
+    // Chi phí tồn kho (vật tư không kiểm kê) trừ sau Lợi nhuận gộp — KHÔNG lẫn COGS
+    // (COGS tính từ tiêu hao công thức của hàng có kiểm kê), rồi mới tới vận hành.
+    const operatingProfit = grossProfit - inventoryTotal - operatingTotal
 
     return (
         <div className="grid grid-cols-2 gap-3.5">
@@ -76,6 +78,15 @@ export default function FinanceCards({
                     </span>
                 </div>
             </ProfitBanner>
+
+            {/* 3b. CHI PHÍ TỒN KHO — vật tư mua không kiểm kê (chỉ hiện khi có chi). */}
+            {inventoryTotal > 0 && (
+                <SimpleCard title="Chi phí tồn kho" totalLabel="Tổng chi phí tồn kho" totalAmount={inventoryTotal} totalTone="danger">
+                    {inventoryRows.map(r => (
+                        <LineItem key={r.id} label={`· ${r.name}`} amount={r.amount} />
+                    ))}
+                </SimpleCard>
+            )}
 
             {/* 4. CHI PHÍ VẬN HÀNH — dynamic by category */}
             <SimpleCard title="Chi phí vận hành" totalLabel="Tổng chi phí vận hành" totalAmount={operatingTotal} totalTone="danger">

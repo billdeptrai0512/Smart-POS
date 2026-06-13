@@ -429,6 +429,9 @@ const DEFAULT_EXPENSE_CATEGORIES = [
     { name: 'Khấu hao máy móc',    group_section: 'overhead',  sort_order: 20 },
     { name: 'Chi phí tài chính',   group_section: 'overhead',  sort_order: 30 },
     { name: 'Chi phí khác',        group_section: 'overhead',  sort_order: 999 },
+    { name: 'Mua nguyên liệu',     group_section: 'inventory', sort_order: 10 },
+    { name: 'Mua bao bì',          group_section: 'inventory', sort_order: 20 },
+    { name: 'Chi phí khác',        group_section: 'non_operating', sort_order: 999 },
 ];
 
 const seedLocalExpenseCategoriesIfNeeded = (addressId) => {

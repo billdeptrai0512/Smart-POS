@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { X, Plus, Check, Pencil, Trash2 } from 'lucide-react'
+import { EXPENSE_GROUPS } from '../../constants/expenseGroups'
 
 // Bottom sheet for re-tagging an expense card. Tap a chip → auto-save + close.
 // Groups categories by section (Operating top, Overhead bottom) so manager sees
@@ -27,8 +28,11 @@ export default function ChangeCategorySheet({
 
     if (!open) return null
 
-    const operating = categories.filter(c => c.group_section === 'operating')
-    const overhead = categories.filter(c => c.group_section === 'overhead')
+    // Nhóm theo group_section: nhãn không khớp nhóm nào (legacy) coi như Vận hành.
+    const knownKeys = new Set(EXPENSE_GROUPS.map(g => g.key))
+    const chipsOf = (key) => categories.filter(c =>
+        c.group_section === key || (key === 'operating' && !knownKeys.has(c.group_section))
+    )
 
     const handlePick = async (id) => {
         if (isSaving || id === selectedId) {
@@ -128,13 +132,16 @@ export default function ChangeCategorySheet({
                     </div>
                 </div>
 
-                <Section title="Vận hành" dotCls="bg-danger">
-                    <ChipGroup chips={operating} selectedId={selectedId} dotCls="bg-danger" disabled={isSaving} {...chipHandlers} />
-                </Section>
-
-                <Section title="Quản lý & khác" dotCls="bg-warning">
-                    <ChipGroup chips={overhead} selectedId={selectedId} dotCls="bg-warning" disabled={isSaving} {...chipHandlers} />
-                </Section>
+                {EXPENSE_GROUPS.map(g => {
+                    const chips = chipsOf(g.key)
+                    // Ẩn nhóm rỗng khi đang chọn (đỡ ồn); giữ ở chế độ Sửa để quản lý.
+                    if (chips.length === 0 && !manageMode) return null
+                    return (
+                        <Section key={g.key} title={g.label} dotCls={g.dotCls}>
+                            <ChipGroup chips={chips} selectedId={selectedId} dotCls={g.dotCls} disabled={isSaving} {...chipHandlers} />
+                        </Section>
+                    )
+                })}
 
                 {!manageMode && (!isCreating ? (
                     <button
@@ -157,9 +164,12 @@ export default function ChangeCategorySheet({
                             onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
                             className="w-full bg-surface border border-border/60 rounded-[10px] px-3 py-2 text-[13px] text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary/50"
                         />
-                        <div className="flex bg-surface border border-border/60 rounded-[10px] p-0.5">
-                            <GroupTab active={newGroup === 'operating'} color="bg-danger/20 text-danger" onClick={() => setNewGroup('operating')}>Vận hành</GroupTab>
-                            <GroupTab active={newGroup === 'overhead'} color="bg-warning/20 text-warning" onClick={() => setNewGroup('overhead')}>Quản lý & khác</GroupTab>
+                        <div className="grid grid-cols-2 gap-1 bg-surface border border-border/60 rounded-[10px] p-0.5">
+                            {EXPENSE_GROUPS.map(g => (
+                                <GroupTab key={g.key} active={newGroup === g.key} color={g.tabCls} onClick={() => setNewGroup(g.key)}>
+                                    {g.label}
+                                </GroupTab>
+                            ))}
                         </div>
                         <div className="flex gap-2">
                             <button

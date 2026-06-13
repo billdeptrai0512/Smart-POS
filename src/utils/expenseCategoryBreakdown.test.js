@@ -8,6 +8,8 @@ const cats = [
     { id: 'oh-mgr',    name: 'Lương quản lý',   group_section: 'overhead',  sort_order: 10, is_default: true },
     { id: 'oh-other',  name: 'Chi phí khác',    group_section: 'overhead',  sort_order: 999, is_default: true },
     { id: 'op-custom', name: 'Marketing FB',    group_section: 'operating', sort_order: 50, is_default: false },
+    { id: 'inv-mat',   name: 'Mua nguyên liệu', group_section: 'inventory', sort_order: 10, is_default: true },
+    { id: 'nop-draw',  name: 'Rút vốn',         group_section: 'non_operating', sort_order: 10, is_default: true },
 ]
 
 describe('buildCategoryBreakdown', () => {
@@ -20,6 +22,23 @@ describe('buildCategoryBreakdown', () => {
         const { operatingTotal, overheadTotal } = buildCategoryBreakdown({ expenses, expenseCategories: cats })
         expect(operatingTotal).toBe(300)
         expect(overheadTotal).toBe(500)
+    })
+
+    it('tách inventory thành nhóm riêng, loại non_operating khỏi mọi tổng', () => {
+        const expenses = [
+            { id: '1', amount: 100, category_id: 'op-salary' },
+            { id: '2', amount: 300, category_id: 'inv-mat' },
+            { id: '3', amount: 999, category_id: 'nop-draw' },
+        ]
+        const r = buildCategoryBreakdown({ expenses, expenseCategories: cats })
+        expect(r.operatingTotal).toBe(100)
+        expect(r.inventoryTotal).toBe(300)
+        expect(r.inventoryRows).toHaveLength(1)
+        expect(r.inventoryRows[0].id).toBe('inv-mat')
+        // non_operating không lọt vào bất kỳ tổng/row nào.
+        expect(r.overheadTotal).toBe(0)
+        const allIds = [...r.operatingRows, ...r.overheadRows, ...r.inventoryRows].map(x => x.id)
+        expect(allIds).not.toContain('nop-draw')
     })
 
     it('skips NVL refill rows (is_refill without free_form)', () => {
@@ -102,8 +121,10 @@ describe('buildCategoryBreakdown', () => {
         expect(buildCategoryBreakdown({ expenses: [], expenseCategories: [] })).toEqual({
             operatingRows: [],
             overheadRows: [],
+            inventoryRows: [],
             operatingTotal: 0,
             overheadTotal: 0,
+            inventoryTotal: 0,
         })
     })
 

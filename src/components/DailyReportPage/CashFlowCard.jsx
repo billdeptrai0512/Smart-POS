@@ -134,13 +134,17 @@ export default function CashFlowCard({
             .map(g => ({ ...g, phase: groupPhase(g.hasIn, g.hasPost) }))
             .sort((a, b) => b.amount - a.amount)
     }
-    // ── Section VẬN HÀNH — chi phí (trong ca + sau chốt ca) nhóm theo TÊN nhãn
-    // chi phí. category_id thiếu / nhãn đã xoá → rơi về "Chi phí khác". Mỗi nhãn
-    // là 1 dòng collapse; expand ra list phẳng, món sau chốt ca mang pill "Sau ca".
+    // ── Phân chi phí non-refill theo group_section của nhãn (legacy/null → Vận hành).
+    // Mỗi section gom theo TÊN nhãn, tách phase trong ca (chấm xám) / sau chốt ca
+    // (chấm hổ phách). Bấm chấm xem chú thích phase.
     const catById = new Map((expenseCategories || []).map(c => [c.id, c]))
-    const opsGroups = (() => {
+    const expenseGroupKey = (e) => {
+        const k = catById.get(e.category_id)?.group_section
+        return (k === 'overhead' || k === 'inventory' || k === 'non_operating') ? k : 'operating'
+    }
+    const buildLabelGroups = (items) => {
         const map = new Map()
-        const add = (e, phase) => {
+        for (const { e, phase } of items) {
             const cat = catById.get(e.category_id)
             const label = cat?.name || 'Chi phí khác'
             const sortKey = cat ? (cat.sort_order ?? 100) : 999
@@ -150,44 +154,60 @@ export default function CashFlowCard({
             g.total += e.amount || 0
             g.sortKey = Math.min(g.sortKey, sortKey)
         }
-        for (const e of shiftExpenses) add(e, 'inShift')
-        for (const e of afterShiftOps) add(e, 'postClose')
         return [...map.values()].sort((a, b) => a.sortKey - b.sortKey || a.label.localeCompare(b.label, 'vi'))
-    })()
-    const opsTotal = opsGroups.reduce((s, g) => s + g.total, 0)
+    }
+    const tagged = { operating: [], overhead: [], inventory: [], non_operating: [] }
+    for (const e of shiftExpenses) tagged[expenseGroupKey(e)].push({ e, phase: 'inShift' })
+    for (const e of afterShiftOps) tagged[expenseGroupKey(e)].push({ e, phase: 'postClose' })
 
-    // ── Section TỒN KHO — đi chợ hôm nay phân theo nhóm nguyên liệu (main /
-    // packaging; payment không có ingredient key rơi về 'main' — cùng default với
-    // normalizeIngredientCategory) + dòng Trả nợ cũ. Nhóm rỗng không hiển thị.
+    const operatingGroups = buildLabelGroups(tagged.operating)
+    const overheadGroups = buildLabelGroups(tagged.overhead)
+    const nonOpGroups = buildLabelGroups(tagged.non_operating)
+    const operatingTotal = operatingGroups.reduce((s, g) => s + g.total, 0)
+    const overheadTotal = overheadGroups.reduce((s, g) => s + g.total, 0)
+    const nonOpTotal = nonOpGroups.reduce((s, g) => s + g.total, 0)
+
+    // ── Section TỒN KHO — mua NVL refill (gom theo nhóm nguyên liệu) GỘP với chi phí
+    // gắn nhãn nhóm "Chi phí tồn kho" (vật tư không kiểm kê) cùng tên nhãn, + Trả nợ cũ.
+    // Gộp theo label để "Mua nguyên liệu" refill và chi phí nhãn "Mua nguyên liệu" về 1 dòng.
     const catByKey = new Map(
         (ingredientConfigs || []).map(c => [c.ingredient, normalizeIngredientCategory(c.category)])
     )
-    const nvlGroups = INGREDIENT_CATEGORIES.map(cat => {
-        const pays = purchaseToday.filter(p =>
-            (catByKey.get(p.invoice_metadata?.ingredient) || 'main') === cat.key
-        )
-        return {
-            key: cat.key,
-            label: cat.key === 'packaging' ? 'Mua bao bì' : 'Mua nguyên liệu',
-            rows: groupByIngredient(pays),
-            count: pays.length,
-            total: pays.reduce((s, p) => s + (p.amount || 0), 0),
+    const invBlocks = new Map()
+    const ensureBlock = (label, sortKey) => {
+        let b = invBlocks.get(label)
+        if (!b) { b = { label, sortKey, total: 0, count: 0, children: [] }; invBlocks.set(label, b) }
+        b.sortKey = Math.min(b.sortKey, sortKey)
+        return b
+    }
+    for (const cat of INGREDIENT_CATEGORIES) {
+        const pays = purchaseToday.filter(p => (catByKey.get(p.invoice_metadata?.ingredient) || 'main') === cat.key)
+        if (pays.length === 0) continue
+        const b = ensureBlock(cat.key === 'packaging' ? 'Mua bao bì' : 'Mua nguyên liệu', cat.key === 'packaging' ? 20 : 10)
+        for (const r of groupByIngredient(pays)) {
+            b.total += r.amount; b.count += r.count
+            b.children.push({ key: r.key, name: r.name, amount: r.amount, count: r.count, phase: r.phase })
         }
-    }).filter(g => g.rows.length > 0)
-    // Trả nợ cũ giữ nhóm theo hoá đơn (tên · ngày hoá đơn gốc) — ngày ở đây là
-    // thông tin chính ("trả nợ ngày nào"), không gộp theo tên.
+    }
+    for (const { e, phase } of tagged.inventory) {
+        const cat = catById.get(e.category_id)
+        const label = cat?.name || 'Mua nguyên liệu'
+        const b = ensureBlock(label, cat?.sort_order ?? 100)
+        b.total += e.amount || 0; b.count += 1
+        b.children.push({ key: e.id, date: dayMonth(e.created_at), name: capFirst(e.name || label), amount: e.amount, phase: phase === 'inShift' ? 'in_shift' : 'post_close' })
+    }
+    const inventoryBlocks = [...invBlocks.values()].sort((a, b) => a.sortKey - b.sortKey || a.label.localeCompare(b.label, 'vi'))
+    // Trả nợ cũ giữ nhóm theo hoá đơn (tên · ngày hoá đơn gốc).
     const debtRows = groupByInvoice(debtRepayments)
-    const inventoryGroups = [
-        ...nvlGroups,
-        ...(debtRows.length > 0 ? [{
-            key: 'debt',
+    if (debtRows.length > 0) {
+        inventoryBlocks.push({
             label: 'Trả nợ cũ',
-            rows: debtRows,
-            count: debtRepayments.length,
             total: debtRepayments.reduce((s, p) => s + (p.amount || 0), 0),
-        }] : []),
-    ]
-    const inventoryTotal = inventoryGroups.reduce((s, g) => s + g.total, 0)
+            count: debtRepayments.length,
+            children: debtRows.map(r => ({ key: r.key, name: r.name, amount: r.amount, count: r.count, phase: r.phase })),
+        })
+    }
+    const inventoryTotal = inventoryBlocks.reduce((s, b) => s + b.total, 0)
 
     return (
         <div className="flex flex-col gap-4">
@@ -259,79 +279,39 @@ export default function CashFlowCard({
                 </div>
             </div>
 
-            {/* PANEL 2: THỰC CHI — 2 section (Vận hành / Tồn kho), mỗi section là
-                các dòng nhãn collapse; Tổng thực chi nằm cuối CÙNG PANEL (cùng kiểu
-                panel Thực nhận). Phân cấp cỡ chữ to dần từ trong ra ngoài:
-                món 11px medium → nhãn 12px bold → tổng section 13px black →
-                Tổng thực chi 14px black. */}
+            {/* PANEL 2: THỰC CHI — 4 section theo group_section nhãn (Vận hành / Quản lý
+                & khác / Tồn kho / Ngoài kinh doanh), section phụ chỉ hiện khi có chi.
+                Mỗi section là các dòng nhãn collapse; Tổng thực chi nằm cuối CÙNG PANEL. */}
             <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
                 <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Thực chi</h3>
 
-                {/* SECTION: VẬN HÀNH */}
-                <div className="flex flex-col gap-1 pl-1">
-                    <div className="flex justify-between items-center">
-                        <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest">Vận hành</span>
-                        {opsGroups.length > 0 && (
-                            <span className="text-[13px] font-black text-danger tabular-nums">-{formatVND(opsTotal)}</span>
-                        )}
-                    </div>
-                    {opsGroups.length > 0 ? (
-                        opsGroups.map((g) => (
-                            <CollapseGroup
-                                key={`op:${g.label}`}
-                                expanded={!!expandedCats[`op:${g.label}`]}
-                                onToggle={() => toggleCat(`op:${g.label}`)}
-                                label={g.label}
-                                count={g.inShift.length + g.postClose.length}
-                                total={g.total}
-                            >
-                                {/* List phẳng `ngày · tên`: trong ca trước (chấm xám), sau chốt
-                                    ca sau (chấm hổ phách). Bấm chấm ● xem chú thích phase. */}
-                                {g.inShift.map((e) => (
-                                    <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="in_shift" />
-                                ))}
-                                {g.postClose.map((e) => (
-                                    <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="post_close" />
-                                ))}
-                            </CollapseGroup>
-                        ))
-                    ) : (
-                        <span className="text-[12px] text-text-secondary italic">Không có chi phí vận hành</span>
-                    )}
-                </div>
+                {/* SECTION: VẬN HÀNH (luôn hiện) */}
+                <ExpenseSection title="Vận hành" total={operatingTotal} keyPrefix="op" groups={operatingGroups}
+                    expandedCats={expandedCats} toggleCat={toggleCat} emptyText="Không có chi phí vận hành" />
+
+                {/* SECTION: QUẢN LÝ & KHÁC (chỉ khi có chi) */}
+                {overheadGroups.length > 0 && (
+                    <>
+                        <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
+                        <ExpenseSection title="Quản lý & khác" total={overheadTotal} keyPrefix="oh" groups={overheadGroups}
+                            expandedCats={expandedCats} toggleCat={toggleCat} />
+                    </>
+                )}
 
                 <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
 
-                {/* SECTION: TỒN KHO */}
-                <div className="flex flex-col gap-1 pl-1">
-                    <div className="flex justify-between items-center">
-                        <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest">Tồn kho</span>
-                        {inventoryGroups.length > 0 && (
-                            <span className="text-[13px] font-black text-danger tabular-nums">-{formatVND(inventoryTotal)}</span>
-                        )}
-                    </div>
-                    {inventoryGroups.length > 0 ? (
-                        inventoryGroups.map((g) => (
-                            <CollapseGroup
-                                key={g.key}
-                                expanded={!!expandedCats[g.key]}
-                                onToggle={() => toggleCat(g.key)}
-                                label={g.label}
-                                count={g.count}
-                                total={g.total}
-                            >
-                                {/* Trả nợ cũ: tên kèm ngày hoá đơn gốc. Mua NVL/bao bì:
-                                    1 dòng/nguyên liệu ×số lần, không ngày. Chấm ● = phase gộp
-                                    (mixed khi nhóm có cả trong ca lẫn sau chốt ca). */}
-                                {g.rows.map((row) => (
-                                    <ItemRow key={row.key} name={row.name} amount={row.amount} count={row.count} phase={row.phase} />
-                                ))}
-                            </CollapseGroup>
-                        ))
-                    ) : (
-                        <span className="text-[12px] text-text-secondary italic">Không có đi chợ trong ngày</span>
-                    )}
-                </div>
+                {/* SECTION: TỒN KHO (luôn hiện) — refill + chi phí nhãn tồn kho, gộp theo dòng */}
+                <BlockSection title="Tồn kho" total={inventoryTotal} keyPrefix="inv" blocks={inventoryBlocks}
+                    expandedCats={expandedCats} toggleCat={toggleCat} emptyText="Không có chi tồn kho trong kỳ" />
+
+                {/* SECTION: NGOÀI KINH DOANH (chỉ khi có chi) — không vào lợi nhuận */}
+                {nonOpGroups.length > 0 && (
+                    <>
+                        <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
+                        <ExpenseSection title="Ngoài kinh doanh" total={nonOpTotal} keyPrefix="nonop" groups={nonOpGroups}
+                            expandedCats={expandedCats} toggleCat={toggleCat} />
+                    </>
+                )}
 
                 <div className="w-full h-[1px] bg-border/60 rounded-full my-3" />
 
@@ -394,6 +374,65 @@ function CollapseGroup({ expanded, onToggle, label, count, total, children }) {
                 <span className="text-[12px] font-bold text-danger tabular-nums">-{formatVND(total)}</span>
             </button>
             {expanded && children}
+        </div>
+    )
+}
+
+// Header 1 section Thực chi: tên nhóm + tổng tiền nhóm.
+function SectionHead({ title, total }) {
+    return (
+        <div className="flex justify-between items-center">
+            <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest">{title}</span>
+            {total > 0 && <span className="text-[13px] font-black text-danger tabular-nums">-{formatVND(total)}</span>}
+        </div>
+    )
+}
+
+// Section chi phí kiểu Vận hành/Quản lý/Ngoài KD — groups gom theo nhãn, mỗi nhãn
+// collapse, expand ra list `ngày · tên` (trong ca trước, sau chốt ca sau, chấm phase).
+function ExpenseSection({ title, total, keyPrefix, groups, expandedCats, toggleCat, emptyText }) {
+    return (
+        <div className="flex flex-col gap-1 pl-1">
+            <SectionHead title={title} total={total} />
+            {groups.length === 0 ? (
+                emptyText ? <span className="text-[12px] text-text-secondary italic">{emptyText}</span> : null
+            ) : groups.map((g) => {
+                const k = `${keyPrefix}:${g.label}`
+                return (
+                    <CollapseGroup key={k} expanded={!!expandedCats[k]} onToggle={() => toggleCat(k)}
+                        label={g.label} count={g.inShift.length + g.postClose.length} total={g.total}>
+                        {g.inShift.map((e) => (
+                            <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="in_shift" />
+                        ))}
+                        {g.postClose.map((e) => (
+                            <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="post_close" />
+                        ))}
+                    </CollapseGroup>
+                )
+            })}
+        </div>
+    )
+}
+
+// Section Tồn kho — blocks đã gộp sẵn (refill theo nguyên liệu + chi phí nhãn tồn
+// kho + trả nợ), children là ItemRow props dựng sẵn.
+function BlockSection({ title, total, keyPrefix, blocks, expandedCats, toggleCat, emptyText }) {
+    return (
+        <div className="flex flex-col gap-1 pl-1">
+            <SectionHead title={title} total={total} />
+            {blocks.length === 0 ? (
+                emptyText ? <span className="text-[12px] text-text-secondary italic">{emptyText}</span> : null
+            ) : blocks.map((b) => {
+                const k = `${keyPrefix}:${b.label}`
+                return (
+                    <CollapseGroup key={k} expanded={!!expandedCats[k]} onToggle={() => toggleCat(k)}
+                        label={b.label} count={b.count} total={b.total}>
+                        {b.children.map((c) => (
+                            <ItemRow key={c.key} date={c.date} name={c.name} amount={c.amount} count={c.count} phase={c.phase} />
+                        ))}
+                    </CollapseGroup>
+                )
+            })}
         </div>
     )
 }
