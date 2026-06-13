@@ -3,13 +3,17 @@
 -- group_section trước giờ chỉ 'operating' | 'overhead' (CHECK constraint chặn). Nới ra 4 giá trị.
 --   - inventory:     defaults "Mua nguyên liệu" + "Mua bao bì" — chi mua vật tư KHÔNG kiểm kê.
 --                    Báo cáo: Dòng tiền → section Tồn kho; Lợi nhuận → 1 dòng "Chi phí tồn kho".
---   - non_operating: default "Chi phí khác" — tiền ra ngoài hoạt động KD (rút vốn, chi cá nhân…).
+--   - non_operating: default "Rút vốn / cá nhân" — tiền ra ngoài hoạt động KD.
 --                    Báo cáo: Dòng tiền → section riêng; Lợi nhuận → KHÔNG hiện, KHÔNG trừ.
 --
--- CLAUDE.md: seed_default_expense_categories đã được hardening (SET search_path=public +
--- REVOKE EXECUTE FROM PUBLIC/anon/authenticated ở 20260603). CREATE OR REPLACE làm RƠI
--- search_path → khai báo lại trong định nghĩa; re-REVOKE cho chắc (signature không đổi nên
--- grant thực ra giữ nguyên, revoke lại là idempotent).
+-- ⚠️ Unique index idx_expense_categories_unique_name (address_id, lower(name)) WHERE is_active
+-- cấm TRÙNG TÊN trong cùng địa chỉ BẤT KỂ nhóm. Vì vậy KHÔNG seed thêm "Chi phí khác" cho
+-- nhóm mới (đã có ở operating). Mọi insert chèn TỪNG DÒNG kèm guard tên-toàn-cục (bỏ qua nếu
+-- tên đã tồn tại) — an toàn kể cả khi địa chỉ đã có nhãn tự tạo trùng tên.
+--
+-- CLAUDE.md: seed_default_expense_categories đã hardening (SET search_path=public + REVOKE
+-- EXECUTE FROM PUBLIC/anon/authenticated). CREATE OR REPLACE làm RƠI search_path → khai báo
+-- lại; re-REVOKE cho chắc.
 
 BEGIN;
 
@@ -18,13 +22,17 @@ ALTER TABLE expense_categories DROP CONSTRAINT IF EXISTS expense_categories_grou
 ALTER TABLE expense_categories ADD CONSTRAINT expense_categories_group_section_check
     CHECK (group_section IN ('operating', 'overhead', 'inventory', 'non_operating'));
 
--- ── 2. Seed fn cho address MỚI (thêm defaults 2 nhóm mới) ─────────────────────
+-- ── 2. Seed fn cho address MỚI (chèn từng dòng, guard trùng tên toàn-cục) ─────
+-- Bỏ "Chi phí khác" của overhead (vốn trùng operating → bị index chặn); fallback "Chi phí
+-- khác" của báo cáo lợi nhuận chỉ dùng bản operating nên không ảnh hưởng.
 CREATE OR REPLACE FUNCTION seed_default_expense_categories(p_address_id UUID)
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+    v RECORD;
 BEGIN
     IF EXISTS (
         SELECT 1 FROM expense_categories
@@ -33,51 +41,55 @@ BEGIN
         RETURN;
     END IF;
 
-    INSERT INTO expense_categories (address_id, name, group_section, sort_order, is_default)
-    VALUES
-        -- Operating (Chi phí vận hành)
-        (p_address_id, 'Lương nhân viên',      'operating', 10, TRUE),
-        (p_address_id, 'Thuê mặt bằng',        'operating', 20, TRUE),
-        (p_address_id, 'Điện nước',            'operating', 30, TRUE),
-        (p_address_id, 'Marketing',            'operating', 40, TRUE),
-        (p_address_id, 'Phần mềm / Hệ thống',  'operating', 50, TRUE),
-        (p_address_id, 'Chi phí khác',         'operating', 999, TRUE),
-        -- Overhead (Chi phí quản lý & khác)
-        (p_address_id, 'Lương quản lý',        'overhead',  10, TRUE),
-        (p_address_id, 'Khấu hao máy móc',     'overhead',  20, TRUE),
-        (p_address_id, 'Chi phí tài chính',    'overhead',  30, TRUE),
-        (p_address_id, 'Chi phí khác',         'overhead',  999, TRUE),
-        -- Inventory (Chi phí tồn kho) — mua vật tư không kiểm kê
-        (p_address_id, 'Mua nguyên liệu',      'inventory', 10, TRUE),
-        (p_address_id, 'Mua bao bì',           'inventory', 20, TRUE),
-        -- Non-operating (Ngoài kinh doanh)
-        (p_address_id, 'Chi phí khác',         'non_operating', 999, TRUE);
+    FOR v IN
+        SELECT * FROM (VALUES
+            ('Lương nhân viên',      'operating',     10),
+            ('Thuê mặt bằng',        'operating',     20),
+            ('Điện nước',            'operating',     30),
+            ('Marketing',            'operating',     40),
+            ('Phần mềm / Hệ thống',  'operating',     50),
+            ('Chi phí khác',         'operating',     999),
+            ('Lương quản lý',        'overhead',      10),
+            ('Khấu hao máy móc',     'overhead',      20),
+            ('Chi phí tài chính',    'overhead',      30),
+            ('Mua nguyên liệu',      'inventory',     10),
+            ('Mua bao bì',           'inventory',     20),
+            ('Rút vốn / cá nhân',    'non_operating', 10)
+        ) AS t(name, grp, so)
+    LOOP
+        INSERT INTO expense_categories (address_id, name, group_section, sort_order, is_default)
+        SELECT p_address_id, v.name, v.grp, v.so, TRUE
+        WHERE NOT EXISTS (
+            SELECT 1 FROM expense_categories c
+            WHERE c.address_id = p_address_id AND lower(c.name) = lower(v.name) AND c.is_active
+        );
+    END LOOP;
 END;
 $$;
 
 REVOKE EXECUTE ON FUNCTION seed_default_expense_categories(UUID) FROM PUBLIC, anon, authenticated;
 
--- ── 3. Backfill defaults nhóm mới cho address ĐÃ CÓ ───────────────────────────
--- (seed fn early-return với address đã có defaults nên không tự thêm — chèn thủ công,
---  bỏ qua nếu đã tồn tại để idempotent.)
+-- ── 3. Backfill defaults nhóm mới cho address ĐÃ CÓ (cùng guard toàn-cục) ─────
 DO $$
-DECLARE addr RECORD;
+DECLARE
+    addr RECORD;
+    v    RECORD;
 BEGIN
     FOR addr IN SELECT id FROM addresses LOOP
-        INSERT INTO expense_categories (address_id, name, group_section, sort_order, is_default)
-        SELECT addr.id, v.name, 'inventory', v.so, TRUE
-        FROM (VALUES ('Mua nguyên liệu', 10), ('Mua bao bì', 20)) AS v(name, so)
-        WHERE NOT EXISTS (
-            SELECT 1 FROM expense_categories c
-            WHERE c.address_id = addr.id AND c.group_section = 'inventory' AND c.name = v.name
-        );
-
-        INSERT INTO expense_categories (address_id, name, group_section, sort_order, is_default)
-        SELECT addr.id, 'Chi phí khác', 'non_operating', 999, TRUE
-        WHERE NOT EXISTS (
-            SELECT 1 FROM expense_categories c
-            WHERE c.address_id = addr.id AND c.group_section = 'non_operating'
-        );
+        FOR v IN
+            SELECT * FROM (VALUES
+                ('Mua nguyên liệu',   'inventory',     10),
+                ('Mua bao bì',        'inventory',     20),
+                ('Rút vốn / cá nhân', 'non_operating', 10)
+            ) AS t(name, grp, so)
+        LOOP
+            INSERT INTO expense_categories (address_id, name, group_section, sort_order, is_default)
+            SELECT addr.id, v.name, v.grp, v.so, TRUE
+            WHERE NOT EXISTS (
+                SELECT 1 FROM expense_categories c
+                WHERE c.address_id = addr.id AND lower(c.name) = lower(v.name) AND c.is_active
+            );
+        END LOOP;
     END LOOP;
 END $$;
 

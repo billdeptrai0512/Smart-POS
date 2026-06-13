@@ -428,10 +428,11 @@ const DEFAULT_EXPENSE_CATEGORIES = [
     { name: 'Lương quản lý',       group_section: 'overhead',  sort_order: 10 },
     { name: 'Khấu hao máy móc',    group_section: 'overhead',  sort_order: 20 },
     { name: 'Chi phí tài chính',   group_section: 'overhead',  sort_order: 30 },
-    { name: 'Chi phí khác',        group_section: 'overhead',  sort_order: 999 },
+    // Tên nhãn phải duy nhất theo địa chỉ (idx_expense_categories_unique_name) — không
+    // lặp "Chi phí khác" sang nhóm khác. Khớp seed server 20260613.
     { name: 'Mua nguyên liệu',     group_section: 'inventory', sort_order: 10 },
     { name: 'Mua bao bì',          group_section: 'inventory', sort_order: 20 },
-    { name: 'Chi phí khác',        group_section: 'non_operating', sort_order: 999 },
+    { name: 'Rút vốn / cá nhân',   group_section: 'non_operating', sort_order: 10 },
 ];
 
 const seedLocalExpenseCategoriesIfNeeded = (addressId) => {
