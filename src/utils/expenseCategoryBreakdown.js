@@ -13,10 +13,10 @@
 // soft-deleted tag, or null for legacy/uncategorized), the amount goes to
 // "Chi phí khác" of the operating section.
 //
-// Returns { operatingRows, overheadRows, inventoryRows, *Total } — mỗi mảng gồm
-// các nhãn active của nhóm (kể cả amount=0 nếu là nhãn mặc định; nhãn tự tạo
-// amount=0 bị lọc bớt cho gọn), sắp theo sort_order asc. Nhóm non_operating
-// KHÔNG trả về (không nằm trong báo cáo lợi nhuận).
+// Returns { operatingRows, overheadRows, inventoryRows, *Total } — operating +
+// overhead gồm MỌI nhãn active của nhóm (kể cả amount=0) để báo cáo phản ánh đúng
+// cấu hình từng địa chỉ. inventory chỉ liệt kê nhãn có chi (>0) cho gọn. Sắp theo
+// sort_order asc. Nhóm non_operating KHÔNG trả về (không nằm trong báo cáo lợi nhuận).
 export function buildCategoryBreakdown({ expenses = [], expenseCategories = [] }) {
     const catById = new Map(expenseCategories.map(c => [c.id, c]))
     const fallbackOther =
@@ -51,10 +51,12 @@ export function buildCategoryBreakdown({ expenses = [], expenseCategories = [] }
         const amount = totals.get(c.id) || 0
         const row = { id: c.id, name: c.name, amount, sort_order: c.sort_order }
         if (c.group_section === 'operating') {
-            if (amount > 0 || c.is_default) operatingRows.push(row)
+            // Hiện MỌI nhãn active (default + nhãn manager tự tạo) → báo cáo phản ánh
+            // đúng cấu hình từng địa chỉ, dù kỳ này chưa phát sinh.
+            operatingRows.push(row)
             operatingTotal += amount
         } else if (c.group_section === 'overhead') {
-            if (amount > 0 || c.is_default) overheadRows.push(row)
+            overheadRows.push(row)
             overheadTotal += amount
         } else if (c.group_section === 'inventory') {
             // Tồn kho: chỉ hiện nhãn có chi (không nhồi nhãn mặc định amount=0 cho gọn).

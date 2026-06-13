@@ -93,7 +93,7 @@ export default function FinanceCards({
             )}
 
             {/* 4. CHI PHÍ VẬN HÀNH — dynamic by category */}
-            <SimpleCard title="Chi phí vận hành" totalLabel="Tổng chi phí vận hành" totalAmount={operatingTotal} totalTone="danger">
+            <SimpleCard title="Chi phí vận hành" totalLabel="Tổng cộng" totalAmount={operatingTotal} totalTone="danger">
                 {operatingRows.length === 0
                     ? <span className="text-[12px] text-text-secondary italic pl-1">Chưa có chi phí vận hành</span>
                     : operatingRows.map(r => (
@@ -106,7 +106,7 @@ export default function FinanceCards({
             <ProfitBanner label="Lợi nhuận vận hành" amount={operatingProfit} onClick={onRecipesClick} />
 
             {/* 6. CHI PHÍ QUẢN LÝ & KHÁC — dynamic by category */}
-            <SimpleCard title="Chi phí quản lý & khác" totalLabel="Tổng chi phí khác" totalAmount={overheadTotal} totalTone="danger">
+            <SimpleCard title="Chi phí quản lý & khác" totalLabel="Tổng cộng" totalAmount={overheadTotal} totalTone="danger">
                 {overheadRows.length === 0
                     ? <span className="text-[12px] text-text-secondary italic pl-1">Chưa có chi phí quản lý & khác</span>
                     : overheadRows.map(r => (

@@ -80,14 +80,16 @@ describe('buildCategoryBreakdown', () => {
         expect(otherRow.amount).toBe(300)
     })
 
-    it('hides manager-created categories with zero amount', () => {
+    it('hiện MỌI nhãn active operating (default + manager tự tạo) kể cả amount=0', () => {
         const expenses = [
             { id: '1', amount: 100, category_id: 'op-salary' },
         ]
         const { operatingRows } = buildCategoryBreakdown({ expenses, expenseCategories: cats })
-        // op-custom (Marketing FB) is_default=false + amount=0 → hidden
-        expect(operatingRows.find(r => r.id === 'op-custom')).toBeUndefined()
-        // op-rent is_default=true + amount=0 → still shown
+        // op-custom (Marketing FB) is_default=false + amount=0 → vẫn hiện (phản ánh setup).
+        expect(operatingRows.find(r => r.id === 'op-custom')).toEqual(
+            expect.objectContaining({ id: 'op-custom', amount: 0 })
+        )
+        // op-rent is_default=true + amount=0 → vẫn hiện.
         expect(operatingRows.find(r => r.id === 'op-rent')).toEqual(
             expect.objectContaining({ id: 'op-rent', amount: 0 })
         )
