@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { formatVND } from '../../utils'
+import { groupMeta } from '../../constants/expenseGroups'
 import ChangeCategorySheet from './ChangeCategorySheet'
 
 // "Thực chi" model: chỉ list chi phí thực (operating + overhead). NVL refill
@@ -205,7 +206,7 @@ function ExpenseCard({ expense, category, isReadOnly, runningTotal, deletingExpI
 // onClick is provided (manager can re-tag); plain span otherwise (read-only).
 // `strike` is shown for orphan tags (category was soft-deleted).
 function TagPill({ name, group, muted = false, strike = false, onClick }) {
-    const dotCls = group === 'overhead' ? 'bg-warning' : 'bg-danger'
+    const dotCls = groupMeta(group).dotCls
     const wrapCls = muted
         ? 'bg-surface-light border-border/60 text-text-dim italic'
         : 'bg-surface-light border-border/60 text-text-secondary'

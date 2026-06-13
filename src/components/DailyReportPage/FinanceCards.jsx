@@ -2,6 +2,10 @@ import { useMemo } from 'react'
 import { formatVND } from '../../utils'
 import { buildCategoryBreakdown } from '../../utils/expenseCategoryBreakdown'
 
+// Hàng so sánh hôm qua tạm tắt — giữ prop + markup cho tương lai. Cờ có tên thay
+// literal `false` để khỏi vướng lint no-constant-binary-expression.
+const SHOW_COMPARE_ROW = false
+
 // Per-period P&L breakdown. Replaces the hardcoded 6+3 row list with category-
 // driven rendering: each expense_categories row is one line in either the
 // Operating ("Chi phí vận hành") or Overhead ("Chi phí quản lý & khác") card.
@@ -176,7 +180,7 @@ function NetProfitCard({ netProfit, yesterdayNetProfit, compareLabel }) {
                         {formatVND(netProfit)}
                     </div>
                 </div>
-                {hasYesterday && false /* compare row currently disabled — keep prop for future */ && (
+                {hasYesterday && SHOW_COMPARE_ROW && (
                     <div className="flex justify-between items-center pl-1">
                         <span className="self-end text-[10px] font-black text-text-secondary uppercase mb-1.5 opacity-80">{compareLabel}</span>
                     </div>

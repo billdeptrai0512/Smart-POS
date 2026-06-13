@@ -67,7 +67,7 @@ export default function DailyReportPage() {
     // nav state so a week/month/custom window survives the Nhật ký ↔ Báo cáo switch.
     const date = useDateScope(location.state)
     const {
-        scope, offset, customRange, hasManualPick,
+        scope, offset, customRange,
         dayInputValue, canGoForwardDay, canGoForwardPeriod, navState: dateNavState,
         goPrevDay, goNextDay, goOffsetPrev, goOffsetNext,
         applyRange, shiftRange, canShiftRangeForward, applyPreset, goToDate,
@@ -219,7 +219,7 @@ export default function DailyReportPage() {
         if (!isTodayScope) return
         setCashInput(isTodaysClosing && shiftClosing.actual_cash != null ? formatVNDInput(shiftClosing.actual_cash) : '')
         setTransferInput(isTodaysClosing && shiftClosing.actual_transfer != null ? formatVNDInput(shiftClosing.actual_transfer) : '')
-    }, [isTodayScope, todayISO, shiftClosing?.id, shiftClosing?.actual_cash, shiftClosing?.actual_transfer, shiftClosing?.closed_at])
+    }, [isTodayScope, isTodaysClosing, todayISO, shiftClosing?.id, shiftClosing?.actual_cash, shiftClosing?.actual_transfer, shiftClosing?.closed_at])
 
     // Base chốt-ca: persisted shift_closing có cash + transfer VÀ mọi NVL đã đếm Cuối kỳ.
     // Điều kiện "đã hoàn tất" đầy đủ (gồm 'đã soạn cho hôm nay') ghép thêm bên dưới sau
@@ -323,7 +323,9 @@ export default function DailyReportPage() {
         [displayExpenses]
     )
     // Chi phí gắn nhãn nhóm "Ngoài kinh doanh" — KHÔNG vào lợi nhuận (tiền ra ngoài
-    // hoạt động KD). dailyExpense gom mọi non-refill nên phải trừ phần này ra khỏi P&L.
+    // hoạt động KD). Phải trừ khỏi P&L. Bỏ qua đúng theo luật của buildCategoryBreakdown:
+    // NVL refill (is_refill & !free_form) + adjustment; free-form refill (sau ca) VẪN xét
+    // để khớp 2 nơi nếu phiếu sau ca được gắn nhãn ngoài KD.
     const nonOperatingExpense = useMemo(() => {
         const nonOpIds = new Set(
             (expenseCategories || []).filter(c => c.group_section === 'non_operating').map(c => c.id)
@@ -331,7 +333,7 @@ export default function DailyReportPage() {
         if (nonOpIds.size === 0) return 0
         let sum = 0
         for (const e of displayExpenses || []) {
-            if (e.is_refill || e.metadata?.adjustment) continue
+            if ((e.is_refill && !e.metadata?.free_form) || e.metadata?.adjustment) continue
             if (e.category_id && nonOpIds.has(e.category_id)) sum += e.amount || 0
         }
         return sum
