@@ -94,21 +94,21 @@ export default function HistoryPage() {
         fetchExpenseCategories(selectedAddress.id).then(setExpenseCategories)
     }, [selectedAddress?.id, showAddModal])
 
-    // Auto-pick a sensible default category whenever the modal opens or the top
-    // tab switches. Switching Vận hành ↔ Quản lý & khác MUST reset the selection
-    // to a tag in the new group — otherwise the picker shows a chip that's
-    // hidden from the filtered list, leaving the user with no visible selection.
+    // Auto-pick a default category khi mở modal mà CHƯA có nhãn nào chọn. KHÔNG
+    // re-pick theo nhóm legacy nữa: việc đổi Phân loại (group) + chọn nhãn đầu của
+    // nhóm mới do dropdown trong AddExpenseModal đảm nhiệm. Effect cũ map về
+    // operating/overhead làm nhãn nhóm Tồn kho / Ngoài kinh doanh bị ghi đè ngược.
     useEffect(() => {
         if (!showAddModal || expenseCategories.length === 0) return
-        const targetGroup = expenseCategory === 'fixed' ? 'overhead' : 'operating'
         const current = expenseCategories.find(c => c.id === selectedCategoryId)
-        if (current && current.group_section === targetGroup) return
+        if (current) return // đã có nhãn hợp lệ (bất kể nhóm) → giữ nguyên
         const fallback =
-            expenseCategories.find(c => c.is_default && c.group_section === targetGroup && c.name === 'Chi phí khác')
-            || expenseCategories.find(c => c.group_section === targetGroup)
+            expenseCategories.find(c => c.is_default && c.group_section === 'operating' && c.name === 'Chi phí khác')
+            || expenseCategories.find(c => c.group_section === 'operating')
+            || expenseCategories[0]
             || null
         setSelectedCategoryId(fallback?.id || null)
-    }, [showAddModal, expenseCategories, selectedCategoryId, expenseCategory])
+    }, [showAddModal, expenseCategories, selectedCategoryId])
 
     // Reset form when modal closes; seed isAfterShift from current finalized state
     useEffect(() => {
@@ -412,6 +412,8 @@ export default function HistoryPage() {
                     selectedCategoryId={selectedCategoryId}
                     onCategoryIdChange={setSelectedCategoryId}
                     onCreateCategory={handleCreateCategory}
+                    onUpdateCategory={handleUpdateCategory}
+                    onDeleteCategory={handleDeleteCategoryTag}
                     onClose={() => setShowAddModal(false)}
                     onSubmit={submitExpense}
                     onCategoryChange={setExpenseCategory}

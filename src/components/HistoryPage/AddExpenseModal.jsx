@@ -1,11 +1,18 @@
-import { useRef } from 'react'
-import { X } from 'lucide-react'
-import ExpenseCategoryPicker from './ExpenseCategoryPicker'
+import { useRef, useState, useEffect, useCallback } from 'react'
+import { X, Check, ChevronDown, Settings2 } from 'lucide-react'
 import MoneyInput from '../common/MoneyInput'
 import DatePicker from '../common/DatePicker'
+import ChangeCategorySheet from './ChangeCategorySheet'
 import { formatIsoDisplay } from '../common/datePickerUtils'
 import { parseVNDInput } from '../../utils'
 import { dateStringVN } from '../../utils/dateVN'
+import { EXPENSE_GROUPS, groupMeta } from '../../constants/expenseGroups'
+
+const KNOWN_GROUP_KEYS = new Set(EXPENSE_GROUPS.map(g => g.key))
+// Nhãn của 1 nhóm; nhãn legacy không khớp nhóm nào → coi như Vận hành.
+const labelsInGroup = (categories, key) => categories.filter(c =>
+    c.group_section === key || (key === 'operating' && !KNOWN_GROUP_KEYS.has(c.group_section))
+)
 
 // Create flow: pick label → name → amount → (date) → submit. Payment defaults to
 // cash on insert; user toggles it on the expense card (ExpensePanel) after the row
@@ -18,6 +25,8 @@ export default function AddExpenseModal({
     selectedCategoryId,
     onCategoryIdChange,
     onCreateCategory,
+    onUpdateCategory,
+    onDeleteCategory,
     // Date (backdate support)
     expenseDate, onDateChange,
     // Payment method toggle
@@ -34,23 +43,51 @@ export default function AddExpenseModal({
     const nameRef = useRef(null)
     const amountRef = useRef(null)
 
-    // The top Vận hành/Quản lý tab is gone — chip section + dot color carry the
-    // group context now. When user picks a chip, mirror its group_section back
-    // into expenseCategory so the parent's save path (and submit button tone)
-    // route to the correct bucket without a separate tab toggle.
-    const handleChipSelect = (id) => {
+    // Chọn category 2 bước: PHÂN LOẠI (group) → NHÃN (category trong group). activeGroup
+    // suy từ nhãn đang chọn; khi parent đổi selection (mở modal / reset) thì đồng bộ lại
+    // bằng pattern "adjust state during render" (tránh setState trong effect).
+    const selectedCat = expenseCategories.find(c => c.id === selectedCategoryId)
+    const [activeGroup, setActiveGroup] = useState(() => (selectedCat ? groupMeta(selectedCat.group_section).key : 'operating'))
+    const [prevSelId, setPrevSelId] = useState(selectedCategoryId)
+    if (selectedCategoryId !== prevSelId) {
+        setPrevSelId(selectedCategoryId)
+        if (selectedCat) setActiveGroup(groupMeta(selectedCat.group_section).key)
+    }
+    // Chỉ 1 dropdown mở tại 1 thời điểm: 'group' | 'label' | null.
+    const [openDd, setOpenDd] = useState(null)
+    const closeDd = useCallback(() => setOpenDd(null), [setOpenDd])
+    // Sheet CRUD nhãn (lọc theo nhóm đang chọn).
+    const [manageOpen, setManageOpen] = useState(false)
+
+    const groupLabels = labelsInGroup(expenseCategories, activeGroup)
+
+    // Mirror group → expenseCategory ('fixed' cho overhead, 'expense' còn lại) để
+    // route save path + tông nút Xác nhận, không cần tab riêng.
+    const mirrorGroup = (key) => {
+        const next = key === 'overhead' ? 'fixed' : 'expense'
+        if (next !== expenseCategory) onCategoryChange?.(next)
+    }
+    // Đổi PHÂN LOẠI: set group + mirror; nếu nhãn đang chọn không thuộc nhóm mới thì
+    // tự chọn nhãn đầu (luôn có category hợp lệ, khỏi để trống).
+    const applyGroup = (key) => {
+        setActiveGroup(key)
+        mirrorGroup(key)
+        const labels = labelsInGroup(expenseCategories, key)
+        if (!labels.some(l => l.id === selectedCategoryId) && labels[0]) onCategoryIdChange(labels[0].id)
+        setOpenDd(null)
+    }
+    const handlePickCategory = (id) => {
         const chip = expenseCategories.find(c => c.id === id)
-        if (chip) {
-            const next = chip.group_section === 'overhead' ? 'fixed' : 'expense'
-            if (next !== expenseCategory) onCategoryChange?.(next)
-        }
+        if (chip) mirrorGroup(chip.group_section)
         onCategoryIdChange(id)
+        setOpenDd(null)
         // Advance focus only when the user hasn't started typing — avoid
         // yanking caret away if they reach back to fix the label.
         if (!costName.trim()) nameRef.current?.focus()
     }
 
     return (
+        <>
         <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={onClose}>
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
             <div
@@ -90,34 +127,82 @@ export default function AddExpenseModal({
                     )}
                 </div>
 
-                {/* Thời điểm (Timing Toggle) */}
-                <div className="flex items-center justify-between gap-3">
+                {/* Thời điểm — toggle full-width dưới nhãn */}
+                <div className="flex flex-col gap-1.5">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Thời điểm</span>
-                    <div className="w-48 flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
+                    <div className="w-full flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
                         <button
                             type="button"
                             onClick={() => onAfterShiftChange?.(false)}
-                            className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${!isAfterShift ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                            className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${!isAfterShift ? 'bg-primary text-white' : 'text-text-secondary'}`}
                         >
                             Trong ca
                         </button>
                         <button
                             type="button"
                             onClick={() => onAfterShiftChange?.(true)}
-                            className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${isAfterShift ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                            className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${isAfterShift ? 'bg-primary text-white' : 'text-text-secondary'}`}
                         >
                             Sau chốt ca
                         </button>
                     </div>
                 </div>
 
-                <ExpenseCategoryPicker
-                    categories={expenseCategories}
-                    selectedId={selectedCategoryId}
-                    onSelect={handleChipSelect}
-                    onCreate={onCreateCategory}
-                    disabled={isSubmitting}
-                />
+                {/* Phân loại — dropdown chọn nhóm */}
+                <div className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Phân loại</span>
+                    <SelectRow
+                        valueLabel={groupMeta(activeGroup).label}
+                        valueDot={groupMeta(activeGroup).dotCls}
+                        disabled={isSubmitting}
+                        open={openDd === 'group'}
+                        onToggle={() => setOpenDd(o => (o === 'group' ? null : 'group'))}
+                        onClose={closeDd}
+                    >
+                        {EXPENSE_GROUPS.map(g => (
+                            <OptionRow
+                                key={g.key}
+                                dotCls={g.dotCls}
+                                name={g.label}
+                                active={activeGroup === g.key}
+                                onClick={() => applyGroup(g.key)}
+                            />
+                        ))}
+                    </SelectRow>
+                </div>
+
+                {/* Nhãn — dropdown chọn nhãn thuộc nhóm đang chọn + quản lý nhãn */}
+                <div className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Nhãn</span>
+                    <SelectRow
+                        valueLabel={groupLabels.find(c => c.id === selectedCategoryId)?.name}
+                        valueDot={groupMeta(activeGroup).dotCls}
+                        placeholder="Chọn nhãn…"
+                        disabled={isSubmitting}
+                        open={openDd === 'label'}
+                        onToggle={() => setOpenDd(o => (o === 'label' ? null : 'label'))}
+                        onClose={closeDd}
+                    >
+                        {groupLabels.map(c => (
+                            <OptionRow
+                                key={c.id}
+                                dotCls={groupMeta(activeGroup).dotCls}
+                                name={c.name}
+                                active={c.id === selectedCategoryId}
+                                onClick={() => handlePickCategory(c.id)}
+                            />
+                        ))}
+                        {/* Mở sheet CRUD nhãn (lọc theo nhóm đang chọn) thay cho inline-create */}
+                        <button
+                            type="button"
+                            onClick={() => { setOpenDd(null); setManageOpen(true) }}
+                            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-[10px] text-[12px] font-bold border border-dashed border-border text-text-secondary hover:text-primary hover:border-primary/50 transition-all"
+                        >
+                            <Settings2 size={13} strokeWidth={2.5} />
+                            Quản lý nhãn
+                        </button>
+                    </SelectRow>
+                </div>
 
                 <input
                     ref={nameRef}
@@ -145,21 +230,21 @@ export default function AddExpenseModal({
                     placeholder="Số tiền..."
                 />
 
-                {/* Phương thức thanh toán (Toggle Tiền mặt / Bank) */}
-                <div className="flex items-center justify-between gap-3">
+                {/* Phương thức — toggle full-width dưới nhãn */}
+                <div className="flex flex-col gap-1.5">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Phương thức</span>
-                    <div className="w-48 flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
+                    <div className="w-full flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
                         <button
                             type="button"
                             onClick={() => onPaymentMethodChange?.('cash')}
-                            className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'cash' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                            className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${paymentMethod === 'cash' ? 'bg-primary text-white' : 'text-text-secondary'}`}
                         >
                             Tiền mặt
                         </button>
                         <button
                             type="button"
                             onClick={() => onPaymentMethodChange?.('transfer')}
-                            className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                            className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}
                         >
                             Bank
                         </button>
@@ -175,5 +260,77 @@ export default function AddExpenseModal({
                 </button>
             </div>
         </div>
+
+        {/* Sheet CRUD nhãn — lọc đúng nhóm đang chọn; chọn 1 nhãn → set + đóng. */}
+        <ChangeCategorySheet
+            open={manageOpen}
+            filterGroup={activeGroup}
+            categories={expenseCategories}
+            selectedId={selectedCategoryId}
+            onSelect={(id) => { handlePickCategory(id); setManageOpen(false) }}
+            onCreate={onCreateCategory}
+            onUpdate={onUpdateCategory}
+            onDelete={onDeleteCategory}
+            onClose={() => setManageOpen(false)}
+        />
+        </>
+    )
+}
+
+// Dropdown select dùng chung cho Phân loại + Nhãn. Trigger hiện giá trị (chấm màu
+// + tên); panel mở LÊN trên (modal neo đáy màn hình) chứa các option (children).
+// Click ra ngoài (trigger + panel) → đóng (onClose). ref bọc cả trigger nên bấm
+// lại trigger không bị listener đóng trước rồi onToggle mở lại.
+function SelectRow({ valueLabel, valueDot, placeholder = 'Chọn…', disabled, open, onToggle, onClose, children }) {
+    const ref = useRef(null)
+    useEffect(() => {
+        if (!open) return
+        const onDown = (e) => { if (!ref.current?.contains(e.target)) onClose?.() }
+        document.addEventListener('pointerdown', onDown)
+        return () => document.removeEventListener('pointerdown', onDown)
+    }, [open, onClose])
+    return (
+        <div ref={ref} className="relative">
+            <button
+                type="button"
+                disabled={disabled}
+                onClick={onToggle}
+                className="flex items-center justify-between gap-2 w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 hover:border-primary/40 transition-all"
+            >
+                {valueLabel ? (
+                    <span className="flex items-center gap-2 text-[14px] font-bold text-text min-w-0">
+                        <span className={`w-1.5 h-1.5 rounded-full ${valueDot} opacity-80 shrink-0`} />
+                        <span className="truncate">{valueLabel}</span>
+                    </span>
+                ) : (
+                    <span className="text-[14px] font-medium text-text-secondary/60 truncate">{placeholder}</span>
+                )}
+                <ChevronDown size={16} className={`text-text-secondary shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+            </button>
+            {open && (
+                <div className="absolute bottom-full left-0 right-0 mb-1.5 z-10 bg-surface border border-border/60 rounded-[12px] shadow-xl p-2 flex flex-col gap-1 max-h-[50vh] overflow-y-auto hide-scrollbar">
+                    {children}
+                </div>
+            )}
+        </div>
+    )
+}
+
+// 1 option trong dropdown — chấm màu + tên + check khi đang chọn.
+function OptionRow({ dotCls, name, active, onClick }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-[10px] text-[13px] font-bold border transition-all ${
+                active ? 'bg-primary/15 border-primary/50 text-primary' : 'bg-surface-light border-border/60 text-text-secondary hover:text-text hover:border-border'
+            }`}
+        >
+            <span className="flex items-center gap-2 min-w-0">
+                <span className={`w-1.5 h-1.5 rounded-full ${dotCls} opacity-70 shrink-0`} />
+                <span className="truncate">{name}</span>
+            </span>
+            {active && <Check size={12} strokeWidth={3} className="shrink-0" />}
+        </button>
     )
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { X, Plus, Check, Pencil, Trash2 } from 'lucide-react'
-import { EXPENSE_GROUPS } from '../../constants/expenseGroups'
+import { EXPENSE_GROUPS, groupMeta } from '../../constants/expenseGroups'
 
 // Bottom sheet for re-tagging an expense card. Tap a chip → auto-save + close.
 // Groups categories by section (Operating top, Overhead bottom) so manager sees
@@ -12,6 +12,7 @@ export default function ChangeCategorySheet({
     expense,           // the row being re-tagged (needed only for name display)
     selectedId,        // current category_id of the expense
     categories,        // full list (both sections)
+    filterGroup,       // optional: chỉ hiện 1 nhóm (CRUD nhãn theo phân loại) — create cố định nhóm này
     onSelect,          // (newCategoryId) => Promise — called with new id; sheet closes when done
     onCreate,          // ({name, group_section}) => Promise<{id}>
     onUpdate,          // (id, { name?, group_section? }) => Promise
@@ -33,6 +34,9 @@ export default function ChangeCategorySheet({
     const chipsOf = (key) => categories.filter(c =>
         c.group_section === key || (key === 'operating' && !knownKeys.has(c.group_section))
     )
+    // filterGroup → chỉ 1 section; create cố định nhóm đó (không cho đổi nhóm).
+    const shownGroups = filterGroup ? EXPENSE_GROUPS.filter(g => g.key === filterGroup) : EXPENSE_GROUPS
+    const createGroup = filterGroup || newGroup
 
     const handlePick = async (id) => {
         if (isSaving || id === selectedId) {
@@ -51,7 +55,7 @@ export default function ChangeCategorySheet({
         if (!newName.trim() || isSaving) return
         setIsSaving(true)
         try {
-            const created = await onCreate({ name: newName.trim(), group_section: newGroup })
+            const created = await onCreate({ name: newName.trim(), group_section: createGroup })
             if (created?.id) await onSelect(created.id)
             setIsCreating(false)
             setNewName('')
@@ -108,11 +112,13 @@ export default function ChangeCategorySheet({
                 <div className="flex items-center justify-between">
                     <div className="flex flex-col">
                         <span className="text-[16px] font-black text-text">
-                            {manageMode ? 'Quản lý nhãn' : 'Đổi nhãn'}
+                            {filterGroup ? 'Quản lý nhãn' : manageMode ? 'Quản lý nhãn' : 'Đổi nhãn'}
                         </span>
-                        {!manageMode && expense?.name && (
+                        {filterGroup ? (
+                            <span className="text-[12px] text-text-secondary truncate max-w-[260px]">{groupMeta(filterGroup).label}</span>
+                        ) : !manageMode && expense?.name ? (
                             <span className="text-[12px] text-text-secondary truncate max-w-[260px]">{expense.name}</span>
-                        )}
+                        ) : null}
                     </div>
                     <div className="flex items-center gap-2">
                         <button
@@ -132,10 +138,10 @@ export default function ChangeCategorySheet({
                     </div>
                 </div>
 
-                {EXPENSE_GROUPS.map(g => {
+                {shownGroups.map(g => {
                     const chips = chipsOf(g.key)
-                    // Ẩn nhóm rỗng khi đang chọn (đỡ ồn); giữ ở chế độ Sửa để quản lý.
-                    if (chips.length === 0 && !manageMode) return null
+                    // Ẩn nhóm rỗng khi đang chọn (đỡ ồn); giữ ở chế độ Sửa hoặc khi lọc 1 nhóm.
+                    if (chips.length === 0 && !manageMode && !filterGroup) return null
                     return (
                         <Section key={g.key} title={g.label} dotCls={g.dotCls}>
                             <ChipGroup chips={chips} selectedId={selectedId} dotCls={g.dotCls} disabled={isSaving} {...chipHandlers} />
@@ -164,13 +170,16 @@ export default function ChangeCategorySheet({
                             onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
                             className="w-full bg-surface border border-border/60 rounded-[10px] px-3 py-2 text-[13px] text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary/50"
                         />
-                        <div className="grid grid-cols-2 gap-1 bg-surface border border-border/60 rounded-[10px] p-0.5">
-                            {EXPENSE_GROUPS.map(g => (
-                                <GroupTab key={g.key} active={newGroup === g.key} color={g.tabCls} onClick={() => setNewGroup(g.key)}>
-                                    {g.label}
-                                </GroupTab>
-                            ))}
-                        </div>
+                        {/* Khi lọc 1 nhóm thì nhãn mới luôn thuộc nhóm đó → ẩn chọn nhóm. */}
+                        {!filterGroup && (
+                            <div className="grid grid-cols-2 gap-1 bg-surface border border-border/60 rounded-[10px] p-0.5">
+                                {EXPENSE_GROUPS.map(g => (
+                                    <GroupTab key={g.key} active={newGroup === g.key} color={g.tabCls} onClick={() => setNewGroup(g.key)}>
+                                        {g.label}
+                                    </GroupTab>
+                                ))}
+                            </div>
+                        )}
                         <div className="flex gap-2">
                             <button
                                 type="button"
