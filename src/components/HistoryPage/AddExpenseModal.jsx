@@ -261,10 +261,10 @@ export default function AddExpenseModal({
             </div>
         </div>
 
-        {/* Sheet CRUD nhãn — lọc đúng nhóm đang chọn; chọn 1 nhãn → set + đóng. */}
+        {/* Sheet CRUD nhãn — chung 1 sheet (tất cả nhóm) với "Đổi nhãn" ở thẻ chi phí;
+            chọn 1 nhãn → set vào modal + đóng sheet. */}
         <ChangeCategorySheet
             open={manageOpen}
-            filterGroup={activeGroup}
             categories={expenseCategories}
             selectedId={selectedCategoryId}
             onSelect={(id) => { handlePickCategory(id); setManageOpen(false) }}

@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import { X, Plus, Check, Pencil, Trash2 } from 'lucide-react'
-import { EXPENSE_GROUPS, groupMeta } from '../../constants/expenseGroups'
+import { EXPENSE_GROUPS } from '../../constants/expenseGroups'
+
+// Nhãn fallback (Vận hành · "Chi phí khác") là nơi dồn chi phí khi xoá nhãn khác /
+// chi phí không gắn nhãn — KHÓA xoá để không gãy fallback. Mọi nhãn còn lại xoá được.
+const isProtectedFallback = (c) =>
+    c.is_default && c.group_section === 'operating' && c.name === 'Chi phí khác'
 
 // Bottom sheet for re-tagging an expense card. Tap a chip → auto-save + close.
 // Groups categories by section (Operating top, Overhead bottom) so manager sees
@@ -11,8 +16,7 @@ export default function ChangeCategorySheet({
     open,
     expense,           // the row being re-tagged (needed only for name display)
     selectedId,        // current category_id of the expense
-    categories,        // full list (both sections)
-    filterGroup,       // optional: chỉ hiện 1 nhóm (CRUD nhãn theo phân loại) — create cố định nhóm này
+    categories,        // full list (all sections)
     onSelect,          // (newCategoryId) => Promise — called with new id; sheet closes when done
     onCreate,          // ({name, group_section}) => Promise<{id}>
     onUpdate,          // (id, { name?, group_section? }) => Promise
@@ -34,9 +38,6 @@ export default function ChangeCategorySheet({
     const chipsOf = (key) => categories.filter(c =>
         c.group_section === key || (key === 'operating' && !knownKeys.has(c.group_section))
     )
-    // filterGroup → chỉ 1 section; create cố định nhóm đó (không cho đổi nhóm).
-    const shownGroups = filterGroup ? EXPENSE_GROUPS.filter(g => g.key === filterGroup) : EXPENSE_GROUPS
-    const createGroup = filterGroup || newGroup
 
     const handlePick = async (id) => {
         if (isSaving || id === selectedId) {
@@ -55,7 +56,7 @@ export default function ChangeCategorySheet({
         if (!newName.trim() || isSaving) return
         setIsSaving(true)
         try {
-            const created = await onCreate({ name: newName.trim(), group_section: createGroup })
+            const created = await onCreate({ name: newName.trim(), group_section: newGroup })
             if (created?.id) await onSelect(created.id)
             setIsCreating(false)
             setNewName('')
@@ -112,13 +113,11 @@ export default function ChangeCategorySheet({
                 <div className="flex items-center justify-between">
                     <div className="flex flex-col">
                         <span className="text-[16px] font-black text-text">
-                            {filterGroup ? 'Quản lý nhãn' : manageMode ? 'Quản lý nhãn' : 'Đổi nhãn'}
+                            {manageMode ? 'Quản lý nhãn' : 'Đổi nhãn'}
                         </span>
-                        {filterGroup ? (
-                            <span className="text-[12px] text-text-secondary truncate max-w-[260px]">{groupMeta(filterGroup).label}</span>
-                        ) : !manageMode && expense?.name ? (
+                        {!manageMode && expense?.name && (
                             <span className="text-[12px] text-text-secondary truncate max-w-[260px]">{expense.name}</span>
-                        ) : null}
+                        )}
                     </div>
                     <div className="flex items-center gap-2">
                         <button
@@ -138,10 +137,10 @@ export default function ChangeCategorySheet({
                     </div>
                 </div>
 
-                {shownGroups.map(g => {
+                {EXPENSE_GROUPS.map(g => {
                     const chips = chipsOf(g.key)
-                    // Ẩn nhóm rỗng khi đang chọn (đỡ ồn); giữ ở chế độ Sửa hoặc khi lọc 1 nhóm.
-                    if (chips.length === 0 && !manageMode && !filterGroup) return null
+                    // Ẩn nhóm rỗng khi đang chọn (đỡ ồn); giữ ở chế độ Sửa để quản lý.
+                    if (chips.length === 0 && !manageMode) return null
                     return (
                         <Section key={g.key} title={g.label} dotCls={g.dotCls}>
                             <ChipGroup chips={chips} selectedId={selectedId} dotCls={g.dotCls} disabled={isSaving} {...chipHandlers} />
@@ -170,16 +169,13 @@ export default function ChangeCategorySheet({
                             onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
                             className="w-full bg-surface border border-border/60 rounded-[10px] px-3 py-2 text-[13px] text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary/50"
                         />
-                        {/* Khi lọc 1 nhóm thì nhãn mới luôn thuộc nhóm đó → ẩn chọn nhóm. */}
-                        {!filterGroup && (
-                            <div className="grid grid-cols-2 gap-1 bg-surface border border-border/60 rounded-[10px] p-0.5">
-                                {EXPENSE_GROUPS.map(g => (
-                                    <GroupTab key={g.key} active={newGroup === g.key} color={g.tabCls} onClick={() => setNewGroup(g.key)}>
-                                        {g.label}
-                                    </GroupTab>
-                                ))}
-                            </div>
-                        )}
+                        <div className="grid grid-cols-2 gap-1 bg-surface border border-border/60 rounded-[10px] p-0.5">
+                            {EXPENSE_GROUPS.map(g => (
+                                <GroupTab key={g.key} active={newGroup === g.key} color={g.tabCls} onClick={() => setNewGroup(g.key)}>
+                                    {g.label}
+                                </GroupTab>
+                            ))}
+                        </div>
                         <div className="flex gap-2">
                             <button
                                 type="button"
@@ -202,7 +198,7 @@ export default function ChangeCategorySheet({
 
                 {manageMode && (
                     <span className="text-[11px] text-text-dim leading-snug">
-                        Nhãn mặc định chỉ đổi tên được. Xoá nhãn → các chi phí đã gán chuyển về "Chi phí khác".
+                        Xoá nhãn → các chi phí đã gán chuyển về "Chi phí khác". Riêng "Chi phí khác" (Vận hành) không xoá được vì là nơi dồn.
                     </span>
                 )}
             </div>
@@ -272,7 +268,7 @@ function ChipGroup({
                             >
                                 <Pencil size={11} />
                             </button>
-                            {!c.is_default && (
+                            {!isProtectedFallback(c) && (
                                 <button
                                     type="button"
                                     disabled={disabled}
