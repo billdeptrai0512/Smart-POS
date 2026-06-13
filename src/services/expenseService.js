@@ -70,6 +70,10 @@ export async function updateExpense(id, updates) {
     if (updates.name !== undefined) payload.name = updates.name
     if (updates.amount !== undefined) payload.amount = updates.amount
     if (updates.payment_method !== undefined) payload.payment_method = updates.payment_method
+    // Sửa chi phí (modal edit): ngày + phase (is_refill/free_form) cũng đổi được.
+    if (updates.created_at !== undefined) payload.created_at = updates.created_at
+    if (updates.is_refill !== undefined) payload.is_refill = updates.is_refill
+    if (updates.metadata !== undefined) payload.metadata = updates.metadata
     const { data, error } = await supabase
         .from('expenses')
         .update(payload)

@@ -18,6 +18,8 @@ const labelsInGroup = (categories, key) => categories.filter(c =>
 // cash on insert; user toggles it on the expense card (ExpensePanel) after the row
 // appears. Ngày chi defaults to today; pick a past day to backdate the expense.
 export default function AddExpenseModal({
+    isEditing = false,
+    onDelete,
     expenseCategory, costName, costAmount, isSubmitting,
     isAfterShift, onAfterShiftChange,
     // Tag picker
@@ -95,7 +97,7 @@ export default function AddExpenseModal({
                 onClick={e => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between">
-                    <span className="text-[16px] font-black text-text">Thêm chi phí</span>
+                    <span className="text-[16px] font-black text-text">{isEditing ? 'Sửa chi phí' : 'Thêm chi phí'}</span>
                     <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all">
                         <X size={16} />
                     </button>
@@ -256,8 +258,19 @@ export default function AddExpenseModal({
                     disabled={!canSubmit}
                     className={`w-full py-3.5 rounded-[14px] text-white text-[15px] font-black uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed ${submitColor}`}
                 >
-                    {isSubmitting ? 'Đang lưu...' : 'Xác nhận'}
+                    {isSubmitting ? 'Đang lưu...' : isEditing ? 'Lưu thay đổi' : 'Xác nhận'}
                 </button>
+
+                {isEditing && onDelete && (
+                    <button
+                        type="button"
+                        onClick={onDelete}
+                        disabled={isSubmitting}
+                        className="w-full -mt-1 py-2 rounded-[12px] text-[13px] font-bold text-danger hover:bg-danger/10 transition-all disabled:opacity-40"
+                    >
+                        Xoá chi phí
+                    </button>
+                )}
             </div>
         </div>
 
