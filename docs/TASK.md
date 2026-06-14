@@ -2,7 +2,7 @@
 
 [x] Làm gọn báo cáo dòng tiền ở mục mua nguyên liệu / bao bì . Phân loại và có tổng cộng
 
-[] Xoá nhãn chi phí ĐANG CÓ chi phí gắn vào → BUỘC phân loại lại, không đổ mặc định về "Chi phí khác"
+[x] Xoá nhãn chi phí ĐANG CÓ chi phí gắn vào → BUỘC phân loại lại, không đổ mặc định về "Chi phí khác"
    Bối cảnh: hiện xoá nhãn = soft-delete, mọi chi phí của nhãn đó tự dồn về "Chi phí khác" (Vận hành)
    trong báo cáo Lợi nhuận → dễ làm sai cơ cấu chi phí. Muốn manager BẮT BUỘC tự tay chuyển từng chi phí
    sang nhãn khác đang có trước khi nhãn biến mất, để báo cáo chính xác.

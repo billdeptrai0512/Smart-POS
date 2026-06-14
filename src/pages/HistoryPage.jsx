@@ -17,7 +17,8 @@ import ExpensePanel from '../components/HistoryPage/ExpensePanel'
 import AddExpenseModal from '../components/HistoryPage/AddExpenseModal'
 import { shiftFinalizedKey, cashClosedKey } from '../constants/storageKeys'
 import { Plus } from 'lucide-react'
-import { fetchExpenseCategories, insertExpenseCategory, updateExpenseCategory, deleteExpenseCategory } from '../services/expenseService'
+import { fetchExpenseCategories, insertExpenseCategory, updateExpenseCategory, deleteExpenseCategory, fetchExpensesByCategory, fetchExpenseCategoryCounts, restoreExpenseCategory } from '../services/expenseService'
+import Toast from '../components/POSPage/Toast'
 
 // Use dateStringVN so YYYY-MM-DD always reflects Vietnam local date,
 // regardless of where the browser runs.
@@ -31,6 +32,7 @@ export default function HistoryPage() {
     const {
         todayOrders, todayExpenses, isLoadingHistory,
         handleDeleteOrder, handleAddExpense, handleUpdateExpense, handleDeleteExpense, handleLoadHistory, retrySync,
+        toast, showToast,
     } = usePOS()
 
     useEffect(() => {
@@ -143,12 +145,29 @@ export default function HistoryPage() {
         return updated
     }, [])
 
+    // Soft-delete an EMPTY label (no expenses attached). The sheet lists a label's
+    // expenses first — a label still holding expenses must have each row moved to
+    // another label before this runs, so we never silently dump rows into "Chi phí khác".
     const handleDeleteCategoryTag = useCallback(async (id) => {
         await deleteExpenseCategory(id)
         setExpenseCategories(prev => prev.filter(c => c.id !== id))
-        // Note: existing expenses still hold this category_id. FinanceCards +
-        // TagPill fall back to "Chưa phân loại" / "Chi phí khác" via lookup miss.
-        // Manager can re-tag them via the sheet if needed.
+    }, [])
+
+    const handleListCategoryExpenses = useCallback(
+        (id) => fetchExpensesByCategory(selectedAddress?.id, id),
+        [selectedAddress?.id]
+    )
+
+    const handleCountCategories = useCallback(
+        () => fetchExpenseCategoryCounts(selectedAddress?.id),
+        [selectedAddress?.id]
+    )
+
+    // Hoàn tác xoá nhãn: bật lại is_active + đưa lại vào danh sách. Việc trả các
+    // chi phí về nhãn cũ do sheet lo (gọi onMoveExpense ngược).
+    const handleRestoreCategory = useCallback(async (category) => {
+        await restoreExpenseCategory(category.id)
+        setExpenseCategories(prev => prev.some(c => c.id === category.id) ? prev : [...prev, category])
     }, [])
 
     // ─── Range fetch ──────────────────────────────────────────────────
@@ -165,6 +184,14 @@ export default function HistoryPage() {
         rangeStart, rangeEnd,
         isTodayScope, isReadOnly,
     })
+
+    // Move ONE expense to another label (re-tag). Patches both the today list
+    // (via POS handler) and the range list so the moved card shows its new tag
+    // immediately; report cards refetch on their own via cache invalidation.
+    const handleMoveExpense = useCallback(async (expenseId, toId) => {
+        await handleUpdateExpense(expenseId, { category_id: toId })
+        if (!isTodayScope && patchRangeExpense) patchRangeExpense(expenseId, { category_id: toId })
+    }, [handleUpdateExpense, isTodayScope, patchRangeExpense])
 
     // ─── Offline order sync ───────────────────────────────────────────
     const refreshPending = useCallback(() => setPendingOrders(getPendingOrders()), [])
@@ -417,6 +444,11 @@ export default function HistoryPage() {
                     onCreateCategory={handleCreateCategory}
                     onUpdateCategory={handleUpdateCategory}
                     onDeleteCategory={handleDeleteCategoryTag}
+                    onListCategoryExpenses={handleListCategoryExpenses}
+                    onMoveExpense={handleMoveExpense}
+                    onCountCategories={handleCountCategories}
+                    onRestoreCategory={handleRestoreCategory}
+                    showToast={showToast}
                     onClose={() => setShowAddModal(false)}
                     onSubmit={submitExpense}
                     onCategoryChange={setExpenseCategory}
@@ -428,6 +460,14 @@ export default function HistoryPage() {
                     onPaymentMethodChange={setPaymentMethod}
                 />
             )}
+
+            {/* Toast nâng lên trên modal/sheet (z-[100]) để nút Hoàn tác bấm được.
+                Wrapper inset-0 pointer-events-none cho click xuyên qua, chỉ toast nhận click. */}
+            <div className="fixed inset-0 z-[200] pointer-events-none">
+                <div className="pointer-events-auto">
+                    <Toast toast={toast} />
+                </div>
+            </div>
         </div>
     )
 }

@@ -283,10 +283,70 @@ export async function updateExpenseCategory(id, updates) {
     return data
 }
 
+// Count expenses per category for the address in ONE query (just the FK column),
+// reduced client-side → { [categoryId]: count }. Powers the count badge on each
+// label in the manage sheet so managers see what they're about to delete.
+export async function fetchExpenseCategoryCounts(addressId) {
+    if (!addressId) return {}
+    if (localRepo.isGuest()) return localRepo.fetchLocalExpenseCategoryCounts(addressId)
+    if (!supabase) return {}
+    const { data, error } = await supabase
+        .from('expenses')
+        .select('category_id')
+        .eq('address_id', addressId)
+    if (error) {
+        if (error.code !== '42P01') console.error('fetchExpenseCategoryCounts error:', error)
+        return {}
+    }
+    const counts = {}
+    for (const row of data || []) {
+        if (row.category_id) counts[row.category_id] = (counts[row.category_id] || 0) + 1
+    }
+    return counts
+}
+
+// Un-delete a soft-deleted category (is_active → true). Mirror of
+// deleteExpenseCategory; used by the "Hoàn tác" undo after a delete.
+export async function restoreExpenseCategory(id) {
+    invalidateReportCache(null)
+    if (localRepo.isGuest()) return localRepo.restoreLocalExpenseCategory(id)
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase
+        .from('expense_categories')
+        .update({ is_active: true })
+        .eq('id', id)
+    if (error) throw error
+    return true
+}
+
+// List every expense still tagged with a category (any date, scoped to address).
+// Drives the "force re-tag before delete" gate: a label with attached expenses
+// can't be deleted until the manager moves each of these to another label, so the
+// profit report never silently dumps them into "Chi phí khác". Newest first.
+export async function fetchExpensesByCategory(addressId, categoryId) {
+    if (!addressId || !categoryId) return []
+    if (localRepo.isGuest()) return localRepo.fetchLocalExpensesByCategory(addressId, categoryId)
+    if (!supabase) return []
+    const { data, error } = await supabase
+        .from('expenses')
+        .select('id, name, amount, category_id, created_at')
+        .eq('address_id', addressId)
+        .eq('category_id', categoryId)
+        .order('created_at', { ascending: false })
+    if (error) {
+        if (error.code !== '42P01') console.error('fetchExpensesByCategory error:', error)
+        return []
+    }
+    return data || []
+}
+
 // Soft-delete a category. Existing expenses keep the FK but readers should
 // treat soft-deleted categories as falling back to "Chi phí khác". We do NOT
 // hard-delete because that would null-out historical expense.category_id via
 // the ON DELETE SET NULL trigger and lose audit trail.
+// NOTE: callers must guarantee the category has no attached expenses (count = 0)
+// — either it was always empty, or they moved each row to another label first
+// (see fetchExpensesByCategory). Otherwise orphaned rows fall back to "Chi phí khác".
 export async function deleteExpenseCategory(id) {
     invalidateReportCache(null)
     if (localRepo.isGuest()) return localRepo.deleteLocalExpenseCategory(id)

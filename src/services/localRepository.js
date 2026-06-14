@@ -485,6 +485,30 @@ export const updateLocalExpenseCategory = (id, updates) => {
     return null;
 };
 
+export const fetchLocalExpensesByCategory = (addressId, categoryId) =>
+    get(KEYS.EXPENSES)
+        .filter(e => e.address_id === addressId && e.category_id === categoryId)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+export const fetchLocalExpenseCategoryCounts = (addressId) => {
+    const counts = {};
+    for (const e of get(KEYS.EXPENSES)) {
+        if (e.address_id === addressId && e.category_id) counts[e.category_id] = (counts[e.category_id] || 0) + 1;
+    }
+    return counts;
+};
+
+export const restoreLocalExpenseCategory = (id) => {
+    const list = get(KEYS.EXPENSE_CATEGORIES);
+    const idx = list.findIndex(c => c.id === id);
+    if (idx >= 0) {
+        list[idx].is_active = true;
+        list[idx].updated_at = new Date().toISOString();
+        set(KEYS.EXPENSE_CATEGORIES, list);
+    }
+    return true;
+};
+
 export const deleteLocalExpenseCategory = (id) => {
     const list = get(KEYS.EXPENSE_CATEGORIES);
     const idx = list.findIndex(c => c.id === id);

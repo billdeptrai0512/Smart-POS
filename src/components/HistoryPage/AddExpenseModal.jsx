@@ -29,6 +29,11 @@ export default function AddExpenseModal({
     onCreateCategory,
     onUpdateCategory,
     onDeleteCategory,
+    onListCategoryExpenses,
+    onMoveExpense,
+    onCountCategories,
+    onRestoreCategory,
+    showToast,
     // Date (backdate support)
     expenseDate, onDateChange,
     // Payment method toggle
@@ -175,7 +180,18 @@ export default function AddExpenseModal({
 
                 {/* Nhãn — dropdown chọn nhãn thuộc nhóm đang chọn + quản lý nhãn */}
                 <div className="flex flex-col gap-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Nhãn</span>
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Nhãn</span>
+                        {/* Lối tắt vào màn Quản lý nhãn — không phải mở dropdown mới thấy. */}
+                        <button
+                            type="button"
+                            onClick={() => { setOpenDd(null); setManageOpen(true) }}
+                            className="flex items-center gap-1 text-[11px] font-bold text-text-secondary hover:text-primary transition-all"
+                        >
+                            <Settings2 size={12} strokeWidth={2.5} />
+                            Quản lý
+                        </button>
+                    </div>
                     <SelectRow
                         valueLabel={groupLabels.find(c => c.id === selectedCategoryId)?.name}
                         valueDot={groupMeta(activeGroup).dotCls}
@@ -274,16 +290,22 @@ export default function AddExpenseModal({
             </div>
         </div>
 
-        {/* Sheet CRUD nhãn — chung 1 sheet (tất cả nhóm) với "Đổi nhãn" ở thẻ chi phí;
-            chọn 1 nhãn → set vào modal + đóng sheet. */}
+        {/* Màn Quản lý nhãn — CRUD nhãn theo nhóm + tái phân loại chi phí khi xoá.
+            Việc CHỌN nhãn cho chi phí dùng 2 dropdown phía trên; ở đây tạo nhãn mới
+            thì onPick set luôn nhãn đó vào form (không đóng sheet). */}
         <ChangeCategorySheet
             open={manageOpen}
             categories={expenseCategories}
             selectedId={selectedCategoryId}
-            onSelect={(id) => { handlePickCategory(id); setManageOpen(false) }}
+            onPick={handlePickCategory}
             onCreate={onCreateCategory}
             onUpdate={onUpdateCategory}
             onDelete={onDeleteCategory}
+            onListCategoryExpenses={onListCategoryExpenses}
+            onMoveExpense={onMoveExpense}
+            onCountCategories={onCountCategories}
+            onRestoreCategory={onRestoreCategory}
+            showToast={showToast}
             onClose={() => setManageOpen(false)}
         />
         </>
