@@ -1,3 +1,134 @@
+# 🆕 TASK ĐANG GIAO (cho Gemini) — Sửa phiếu nhập kho tại chỗ
+
+> **Đọc kỹ trước khi code.** Đây là codebase THẬT đang chạy production, KHÔNG phải sandbox.
+> Bắt buộc tuân `CLAUDE.md` (đặc biệt mục Migrations chống regression Security Advisor).
+> Trong lúc làm, nếu phát hiện bug nào khác (kể cả ngoài phạm vi task) → **cứ fix luôn**, ghi rõ trong commit.
+>
+> **Lưu ý phối hợp:** Claude vừa merge loạt fix báo cáo (commit `51c252e`, `a9d5ed7`) + migration
+> `20260616_shift_closing_dedupe_unique.sql` (CHƯA apply lên DB — owner sẽ tự chạy). Đừng đụng
+> vào phần đó. Branch hiện tại: `main`.
+
+## Mục tiêu
+Thêm tính năng **sửa (modify) phiếu nhập kho** trên thẻ Nhật ký của 1 nguyên liệu — parity với
+thẻ chi phí (`/history` đã có "bấm thẻ để sửa"). Hiện thẻ nhập kho chỉ có **Hủy** (trash) +
+**trả nợ** (tap → payment sheet). Cần thêm **sửa tại chỗ**: số lượng, tổng tiền, chi phí thêm,
+giảm giá, phương thức TM/CK, đã thanh toán, ngày mua.
+
+## Cách tiếp cận đã chốt: **RPC sửa tại chỗ** (KHÔNG hủy+tạo lại)
+Hủy+tạo lại bị loại vì để lại thẻ "ĐÃ HỦY" rác + đổi giờ tạo. Làm RPC `edit_ingredient_restock`
+cập nhật chính dòng expense đó trong 1 transaction.
+
+### ⚠️ 2 SỰ THẬT CỐT LÕI phải hiểu trước khi viết RPC (nếu hiểu sai sẽ tạo bug tồn kho/giá vốn)
+1. **Tồn kho là DỮ LIỆU SUY RA, không có bảng tồn để ghi.** `fetchIngredientStocks` tính
+   warehouse = `Σ(refill.metadata.qty)` − `Σ(restock-to-counter trong shift_closing)`. Nên chỉ
+   cần **UPDATE `metadata.qty` + `amount`** trên dòng expense là tồn warehouse tự đổi theo.
+   **TUYỆT ĐỐI KHÔNG** gọi thêm `adjustIngredientStock` cho phần delta qty → sẽ trừ/cộng tồn 2 lần.
+2. **WAC (giá vốn) hiện có 2 mô hình KHÁC NHAU trong code — phải chọn 1 cho nhất quán:**
+   - `process_ingredient_restock`: moving-average tăng dần dùng tồn quầy hiện tại
+     (`(stock*old_cost + amount)/(stock+qty)`).
+   - `cancel_restock`: tính lại TRUNG BÌNH toàn bộ = `Σamount / Σqty` trên các phiếu mua thật
+     còn sống (is_refill, không adjustment, không cancelled, amount>0).
+   → **Edit RPC PHẢI recompute WAC kiểu `cancel_restock`** (full re-average sau khi đã cập nhật
+     dòng). Đây là cách duy nhất cho kết quả **tất định, không phụ thuộc thứ tự sửa**. Dùng kiểu
+     moving-average của process sẽ ra số sai khi sửa phiếu cũ.
+
+## Backend — migration mới `supabase/migrations/<YYYYMMDD>_edit_ingredient_restock.sql`
+Tạo `edit_ingredient_restock(p_address_id UUID, p_expense_id UUID, p_qty NUMERIC, p_subtotal NUMERIC,
+p_discount NUMERIC, p_extra_cost NUMERIC, p_initial_payment NUMERIC, p_payment_method TEXT,
+p_cash_phase TEXT, p_created_at TIMESTAMPTZ, p_staff_name TEXT)` — `RETURNS JSONB`, `SECURITY DEFINER`,
+`SET search_path = public`. Logic:
+1. **Ownership guard** y nguyên pattern 20260520/20260612 (admin OR `manager_id = auth_owner_id(auth.uid())`
+   OR `user_address_access`; skip khi `auth.uid() IS NULL`). RAISE `insufficient_privilege` nếu fail.
+2. `SELECT ... FOR UPDATE` dòng expense; validate: tồn tại, `is_refill=true`, **KHÔNG**
+   `metadata.adjustment`, **KHÔNG** `metadata.cancelled` (RAISE nếu vi phạm). Adjustment/withdrawal
+   không sửa qua RPC này.
+3. Validate input: `p_qty>0`, `p_subtotal>0`, `p_discount>=0`, `p_extra_cost>=0`.
+   `v_amount = max(0, subtotal − discount + extra_cost)`.
+4. UPDATE expenses: `amount=v_amount`, `discount_amount`, `extra_cost`, `payment_method`,
+   `created_at` (nếu đổi ngày), và merge `metadata` mới `qty`, `subtotal`, `cash_phase`. Giữ
+   `before_stock`; set `after_stock = before_stock + p_qty` (xem edge case #4).
+5. **Reconcile payment**: cách đơn giản & tất định = `DELETE FROM expense_payments WHERE expense_id`
+   rồi INSERT lại 1 payment = `min(p_initial_payment, v_amount)` (nếu >0) với method/phase/paid_at.
+   `paid_at = COALESCE(p_paid_at hoặc p_created_at, created_at cũ)`; phải thỏa
+   `chk_payment_paid_at_not_before_created` (paid_at ≥ created_at) **và** không trước ngày VN của
+   created_at. **Đánh đổi**: gộp nhiều lần trả thành 1 → mất lịch sử trả từng phần (chấp nhận cho v1,
+   ghi chú trong comment).
+6. Recompute WAC kiểu `cancel_restock` (full re-average) → UPDATE `ingredient_costs.unit_cost`.
+7. `REVOKE ... FROM PUBLIC, anon; GRANT ... TO authenticated;` (signature mới — bắt buộc theo CLAUDE.md).
+8. Idempotent / chạy lại an toàn; bọc `BEGIN; ... COMMIT;`.
+
+## Service layer — `src/services/ingredientService.js`
+Thêm `editIngredientRestock(addressId, expenseId, opts)` mirror `processIngredientRestock`:
+- Online: `supabase.rpc('edit_ingredient_restock', {...})`, có **retry bỏ `p_cash_phase`** nếu
+  `PGRST202`/`cash_phase` (RPC chưa migrate) — y như processIngredientRestock đã làm.
+- **Guest path** (`localRepo.isGuest()`): update local expense + xoá/insert local payment + tính lại
+  WAC local (Σamount/Σqty trên refill thật) qua `upsertIngredientCost`. Đừng bỏ quên guest.
+- `invalidateReportCache(addressId)` cuối hàm.
+- Export thêm ở `src/services/orderService.js` (file này re-export — kiểm tra cách nó re-export).
+
+## UI
+1. **`RestockModal.jsx`** — thêm chế độ sửa: prop `mode='edit'` + `initial={{ qty, subtotal,
+   discount, discountMode, extraCost, paid, paymentMethod, cashPhase, purchaseDate, usePackMode }}`.
+   Pre-fill toàn bộ state từ `initial`. Đổi tiêu đề → "Sửa phiếu nhập", nút → "Lưu thay đổi".
+   `onConfirm` trả cùng shape như create. Lưu ý: `qty` lưu ở **base unit**; khi mở edit mặc định
+   hiển thị base unit (đừng auto-bật pack mode trừ khi chia hết cho packSize).
+2. **`IngredientHistoryTab.jsx` → `HistoryCard`** — thêm prop `onEditRestock`. Thêm **nút bút chì
+   (Pencil) cạnh nút Hủy** ở góc thẻ, chỉ hiện khi `isRestock && !cancelled` (KHÔNG cho
+   adjustment/withdrawal). GIỮ NGUYÊN hành vi tap→payment sheet khi đang nợ (đừng để 2 hành vi
+   xung đột: tap thẻ = trả nợ, bút chì = sửa). `e.stopPropagation()` trên nút bút chì.
+3. **`IngredientDetailPage.jsx`** — state `editingEntry`; `handleEditRestock(entry, form)` gọi
+   `editIngredientRestock` rồi `Promise.all([reloadHistory(), reloadStock(), refreshProducts?.(),
+   refreshTodayExpenses?.()])` (y như `handleCancelRestock` — WAC đổi nên phải refresh products +
+   today expenses). Render `RestockModal` ở mode edit khi có `editingEntry`. Truyền
+   `onEditRestock={canEdit ? setEditingEntry : null}` xuống tab.
+
+## 🐞 EDGE CASE & BUG TIỀM ẨN (đã lường trước — xử lý hoặc ghi chú rõ)
+1. **Trả nhiều hơn tổng mới**: user giảm tổng tiền xuống dưới số đã trả → payment mới clamp
+   `min(paid, amount)`; phần dư coi như hoàn (vì ta xoá payment cũ insert lại). Đảm bảo không
+   để `paid_total > amount` (vi phạm logic overpay).
+2. **WAC mismatch** (mục cốt lõi #2): nếu lỡ dùng moving-average của process → số sai. Test:
+   sửa 1 phiếu cũ giữa nhiều phiếu, kiểm tra `unit_cost` == `Σamount/Σqty`.
+3. **Double-count tồn** (mục cốt lõi #1): nếu gọi adjustIngredientStock cho delta → tồn sai gấp đôi.
+   Chỉ UPDATE metadata.qty.
+4. **Snapshot `before/after_stock` drift**: snapshot là DISPLAY-ONLY, tính lúc tạo. Sửa qty của
+   phiếu cũ làm running-balance các phiếu SAU nó lệch. v1: chỉ cập nhật `after_stock = before_stock
+   + qty_mới` của chính dòng đang sửa, chấp nhận các dòng sau drift (ghi chú). Đừng cố tính lại
+   snapshot toàn bộ (đắt + dễ sai).
+5. **Backdate constraints**: `paid_at ≥ created_at` (chk_payment_paid_at_not_before_created) và
+   không trước ngày VN của created_at. Khi đổi ngày mua lùi về quá khứ, neo `created_at` và `paid_at`
+   cùng ngày (client neo 12h trưa VN như RestockModal đang làm).
+6. **Concurrency**: `FOR UPDATE` để 2 lần sửa/hủy đồng thời không đua nhau.
+7. **cash_phase**: chỉ áp khi trả tiền mặt; CK → 'post_close'. Giữ logic như RestockModal.
+8. **Guest mode** không được bỏ quên (nhiều người dùng thử ở guest).
+9. **Sửa phiếu đã bị Hủy / adjustment / withdrawal**: chặn ở cả RPC lẫn UI (không hiện nút bút chì).
+10. **Phiếu đang nợ + đổi phương thức**: payment cũ bị xoá insert lại theo method mới — đảm bảo
+    `expense.payment_method` (trên invoice) và payment đồng bộ.
+11. **RPC chưa migrate ở production**: service phải retry-without-`p_cash_phase` để không vỡ
+    nếu owner chưa chạy migration (giống processIngredientRestock).
+12. **Refresh thiếu**: quên `refreshProducts` → giá vốn/COGS ở các màn khác giữ số cũ. Phải refresh đủ.
+
+## ✅ Acceptance
+- [ ] Sửa qty/giá 1 phiếu → tồn warehouse + WAC + tổng tiền nhập (SummaryStrip) cập nhật đúng,
+      KHÔNG sinh thẻ rác, KHÔNG đổi giờ tạo (trừ khi user đổi ngày).
+- [ ] Sửa phương thức TM↔CK phản ánh đúng ở Dòng tiền (Thực chi TM/CK — Claude vừa thêm).
+- [ ] Sửa giảm số đã trả / tăng → trạng thái Đã trả/Còn nợ đúng.
+- [ ] Guest mode sửa được.
+- [ ] `npm run lint` (file mới sạch), `npm run typecheck`, `npx vitest run` đều xanh. Thêm test cho
+      service edit nếu khả thi.
+- [ ] Migration tuân CLAUDE.md: search_path + ownership guard + revoke/grant.
+
+## Files đụng tới
+- `supabase/migrations/<new>_edit_ingredient_restock.sql` (mới) + mirror vào `supabase/schema.sql` nếu cần.
+- `src/services/ingredientService.js`, `src/services/orderService.js` (re-export).
+- `src/components/IngredientManagementPage/RestockModal.jsx`
+- `src/components/IngredientManagementPage/IngredientHistoryTab.jsx`
+- `src/pages/IngredientDetailPage.jsx`
+- Tham khảo (đọc, không sửa): `supabase/migrations/20260612_security_advisor_fixes.sql`
+  (body process/record mới nhất + guard), `supabase/migrations/20260601_cancel_restock.sql`
+  (mẫu re-average WAC + zero-out + grant).
+
+---
+
 # Task / Reminder — Monetization
 
 > Ưu tiên hiện tại: **thiết kế UI trước**. Chưa build payment backend.
