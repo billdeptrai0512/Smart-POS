@@ -107,6 +107,31 @@ Thêm `editIngredientRestock(addressId, expenseId, opts)` mirror `processIngredi
     nếu owner chưa chạy migration (giống processIngredientRestock).
 12. **Refresh thiếu**: quên `refreshProducts` → giá vốn/COGS ở các màn khác giữ số cũ. Phải refresh đủ.
 
+## 📌 Bổ sung — prefill chính xác, thực tế apply, ngoài phạm vi
+**Map prefill RestockModal (mode=edit)** — đọc từ `entry` (expense), KHÔNG đoán:
+- `qty`        ← `entry.metadata.qty` (base unit; mặc định hiển thị base, không tự bật pack mode).
+- `subtotal`   ← `entry.metadata.subtotal` (KHÔNG phải `amount`).
+- `discount`   ← `entry.discount_amount`, **discountMode='amount'** luôn (DB chỉ lưu tuyệt đối,
+                 không khôi phục được %; đừng cố suy ngược phần trăm).
+- `extraCost`  ← `entry.extra_cost`.
+- `paid`       ← `Σ entry.payments[].amount`.
+- `paymentMethod` ← `entry.payment_method`; `cashPhase` ← `entry.metadata.cash_phase` (fallback 'post_close').
+- `purchaseDate`  ← ngày VN của `entry.created_at` (dùng `dateStringVN`).
+
+**Thực tế apply migration (đọc kỹ, đừng loay hoay):**
+- Gemini KHÔNG có service role → KHÔNG tự chạy được migration. Owner sẽ apply (ghi vào mục
+  "Việc cần làm trên Supabase" của task.md này khi xong). Trước khi apply, gọi `edit_ingredient_restock`
+  sẽ lỗi PGRST202 — **chấp nhận** (toast lỗi), ĐỪNG viết fallback client-side để "chạy không cần RPC"
+  (sẽ tự tính WAC/tồn ở client → sai và lệch với server).
+- Retry-bỏ-`p_cash_phase` chỉ xử lý khi hàm TỒN TẠI nhưng thiếu param (lệch signature); KHÔNG cứu
+  trường hợp hàm chưa tồn tại. Đừng nhầm 2 ca này.
+
+**Ngoài phạm vi — ĐỪNG đụng:**
+- KHÔNG sửa `process_ingredient_restock` để "đồng bộ" mô hình WAC. Divergence moving-avg (process)
+  vs full-avg (cancel) là nợ kỹ thuật có sẵn; đổi hành vi tạo phiếu = rủi ro hồi quy. Edit RPC chỉ
+  cần dùng full-avg (khớp cancel) là đủ nhất quán cho luồng sửa/hủy.
+- KHÔNG đổi cách tính/định nghĩa tồn kho. KHÔNG đụng migration `20260616` (báo cáo, owner chưa apply).
+
 ## ✅ Acceptance
 - [ ] Sửa qty/giá 1 phiếu → tồn warehouse + WAC + tổng tiền nhập (SummaryStrip) cập nhật đúng,
       KHÔNG sinh thẻ rác, KHÔNG đổi giờ tạo (trừ khi user đổi ngày).
