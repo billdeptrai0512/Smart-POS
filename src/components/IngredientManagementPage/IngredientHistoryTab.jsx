@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Trash2, Pencil } from 'lucide-react'
 import { formatVND } from '../../utils'
 import { formatPackedQty } from '../../utils/inventory'
 
@@ -14,7 +14,7 @@ export default function IngredientHistoryTab({
     loading, summary, history, unit,
     packSize, packUnit,
     monthLabel, monthOffset, onMonthChange,
-    onOpenPayment, onCancelRestock,
+    onOpenPayment, onCancelRestock, onEditRestock,
 }) {
     const hasOwing = summary.totalOwing > 0
     return (
@@ -44,6 +44,7 @@ export default function IngredientHistoryTab({
                             packUnit={packUnit}
                             onOpenPayment={onOpenPayment}
                             onCancelRestock={onCancelRestock}
+                            onEditRestock={onEditRestock}
                         />
                     ))}
                 </div>
@@ -122,7 +123,7 @@ function Stat({ label, value, tone }) {
 //
 // Layout: ĐÃ HỦY badge (if cancelled) · type tag + Hủy (corner) · hero qty + money ·
 // Tồn X→Y · context pills (restock only) · staff + datetime above a hairline divider.
-function HistoryCard({ entry, unit, packSize, packUnit, onOpenPayment, onCancelRestock }) {
+function HistoryCard({ entry, unit, packSize, packUnit, onOpenPayment, onCancelRestock, onEditRestock }) {
     const d = new Date(entry.created_at)
     // Hardcode dd/mm — Chromium's vi-VN renders "27 - 05" with literal spaces.
     const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -165,6 +166,8 @@ function HistoryCard({ entry, unit, packSize, packUnit, onOpenPayment, onCancelR
     const clickable = (status === 'unpaid' || status === 'partial') && !!onOpenPayment
     // Lượt rút sửa ở báo cáo ca (field Nhập thêm), không Hủy được từ Nhật ký.
     const cancellable = !!onCancelRestock && !cancelled && !isWithdrawal
+    // Chỉ hiện nút Sửa cho restock thật (không phải adjustment/withdrawal/cancelled).
+    const editable = !!onEditRestock && isRestock && !cancelled
 
     const typeLabel = isWithdrawal ? 'Rút ra quầy' : isAdjust ? 'Hiệu chỉnh tồn' : 'Nhập kho'
     const typeTone = cancelled ? 'text-text-dim'
@@ -194,15 +197,29 @@ function HistoryCard({ entry, unit, packSize, packUnit, onOpenPayment, onCancelR
                 <span className={`text-[11px] font-black uppercase tracking-wider ${typeTone}`}>
                     {typeLabel}
                 </span>
-                {cancellable && (
-                    <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); onCancelRestock(entry) }}
-                        aria-label="Hủy phiếu"
-                        className="-mr-1 -mt-1 w-7 h-7 flex items-center justify-center rounded-lg text-text-dim hover:text-danger hover:bg-danger/10 active:scale-95 transition-all"
-                    >
-                        <Trash2 size={14} />
-                    </button>
+                {(editable || cancellable) && (
+                    <div className="flex items-center gap-0.5 -mr-1 -mt-1">
+                        {editable && (
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onEditRestock(entry) }}
+                                aria-label="Sửa phiếu"
+                                className="w-7 h-7 flex items-center justify-center rounded-lg text-text-dim hover:text-primary hover:bg-primary/10 active:scale-95 transition-all"
+                            >
+                                <Pencil size={13} />
+                            </button>
+                        )}
+                        {cancellable && (
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onCancelRestock(entry) }}
+                                aria-label="Hủy phiếu"
+                                className="w-7 h-7 flex items-center justify-center rounded-lg text-text-dim hover:text-danger hover:bg-danger/10 active:scale-95 transition-all"
+                            >
+                                <Trash2 size={14} />
+                            </button>
+                        )}
+                    </div>
                 )}
             </div>
 

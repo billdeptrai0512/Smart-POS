@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
@@ -8,7 +8,9 @@ import {
     fetchIngredientRestockHistory, fetchIngredientStocks, fetchIngredientWithdrawals,
     deleteIngredientCost, upsertIngredientCost, renameIngredient,
     adjustIngredientStock, setCounterStock, recordInvoicePayment, cancelRestock,
+    editIngredientRestock,
 } from '../services/orderService'
+import { supabase } from '../lib/supabaseClient'
 import {
     ingredientLabel, getIngredientUnit,
     normalizeIngredientCategory, normalizeIngredientKey,
@@ -18,8 +20,10 @@ import PackConfigModal from '../components/IngredientManagementPage/PackConfigMo
 import IngredientDetailsTab from '../components/IngredientManagementPage/IngredientDetailsTab'
 import IngredientHistoryTab from '../components/IngredientManagementPage/IngredientHistoryTab'
 import InvoicePaymentSheet from '../components/IngredientManagementPage/InvoicePaymentSheet'
+import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
+import { dateStringVN } from '../utils/dateVN'
 
 // Page-level orchestrator: fetches data, owns the canonical state (stock, history,
 // config), and exposes per-field save callbacks. All edit-mode UI state lives
@@ -42,6 +46,7 @@ export default function IngredientDetailPage() {
     const [saving, setSaving] = useState(false)
     const [packModalOpen, setPackModalOpen] = useState(false)
     const [paymentInvoice, setPaymentInvoice] = useState(null)
+    const [editingEntry, setEditingEntry] = useState(null)
 
     // Month navigation (Nhật ký tab)
     const [monthOffset, setMonthOffset] = useState(0)
@@ -86,7 +91,7 @@ export default function IngredientDetailPage() {
     // History is scoped to the displayed month. Gồm 2 nguồn xen kẽ theo thời gian:
     // phiếu nhập/hiệu chỉnh (expenses) + lượt "Rút ra quầy" (restock trong phiếu
     // chốt ca). Lượt rút là chuyển kho nội bộ — không tiền, không payments.
-    const loadHistory = async () => {
+    const loadHistory = useCallback(async () => {
         const [hist, withdrawals] = await Promise.all([
             fetchIngredientRestockHistory(selectedAddress.id, ingredientKey, fromDate, toDate),
             fetchIngredientWithdrawals(selectedAddress.id, ingredientKey, fromDate, toDate),
@@ -103,15 +108,53 @@ export default function IngredientDetailPage() {
         }))
         return [...hist, ...withdrawalEntries]
             .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    }
+    }, [selectedAddress?.id, ingredientKey, fromDate, toDate])
+
     useEffect(() => {
         if (!selectedAddress?.id || !ingredientKey) return
         setLoading(true)
         loadHistory()
             .then(setHistory)
             .finally(() => setLoading(false))
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedAddress?.id, ingredientKey, fromDate, toDate])
+    }, [loadHistory])
+
+    // Realtime subscription
+    useEffect(() => {
+        if (!supabase || !selectedAddress?.id || !ingredientKey) return
+
+        const channel = supabase
+            .channel(`ingredient-detail-${ingredientKey}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'expenses',
+                    filter: `address_id=eq.${selectedAddress.id}`
+                },
+                () => {
+                    reloadHistory()
+                    reloadStock()
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'expense_payments',
+                    filter: `address_id=eq.${selectedAddress.id}`
+                },
+                () => {
+                    reloadHistory()
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [selectedAddress?.id, ingredientKey])
 
     const summary = useMemo(() => {
         let totalSpent = 0, totalQty = 0, totalOwing = 0, totalPaidInMonth = 0
@@ -293,6 +336,83 @@ export default function IngredientDetailPage() {
         finally { setSaving(false) }
     }
 
+    async function handleEditRestock(entry, form) {
+        setSaving(true)
+        const originalHistory = [...history]
+        const originalStockData = stockData ? { ...stockData } : null
+
+        const purchaseDate = form.purchaseDate
+            || new Date(`${dateStringVN()}T12:00:00+07:00`).toISOString()
+        const qtyNum = Number(form.qty)
+        const subtotalNum = Number(form.subtotal)
+        const discountNum = Number(form.discount)
+        const extraCostNum = Number(form.extraCost)
+        const paidNum = Number(form.paid)
+        const amountDue = Math.max(0, subtotalNum - discountNum + extraCostNum)
+        const paidAmount = Math.min(paidNum, amountDue)
+
+        // Optimistic history update
+        const updatedHistory = history.map(h => {
+            if (h.id === entry.id) {
+                return {
+                    ...h,
+                    amount: amountDue,
+                    discount_amount: discountNum,
+                    extra_cost: extraCostNum,
+                    payment_method: form.paymentMethod,
+                    created_at: purchaseDate,
+                    metadata: {
+                        ...h.metadata,
+                        qty: qtyNum,
+                        subtotal: subtotalNum,
+                        cash_phase: form.cashPhase,
+                        after_stock: (h.metadata?.before_stock || 0) + qtyNum,
+                    },
+                    payments: paidAmount > 0 ? [{
+                        amount: paidAmount,
+                        payment_method: form.paymentMethod,
+                        paid_at: purchaseDate,
+                        cash_phase: form.cashPhase,
+                        staff_name: profile?.name,
+                    }] : []
+                }
+            }
+            return h
+        })
+
+        const qtyDelta = qtyNum - (Number(entry.metadata?.qty) || 0)
+        if (stockData && qtyDelta !== 0) {
+            setStockData({
+                ...stockData,
+                current_stock: (stockData.current_stock || 0) + qtyDelta,
+                warehouse_stock: (stockData.warehouse_stock || 0) + qtyDelta
+            })
+        }
+
+        setHistory(updatedHistory)
+        setEditingEntry(null)
+
+        try {
+            await editIngredientRestock(selectedAddress?.id, entry.id, {
+                qty: qtyNum,
+                subtotal: subtotalNum,
+                discount: discountNum,
+                extraCost: extraCostNum,
+                paid: paidAmount,
+                paymentMethod: form.paymentMethod,
+                purchaseDate,
+                cashPhase: form.cashPhase,
+                staffName: profile?.name,
+            })
+            await Promise.all([reloadHistory(), reloadStock(), refreshProducts?.(), refreshTodayExpenses?.()])
+        } catch (err) {
+            setHistory(originalHistory)
+            setStockData(originalStockData)
+            showError(err, 'Sửa phiếu nhập kho')
+        }
+        finally { setSaving(false) }
+    }
+
     async function handleDelete() {
         const label = ingredientLabel(ingredientKey)
         if (!window.confirm(`Xóa nguyên liệu "${label}"? Hành động này sẽ gỡ nó khỏi tất cả công thức liên quan.`)) return
@@ -358,6 +478,7 @@ export default function IngredientDetailPage() {
                         onMonthChange={setMonthOffset}
                         onOpenPayment={canEdit ? setPaymentInvoice : null}
                         onCancelRestock={canEdit ? handleCancelRestock : null}
+                        onEditRestock={canEdit ? setEditingEntry : null}
                     />
                 )}
             </main>
@@ -383,6 +504,29 @@ export default function IngredientDetailPage() {
                         await savePackConfig({ packSize: ps, packUnit: pu })
                         setPackModalOpen(false)
                     }}
+                />
+            )}
+
+            {editingEntry && (
+                <RestockModal
+                    ingredient={ingredientKey}
+                    unit={unit}
+                    packSize={packSize}
+                    packUnit={packUnit}
+                    cashClosedToday={false}
+                    mode="edit"
+                    initial={{
+                        qty: editingEntry.metadata?.qty ?? 0,
+                        subtotal: editingEntry.metadata?.subtotal ?? editingEntry.amount ?? 0,
+                        discount: editingEntry.discount_amount ?? 0,
+                        extraCost: editingEntry.extra_cost ?? 0,
+                        paid: (editingEntry.payments || []).reduce((s, p) => s + (p.amount || 0), 0),
+                        paymentMethod: editingEntry.payment_method || 'cash',
+                        cashPhase: editingEntry.metadata?.cash_phase || 'post_close',
+                        purchaseDate: dateStringVN(new Date(editingEntry.created_at)),
+                    }}
+                    onConfirm={(form) => handleEditRestock(editingEntry, form)}
+                    onClose={() => setEditingEntry(null)}
                 />
             )}
 

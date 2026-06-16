@@ -6,24 +6,44 @@ import { parseVNDInput, formatVND, formatVNDInput } from '../../utils'
 import { dateStringVN } from '../../utils/dateVN'
 import DatePicker from '../common/DatePicker'
 
-export default function RestockModal({ ingredient, unit, packSize, packUnit, cashClosedToday = false, onConfirm, onClose }) {
+export default function RestockModal({
+    ingredient,
+    unit,
+    packSize,
+    packUnit,
+    cashClosedToday = false,
+    onConfirm,
+    onClose,
+    mode = 'create',
+    initial = null
+}) {
     const today = dateStringVN()
     const hasPack = !!(packSize && packUnit)
-    const [usePackMode, setUsePackMode] = useState(hasPack)
-    const [qty, setQty] = useState('')
-    const [subtotal, setSubtotal] = useState('')
-    const [purchaseDate, setPurchaseDate] = useState(today)
+    // Edit mode: auto-bật pack mode nếu qty chia hết cho packSize (user nhập theo thùng/lốc).
+    // Create mode: default theo hasPack như cũ.
+    const initPackMode = mode === 'edit' && hasPack && initial?.qty > 0
+        ? Number(initial.qty) % packSize === 0
+        : hasPack
+    const [usePackMode, setUsePackMode] = useState(initPackMode)
+    // Edit mode: nếu pack mode, hiển thị số lốc/thùng thay vì base unit.
+    const initQty = () => {
+        if (initial?.qty == null) return ''
+        if (mode === 'edit' && hasPack && Number(initial.qty) % packSize === 0) {
+            return String(Number(initial.qty) / packSize)
+        }
+        return String(initial.qty)
+    }
+    const [qty, setQty] = useState(initQty)
+    const [subtotal, setSubtotal] = useState(initial?.subtotal ? formatVNDInput(initial.subtotal) : '')
+    const [purchaseDate, setPurchaseDate] = useState(initial?.purchaseDate || today)
     const [discountMode, setDiscountMode] = useState('amount') // 'amount' | 'percent'
-    const [discountInput, setDiscountInput] = useState('')
-    const [extraCostInput, setExtraCostInput] = useState('')
-    const [paidInput, setPaidInput] = useState('')
-    const [userTouchedPaid, setUserTouchedPaid] = useState(false)
-    const [paymentMethod, setPaymentMethod] = useState('cash')
-    // cash_phase: tiền mặt mua TRƯỚC khi chốt ca tiền thực thu thì rút từ doanh thu trong
-    // ca ('in_shift' → cộng vào Thực thu); SAU chốt là tiêu tiền đã đếm ('post_close').
-    // Mặc định theo trạng thái đã chốt tiền hôm nay hay chưa. Lưu cố định trên phiếu.
-    const [cashPhase, setCashPhase] = useState(cashClosedToday ? 'post_close' : 'in_shift')
-    const [userTouchedPhase, setUserTouchedPhase] = useState(false)
+    const [discountInput, setDiscountInput] = useState(initial?.discount ? formatVNDInput(initial.discount) : '')
+    const [extraCostInput, setExtraCostInput] = useState(initial?.extraCost ? formatVNDInput(initial.extraCost) : '')
+    const [paidInput, setPaidInput] = useState(initial?.paid !== undefined && initial?.paid !== null ? formatVNDInput(initial.paid) : '')
+    const [userTouchedPaid, setUserTouchedPaid] = useState(mode === 'edit')
+    const [paymentMethod, setPaymentMethod] = useState(initial?.paymentMethod || 'cash')
+    const [cashPhase, setCashPhase] = useState(initial?.cashPhase || (cashClosedToday ? 'post_close' : 'in_shift'))
+    const [userTouchedPhase, setUserTouchedPhase] = useState(mode === 'edit')
     const [submitting, setSubmitting] = useState(false)
 
     const actualQty = usePackMode ? Number(qty) * packSize : Number(qty)
@@ -103,7 +123,7 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, cas
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div className="flex flex-col">
-                        <span className="text-[11px] font-black text-text-secondary uppercase tracking-wider">Nhập kho</span>
+                        <span className="text-[11px] font-black text-text-secondary uppercase tracking-wider">{mode === 'edit' ? 'Sửa phiếu nhập' : 'Nhập kho'}</span>
                         <span className="text-[18px] font-black text-text leading-tight">{ingredientLabel(ingredient)}</span>
                     </div>
                     <button
@@ -328,7 +348,7 @@ export default function RestockModal({ ingredient, unit, packSize, packUnit, cas
                     disabled={!isValid || submitting}
                     className="w-full py-3.5 rounded-[14px] bg-primary text-white text-[15px] font-black uppercase tracking-wide hover:bg-primary/90 active:bg-primary/80 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-primary/20"
                 >
-                    {submitting ? 'Đang xử lý...' : 'Xác nhận nhập kho'}
+                    {submitting ? 'Đang xử lý...' : mode === 'edit' ? 'Lưu thay đổi' : 'Xác nhận nhập kho'}
                 </button>
             </div>
         </div>

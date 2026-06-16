@@ -797,6 +797,122 @@ export async function processIngredientRestock(addressId, ingredient, qty, staff
     return result
 }
 
+// Sửa một phiếu nhập kho tại chỗ (RPC edit_ingredient_restock)
+export async function editIngredientRestock(addressId, expenseId, opts = {}) {
+    const {
+        qty,
+        subtotal,
+        discount = 0,
+        extraCost = 0,
+        paid = null,
+        paymentMethod = 'cash',
+        purchaseDate = null,
+        cashPhase = 'post_close',
+        staffName = null
+    } = opts
+
+    const amountDue = Math.max(0, Number(subtotal) - Number(discount) + Number(extraCost))
+    const paidAmount = paid == null ? amountDue : Math.max(0, Math.min(Number(paid), amountDue))
+    const phase = cashPhase === 'in_shift' ? 'in_shift' : 'post_close'
+
+    let result
+    if (localRepo.isGuest()) {
+        const all = localRepo.fetchAllLocalExpenses(addressId)
+        const target = all.find(e => e.id === expenseId)
+        if (!target || !target.is_refill) {
+            throw new Error('Không phải phiếu nhập kho hợp lệ')
+        }
+        if (target.metadata?.cancelled) throw new Error('Phiếu đã bị hủy')
+        if (target.metadata?.adjustment) throw new Error('Không thể sửa phiếu hiệu chỉnh')
+
+        const ingredient = target.metadata?.ingredient
+        const beforeStock = Number(target.metadata?.before_stock) || 0
+        const afterStock = beforeStock + Number(qty)
+
+        // 1. Update expense local
+        localRepo.updateLocalExpense(expenseId, {
+            amount: amountDue,
+            discount_amount: discount,
+            extra_cost: extraCost,
+            payment_method: paymentMethod,
+            created_at: purchaseDate || target.created_at,
+            metadata: {
+                ...target.metadata,
+                qty: Number(qty),
+                subtotal: Number(subtotal),
+                cash_phase: phase,
+                after_stock: afterStock
+            }
+        })
+
+        // 2. Xóa & insert payments local
+        localRepo.deleteLocalExpensePaymentsByExpense(expenseId)
+        if (paidAmount > 0) {
+            await localRepo.insertLocalExpensePayment({
+                expense_id: expenseId,
+                address_id: addressId,
+                amount: paidAmount,
+                payment_method: paymentMethod,
+                staff_name: staffName,
+                paid_at: purchaseDate || target.created_at,
+                cash_phase: phase
+            })
+        }
+
+        // 3. Tính lại WAC local
+        const remaining = localRepo.fetchAllLocalExpenses(addressId)
+            .filter(e => e.is_refill && e.metadata?.ingredient === ingredient
+                && !e.metadata?.adjustment && !e.metadata?.cancelled && e.amount > 0)
+        const totalQty = remaining.reduce((s, e) => s + (Number(e.metadata?.qty) || 0), 0)
+        const totalCost = remaining.reduce((s, e) => s + (Number(e.amount) || 0), 0)
+        
+        let newUnitCost = null
+        if (totalQty > 0) {
+            newUnitCost = Math.round(totalCost / totalQty)
+            await upsertIngredientCost(ingredient, newUnitCost, addressId)
+            
+            // Cập nhật lại new_unit_cost trong metadata
+            const updatedTarget = localRepo.fetchAllLocalExpenses(addressId).find(e => e.id === expenseId)
+            if (updatedTarget) {
+                localRepo.updateLocalExpense(expenseId, {
+                    metadata: {
+                        ...updatedTarget.metadata,
+                        new_unit_cost: newUnitCost
+                    }
+                })
+            }
+        }
+
+        result = { success: true, expense_id: expenseId, amount: amountDue, paid: paidAmount, owing: amountDue - paidAmount, new_unit_cost: newUnitCost }
+    } else {
+        if (!supabase) throw new Error('No Supabase connection')
+        const params = {
+            p_address_id: addressId,
+            p_expense_id: expenseId,
+            p_qty: qty,
+            p_subtotal: subtotal,
+            p_discount: discount,
+            p_extra_cost: extraCost,
+            p_initial_payment: paidAmount,
+            p_payment_method: paymentMethod,
+            p_cash_phase: phase,
+            p_created_at: purchaseDate || new Date().toISOString(),
+            p_staff_name: staffName
+        }
+
+        let { data, error } = await supabase.rpc('edit_ingredient_restock', params)
+        if (error && (error.code === 'PGRST202' || /cash_phase/i.test(error.message || ''))) {
+            const retry = { ...params }
+            delete retry.p_cash_phase
+            ;({ data, error } = await supabase.rpc('edit_ingredient_restock', retry))
+        }
+        if (error) throw error
+        result = data
+    }
+    invalidateReportCache(addressId)
+    return result
+}
+
 // Ghi nhận 1 lần trả nợ cho invoice đã tồn tại (từ Tab Nhật ký của ingredient).
 // `paidAt` ISO string — default NOW server-side.
 // `cashPhase` 'in_shift' | 'post_close' — phân loại tiền mặt của LẦN TRẢ này

@@ -192,9 +192,9 @@ export async function fetchIngredientRestockHistory(addressId, ingredient, fromD
     // Nested select kéo luôn payments để FE tính owing & hiển thị badge mà không cần round-trip phụ.
     // Có 3 cấp fallback nếu migration 20260528 chưa deploy: bỏ payments → bỏ discount/extra columns.
     const trySelects = [
-        'id, name, amount, staff_name, metadata, created_at, discount_amount, extra_cost, expense_payments(id, amount, payment_method, staff_name, paid_at)',
-        'id, name, amount, staff_name, metadata, created_at, discount_amount, extra_cost',
-        'id, name, amount, staff_name, metadata, created_at',
+        'id, name, amount, staff_name, metadata, created_at, discount_amount, extra_cost, payment_method, expense_payments(id, amount, payment_method, staff_name, paid_at)',
+        'id, name, amount, staff_name, metadata, created_at, discount_amount, extra_cost, payment_method',
+        'id, name, amount, staff_name, metadata, created_at, payment_method',
     ]
     let data = null, error = null
     for (const sel of trySelects) {
