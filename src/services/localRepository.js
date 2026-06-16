@@ -317,10 +317,9 @@ export const fetchLocalIngredientStocks = (addressId) => {
     });
 
     return Array.from(ingredients).map(ing => {
+        const myRefills = expenses.filter(e => e.metadata?.ingredient === ing);
         // Σ refill
-        const totalRefill = expenses
-            .filter(e => e.metadata?.ingredient === ing)
-            .reduce((sum, e) => sum + (Number(e.metadata?.qty) || 0), 0);
+        const totalRefill = myRefills.reduce((sum, e) => sum + (Number(e.metadata?.qty) || 0), 0);
 
         // Σ restock
         const totalRestock = closings
@@ -329,7 +328,26 @@ export const fetchLocalIngredientStocks = (addressId) => {
                 return sum + (Number(item?.restock) || 0);
             }, 0);
 
-        const warehouse = Math.max(0, totalRefill - totalRestock);
+        // MỐC NEO: phiếu nhập/hiệu chỉnh mới nhất có after_stock = chốt số kho tuyệt đối.
+        // Kho = số neo − Σ rút sau neo (chống trôi số). Chưa có → công thức cộng dồn cũ.
+        let anchorAfter, anchorAt = -Infinity;
+        for (const e of myRefills) {
+            const after = Number(e.metadata?.after_stock);
+            const t = new Date(e.created_at).getTime();
+            if (Number.isFinite(after) && t > anchorAt) { anchorAt = t; anchorAfter = after; }
+        }
+        let warehouseRaw;
+        if (anchorAfter !== undefined) {
+            const restockSinceAnchor = closings.reduce((sum, s) => {
+                if (new Date(s.created_at).getTime() <= anchorAt) return sum;
+                const item = (s.inventory_report || []).find(i => i.ingredient === ing);
+                return sum + (Number(item?.restock) || 0);
+            }, 0);
+            warehouseRaw = anchorAfter - restockSinceAnchor;
+        } else {
+            warehouseRaw = totalRefill - totalRestock;
+        }
+        const warehouse = Math.max(0, warehouseRaw);
         const item = (latestClosing?.inventory_report || []).find(i => i.ingredient === ing);
         const counter = counterByIngredient[ing] ?? 0;
 
