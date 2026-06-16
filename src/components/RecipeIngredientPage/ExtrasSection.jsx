@@ -77,7 +77,7 @@ export default function ExtrasSection({
                         canEdit={canEdit}
                         onSaveName={(v) => extraHandlers.saveName(extra.id, v)}
                         onSavePrice={(v) => extraHandlers.savePrice(extra.id, v)}
-                        onToggleSticky={(v) => extraHandlers.toggleSticky(extra.id, !extra.is_sticky)}
+                        onToggleSticky={() => extraHandlers.toggleSticky(extra.id, !extra.is_sticky)}
                         onDelete={() => extraHandlers.deleteExtra(extra.id, extra.name)}
                         onSaveExtraAmount={(ing, v) => extraHandlers.saveExtraAmount(extra.id, ing, v)}
                         onDeleteExtraIngredient={(ing) => extraHandlers.deleteExtraIngredient(extra.id, ing)}

@@ -230,7 +230,7 @@ export default function RangeLossCard({
                             dText = `Dư ${d.diff} ${unit}`;
                             dColor = 'text-warning';
                         }
-                        const [y, m, day] = d.dayStr.split('-');
+                        const [, m, day] = d.dayStr.split('-');
                         return { ...d, dateLabel: `${day}/${m}`, dText, dColor };
                     });
 

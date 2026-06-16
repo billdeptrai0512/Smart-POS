@@ -8,11 +8,6 @@ export default function FinancialFlow({
     refillTotal = 0,
     refillNvl = 0,
     refillFreeForm = 0,
-    yesterdayActualTotal,
-    yesterdayTakeHome,
-    compareLabel = 'So với hôm qua',
-    onDailyExpenseClick,
-    onRefillClick,
     expenses = []
 }) {
     const totalExpenses = (dailyExpense || 0) + (refillFreeForm || 0) + (refillNvl || 0)

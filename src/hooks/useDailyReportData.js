@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { fetchDailyReportContext, fetchReportByDate, fetchReportByRange } from '../services/orderService'
 import { dateStringVN } from '../utils/dateVN'
 import { calcRangeWithPrev } from '../utils/rangeCalc'
+import { dedupeShiftClosingsByDay } from '../utils/reportStats'
 
 /**
  * useDailyReportData
@@ -92,16 +93,19 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
             // Range scopes (week/month/custom)
             fetchReportByRange(addressId, rangeStart.toISOString(), rangeEnd.toISOString(), prevStart.toISOString(), prevEnd.toISOString())
                 .then((data) => {
+                    // Khử trùng phiếu chốt về 1 phiếu mới nhất/ngày VN — khớp report Ngày,
+                    // tránh double-count Thực thu/hao hụt ở Tuần/Tháng (xem dedupeShiftClosingsByDay).
+                    const targetClosings = dedupeShiftClosingsByDay(data?.target_shift_closings || [])
                     setApiOrders(data?.target_orders || [])
                     setApiExpenses(data?.target_expenses || [])
                     setApiPayments(data?.target_payments || [])
-                    setApiShiftClosings(data?.target_shift_closings || [])
-                    setPrevShiftClosings(data?.prev_shift_closings || [])
+                    setApiShiftClosings(targetClosings)
+                    setPrevShiftClosings(dedupeShiftClosingsByDay(data?.prev_shift_closings || []))
                     setYesterdayOrders(data?.prev_orders || [])
                     setYesterdayExpensesData(data?.prev_expenses || [])
 
-                    if (data?.target_shift_closings?.length) {
-                        setShiftClosing(data.target_shift_closings[data.target_shift_closings.length - 1])
+                    if (targetClosings.length) {
+                        setShiftClosing(targetClosings[targetClosings.length - 1])
                     } else {
                         setShiftClosing(null)
                     }

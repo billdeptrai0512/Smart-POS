@@ -237,7 +237,11 @@ export default function DailyReportPage() {
     }, [isTodaysClosing, shiftClosing?.actual_cash, shiftClosing?.actual_transfer, shiftClosing?.inventory_report, inventory.ingredientsList])
 
     // Week/month scopes show the per-day/per-week bar chart instead of the hourly line.
+    // "Range" = khoảng NHIỀU NGÀY. Biểu đồ đường cộng dồn theo GIỜ chỉ có nghĩa cho 1
+    // ngày (dòng tiền trong ngày); week/month/custom-nhiều-ngày phải dùng biểu đồ cột.
+    // Trước đây bỏ sót custom range nhiều ngày → vẫn hiện line chart sai.
     const isRangeScope = scope === 'week' || scope === 'month'
+        || (scope === 'custom' && !isSameDayVN(rangeStart, rangeEnd))
 
     // Computed display data
     const displayOrders = isTodayScope ? todayOrders : apiOrders
@@ -988,7 +992,6 @@ export default function DailyReportPage() {
                                                 orders={displayOrders}
                                                 range={scope}
                                                 start={rangeStart}
-                                                end={rangeEnd}
                                                 products={products}
                                             />
                                         )}

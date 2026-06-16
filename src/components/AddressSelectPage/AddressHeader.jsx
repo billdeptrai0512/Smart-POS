@@ -1,6 +1,6 @@
 import { Building2, Shield, Users } from 'lucide-react'
 
-export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTab, profile, dateOnly, setError, addressCount, staffCount, managerCount }) {
+export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTab, profile, setError, addressCount, staffCount, managerCount }) {
     const showTabs = !isStaff && !isGuest;
 
     return (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateRefillTarget } from '../../utils/inventory';
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown } from '../../utils/inventory';
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients';
 import { fetchLastWeekSameDayOrderItems } from '../../services/orderService';
 import { ChevronDown } from 'lucide-react';

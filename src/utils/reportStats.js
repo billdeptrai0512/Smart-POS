@@ -1,4 +1,23 @@
 import { calculateItemCost as calculateProductCost } from './inventory'
+import { dateStringVN } from './dateVN'
+
+// Khử trùng phiếu chốt ca: mỗi ngày VN chỉ giữ phiếu MỚI NHẤT (max closed_at), khớp
+// đúng hành vi report Ngày (RPC ... ORDER BY closed_at DESC LIMIT 1). Report Tuần/Tháng
+// nhận TẤT CẢ phiếu trong kỳ; nếu 1 ngày có >1 phiếu (lưu lại nhiều lần / insert trùng do
+// 2 đường lưu tồn-kho & thực-thu) thì cộng dồn sẽ double-count actual_cash/actual_transfer
+// + hao hụt → Tuần/Tháng không khớp tổng các Ngày. Dedup tại nguồn để mọi consumer
+// (cashflow, lossValue, RangeLossCard) dùng chung 1 phiếu/ngày.
+export function dedupeShiftClosingsByDay(closings) {
+    const tsOf = (s) => new Date(s.closed_at || s.created_at).getTime()
+    const byDay = new Map()
+    for (const s of closings || []) {
+        const day = dateStringVN(new Date(s.closed_at || s.created_at))
+        const prev = byDay.get(day)
+        if (!prev || tsOf(s) > tsOf(prev)) byDay.set(day, s)
+    }
+    // Giữ thứ tự closed_at DESC như RPC trả về (consumer dựa vào [last] = ngày cũ nhất).
+    return [...byDay.values()].sort((a, b) => tsOf(b) - tsOf(a))
+}
 
 // Builds lookup maps once so per-item math stays O(1).
 export function buildExtraMaps(productExtras) {

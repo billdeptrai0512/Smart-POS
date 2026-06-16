@@ -300,20 +300,6 @@ export default function IngredientManagementPage() {
         }
     }
 
-    async function saveCategory(ingredient, newCat) {
-        setSaving(true)
-        try {
-            const cost = ingredientCosts[ingredient] || 0
-            const unit = ingredientUnits[ingredient] || 'đv'
-            await upsertIngredientCost(ingredient, cost, selectedAddress?.id, unit, { category: newCat })
-            refreshProducts?.()
-        } catch (err) {
-            showError(err, 'Lưu nhóm nguyên liệu')
-        } finally {
-            setSaving(false)
-        }
-    }
-
     async function handleDeleteIngredient(ingredient) {
         const recipeCount = recipeUsageByIngredient.get(ingredient) || 0
         const label = ingredientLabel(ingredient)

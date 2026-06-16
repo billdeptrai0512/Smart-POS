@@ -28,8 +28,8 @@ function buildWeekData(orders, start, countMap) {
     return slots
 }
 
-// Month: aggregate every order by day-of-week → 7 columns T2..CN, so each column
-// is the total of all that weekday across the month (not one bar per week).
+// Month / custom: aggregate every order by day-of-week → 7 columns T2..CN, so each
+// column is the total of all that weekday across the range (not one bar per week).
 function buildWeekdayData(orders, countMap) {
     const slots = DAY_LABELS.map(label => ({ label, cups: 0, revenue: 0 }))
     orders.forEach(o => {
@@ -53,7 +53,7 @@ const CustomTooltip = ({ active, payload, label }) => {
     )
 }
 
-export default function DayPerformanceChart({ orders, range, start, end, products }) {
+export default function DayPerformanceChart({ orders, range, start, products }) {
     const now = new Date()
 
     const countMap = useMemo(
@@ -63,10 +63,12 @@ export default function DayPerformanceChart({ orders, range, start, end, product
 
     const data = useMemo(() => {
         if (!start) return []
+        // Week: 7 cột T2..CN của đúng tuần đó (theo ngày lịch).
         if (range === 'week') return buildWeekData(orders, start, countMap)
-        if (range === 'month') return buildWeekdayData(orders, countMap)
-        return []
-    }, [orders, range, start, end, countMap])
+        // Month + custom + mọi range nhiều ngày: gộp theo THỨ trong tuần (T2..CN),
+        // luôn xếp theo thứ tự ngày trong tuần dù range dài bao nhiêu.
+        return buildWeekdayData(orders, countMap)
+    }, [orders, range, start, countMap])
 
     const maxCups = useMemo(() => Math.max(...data.map(d => d.cups), 1), [data])
 

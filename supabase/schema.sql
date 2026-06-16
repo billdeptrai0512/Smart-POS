@@ -169,6 +169,17 @@ CREATE TABLE IF NOT EXISTS shift_closings (
 CREATE INDEX IF NOT EXISTS idx_shift_closings_address_date
   ON shift_closings (address_id, closed_at DESC);
 
+-- Ngày kinh doanh VN (UTC+7 cố định) — IMMUTABLE để dùng trong unique index.
+CREATE OR REPLACE FUNCTION vn_business_date(ts TIMESTAMPTZ)
+RETURNS DATE LANGUAGE sql IMMUTABLE SET search_path = public
+AS $$ SELECT ((ts AT TIME ZONE 'UTC') + INTERVAL '7 hours')::date $$;
+REVOKE ALL ON FUNCTION vn_business_date(TIMESTAMPTZ) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION vn_business_date(TIMESTAMPTZ) TO authenticated;
+
+-- Mỗi address tối đa 1 phiếu chốt / ngày VN (chống double-count báo cáo Tuần/Tháng).
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_shift_closings_address_vn_day
+  ON shift_closings (address_id, vn_business_date(closed_at));
+
 -- =============================================
 -- Deprecated tables (commit 43af730 "new design of database product on address")
 -- =============================================

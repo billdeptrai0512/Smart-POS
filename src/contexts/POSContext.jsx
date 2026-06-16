@@ -382,7 +382,6 @@ export function POSProvider() {
         const savedCart = [...cart]
         const savedTotal = finalTotal
         const savedDiscount = discountAmount
-        const savedOrderCount = orderCount
         const prevLastOrder = lastOrder
         const countableQty = cart.reduce((sum, item) => {
             const prod = products?.find(p => p.id === item.productId)

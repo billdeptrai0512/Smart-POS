@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
-import { startOfDayVN, dateStringVN } from '../utils/dateVN'
+import { startOfDayVN, endOfDayVN, dateStringVN } from '../utils/dateVN'
 import { reportCache, historicalCache, invalidateReportCache } from './cache'
 
 // ---- Shift Closing CRUD ----
@@ -19,6 +19,30 @@ function omitCashClosedAt(data) {
     return rest
 }
 
+// Unique index uniq_shift_closings_address_vn_day (1 phiếu / address / ngày VN) chặn
+// insert trùng ở DB. PostgREST trả 23505 cho vi phạm unique.
+function isUniqueViolation(error) {
+    if (!error) return false
+    return error.code === '23505' || /duplicate key|unique constraint/i.test(error.message || '')
+}
+
+// Tìm id phiếu chốt cùng NGÀY VN với `refIso` (mặc định now) cho 1 address. Dùng để
+// tự lành khi insert đụng unique index → UPDATE phiếu đã có thay vì vỡ "Lưu".
+async function findSameDayClosingId(addressId, refIso) {
+    if (!addressId || !supabase) return null
+    const ref = refIso ? new Date(refIso) : new Date()
+    const { data } = await supabase
+        .from('shift_closings')
+        .select('id')
+        .eq('address_id', addressId)
+        .gte('closed_at', startOfDayVN(ref).toISOString())
+        .lte('closed_at', endOfDayVN(ref).toISOString())
+        .order('closed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    return data?.id || null
+}
+
 // Insert a shift closing record
 export async function insertShiftClosing(data) {
     invalidateReportCache(data?.address_id)
@@ -31,6 +55,12 @@ export async function insertShiftClosing(data) {
         .single()
     if (isMissingCashClosedAt(error) && 'cash_closed_at' in data) {
         ;({ data: row, error } = await supabase.from('shift_closings').insert(omitCashClosedAt(data)).select().single())
+    }
+    // Race/insert trùng cùng ngày → unique index chặn. Tự lành: cập nhật phiếu cùng ngày
+    // (đúng phiếu report Ngày dùng) thay vì ném lỗi làm hỏng luồng lưu báo cáo/thực thu.
+    if (isUniqueViolation(error)) {
+        const existingId = await findSameDayClosingId(data.address_id, data.closed_at)
+        if (existingId) return updateShiftClosing(existingId, data)
     }
     if (error) throw error
     return row

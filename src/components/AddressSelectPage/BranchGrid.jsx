@@ -10,9 +10,9 @@ import { formatVND } from '../../utils'
 import SubscriptionBadge from './SubscriptionBadge'
 
 export default function BranchGrid({
-    addresses, fetchError, cupsMap, revenueMap, sessionsMap, statsLoading,
+    addresses, fetchError, cupsMap, revenueMap, sessionsMap,
     isStaff, isAdmin, error, setError,
-    onSelect, onSelectReport, onSelectHistory, onSelectIngredients, onBackup, onRename, onRemove, onDefaultTemplate,
+    onSelect, onSelectReport, onSelectIngredients, onBackup, onRename, onRemove, onDefaultTemplate,
 }) {
     const [editingAddressId, setEditingAddressId] = useState(null)
     const [editName, setEditName] = useState('')

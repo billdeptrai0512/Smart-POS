@@ -7,7 +7,7 @@ import { startOfDayVN, endOfDayVN, startOfWeekVN, startOfMonthVN, endOfMonthVN, 
 
 // Display "dd/mm" using VN-local components.
 const fmt = (d) => {
-    const [y, m, day] = dateStringVN(d).split('-')
+    const [, m, day] = dateStringVN(d).split('-')
     return `${day}/${m}`
 }
 

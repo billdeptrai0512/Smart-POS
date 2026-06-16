@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { splitExpenses, aggregateOrderStats, computeCashFlowTotals } from './reportStats'
+import { splitExpenses, aggregateOrderStats, computeCashFlowTotals, dedupeShiftClosingsByDay } from './reportStats'
 
 describe('splitExpenses (thực chi model)', () => {
     it('sums non-refill expenses into dailyExpense', () => {
@@ -216,5 +216,46 @@ describe('aggregateOrderStats discount', () => {
         const { totalRevenue, totalDiscount } = aggregateOrderStats({ orders, ...base })
         expect(totalRevenue).toBe(16000)
         expect(totalDiscount).toBe(2000)
+    })
+})
+
+describe('dedupeShiftClosingsByDay (1 phiếu mới nhất/ngày VN)', () => {
+    it('giữ phiếu mới nhất khi 1 ngày có nhiều phiếu (case 2026-04-18 thật, 4 phiếu)', () => {
+        // closed_at theo UTC; tất cả rơi vào cùng ngày VN 2026-04-18.
+        const closings = [
+            { id: 'a', closed_at: '2026-04-18T10:08:33Z', actual_cash: 750000, actual_transfer: 333000 },
+            { id: 'b', closed_at: '2026-04-18T10:08:20Z', actual_cash: 0, actual_transfer: 200000 },
+            { id: 'c', closed_at: '2026-04-18T10:08:02Z', actual_cash: 600000, actual_transfer: 100000 },
+            { id: 'd', closed_at: '2026-04-18T02:11:42Z', actual_cash: 133000, actual_transfer: 45000 },
+        ]
+        const out = dedupeShiftClosingsByDay(closings)
+        expect(out).toHaveLength(1)
+        expect(out[0].id).toBe('a') // max closed_at
+        const cash = out.reduce((s, c) => s + c.actual_cash, 0)
+        expect(cash).toBe(750000) // không còn cộng dồn 4 phiếu (1.483.000)
+    })
+
+    it('giữ nguyên khi mỗi ngày chỉ 1 phiếu, sắp theo closed_at DESC', () => {
+        const closings = [
+            { id: 'x', closed_at: '2026-06-10T03:00:00Z', actual_cash: 100 },
+            { id: 'y', closed_at: '2026-06-11T03:00:00Z', actual_cash: 200 },
+        ]
+        const out = dedupeShiftClosingsByDay(closings)
+        expect(out.map(c => c.id)).toEqual(['y', 'x'])
+    })
+
+    it('an toàn với mảng rỗng / null', () => {
+        expect(dedupeShiftClosingsByDay([])).toEqual([])
+        expect(dedupeShiftClosingsByDay(null)).toEqual([])
+    })
+
+    it('dùng created_at khi thiếu closed_at', () => {
+        const closings = [
+            { id: 'p', created_at: '2026-05-01T04:00:00Z', actual_cash: 10 },
+            { id: 'q', created_at: '2026-05-01T05:00:00Z', actual_cash: 20 },
+        ]
+        const out = dedupeShiftClosingsByDay(closings)
+        expect(out).toHaveLength(1)
+        expect(out[0].id).toBe('q')
     })
 })

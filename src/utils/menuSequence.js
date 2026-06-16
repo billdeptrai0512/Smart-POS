@@ -53,7 +53,7 @@ export const menuPrev = (key) => menuStep(key, -1)
 //                       date window survives the Báo cáo → Thu nhập/Chi phí jump
 export function goToMenuStep(currentKey, dir, ctx) {
     const target = menuStep(currentKey, dir)
-    const { navigate, backTo, setActiveTab, setViewMode, goReport, scopeState, wizard } = ctx
+    const { navigate, backTo, setActiveTab, setViewMode, scopeState, wizard } = ctx
 
     // If not in wizard mode and going back, return directly to the entry point (backTo).
     if (dir === -1 && !wizard) {
