@@ -13,6 +13,10 @@ const capFirst = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
 const paymentPhase = (p) => ((p.cash_phase || p.invoice_metadata?.cash_phase) === 'in_shift' ? 'in_shift' : 'post_close')
 // Phase của 1 NHÓM payment gộp: cả 2 loại → 'mixed'.
 const groupPhase = (hasIn, hasPost) => (hasIn && hasPost ? 'mixed' : hasIn ? 'in_shift' : 'post_close')
+// Phương thức trả của 1 dòng: chỉ phân biệt CK với phần còn lại (tiền mặt).
+const methodOf = (x) => (x?.payment_method === 'transfer' ? 'transfer' : 'cash')
+// Method của 1 NHÓM gộp: lẫn cả hai → 'mixed'.
+const groupMethod = (hasCash, hasTransfer) => (hasCash && hasTransfer ? 'mixed' : hasTransfer ? 'transfer' : 'cash')
 // "DD/MM" theo timestamp — dòng món trong panel Thực chi mở đầu bằng ngày.
 const dayMonth = (ts) => {
     if (!ts) return ''
@@ -101,12 +105,13 @@ export default function CashFlowCard({
                 return `${name} · ${d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`
             })()
             let g = byName.get(display)
-            if (!g) { g = { name: display, amount: 0, count: 0, key: p.id, hasIn: false, hasPost: false }; byName.set(display, g) }
+            if (!g) { g = { name: display, amount: 0, count: 0, key: p.id, hasIn: false, hasPost: false, hasCash: false, hasTransfer: false }; byName.set(display, g) }
             g.amount += p.amount || 0
             g.count += 1
             if (paymentPhase(p) === 'in_shift') g.hasIn = true; else g.hasPost = true
+            if (methodOf(p) === 'transfer') g.hasTransfer = true; else g.hasCash = true
         }
-        return [...byName.values()].map(g => ({ ...g, phase: groupPhase(g.hasIn, g.hasPost) }))
+        return [...byName.values()].map(g => ({ ...g, phase: groupPhase(g.hasIn, g.hasPost), method: groupMethod(g.hasCash, g.hasTransfer) }))
     }
     const purchaseToday = []
     const debtRepayments = []
@@ -125,13 +130,14 @@ export default function CashFlowCard({
             const ing = p.invoice_metadata?.ingredient
             const name = ing ? ingredientLabel(ing) : (p.invoice_name || 'Trả NCC')
             let g = byName.get(name)
-            if (!g) { g = { name, key: p.id, amount: 0, count: 0, hasIn: false, hasPost: false }; byName.set(name, g) }
+            if (!g) { g = { name, key: p.id, amount: 0, count: 0, hasIn: false, hasPost: false, hasCash: false, hasTransfer: false }; byName.set(name, g) }
             g.amount += p.amount || 0
             g.count += 1
             if (paymentPhase(p) === 'in_shift') g.hasIn = true; else g.hasPost = true
+            if (methodOf(p) === 'transfer') g.hasTransfer = true; else g.hasCash = true
         }
         return [...byName.values()]
-            .map(g => ({ ...g, phase: groupPhase(g.hasIn, g.hasPost) }))
+            .map(g => ({ ...g, phase: groupPhase(g.hasIn, g.hasPost), method: groupMethod(g.hasCash, g.hasTransfer) }))
             .sort((a, b) => b.amount - a.amount)
     }
     // ── Phân chi phí non-refill theo group_section của nhãn (legacy/null → Vận hành).
@@ -186,7 +192,7 @@ export default function CashFlowCard({
         const b = ensureBlock(cat.key === 'packaging' ? 'Mua bao bì' : 'Mua nguyên liệu', cat.key === 'packaging' ? 20 : 10)
         for (const r of groupByIngredient(pays)) {
             b.total += r.amount; b.count += r.count
-            b.children.push({ key: r.key, name: r.name, amount: r.amount, count: r.count, phase: r.phase })
+            b.children.push({ key: r.key, name: r.name, amount: r.amount, count: r.count, phase: r.phase, method: r.method })
         }
     }
     for (const { e, phase } of tagged.inventory) {
@@ -194,7 +200,7 @@ export default function CashFlowCard({
         const label = cat?.name || 'Mua nguyên liệu'
         const b = ensureBlock(label, cat?.sort_order ?? 100)
         b.total += e.amount || 0; b.count += 1
-        b.children.push({ key: e.id, date: dayMonth(e.created_at), name: capFirst(e.name || label), amount: e.amount, phase: phase === 'inShift' ? 'in_shift' : 'post_close' })
+        b.children.push({ key: e.id, date: dayMonth(e.created_at), name: capFirst(e.name || label), amount: e.amount, phase: phase === 'inShift' ? 'in_shift' : 'post_close', method: methodOf(e) })
     }
     const inventoryBlocks = [...invBlocks.values()].sort((a, b) => a.sortKey - b.sortKey || a.label.localeCompare(b.label, 'vi'))
     // Trả nợ cũ giữ nhóm theo hoá đơn (tên · ngày hoá đơn gốc).
@@ -204,7 +210,7 @@ export default function CashFlowCard({
             label: 'Trả nợ cũ',
             total: debtRepayments.reduce((s, p) => s + (p.amount || 0), 0),
             count: debtRepayments.length,
-            children: debtRows.map(r => ({ key: r.key, name: r.name, amount: r.amount, count: r.count, phase: r.phase })),
+            children: debtRows.map(r => ({ key: r.key, name: r.name, amount: r.amount, count: r.count, phase: r.phase, method: r.method })),
         })
     }
     const inventoryTotal = inventoryBlocks.reduce((s, b) => s + b.total, 0)
@@ -402,10 +408,10 @@ function ExpenseSection({ title, total, keyPrefix, groups, expandedCats, toggleC
                     <CollapseGroup key={k} expanded={!!expandedCats[k]} onToggle={() => toggleCat(k)}
                         label={g.label} count={g.inShift.length + g.postClose.length} total={g.total}>
                         {g.inShift.map((e) => (
-                            <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="in_shift" />
+                            <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="in_shift" method={e.payment_method} />
                         ))}
                         {g.postClose.map((e) => (
-                            <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="post_close" />
+                            <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="post_close" method={e.payment_method} />
                         ))}
                     </CollapseGroup>
                 )
@@ -428,7 +434,7 @@ function BlockSection({ title, total, keyPrefix, blocks, expandedCats, toggleCat
                     <CollapseGroup key={k} expanded={!!expandedCats[k]} onToggle={() => toggleCat(k)}
                         label={b.label} count={b.count} total={b.total}>
                         {b.children.map((c) => (
-                            <ItemRow key={c.key} date={c.date} name={c.name} amount={c.amount} count={c.count} phase={c.phase} />
+                            <ItemRow key={c.key} date={c.date} name={c.name} amount={c.amount} count={c.count} phase={c.phase} method={c.method} />
                         ))}
                     </CollapseGroup>
                 )
@@ -475,13 +481,30 @@ function PhaseDot({ phase }) {
     )
 }
 
+// Nhãn TM/CK đánh dấu phương thức trả của 1 dòng/nhóm chi phí. CK (chuyển khoản) tô
+// đậm hơn vì là khoản trừ vào "Thực nhận chuyển khoản" — manager hay đối soát thiếu.
+// 'mixed' = nhóm gồm cả 2 → "TM/CK". TM mặc định, mờ, để CK nổi lên.
+function MethodTag({ method }) {
+    const m = method === 'transfer' ? 'transfer' : method === 'mixed' ? 'mixed' : 'cash'
+    const label = m === 'transfer' ? 'CK' : m === 'mixed' ? 'TM/CK' : 'TM'
+    const cls = m === 'cash'
+        ? 'text-text-dim border-border/50'
+        : 'text-text border-border bg-surface-light'
+    return (
+        <span className={`shrink-0 text-[8px] font-black leading-none px-1 py-[2px] rounded border ${cls}`}>
+            {label}
+        </span>
+    )
+}
+
 // Dòng món bên trong nhóm đã mở — cấp nhỏ nhất, thụt vào + nhạt hơn hàng nhãn.
-// Thứ tự `● ngày · tên`; chấm đứng riêng (bấm xem phase), tên truncate độc lập.
-function ItemRow({ date, name, amount, count, phase = 'in_shift' }) {
+// Thứ tự `● [TM|CK] ngày · tên`; chấm + nhãn method đứng riêng, tên truncate độc lập.
+function ItemRow({ date, name, amount, count, phase = 'in_shift', method = 'cash' }) {
     return (
         <div className="flex justify-between items-center gap-2 pl-4">
             <span className="flex items-center gap-1.5 min-w-0">
                 <PhaseDot phase={phase} />
+                <MethodTag method={method} />
                 <span className="text-[11px] font-medium text-text-secondary/90 min-w-0 truncate">
                     {date && <span className="text-text-dim tabular-nums">{date} · </span>}
                     {name}
