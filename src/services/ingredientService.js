@@ -321,9 +321,12 @@ export async function fetchIngredientStocks(addressId) {
         })
     })
 
-    // First refill timestamp + total refill per ingredient
+    // First refill timestamp + total refill per ingredient. Đồng thời lấy MỐC NEO =
+    // phiếu nhập/hiệu chỉnh MỚI NHẤT có `after_stock` (chốt số kho tuyệt đối).
     const totalRefill = {}
     const firstRefillAt = {}
+    const anchorAfter = {}   // after_stock của phiếu neo gần nhất
+    const anchorAt = {}      // thời điểm phiếu neo gần nhất
     ;(refillsRes.data || []).forEach(e => {
         const ing = e.metadata?.ingredient
         if (!ing) return
@@ -332,12 +335,20 @@ export async function fetchIngredientStocks(addressId) {
         if (firstRefillAt[ing] === undefined || t < firstRefillAt[ing]) {
             firstRefillAt[ing] = t
         }
+        const after = Number(e.metadata?.after_stock)
+        if (Number.isFinite(after) && (anchorAt[ing] === undefined || t > anchorAt[ing])) {
+            anchorAt[ing] = t
+            anchorAfter[ing] = after
+        }
     })
 
     // Fallback step 2: shift_closings bounded by earliest first_refill_at.
     // Older closings can't contribute restock (JS aggregator filters them out anyway),
     // so we skip fetching them entirely. Skip the query if no refills exist yet.
+    // totalRestock = Σ sau lần refill đầu (công thức cũ, dùng khi không có mốc neo).
+    // restockSinceAnchor = Σ restock sau MỐC NEO (dùng cho công thức neo).
     const totalRestock = {}
+    const restockSinceAnchor = {}
     const refillTimes = Object.values(firstRefillAt)
     if (refillTimes.length > 0) {
         const earliestRefillISO = new Date(Math.min(...refillTimes)).toISOString()
@@ -355,7 +366,11 @@ export async function fetchIngredientStocks(addressId) {
                 if (!ing) return
                 const refillStart = firstRefillAt[ing]
                 if (refillStart === undefined || closingTime < refillStart) return
-                totalRestock[ing] = (totalRestock[ing] || 0) + (Number(item.restock) || 0)
+                const r = Number(item.restock) || 0
+                totalRestock[ing] = (totalRestock[ing] || 0) + r
+                if (anchorAt[ing] !== undefined && closingTime > anchorAt[ing]) {
+                    restockSinceAnchor[ing] = (restockSinceAnchor[ing] || 0) + r
+                }
             })
         })
     }
@@ -366,7 +381,11 @@ export async function fetchIngredientStocks(addressId) {
         ...Object.keys(totalRefill)
     ])
     return Array.from(keys).map(ingredient => {
-        const warehouseRaw = (totalRefill[ingredient] || 0) - (totalRestock[ingredient] || 0)
+        // Có mốc neo (after_stock) → kho = số neo − rút sau neo (chống trôi số do
+        // kho âm/hiệu chỉnh tích lũy). Không có (phiếu cũ) → công thức cộng dồn cũ.
+        const warehouseRaw = anchorAfter[ingredient] !== undefined
+            ? anchorAfter[ingredient] - (restockSinceAnchor[ingredient] || 0)
+            : (totalRefill[ingredient] || 0) - (totalRestock[ingredient] || 0)
         const warehouse = Math.max(0, warehouseRaw)
         const counterStock = counter[ingredient] || 0
         return {
@@ -442,6 +461,12 @@ export async function fetchIngredientDailyContext(addressId) {
 // — cùng quy tắc với fetchIngredientStocks: rút TRƯỚC lần nhập kho đầu tiên không
 // trừ kho (snapshot để null). Vì vậy phải fetch full-history thay vì chỉ cửa sổ tháng.
 //
+// NEO theo snapshot (chống trôi số): mỗi phiếu nhập/hiệu chỉnh có `after_stock` lưu
+// sẵn = "chốt số kho" tại thời điểm đó. Replay RESET kho về after_stock thay vì cộng
+// dồn qty → một lần kiểm kê/sửa kho đóng vai trò mốc tuyệt đối, không bị cộng đôi và
+// không tích lũy sai số do kho âm/hiệu chỉnh trước đó. Phiếu cũ (trước migration
+// 20260529, after_stock null) vẫn cộng dồn qty như cũ.
+//
 // staff_name = người TẠO phiếu chốt ca (closed_by) — phiếu được người khác sửa
 // sau đó thì không có dấu vết, đành chịu (DB không ghi ai update).
 // Trả về [{ id, created_at, qty, before_stock, after_stock, staff_name }] DESC.
@@ -450,10 +475,13 @@ export async function fetchIngredientWithdrawals(addressId, ingredient, fromDate
         const events = []
         for (const e of refills || []) {
             if (e.metadata?.ingredient !== ingredient) continue
+            const after = Number(e.metadata?.after_stock)
             events.push({
                 t: new Date(e.created_at).getTime(),
                 kind: 'refill',
                 qty: Number(e.metadata?.qty) || 0,
+                // Có snapshot → mốc neo tuyệt đối; null (phiếu cũ) → cộng dồn qty.
+                anchor: Number.isFinite(after) ? after : null,
             })
         }
         for (const c of closings || []) {
@@ -481,7 +509,9 @@ export async function fetchIngredientWithdrawals(addressId, ingredient, fromDate
         let started = false
         for (const ev of events) {
             if (ev.kind === 'refill') {
-                warehouse += ev.qty
+                // Snapshot có sẵn → neo kho về after_stock (chốt số). Không có → cộng dồn.
+                if (ev.anchor != null) warehouse = ev.anchor
+                else warehouse += ev.qty
                 started = true
                 continue
             }
