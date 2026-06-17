@@ -335,6 +335,8 @@ export async function fetchIngredientStocks(addressId) {
         if (firstRefillAt[ing] === undefined || t < firstRefillAt[ing]) {
             firstRefillAt[ing] = t
         }
+        // FIX: bỏ qua phiếu đã cancelled khi tìm mốc neo (khớp với anchor_cte RPC)
+        if (e.metadata?.cancelled) return
         const after = Number(e.metadata?.after_stock)
         if (Number.isFinite(after) && (anchorAt[ing] === undefined || t > anchorAt[ing])) {
             anchorAt[ing] = t
@@ -475,6 +477,8 @@ export async function fetchIngredientWithdrawals(addressId, ingredient, fromDate
         const events = []
         for (const e of refills || []) {
             if (e.metadata?.ingredient !== ingredient) continue
+            // FIX: bỏ qua phiếu cancelled — snapshot "chết" không nên tham gia replay
+            if (e.metadata?.cancelled) continue
             const after = Number(e.metadata?.after_stock)
             events.push({
                 t: new Date(e.created_at).getTime(),
@@ -761,6 +765,27 @@ export async function processIngredientRestock(addressId, ingredient, qty, staff
                 paid_at: purchaseDate || new Date().toISOString(),
             })
         }
+        // FIX: Cascade after_stock khi backdate — cộng qty vào before/after_stock
+        // của phiếu refill SAU phiếu vừa tạo (cùng ingredient, chưa cancelled).
+        if (purchaseDate && invoice?.id) {
+            const invoiceCreatedAt = new Date(purchaseDate).getTime()
+            const allAfter = localRepo.fetchAllLocalExpenses(addressId)
+                .filter(e => e.is_refill && e.metadata?.ingredient === ingredient
+                    && !e.metadata?.cancelled && e.metadata?.after_stock != null
+                    && e.id !== invoice.id
+                    && new Date(e.created_at).getTime() > invoiceCreatedAt)
+            for (const e of allAfter) {
+                const oldBefore = Number(e.metadata?.before_stock) || 0
+                const oldAfter = Number(e.metadata?.after_stock) || 0
+                localRepo.updateLocalExpense(e.id, {
+                    metadata: {
+                        ...e.metadata,
+                        before_stock: roundStock(oldBefore + Number(qty)),
+                        after_stock: roundStock(oldAfter + Number(qty)),
+                    },
+                })
+            }
+        }
         result = { success: true, expense_id: invoice?.id, amount: amountDue, paid: paidAmount, owing: amountDue - paidAmount }
     } else {
         if (!supabase) throw new Error('No Supabase connection')
@@ -858,6 +883,7 @@ export async function editIngredientRestock(addressId, expenseId, opts = {}) {
         const ingredient = target.metadata?.ingredient
         const beforeStock = Number(target.metadata?.before_stock) || 0
         const afterStock = beforeStock + Number(qty)
+        const qtyDelta = Number(qty) - (Number(target.metadata?.qty) || 0)
 
         // 1. Update expense local
         localRepo.updateLocalExpense(expenseId, {
@@ -874,6 +900,27 @@ export async function editIngredientRestock(addressId, expenseId, opts = {}) {
                 after_stock: afterStock
             }
         })
+
+        // Cascade delta to subsequent refills
+        if (qtyDelta !== 0) {
+            const targetCreatedAt = new Date(purchaseDate || target.created_at).getTime()
+            const allAfter = localRepo.fetchAllLocalExpenses(addressId)
+                .filter(e => e.is_refill && e.metadata?.ingredient === ingredient
+                    && !e.metadata?.cancelled && e.metadata?.after_stock != null
+                    && e.id !== expenseId
+                    && new Date(e.created_at).getTime() > targetCreatedAt)
+            for (const e of allAfter) {
+                const oldBefore = Number(e.metadata?.before_stock) || 0
+                const oldAfter = Number(e.metadata?.after_stock) || 0
+                localRepo.updateLocalExpense(e.id, {
+                    metadata: {
+                        ...e.metadata,
+                        before_stock: roundStock(oldBefore + qtyDelta),
+                        after_stock: roundStock(oldAfter + qtyDelta),
+                    },
+                })
+            }
+        }
 
         // 2. Xóa & insert payments local
         localRepo.deleteLocalExpensePaymentsByExpense(expenseId)
@@ -999,10 +1046,12 @@ export async function cancelRestock(addressId, expenseId, staffName = null) {
         const cancelledAmount = Number(target.amount) || 0
         const wasAdjustment = !!target.metadata?.adjustment
         // 1. Zero-out tại chỗ + cờ cancelled (giữ dòng trong nhật ký). Số gốc cất trong metadata.
+        //    FIX: xóa after_stock/before_stock để anchor không đọc neo "chết".
+        const { after_stock: _as, before_stock: _bs, ...metaWithoutSnapshot } = target.metadata || {}
         localRepo.updateLocalExpense(expenseId, {
             amount: 0,
             metadata: {
-                ...target.metadata,
+                ...metaWithoutSnapshot,
                 qty: 0,
                 cancelled: true,
                 cancelled_at: new Date().toISOString(),
@@ -1011,6 +1060,26 @@ export async function cancelRestock(addressId, expenseId, staffName = null) {
                 cancelled_amount: cancelledAmount,
             },
         })
+        // FIX: Cascade trừ qty khỏi before_stock/after_stock của phiếu refill SAU phiếu bị hủy.
+        if (cancelledQty !== 0) {
+            const targetCreatedAt = new Date(target.created_at).getTime()
+            const allAfter = localRepo.fetchAllLocalExpenses(addressId)
+                .filter(e => e.is_refill && e.metadata?.ingredient === ingredient
+                    && !e.metadata?.cancelled && e.metadata?.after_stock != null
+                    && e.id !== expenseId
+                    && new Date(e.created_at).getTime() > targetCreatedAt)
+            for (const e of allAfter) {
+                const oldBefore = Number(e.metadata?.before_stock) || 0
+                const oldAfter = Number(e.metadata?.after_stock) || 0
+                localRepo.updateLocalExpense(e.id, {
+                    metadata: {
+                        ...e.metadata,
+                        before_stock: roundStock(oldBefore - cancelledQty),
+                        after_stock: roundStock(oldAfter - cancelledQty),
+                    },
+                })
+            }
+        }
         // 2. Xóa payments của phiếu (đảo cash-out).
         localRepo.deleteLocalExpensePaymentsByExpense(expenseId)
         // 3. Tính lại WAC từ các phiếu mua thật còn lại (loại adjustment + cancelled + amount 0).

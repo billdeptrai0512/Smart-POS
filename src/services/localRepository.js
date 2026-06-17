@@ -332,6 +332,7 @@ export const fetchLocalIngredientStocks = (addressId) => {
         // Kho = số neo − Σ rút sau neo (chống trôi số). Chưa có → công thức cộng dồn cũ.
         let anchorAfter, anchorAt = -Infinity;
         for (const e of myRefills) {
+            if (e.metadata?.cancelled) continue;
             const after = Number(e.metadata?.after_stock);
             const t = new Date(e.created_at).getTime();
             if (Number.isFinite(after) && t > anchorAt) { anchorAt = t; anchorAfter = after; }
