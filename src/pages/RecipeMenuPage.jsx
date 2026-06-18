@@ -28,7 +28,7 @@ export default function RecipeMenuPage() {
     const { selectedAddress } = useAddress()
     const { isManager, isAdmin } = useAuth()
     const canEdit = isManager || isAdmin
-    const { toast, showError } = useToast()
+    const { toast, showToast, showError } = useToast()
 
     const [newProductName, setNewProductName] = useState('')
     const [newProductPrice, setNewProductPrice] = useState('')
@@ -88,6 +88,7 @@ export default function RecipeMenuPage() {
             setNewProductName('')
             setNewProductPrice('')
             setShowCreateModal(false)
+            showToast('Đã tạo món mới', 'success')
         } catch (err) {
             showError(err, 'Tạo món mới')
         } finally {

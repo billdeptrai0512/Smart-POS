@@ -1196,6 +1196,7 @@ export default function DailyReportPage() {
                                 ...snapshot,
                             })
                             await Promise.all([inventory.reloadStocks?.(), inventory.reloadIngredients?.(), refreshProducts?.(), refreshTodayExpenses?.()])
+                            showToast('Đã nhập kho', 'success')
                             return result
                         }}
                     />

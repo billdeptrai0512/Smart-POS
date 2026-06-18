@@ -37,7 +37,7 @@ export default function IngredientDetailPage() {
     const { isManager, isAdmin, profile } = useAuth()
     const { refreshTodayExpenses } = usePOS()
     const canEdit = isManager || isAdmin
-    const { toast, showError } = useToast()
+    const { toast, showToast, showError } = useToast()
 
     const [viewMode, setViewMode] = useState('details')
     const [history, setHistory] = useState([])
@@ -310,6 +310,7 @@ export default function IngredientDetailPage() {
             )
             await Promise.all([reloadHistory(), refreshTodayExpenses?.()])
             setPaymentInvoice(null)
+            showToast('Đã ghi nhận thanh toán', 'success')
         } catch (err) { showError(err, 'Ghi nhận thanh toán') }
         finally { setSaving(false) }
     }
@@ -332,6 +333,7 @@ export default function IngredientDetailPage() {
         try {
             await cancelRestock(selectedAddress?.id, entry.id, profile?.name)
             await Promise.all([reloadHistory(), reloadStock(), refreshProducts?.(), refreshTodayExpenses?.()])
+            showToast(isAdjust ? 'Đã hủy hiệu chỉnh tồn' : 'Đã hủy phiếu nhập kho', 'success')
         } catch (err) { showError(err, isAdjust ? 'Hủy hiệu chỉnh tồn' : 'Hủy phiếu nhập kho') }
         finally { setSaving(false) }
     }
@@ -405,6 +407,7 @@ export default function IngredientDetailPage() {
                 staffName: profile?.name,
             })
             await Promise.all([reloadHistory(), reloadStock(), refreshProducts?.(), refreshTodayExpenses?.()])
+            showToast('Đã sửa phiếu nhập kho', 'success')
         } catch (err) {
             setHistory(originalHistory)
             setStockData(originalStockData)

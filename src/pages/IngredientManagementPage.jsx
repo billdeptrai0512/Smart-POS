@@ -46,7 +46,7 @@ export default function IngredientManagementPage() {
     const { selectedAddress, updateSortOrder } = useAddress()
     const { isManager, isAdmin, profile } = useAuth()
     const { refreshTodayExpenses } = usePOS()
-    const { toast, showError } = useToast()
+    const { toast, showToast, showError } = useToast()
     const canEdit = isManager || isAdmin
 
     const [ingredientCosts, setIngredientCosts] = useState(contextCosts || {})
@@ -293,6 +293,7 @@ export default function IngredientManagementPage() {
             refreshProducts?.()
             setNewName(''); setNewUnit(''); setNewCost(''); setNewCategory(null)
             setShowCreateModal(false)
+            showToast('Đã tạo nguyên liệu', 'success')
         } catch (err) {
             showError(err, 'Tạo nguyên liệu mới')
         } finally {
@@ -312,6 +313,7 @@ export default function IngredientManagementPage() {
             await deleteIngredientCost(ingredient, selectedAddress?.id)
             setIngredientCosts(prev => { const next = { ...prev }; delete next[ingredient]; return next })
             setIngredientUnits(prev => { const next = { ...prev }; delete next[ingredient]; return next })
+            showToast('Đã xóa nguyên liệu', 'success')
         } catch (err) {
             showError(err, 'Xóa nguyên liệu')
         } finally {
@@ -523,6 +525,7 @@ export default function IngredientManagementPage() {
                             ...snapshot,
                         })
                         await Promise.all([loadStocks(), refreshProducts?.(), refreshTodayExpenses?.()])
+                        showToast('Đã nhập kho', 'success')
                         return result
                     }}
                 />
