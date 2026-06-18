@@ -857,8 +857,13 @@ export default function DailyReportPage() {
     // Ref tới bản handleSaveInventory mới nhất để timer auto-lưu gọi đúng state hiện tại.
     handleSaveInvRef.current = handleSaveInventory
 
+    // isSavingShift (cờ của hook) chỉ true trong lúc GHI, nhả ngay khi save() xong — nhưng
+    // nút chỉ ẩn khi cashDirty=false, mà cashDirty phụ thuộc shiftClosing chỉ cập nhật SAU
+    // refetch. Cờ riêng này giữ nút disabled suốt cả refetch → không có khe double-click.
+    const [savingCashflow, setSavingCashflow] = useState(false)
     const handleSaveCashflow = async () => {
-        if (!selectedAddress?.id) return
+        if (!selectedAddress?.id || savingCashflow) return
+        setSavingCashflow(true)
         const payload = {
             address_id: selectedAddress.id,
             closed_by: profile?.id || null,
@@ -891,6 +896,8 @@ export default function DailyReportPage() {
             setShiftClosing(fresh?.shift_closing || saved)
         } catch (err) {
             showError(err, 'Lưu thực thu')
+        } finally {
+            setSavingCashflow(false)
         }
     }
 
@@ -1152,10 +1159,10 @@ export default function DailyReportPage() {
                             {(view === VIEW_ALL || view === VIEW_CASHFLOW) && cashDirty && (
                                 <button
                                     onClick={handleSaveCashflow}
-                                    disabled={isSavingShift}
+                                    disabled={isSavingShift || savingCashflow}
                                     className="bg-primary text-black rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider hover:bg-primary/90 active:scale-95 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
-                                    {isSavingShift ? 'Đang lưu...' : 'Lưu thực thu'}
+                                    {(isSavingShift || savingCashflow) ? 'Đang lưu...' : 'Lưu thực thu'}
                                 </button>
                             )}
                             {(view === VIEW_ALL || view === VIEW_INVENTORY) && inventory.isDirty && !autoSavePending && (
