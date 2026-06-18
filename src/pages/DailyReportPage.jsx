@@ -60,6 +60,9 @@ export default function DailyReportPage() {
     const initialView = [VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY].includes(location.state?.initialView)
         ? location.state.initialView : VIEW_CASHFLOW
     const [view, setView] = useState(initialView)
+    // Mỗi view là 1 "trang" riêng → đổi view thì cuộn lại đầu (cùng 1 <main> nên scroll bị dính).
+    const mainRef = useRef(null)
+    useEffect(() => { mainRef.current?.scrollTo(0, 0) }, [view])
     const [selectedProductId, setSelectedProductId] = useState('all')
     const { selectedAddress } = useAddress()
     const initialDate = location.state?.initialDate || null
@@ -937,7 +940,7 @@ export default function DailyReportPage() {
                 onPresetSelect={applyPreset}
             />
 
-            <main className="flex-1 overflow-y-auto px-4 py-6 pb-6 space-y-4 bg-bg">
+            <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-6 pb-6 space-y-4 bg-bg">
                 {!isReady ? (
                     <div className="flex flex-col gap-4 animate-pulse">
                         <div className="grid grid-cols-2 gap-3">
