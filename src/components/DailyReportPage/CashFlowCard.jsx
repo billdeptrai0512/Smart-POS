@@ -279,7 +279,7 @@ export default function CashFlowCard({
                 <div className="w-full h-[1px] bg-border/60 rounded-full my-3" />
                 <div className="flex justify-between items-center mt-1 pl-1">
                     <span className="text-[13px] font-black text-text uppercase tracking-wide">Tổng thực thu</span>
-                    <span className="text-[13px] font-black text-success tabular-nums">
+                    <span className="text-[14px] font-black text-success tabular-nums">
                         {formatVND(actualTotal)}
                     </span>
                 </div>
@@ -352,7 +352,7 @@ export default function CashFlowCard({
 
                 <div className="flex justify-between items-center mt-1 pl-1">
                     <span className="text-[13px] font-black text-text uppercase tracking-wide">Tổng thực nhận</span>
-                    <span className={`text-[16px] font-black tabular-nums ${takeHome < 0 ? 'text-danger' : 'text-success'}`}>
+                    <span className={`text-[14px] font-black tabular-nums ${takeHome < 0 ? 'text-danger' : 'text-success'}`}>
                         {formatVND(takeHome)}
                     </span>
                 </div>

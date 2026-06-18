@@ -130,6 +130,21 @@ describe('buildCategoryBreakdown', () => {
         })
     })
 
+    it('gắn entries từng khoản vào row (gồm orphan rớt về "Chi phí khác")', () => {
+        const expenses = [
+            { id: 'a', name: 'Sửa wifi', amount: 30, category_id: 'op-other', created_at: '2026-06-01' },
+            { id: 'b', name: 'Linh tinh', amount: 10, category_id: null },          // orphan → op-other
+            { id: 'c', name: 'Lương', amount: 50, category_id: 'op-salary' },
+        ]
+        const { operatingRows } = buildCategoryBreakdown({ expenses, expenseCategories: cats })
+        const other = operatingRows.find(r => r.id === 'op-other')
+        expect(other.amount).toBe(40)
+        expect(other.entries.map(e => e.id).sort()).toEqual(['a', 'b'])
+        expect(other.entries.reduce((s, e) => s + e.amount, 0)).toBe(other.amount)
+        // nhãn rỗng → entries rỗng (không undefined)
+        expect(operatingRows.find(r => r.id === 'op-rent').entries).toEqual([])
+    })
+
     it('counts legacy is_fixed=true expenses (auto-injected from old templates)', () => {
         const expenses = [
             { id: '1', amount: 100, category_id: 'op-rent', is_fixed: true },

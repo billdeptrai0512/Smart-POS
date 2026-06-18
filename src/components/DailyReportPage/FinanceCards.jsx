@@ -1,6 +1,21 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { formatVND } from '../../utils'
 import { buildCategoryBreakdown } from '../../utils/expenseCategoryBreakdown'
+
+const capFirst = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
+const dayMonth = (ts) => {
+    if (!ts) return ''
+    const d = new Date(ts)
+    return isNaN(d) ? '' : d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
+}
+
+// "Chi phí khác" gom nhiều khoản lẻ → 1 dòng tổng đục. Cho bấm xổ ra từng khoản như
+// báo cáo dòng tiền (nhưng KHÔNG phân biệt TM/CK). Dòng nhãn khác giữ LineItem phẳng.
+function renderRow(r) {
+    return r.name === 'Chi phí khác' && r.entries.length > 0
+        ? <ExpandableLineItem key={r.id} label={r.name} amount={r.amount} entries={r.entries} />
+        : <LineItem key={r.id} label={`· ${r.name}`} amount={r.amount} />
+}
 
 // Hàng so sánh hôm qua tạm tắt — giữ prop + markup cho tương lai. Cờ có tên thay
 // literal `false` để khỏi vướng lint no-constant-binary-expression.
@@ -85,10 +100,8 @@ export default function FinanceCards({
 
             {/* 3b. CHI PHÍ TỒN KHO — vật tư mua không kiểm kê (chỉ hiện khi có chi). */}
             {inventoryTotal > 0 && (
-                <SimpleCard title="Chi phí tồn kho" totalLabel="Tổng chi phí tồn kho" totalAmount={inventoryTotal} totalTone="danger">
-                    {inventoryRows.map(r => (
-                        <LineItem key={r.id} label={`· ${r.name}`} amount={r.amount} />
-                    ))}
+                <SimpleCard title="Chi phí tồn kho" totalLabel="Tổng cộng" totalAmount={inventoryTotal} totalTone="danger">
+                    {inventoryRows.map(renderRow)}
                 </SimpleCard>
             )}
 
@@ -96,9 +109,7 @@ export default function FinanceCards({
             <SimpleCard title="Chi phí vận hành" totalLabel="Tổng cộng" totalAmount={operatingTotal} totalTone="danger">
                 {operatingRows.length === 0
                     ? <span className="text-[12px] text-text-secondary italic pl-1">Chưa có chi phí vận hành</span>
-                    : operatingRows.map(r => (
-                        <LineItem key={r.id} label={`· ${r.name}`} amount={r.amount} />
-                    ))
+                    : operatingRows.map(renderRow)
                 }
             </SimpleCard>
 
@@ -109,9 +120,7 @@ export default function FinanceCards({
             <SimpleCard title="Chi phí quản lý & khác" totalLabel="Tổng cộng" totalAmount={overheadTotal} totalTone="danger">
                 {overheadRows.length === 0
                     ? <span className="text-[12px] text-text-secondary italic pl-1">Chưa có chi phí quản lý & khác</span>
-                    : overheadRows.map(r => (
-                        <LineItem key={r.id} label={`· ${r.name}`} amount={r.amount} />
-                    ))
+                    : overheadRows.map(renderRow)
                 }
             </SimpleCard>
 
@@ -131,7 +140,7 @@ function SimpleCard({ title, totalLabel, totalAmount, totalTone, children }) {
             <div className="w-full h-[1px] bg-border/60 rounded-full my-3" />
             <div className="flex justify-between items-center mt-1 pl-1">
                 <span className="text-[13px] font-black text-text uppercase tracking-wide">{totalLabel}</span>
-                <span className={`text-[16px] font-black tabular-nums ${toneCls}`}>{formatVND(totalAmount)}</span>
+                <span className={`text-[14px] font-black tabular-nums ${toneCls}`}>{formatVND(totalAmount)}</span>
             </div>
         </div>
     )
@@ -142,6 +151,35 @@ function LineItem({ label, amount }) {
         <div className="flex justify-between items-center">
             <span className="text-[12px] font-bold text-text-secondary">{label}</span>
             <span className="text-[13px] font-bold text-text tabular-nums">{formatVND(amount)}</span>
+        </div>
+    )
+}
+
+// Dòng nhãn bấm xổ ra các khoản con (· ngày · tên + số tiền). Chevron thay dấu "·".
+function ExpandableLineItem({ label, amount, entries }) {
+    const [open, setOpen] = useState(false)
+    return (
+        <div className="flex flex-col gap-1.5">
+            <button
+                type="button"
+                onClick={() => setOpen(o => !o)}
+                className="w-full flex justify-between items-center text-left hover:opacity-85 active:scale-[0.99] transition-all"
+            >
+                <span className="flex items-center gap-1 text-[12px] font-bold text-text-secondary">
+                    · {label}
+                    <span className="text-text-dim font-medium">({entries.length})</span>
+                </span>
+                <span className="text-[13px] font-bold text-text tabular-nums">{formatVND(amount)}</span>
+            </button>
+            {open && entries.map(e => (
+                <div key={e.id} className="flex justify-between items-center gap-2 pl-5">
+                    <span className="text-[11px] font-medium text-text-secondary/90 min-w-0 truncate">
+                        {e.created_at && <span className="text-text-dim tabular-nums">{dayMonth(e.created_at)} · </span>}
+                        {capFirst(e.name || 'Chi phí khác')}
+                    </span>
+                    <span className="text-[11px] font-medium text-text/70 tabular-nums shrink-0">{formatVND(e.amount)}</span>
+                </div>
+            ))}
         </div>
     )
 }
@@ -158,7 +196,7 @@ function ProfitBanner({ label, amount, onClick, children }) {
             <div className={`absolute top-0 left-0 w-1.5 h-full ${isPositive ? 'bg-success/60' : 'bg-danger/60'}`} />
             <div className="flex justify-between items-center pl-1">
                 <span className="text-[13px] font-black text-text uppercase tracking-wide">{label}</span>
-                <span className={`text-[16px] font-black tabular-nums ${isPositive ? 'text-success' : 'text-danger'}`}>{formatVND(amount)}</span>
+                <span className={`text-[14px] font-black tabular-nums ${isPositive ? 'text-success' : 'text-danger'}`}>{formatVND(amount)}</span>
             </div>
             {children}
         </div>
@@ -176,7 +214,7 @@ function NetProfitCard({ netProfit, yesterdayNetProfit, compareLabel }) {
             <div className="flex-1 flex flex-col justify-center">
                 <div className="flex justify-between items-center pl-1">
                     <h3 className="text-[14px] font-black text-text/80 uppercase tracking-wide">Lợi nhuận ròng</h3>
-                    <div className={`text-[16px] font-black tabular-nums ${isPositive ? 'text-success' : 'text-danger'}`}>
+                    <div className={`text-[14px] font-black tabular-nums ${isPositive ? 'text-success' : 'text-danger'}`}>
                         {formatVND(netProfit)}
                     </div>
                 </div>

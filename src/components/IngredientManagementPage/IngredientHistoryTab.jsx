@@ -19,11 +19,17 @@ export default function IngredientHistoryTab({
     const hasOwing = summary.totalOwing > 0
     return (
         <>
-            <MonthNav monthLabel={monthLabel} monthOffset={monthOffset} onMonthChange={onMonthChange} />
-
-            {!loading && summary.count > 0 && (
-                <SummaryStrip summary={summary} unit={unit} packSize={packSize} packUnit={packUnit} hasOwing={hasOwing} />
-            )}
+            <MonthSummaryCard
+                monthLabel={monthLabel}
+                monthOffset={monthOffset}
+                onMonthChange={onMonthChange}
+                showStats={!loading && summary.count > 0}
+                summary={summary}
+                unit={unit}
+                packSize={packSize}
+                packUnit={packUnit}
+                hasOwing={hasOwing}
+            />
 
             {loading ? (
                 <div className="flex flex-col gap-3 animate-pulse">
@@ -53,48 +59,48 @@ export default function IngredientHistoryTab({
     )
 }
 
-// ── Month nav ───────────────────────────────────────────────────────────────
-function MonthNav({ monthLabel, monthOffset, onMonthChange }) {
+// ── Month nav + summary (one card) ────────────────────────────────────────────
+// Nav row on top, stats below a divider. Stats keep p-4 so the left column lines
+// up with the history card titles underneath. Hàng 2 (Đã trả | Còn nợ) chỉ khi có nợ.
+function MonthSummaryCard({ monthLabel, monthOffset, onMonthChange, showStats, summary, unit, packSize, packUnit, hasOwing }) {
     return (
-        <div className="flex items-center justify-between bg-surface-light rounded-[12px] px-1 py-1">
-            <button
-                onClick={() => onMonthChange(monthOffset - 1)}
-                className="w-9 h-9 flex items-center justify-center rounded-[10px] text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all"
-            >
-                <ChevronLeft size={18} />
-            </button>
-            <span className="text-[13px] font-black text-text capitalize">{monthLabel}</span>
-            <button
-                onClick={() => onMonthChange(Math.min(0, monthOffset + 1))}
-                disabled={monthOffset >= 0}
-                className="w-9 h-9 flex items-center justify-center rounded-[10px] text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all disabled:opacity-20"
-            >
-                <ChevronRight size={18} />
-            </button>
-        </div>
-    )
-}
-
-// ── Summary strip ───────────────────────────────────────────────────────────
-function SummaryStrip({ summary, unit, packSize, packUnit, hasOwing }) {
-    // Luôn 2 cột: Tổng tiền nhập | Số lượng nhập. Khi có nợ thêm hàng 2: Đã trả | Còn nợ.
-    // "Tổng tiền nhập" = nghĩa vụ phát sinh trong tháng (theo created_at).
-    // "Đã trả" = cash-out NVL trong tháng (theo paid_at, có thể trả cho invoice tháng khác).
-    return (
-        <div className="bg-surface rounded-[16px] border border-border/60 p-4 grid gap-3 grid-cols-2">
-            <Stat label="Tổng tiền nhập" value={formatVND(summary.totalSpent)} />
-            <Stat label="Số lượng nhập" value={formatPackedQty(summary.totalQty, packSize, packUnit, unit, { compact: true })} />
-            {hasOwing && (
+        <div className="bg-surface rounded-[16px] border border-border/60 overflow-hidden">
+            <div className="flex items-center justify-between px-1.5 py-1.5">
+                <button
+                    onClick={() => onMonthChange(monthOffset - 1)}
+                    className="w-9 h-9 flex items-center justify-center rounded-[10px] text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all"
+                >
+                    <ChevronLeft size={18} />
+                </button>
+                <span className="text-[13px] font-black text-text capitalize">{monthLabel}</span>
+                <button
+                    onClick={() => onMonthChange(Math.min(0, monthOffset + 1))}
+                    disabled={monthOffset >= 0}
+                    className="w-9 h-9 flex items-center justify-center rounded-[10px] text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all disabled:opacity-20"
+                >
+                    <ChevronRight size={18} />
+                </button>
+            </div>
+            {showStats && (
                 <>
-                    <Stat label="Đã trả" value={formatVND(summary.totalPaidInMonth)} tone="success" />
-                    <Stat label="Còn nợ" value={formatVND(summary.totalOwing)} tone="warning" />
+                    <div className="h-[1px] bg-border/60" />
+                    <div className="grid gap-3 grid-cols-2 p-4">
+                        <Stat label="Số lượng nhập" value={formatPackedQty(summary.totalQty, packSize, packUnit, unit, { compact: true })} align="start" />
+                        <Stat label="Tổng tiền nhập" value={formatVND(summary.totalSpent)} align="end" />
+                        {hasOwing && (
+                            <>
+                                <Stat label="Đã trả" value={formatVND(summary.totalPaidInMonth)} tone="success" align="start" />
+                                <Stat label="Còn nợ" value={formatVND(summary.totalOwing)} tone="warning" align="end" />
+                            </>
+                        )}
+                    </div>
                 </>
             )}
         </div>
     )
 }
 
-function Stat({ label, value, tone }) {
+function Stat({ label, value, tone, align = 'center' }) {
     const labelCls = tone === 'success' ? 'text-success'
         : tone === 'warning' ? 'text-warning'
         : 'text-text-secondary'
@@ -103,7 +109,7 @@ function Stat({ label, value, tone }) {
         : tone === 'primary' ? 'text-primary'
         : 'text-text'
     return (
-        <div className="flex flex-col items-center">
+        <div className={`flex flex-col ${align === 'start' ? 'items-start' : align === 'end' ? 'items-end' : 'items-center'}`}>
             <span className={`text-[10px] font-black uppercase tracking-wider ${labelCls}`}>{label}</span>
             <span className={`text-[15px] font-black tabular-nums mt-1 ${valueCls}`}>{value}</span>
         </div>

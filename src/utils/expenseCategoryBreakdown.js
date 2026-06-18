@@ -24,20 +24,24 @@ export function buildCategoryBreakdown({ expenses = [], expenseCategories = [] }
         || expenseCategories.find(c => c.group_section === 'operating')
 
     const totals = new Map() // category_id → amount
-    const accumulate = (cid, amount) => {
+    const entriesByCat = new Map() // category_id → [{ id, name, amount, created_at }] (cho dòng xổ chi tiết)
+    const accumulate = (e, amount) => {
         if (!amount) return
-        const cat = cid ? catById.get(cid) : null
+        const cat = e.category_id ? catById.get(e.category_id) : null
         // Ngoài kinh doanh: bỏ hẳn khỏi lợi nhuận (không trừ, không hiện).
         if (cat?.group_section === 'non_operating') return
-        const targetId = cat ? cid : fallbackOther?.id
+        const targetId = cat ? e.category_id : fallbackOther?.id
         if (!targetId) return  // no categories at all → drop silently
         totals.set(targetId, (totals.get(targetId) || 0) + amount)
+        let arr = entriesByCat.get(targetId)
+        if (!arr) { arr = []; entriesByCat.set(targetId, arr) }
+        arr.push({ id: e.id, name: e.name, amount, created_at: e.created_at })
     }
 
     for (const e of expenses) {
         if (e.is_refill && !e.metadata?.free_form) continue
         if (e.metadata?.adjustment) continue
-        accumulate(e.category_id, e.amount || 0)
+        accumulate(e, e.amount || 0)
     }
 
     const operatingRows = []
@@ -49,7 +53,7 @@ export function buildCategoryBreakdown({ expenses = [], expenseCategories = [] }
 
     for (const c of expenseCategories) {
         const amount = totals.get(c.id) || 0
-        const row = { id: c.id, name: c.name, amount, sort_order: c.sort_order }
+        const row = { id: c.id, name: c.name, amount, sort_order: c.sort_order, entries: entriesByCat.get(c.id) || [] }
         if (c.group_section === 'operating') {
             // Hiện MỌI nhãn active (default + nhãn manager tự tạo) → báo cáo phản ánh
             // đúng cấu hình từng địa chỉ, dù kỳ này chưa phát sinh.
