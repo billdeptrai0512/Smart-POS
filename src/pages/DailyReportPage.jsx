@@ -26,7 +26,7 @@ import InventoryReportCard from '../components/DailyReportPage/InventoryReportCa
 import ShiftPrepCard from '../components/DailyReportPage/ShiftPrepCard'
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import RangeLossCard from '../components/DailyReportPage/RangeLossCard'
-import { Truck, Package } from 'lucide-react'
+import { Truck, Package, Loader2 } from 'lucide-react'
 import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY } from '../components/DailyReportPage/ReportViewFilter'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -1026,14 +1026,13 @@ export default function DailyReportPage() {
                                 {/* Past date: read-only audit + refill view via InventoryRefillCard. */}
                                 {isTodayScope ? (
                                     <div className="flex flex-col gap-3">
-                                        {/* Chỉ báo trạng thái lưu — Chưa lưu (dirty) / Đã lưu (đã có phiếu & sạch). */}
-                                        {(inventory.isDirty || inventory.existingClosing?.id) && (
+                                        {/* Pill chỉ hiện "Đang lưu" (spinner) trong lúc GHI (isSavingShift) — tắt
+                                            đúng lúc toast "Đã lưu" hiện. Trạng thái khác không cần pill. */}
+                                        {isSavingShift && (
                                             <div className="flex justify-end -mb-1">
-                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide border ${inventory.isDirty
-                                                    ? 'bg-warning/10 text-warning border-warning/30'
-                                                    : 'bg-success/10 text-success border-success/30'}`}>
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${inventory.isDirty ? 'bg-warning animate-pulse' : 'bg-success'}`} />
-                                                    {inventory.isDirty ? 'Chưa lưu' : 'Đã lưu'}
+                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide border bg-primary/10 text-primary border-primary/30">
+                                                    <Loader2 size={11} className="animate-spin" />
+                                                    Đang lưu
                                                 </span>
                                             </div>
                                         )}
