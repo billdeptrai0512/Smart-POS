@@ -33,6 +33,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useEntitlement, hasModule } from '../hooks/useEntitlement'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
+import { useConfirm } from '../contexts/ConfirmContext'
 import { shiftFinalizedKey, cashClosedKey } from '../constants/storageKeys'
 
 // "Soạn cho hôm nay" coi là đã làm khi Nhập thêm (restock) khác 0 — rỗng/0 = chưa soạn.
@@ -53,6 +54,7 @@ export default function DailyReportPage() {
     const { isStaff, profile } = useAuth()
     const { activeModules, loading: entitlementLoading, enabled: monetizationEnabled } = useEntitlement()
     const { toast, showToast, showError } = useToast()
+    const confirm = useConfirm()
 
     // ── All hooks unconditional (Rules of Hooks) ──────────────────────────────
     const initialView = [VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY].includes(location.state?.initialView)
@@ -790,8 +792,8 @@ export default function DailyReportPage() {
         return () => window.removeEventListener('beforeunload', handler)
     }, [hasUnsaved])
     // Bọc các thao tác rời trang (back / đổi tab) — xác nhận nếu còn thay đổi chưa lưu.
-    const guardLeave = (proceed) => {
-        if (hasUnsaved && !window.confirm('Còn thay đổi chưa lưu trong báo cáo. Rời trang và bỏ các thay đổi?')) return
+    const guardLeave = async (proceed) => {
+        if (hasUnsaved && !await confirm({ title: 'Còn thay đổi chưa lưu trong báo cáo.', detail: 'Rời trang và bỏ các thay đổi?', danger: true, confirmLabel: 'Rời trang' })) return
         proceed()
     }
 
@@ -805,7 +807,7 @@ export default function DailyReportPage() {
         }
         // Chỉ confirm khi lưu THỦ CÔNG có CHUYỂN KHO (restock đổi) — auto-lưu soạn bỏ qua.
         if (!silent && inventory.restockDirty
-            && !window.confirm(inventory.existingClosing?.id ? 'Cập nhật báo cáo (có chuyển kho ra quầy)?' : 'Lưu báo cáo (có chuyển kho ra quầy)?')) return
+            && !await confirm({ title: inventory.existingClosing?.id ? 'Cập nhật báo cáo (có chuyển kho ra quầy)?' : 'Lưu báo cáo (có chuyển kho ra quầy)?' })) return
 
         const inventoryReport = inventory.buildInventoryReport()
         // Cash/transfer/note are owned by the cashflow card — only seed defaults on first

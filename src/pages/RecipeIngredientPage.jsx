@@ -23,6 +23,7 @@ import {
 } from '../services/orderService'
 import { sortIngredients, ingredientLabel, getIngredientUnit } from '../utils/ingredients'
 import { useToast } from '../hooks/useToast'
+import { useConfirm } from '../contexts/ConfirmContext'
 import Toast from '../components/POSPage/Toast'
 import RecipeHeader from '../components/RecipeIngredientPage/RecipeHeader'
 import BaseRecipeSection from '../components/RecipeIngredientPage/BaseRecipeSection'
@@ -41,6 +42,7 @@ export default function RecipeIngredientPage() {
     const { selectedAddress } = useAddress()
     const { isManager, isAdmin } = useAuth()
     const { toast, showError } = useToast()
+    const confirm = useConfirm()
     const canEdit = isManager || isAdmin
 
     const [ingredientCosts, setIngredientCosts] = useState(contextCosts || {})
@@ -97,7 +99,7 @@ export default function RecipeIngredientPage() {
 
     // ─── Base recipe handlers ─────────────────────────────────────────
     async function handleDeleteRecipeIngredient(ingredient) {
-        if (!window.confirm(`Xóa "${ingredientLabel(ingredient)}" khỏi công thức?`)) return
+        if (!await confirm({ title: `Xóa "${ingredientLabel(ingredient)}" khỏi công thức?`, danger: true, confirmLabel: 'Xóa' })) return
         await withSaving('Xóa nguyên liệu khỏi công thức', async () => {
             await deleteRecipeRow(productId, ingredient, selectedAddress?.id)
             setRecipes(prev => prev.filter(r => !(r.product_id === productId && r.ingredient === ingredient)))
@@ -158,7 +160,7 @@ export default function RecipeIngredientPage() {
         const addrId = selectedAddress?.id || null
         if (!addrId && !isAdmin) return
         const targetName = addrId ? 'của chi nhánh này' : 'mặc định của hệ thống'
-        if (!window.confirm(`Xóa "${product.name}" khỏi menu ${targetName}?`)) return
+        if (!await confirm({ title: `Xóa "${product.name}" khỏi menu ${targetName}?`, danger: true, confirmLabel: 'Xóa' })) return
         await withSaving('Xóa món khỏi menu', async () => {
             await removeProductFromAddress(productId, addrId)
             refreshProducts?.()
@@ -204,7 +206,7 @@ export default function RecipeIngredientPage() {
     }
 
     async function deleteExtra(extraId, extraName) {
-        if (!window.confirm(`Xóa tùy chọn "${extraName}"?`)) return
+        if (!await confirm({ title: `Xóa tùy chọn "${extraName}"?`, danger: true, confirmLabel: 'Xóa' })) return
         await withSaving('Xóa tùy chọn', async () => {
             await deleteProductExtra(extraId)
             setExtras(prev => prev.filter(e => e.id !== extraId))
@@ -262,7 +264,7 @@ export default function RecipeIngredientPage() {
     }
 
     async function deleteExtraIng(extraId, ingredient) {
-        if (!window.confirm(`Xóa tác động nguyên liệu này?`)) return
+        if (!await confirm({ title: 'Xóa tác động nguyên liệu này?', danger: true, confirmLabel: 'Xóa' })) return
         await withSaving('Xóa nguyên liệu khỏi tùy chọn', async () => {
             await deleteExtraIngredient(extraId, ingredient)
             setExtraIngs(prev => ({

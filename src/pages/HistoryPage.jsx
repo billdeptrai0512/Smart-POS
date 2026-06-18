@@ -11,6 +11,7 @@ import { useFormatHistoryOrders } from '../hooks/useFormatHistoryOrders'
 import { useAddress } from '../contexts/AddressContext'
 import { useProducts } from '../contexts/ProductContext'
 import { usePOS } from '../contexts/POSContext'
+import { useConfirm } from '../contexts/ConfirmContext'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import OrdersList from '../components/HistoryPage/OrdersList'
 import ExpensePanel from '../components/HistoryPage/ExpensePanel'
@@ -28,6 +29,7 @@ export default function HistoryPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const { selectedAddress } = useAddress()
+    const confirm = useConfirm()
     const { products, recipes, ingredientCosts, extraIngredients, refreshProducts } = useProducts()
     const {
         todayOrders, todayExpenses, isLoadingHistory,
@@ -196,11 +198,11 @@ export default function HistoryPage() {
     // ─── Offline order sync ───────────────────────────────────────────
     const refreshPending = useCallback(() => setPendingOrders(getPendingOrders()), [])
 
-    const handleDeleteOffline = useCallback((createdAt) => {
-        if (!window.confirm('Xóa đơn offline này khỏi máy?')) return
+    const handleDeleteOffline = useCallback(async (createdAt) => {
+        if (!await confirm({ title: 'Xóa đơn offline này khỏi máy?', danger: true, confirmLabel: 'Xóa' })) return
         removePendingOrder(createdAt)
         refreshPending()
-    }, [refreshPending])
+    }, [refreshPending, confirm])
 
     const handleRetrySync = useCallback(async () => {
         if (!retrySync) return
@@ -331,7 +333,7 @@ export default function HistoryPage() {
     // Xoá từ trong modal sửa.
     const deleteEditingExpense = async () => {
         if (!editingExpense) return
-        if (!window.confirm(`Xóa chi phí "${editingExpense.name}"?\n\nHành động này không thể hoàn tác!`)) return
+        if (!await confirm({ title: `Xóa chi phí "${editingExpense.name}"?`, detail: 'Hành động này không thể hoàn tác!', danger: true, confirmLabel: 'Xóa' })) return
         await deleteExpense(editingExpense.id, editingExpense.amount)
         setShowAddModal(false)
     }

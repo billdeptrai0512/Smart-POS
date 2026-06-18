@@ -5,6 +5,7 @@ import { AddressProvider, useAddress } from './contexts/AddressContext'
 import { AddressStatsProvider } from './contexts/AddressStatsContext'
 import { ProductProvider } from './contexts/ProductContext'
 import { POSProvider } from './contexts/POSContext'
+import { ConfirmProvider } from './contexts/ConfirmContext'
 import ErrorBoundary from './components/common/ErrorBoundary'
 import './index.css'
 
@@ -71,6 +72,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
+        <ConfirmProvider>
         <Suspense fallback={<PageLoading />}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
@@ -104,6 +106,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/pos" />} />
           </Routes>
         </Suspense>
+        </ConfirmProvider>
       </AuthProvider>
     </ErrorBoundary>
   )

@@ -23,6 +23,7 @@ import InvoicePaymentSheet from '../components/IngredientManagementPage/InvoiceP
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
+import { useConfirm } from '../contexts/ConfirmContext'
 import { dateStringVN } from '../utils/dateVN'
 
 // Page-level orchestrator: fetches data, owns the canonical state (stock, history,
@@ -38,6 +39,7 @@ export default function IngredientDetailPage() {
     const { refreshTodayExpenses } = usePOS()
     const canEdit = isManager || isAdmin
     const { toast, showToast, showError } = useToast()
+    const confirm = useConfirm()
 
     const [viewMode, setViewMode] = useState('details')
     const [history, setHistory] = useState([])
@@ -244,6 +246,7 @@ export default function IngredientDetailPage() {
             const snapshotOpts = stockData ? { beforeStock: stockData.warehouse_stock } : {}
             await adjustIngredientStock(selectedAddress?.id, ingredientKey, delta, profile?.name, snapshotOpts)
             await Promise.all([reloadStock(), refreshTodayExpenses?.()])
+            showToast('Đã hiệu chỉnh kho sau', 'success')
         } catch (err) { showError(err, 'Hiệu chỉnh kho sau') }
         finally { setSaving(false) }
     }
@@ -257,6 +260,7 @@ export default function IngredientDetailPage() {
             const res = await setCounterStock(selectedAddress?.id, ingredientKey, newCounter)
             if (!res) { showError(new Error('Chưa có phiếu chốt ca nào để ghi tồn quầy.'), 'Sửa tồn quầy'); return }
             await reloadStock()
+            showToast('Đã sửa tồn quầy', 'success')
         } catch (err) { showError(err, 'Sửa tồn quầy') }
         finally { setSaving(false) }
     }
@@ -328,7 +332,7 @@ export default function IngredientDetailPage() {
         const detail = isAdjust
             ? `Tồn kho sẽ thay đổi ${revertStr} để hoàn lại hiện trạng.`
             : `Tồn kho ${revertStr}, hoàn tiền đã trả, và tính lại giá vốn.`
-        if (!window.confirm(`${head}\n${detail}`)) return
+        if (!await confirm({ title: head, detail, danger: true, confirmLabel: 'Hủy phiếu' })) return
         setSaving(true)
         try {
             await cancelRestock(selectedAddress?.id, entry.id, profile?.name)
@@ -418,7 +422,7 @@ export default function IngredientDetailPage() {
 
     async function handleDelete() {
         const label = ingredientLabel(ingredientKey)
-        if (!window.confirm(`Xóa nguyên liệu "${label}"? Hành động này sẽ gỡ nó khỏi tất cả công thức liên quan.`)) return
+        if (!await confirm({ title: `Xóa nguyên liệu "${label}"?`, detail: 'Sẽ gỡ khỏi tất cả công thức liên quan.', danger: true, confirmLabel: 'Xóa' })) return
         try {
             await deleteIngredientCost(ingredientKey, selectedAddress?.id)
             refreshProducts?.()

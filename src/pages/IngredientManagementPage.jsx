@@ -24,6 +24,7 @@ import CreateIngredientForm from '../components/IngredientManagementPage/CreateI
 import SortableList from '../components/common/SortableList'
 import { detectKeyMismatches } from '../utils/ingredientKeySync'
 import { useToast } from '../hooks/useToast'
+import { useConfirm } from '../contexts/ConfirmContext'
 import Toast from '../components/POSPage/Toast'
 import { keySyncDismissedKey, orphanIgnoredKey } from '../constants/storageKeys'
 import { goToMenuStep } from '../utils/menuSequence'
@@ -47,6 +48,7 @@ export default function IngredientManagementPage() {
     const { isManager, isAdmin, profile } = useAuth()
     const { refreshTodayExpenses } = usePOS()
     const { toast, showToast, showError } = useToast()
+    const confirm = useConfirm()
     const canEdit = isManager || isAdmin
 
     const [ingredientCosts, setIngredientCosts] = useState(contextCosts || {})
@@ -304,10 +306,10 @@ export default function IngredientManagementPage() {
     async function handleDeleteIngredient(ingredient) {
         const recipeCount = recipeUsageByIngredient.get(ingredient) || 0
         const label = ingredientLabel(ingredient)
-        const warning = recipeCount > 0
-            ? `"${label}" đang được dùng trong ${recipeCount} công thức. Xóa sẽ gỡ nó khỏi tất cả công thức liên quan. Tiếp tục?`
-            : `Xóa nguyên liệu "${label}"?`
-        if (!window.confirm(warning)) return
+        const detail = recipeCount > 0
+            ? `Đang dùng trong ${recipeCount} công thức — xóa sẽ gỡ khỏi tất cả công thức liên quan.`
+            : null
+        if (!await confirm({ title: `Xóa nguyên liệu "${label}"?`, detail, danger: true, confirmLabel: 'Xóa' })) return
         setSaving(true)
         try {
             await deleteIngredientCost(ingredient, selectedAddress?.id)

@@ -1,4 +1,5 @@
 import { formatVND } from '../../utils'
+import { useConfirm } from '../../contexts/ConfirmContext'
 
 export default function OrdersList({
     orders, runningTotals, isLoading, isTodayScope,
@@ -49,6 +50,7 @@ export default function OrdersList({
 }
 
 function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrder, onDeleteOffline }) {
+    const confirm = useConfirm()
     const date = new Date(order.createdAt)
     const time = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
 
@@ -95,10 +97,10 @@ function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrd
                     ) : !order.isOffline ? (
                         <span
                             className="text-text-secondary text-[14px] text-end font-bold cursor-pointer underline decoration-dashed decoration-text-secondary/50 underline-offset-4 hover:text-danger hover:decoration-danger active:text-danger/80 transition-all select-none leading-none"
-                            onClick={() => {
+                            onClick={async () => {
                                 if (deletingId === order.id) return
                                 const text = order.items?.map(i => i.text).join(', ') || ''
-                                if (window.confirm(`Xóa đơn ${text} (${formatVND(order.total)})?\n\nHành động này không thể hoàn tác!`)) {
+                                if (await confirm({ title: `Xóa đơn ${text} (${formatVND(order.total)})?`, detail: 'Hành động này không thể hoàn tác!', danger: true, confirmLabel: 'Xóa' })) {
                                     setDeletingId(order.id)
                                     onDeleteOrder(order.id).finally(() => setDeletingId(null))
                                 }
