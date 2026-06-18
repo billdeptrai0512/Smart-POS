@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Info } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
 import { formatPackedQty } from '../../utils/inventory'
@@ -60,6 +60,42 @@ export default function InventoryReportCard({
     open = true, onToggleOpen,
     onOpeningChange, onOpeningLock, onRestockChange, onInventoryChange,
 }) {
+    // Sort by status priority so staff sees "Chưa nhập" first, then anomalies,
+    // then matched rows at the bottom. Tie-break by display name for stability.
+    //
+    // Status is computed against the LAST-PERSISTED snapshot, not the live input
+    // maps — otherwise typing a Cuối kỳ value would flip the row from Chưa nhập
+    // → Hụt/Dư mid-keystroke and shuffle it down the list before staff finishes.
+    // Falls back to live maps when no baseline is wired (older callers).
+    // When baseline is wired these refs are stable across keystrokes, so the sort
+    // (its only inputs) is memoized away — typing a Cuối kỳ value no longer re-runs
+    // the O(n log n) comparator (each compare scans the maps via lookupByLabel).
+    const sortOpening = baselineInputs?.opening ?? openingInputs
+    const sortRestock = baselineInputs?.restock ?? restockInputs
+    const sortInventory = baselineInputs?.inventory ?? inventoryInputs
+    const sortedList = useMemo(() => [...ingredientsList].sort((a, b) => {
+        const sa = computeRowStatus({
+            inventoryValue: sortInventory[a.ingredient],
+            restockValue: sortRestock[a.ingredient],
+            warehouseAvailable: warehouseStocks[a.ingredient],
+            openingValue: sortOpening[a.ingredient],
+            openingFallback: openingStock[a.ingredient],
+            used: lookupByLabel(a.ingredient, usedMap),
+        })
+        const sb = computeRowStatus({
+            inventoryValue: sortInventory[b.ingredient],
+            restockValue: sortRestock[b.ingredient],
+            warehouseAvailable: warehouseStocks[b.ingredient],
+            openingValue: sortOpening[b.ingredient],
+            openingFallback: openingStock[b.ingredient],
+            used: lookupByLabel(b.ingredient, usedMap),
+        })
+        const pa = STATUS_PRIORITY[sa]
+        const pb = STATUS_PRIORITY[sb]
+        if (pa !== pb) return pa - pb
+        return ingredientLabel(a.ingredient).localeCompare(ingredientLabel(b.ingredient))
+    }), [ingredientsList, sortOpening, sortRestock, sortInventory, warehouseStocks, openingStock, usedMap])
+
     if (isLoading) {
         return (
             <div className="flex flex-col gap-3 py-4 animate-pulse">
@@ -69,41 +105,6 @@ export default function InventoryReportCard({
         )
     }
     if (!ingredientsList.length) return null
-
-    // Sort by status priority so staff sees "Chưa nhập" first, then anomalies,
-    // then matched rows at the bottom. Tie-break by display name for stability.
-    //
-    // Status is computed against the LAST-PERSISTED snapshot, not the live input
-    // maps — otherwise typing a Cuối kỳ value would flip the row from Chưa nhập
-    // → Hụt/Dư mid-keystroke and shuffle it down the list before staff finishes.
-    // Falls back to live maps when no baseline is wired (older callers).
-    const sortInputs = {
-        opening: baselineInputs?.opening ?? openingInputs,
-        restock: baselineInputs?.restock ?? restockInputs,
-        inventory: baselineInputs?.inventory ?? inventoryInputs,
-    }
-    const sortedList = [...ingredientsList].sort((a, b) => {
-        const sa = computeRowStatus({
-            inventoryValue: sortInputs.inventory[a.ingredient],
-            restockValue: sortInputs.restock[a.ingredient],
-            warehouseAvailable: warehouseStocks[a.ingredient],
-            openingValue: sortInputs.opening[a.ingredient],
-            openingFallback: openingStock[a.ingredient],
-            used: lookupByLabel(a.ingredient, usedMap),
-        })
-        const sb = computeRowStatus({
-            inventoryValue: sortInputs.inventory[b.ingredient],
-            restockValue: sortInputs.restock[b.ingredient],
-            warehouseAvailable: warehouseStocks[b.ingredient],
-            openingValue: sortInputs.opening[b.ingredient],
-            openingFallback: openingStock[b.ingredient],
-            used: lookupByLabel(b.ingredient, usedMap),
-        })
-        const pa = STATUS_PRIORITY[sa]
-        const pb = STATUS_PRIORITY[sb]
-        if (pa !== pb) return pa - pb
-        return ingredientLabel(a.ingredient).localeCompare(ingredientLabel(b.ingredient))
-    })
 
     // Tổng giá trị hao hụt — sum |Hao hụt × unit_cost| over rows that came up short,
     // computed against LIVE inputs so the header summary tracks what staff is counting now.
@@ -188,7 +189,11 @@ function lookupByLabel(ingredient, map) {
     return 0
 }
 
-function IngredientRow({
+// memo: parent re-renders on every keystroke (input state lives in the page/hook),
+// but each row gets indexed primitives + stable callbacks — so only the row being
+// edited re-renders instead of all ~40. Relies on ingredientUnits/usedMap/handlers
+// being referentially stable (they are: page useMemo + useShiftInventoryState useCallback).
+const IngredientRow = memo(function IngredientRow({
     ing, ingredientUnits, openingValue, openingFallback, isLocked, restockValue, inventoryValue,
     warehouseAvailable, used, breakdown, productRef,
     isSubmitting,
@@ -427,7 +432,7 @@ function IngredientRow({
             </div>)}
         </div>
     )
-}
+})
 
 function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRight, overflow, tone = 'neutral', onLabelClick, labelTrailing }) {
     // tone overrides the default disabled coloring for read-only diff cells.

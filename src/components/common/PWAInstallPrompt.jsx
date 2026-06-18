@@ -1,52 +1,36 @@
 import { useState, useEffect } from 'react'
 import { STORAGE_KEYS } from '../../constants/storageKeys'
 
+// Synchronous, mount-only environment checks — computed as lazy initial state so
+// they don't trigger an extra render via setState-in-effect.
+const detectStandalone = () =>
+    window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone || document.referrer.includes('android-app://')
+const detectIOS = () =>
+    (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+
 export default function PWAInstallPrompt() {
-    const [supportsPWA, setSupportsPWA] = useState(false)
     const [promptInstall, setPromptInstall] = useState(null)
-    const [isIOS, setIsIOS] = useState(false)
-    const [isStandalone, setIsStandalone] = useState(false)
-    const [showPrompt, setShowPrompt] = useState(false)
+    const [isStandalone] = useState(detectStandalone)
+    const [isIOS] = useState(detectIOS)
+    // iOS has no beforeinstallprompt event, so decide its banner up front; Android
+    // flips this on in the event handler below.
+    const [showPrompt, setShowPrompt] = useState(
+        () => !detectStandalone() && detectIOS() && !localStorage.getItem(STORAGE_KEYS.PWA_PROMPT_DISMISSED)
+    )
 
     useEffect(() => {
-        // Check if already installed
-        const isAppStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone || document.referrer.includes('android-app://')
-        setIsStandalone(isAppStandalone)
+        if (isStandalone) return // Already installed — nothing to offer.
 
-        if (isAppStandalone) {
-            return // Don't show anything if already installed
-        }
-
-        // Detect iOS (iPad, iPhone, iPod)
-        const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-        // Also check for new iPads on iOS 13+
-        const isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-        const iosEnv = isIOSDevice || isIPadOS;
-
-        setIsIOS(iosEnv)
-
-        // Handle Android/Chrome beforeinstallprompt
+        // Android/Chrome: offer the banner once the browser fires the install event.
         const handler = e => {
             e.preventDefault()
-            setSupportsPWA(true)
             setPromptInstall(e)
             setShowPrompt(true)
         }
-
         window.addEventListener('beforeinstallprompt', handler)
-
-        // If it's iOS and not standalone, we can automatically show the prompt
-        // Or we might want to delay it or only show if they haven't dismissed it
-        // Check local storage so we don't annoy users constantly
-        const dismissed = localStorage.getItem(STORAGE_KEYS.PWA_PROMPT_DISMISSED)
-        if (iosEnv && !dismissed) {
-            setShowPrompt(true)
-        } else if (!iosEnv && !dismissed && supportsPWA) {
-            setShowPrompt(true)
-        }
-
         return () => window.removeEventListener('beforeinstallprompt', handler)
-    }, [supportsPWA])
+    }, [isStandalone])
 
     const handleInstall = async () => {
         if (!promptInstall) {

@@ -39,3 +39,6 @@ PROJECT.md
 
 # Supabase CLI scratch
 supabase/.temp/
+
+# Local debug / diagnostic one-offs
+scratch/

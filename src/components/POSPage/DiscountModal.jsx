@@ -11,13 +11,16 @@ export default function DiscountModal({ open, onClose, subtotal, discount, onApp
     const [type, setType] = useState('percent')
     const [input, setInput] = useState('')
 
-    // Seed local state from the active discount each time the modal opens
+    // Seed local form state from the active discount each time the modal opens.
+    // Intentional state-sync on the `open` edge — not a cascading-render hazard.
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         if (!open) return
         const t = discount.value ? discount.type : 'percent'
         setType(t)
         setInput(!discount.value ? '' : t === 'amount' ? formatVNDInput(discount.value) : String(discount.value))
     }, [open, discount])
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     if (!open) return null
 

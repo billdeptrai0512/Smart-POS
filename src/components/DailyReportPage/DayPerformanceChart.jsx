@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import { BarChart, Bar, XAxis, ResponsiveContainer, Cell, Tooltip } from 'recharts'
 import { formatVND } from '../../utils'
 
@@ -53,7 +53,10 @@ const CustomTooltip = ({ active, payload, label }) => {
     )
 }
 
-export default function DayPerformanceChart({ orders, range, start, products }) {
+// memo: only mounts in range scope, but the parent still re-renders on unrelated
+// state changes — props (orders/range/start/products) are stable refs, so memo
+// keeps the recharts bar chart from re-rendering needlessly.
+function DayPerformanceChart({ orders, range, start, products }) {
     const now = new Date()
 
     const countMap = useMemo(
@@ -123,3 +126,5 @@ export default function DayPerformanceChart({ orders, range, start, products }) 
         </div>
     )
 }
+
+export default memo(DayPerformanceChart)

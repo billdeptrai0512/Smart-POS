@@ -54,6 +54,8 @@ export default function InventoryRefillCard({
 
         if (cached) {
             try {
+                // Intentional synchronous hydrate from sessionStorage cache.
+                // eslint-disable-next-line react-hooks/set-state-in-effect
                 setLastWeekItems(JSON.parse(cached));
                 return;
             } catch { /* ignore parse errors, re-fetch */ }

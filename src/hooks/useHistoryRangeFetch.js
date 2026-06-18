@@ -16,6 +16,9 @@ export function useHistoryRangeFetch({ addressId, rangeStart, rangeEnd, isTodayS
     const startISO = rangeStart.toISOString()
     const endISO = rangeEnd.toISOString()
 
+    // The today-scope reset and cache-hit hydrate set state synchronously on purpose
+    // (the async fetch path drives the rest). Intentional, not a cascade hazard.
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         if (!addressId || isReadOnly) return
         if (isTodayScope) { setRangeExpenses([]); return }
@@ -39,6 +42,7 @@ export function useHistoryRangeFetch({ addressId, rangeStart, rangeEnd, isTodayS
             .then(data => { ordCache.current.set(key, data); setRangeOrders(data) })
             .finally(() => setIsLoadingRangeOrders(false))
     }, [addressId, startISO, endISO, isTodayScope, isReadOnly])
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     // Optimistic patch helper for mutations (e.g. re-tag expense). Patches both
     // the visible state and the cached entry so a re-render or cache hit shows

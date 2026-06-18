@@ -98,6 +98,8 @@ export function useEntitlement() {
         if (bypass || configLoading) return
 
         if (!selectedAddress?.id) {
+            // Intentional reset when no address is selected — nothing to fetch.
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setState({ activeModules: [], validToByModule: {}, loading: false })
             return
         }

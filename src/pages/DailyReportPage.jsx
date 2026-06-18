@@ -763,6 +763,13 @@ export default function DailyReportPage() {
         return map
     }, [recipes, products, todayOrderItems])
 
+    // Stable ingredient→unit map so InventoryReportCard's memoized rows don't all
+    // re-render on every keystroke (was rebuilt inline each render).
+    const inventoryRowUnits = useMemo(
+        () => Object.fromEntries(inventory.ingredientsList.map(i => [i.ingredient, i.unit])),
+        [inventory.ingredientsList]
+    )
+
     // Sum today's orders (online + offline) for the system_total_revenue snapshot we send
     // when creating a new shift_closing. Mirrors /shift-closing's calculation.
     const systemTotalRevenue = useMemo(() => {
@@ -1051,7 +1058,7 @@ export default function DailyReportPage() {
                                             restockInputs={inventory.restockInputs}
                                             inventoryInputs={inventory.inventoryInputs}
                                             warehouseStocks={inventory.effectiveWarehouseStocks}
-                                            ingredientUnits={Object.fromEntries(inventory.ingredientsList.map(i => [i.ingredient, i.unit]))}
+                                            ingredientUnits={inventoryRowUnits}
                                             usedMap={usedMap}
                                             consumptionBreakdown={consumptionBreakdown}
                                             ingredientToProduct={ingredientToProduct}

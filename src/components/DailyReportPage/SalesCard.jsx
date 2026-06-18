@@ -1,11 +1,14 @@
-import { useState, useEffect, useRef } from 'react'
+import { memo, useState, useEffect, useRef } from 'react'
 import { Filter, TrendingUp } from 'lucide-react'
 import { LineChart, Line, CartesianGrid, XAxis } from 'recharts'
 import { formatVND } from '../../utils'
 
 const CHART_HEIGHT = 200
 
-export default function SalesCard({
+// memo: parent (DailyReportPage) re-renders on every cash/inventory keystroke;
+// all props here come from page-level useMemo / stable setters, so memo lets the
+// recharts subtree bail out instead of re-rendering per keystroke.
+function SalesCard({
     totalCups,
     selectedProductId,
     onFilterChange,
@@ -79,12 +82,13 @@ export default function SalesCard({
     }
 
     const getTooltipStyle = () => {
-        if (!activePoint || !wrapperRef.current) return {}
-        const wrapperWidth = wrapperRef.current.offsetWidth
-        const wrapperHeight = wrapperRef.current.offsetHeight
+        // Use measured width (ResizeObserver state) + the fixed chart height instead of
+        // reading the ref's layout during render — avoids the stale-render hazard and the
+        // value is identical (the wrapper's height is locked to CHART_HEIGHT).
+        if (!activePoint || !chartWidth) return {}
         const tooltipWidth = 220
-        const left = Math.max(tooltipWidth / 2 + 8, Math.min(activePoint.cx, wrapperWidth - tooltipWidth / 2 - 8))
-        const showBelow = activePoint.cy < wrapperHeight / 2
+        const left = Math.max(tooltipWidth / 2 + 8, Math.min(activePoint.cx, chartWidth - tooltipWidth / 2 - 8))
+        const showBelow = activePoint.cy < CHART_HEIGHT / 2
         return {
             position: 'absolute',
             left,
@@ -228,6 +232,9 @@ export default function SalesCard({
                                     dataKey="revenue"
                                     stroke="#f59e0b"
                                     strokeWidth={4}
+                                    // CustomDot closes over activePoint/setActivePoint for the
+                                    // tap-to-pin tooltip, so it can't be hoisted to module scope.
+                                    // eslint-disable-next-line react-hooks/static-components
                                     dot={<CustomDot />}
                                     activeDot={false}
                                 />
@@ -244,3 +251,5 @@ export default function SalesCard({
         </div>
     )
 }
+
+export default memo(SalesCard)

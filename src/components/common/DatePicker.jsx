@@ -53,12 +53,15 @@ export default function DatePicker({
     const dayPickEnabled = typeof onChange === 'function'
 
     // Re-anchor month + reset any in-progress range each time the popover opens.
+    // Intentional state-sync on the `open` edge — not a cascading-render hazard.
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         if (open) {
             setViewMonth(parseIsoDay(anchorIso) || new Date())
             setPendingStart(null)
         }
     }, [open, anchorIso])
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     // Outside click + Escape close — listeners only live while open.
     useEffect(() => {

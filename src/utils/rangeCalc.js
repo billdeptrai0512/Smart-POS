@@ -5,10 +5,7 @@
 // offset: negative for past, 0 = current period, only meaningful for day/week/month
 // customRange?: { startISO, endISO } (YYYY-MM-DD in VN local)
 
-import {
-    startOfDayVN, endOfDayVN, startOfWeekVN, startOfMonthVN, endOfMonthVN,
-    addDaysVN, dateStringVN,
-} from './dateVN'
+import { startOfDayVN, endOfDayVN, dateStringVN } from './dateVN'
 import { getDateRange } from '../components/DailyReportPage/ReportHeader'
 
 const fmtDM = (d) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -76,6 +73,3 @@ export function dayCustomDateOf(scope, offset) {
     d.setDate(d.getDate() + offset)
     return dateStringVN(d)
 }
-
-// Re-exports so callers don't reach back into dateVN directly for the common case.
-export { startOfDayVN, endOfDayVN, addDaysVN, dateStringVN, startOfWeekVN, startOfMonthVN, endOfMonthVN }

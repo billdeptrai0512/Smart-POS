@@ -23,7 +23,9 @@ export function AddressProvider() {
     const [loading, setLoading] = useState(true)
     const [fetchError, setFetchError] = useState(null)
 
-    // Load addresses when profile is available
+    // Load addresses when profile is available. Synchronous setState in the
+    // guest/no-profile branches is an intentional init reset, not a cascade hazard.
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         if (isGuest) {
             const demo = getDemoAddress()
@@ -79,6 +81,7 @@ export function AddressProvider() {
             setLoading(false)
         })
     }, [profile])
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     const setSelectedAddress = useCallback((addr) => {
         setSelectedAddressState(addr)

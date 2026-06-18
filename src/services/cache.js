@@ -32,11 +32,6 @@ export function createCache(ttlMs) {
         store.set(keyOf(parts), { data, t: Date.now() })
     }
 
-    // Drop a single entry. Partial keys aren't matched — use invalidatePrefix for that.
-    function invalidate(parts) {
-        store.delete(keyOf(parts))
-    }
-
     // Drop every entry whose key starts with the given prefix parts.
     // Useful when a mutation invalidates a whole namespace (e.g. all
     // report reads for an addressId).
@@ -60,7 +55,7 @@ export function createCache(ttlMs) {
         return data
     }
 
-    return { get, set, invalidate, invalidatePrefix, clear, through }
+    return { invalidatePrefix, clear, through }
 }
 
 // ─── Shared instances ────────────────────────────────────────────────────────

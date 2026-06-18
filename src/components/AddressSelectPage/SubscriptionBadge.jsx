@@ -28,6 +28,8 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
     // Không fetch gì khi monetization OFF (client build hoặc server app_config)
     useEffect(() => {
         if (!enabled || !addressId) {
+            // Intentional: nothing to fetch, mark loaded so render resolves.
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setLoaded(true)
             return
         }

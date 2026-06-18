@@ -294,7 +294,7 @@ export function POSProvider() {
 
     // ---- Handlers ----
     function handleAddItem(product) {
-        const cartItemId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9)
+        const cartItemId = crypto.randomUUID()
         const stickyExtras = (productExtras[product.id] || []).filter(e => e.is_sticky && enabledStickyExtraIds.includes(e.id))
         setCart(prev => [...prev, {
             cartItemId,
