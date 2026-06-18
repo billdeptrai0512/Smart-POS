@@ -34,7 +34,20 @@ export default function StaffInvitePage() {
         e.preventDefault()
         if (!name.trim()) { setError('Vui lòng nhập tên'); return }
         if (!username.trim()) { setError('Vui lòng nhập tài khoản'); return }
-        if (username.length < 3) { setError('Tài khoản ít nhất 3 ký tự'); return }
+        const isCoManager = tokenInfo?.role === 'co-manager'
+        if (isCoManager) {
+            const hasLetter = /[a-zA-Z]/.test(password)
+            const hasNumber = /[0-9]/.test(password)
+            if (password.length < 8 || !hasLetter || !hasNumber) {
+                setError('Mật khẩu quản lý yêu cầu ít nhất 8 ký tự, bao gồm cả chữ và số')
+                return
+            }
+        } else {
+            if (!/^[0-9]{6}$/.test(password)) {
+                setError('Mật khẩu nhân viên phải là mã PIN gồm đúng 6 chữ số')
+                return
+            }
+        }
         setError('')
         setLoading(true)
         try {
@@ -125,9 +138,8 @@ export default function StaffInvitePage() {
                             value={password}
                             onChange={e => setPassword(e.target.value)}
                             required
-                            minLength={6}
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder="Tối thiểu 6 ký tự"
+                            placeholder={tokenInfo?.role === 'co-manager' ? 'Ít nhất 8 ký tự, gồm cả chữ và số' : 'Mã PIN gồm 6 chữ số'}
                         />
                     </div>
 

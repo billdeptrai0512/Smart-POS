@@ -72,10 +72,23 @@ export async function signUp(username, password, name, email) {
 // permission error — name is purely cosmetic.
 export async function validateInviteToken(token) {
     if (!supabase) return { valid: false, error: 'No connection' }
+
+    // Sanitize the token: decode url-encoded characters, extract the segment before
+    // any slash/query/hash, and keep only hex characters to handle trailing slashes
+    // or tracking parameters appended by third-party in-app browsers (Zalo, FB, etc.).
+    let decodedToken = ''
+    try {
+        decodedToken = decodeURIComponent(token || '')
+    } catch {
+        decodedToken = token || ''
+    }
+    const rawSegment = decodedToken.trim().split(/[?#/]/)[0]
+    const cleanToken = rawSegment.replace(/[^a-fA-F0-9]/g, '').toLowerCase()
+
     const { data, error } = await supabase
         .from('invite_tokens')
         .select('id, manager_id, role, expires_at, used_at')
-        .eq('token', token)
+        .eq('token', cleanToken)
         .maybeSingle()
 
     if (error || !data) return { valid: false, error: 'Link không hợp lệ' }

@@ -20,7 +20,12 @@ export default function SignUpPage() {
         if (!emailRegex.test(email.trim())) { setError('Email không hợp lệ'); return }
         if (!username.trim()) { setError('Vui lòng nhập tài khoản'); return }
         if (username.length < 3) { setError('Tài khoản ít nhất 3 ký tự'); return }
-        if (password.length < 6) { setError('Mật khẩu ít nhất 6 ký tự'); return }
+        const hasLetter = /[a-zA-Z]/.test(password)
+        const hasNumber = /[0-9]/.test(password)
+        if (password.length < 8 || !hasLetter || !hasNumber) {
+            setError('Mật khẩu mạnh yêu cầu ít nhất 8 ký tự, bao gồm cả chữ và số')
+            return
+        }
         setError('')
         setLoading(true)
         try {
@@ -89,9 +94,8 @@ export default function SignUpPage() {
                             value={password}
                             onChange={e => setPassword(e.target.value)}
                             required
-                            minLength={6}
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder=""
+                            placeholder="Ít nhất 8 ký tự, gồm cả chữ và số"
                         />
                     </div>
 
