@@ -53,15 +53,18 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
 
     if (activeTiers.length === 0) {
         return (
-            <span
-                id={`sub-badge-locked-${addressId}`}
-                role="button"
-                tabIndex={0}
-                onClick={handleClick}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/15 border border-primary/30 hover:bg-primary/25 active:scale-95 transition-all cursor-pointer"
-            >
-                <span className="text-[10px] font-black text-primary">Mở khoá báo cáo</span>
-            </span>
+            <div className="flex items-baseline gap-1.5 text-sm">
+                <span className="text-text-secondary shrink-0">Trạng thái:</span>
+                <span
+                    id={`sub-badge-locked-${addressId}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={handleClick}
+                    className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 active:scale-95 transition-all cursor-pointer"
+                >
+                    Chưa đăng ký
+                </span>
+            </div>
         )
     }
 
@@ -77,30 +80,34 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
     // ── Còn ≤ 3 ngày → warning + gia hạn ────────────────────────────────────
     if (minDaysLeft <= 3) {
         return (
-            <span
-                id={`sub-badge-expiring-${addressId}`}
-                role="button"
-                tabIndex={0}
-                onClick={handleClick}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/10 border border-warning/25 hover:bg-warning/20 active:scale-95 transition-all cursor-pointer"
-            >
-                <span className="text-[10px] font-black text-warning">
+            <div className="flex items-baseline gap-1.5 text-sm">
+                <span className="text-text-secondary shrink-0">Trạng thái:</span>
+                <span
+                    id={`sub-badge-expiring-${addressId}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={handleClick}
+                    className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold bg-warning/10 border border-warning/25 text-warning hover:bg-warning/20 active:scale-95 transition-all cursor-pointer"
+                >
                     Còn {minDaysLeft} ngày — Gia hạn
                 </span>
-            </span>
+            </div>
         )
     }
 
     // ── Active, còn > 3 ngày → hiển thị nhỏ, mờ (vẫn bấm vào /subscription để quản lý) ──
     return (
-        <span
-            id={`sub-badge-active-${addressId}`}
-            role="button"
-            tabIndex={0}
-            onClick={handleClick}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-light hover:bg-border/40 active:scale-95 transition-all cursor-pointer"
-        >
-            <span className="text-[10px] font-medium text-text-dim">Đã đăng ký · còn {minDaysLeft} ngày</span>
-        </span>
+        <div className="flex items-baseline gap-1.5 text-sm">
+            <span className="text-text-secondary shrink-0">Trạng thái:</span>
+            <span
+                id={`sub-badge-active-${addressId}`}
+                role="button"
+                tabIndex={0}
+                onClick={handleClick}
+                className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold bg-success/10 border border-success/25 text-success hover:bg-success/20 active:scale-95 transition-all cursor-pointer"
+            >
+                Còn {minDaysLeft} ngày
+            </span>
+        </div>
     )
 }

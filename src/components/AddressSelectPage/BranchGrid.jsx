@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
     Pencil, Trash2, ClipboardCopy, MoreHorizontal, X,
     Coffee, Loader, FileText,
-    ArrowRight,
+    ArrowRight, CupSoda, Wallet, Users,
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import { formatVND } from '../../utils'
@@ -110,44 +110,39 @@ export default function BranchGrid({
                                         onClick={() => onSelect(addr)}
                                         className="flex-1 p-3.5 text-left hover:bg-surface-light active:bg-border/30 transition-colors min-w-0"
                                     >
-                                        <div className="flex items-center justify-between gap-2 mb-1.5">
-                                            <span className="text-text font-black text-sm transition-colors line-clamp-2 leading-tight truncate">{addr.name}</span>
+                                        <div className="flex items-center justify-between gap-2 mb-2">
+                                            <span className="text-text font-black text-base transition-colors line-clamp-2 leading-tight truncate">{addr.name}</span>
                                             <ArrowRight size={20} strokeWidth={2.5} className="text-text shrink-0" />
                                         </div>
 
-
-                                        {/* Subscription status badge */}
-                                        <SubscriptionBadge
-                                            addressId={addr.id}
-                                            onRenewClick={() => navigate('/subscription', {
-                                                state: { preselectAddressId: addr.id, from: '/addresses' },
-                                            })}
-                                        />
-                                        {hasStats && (
-                                            <div className="flex flex-col  gap-1 mt-2">
-
-                                                <span className="flex  items-center gap-1 text-text-secondary text-sm">
-                                                    Đã bán: <span className="font-bold">{cups}</span> ly
-                                                </span>
-                                                <span className="flex items-center gap-1 text-text-secondary text-sm">
-                                                    Doanh thu: <span className="font-bold">{formatVND(revenue)}</span>
-                                                </span>
-                                                {staffNames.length > 0 && (
-                                                    <div className="flex items-center gap-1 min-w-0">
-                                                        <span className="text-text-secondary text-sm shrink-0">Nhân viên:</span>
-                                                        <span className="text-[11px] font-bold bg-surface-light border border-border/60 rounded-full px-2 py-0.5 text-text leading-none truncate">
-                                                            {staffNames[0]}
-                                                        </span>
-                                                        {staffNames.length > 1 && (
-                                                            <span className="text-[11px] font-bold bg-surface-light border border-border/60 rounded-full px-2 py-0.5 text-text leading-none shrink-0">
-                                                                +{staffNames.length - 1}
-                                                            </span>
-                                                        )}
+                                        {/* Uniform label:value list — số liệu + tình trạng gói cước */}
+                                        <div className="flex flex-col gap-1.5 text-sm">
+                                            {hasStats && (
+                                                <>
+                                                    <div className="flex items-baseline gap-1.5">
+                                                        <span className="text-text-secondary">Đã bán:</span>
+                                                        <span className="font-bold text-text opacity-70">{cups} ly</span>
                                                     </div>
-                                                )}
-
-                                            </div>
-                                        )}
+                                                    <div className="flex items-baseline gap-1.5">
+                                                        <span className="text-text-secondary">Doanh thu:</span>
+                                                        <span className="font-bold text-text opacity-70">{formatVND(revenue)}</span>
+                                                    </div>
+                                                    <div className="flex items-baseline gap-1.5 min-w-0">
+                                                        <span className="text-text-secondary shrink-0">Nhân viên:</span>
+                                                        <span className="font-bold text-text opacity-70 truncate">
+                                                            {staffNames.length > 0 ? staffNames.join(', ') : '—'}
+                                                        </span>
+                                                    </div>
+                                                </>
+                                            )}
+                                            {/* Tình trạng gói — tự ẩn khi monetization OFF (badge return null) */}
+                                            <SubscriptionBadge
+                                                addressId={addr.id}
+                                                onRenewClick={() => navigate('/subscription', {
+                                                    state: { preselectAddressId: addr.id, from: '/addresses' },
+                                                })}
+                                            />
+                                        </div>
                                     </button>
 
                                     {/* Action buttons */}
