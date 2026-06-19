@@ -8,10 +8,11 @@ import { startOfDayVN } from '../../utils/dateVN'
  *
  * Khi monetization OFF → không render gì (ẩn hoàn toàn).
  *
- * 1 gói all-access (xem MONETIZATION.md §6.B):
- *   - active, còn > 3 ngày  → "Đã đăng ký · còn X ngày" (mờ, nhỏ, click → /subscription)
- *   - active, còn ≤ 3 ngày  → "Còn X ngày — Gia hạn" (warning, click → /subscription)
- *   - chưa có gói           → "Mở khoá báo cáo" (primary, click → /subscription)
+ * 1 gói all-access (xem MONETIZATION.md §6.B) — chip "Trạng thái:" 3 bậc màu:
+ *   - active, còn > 14 ngày → "Còn X ngày" (success/xanh, click → /subscription)
+ *   - active, còn ≤ 14 ngày → "Còn X ngày" (warning/vàng — sắp tới hạn)
+ *   - active, còn ≤ 3 ngày  → "Còn X ngày — Gia hạn" (danger/đỏ — gấp)
+ *   - chưa có gói           → "Chưa đăng ký" (primary, click → /subscription)
  *
  * ⚠️ Render bằng <span> (không phải <button>) vì badge nằm BÊN TRONG button card
  *    của BranchGrid — button lồng button gây hydration error. span + onClick hợp lệ.
@@ -77,7 +78,7 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
         }
     })
 
-    // ── Còn ≤ 3 ngày → warning + gia hạn ────────────────────────────────────
+    // ── Còn ≤ 3 ngày → danger + gia hạn (gấp) ───────────────────────────────
     if (minDaysLeft <= 3) {
         return (
             <div className="flex items-baseline gap-1.5 text-sm">
@@ -87,7 +88,7 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
                     role="button"
                     tabIndex={0}
                     onClick={handleClick}
-                    className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold bg-warning/10 border border-warning/25 text-warning hover:bg-warning/20 active:scale-95 transition-all cursor-pointer"
+                    className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold bg-danger/10 border border-danger/25 text-danger hover:bg-danger/20 active:scale-95 transition-all cursor-pointer"
                 >
                     Còn {minDaysLeft} ngày — Gia hạn
                 </span>
@@ -95,7 +96,25 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
         )
     }
 
-    // ── Active, còn > 3 ngày → hiển thị nhỏ, mờ (vẫn bấm vào /subscription để quản lý) ──
+    // ── Còn ≤ 14 ngày → warning (sắp tới hạn) ────────────────────────────────
+    if (minDaysLeft <= 14) {
+        return (
+            <div className="flex items-baseline gap-1.5 text-sm">
+                <span className="text-text-secondary shrink-0">Trạng thái:</span>
+                <span
+                    id={`sub-badge-soon-${addressId}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={handleClick}
+                    className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold bg-warning/10 border border-warning/25 text-warning hover:bg-warning/20 active:scale-95 transition-all cursor-pointer"
+                >
+                    Còn {minDaysLeft} ngày
+                </span>
+            </div>
+        )
+    }
+
+    // ── Còn > 14 ngày → success (còn nhiều) ──────────────────────────────────
     return (
         <div className="flex items-baseline gap-1.5 text-sm">
             <span className="text-text-secondary shrink-0">Trạng thái:</span>
