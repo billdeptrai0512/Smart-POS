@@ -182,6 +182,16 @@ export default function DailyReportPage() {
         }, 450)
     }, [])
     useEffect(() => () => clearTimeout(autoSaveTimerRef.current), [])
+    // Sửa số kiểm kê (Đầu/Cuối kỳ) cũng tự đẩy lên DB → điện thoại kia hội tụ qua
+    // postgres_changes. Deps gồm các map input nên effect chạy MỖI keystroke (không chỉ
+    // cạnh lên của isDirty) → triggerAutoSave debounce 450ms sau lần gõ cuối. KHÔNG auto-đẩy
+    // khi restock đổi: "chuyển kho ra quầy" vẫn cần bấm Lưu thủ công + confirm (FAB hiện vì
+    // autoSavePending=false ở nhánh này).
+    useEffect(() => {
+        if (!isTodayScope || !inventory.isDirty || inventory.restockDirty) return
+        triggerAutoSave()
+    }, [isTodayScope, inventory.isDirty, inventory.restockDirty,
+        inventory.inventoryInputs, inventory.openingInputs, inventory.openingLocked, triggerAutoSave])
     const toggleSkip = useCallback((ingredient) => {
         const willSkip = !prepSkipped[ingredient]
         setSkip(ingredient, willSkip)
@@ -812,46 +822,22 @@ export default function DailyReportPage() {
         if (!silent && inventory.restockDirty
             && !await confirm({ title: inventory.existingClosing?.id ? 'Cập nhật báo cáo (có chuyển kho ra quầy)?' : 'Lưu báo cáo (có chuyển kho ra quầy)?' })) return
 
-        const inventoryReport = inventory.buildInventoryReport()
-        // Cash/transfer/note are owned by the cashflow card — only seed defaults on first
-        // insert; updates leave them untouched so the cashflow Lưu thực thu values stick.
-        const payload = {
-            address_id: selectedAddress.id,
-            inventory_report: inventoryReport,
-        }
-        if (!inventory.existingClosing?.id) {
-            payload.closed_by = profile?.id || null
-            payload.system_total_revenue = systemTotalRevenue
-            payload.actual_cash = parseVNDInput(cashInput) || 0
-            payload.actual_transfer = parseVNDInput(transferInput) || 0
-            payload.note = ''
-        }
-
         try {
-            const saved = await saveShiftClosing(payload, {
-                existingId: inventory.existingClosing?.id,
-            })
-            // save() trả null khi bị bỏ qua do đang lưu việc khác (cờ isSaving dùng chung
-            // với "Lưu thực thu"). Giữ nguyên dirty để thử lại, không báo thành công giả.
-            if (!saved) return
+            // Đẩy NHẸ: chỉ field đã đổi, merge race-free server-side. Hook tự dời baseline +
+            // fold thay đổi của máy kia (từ row trả về). Không refetch ở đường này.
+            const row = await inventory.pushInventory(profile?.id, systemTotalRevenue)
+            if (!row) return // không có gì đổi (hoặc đang có push khác chạy) → isDirty giữ để thử lại
+            if (silent) return // auto-lưu: im lặng, không refetch (kho/Giá trị tươi lại ở lần mở/đổi tab)
             showToast('Đã lưu báo cáo tồn kho', 'success')
-            inventory.resetDirty()
-            // Chốt id từ row server trả về NGAY → lần lưu kế tiếp UPDATE đúng phiếu này,
-            // không INSERT trùng (refetch dưới có thể trễ/null do replication lag → tạo
-            // 2 phiếu cùng ngày, restock bị cộng đôi khi tính kho tổng).
-            if (saved.id) inventory.setExistingClosing(saved)
-            // Refresh shift_closing (để lần sửa sau là update, không insert) VÀ tồn kho.
-            // Kho tổng được suy ra từ restock, nên bỏ tick "Soạn" trả kho lại server-side;
-            // không reload thì warehouseStocks kẹt giá trị cũ (vd Kho 0) khiến tick lại bị
-            // prepFillMap clamp về 0 → không soạn lại được.
+            // Lưu THỦ CÔNG (thường kèm chuyển kho): refresh kho tổng + context để Giá trị/tồn đầu tươi.
             const [fresh] = await Promise.all([
                 fetchDailyReportContext(selectedAddress.id),
                 inventory.reloadStocks(),
             ])
-            setShiftClosing(fresh?.shift_closing || saved)
+            setShiftClosing(fresh?.shift_closing || row)
             if (fresh?.shift_closing) inventory.setExistingClosing(fresh.shift_closing)
         } catch (err) {
-            showError(err, 'Lưu báo cáo tồn kho')
+            if (!silent) showError(err, 'Lưu báo cáo tồn kho')
         }
     }
     // Ref tới bản handleSaveInventory mới nhất để timer auto-lưu gọi đúng state hiện tại.

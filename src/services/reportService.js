@@ -84,6 +84,38 @@ export async function updateShiftClosing(id, data) {
     return row
 }
 
+// Đường autosave NHẸ cho kiểm kê đa thiết bị: merge các field đã đổi vào inventory_report
+// của phiếu hôm nay (tạo phiếu nếu chưa có) qua RPC merge_shift_closing_inventory — race-free
+// dưới row lock. KHÔNG refetch ở đây (gọi xong tự nhẹ); convergence do postgres_changes lo.
+// `patches`: [{ingredient, unit, opening, opening_locked, remaining, restock}], số = null ⇒ xoá NVL.
+export async function mergeShiftClosingInventory(addressId, patches, closedBy, systemTotalRevenue = 0) {
+    invalidateReportCache(addressId)
+    if (localRepo.isGuest()) {
+        // Guest local-only: không có đua, merge tay rồi upsert cả mảng.
+        const existing = localRepo.fetchLocalShiftClosing(addressId, new Date().toISOString())
+        const report = Array.isArray(existing?.inventory_report) ? [...existing.inventory_report] : []
+        for (const p of patches) {
+            const i = report.findIndex(e => e.ingredient === p.ingredient)
+            const tombstone = p.opening == null && p.remaining == null && p.restock == null
+            if (i >= 0) report.splice(i, 1)
+            if (!tombstone) report.push(p)
+        }
+        const payload = { address_id: addressId, closed_by: closedBy, inventory_report: report }
+        if (!existing?.id) payload.system_total_revenue = systemTotalRevenue
+        return localRepo.upsertLocalShiftClosing(payload)
+    }
+    if (!supabase) throw new Error('No Supabase connection')
+    const { data, error } = await supabase.rpc('merge_shift_closing_inventory', {
+        p_address_id: addressId,
+        p_patches: patches,
+        p_closed_by: closedBy || null,
+        p_system_total_revenue: systemTotalRevenue || 0,
+    })
+    if (error) throw error
+    // RETURNS shift_closings (composite) → PostgREST may give the object or a 1-element array.
+    return Array.isArray(data) ? data[0] : data
+}
+
 // get_*_report RPCs liệt kê cột shift_closing tường minh nên KHÔNG trả cash_closed_at.
 // Đọc bổ sung bằng 1 PK lookup nhẹ rồi gắn vào shift_closing. Phòng thủ: nếu cột chưa
 // migrate (42703) thì coi như null (chưa chốt → mọi khoản là trước chốt).
