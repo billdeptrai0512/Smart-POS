@@ -83,7 +83,7 @@ export default function RestockModal({
     }, [cashClosedToday, isBackdated, userTouchedPhase])
 
     // Chỉ tiền mặt mới ảnh hưởng két (CK không cộng Thực thu) → chỉ hỏi phase khi trả tiền mặt.
-    const showPhaseToggle = paymentMethod === 'cash' && paidNum > 0
+    const showPhaseToggle = paymentMethod === 'cash'
 
     const handleSubmit = async () => {
         if (!isValid || submitting) return
@@ -266,13 +266,15 @@ export default function RestockModal({
                             </div>
                         </div>
 
-                        {/* Tổng cộng */}
-                        <div className="flex items-center justify-between gap-3">
-                            <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Tổng cộng</span>
-                            <span className="text-[14px] font-black text-primary tabular-nums">{formatVND(amountDue)}</span>
-                        </div>
+                        {/* Tổng cộng — chỉ hiện khi có chi phí/giảm giá (lúc đó mới khác Tổng tiền) */}
+                        {(discountAmount > 0 || extraCostNum > 0) && (
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Tổng cộng</span>
+                                <span className="text-[14px] font-black text-primary tabular-nums">{formatVND(amountDue)}</span>
+                            </div>
+                        )}
 
-                        {/* Đã thanh toán — trạng thái đủ/nợ hiển thị ở dòng Trạng thái bên dưới */}
+                        {/* Đã thanh toán — mặc định = phải trả; trạng thái chỉ hiện khi user tự sửa */}
                         <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/40">
                             <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Đã thanh toán</span>
                             <MoneyInput
@@ -284,61 +286,55 @@ export default function RestockModal({
                             />
                         </div>
 
-                        {/* Còn nợ / Đã trả đủ */}
-                        {owing > 0 ? (
-                            <div className="flex items-center justify-between gap-3">
-                                <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Còn nợ</span>
-                                <span className="text-[14px] font-black text-warning tabular-nums">{formatVND(owing)}</span>
-                            </div>
-                        ) : paidNum > 0 && amountDue > 0 ? (
-                            <div className="flex items-center justify-between gap-3">
-                                <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Trạng thái</span>
-                                <span className="text-[14px] font-black text-success tabular-nums">Đã trả đủ ✓</span>
-                            </div>
-                        ) : null}
-
-                        {/* Phương thức — chỉ hiện khi có thanh toán */}
-                        {paidNum > 0 && (
-                            <div className="flex items-center justify-between gap-3">
-                                <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Phương thức</span>
-                                <div className="w-32 flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
-                                    <button
-                                        onClick={() => setPaymentMethod('cash')}
-                                        className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'cash' ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                                    >
-                                        Tiền mặt
-                                    </button>
-                                    <button
-                                        onClick={() => setPaymentMethod('transfer')}
-                                        className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                                    >
-                                        Bank
-                                    </button>
+                        {/* Còn nợ / Đã trả đủ — chỉ khi user sửa số tiền trả khác mặc định */}
+                        {userTouchedPaid && amountDue > 0 && (
+                            owing > 0 ? (
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Còn nợ</span>
+                                    <span className="text-[14px] font-black text-warning tabular-nums">{formatVND(owing)}</span>
                                 </div>
-                            </div>
+                            ) : (
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Trạng thái</span>
+                                    <span className="text-[14px] font-black text-success tabular-nums">Đã trả đủ ✓</span>
+                                </div>
+                            )
                         )}
 
-                        {/* Phân loại dòng tiền — chỉ hỏi khi trả TIỀN MẶT. 'Trong ca' = rút từ
-                            doanh thu bán hàng trước khi chốt ca tiền → cộng vào Thực thu. */}
-                        {showPhaseToggle && (
-                            <div className="flex items-center justify-between gap-3">
-                                <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Thời điểm</span>
-                                <div className="w-32 flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
+                        {/* Phương thức + Thời điểm — toggle full-width không nhãn (giống modal chi phí).
+                            Thời điểm chỉ áp dụng tiền mặt → chỉ hiện khi method = cash. */}
+                        <div className="flex flex-col gap-2 pt-2 border-t border-border/40">
+                            <div className="w-full flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
+                                <button
+                                    onClick={() => setPaymentMethod('cash')}
+                                    className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${paymentMethod === 'cash' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                >
+                                    Tiền mặt
+                                </button>
+                                <button
+                                    onClick={() => setPaymentMethod('transfer')}
+                                    className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                >
+                                    Bank
+                                </button>
+                            </div>
+                            {showPhaseToggle && (
+                                <div className="w-full flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
                                     <button
                                         onClick={() => { setUserTouchedPhase(true); setCashPhase('in_shift') }}
-                                        className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold whitespace-nowrap transition-all ${cashPhase === 'in_shift' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                        className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${cashPhase === 'in_shift' ? 'bg-primary text-white' : 'text-text-secondary'}`}
                                     >
                                         Trong ca
                                     </button>
                                     <button
                                         onClick={() => { setUserTouchedPhase(true); setCashPhase('post_close') }}
-                                        className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold whitespace-nowrap transition-all ${cashPhase === 'post_close' ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                        className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${cashPhase === 'post_close' ? 'bg-primary text-white' : 'text-text-secondary'}`}
                                     >
                                         Sau chốt
                                     </button>
                                 </div>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
                 </div>
 
