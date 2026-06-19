@@ -20,15 +20,16 @@ import {
     deleteExtraIngredient,
     upsertIngredientCost,
     deleteRecipeRow,
-    fetchIngredientStocks,
 } from '../services/orderService'
-import { sortIngredients, ingredientLabel, getIngredientUnit } from '../utils/ingredients'
+import { sortIngredients, getIngredientUnit, normalizeIngredientCategory } from '../utils/ingredients'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../contexts/ConfirmContext'
 import Toast from '../components/POSPage/Toast'
 import RecipeHeader from '../components/RecipeIngredientPage/RecipeHeader'
-import BaseRecipeSection from '../components/RecipeIngredientPage/BaseRecipeSection'
+import FastIngredientFill from '../components/RecipeIngredientPage/FastIngredientFill'
 import ExtrasSection from '../components/RecipeIngredientPage/ExtrasSection'
+import CopyRecipeModal from '../components/RecipeIngredientPage/CopyRecipeModal'
+import { Trash2 } from 'lucide-react'
 
 export default function RecipeIngredientPage() {
     const navigate = useNavigate()
@@ -38,7 +39,7 @@ export default function RecipeIngredientPage() {
         products, recipes: allRecipes,
         ingredientCosts: contextCosts, ingredientUnits: contextUnits,
         productExtras: contextExtras, extraIngredients: contextExtraIngs,
-        refreshProducts,
+        ingredientConfigs, refreshProducts,
     } = useProducts()
     const { selectedAddress } = useAddress()
     const { isManager, isAdmin } = useAuth()
@@ -52,18 +53,27 @@ export default function RecipeIngredientPage() {
     const [extras, setExtras] = useState([])
     const [extraIngs, setExtraIngs] = useState(contextExtraIngs || {})
     const [saving, setSaving] = useState(false)
-    const [ingredientStocks, setIngredientStocks] = useState({})
+    const [showCopyFrom, setShowCopyFrom] = useState(false)
 
     const product = useMemo(() => products.find(p => p.id === productId), [products, productId])
 
-    useEffect(() => {
-        if (!selectedAddress?.id) return
-        fetchIngredientStocks(selectedAddress.id).then(stocks => {
-            const map = {}
-            stocks.forEach(s => map[s.ingredient] = s.current_stock)
-            setIngredientStocks(map)
-        }).catch(console.error)
-    }, [selectedAddress?.id])
+    // Index recipes by product — used by the "copy from" picker and to count rows.
+    const recipesByProduct = useMemo(() => {
+        const map = new Map()
+        for (const r of recipes || []) {
+            const list = map.get(r.product_id)
+            if (list) list.push(r)
+            else map.set(r.product_id, [r])
+        }
+        return map
+    }, [recipes])
+
+    // Category lookup for the add-ingredient combobox (groups chips into Chính / Bao bì).
+    const categoryOf = useMemo(() => {
+        const m = new Map()
+        for (const c of ingredientConfigs || []) m.set(c.ingredient, c.category)
+        return (key) => normalizeIngredientCategory(m.get(key))
+    }, [ingredientConfigs])
 
     // Fetch fresh data on mount to avoid showing stale localStorage cache
     useEffect(() => { refreshProducts?.() }, [])
@@ -87,9 +97,6 @@ export default function RecipeIngredientPage() {
             .sort((a, b) => sortIngredients(a, b, selectedAddress?.ingredient_sort_order)),
         [ingredientCosts, selectedAddress?.ingredient_sort_order]
     )
-    const baseIngredients = prodRecipes.map(r => r.ingredient)
-    const availableBaseIngredients = dbIngredients.filter(i => !baseIngredients.includes(i))
-
     // Wraps an async action with saving=true/false + error toast
     const withSaving = async (errorContext, fn) => {
         setSaving(true)
@@ -99,22 +106,55 @@ export default function RecipeIngredientPage() {
     }
 
     // ─── Base recipe handlers ─────────────────────────────────────────
-    async function handleDeleteRecipeIngredient(ingredient) {
-        if (!await confirm({ title: `Xóa "${ingredientLabel(ingredient)}" khỏi công thức?`, danger: true, confirmLabel: 'Xóa' })) return
-        await withSaving('Xóa nguyên liệu khỏi công thức', async () => {
-            await deleteRecipeRow(productId, ingredient, selectedAddress?.id)
-            setRecipes(prev => prev.filter(r => !(r.product_id === productId && r.ingredient === ingredient)))
+    // Fast-fill: amount>0 upserts the row, amount<=0 removes it. One handler for
+    // both add/update/delete so a single number box per ingredient is all the UI needs.
+    async function setBaseAmount(ingredient, amount, unit) {
+        await withSaving('Lưu công thức', async () => {
+            if (amount > 0) {
+                await upsertRecipe(productId, ingredient, amount, selectedAddress?.id, unit)
+                setRecipes(prev => {
+                    const exists = prev.some(r => r.product_id === productId && r.ingredient === ingredient)
+                    if (exists) return prev.map(r => r.product_id === productId && r.ingredient === ingredient ? { ...r, amount } : r)
+                    return [...prev, { product_id: productId, ingredient, amount, unit: unit || getIngredientUnit(ingredient) }]
+                })
+            } else {
+                await deleteRecipeRow(productId, ingredient, selectedAddress?.id)
+                setRecipes(prev => prev.filter(r => !(r.product_id === productId && r.ingredient === ingredient)))
+            }
+            refreshProducts?.()
         })
     }
 
-    async function saveAmount(ingredient, newAmount) {
-        await withSaving('Lưu lượng nguyên liệu', async () => {
-            await upsertRecipe(productId, ingredient, newAmount, selectedAddress?.id)
-            setRecipes(prev => prev.map(r =>
-                r.product_id === productId && r.ingredient === ingredient
-                    ? { ...r, amount: newAmount }
-                    : r
-            ))
+    async function handleCopyFrom(sourceProductId, sourceName) {
+        const srcRows = recipesByProduct.get(sourceProductId) || []
+        const srcExtras = contextExtras?.[sourceProductId] || []
+        if (srcRows.length === 0 && srcExtras.length === 0) return
+        setShowCopyFrom(false)
+        const parts = []
+        if (srcRows.length) parts.push(`${srcRows.length} nguyên liệu`)
+        if (srcExtras.length) parts.push(`${srcExtras.length} tùy chọn`)
+        if (!await confirm({ title: `Chép ${parts.join(' + ')} từ "${sourceName}"?`, detail: 'Nguyên liệu trùng tên sẽ bị ghi đè lượng; tùy chọn được thêm mới.', confirmLabel: 'Chép' })) return
+        await withSaving('Chép công thức', async () => {
+            for (const r of srcRows) {
+                await upsertRecipe(productId, r.ingredient, r.amount, selectedAddress?.id, r.unit)
+            }
+            // Extras are copied as new rows (each with its own ingredient impacts).
+            // Skip any whose name already exists here so copying twice / into a product that
+            // already has "Lớn" doesn't create duplicate options.
+            const existingExtraNames = new Set(extras.map(e => e.name.trim().toLowerCase()))
+            for (const se of srcExtras) {
+                if (existingExtraNames.has(se.name.trim().toLowerCase())) continue
+                const newExtra = await insertProductExtra(productId, se.name, se.price, selectedAddress?.id)
+                if (se.is_sticky) await updateProductExtraSticky(newExtra.id, true)
+                for (const ei of (contextExtraIngs?.[se.id] || [])) {
+                    await upsertExtraIngredient(newExtra.id, ei.ingredient, ei.amount, ei.unit)
+                }
+            }
+            setRecipes(prev => {
+                const next = prev.filter(r => r.product_id !== productId || !srcRows.some(s => s.ingredient === r.ingredient))
+                return [...next, ...srcRows.map(r => ({ product_id: productId, ingredient: r.ingredient, amount: r.amount, unit: r.unit }))]
+            })
+            refreshProducts?.()
         })
     }
 
@@ -148,20 +188,29 @@ export default function RecipeIngredientPage() {
         if (custom) toAdd.push(custom)
         if (toAdd.length === 0) return
         await withSaving('Thêm nguyên liệu vào công thức', async () => {
-            for (const { key, unit } of toAdd) {
-                await upsertRecipe(productId, key, 0, selectedAddress?.id, unit)
-                // Register custom ingredients into ingredient_costs so they appear in /ingredients
-                if (unit !== null) {
-                    await upsertIngredientCost(key, 0, selectedAddress?.id, unit)
+            for (const { key, unit, category } of toAdd) {
+                // Guard against resetting an ingredient that already exists: only seed amount 0
+                // when it's not yet in this recipe, and only register a cost row when it's
+                // brand-new — else "Tạo mới" typed with an existing name would zero its amount
+                // and (worse) its shared unit cost.
+                if (!prodRecipes.some(r => r.ingredient === key)) {
+                    await upsertRecipe(productId, key, 0, selectedAddress?.id, unit)
+                }
+                if (unit !== null && !(key in ingredientCosts)) {
+                    await upsertIngredientCost(key, 0, selectedAddress?.id, unit, category ? { category } : {})
                 }
             }
-            setRecipes(prev => [
-                ...prev,
-                ...toAdd.map(({ key, unit }) => ({
-                    product_id: productId, ingredient: key, amount: 0,
-                    unit: unit || getIngredientUnit(key),
-                })),
-            ])
+            setRecipes(prev => {
+                const present = new Set(prev.filter(r => r.product_id === productId).map(r => r.ingredient))
+                const fresh = toAdd.filter(t => !present.has(t.key))
+                return [
+                    ...prev,
+                    ...fresh.map(({ key, unit }) => ({
+                        product_id: productId, ingredient: key, amount: 0,
+                        unit: unit || getIngredientUnit(key),
+                    })),
+                ]
+            })
             refreshProducts?.()
         })
     }
@@ -242,15 +291,24 @@ export default function RecipeIngredientPage() {
         const toAdd = keys.map(key => ({ key, unit: null }))
         if (custom) toAdd.push(custom)
         if (toAdd.length === 0) return
+        const present = new Set((extraIngs[extraId] || []).map(ei => ei.ingredient))
         await withSaving('Thêm nguyên liệu vào tùy chọn', async () => {
-            for (const { key, unit } of toAdd) {
-                await upsertExtraIngredient(extraId, key, 0, unit)
+            for (const { key, unit, category } of toAdd) {
+                // Same guard as the base recipe: don't zero an impact/cost that already exists.
+                if (!present.has(key)) {
+                    await upsertExtraIngredient(extraId, key, 0, unit)
+                }
+                // A brand-new ingredient created here must exist in ingredient_costs (with its
+                // category) too, else it won't show in /ingredients or the chip list.
+                if (unit !== null && !(key in ingredientCosts)) {
+                    await upsertIngredientCost(key, 0, selectedAddress?.id, unit, category ? { category } : {})
+                }
             }
             setExtraIngs(prev => ({
                 ...prev,
                 [extraId]: [
                     ...(prev[extraId] || []),
-                    ...toAdd.map(({ key, unit }) => ({
+                    ...toAdd.filter(t => !present.has(t.key)).map(({ key, unit }) => ({
                         extra_id: extraId, ingredient: key, amount: 0,
                         unit: unit || getIngredientUnit(key),
                     })),
@@ -317,21 +375,21 @@ export default function RecipeIngredientPage() {
                 onBack={() => navigate('/recipes', { state: location.state })}
                 onSavePrice={saveProductPrice}
                 onSaveName={saveProductName}
-                onDeleteFromMenu={handleDeleteFromMenu}
+                onCopyFrom={() => setShowCopyFrom(true)}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-bg">
-                <BaseRecipeSection
-                    prodRecipes={prodRecipes}
-                    ingredientCosts={ingredientCosts}
-                    ingredientUnits={ingredientUnits}
-                    availableBaseIngredients={availableBaseIngredients}
+                <FastIngredientFill
+                    entries={prodRecipes}
                     dbIngredients={dbIngredients}
+                    getUnit={(k) => getIngredientUnit(k, ingredientUnits?.[k], ingredientUnits)}
+                    categoryOf={categoryOf}
+                    ingredientCosts={ingredientCosts}
                     canEdit={canEdit}
-                    onSaveAmount={saveAmount}
-                    onDeleteIngredient={handleDeleteRecipeIngredient}
-                    onAddIngredients={handleAddBaseIngredients}
-                    ingredientStocks={ingredientStocks}
+                    showCost
+                    onSetAmount={setBaseAmount}
+                    onRemove={(ing) => setBaseAmount(ing, 0)}
+                    onAddCustom={handleAddBaseIngredients}
                 />
 
                 {canEdit && (
@@ -348,6 +406,13 @@ export default function RecipeIngredientPage() {
                                 className="w-5 h-5 accent-primary cursor-pointer shrink-0"
                             />
                         </label>
+
+                        <button
+                            onClick={handleDeleteFromMenu}
+                            className="mt-2 flex items-center justify-center gap-1.5 w-full text-[12px] font-bold text-danger/80 bg-danger/5 border border-danger/20 rounded-[12px] px-3 py-2.5 hover:bg-danger/10 hover:text-danger active:scale-[0.99] transition-all"
+                        >
+                            <Trash2 size={14} /> Xóa món khỏi menu
+                        </button>
                     </div>
                 )}
 
@@ -361,9 +426,18 @@ export default function RecipeIngredientPage() {
                     onAddExtra={handleAddExtra}
                     onSaveSortOrder={saveExtrasSortOrder}
                     extraHandlers={extraHandlers}
-                    ingredientStocks={ingredientStocks}
+                    categoryOf={categoryOf}
                 />
             </main>
+
+            {showCopyFrom && (
+                <CopyRecipeModal
+                    products={products.filter(p => p.id !== productId)}
+                    recipesByProduct={recipesByProduct}
+                    onPick={handleCopyFrom}
+                    onClose={() => setShowCopyFrom(false)}
+                />
+            )}
 
             {saving && (
                 <div className="fixed bottom-4 right-4 z-50 pointer-events-none">

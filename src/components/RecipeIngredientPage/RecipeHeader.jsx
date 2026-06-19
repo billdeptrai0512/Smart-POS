@@ -1,10 +1,10 @@
-import { ArrowLeft, Trash2 } from 'lucide-react'
+import { ArrowLeft, Copy } from 'lucide-react'
 import { formatVND } from '../../utils'
 import InlineEditor from './InlineEditor'
 import MenuTabsBar from '../common/MenuTabsBar'
 
 export default function RecipeHeader({
-    product, canEdit, onBack, onSavePrice, onSaveName, onDeleteFromMenu, onTabSelect,
+    product, canEdit, onBack, onSavePrice, onSaveName, onCopyFrom, onTabSelect,
 }) {
     return (
         <header className="shrink-0 pt-6 pb-3 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
@@ -45,11 +45,11 @@ export default function RecipeHeader({
 
                 {canEdit && (
                     <button
-                        onClick={onDeleteFromMenu}
-                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-danger/5 border border-danger/20 text-danger/70 hover:text-danger hover:bg-danger/10 transition-colors shadow-sm focus:outline-none shrink-0"
-                        title="Xóa món khỏi menu"
+                        onClick={onCopyFrom}
+                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 active:scale-95 transition-all shadow-sm focus:outline-none shrink-0"
+                        title="Chép công thức từ món khác"
                     >
-                        <Trash2 size={20} strokeWidth={2.5} />
+                        <Copy size={20} strokeWidth={2.5} />
                     </button>
                 )}
             </div>

@@ -1,21 +1,23 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { formatVND } from '../../utils'
-import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
+import { getIngredientUnit } from '../../utils/ingredients'
 import InlineEditor from './InlineEditor'
-import IngredientPicker from './IngredientPicker'
+import FastIngredientFill from './FastIngredientFill'
 
 export default function ExtraCard({
     extra, extraIngs, ingredientUnits, dbIngredients, canEdit,
     onSaveName, onSavePrice, onToggleSticky, onDelete,
     onSaveExtraAmount, onDeleteExtraIngredient, onAddExtraIngredients, onDuplicate,
-    ingredientStocks,
+    categoryOf,
 }) {
-    const [addingIngs, setAddingIngs] = useState(false)
     const [duplicating, setDuplicating] = useState(false)
     const [duplicateName, setDuplicateName] = useState('')
 
-    const existing = extraIngs.map(ei => ei.ingredient)
-    const available = dbIngredients.filter(i => !existing.includes(i))
+    const unitByKey = useMemo(() => {
+        const m = {}
+        for (const ei of extraIngs) m[ei.ingredient] = ei.unit
+        return m
+    }, [extraIngs])
 
     const submitDuplicate = () => {
         if (!duplicateName.trim()) return
@@ -75,110 +77,44 @@ export default function ExtraCard({
                 )}
             </div>
 
-            <div className="border-t border-border/40 pt-2 flex flex-col gap-1.5">
-                {extraIngs.map(ei => (
-                    <ExtraIngredientRow
-                        key={ei.id ?? ei.ingredient}
-                        ei={ei}
-                        unit={getIngredientUnit(ei.ingredient, ei.unit, ingredientUnits)}
-                        currentStock={ingredientStocks?.[ei.ingredient]}
-                        canEdit={canEdit}
-                        onSaveAmount={(v) => onSaveExtraAmount(ei.ingredient, v)}
-                        onDelete={() => onDeleteExtraIngredient(ei.ingredient)}
-                    />
-                ))}
-
-                {canEdit && addingIngs && (
-                    <IngredientPicker
-                        availableIngredients={available}
-                        existingIngredients={dbIngredients}
-                        label="Thêm nguyên liệu / tác động"
-                        onConfirm={(payload) => {
-                            onAddExtraIngredients(payload)
-                            setAddingIngs(false)
-                        }}
-                        onCancel={() => setAddingIngs(false)}
-                    />
-                )}
-
-                {canEdit && duplicating && (
-                    <div className="flex flex-col gap-1.5 mt-1 pt-2 border-t border-border/30">
-                        <div className="flex flex-wrap sm:flex-nowrap gap-1.5">
-                            <input
-                                type="text"
-                                autoFocus
-                                placeholder="Tên..."
-                                value={duplicateName}
-                                onChange={e => setDuplicateName(e.target.value)}
-                                onKeyDown={e => {
-                                    if (e.key === 'Enter') submitDuplicate()
-                                    if (e.key === 'Escape') setDuplicating(false)
-                                }}
-                                className="flex-1 bg-bg border border-primary/60 rounded-lg px-2 py-1 text-[12px] text-text focus:outline-none focus:border-primary"
-                            />
-                            <div className="flex gap-2 mt-1">
-                                <button
-                                    onClick={submitDuplicate}
-                                    className="flex-1 bg-primary text-bg px-3 py-1.5 rounded-lg text-[12px] font-bold disabled:opacity-50 transition-opacity"
-                                >
-                                    Nhân bản
-                                </button>
-                                <button
-                                    onClick={() => { setDuplicating(false); setDuplicateName('') }}
-                                    className="shrink-0 bg-surface-light border border-border/60 text-text px-2 py-1.5 rounded-lg text-[12px] font-bold"
-                                >
-                                    Hủy
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {canEdit && !addingIngs && !duplicating && (
-                    <div className="flex justify-between gap-2 mt-1">
-                        <button
-                            onClick={() => setAddingIngs(true)}
-                            className="text-[11px] text-primary hover:underline self-start font-medium mt-1"
-                        >
-                            + Thêm nguyên liệu
-                        </button>
-                        <button
-                            onClick={() => setDuplicating(true)}
-                            className="text-text-dim hover:text-primary text-[14px] shrink-0 w-6 h-6 flex items-center justify-center"
-                            title="Nhân bản"
-                        >
-                            ⧉
-                        </button>
-                    </div>
-                )}
-            </div>
-        </div>
-    )
-}
-
-function ExtraIngredientRow({ ei, unit, currentStock, canEdit, onSaveAmount, onDelete }) {
-    return (
-        <div className="flex justify-between items-center bg-bg/50 px-2 py-1.5 rounded text-[12px]">
-            <div className="flex flex-col flex-1 min-w-0">
-                <span className="text-text truncate">{ingredientLabel(ei.ingredient)}</span>
-                <span className="text-[10px] text-text-secondary mt-0.5">Tồn: {currentStock != null ? `${Math.round(currentStock * 10) / 10} ${unit}` : '—'}</span>
-            </div>
-            <div className="flex items-center gap-2">
-                <InlineEditor
-                    value={ei.amount}
+            <div className="border-t border-border/40 pt-2 flex flex-col gap-2">
+                <FastIngredientFill
+                    entries={extraIngs}
+                    dbIngredients={dbIngredients}
+                    getUnit={(k) => getIngredientUnit(k, unitByKey[k], ingredientUnits)}
+                    categoryOf={categoryOf}
                     canEdit={canEdit}
-                    onSave={onSaveAmount}
-                    type="number"
-                    step="any"
-                    suffix={unit}
-                    inputWidthClassName="w-[60px]"
-                    renderDisplay={(v) => (
-                        <span className={`font-bold tabular-nums min-w-[32px] text-right ${v > 0 ? 'text-primary' : v < 0 ? 'text-danger' : 'text-text-dim'}`}>
-                            {v > 0 ? '+' : ''}{v} <span className="text-[10px] font-normal text-text-dim/70">{unit}</span>
-                        </span>
-                    )}
+                    onSetAmount={(ing, v) => onSaveExtraAmount(ing, v)}
+                    onRemove={(ing) => onDeleteExtraIngredient(ing)}
+                    onAddCustom={onAddExtraIngredients}
                 />
-                {canEdit && <button onClick={onDelete} className="text-danger/60 hover:text-danger text-[14px]">✕</button>}
+
+                {canEdit && (duplicating ? (
+                    <div className="flex gap-1.5 pt-2 border-t border-border/30">
+                        <input
+                            type="text"
+                            autoFocus
+                            placeholder="Tên tùy chọn mới…"
+                            value={duplicateName}
+                            onChange={e => setDuplicateName(e.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') submitDuplicate()
+                                if (e.key === 'Escape') setDuplicating(false)
+                            }}
+                            className="flex-1 min-w-0 bg-bg border border-primary/60 rounded-lg px-2 py-1 text-[12px] text-text focus:outline-none focus:border-primary"
+                        />
+                        <button onClick={submitDuplicate} className="bg-primary text-bg px-3 py-1.5 rounded-lg text-[12px] font-bold">Tạo</button>
+                        <button onClick={() => { setDuplicating(false); setDuplicateName('') }} className="shrink-0 bg-surface-light border border-border/60 text-text px-2 py-1.5 rounded-lg text-[12px] font-bold">Hủy</button>
+                    </div>
+                ) : (
+                    <button
+                        onClick={() => setDuplicating(true)}
+                        className="text-text-dim hover:text-primary text-[11px] font-medium self-end"
+                        title="Tạo một tùy chọn giống hệt cái này để chỉnh"
+                    >
+                        ⧉ Tạo bản giống
+                    </button>
+                ))}
             </div>
         </div>
     )
