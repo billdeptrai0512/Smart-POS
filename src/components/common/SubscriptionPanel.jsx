@@ -299,7 +299,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                                 onClick={() => toggleAddress(addr.id)}
                                 className={`w-full text-left rounded-[12px] border px-3 py-2 transition-all duration-150
                                     ${active
-                                        ? 'border-primary bg-primary/[0.07] shadow-[0_0_14px_rgba(245,158,11,0.12)]'
+                                        ? 'border-primary bg-primary/[0.07] shadow-[0_0_14px_rgba(242,119,77,0.12)]'
                                         : 'border-border/60 bg-surface-light hover:border-border-light'}`}
                             >
                                 <span className="flex items-center justify-between gap-2">

@@ -12,7 +12,7 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
                         <button
                             onClick={() => { setActiveTab('branches'); setError('') }}
                             className={`rounded-[20px] p-3 sm:p-3.5 border text-left flex flex-col justify-between gap-[2px] relative overflow-hidden transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${activeTab === 'branches'
-                                ? 'bg-primary/5 border-primary/20 shadow-[0_4px_20px_rgba(245,158,11,0.08)]'
+                                ? 'bg-primary/5 border-primary/20 shadow-[0_4px_20px_rgba(242,119,77,0.08)]'
                                 : 'bg-bg border-border/60 hover:bg-surface-light'}`}
                         >
                             <div className="flex flex-col justify-between items-start relative z-10 mb-[8px]">
@@ -42,7 +42,7 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
                         <button
                             onClick={() => { setActiveTab('staff'); setError('') }}
                             className={`rounded-[20px] p-3 sm:p-3.5 border text-left flex flex-col justify-between gap-[2px] relative overflow-hidden transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${activeTab === 'staff'
-                                ? 'bg-primary/5 border-primary/20 shadow-[0_4px_20px_rgba(245,158,11,0.08)]'
+                                ? 'bg-primary/5 border-primary/20 shadow-[0_4px_20px_rgba(242,119,77,0.08)]'
                                 : 'bg-bg border-border/60 hover:bg-surface-light'}`}
                         >
                             <div className="flex flex-col justify-between items-start relative z-10 mb-[8px]">

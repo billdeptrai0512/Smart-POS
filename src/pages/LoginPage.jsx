@@ -56,10 +56,13 @@ export default function LoginPage() {
         <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-4 py-8">
             <div className="w-full max-w-sm space-y-6">
                 <div className="text-center">
-                    <h1 className="text-2xl font-black text-text uppercase tracking-wider">Smart POS</h1>
-                    <p className="text-center text-text-secondary text-[14px] mt-2">
-                        Công cụ quản lý bán hàng thông minh
-                    </p>
+                    {/* Logo KOPOS — nền trong suốt nên hoà thẳng vào bg-bg của trang login */}
+                    <img
+                        src="/kopos-logo.png"
+                        alt="KOPOS — Vận hành quán nhỏ dễ dàng hơn!"
+                        className="mx-auto w-60 h-auto select-none"
+                        draggable="false"
+                    />
                 </div>
 
                 <div className="bg-surface border border-border/60 rounded-[24px] p-6 shadow-[0_8px_30px_rgba(0,0,0,0.35)] space-y-5">
@@ -127,7 +130,7 @@ export default function LoginPage() {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full py-3.5 rounded-[14px] bg-primary uppercase border border-border/60 text-bg font-black text-sm hover:bg-primary-hover active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_4px_12px_rgba(245,158,11,0.15)]"
+                            className="w-full py-3.5 rounded-[14px] bg-primary uppercase border border-border/60 text-bg font-black text-sm hover:bg-primary-hover active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_4px_12px_rgba(242,119,77,0.15)]"
                         >
                             {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
                         </button>

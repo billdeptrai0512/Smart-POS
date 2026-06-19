@@ -40,13 +40,13 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'prompt',
-      includeAssets: ['favicon.svg', 'icons/*.png'],
+      includeAssets: ['favicon.png', 'icons/*.png'],
       manifest: {
-        name: 'Smart POS - Kôphin Coffee',
-        short_name: 'Smart POS',
-        description: 'Cà phê ngon mang đi buổi sáng',
-        theme_color: '#3E2723',
-        background_color: '#3E2723',
+        name: 'KOPOS',
+        short_name: 'KOPOS',
+        description: 'Vận hành quán nhỏ dễ dàng hơn',
+        theme_color: '#00324B',
+        background_color: '#00324B',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
@@ -72,6 +72,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // iOS splash screens load via <link> tags, not the SW — keep them out of precache.
+        globIgnores: ['**/splash/*'],
         // Don't cache Auth/Storage/Realtime endpoints — they are stateful and
         // serving stale tokens or websocket frames is worse than failing fast.
         navigateFallbackDenylist: [/^\/api\//, /^\/auth\//],

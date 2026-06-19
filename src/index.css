@@ -10,11 +10,11 @@
   --color-border: #44403c;
   --color-border-light: #57534e;
 
-  /* Accent – warm amber/orange */
-  --color-primary: #f59e0b;
-  --color-primary-hover: #fbbf24;
-  --color-primary-glow: rgba(245, 158, 11, 0.25);
-  --color-primary-soft: rgba(245, 158, 11, 0.1);
+  /* Accent – KOPOS tag orange */
+  --color-primary: #f2774d;
+  --color-primary-hover: #f58d6a;
+  --color-primary-glow: rgba(242, 119, 77, 0.25);
+  --color-primary-soft: rgba(242, 119, 77, 0.1);
 
   /* Text */
   --color-text: #fafaf9;
