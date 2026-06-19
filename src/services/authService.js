@@ -389,18 +389,18 @@ export async function fetchActiveSessions(addressIds) {
     // Best-effort name lookup. Authenticated managers/staff can read users via RLS;
     // anonymous contexts can't and we silently degrade to undefined names.
     const userIds = [...new Set(data.map(s => s.user_id))]
-    let nameById = {}
+    let userById = {}
     try {
         const { data: usersData } = await supabase
             .from('users')
-            .select('id, name')
+            .select('id, name, role')
             .in('id', userIds)
         if (usersData) {
-            for (const u of usersData) nameById[u.id] = u.name
+            for (const u of usersData) userById[u.id] = { name: u.name, role: u.role }
         }
     } catch { /* RLS blocked — leave names undefined */ }
 
-    return data.map(s => ({ ...s, users: { name: nameById[s.user_id] } }))
+    return data.map(s => ({ ...s, users: userById[s.user_id] || {} }))
 }
 
 // Fetch today's cup count + revenue for multiple addresses in one RPC call.

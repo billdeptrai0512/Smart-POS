@@ -60,7 +60,7 @@ export default function BranchGrid({
                 {addresses.map(addr => {
                     const cups = cupsMap[addr.id] || 0
                     const revenue = revenueMap[addr.id] || 0
-                    const staffNames = sessionsMap[addr.id] || []
+                    const sessionUsers = sessionsMap[addr.id] || []
                     const isEditing = editingAddressId === addr.id
                     // Stale-while-revalidate: only hide stats on initial load.
                     // Once cupsMap has any value (incl. 0), keep rendering it
@@ -136,13 +136,16 @@ export default function BranchGrid({
                                                     state: { preselectAddressId: addr.id, from: '/addresses' },
                                                 })}
                                             />
-                                            {/* Mỗi nhân viên đang trong ca một dòng riêng */}
-                                            {hasStats && staffNames.map((name, i) => (
-                                                <div key={i} className="flex items-baseline gap-1.5 min-w-0">
-                                                    <span className="text-text-secondary shrink-0">Nhân viên:</span>
-                                                    <span className="font-bold text-text opacity-70 truncate">{name}</span>
-                                                </div>
-                                            ))}
+                                            {/* Mỗi người đang trong ca một dòng — nhãn theo vai trò */}
+                                            {hasStats && sessionUsers.map((u, i) => {
+                                                const isManager = u.role === 'manager' || u.role === 'co-manager'
+                                                return (
+                                                    <div key={i} className="flex items-baseline gap-1.5 min-w-0">
+                                                        <span className="text-text-secondary shrink-0">{isManager ? 'Quản lý:' : 'Nhân viên:'}</span>
+                                                        <span className="font-bold text-text opacity-70 truncate">{u.name}</span>
+                                                    </div>
+                                                )
+                                            })}
                                         </div>
                                     </button>
 

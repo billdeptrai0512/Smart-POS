@@ -49,7 +49,7 @@ export function AddressStatsProvider() {
             const grouped = {}
             sessions.forEach(s => {
                 if (!grouped[s.address_id]) grouped[s.address_id] = []
-                grouped[s.address_id].push(s.users?.name || 'Unknown')
+                grouped[s.address_id].push({ name: s.users?.name || 'Unknown', role: s.users?.role })
             })
             setSessionsMap(grouped)
         } finally {
