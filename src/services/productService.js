@@ -46,6 +46,17 @@ export async function upsertProductPrice(productId, addressId, price) {
     if (error) throw error
 }
 
+// Rename a product
+export async function updateProductName(productId, name) {
+    if (localRepo.isGuest()) return localRepo.updateLocalProductName(productId, name)
+    if (!supabase) return
+    const { error } = await supabase
+        .from('products')
+        .update({ name })
+        .eq('id', productId)
+    if (error) throw error
+}
+
 // Toggle whether a product counts toward daily cup total
 export async function updateProductCountAsCup(productId, countAsCup) {
     if (localRepo.isGuest()) return localRepo.updateLocalProductCountAsCup(productId, countAsCup)

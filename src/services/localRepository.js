@@ -576,6 +576,12 @@ export const updateLocalProductPrice = (productId, price) => {
     if (p) { p.price = price; set(KEYS.PRODUCTS, products); }
 };
 
+export const updateLocalProductName = (productId, name) => {
+    const products = get(KEYS.PRODUCTS);
+    const p = products.find(p => p.id === productId);
+    if (p) { p.name = name; set(KEYS.PRODUCTS, products); }
+};
+
 export const updateLocalProductCountAsCup = (productId, countAsCup) => {
     const products = get(KEYS.PRODUCTS);
     const p = products.find(p => p.id === productId);

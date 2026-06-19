@@ -6,6 +6,7 @@ import { useAddress } from '../contexts/AddressContext'
 import {
     upsertRecipe,
     upsertProductPrice,
+    updateProductName,
     updateProductCountAsCup,
     insertProductExtra,
     updateProductExtraName,
@@ -121,6 +122,15 @@ export default function RecipeIngredientPage() {
         if (!selectedAddress?.id) return
         await withSaving('Lưu giá bán sản phẩm', async () => {
             await upsertProductPrice(productId, selectedAddress.id, newPrice)
+            refreshProducts?.()
+        })
+    }
+
+    async function saveProductName(newName) {
+        const trimmed = newName.trim()
+        if (!trimmed || trimmed === product?.name) return
+        await withSaving('Lưu tên món', async () => {
+            await updateProductName(productId, trimmed)
             refreshProducts?.()
         })
     }
@@ -306,6 +316,7 @@ export default function RecipeIngredientPage() {
                 canEdit={canEdit}
                 onBack={() => navigate('/recipes', { state: location.state })}
                 onSavePrice={saveProductPrice}
+                onSaveName={saveProductName}
                 onDeleteFromMenu={handleDeleteFromMenu}
             />
 

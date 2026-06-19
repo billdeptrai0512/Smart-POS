@@ -4,7 +4,7 @@ import InlineEditor from './InlineEditor'
 import MenuTabsBar from '../common/MenuTabsBar'
 
 export default function RecipeHeader({
-    product, canEdit, onBack, onSavePrice, onDeleteFromMenu, onTabSelect,
+    product, canEdit, onBack, onSavePrice, onSaveName, onDeleteFromMenu, onTabSelect,
 }) {
     return (
         <header className="shrink-0 pt-6 pb-3 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
@@ -19,7 +19,16 @@ export default function RecipeHeader({
 
                 <div className="flex flex-row gap-2 flex-1 min-w-0">
                     <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center min-w-0">
-                        <span className="text-[13px] font-black text-primary uppercase line-clamp-1 break-words w-full px-2" title={product.name}>{product.name}</span>
+                        <InlineEditor
+                            value={product.name}
+                            canEdit={canEdit}
+                            onSave={onSaveName}
+                            type="text"
+                            inputWidthClassName="w-full"
+                            displayClassName="text-[13px] font-black text-primary uppercase line-clamp-1 break-words w-full px-2"
+                            inputClassName="!text-center uppercase"
+                            renderDisplay={(v) => <span title={v}>{v}</span>}
+                        />
                         <div className="flex items-center justify-center gap-1.5 text-[12px] font-bold text-text-secondary leading-none mt-1 w-full">
                             <span>Giá bán:</span>
                             <InlineEditor
