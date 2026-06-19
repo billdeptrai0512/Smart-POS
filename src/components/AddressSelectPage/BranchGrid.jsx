@@ -127,21 +127,22 @@ export default function BranchGrid({
                                                         <span className="text-text-secondary">Doanh thu:</span>
                                                         <span className="font-bold text-text opacity-70">{formatVND(revenue)}</span>
                                                     </div>
-                                                    <div className="flex items-baseline gap-1.5 min-w-0">
-                                                        <span className="text-text-secondary shrink-0">Nhân viên:</span>
-                                                        <span className="font-bold text-text opacity-70 truncate">
-                                                            {staffNames.length > 0 ? staffNames.join(', ') : '—'}
-                                                        </span>
-                                                    </div>
                                                 </>
                                             )}
-                                            {/* Tình trạng gói — tự ẩn khi monetization OFF (badge return null) */}
+                                            {/* Trạng thái gói — tự ẩn khi monetization OFF (badge return null) */}
                                             <SubscriptionBadge
                                                 addressId={addr.id}
                                                 onRenewClick={() => navigate('/subscription', {
                                                     state: { preselectAddressId: addr.id, from: '/addresses' },
                                                 })}
                                             />
+                                            {/* Mỗi nhân viên đang trong ca một dòng riêng */}
+                                            {hasStats && staffNames.map((name, i) => (
+                                                <div key={i} className="flex items-baseline gap-1.5 min-w-0">
+                                                    <span className="text-text-secondary shrink-0">Nhân viên:</span>
+                                                    <span className="font-bold text-text opacity-70 truncate">{name}</span>
+                                                </div>
+                                            ))}
                                         </div>
                                     </button>
 
