@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { setMyPhone } from '../services/authService'
 import { useNavigate, Link } from 'react-router-dom'
 import ErrorBanner from '../components/common/ErrorBanner'
 
@@ -9,6 +10,7 @@ export default function SignUpPage() {
     const [name, setName] = useState('')
     const [email, setEmail] = useState('')
     const [username, setUsername] = useState('')
+    const [phone, setPhone] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
@@ -20,6 +22,13 @@ export default function SignUpPage() {
         if (!emailRegex.test(email.trim())) { setError('Email không hợp lệ'); return }
         if (!username.trim()) { setError('Vui lòng nhập tài khoản'); return }
         if (username.length < 3) { setError('Tài khoản ít nhất 3 ký tự'); return }
+        // SĐT phải hợp lệ TRƯỚC khi tạo tài khoản — set_my_phone (sau signUp) dùng
+        // cùng luật này; chặn ở client để không lỡ tạo account rồi rớt phone → mất trial.
+        const phoneDigits = phone.replace(/\D/g, '').replace(/^84/, '0')
+        if (!/^0[35789]\d{8}$/.test(phoneDigits)) {
+            setError('Số điện thoại không hợp lệ — cần số di động VN 10 số (vd: 0901234567)')
+            return
+        }
         const hasLetter = /[a-zA-Z]/.test(password)
         const hasNumber = /[0-9]/.test(password)
         if (password.length < 8 || !hasLetter || !hasNumber) {
@@ -30,6 +39,14 @@ export default function SignUpPage() {
         setLoading(true)
         try {
             await signUp(username.trim(), password, name.trim(), email.trim())
+            // Lưu SĐT cho tài khoản vừa tạo → trigger cấp 7 ngày trial khi tạo chi nhánh đầu.
+            // Account đã tạo xong; nếu SĐT trùng tài khoản khác, báo lỗi nhưng vẫn cho vào
+            // (sửa lại SĐT sau trong thẻ tài khoản).
+            try {
+                await setMyPhone(phone.trim())
+            } catch (phoneErr) {
+                console.error('[SignUp] setMyPhone failed:', phoneErr)
+            }
             navigate('/addresses', { replace: true })
         } catch (err) {
             setError(err.message || 'Đăng ký thất bại')
@@ -74,17 +91,31 @@ export default function SignUpPage() {
                             placeholder=""
                         />
                     </div>
-                    {/* change this input of username to phone number,  */}
                     <div>
-                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Số điện thoại</label>
+                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Tài khoản</label>
                         <input
                             type="text"
                             value={username}
                             onChange={e => setUsername(e.target.value)}
                             required
+                            autoComplete="username"
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
                             placeholder=""
                         />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Số điện thoại</label>
+                        <input
+                            type="tel"
+                            value={phone}
+                            onChange={e => setPhone(e.target.value)}
+                            required
+                            autoComplete="tel"
+                            className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+                            placeholder="0901234567"
+                        />
+                        <p className="text-text-secondary text-[11px] mt-1">Nhận 7 ngày dùng thử báo cáo (1 SĐT = 1 lần)</p>
                     </div>
 
                     <div>
