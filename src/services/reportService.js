@@ -26,6 +26,19 @@ function isUniqueViolation(error) {
     return error.code === '23505' || /duplicate key|unique constraint/i.test(error.message || '')
 }
 
+// Khi insert đụng unique → self-heal bằng UPDATE phiếu đã có. PHẢI bỏ các field chỉ là
+// "mặc định lúc insert" (inventory_report=[], note='') khỏi payload update, nếu không chúng
+// sẽ ĐÈ SẠCH dữ liệu phiếu đã tồn tại. Bug thực tế: máy A treo (shiftClosing.id=null vì
+// không refetch/realtime), nhân viên máy B kiểm kê xong, A bấm "Lưu thực thu" → insert đụng
+// unique → update mang inventory_report=[] → xoá toàn bộ kiểm kê của B. Cash field thì vẫn
+// update bình thường (last-write-wins là chấp nhận được với số đếm tiền).
+export function stripInsertOnlyDefaults(data) {
+    const safe = { ...data }
+    if (Array.isArray(safe.inventory_report) && safe.inventory_report.length === 0) delete safe.inventory_report
+    if (safe.note === '') delete safe.note
+    return safe
+}
+
 // Tìm id phiếu chốt cùng NGÀY VN với `refIso` (mặc định now) cho 1 address. Dùng để
 // tự lành khi insert đụng unique index → UPDATE phiếu đã có thay vì vỡ "Lưu".
 async function findSameDayClosingId(addressId, refIso) {
@@ -60,7 +73,7 @@ export async function insertShiftClosing(data) {
     // (đúng phiếu report Ngày dùng) thay vì ném lỗi làm hỏng luồng lưu báo cáo/thực thu.
     if (isUniqueViolation(error)) {
         const existingId = await findSameDayClosingId(data.address_id, data.closed_at)
-        if (existingId) return updateShiftClosing(existingId, data)
+        if (existingId) return updateShiftClosing(existingId, stripInsertOnlyDefaults(data))
     }
     if (error) throw error
     return row

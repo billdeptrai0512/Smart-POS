@@ -21,7 +21,7 @@ vi.mock('../utils/dateVN', () => ({
     startOfDayVN: () => new Date(0), endOfDayVN: () => new Date(0), dateStringVN: () => '2026-06-19',
 }))
 
-const { mergeShiftClosingInventory } = await import('./reportService')
+const { mergeShiftClosingInventory, stripInsertOnlyDefaults } = await import('./reportService')
 
 const entry = (ingredient, remaining) => ({ ingredient, unit: 'g', opening: null, opening_locked: false, remaining, restock: null })
 
@@ -57,5 +57,22 @@ describe('mergeShiftClosingInventory (merge semantics)', () => {
             { ingredient: 'sugar', unit: 'g', opening: null, opening_locked: false, remaining: null, restock: null },
         ], 'user')
         expect(res.inventory_report.map(e => e.ingredient)).toEqual(['milk'])
+    })
+})
+
+describe('stripInsertOnlyDefaults (self-heal không xoá kiểm kê)', () => {
+    it('bỏ inventory_report=[] và note="" để update không đè dữ liệu đã có', () => {
+        const out = stripInsertOnlyDefaults({
+            address_id: 'a', actual_cash: 500, inventory_report: [], note: '', cash_closed_at: 't',
+        })
+        expect(out).not.toHaveProperty('inventory_report') // ← giữ nguyên kiểm kê máy B
+        expect(out).not.toHaveProperty('note')
+        expect(out).toMatchObject({ address_id: 'a', actual_cash: 500, cash_closed_at: 't' })
+    })
+
+    it('giữ inventory_report khi có dữ liệu thật (không phải default insert)', () => {
+        const out = stripInsertOnlyDefaults({ inventory_report: [entry('milk', 1)], note: 'x' })
+        expect(out.inventory_report).toHaveLength(1)
+        expect(out.note).toBe('x')
     })
 })
