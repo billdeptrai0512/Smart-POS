@@ -27,8 +27,10 @@ AS $$
 BEGIN
     -- Chỉ neo lại ở lần chốt ca đầu tiên của địa chỉ.
     IF (SELECT COUNT(*) FROM shift_closings WHERE address_id = NEW.address_id) = 1 THEN
+        -- GREATEST: chỉ kéo DÀI, không bao giờ rút ngắn (phòng trial đã được gia
+        -- hạn tay xa hơn ngày_chốt + 7).
         UPDATE address_subscriptions
-        SET valid_to = vn_business_date(NEW.closed_at) + 7
+        SET valid_to = GREATEST(valid_to, vn_business_date(NEW.closed_at) + 7)
         WHERE address_id = NEW.address_id
           AND note = 'trial';
     END IF;
