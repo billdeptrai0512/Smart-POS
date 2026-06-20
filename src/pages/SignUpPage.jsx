@@ -13,6 +13,7 @@ export default function SignUpPage() {
     const [phone, setPhone] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
+    const [phoneWarning, setPhoneWarning] = useState('')
     const [loading, setLoading] = useState(false)
 
     async function handleSubmit(e) {
@@ -45,7 +46,11 @@ export default function SignUpPage() {
             try {
                 await setMyPhone(phone.trim())
             } catch (phoneErr) {
-                console.error('[SignUp] setMyPhone failed:', phoneErr)
+                // Tài khoản đã tạo nhưng chưa lưu được SĐT (vd trùng số). Đừng nuốt lỗi —
+                // báo để user biết chưa có trial, nhập lại SĐT trong phần Tài khoản.
+                setPhoneWarning(phoneErr.message || 'Không lưu được số điện thoại')
+                setLoading(false)
+                return
             }
             navigate('/addresses', { replace: true })
         } catch (err) {
@@ -64,6 +69,21 @@ export default function SignUpPage() {
                 </div>
 
 
+                {phoneWarning ? (
+                    <div className="bg-surface border border-warning/40 rounded-[20px] p-6 shadow-sm space-y-4 text-center">
+                        <p className="text-text font-black text-base">Tài khoản đã tạo!</p>
+                        <p className="text-text-secondary text-sm">
+                            Nhưng chưa lưu được số điện thoại: <span className="text-warning font-bold">{phoneWarning}</span>.
+                            Bạn có thể nhập lại SĐT trong phần Tài khoản để nhận 7 ngày dùng thử.
+                        </p>
+                        <button
+                            onClick={() => navigate('/addresses', { replace: true })}
+                            className="w-full py-3 rounded-[14px] bg-primary text-black/80 uppercase font-bold text-sm hover:bg-primary/90 transition-colors"
+                        >
+                            Tiếp tục
+                        </button>
+                    </div>
+                ) : (
                 <form onSubmit={handleSubmit} className="bg-surface border border-border/60 rounded-[20px] p-6 shadow-sm space-y-4">
                     <ErrorBanner message={error} />
 
@@ -143,6 +163,7 @@ export default function SignUpPage() {
                         <Link to="/login" className="text-primary font-bold hover:underline">Quay lại</Link> trang đăng nhập
                     </p>
                 </form>
+                )}
 
 
             </div>
