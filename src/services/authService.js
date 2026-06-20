@@ -19,14 +19,17 @@ export async function signIn(username, password) {
 }
 
 // Sign up: creates manager Auth user + profile row.
-// `email` is required for password recovery — auth still uses username via fake email.
+// Email tuỳ chọn — đăng nhập dùng username (→ email giả), chưa có flow reset
+// password qua email. Chỉ validate khi có nhập.
 export async function signUp(username, password, name, email) {
     if (!supabase) throw new Error('No Supabase connection')
 
     const trimmedEmail = (email || '').trim()
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(trimmedEmail)) {
-        throw new Error('Email không hợp lệ. Email cần thiết cho khôi phục mật khẩu.')
+    if (trimmedEmail) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+        if (!emailRegex.test(trimmedEmail)) {
+            throw new Error('Email không hợp lệ')
+        }
     }
 
     const authEmail = formatUsernameToEmail(username)
@@ -49,7 +52,7 @@ export async function signUp(username, password, name, email) {
     // 2. Create profile row linked to auth user
     const { data: profile, error: profileError } = await supabase
         .from('users')
-        .insert({ auth_id: authUser.id, name, role: 'manager', manager_id: null, email: trimmedEmail })
+        .insert({ auth_id: authUser.id, name, role: 'manager', manager_id: null, email: trimmedEmail || null })
         .select()
         .single()
 

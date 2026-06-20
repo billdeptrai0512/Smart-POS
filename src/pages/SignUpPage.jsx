@@ -8,7 +8,6 @@ export default function SignUpPage() {
     const { signUp } = useAuth()
     const navigate = useNavigate()
     const [name, setName] = useState('')
-    const [email, setEmail] = useState('')
     const [username, setUsername] = useState('')
     const [phone, setPhone] = useState('')
     const [password, setPassword] = useState('')
@@ -19,8 +18,6 @@ export default function SignUpPage() {
     async function handleSubmit(e) {
         e.preventDefault()
         if (!name.trim()) { setError('Vui lòng nhập tên'); return }
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-        if (!emailRegex.test(email.trim())) { setError('Email không hợp lệ'); return }
         if (!username.trim()) { setError('Vui lòng nhập tài khoản'); return }
         if (username.length < 3) { setError('Tài khoản ít nhất 3 ký tự'); return }
         // SĐT phải hợp lệ TRƯỚC khi tạo tài khoản — set_my_phone (sau signUp) dùng
@@ -39,7 +36,7 @@ export default function SignUpPage() {
         setError('')
         setLoading(true)
         try {
-            await signUp(username.trim(), password, name.trim(), email.trim())
+            await signUp(username.trim(), password, name.trim())
             // Lưu SĐT cho tài khoản vừa tạo → trigger cấp 7 ngày trial khi tạo chi nhánh đầu.
             // Account đã tạo xong; nếu SĐT trùng tài khoản khác, báo lỗi nhưng vẫn cho vào
             // (sửa lại SĐT sau trong thẻ tài khoản).
@@ -86,19 +83,6 @@ export default function SignUpPage() {
                 ) : (
                 <form onSubmit={handleSubmit} className="bg-surface border border-border/60 rounded-[20px] p-6 shadow-sm space-y-4">
                     <ErrorBanner message={error} />
-
-                    <div>
-                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Email</label>
-                        <input
-                            type="email"
-                            value={email}
-                            onChange={e => setEmail(e.target.value)}
-                            required
-                            autoComplete="email"
-                            className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder=""
-                        />
-                    </div>
 
                     <div>
                         <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Họ và Tên</label>
