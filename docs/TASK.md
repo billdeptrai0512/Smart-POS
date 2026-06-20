@@ -1,13 +1,29 @@
-[x] Nhật ký của nguyên vật liệu nên bao gồm cả card rút từ kho ra quầy. Định nghĩa ở card hao hụt là nhập thêm cho bạn dễ hình dung và phân loại
+# Kế hoạch phát triển: Hỗ trợ nhiều ca chốt kho/chuyển tiền trong ngày
 
-[x] Làm gọn báo cáo dòng tiền ở mục mua nguyên liệu / bao bì . Phân loại và có tổng cộng
+## 1. Thiết kế Database & API
+- [ ] Loại bỏ ràng buộc duy nhất 1 ca mỗi ngày kinh doanh trên Supabase (`shift_closings` table/triggers).
+- [ ] Chuyển các câu lệnh cập nhật và tạo ca từ logic gom ngày (`vn_business_date`) sang tạo mới (`INSERT`) mỗi khi chốt ca.
+- [ ] Bổ sung trường định danh ca (ví dụ: `shift_name` - Ca Sáng, Ca Chiều, Ca Tối... hoặc `shift_number` để phân biệt thứ tự ca trong ngày).
 
-[x] Xoá nhãn chi phí ĐANG CÓ chi phí gắn vào → BUỘC phân loại lại, không đổ mặc định về "Chi phí khác"
-   Bối cảnh: hiện xoá nhãn = soft-delete, mọi chi phí của nhãn đó tự dồn về "Chi phí khác" (Vận hành)
-   trong báo cáo Lợi nhuận → dễ làm sai cơ cấu chi phí. Muốn manager BẮT BUỘC tự tay chuyển từng chi phí
-   sang nhãn khác đang có trước khi nhãn biến mất, để báo cáo chính xác.
-   - Khi bấm Xoá một nhãn mà nhãn đó còn chi phí gắn (đếm > 0): KHÔNG xoá ngay.
-   - Hiện flow chọn nhãn đích để CHUYỂN HÀNG LOẠT các chi phí đó sang (picker các nhãn đang có,
-     có thể cho phép chuyển tất cả về 1 nhãn, hoặc tối thiểu chặn xoá tới khi không còn chi phí orphan).
-   - Nhãn không còn chi phí gắn (đếm = 0) thì xoá bình thường như hiện tại.
-   - Mục tiêu: không còn chi phí "Nhãn đã xoá" / dồn nhầm "Chi phí khác" làm méo báo cáo Lợi nhuận.
+## 2. Thay đổi Logic xác định ca trước (lấy Đầu kỳ)
+- [ ] Thay đổi câu lệnh query lấy "yesterday's shift closing" thành tìm dòng chốt ca gần nhất overall, ngoại trừ chính ca đang thao tác:
+  ```javascript
+  const query = supabase
+      .from('shift_closings')
+      .select('id, closed_at, inventory_report')
+      .eq('address_id', addressId)
+      .order('closed_at', { ascending: false });
+
+  if (currentShiftClosingId) {
+      query.neq('id', currentShiftClosingId);
+  }
+  const { data: previousShift } = await query.limit(1).maybeSingle();
+  ```
+- [ ] Cập nhật hàm local fallback (Guest Mode) tương đương trong `localRepository.js` (`fetchLocalYesterdayShiftClosing` đổi thành `fetchLocalPreviousShiftClosing`).
+
+## 3. Quản lý trạng thái Ca đang mở (Active Shift)
+- [ ] Thao tác **"Mở ca mới"** trên UI: Tạo nút mở ca, sinh ra dòng chốt ca trạng thái "Đang hoạt động" (`cash_closed_at IS NULL`).
+- [ ] Cập nhật `DailyReportPage.jsx` để tìm kiếm và bind UI với ca đang hoạt động gần nhất, thay vì bind tự động theo ngày `todayISO`.
+
+## 4. Đồng bộ Realtime theo Ca
+- [ ] Thay đổi kênh đăng ký Realtime trong `useShiftInventoryState.js` lắng nghe theo ID của ca: `shift-closing-db-${shiftId}` thay vì theo địa chỉ `addressId` để tránh xung đột dữ liệu giữa các ca khác nhau hoạt động cùng thời điểm.
