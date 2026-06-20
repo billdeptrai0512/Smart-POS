@@ -35,6 +35,11 @@ App KHÔNG lưu một con số "tồn kho" cố định. Mọi thứ được **
 - `restock` — **Nhập thêm**: lượng rút từ kho tổng ra quầy ca này (dòng **B**).
 - `remaining` — tồn quầy **cuối ca**, **ĐẾM TAY**. Đây là **ground truth** của quầy.
 
+> [!IMPORTANT]
+> **Quy tắc lấy Đầu kỳ (`opening`):**
+> Đầu kỳ của ca hôm nay bắt buộc phải lấy từ Cuối kỳ (`remaining`) của ca gần nhất trước đó (truy vấn qua `fetchYesterdayShiftClosing`), không được sử dụng tồn quầy hiện tại (`fetchIngredientStocks` / `get_ingredient_stocks_v2`) làm Đầu kỳ. Vì ngay khi lưu/chốt ca hôm nay, tồn quầy hiện tại sẽ cập nhật thành số Cuối kỳ vừa chốt, nếu dùng nó làm Đầu kỳ sẽ gây ra lỗi nghiêm trọng: Đầu kỳ bị đè thành Cuối kỳ.
+
+
 ---
 
 ## 2. Công thức hiển thị ở `/ingredients`

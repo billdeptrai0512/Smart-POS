@@ -4,7 +4,7 @@ import {
     fetchIngredientCostsWithUnits,
     fetchIngredientStocks,
 } from '../services/orderService'
-import { mergeShiftClosingInventory } from '../services/reportService'
+import { mergeShiftClosingInventory, fetchYesterdayShiftClosing } from '../services/reportService'
 import { supabase } from '../lib/supabaseClient'
 import { isGuest } from '../services/localRepository'
 import { sortIngredients } from '../utils/ingredients'
@@ -114,19 +114,37 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
     // — the warehouse balances then reflect the new purchase without a tab switch.
     const reloadStocks = useCallback(() => {
         if (!addressId) return Promise.resolve()
-        return fetchIngredientStocks(addressId).then(rows => {
-            const counters = {}, openings = {}, warehouses = {}
-                ; (rows || []).forEach(r => {
-                    if (typeof r.counter_stock === 'number') {
-                        counters[r.ingredient] = r.counter_stock
-                        openings[r.ingredient] = String(r.counter_stock)
-                    }
-                    if (typeof r.warehouse_stock === 'number') {
-                        warehouses[r.ingredient] = r.warehouse_stock
+        return Promise.all([
+            fetchIngredientStocks(addressId),
+            fetchYesterdayShiftClosing(addressId),
+        ]).then(([rows, yesterdayClosing]) => {
+            const warehouses = {}
+            ; (rows || []).forEach(r => {
+                if (typeof r.warehouse_stock === 'number') {
+                    warehouses[r.ingredient] = r.warehouse_stock
+                }
+            })
+            setWarehouseStocks(warehouses)
+
+            let yesterdayReport = []
+            if (yesterdayClosing && yesterdayClosing.inventory_report) {
+                yesterdayReport = yesterdayClosing.inventory_report
+                if (typeof yesterdayReport === 'string') {
+                    try { yesterdayReport = JSON.parse(yesterdayReport) } catch { yesterdayReport = [] }
+                }
+            }
+
+            const counters = {}, openings = {}
+            if (Array.isArray(yesterdayReport)) {
+                yesterdayReport.forEach(item => {
+                    if (item && item.ingredient && typeof item.remaining === 'number') {
+                        counters[item.ingredient] = item.remaining
+                        openings[item.ingredient] = String(item.remaining)
                     }
                 })
+            }
+
             setOpeningStock(counters)
-            setWarehouseStocks(warehouses)
             // Seed openingInputs only if today's closing hasn't set them yet.
             // When seeding kicks in, also fold the seed into baseline.opening so
             // a fresh tab doesn't read as "dirty" before any user edit.
