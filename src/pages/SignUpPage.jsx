@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Check } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { setMyPhone } from '../services/authService'
 import { useNavigate, Link } from 'react-router-dom'
@@ -117,9 +118,8 @@ export default function SignUpPage() {
                             required
                             autoComplete="tel"
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder="0901234567"
+                            placeholder=""
                         />
-                        <p className="text-text-secondary text-[11px] mt-1">Nhận 7 ngày dùng thử báo cáo (1 SĐT = 1 lần)</p>
                     </div>
 
                     <div>
@@ -130,8 +130,20 @@ export default function SignUpPage() {
                             onChange={e => setPassword(e.target.value)}
                             required
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder="Ít nhất 8 ký tự, gồm cả chữ và số"
+                            placeholder=""
                         />
+                        <ul className="mt-2 space-y-1">
+                            {[
+                                { ok: password.length >= 8, label: 'Ít nhất 8 ký tự' },
+                                { ok: /[a-zA-Z]/.test(password), label: 'Có chữ cái' },
+                                { ok: /[0-9]/.test(password), label: 'Có chữ số' },
+                            ].map((r, i) => (
+                                <li key={i} className={`flex items-center gap-1.5 text-[11px] ${r.ok ? 'text-success' : 'text-text-secondary'}`}>
+                                    <Check size={12} className={r.ok ? 'opacity-100' : 'opacity-30'} />
+                                    {r.label}
+                                </li>
+                            ))}
+                        </ul>
                     </div>
 
                     <button
