@@ -22,7 +22,19 @@ CREATE TABLE IF NOT EXISTS addresses (
   manager_id UUID REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   ingredient_sort_order JSONB DEFAULT '[]',
+  referred_from_address_id UUID REFERENCES addresses(id) ON DELETE SET NULL, -- địa chỉ nguồn đã share-clone (hook referral)
+  referral_rewarded_at TIMESTAMPTZ, -- đã thưởng người mời cho địa chỉ này chưa (dedup, §11)
   created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Mã chia sẻ cấu hình: chủ địa chỉ phát mã → manager khác clone xuyên tài khoản.
+-- Dùng lại được, hết hạn 30 ngày. Truy cập qua RPC create_address_share_code /
+-- get_shared_config (SECURITY DEFINER). RLS bật, không policy = client không đụng trực tiếp.
+CREATE TABLE IF NOT EXISTS address_share_codes (
+  code TEXT PRIMARY KEY,
+  source_address_id UUID NOT NULL REFERENCES addresses(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '30 days')
 );
 
 -- Prevent duplicate address names per manager (case/space-insensitive).

@@ -13,19 +13,81 @@ import { cacheKey as buildCacheKey } from '../constants/storageKeys'
  * everything in one round-trip per table. Avoids the per-row INSERT...RETURNING dance and the fact
  * that PostgreSQL doesn't guarantee RETURNING preserves input order.
  *
+ * Two entry points share the same WRITE path (`applySnapshot`):
+ *   - cloneAddressConfig — same-account: reads source (RLS-scoped), then writes.
+ *   - cloneFromShareCode — cross-account: reads source via get_shared_config RPC
+ *     (SECURITY DEFINER, authorized by share code), then writes.
+ *
  * options = { menu, recipes, extras, ingredients }   (all default true)
  * onProgress = ({ phase, count }) => void   (phase: 'menu' | 'recipes' | 'extras' | 'ingredients')
  */
-export async function cloneAddressConfig(sourceAddressId, targetAddressId, options = {}, onProgress) {
-    if (!supabase) throw new Error('No Supabase connection')
 
-    const opts = {
-        menu: true,
-        recipes: true,
-        extras: true,
-        ingredients: true,
-        ...options,
+// Snapshot shape (source ids preserved so id-map logic works on write):
+//   { products:[{id,name,price,sort_order,count_as_cup}],
+//     recipes:[{product_id,ingredient,amount,unit}],
+//     extras:[{id,product_id,name,price,sort_order,is_sticky}],
+//     extraIngredients:[{extra_id,ingredient,amount,unit}],
+//     costs:[{ingredient,unit_cost,unit}],
+//     ingredientSortOrder:[...] }
+
+// Read a source address (RLS-scoped to current user) into a snapshot.
+async function readSnapshot(sourceAddressId) {
+    const { data: products, error: e1 } = await supabase
+        .from('products')
+        .select('id, name, price, sort_order, count_as_cup')
+        .eq('owner_address_id', sourceAddressId)
+        .eq('is_active', true)
+    if (e1) throw new Error('Lỗi khi đọc menu nguồn: ' + e1.message)
+
+    const { data: recipes, error: e2 } = await supabase
+        .from('recipes')
+        .select('product_id, ingredient, amount, unit')
+        .eq('address_id', sourceAddressId)
+    if (e2) throw new Error('Lỗi khi đọc công thức nguồn: ' + e2.message)
+
+    const { data: extras, error: e3 } = await supabase
+        .from('product_extras')
+        .select('id, product_id, name, price, sort_order, is_sticky')
+        .eq('address_id', sourceAddressId)
+    if (e3) throw new Error('Lỗi khi đọc tùy chọn nguồn: ' + e3.message)
+
+    let extraIngredients = []
+    const extraIds = (extras || []).map(e => e.id)
+    if (extraIds.length) {
+        const { data: ei, error: e4 } = await supabase
+            .from('extra_ingredients')
+            .select('extra_id, ingredient, amount, unit')
+            .in('extra_id', extraIds)
+        if (e4) throw new Error('Lỗi khi đọc định lượng tùy chọn: ' + e4.message)
+        extraIngredients = ei || []
     }
+
+    const { data: costs, error: e5 } = await supabase
+        .from('ingredient_costs')
+        .select('ingredient, unit_cost, unit')
+        .eq('address_id', sourceAddressId)
+    if (e5) throw new Error('Lỗi khi đọc nguyên liệu nguồn: ' + e5.message)
+
+    const { data: srcAddr, error: e6 } = await supabase
+        .from('addresses')
+        .select('ingredient_sort_order')
+        .eq('id', sourceAddressId)
+        .single()
+    if (e6) throw new Error('Lỗi khi đọc thứ tự nguyên liệu: ' + e6.message)
+
+    return {
+        products: products || [],
+        recipes: recipes || [],
+        extras: extras || [],
+        extraIngredients,
+        costs: costs || [],
+        ingredientSortOrder: srcAddr?.ingredient_sort_order || [],
+    }
+}
+
+// Write a snapshot into a freshly-created target address.
+async function applySnapshot(targetAddressId, snapshot, options, onProgress) {
+    const opts = { menu: true, recipes: true, extras: true, ingredients: true, ...options }
     const emit = (phase, count) => { try { onProgress?.({ phase, count }) } catch { /* never let UI bug break clone */ } }
 
     const productIdMap = new Map() // source product id → target product id
@@ -57,16 +119,7 @@ export async function cloneAddressConfig(sourceAddressId, targetAddressId, optio
 
     // ── 1. Menu = products (price + sort_order + count_as_cup live on this row) ─────
     if (opts.menu) {
-        // is_active = false = soft-deleted product. Don't carry deleted products
-        // (and their recipes/extras) into the new address.
-        const { data: srcProducts, error } = await supabase
-            .from('products')
-            .select('id, name, price, sort_order, count_as_cup')
-            .eq('owner_address_id', sourceAddressId)
-            .eq('is_active', true)
-        if (error) throw new Error('Lỗi khi đọc menu nguồn: ' + error.message)
-
-        const list = srcProducts || []
+        const list = snapshot.products || []
         emit('menu', list.length)
 
         if (list.length) {
@@ -90,13 +143,7 @@ export async function cloneAddressConfig(sourceAddressId, targetAddressId, optio
 
     // ── 2. Recipes (per-address overrides; globals are shared and inherited automatically) ──
     if (opts.recipes && productIdMap.size > 0) {
-        const { data: srcRecipes, error } = await supabase
-            .from('recipes')
-            .select('product_id, ingredient, amount, unit')
-            .eq('address_id', sourceAddressId)
-        if (error) throw new Error('Lỗi khi đọc công thức nguồn: ' + error.message)
-
-        const rows = (srcRecipes || [])
+        const rows = (snapshot.recipes || [])
             .map(r => {
                 const newPid = productIdMap.get(r.product_id)
                 if (!newPid) return null
@@ -119,15 +166,9 @@ export async function cloneAddressConfig(sourceAddressId, targetAddressId, optio
 
     // ── 3. Extras = product_extras + extra_ingredients (need product idMap and extra idMap) ──
     if (opts.extras && productIdMap.size > 0) {
-        const { data: srcExtras, error } = await supabase
-            .from('product_extras')
-            .select('id, product_id, name, price, sort_order, is_sticky')
-            .eq('address_id', sourceAddressId)
-        if (error) throw new Error('Lỗi khi đọc tùy chọn nguồn: ' + error.message)
-
         const extraIdMap = new Map()
         const extraRows = []
-        for (const e of srcExtras || []) {
+        for (const e of snapshot.extras || []) {
             const newPid = productIdMap.get(e.product_id)
             if (!newPid) continue
             const newId = crypto.randomUUID()
@@ -148,13 +189,7 @@ export async function cloneAddressConfig(sourceAddressId, targetAddressId, optio
             const { error: insErr } = await supabase.from('product_extras').insert(extraRows)
             if (insErr) throw new Error('Lỗi khi sao lưu tùy chọn: ' + insErr.message)
 
-            const { data: srcIngs, error: ingErr } = await supabase
-                .from('extra_ingredients')
-                .select('extra_id, ingredient, amount, unit')
-                .in('extra_id', Array.from(extraIdMap.keys()))
-            if (ingErr) throw new Error('Lỗi khi đọc định lượng tùy chọn: ' + ingErr.message)
-
-            const ingRows = (srcIngs || [])
+            const ingRows = (snapshot.extraIngredients || [])
                 .map(i => ({
                     extra_id: extraIdMap.get(i.extra_id),
                     ingredient: i.ingredient,
@@ -172,13 +207,7 @@ export async function cloneAddressConfig(sourceAddressId, targetAddressId, optio
 
     // ── 4. Ingredients = ingredient_costs overrides + ingredient_sort_order ─────────
     if (opts.ingredients) {
-        const { data: srcCosts, error } = await supabase
-            .from('ingredient_costs')
-            .select('ingredient, unit_cost, unit')
-            .eq('address_id', sourceAddressId)
-        if (error) throw new Error('Lỗi khi đọc nguyên liệu nguồn: ' + error.message)
-
-        const list = srcCosts || []
+        const list = snapshot.costs || []
         emit('ingredients', list.length)
 
         if (list.length) {
@@ -192,14 +221,7 @@ export async function cloneAddressConfig(sourceAddressId, targetAddressId, optio
             if (insErr) throw new Error('Lỗi khi sao lưu nguyên liệu: ' + insErr.message)
         }
 
-        const { data: srcAddr, error: addrErr } = await supabase
-            .from('addresses')
-            .select('ingredient_sort_order')
-            .eq('id', sourceAddressId)
-            .single()
-        if (addrErr) throw new Error('Lỗi khi đọc thứ tự nguyên liệu: ' + addrErr.message)
-
-        const sortOrder = srcAddr?.ingredient_sort_order
+        const sortOrder = snapshot.ingredientSortOrder
         if (Array.isArray(sortOrder) && sortOrder.length > 0) {
             const { error: updErr } = await supabase
                 .from('addresses')
@@ -218,4 +240,64 @@ export async function cloneAddressConfig(sourceAddressId, targetAddressId, optio
     }
 
     return { productCount: productIdMap.size }
+}
+
+export async function cloneAddressConfig(sourceAddressId, targetAddressId, options = {}, onProgress) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const snapshot = await readSnapshot(sourceAddressId)
+    return applySnapshot(targetAddressId, snapshot, options, onProgress)
+}
+
+/**
+ * Cross-account clone: read source config via share code (RPC bypasses RLS),
+ * write into target (owned by caller), then record referral attribution.
+ */
+export async function cloneFromShareCode(code, targetAddressId, onProgress) {
+    if (!supabase) throw new Error('No Supabase connection')
+
+    const { data, error } = await supabase.rpc('get_shared_config', { p_code: code })
+    if (error) throw new Error(error.message || 'Mã không hợp lệ')
+    if (!data) throw new Error('Mã không hợp lệ hoặc đã hết hạn')
+
+    const snapshot = {
+        products: data.products || [],
+        recipes: data.recipes || [],
+        extras: data.extras || [],
+        extraIngredients: data.extra_ingredients || [],
+        costs: data.costs || [],
+        ingredientSortOrder: data.ingredient_sort_order || [],
+    }
+
+    const result = await applySnapshot(targetAddressId, snapshot, {}, onProgress)
+
+    // Referral attribution (best-effort — clone already succeeded, don't fail on this).
+    if (data.source_address_id) {
+        try {
+            await supabase
+                .from('addresses')
+                .update({ referred_from_address_id: data.source_address_id })
+                .eq('id', targetAddressId)
+        } catch { /* attribution is non-critical */ }
+    }
+
+    return result
+}
+
+/**
+ * Read-only peek at a share code's config — for the "what will I copy" preview.
+ * Returns the snapshot data, or null if the code is invalid/expired.
+ */
+export async function getSharedConfig(code) {
+    if (!supabase || !code) return null
+    const { data, error } = await supabase.rpc('get_shared_config', { p_code: code })
+    if (error || !data) return null
+    return data
+}
+
+/** Generate (or reuse) a share code for an address the caller owns. */
+export async function createAddressShareCode(addressId) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { data, error } = await supabase.rpc('create_address_share_code', { p_address_id: addressId })
+    if (error) throw new Error(error.message || 'Không thể tạo mã')
+    return data
 }

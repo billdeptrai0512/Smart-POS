@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate, Outlet, useSearchParams, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AddressProvider, useAddress } from './contexts/AddressContext'
@@ -44,6 +44,24 @@ function RangeReportRedirect() {
   return <Navigate to="/daily-report" replace state={{ ...state, scope }} />
 }
 
+// Capture a ?clone=CODE share link the moment the app loads (before any auth
+// redirect can drop it). Stash in sessionStorage so it survives login/signup;
+// AddressSelectPage picks it up and pre-fills "Tạo địa chỉ". Then strip the
+// param so a refresh doesn't re-trigger.
+function CloneCapture() {
+  const [params, setParams] = useSearchParams()
+  useEffect(() => {
+    const code = params.get('clone')
+    if (!code) return
+    sessionStorage.setItem('pending_clone_code', code.trim().toUpperCase())
+    const next = new URLSearchParams(params)
+    next.delete('clone')
+    setParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return null
+}
+
 // Protected route: allows both authenticated users and active guest sessions
 function ProtectedRoute() {
   const { user, isGuest, loading } = useAuth()
@@ -74,6 +92,7 @@ export default function App() {
       <AuthProvider>
         <ConfirmProvider>
         <Suspense fallback={<PageLoading />}>
+          <CloneCapture />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignUpPage />} />
