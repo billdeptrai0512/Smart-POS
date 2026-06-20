@@ -182,16 +182,11 @@ export default function DailyReportPage() {
         }, 450)
     }, [])
     useEffect(() => () => clearTimeout(autoSaveTimerRef.current), [])
-    // Sửa số kiểm kê (Đầu/Cuối kỳ) cũng tự đẩy lên DB → điện thoại kia hội tụ qua
-    // postgres_changes. Deps gồm các map input nên effect chạy MỖI keystroke (không chỉ
-    // cạnh lên của isDirty) → triggerAutoSave debounce 450ms sau lần gõ cuối. KHÔNG auto-đẩy
-    // khi restock đổi: "chuyển kho ra quầy" vẫn cần bấm Lưu thủ công + confirm (FAB hiện vì
-    // autoSavePending=false ở nhánh này).
-    useEffect(() => {
-        if (!isTodayScope || !inventory.isDirty || inventory.restockDirty) return
-        triggerAutoSave()
-    }, [isTodayScope, inventory.isDirty, inventory.restockDirty,
-        inventory.inventoryInputs, inventory.openingInputs, inventory.openingLocked, triggerAutoSave])
+    // Kiểm kê (Đầu/Cuối kỳ) KHÔNG còn tự lưu mỗi keystroke: trước đây autosave đẩy ngay số
+    // Cuối kỳ vừa gõ lên DB, mà get_ingredient_stocks_v2 carry-forward remaining mới nhất ⇒
+    // Đầu kỳ bị ghi đè thành Cuối kỳ y chang. Giờ chỉ sync khi bấm "Lưu báo cáo" (FAB) →
+    // pushInventory → merge RPC → máy kia hội tụ qua postgres_changes. (Soạn tick/skip vẫn
+    // dùng triggerAutoSave bên dưới.)
     const toggleSkip = useCallback((ingredient) => {
         const willSkip = !prepSkipped[ingredient]
         setSkip(ingredient, willSkip)
