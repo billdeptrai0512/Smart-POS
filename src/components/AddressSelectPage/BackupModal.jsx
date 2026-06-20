@@ -1,32 +1,118 @@
 import { useState, useRef } from 'react'
-import { X, ClipboardCopy, Check, ChevronRight, Loader } from 'lucide-react'
-import { cloneAddressConfig } from '../../services/backupService'
+import { X, ClipboardCopy, Check, ChevronRight, Loader, Share2, Copy } from 'lucide-react'
+import { cloneAddressConfig, createAddressShareCode } from '../../services/backupService'
 import { useAddress } from '../../contexts/AddressContext'
 
 const ALL_OPTIONS = { menu: true, recipes: true, extras: true, ingredients: true }
 
-const PROGRESS_LABELS = {
-    menu: 'menu',
-    recipes: 'công thức',
-    extras: 'tùy chọn thêm',
-    ingredients: 'nguyên liệu',
+// Thứ tự khớp với applySnapshot trong backupService (menu → recipes → extras → ingredients).
+const PHASES = [
+    { key: 'menu', label: 'Menu' },
+    { key: 'recipes', label: 'Công thức' },
+    { key: 'extras', label: 'Tùy chọn thêm' },
+    { key: 'ingredients', label: 'Nguyên liệu' },
+]
+
+// Copy text an toàn: clipboard API có thể bị chặn trong iframe / webview Zalo-FB
+// (reject NotAllowedError). Bắt lỗi + fallback execCommand qua textarea ẩn.
+async function copyText(text) {
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text)
+            return true
+        }
+    } catch { /* fall through */ }
+    try {
+        const ta = document.createElement('textarea')
+        ta.value = text
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.focus()
+        ta.select()
+        const ok = document.execCommand('copy')
+        document.body.removeChild(ta)
+        return ok
+    } catch {
+        return false
+    }
 }
-const PROGRESS_UNITS = {
-    menu: 'sản phẩm',
-    recipes: 'công thức',
-    extras: 'tùy chọn',
-    ingredients: 'nguyên liệu',
+
+// Checklist trực quan từng bước clone (thay cho progress nhồi trong nút).
+function PhaseChecklist({ progress }) {
+    const currentIdx = progress ? PHASES.findIndex(p => p.key === progress.phase) : -1
+    return (
+        <div className="py-2 space-y-3">
+            {PHASES.map((p, i) => {
+                const status = i < currentIdx ? 'done' : i === currentIdx ? 'active' : 'pending'
+                return (
+                    <div key={p.key} className="flex items-center gap-3">
+                        <span className="w-5 h-5 flex items-center justify-center shrink-0">
+                            {status === 'done' && <Check size={16} className="text-success" />}
+                            {status === 'active' && <Loader size={15} className="animate-spin text-primary" />}
+                            {status === 'pending' && <span className="w-2 h-2 rounded-full bg-border" />}
+                        </span>
+                        <span className={`text-sm font-bold ${status === 'pending' ? 'text-text-secondary/50' : 'text-text'}`}>
+                            {p.label}
+                        </span>
+                        {status === 'active' && progress?.count != null && (
+                            <span className="text-text-secondary text-xs tabular-nums">({progress.count})</span>
+                        )}
+                    </div>
+                )
+            })}
+        </div>
+    )
 }
 
 export default function BackupModal({ sourceAddress, onClose }) {
     const { createNewAddress, removeAddress } = useAddress()
 
+    const [tab, setTab] = useState('self') // 'self' = nhân bản trong tài khoản này | 'other' = sang tài khoản khác
+
+    // ── Tab "self": nhân bản sang địa chỉ mới trong tài khoản này ──
     const [newName, setNewName] = useState('')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
     const [done, setDone] = useState(false)
     const [progress, setProgress] = useState(null)
     const submitGuardRef = useRef(false)
+
+    // ── Tab "other": phát link/mã cho tài khoản khác clone xuyên tài khoản ──
+    const [shareCode, setShareCode] = useState('')
+    const [sharing, setSharing] = useState(false)
+    const [shareErr, setShareErr] = useState('')
+    const [codeCopied, setCodeCopied] = useState(false)
+    const [linkCopied, setLinkCopied] = useState(false)
+
+    const shareLink = shareCode ? `${window.location.origin}/signup?clone=${shareCode}` : ''
+
+    async function handleGenerateCode() {
+        setShareErr('')
+        setSharing(true)
+        try {
+            const code = await createAddressShareCode(sourceAddress.id)
+            setShareCode(code)
+        } catch (err) {
+            setShareErr(err.message || 'Không thể tạo mã')
+        } finally {
+            setSharing(false)
+        }
+    }
+
+    async function handleCopyCode() {
+        if (await copyText(shareCode)) {
+            setCodeCopied(true)
+            setTimeout(() => setCodeCopied(false), 2000)
+        }
+    }
+
+    async function handleCopyLink() {
+        if (await copyText(shareLink)) {
+            setLinkCopied(true)
+            setTimeout(() => setLinkCopied(false), 2000)
+        }
+    }
 
     async function handleSubmit() {
         setError('')
@@ -74,7 +160,7 @@ export default function BackupModal({ sourceAddress, onClose }) {
                             <ClipboardCopy size={15} className="text-primary" />
                         </div>
                         <div>
-                            <p className="text-text font-black text-sm leading-none">Sao lưu cấu hình</p>
+                            <p className="text-text font-black text-sm leading-none">Nhân bản cấu hình</p>
                             <p className="text-text-secondary text-xs mt-0.5">Nguồn: <span className="text-primary font-bold">{sourceAddress.name}</span></p>
                         </div>
                     </div>
@@ -91,9 +177,9 @@ export default function BackupModal({ sourceAddress, onClose }) {
                         <div className="w-14 h-14 rounded-full bg-success/10 flex items-center justify-center">
                             <Check size={28} className="text-success" />
                         </div>
-                        <p className="text-text font-black text-base">Sao lưu thành công!</p>
+                        <p className="text-text font-black text-base">Nhân bản thành công!</p>
                         <p className="text-text-secondary text-sm text-center">
-                            Sao chép toàn bộ cấu hình từ <span className="text-text font-bold">{sourceAddress.name}</span> sang địa chỉ mới.
+                            Đã sao chép toàn bộ cấu hình từ <span className="text-text font-bold">{sourceAddress.name}</span> sang địa chỉ mới.
                         </p>
                         <button
                             onClick={onClose}
@@ -104,55 +190,126 @@ export default function BackupModal({ sourceAddress, onClose }) {
                     </div>
                 ) : (
                     <div className="px-5 py-4 space-y-4">
-                        {/* ── New address name ── */}
-                        <div className="space-y-2">
-                            <p className="text-xs font-black text-text-secondary uppercase tracking-wider">Tên địa chỉ mới</p>
-                            <input
-                                type="text"
-                                value={newName}
-                                onChange={e => setNewName(e.target.value)}
-                                placeholder="vd: KOPHIN Cầu Giấy"
-                                autoFocus
-                                disabled={loading}
-                                className="w-full px-4 py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all disabled:opacity-50"
-                            />
-                        </div>
-
-                        <p className="text-text-secondary text-xs">
-                            <span className="font-bold text-text">Bao gồm:</span> Menu - Tùy chọn thêm - Công thức - Nguyên liệu.
-                        </p>
-
-                        {/* ── Error ── */}
-                        {error && (
-                            <p className="text-danger text-xs font-medium px-1">{error}</p>
+                        {/* ── Tabs (ẩn khi đang chạy) ── */}
+                        {!loading && (
+                            <div className="flex gap-2">
+                                {[
+                                    { key: 'self', label: 'Cùng tài khoản' },
+                                    { key: 'other', label: 'Khác tài khoản' },
+                                ].map(t => (
+                                    <button
+                                        key={t.key}
+                                        onClick={() => { setTab(t.key); setError(''); setShareErr('') }}
+                                        className={`flex-1 py-2.5 rounded-[12px] text-xs font-black border transition-all ${tab === t.key
+                                            ? 'bg-primary/10 text-primary border-primary/30'
+                                            : 'bg-bg text-text-secondary border-border/60 hover:bg-surface-light'}`}
+                                    >
+                                        {t.label}
+                                    </button>
+                                ))}
+                            </div>
                         )}
 
-                        {/* ── Actions ── */}
-                        <div className="flex gap-2 pb-1">
-                            <button
-                                onClick={onClose}
-                                disabled={loading}
-                                className="flex-1 py-3 rounded-[14px] bg-bg border border-border/60 text-text-secondary font-bold text-sm hover:bg-surface-light transition-colors disabled:opacity-50"
-                            >
-                                Hủy
-                            </button>
-                            <button
-                                onClick={handleSubmit}
-                                disabled={loading || !newName.trim()}
-                                className="flex-1 py-3 rounded-[14px] bg-primary text-black font-black text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                {loading ? (
+                        {/* ════ TAB: trong tài khoản này ════ */}
+                        {tab === 'self' && (
+                            loading ? (
+                                <div className="space-y-2">
+                                    <p className="text-xs font-black text-text-secondary uppercase tracking-wider">Đang nhân bản...</p>
+                                    <PhaseChecklist progress={progress} />
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="space-y-2">
+                                        <p className="text-xs font-black text-text-secondary uppercase tracking-wider">Tên địa chỉ mới</p>
+                                        <input
+                                            type="text"
+                                            value={newName}
+                                            onChange={e => setNewName(e.target.value)}
+                                            onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
+                                            placeholder="vd: KOPHIN Cầu Giấy"
+                                            autoFocus
+                                            className="w-full px-4 py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+                                        />
+                                    </div>
+
+                                    {error && <p className="text-danger text-xs font-medium px-1">{error}</p>}
+
+                                    <div className="flex gap-2 pb-1">
+                                        <button
+                                            onClick={onClose}
+                                            className="flex-1 py-3 rounded-[14px] bg-bg border border-border/60 text-text-secondary font-bold text-sm hover:bg-surface-light transition-colors"
+                                        >
+                                            Hủy
+                                        </button>
+                                        <button
+                                            onClick={handleSubmit}
+                                            disabled={!newName.trim()}
+                                            className="flex-1 py-3 rounded-[14px] bg-primary text-black font-black text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                        >
+                                            Nhân bản <ChevronRight size={15} />
+                                        </button>
+                                    </div>
+                                </>
+                            )
+                        )}
+
+                        {/* ════ TAB: sang tài khoản khác ════ */}
+                        {tab === 'other' && (
+                            <div className="space-y-2">
+                                {shareCode ? (
                                     <>
-                                        <Loader size={15} className="animate-spin" />
-                                        {progress
-                                            ? `${PROGRESS_LABELS[progress.phase]} (${progress.count} ${PROGRESS_UNITS[progress.phase]})...`
-                                            : 'Đang sao lưu...'}
+                                        {/* Link mời — ô chọn được + nút copy (chép tay được cả khi clipboard bị chặn, vd webview Zalo) */}
+                                        <div className="flex gap-2">
+                                            <input
+                                                readOnly
+                                                value={shareLink}
+                                                onFocus={e => e.target.select()}
+                                                className="flex-1 min-w-0 px-3 py-2.5 rounded-[12px] bg-bg border border-border/60 text-text-secondary text-xs font-medium focus:outline-none focus:border-primary/40 truncate"
+                                            />
+                                            <button
+                                                onClick={handleCopyLink}
+                                                className="px-3 py-2.5 bg-primary text-black rounded-[12px] shrink-0 hover:bg-primary/90 active:scale-95 transition-all flex items-center gap-1.5 font-black text-xs"
+                                                title="Sao chép link mời"
+                                            >
+                                                {linkCopied ? <><Check size={14} /> Đã chép</> : <><Copy size={14} /> Chép link</>}
+                                            </button>
+                                        </div>
+                                        <div className="text-text-secondary text-[11px] space-y-1 pt-0.5">
+                                            <p className="font-bold text-text">Gửi link cho chủ chi nhánh mới — họ:</p>
+                                            <p className="flex gap-2"><span className="text-primary font-bold shrink-0">•</span><span>Bấm link, tự đăng ký tài khoản riêng</span></p>
+                                            <p className="flex gap-2"><span className="text-primary font-bold shrink-0">•</span><span>Tạo địa chỉ → <span className="font-bold text-text">tự chép toàn bộ cấu hình</span></span></p>
+                                            <p className="flex gap-2"><span className="text-primary font-bold shrink-0">•</span><span>Link dùng lại nhiều lần, hết hạn 30 ngày</span></p>
+                                        </div>
+                                        {/* Mã thủ công (fallback nếu không bấm được link) */}
+                                        <div className="flex items-center gap-2 pt-0.5">
+                                            <span className="text-text-secondary text-[11px] shrink-0">Hoặc mã:</span>
+                                            <code className="flex-1 min-w-0 text-text font-black tracking-widest text-sm truncate">{shareCode}</code>
+                                            <button
+                                                onClick={handleCopyCode}
+                                                className="p-1.5 text-text-secondary hover:text-text rounded-lg hover:bg-surface-light transition-colors shrink-0"
+                                                title="Sao chép mã"
+                                            >
+                                                {codeCopied ? <Check size={13} /> : <Copy size={13} />}
+                                            </button>
+                                        </div>
                                     </>
                                 ) : (
-                                    <>Sao lưu <ChevronRight size={15} /></>
+                                    <>
+                                        <p className="text-text-secondary text-[11px] px-1">
+                                            Tạo 1 link gửi cho chủ chi nhánh khác. Họ tự đăng ký tài khoản riêng và chép nguyên cấu hình này.
+                                        </p>
+                                        <button
+                                            onClick={handleGenerateCode}
+                                            disabled={sharing}
+                                            className="w-full py-2.5 rounded-[12px] bg-primary text-black font-black text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                        >
+                                            {sharing ? <><Loader size={14} className="animate-spin" /> Đang tạo link...</> : <><Share2 size={14} /> Tạo link mời</>}
+                                        </button>
+                                    </>
                                 )}
-                            </button>
-                        </div>
+                                {shareErr && <p className="text-danger text-xs font-medium px-1">{shareErr}</p>}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

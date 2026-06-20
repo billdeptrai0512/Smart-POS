@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { createInviteToken, fetchDefaultIngredientSort, setTeamMemberRole, removeTeamMember, setMyPhone } from '../services/authService'
 import { useMonetizationEnabled } from '../hooks/useEntitlement'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
+import { cloneFromShareCode, getSharedConfig } from '../services/backupService'
 import { LogOut, Loader, Plus, X, UserPlus } from 'lucide-react'
 import Skeleton from '../components/common/Skeleton'
 import BackupModal from '../components/AddressSelectPage/BackupModal'
@@ -17,7 +18,7 @@ import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 export default function AddressSelectPage() {
     const { addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading, fetchError } = useAddress()
     const { cupsMap, revenueMap, sessionsMap, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
-    const { signOut, profile, refreshProfile, isStaff, isAdmin, isGuest } = useAuth()
+    const { signOut, profile, refreshProfile, isStaff, isManager, isAdmin, isGuest } = useAuth()
     const { enabled: monetizationEnabled } = useMonetizationEnabled()
     const navigate = useNavigate()
 
@@ -27,6 +28,8 @@ export default function AddressSelectPage() {
     const [backupSource, setBackupSource] = useState(null)
     const [newAddressName, setNewAddressName] = useState('')
     const [newPhone, setNewPhone] = useState('')
+    const [newShareCode, setNewShareCode] = useState('')
+    const [clonePreview, setClonePreview] = useState(null) // { status: 'loading'|'valid'|'invalid', counts? }
     const [creating, setCreating] = useState(false)
     const [showCreateModal, setShowCreateModal] = useState(false)
     const createGuardRef = useRef(false)
@@ -89,6 +92,44 @@ export default function AddressSelectPage() {
         })
     }, [addressIdsKey])
 
+    // Smart clone link: a ?clone=CODE captured at app load (App.CloneCapture) lands here
+    // → open "Tạo địa chỉ" with the code pre-filled. Survives login/signup via sessionStorage.
+    useEffect(() => {
+        const pending = sessionStorage.getItem('pending_clone_code')
+        // Chỉ mở cho người TẠO được địa chỉ (manager/admin) — check dương, tránh
+        // mở nhầm cho staff lúc profile chưa load xong (isStaff thoáng = false).
+        if (pending && (isManager || isAdmin)) {
+            setNewShareCode(pending)
+            setShowCreateModal(true)
+            sessionStorage.removeItem('pending_clone_code')
+        }
+    }, [isManager, isAdmin])
+
+    // Live preview: when a code is entered, show what it will copy (debounced, read-only).
+    useEffect(() => {
+        const code = newShareCode.trim()
+        if (!code) { setClonePreview(null); return }
+        setClonePreview({ status: 'loading' })
+        let cancelled = false
+        const t = setTimeout(async () => {
+            const cfg = await getSharedConfig(code)
+            if (cancelled) return
+            if (!cfg) {
+                setClonePreview({ status: 'invalid' })
+            } else {
+                setClonePreview({
+                    status: 'valid',
+                    counts: {
+                        products: (cfg.products || []).length,
+                        recipes: (cfg.recipes || []).length,
+                        costs: (cfg.costs || []).length,
+                    },
+                })
+            }
+        }, 400)
+        return () => { cancelled = true; clearTimeout(t) }
+    }, [newShareCode])
+
     function handleSelect(addr) {
         setSelectedAddress(addr)
         navigate('/pos', { replace: true })
@@ -109,10 +150,6 @@ export default function AddressSelectPage() {
         navigate('/ingredients', { state: { from: '/addresses' } })
     }
 
-    async function handleCreateNew(name) {
-        const addr = await createNewAddress(name)
-        handleSelect(addr)
-    }
 
     // Mồi nhập SĐT ngay trong modal tạo chi nhánh: trigger trial chỉ cấp khi
     // owner ĐÃ có phone, nên phải lưu phone TRƯỚC khi insert address.
@@ -124,16 +161,27 @@ export default function AddressSelectPage() {
         createGuardRef.current = true
         setCreating(true)
         setError('')
+        const code = newShareCode.trim()
+        let createdId = null
         try {
             if (needPhone && newPhone.trim()) {
                 await setMyPhone(newPhone.trim())
                 refreshProfile()
             }
-            await handleCreateNew(newAddressName.trim())
+            const addr = await createNewAddress(newAddressName.trim())
+            createdId = addr.id
+            // Nếu có mã hệ thống → chép toàn bộ cấu hình từ địa chỉ nguồn (xuyên tài khoản).
+            if (code) await cloneFromShareCode(code, addr.id)
             setNewAddressName('')
             setNewPhone('')
+            setNewShareCode('')
             setShowCreateModal(false)
+            handleSelect(addr)
         } catch (err) {
+            // Clone lỗi sau khi đã tạo địa chỉ → xoá địa chỉ nửa vời (mirror BackupModal).
+            if (createdId && code) {
+                try { await removeAddress(createdId) } catch { /* keep original error */ }
+            }
             setError(err.message || 'Không thể tạo địa chỉ')
         } finally {
             setCreating(false)
@@ -339,12 +387,40 @@ export default function AddressSelectPage() {
                                     </p>
                                 </div>
                             )}
+                            <div className="flex flex-col gap-1.5">
+                                <input
+                                    type="text"
+                                    placeholder="Mã hệ thống (nếu có)"
+                                    value={newShareCode}
+                                    onChange={e => setNewShareCode(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
+                                    className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-bold uppercase tracking-wider text-text placeholder:text-text-secondary/50 placeholder:normal-case placeholder:tracking-normal placeholder:font-medium focus:outline-none focus:border-primary/40 transition-colors"
+                                />
+                                {clonePreview?.status === 'loading' && (
+                                    <p className="text-text-secondary text-[11px] px-1 flex items-center gap-1.5">
+                                        <Loader size={11} className="animate-spin" /> Đang kiểm tra mã...
+                                    </p>
+                                )}
+                                {clonePreview?.status === 'valid' && (
+                                    <p className="text-success text-[11px] font-bold px-1">
+                                        ✓ Sẽ chép <span className="tabular-nums">{clonePreview.counts.products}</span> món · <span className="tabular-nums">{clonePreview.counts.recipes}</span> công thức · <span className="tabular-nums">{clonePreview.counts.costs}</span> nguyên liệu
+                                    </p>
+                                )}
+                                {clonePreview?.status === 'invalid' && (
+                                    <p className="text-danger text-[11px] font-medium px-1">✗ Mã không đúng hoặc đã hết hạn</p>
+                                )}
+                                {!clonePreview && (
+                                    <p className="text-text-secondary text-[11px] px-1">
+                                        Có mã từ chủ hệ thống? Dán vào đây để <span className="font-bold text-text">chép sẵn menu + công thức + định lượng</span>.
+                                    </p>
+                                )}
+                            </div>
                             <button
                                 onClick={handleCreate}
                                 disabled={!newAddressName.trim() || creating}
                                 className="w-full py-3 rounded-[12px] bg-primary text-bg text-[14px] font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase flex items-center justify-center gap-1.5"
                             >
-                                {creating ? <><Loader size={13} className="animate-spin" /> Đang tạo...</> : 'Tạo địa chỉ'}
+                                {creating ? <><Loader size={13} className="animate-spin" /> {newShareCode.trim() ? 'Đang chép cấu hình...' : 'Đang tạo...'}</> : 'Tạo địa chỉ'}
                             </button>
                         </div>
                     </div>
