@@ -66,25 +66,6 @@ export default function LoginPage() {
                 </div>
 
                 <div className="bg-surface border border-border/60 rounded-[24px] p-6 shadow-[0_8px_30px_rgba(0,0,0,0.35)] space-y-5">
-                    {/* Sử dụng thử (Guest Mode) */}
-                    <div>
-                        <button
-                            id="guest-mode-btn"
-                            type="button"
-                            onClick={handleGuest}
-                            disabled={guestLoading}
-                            className="w-full py-3.5 rounded-[14px] bg-surface-light border border-border-light text-text uppercase font-black text-sm hover:bg-primary hover:text-bg active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_4px_12px_rgba(0,0,0,0.25)]"
-                        >
-                            {guestLoading ? 'Đang tải...' : 'Sử dụng thử'}
-                        </button>
-                    </div>
-
-                    <div className="relative flex items-center py-1">
-                        <div className="flex-grow border-t border-border/40" />
-                        <span className="mx-3 text-[10px] text-text-secondary tracking-widest uppercase font-bold">hoặc</span>
-                        <div className="flex-grow border-t border-border/40" />
-                    </div>
-
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <ErrorBanner message={error} />
 
@@ -134,12 +115,31 @@ export default function LoginPage() {
                         >
                             {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
                         </button>
-
-                        <p className="text-center text-text-secondary text-xs mt-2">
-                            Chưa có tài khoản?{' '}
-                            <Link to="/signup" className="text-primary font-bold hover:underline">Đăng ký</Link>
-                        </p>
                     </form>
+
+                    <div className="relative flex items-center py-1">
+                        <div className="flex-grow border-t border-border/40" />
+                        <span className="mx-3 text-[10px] text-text-secondary tracking-widest uppercase font-bold">hoặc</span>
+                        <div className="flex-grow border-t border-border/40" />
+                    </div>
+
+                    {/* Sử dụng thử (Guest Mode) */}
+                    <div>
+                        <button
+                            id="guest-mode-btn"
+                            type="button"
+                            onClick={handleGuest}
+                            disabled={guestLoading}
+                            className="w-full py-3.5 rounded-[14px] bg-surface-light border border-border-light text-text uppercase font-black text-sm hover:bg-primary hover:text-bg active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_4px_12px_rgba(0,0,0,0.25)]"
+                        >
+                            {guestLoading ? 'Đang tải...' : 'Sử dụng thử'}
+                        </button>
+                    </div>
+
+                    <p className="text-center text-text-secondary text-xs">
+                        Chưa có tài khoản?{' '}
+                        <Link to="/signup" className="text-primary font-bold hover:underline">Đăng ký</Link>
+                    </p>
                 </div>
             </div>
         </div>
