@@ -192,7 +192,7 @@ export default function BackupModal({ sourceAddress, onClose }) {
                     <div className="px-5 py-4 space-y-4">
                         {/* ── Tabs (ẩn khi đang chạy) ── */}
                         {!loading && (
-                            <div className="flex gap-2">
+                            <div className="flex items-center gap-1 bg-bg border border-border/60 rounded-[14px] p-1">
                                 {[
                                     { key: 'self', label: 'Cùng tài khoản' },
                                     { key: 'other', label: 'Khác tài khoản' },
@@ -200,9 +200,9 @@ export default function BackupModal({ sourceAddress, onClose }) {
                                     <button
                                         key={t.key}
                                         onClick={() => { setTab(t.key); setError(''); setShareErr('') }}
-                                        className={`flex-1 py-2.5 rounded-[12px] text-xs font-black border transition-all ${tab === t.key
-                                            ? 'bg-primary/10 text-primary border-primary/30'
-                                            : 'bg-bg text-text-secondary border-border/60 hover:bg-surface-light'}`}
+                                        className={`flex-1 py-2.5 rounded-[10px] text-xs font-black transition-all ${tab === t.key
+                                            ? 'bg-primary text-black shadow-sm'
+                                            : 'text-text-secondary hover:text-text'}`}
                                     >
                                         {t.label}
                                     </button>
@@ -257,31 +257,31 @@ export default function BackupModal({ sourceAddress, onClose }) {
                         {tab === 'other' && (
                             <div className="space-y-2">
                                 {shareCode ? (
-                                    <>
+                                    <div className="rounded-[16px] bg-surface-light/50 border border-border/50 p-3 space-y-3">
                                         {/* Link mời — ô chọn được + nút copy (chép tay được cả khi clipboard bị chặn, vd webview Zalo) */}
-                                        <div className="flex gap-2">
+                                        <div className="relative">
                                             <input
                                                 readOnly
                                                 value={shareLink}
                                                 onFocus={e => e.target.select()}
-                                                className="flex-1 min-w-0 px-3 py-2.5 rounded-[12px] bg-bg border border-border/60 text-text-secondary text-xs font-medium focus:outline-none focus:border-primary/40 truncate"
+                                                className="w-full px-3 py-2.5 pr-12 rounded-[12px] bg-bg border border-border/60 text-text-secondary text-xs font-medium focus:outline-none focus:border-primary/40 truncate"
                                             />
                                             <button
                                                 onClick={handleCopyLink}
-                                                className="px-3 py-2.5 bg-primary text-black rounded-[12px] shrink-0 hover:bg-primary/90 active:scale-95 transition-all flex items-center gap-1.5 font-black text-xs"
+                                                className="absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center bg-primary text-black rounded-[9px] hover:bg-primary/90 active:scale-95 transition-all"
                                                 title="Sao chép link mời"
                                             >
-                                                {linkCopied ? <><Check size={14} /> Đã chép</> : <><Copy size={14} /> Chép link</>}
+                                                {linkCopied ? <Check size={16} /> : <Copy size={16} />}
                                             </button>
                                         </div>
-                                        <div className="text-text-secondary text-[11px] space-y-1 pt-0.5">
+                                        <div className="text-text-secondary text-[11px] space-y-1">
                                             <p className="font-bold text-text">Gửi link cho chủ chi nhánh mới — họ:</p>
                                             <p className="flex gap-2"><span className="text-primary font-bold shrink-0">•</span><span>Bấm link, tự đăng ký tài khoản riêng</span></p>
                                             <p className="flex gap-2"><span className="text-primary font-bold shrink-0">•</span><span>Tạo địa chỉ → <span className="font-bold text-text">tự chép toàn bộ cấu hình</span></span></p>
                                             <p className="flex gap-2"><span className="text-primary font-bold shrink-0">•</span><span>Link dùng lại nhiều lần, hết hạn 30 ngày</span></p>
                                         </div>
                                         {/* Mã thủ công (fallback nếu không bấm được link) */}
-                                        <div className="flex items-center gap-2 pt-0.5">
+                                        <div className="flex items-center gap-2 pt-3 border-t border-border/40">
                                             <span className="text-text-secondary text-[11px] shrink-0">Hoặc mã:</span>
                                             <code className="flex-1 min-w-0 text-text font-black tracking-widest text-sm truncate">{shareCode}</code>
                                             <button
@@ -292,7 +292,7 @@ export default function BackupModal({ sourceAddress, onClose }) {
                                                 {codeCopied ? <Check size={13} /> : <Copy size={13} />}
                                             </button>
                                         </div>
-                                    </>
+                                    </div>
                                 ) : (
                                     <>
                                         <p className="text-text-secondary text-[11px] px-1">

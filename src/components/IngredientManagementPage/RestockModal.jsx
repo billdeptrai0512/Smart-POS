@@ -302,7 +302,9 @@ export default function RestockModal({
                         )}
 
                         {/* Phương thức + Thời điểm — toggle full-width không nhãn (giống modal chi phí).
-                            Thời điểm chỉ áp dụng tiền mặt → chỉ hiện khi method = cash. */}
+                            Thời điểm chỉ áp dụng tiền mặt → chỉ hiện khi method = cash.
+                            Trả 0đ (ghi nợ toàn bộ) → không có tiền nào đi nên ẩn cả khối. */}
+                        {paidNum > 0 && (
                         <div className="flex flex-col gap-2 pt-2 border-t border-border/40">
                             <div className="w-full flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
                                 <button
@@ -335,6 +337,7 @@ export default function RestockModal({
                                 </div>
                             )}
                         </div>
+                        )}
                     </div>
                 </div>
 

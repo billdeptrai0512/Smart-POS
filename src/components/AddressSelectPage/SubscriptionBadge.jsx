@@ -8,11 +8,15 @@ import { startOfDayVN } from '../../utils/dateVN'
  *
  * Khi monetization OFF → không render gì (ẩn hoàn toàn).
  *
- * 1 gói all-access (xem MONETIZATION.md §6.B) — chip "Trạng thái:" 3 bậc màu:
- *   - active, còn > 14 ngày → "Còn X ngày" (success/xanh, click → /subscription)
- *   - active, còn ≤ 14 ngày → "Còn X ngày" (warning/vàng — sắp tới hạn)
- *   - active, còn ≤ 3 ngày  → "Còn X ngày — Gia hạn" (danger/đỏ — gấp)
- *   - chưa có gói           → "Chưa đăng ký" (primary, click → /subscription)
+ * 1 dòng status mảnh dưới tên quán (subtitle) — chấm màu + chữ:
+ *   - đã trả      → ● Đã đăng ký · còn X ngày
+ *   - trial       → ● Đang dùng thử · còn X ngày
+ *   - chưa có gói → ● Chưa đăng ký   (click → /subscription)
+ * Chấm đổi màu theo độ gấp: ≤3 đỏ, ≤14 vàng, còn lại xanh.
+ *
+ * Trial = dòng note='trial'. Đọc trực tiếp address_subscriptions (RLS addr_sub_select
+ * cho phép) vì RPC get_address_entitlement không trả `note`. Lấy dòng valid_to muộn
+ * nhất làm gói hiệu lực → paid nối tiếp trial thì hiện "Đã đăng ký".
  *
  * ⚠️ Render bằng <span> (không phải <button>) vì badge nằm BÊN TRONG button card
  *    của BranchGrid — button lồng button gây hydration error. span + onClick hợp lệ.
@@ -21,10 +25,15 @@ import { startOfDayVN } from '../../utils/dateVN'
  *   addressId: UUID
  *   onRenewClick: () => void   — điều hướng tới /subscription (passed from parent)
  */
+// Cache entitlement rows theo addressId (module-level). Badge bị unmount/mount lại
+// mỗi lần mở/đóng menu "thao tác khác" của card → không cache thì mỗi lần mount lại
+// phải fetch, nháy trống chờ load. Gói cước gần như không đổi trong 1 phiên.
+const entitlementCache = new Map()
+
 export default function SubscriptionBadge({ addressId, onRenewClick }) {
     const { enabled } = useMonetizationEnabled()
-    const [activeTiers, setActiveTiers] = useState([])
-    const [loaded, setLoaded] = useState(false)
+    const [rows, setRows] = useState(() => entitlementCache.get(addressId) ?? [])
+    const [loaded, setLoaded] = useState(() => entitlementCache.has(addressId))
 
     // Không fetch gì khi monetization OFF (client build hoặc server app_config)
     useEffect(() => {
@@ -34,12 +43,17 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
             setLoaded(true)
             return
         }
+        // Đã có cache (vd vừa đóng menu thao tác) → initializer đã seed sẵn, khỏi fetch lại.
+        if (entitlementCache.has(addressId)) return
 
         supabase
-            .rpc('get_address_entitlement', { p_address_id: addressId })
+            .from('address_subscriptions')
+            .select('valid_from, valid_to, note')
+            .eq('address_id', addressId)
             .then(({ data }) => {
-                const rows = Array.isArray(data) ? data : (data ? [data] : [])
-                setActiveTiers(rows)
+                const r = Array.isArray(data) ? data : []
+                entitlementCache.set(addressId, r)
+                setRows(r)
             })
             .finally(() => setLoaded(true))
     }, [addressId, enabled])
@@ -47,86 +61,62 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
     // Monetization OFF hoặc chưa load xong → không render
     if (!enabled || !loaded) return null
 
-    // ── Tính số ngày còn lại ────────────────────────────────────────────────────
     const today = startOfDayVN()
-
     const handleClick = (e) => { e.stopPropagation(); onRenewClick?.() }
 
-    if (activeTiers.length === 0) {
-        return (
-            <div className="flex items-baseline gap-1.5 text-sm">
-                <span className="text-text-secondary shrink-0">Trạng thái:</span>
-                <span
-                    id={`sub-badge-locked-${addressId}`}
-                    role="button"
-                    tabIndex={0}
-                    onClick={handleClick}
-                    className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 active:scale-95 transition-all cursor-pointer"
-                >
-                    Chưa đăng ký
-                </span>
-            </div>
-        )
-    }
-
-    let minDaysLeft = Infinity;
-    activeTiers.forEach(t => {
-        if (t.valid_to) {
-            const expiry = startOfDayVN(new Date(t.valid_to))
-            const daysLeft = Math.round((expiry - today) / (1000 * 60 * 60 * 24))
-            minDaysLeft = Math.min(minDaysLeft, daysLeft)
-        }
+    // Dòng còn hiệu lực hôm nay (valid_from ≤ today ≤ valid_to).
+    const active = rows.filter(r => {
+        const from = startOfDayVN(new Date(r.valid_from))
+        const to = startOfDayVN(new Date(r.valid_to))
+        return from <= today && today <= to
     })
 
-    // ── Còn ≤ 3 ngày → danger + gia hạn (gấp) ───────────────────────────────
-    if (minDaysLeft <= 3) {
+    if (active.length === 0) {
         return (
-            <div className="flex items-baseline gap-1.5 text-sm">
-                <span className="text-text-secondary shrink-0">Trạng thái:</span>
-                <span
-                    id={`sub-badge-expiring-${addressId}`}
-                    role="button"
-                    tabIndex={0}
-                    onClick={handleClick}
-                    className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold bg-danger/10 border border-danger/25 text-danger hover:bg-danger/20 active:scale-95 transition-all cursor-pointer"
-                >
-                    Còn {minDaysLeft} ngày — Gia hạn
-                </span>
-            </div>
-        )
-    }
-
-    // ── Còn ≤ 14 ngày → warning (sắp tới hạn) ────────────────────────────────
-    if (minDaysLeft <= 14) {
-        return (
-            <div className="flex items-baseline gap-1.5 text-sm">
-                <span className="text-text-secondary shrink-0">Trạng thái:</span>
-                <span
-                    id={`sub-badge-soon-${addressId}`}
-                    role="button"
-                    tabIndex={0}
-                    onClick={handleClick}
-                    className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold bg-warning/10 border border-warning/25 text-warning hover:bg-warning/20 active:scale-95 transition-all cursor-pointer"
-                >
-                    Còn {minDaysLeft} ngày
-                </span>
-            </div>
-        )
-    }
-
-    // ── Còn > 14 ngày → success (còn nhiều) ──────────────────────────────────
-    return (
-        <div className="flex items-baseline gap-1.5 text-sm">
-            <span className="text-text-secondary shrink-0">Trạng thái:</span>
-            <span
-                id={`sub-badge-active-${addressId}`}
-                role="button"
-                tabIndex={0}
+            <StatusLine
+                id={`sub-badge-locked-${addressId}`}
                 onClick={handleClick}
-                className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold bg-success/10 border border-success/25 text-success hover:bg-success/20 active:scale-95 transition-all cursor-pointer"
+                dotClass="bg-primary"
+                textClass="text-primary"
             >
-                Còn {minDaysLeft} ngày
-            </span>
-        </div>
+                Chưa đăng ký
+            </StatusLine>
+        )
+    }
+
+    // Gói hiệu lực = dòng valid_to muộn nhất (valid_to là 'YYYY-MM-DD' → so sánh chuỗi
+    // = so sánh ngày). Paid nối tiếp trial → dòng muộn nhất là paid.
+    const dominant = active.reduce((a, b) => (b.valid_to > a.valid_to ? b : a))
+    const isTrial = dominant.note === 'trial'
+    const daysLeft = Math.round((startOfDayVN(new Date(dominant.valid_to)) - today) / 86400000)
+
+    const dotClass = daysLeft <= 3 ? 'bg-danger' : daysLeft <= 14 ? 'bg-warning' : 'bg-success'
+    // Chữ trầm (subtitle) cho trạng thái bình thường; chỉ đỏ lên khi gấp (≤3 ngày).
+    const textClass = daysLeft <= 3 ? 'text-danger' : 'text-text-secondary'
+
+    return (
+        <StatusLine
+            id={`sub-badge-status-${addressId}`}
+            onClick={handleClick}
+            dotClass={dotClass}
+            textClass={textClass}
+        >
+            {isTrial ? 'Đang dùng thử' : 'Đã đăng ký'} · còn {daysLeft} ngày
+        </StatusLine>
+    )
+}
+
+function StatusLine({ id, onClick, dotClass, textClass, children }) {
+    return (
+        <span
+            id={id}
+            role="button"
+            tabIndex={0}
+            onClick={onClick}
+            className="inline-flex items-center gap-1.5 text-[12px] font-bold cursor-pointer active:opacity-70 transition-opacity"
+        >
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} />
+            <span className={textClass}>{children}</span>
+        </span>
     )
 }

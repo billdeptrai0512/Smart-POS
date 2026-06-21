@@ -2,8 +2,8 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
     Pencil, Trash2, ClipboardCopy, MoreHorizontal, X,
-    Coffee, Loader, FileText,
-    ArrowRight, CupSoda, Wallet, Users,
+    Coffee, Loader, FileText, BarChart3, Package, ChevronRight,
+    CupSoda, Wallet, Users,
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import { formatVND } from '../../utils'
@@ -72,70 +72,57 @@ export default function BranchGrid({
                             key={addr.id}
                             className="bg-surface border border-border/60 rounded-[20px] overflow-hidden shadow-sm group hover:border-border/80 hover:shadow-[0_4px_20px_rgba(0,0,0,0.15)] transition-all flex flex-col"
                         >
-                            {isEditing ? (
-                                <form
-                                    className="flex flex-col p-3 gap-2 h-full"
-                                    onSubmit={(e) => handleRename(e, addr.id)}
-                                >
-                                    <input
-                                        type="text"
-                                        value={editName}
-                                        onChange={e => setEditName(e.target.value)}
-                                        disabled={renaming}
-                                        className="w-full px-3 py-2 rounded-[10px] bg-bg border border-border/60 text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50"
-                                        autoFocus
-                                    />
-                                    <div className="flex gap-2 mt-auto">
-                                        <button
-                                            type="button"
-                                            disabled={renaming}
-                                            onClick={() => { setEditingAddressId(null); setError('') }}
-                                            className="flex-1 py-2 bg-bg border border-border/60 text-text-secondary text-xs font-bold rounded-[10px] disabled:opacity-50"
-                                        >
-                                            Hủy
-                                        </button>
-                                        <button
-                                            type="submit"
-                                            disabled={renaming || !editName.trim()}
-                                            className="flex-1 py-2 bg-primary text-black text-xs font-black rounded-[10px] disabled:opacity-50 flex items-center justify-center gap-1"
-                                        >
-                                            {renaming ? <Loader size={12} className="animate-spin" /> : 'Lưu'}
-                                        </button>
-                                    </div>
-                                </form>
-                            ) : (
-                                <>
+                            <>
                                     {/* Main click area */}
                                     <button
                                         onClick={() => onSelect(addr)}
-                                        className="flex-1 p-3.5 text-left hover:bg-surface-light active:bg-border/30 transition-colors min-w-0"
+                                        className="group relative flex-1 p-3 text-left hover:bg-surface-light active:bg-border/30 transition-colors min-w-0"
                                     >
-                                        <div className="flex items-center justify-between gap-2 mb-2">
+                                        {/* Quick-access manager: Báo cáo + Tồn kho — absolute để cột nút (cao hơn
+                                            tiêu đề) không kéo giãn chiều cao header. span role=button vì nằm TRONG
+                                            button card (button lồng button gây hydration error). */}
+                                        {!isStaff && onSelectReport && (
+                                            <div className="absolute top-3 right-3 flex flex-col gap-3">
+                                                <span
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    onClick={(e) => { e.stopPropagation(); onSelectReport(addr) }}
+                                                    title="Xem báo cáo ngày"
+                                                    className="relative w-8 h-8 rounded-full bg-success/10 border border-success/25 text-success flex items-center justify-center hover:bg-success/20 active:scale-95 transition-all cursor-pointer before:absolute before:-inset-1.5 before:content-['']"
+                                                >
+                                                    <BarChart3 size={16} strokeWidth={2.5} />
+                                                </span>
+                                                <span
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    onClick={(e) => { e.stopPropagation(); onSelectIngredients?.(addr) }}
+                                                    title="Xem tồn kho"
+                                                    className="relative w-8 h-8 rounded-full bg-primary/10 border border-primary/25 text-primary flex items-center justify-center hover:bg-primary/20 active:scale-95 transition-all cursor-pointer before:absolute before:-inset-1.5 before:content-['']"
+                                                >
+                                                    <Package size={16} strokeWidth={2.5} />
+                                                </span>
+                                            </div>
+                                        )}
+                                        {/* Tên + chevron = tín hiệu "bấm card để vào quán" (giữ 2 nút quick góc phải). */}
+                                        <div className="mb-1.5 pr-12 flex items-center gap-1">
                                             <span className="text-text font-black text-base transition-colors line-clamp-2 leading-tight truncate">{addr.name}</span>
-                                            <ArrowRight size={20} strokeWidth={2.5} className="text-text shrink-0" />
+                                            <ChevronRight size={18} strokeWidth={2.5} className="text-text-secondary shrink-0 group-hover:text-primary group-active:translate-x-0.5 transition-all" />
                                         </div>
 
-                                        {/* Uniform label:value list — số liệu + tình trạng gói cước */}
+                                        {/* Uniform label:value list — số liệu vận hành */}
                                         <div className="flex flex-col gap-1.5 text-sm">
                                             {hasStats && (
                                                 <>
                                                     <div className="flex items-baseline gap-1.5">
                                                         <span className="text-text-secondary">Đã bán:</span>
-                                                        <span className="font-bold text-text opacity-70">{cups} ly</span>
+                                                        <span className="font-bold text-text">{cups} ly</span>
                                                     </div>
                                                     <div className="flex items-baseline gap-1.5">
                                                         <span className="text-text-secondary">Doanh thu:</span>
-                                                        <span className="font-bold text-text opacity-70">{formatVND(revenue)}</span>
+                                                        <span className="font-bold text-text">{formatVND(revenue)}</span>
                                                     </div>
                                                 </>
                                             )}
-                                            {/* Trạng thái gói — tự ẩn khi monetization OFF (badge return null) */}
-                                            <SubscriptionBadge
-                                                addressId={addr.id}
-                                                onRenewClick={() => navigate('/subscription', {
-                                                    state: { preselectAddressId: addr.id, from: '/addresses' },
-                                                })}
-                                            />
                                             {/* Mỗi người đang trong ca một dòng — nhãn theo vai trò */}
                                             {hasStats && sessionUsers.map((u, i) => {
                                                 const isManager = u.role === 'manager' || u.role === 'co-manager'
@@ -149,9 +136,8 @@ export default function BranchGrid({
                                         </div>
                                     </button>
 
-                                    {/* Action buttons */}
-                                    {!isStaff && (
-                                        <div className="border-t border-border/40 px-2 py-1.5">
+                                    {/* Footer: trạng thái gói (mọi role) + menu quản lý (chỉ manager) */}
+                                    <div className="border-t border-border/40 px-2 py-1.5">
                                             {deletingAddressId === addr.id ? (
                                                 /* Delete-confirm: full-width 2-col grid so tap targets are clear on small screens */
                                                 <div className="grid grid-cols-2 gap-1.5">
@@ -178,22 +164,20 @@ export default function BranchGrid({
                                                     </button>
                                                 </div>
                                             ) : expandedActionsId === addr.id ? (
-                                                /* Expanded: equal-width grid takes over full row. Báo cáo/Tồn kho temporarily hidden
-                                                   to free space on small screens. Each cell has icon+label for discoverability and
-                                                   ~44px tap target. */
-                                                <div className="grid grid-cols-4 gap-1">
-                                                    <ActionCell
+                                                /* Expanded: hàng nút tròn icon-only, cùng chiều cao với hàng default
+                                                   (không stack label nên không break height). Badge ẩn tạm (đã cache
+                                                   → hiện lại tức thì khi đóng). */
+                                                <div className="flex items-center justify-end gap-3 px-1.5">
+                                                    <ActionIcon
                                                         icon={<ClipboardCopy size={16} />}
-                                                        label="Sao lưu"
-                                                        color="text-primary"
-                                                        bg="hover:bg-primary/10 active:bg-primary/15"
+                                                        title="Sao lưu cấu hình"
+                                                        tone="primary"
                                                         onClick={(e) => { e.stopPropagation(); onBackup(addr); setExpandedActionsId(null) }}
                                                     />
-                                                    <ActionCell
+                                                    <ActionIcon
                                                         icon={<Pencil size={16} />}
-                                                        label="Đổi tên"
-                                                        color="text-primary"
-                                                        bg="hover:bg-primary/10 active:bg-primary/15"
+                                                        title="Đổi tên địa chỉ"
+                                                        tone="primary"
                                                         onClick={(e) => {
                                                             e.stopPropagation()
                                                             setEditingAddressId(addr.id)
@@ -203,56 +187,102 @@ export default function BranchGrid({
                                                             setError('')
                                                         }}
                                                     />
-                                                    <ActionCell
+                                                    <ActionIcon
                                                         icon={<Trash2 size={16} />}
-                                                        label="Xóa"
-                                                        color="text-danger"
-                                                        bg="hover:bg-danger/10 active:bg-danger/15"
+                                                        title="Xóa địa chỉ"
+                                                        tone="danger"
                                                         onClick={(e) => { e.stopPropagation(); setDeletingAddressId(addr.id); setExpandedActionsId(null) }}
                                                     />
-                                                    <ActionCell
+                                                    <ActionIcon
                                                         icon={<X size={16} />}
-                                                        label="Đóng"
-                                                        color="text-text-secondary"
-                                                        bg="hover:bg-surface-light active:bg-border/30"
+                                                        title="Đóng"
+                                                        tone="neutral"
                                                         onClick={(e) => { e.stopPropagation(); setExpandedActionsId(null) }}
                                                     />
                                                 </div>
                                             ) : (
-                                                /* Default: Báo cáo / Tồn kho on left, MoreHorizontal on right */
+                                                /* Default: trạng thái gói bên trái, menu quản lý bên phải */
                                                 <div className="flex items-center justify-between gap-2 px-1.5">
-                                                    {onSelectReport && (
-                                                        <div className='flex gap-2'>
-                                                            <button
-                                                                onClick={(e) => { e.stopPropagation(); onSelectReport(addr) }}
-                                                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-success/5 border border-success/20 hover:bg-success/15 transition-all group"
-                                                                title="Xem báo cáo ngày"
-                                                            >
-                                                                <span className="text-[10px] font-black text-success uppercase leading-none opacity-80 group-hover:opacity-100">Báo cáo</span>
-                                                            </button>
-                                                            <button
-                                                                onClick={(e) => { e.stopPropagation(); onSelectIngredients?.(addr) }}
-                                                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-primary/5 border border-primary/20 hover:bg-primary/15 transition-all group"
-                                                                title="Xem tồn kho"
-                                                            >
-                                                                <span className="text-[10px] font-black text-primary uppercase leading-none opacity-80 group-hover:opacity-100">Tồn kho</span>
-                                                            </button>
-                                                        </div>
+                                                    {/* Trạng thái gói — tự ẩn khi monetization OFF (badge return null) */}
+                                                    <SubscriptionBadge
+                                                        addressId={addr.id}
+                                                        onRenewClick={() => navigate('/subscription', {
+                                                            state: { preselectAddressId: addr.id, from: '/addresses' },
+                                                        })}
+                                                    />
+                                                    {!isStaff && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); setExpandedActionsId(addr.id) }}
+                                                            className="relative w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/50 text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all shrink-0 before:absolute before:-inset-1.5 before:content-['']"
+                                                            title="Thao tác khác"
+                                                            aria-label="Mở menu thao tác"
+                                                        >
+                                                            <MoreHorizontal size={16} />
+                                                        </button>
                                                     )}
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); setExpandedActionsId(addr.id) }}
-                                                        className="w-9 h-9 flex items-center justify-center text-text-secondary hover:text-text transition-colors rounded-lg hover:bg-surface-light active:bg-border/30 shrink-0"
-                                                        title="Thao tác khác"
-                                                        aria-label="Mở menu thao tác"
-                                                    >
-                                                        <MoreHorizontal size={18} />
-                                                    </button>
                                                 </div>
                                             )}
                                         </div>
-                                    )}
                                 </>
-                            )}
+
+                                {/* Modal đổi tên — đồng bộ với modal Sao lưu (BackupModal). */}
+                                {isEditing && (
+                                    <div className="fixed inset-0 z-50 flex items-center justify-center">
+                                        <div
+                                            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                                            onClick={() => { if (!renaming) { setEditingAddressId(null); setError('') } }}
+                                        />
+                                        <form
+                                            onSubmit={(e) => handleRename(e, addr.id)}
+                                            className="relative w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden"
+                                        >
+                                            <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="w-8 h-8 rounded-[10px] bg-primary/10 flex items-center justify-center">
+                                                        <Pencil size={15} className="text-primary" />
+                                                    </div>
+                                                    <p className="text-text font-black text-sm leading-none">Đổi tên địa chỉ</p>
+                                                </div>
+                                                {!renaming && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setEditingAddressId(null); setError('') }}
+                                                        className="p-1.5 text-text-secondary hover:text-text transition-colors rounded-lg hover:bg-surface-light"
+                                                    >
+                                                        <X size={16} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="p-5 flex flex-col gap-4">
+                                                <input
+                                                    type="text"
+                                                    value={editName}
+                                                    onChange={e => setEditName(e.target.value)}
+                                                    disabled={renaming}
+                                                    className="w-full px-4 py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50"
+                                                    autoFocus
+                                                />
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        disabled={renaming}
+                                                        onClick={() => { setEditingAddressId(null); setError('') }}
+                                                        className="flex-1 py-3 rounded-[14px] bg-bg border border-border/60 text-text-secondary font-bold text-sm hover:bg-surface-light transition-colors disabled:opacity-50"
+                                                    >
+                                                        Hủy
+                                                    </button>
+                                                    <button
+                                                        type="submit"
+                                                        disabled={renaming || !editName.trim()}
+                                                        className="flex-1 py-3 rounded-[14px] bg-primary text-black font-black text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                                    >
+                                                        {renaming ? <Loader size={14} className="animate-spin" /> : 'Lưu'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                )}
                         </div>
                     )
                 })}
@@ -273,16 +303,23 @@ export default function BranchGrid({
     )
 }
 
-// Equal-width action cell used in expanded mode. Mobile-friendly tap target (≥44px) with
-// icon + label stacked so users immediately know each action without relying on title attr.
-function ActionCell({ icon, label, color, bg, onClick }) {
+// Nút tròn icon-only dùng ở expanded menu — cùng kích thước/viền với Báo cáo/Tồn kho/⋯
+// để mở menu không break chiều cao card. title= cho biết hành động (không còn label).
+const ACTION_TONES = {
+    primary: 'bg-primary/10 border-primary/25 text-primary hover:bg-primary/20',
+    danger: 'bg-danger/10 border-danger/25 text-danger hover:bg-danger/20',
+    neutral: 'bg-surface-light border-border/50 text-text-secondary hover:text-text hover:bg-border/40',
+}
+function ActionIcon({ icon, title, tone = 'primary', onClick }) {
     return (
         <button
             onClick={onClick}
-            className={`min-h-[44px] flex flex-col items-center justify-center gap-0.5 rounded-[10px] transition-colors ${bg}`}
+            title={title}
+            aria-label={title}
+            // before:-inset-1.5 = mở vùng chạm ra 44px (32px + 6px mỗi phía), visual giữ 32px.
+            className={`relative w-8 h-8 flex items-center justify-center rounded-full border active:scale-95 transition-all shrink-0 before:absolute before:-inset-1.5 before:content-[''] ${ACTION_TONES[tone]}`}
         >
-            <span className={color}>{icon}</span>
-            <span className={`text-[10px] font-bold leading-none ${color}`}>{label}</span>
+            {icon}
         </button>
     )
 }
