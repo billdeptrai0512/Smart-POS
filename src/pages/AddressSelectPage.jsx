@@ -13,6 +13,7 @@ import BackupModal from '../components/AddressSelectPage/BackupModal'
 import AddressHeader from '../components/AddressSelectPage/AddressHeader'
 import BranchGrid from '../components/AddressSelectPage/BranchGrid'
 import StaffTab from '../components/AddressSelectPage/StaffTab'
+import InviteModal from '../components/AddressSelectPage/InviteModal'
 import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 
 export default function AddressSelectPage() {
@@ -23,7 +24,7 @@ export default function AddressSelectPage() {
     const navigate = useNavigate()
 
     const [activeTab, setActiveTab] = useState('branches')
-    const [staffSubTab, setStaffSubTab] = useState('staff')
+    const [showInviteModal, setShowInviteModal] = useState(false)
     const [error, setError] = useState('')
     const [backupSource, setBackupSource] = useState(null)
     const [newAddressName, setNewAddressName] = useState('')
@@ -246,7 +247,6 @@ export default function AddressSelectPage() {
 
     const showCreate = !isStaff && activeTab === 'branches'
     const showInvite = activeTab === 'staff' && !isStaff && !isGuest
-    const inviteGenerating = staffSubTab === 'staff' ? generatingStaffLink : generatingCoManagerLink
 
     return (
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
@@ -305,8 +305,6 @@ export default function AddressSelectPage() {
                         coManagerInviteExpiry={coManagerInviteExpiry}
                         onSetMemberRole={handleSetMemberRole}
                         onRemoveMember={handleRemoveMember}
-                        subTab={staffSubTab}
-                        setSubTab={setStaffSubTab}
                     />
                 )}
             </div>
@@ -333,16 +331,33 @@ export default function AddressSelectPage() {
 
                 {showInvite && (
                     <button
-                        onClick={() => handleGenerateInvite(staffSubTab === 'co-manager' ? 'co-manager' : 'staff')}
-                        disabled={inviteGenerating}
-                        className="flex-1 min-w-0 flex items-center justify-center gap-2 rounded-[12px] bg-primary px-4 py-3 text-[13px] font-black uppercase text-bg hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-50"
+                        onClick={() => {
+                            setError('')
+                            setShowInviteModal(true)
+                            // Generate sẵn cả 2 link — user chỉ chọn tab để copy.
+                            if (!staffInviteLink) handleGenerateInvite('staff')
+                            if (!coManagerInviteLink) handleGenerateInvite('co-manager')
+                        }}
+                        className="flex-1 min-w-0 flex items-center justify-center gap-2 rounded-[12px] bg-primary px-4 py-3 text-[13px] font-black uppercase text-bg hover:bg-primary/90 active:scale-95 transition-all"
                     >
-                        {inviteGenerating
-                            ? <><Loader size={14} className="animate-spin shrink-0" /> <span className="truncate">Đang tạo...</span></>
-                            : <><UserPlus size={16} className="shrink-0" /> <span className="truncate">{staffSubTab === 'staff' ? 'Mời nhân viên' : 'Mời quản lý'}</span></>}
+                        <UserPlus size={16} className="shrink-0" />
+                        <span className="truncate">Mời nhân sự</span>
                     </button>
                 )}
             </div>
+
+            {showInviteModal && (
+                <InviteModal
+                    onClose={() => setShowInviteModal(false)}
+                    staffInviteLink={staffInviteLink}
+                    staffInviteExpiry={staffInviteExpiry}
+                    coManagerInviteLink={coManagerInviteLink}
+                    coManagerInviteExpiry={coManagerInviteExpiry}
+                    generatingStaff={generatingStaffLink}
+                    generatingCoManager={generatingCoManagerLink}
+                    error={error}
+                />
+            )}
 
             {/* Slide-up Tạo địa chỉ mới modal */}
             {showCreateModal && (
