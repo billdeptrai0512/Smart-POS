@@ -8,23 +8,15 @@ const detectStandalone = () =>
 const detectIOS = () =>
     (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
-// In-app webviews (Instagram/Facebook/Messenger/Zalo/TikTok…) can't install a PWA —
-// neither beforeinstallprompt nor Add-to-Home works. Steer the user to open externally.
-const detectInApp = () =>
-    /Instagram|FBAN|FBAV|FB_IAB|Zalo|Line\/|MicroMessenger|TikTok|musical_ly|BytedanceWebview/i.test(navigator.userAgent)
 
 export default function PWAInstallPrompt() {
     const [promptInstall, setPromptInstall] = useState(null)
     const [isStandalone] = useState(detectStandalone)
     const [isIOS] = useState(detectIOS)
-    const [isInApp] = useState(detectInApp)
-    // iOS and in-app webviews have no beforeinstallprompt event, so decide their banner
-    // up front; Android flips this on in the event handler below.
+    // iOS has no beforeinstallprompt event, so decide its banner up front; Android
+    // flips this on in the event handler below.
     const [showPrompt, setShowPrompt] = useState(
-        () =>
-            !detectStandalone() &&
-            (detectInApp() || detectIOS()) &&
-            !localStorage.getItem(STORAGE_KEYS.PWA_PROMPT_DISMISSED)
+        () => !detectStandalone() && detectIOS() && !localStorage.getItem(STORAGE_KEYS.PWA_PROMPT_DISMISSED)
     )
 
     useEffect(() => {
@@ -58,20 +50,6 @@ export default function PWAInstallPrompt() {
 
     if (isStandalone || !showPrompt) {
         return null
-    }
-
-    // In-app webview: a callout bubble anchored top-right, pointing at the browser's
-    // ⋮ menu. No logo/title/close — just the two steps to escape the webview.
-    if (isInApp) {
-        return (
-            <div className="inapp-hint-bubble toast-in" role="alert">
-                <div className="text-[15px] font-bold text-black">Nhấn ⋮</div>
-                <div className="mt-1.5 flex items-center gap-2 text-[15px] text-black">
-                    <span className="text-[17px] leading-none">↗</span>
-                    <span>“Mở trong trình duyệt”</span>
-                </div>
-            </div>
-        )
     }
 
     return (

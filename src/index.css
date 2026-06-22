@@ -327,7 +327,7 @@ body {
 /* ====== PWA Install Banner ====== */
 .pwa-install-banner {
   position: fixed;
-  top: 16px;
+  bottom: 16px;
   left: 16px;
   right: 16px;
   z-index: 9999;
@@ -341,30 +341,6 @@ body {
   border-radius: 16px;
   padding: 16px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-}
-
-/* In-app webview callout: white bubble pinned top-right with a tail pointing
-   up at the browser's ⋮ menu button. */
-.inapp-hint-bubble {
-  position: fixed;
-  top: 10px;
-  right: 12px;
-  z-index: 9999;
-  max-width: 280px;
-  background: #fff;
-  border-radius: 16px;
-  padding: 16px 20px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
-  pointer-events: none;
-}
-.inapp-hint-bubble::before {
-  content: '';
-  position: absolute;
-  top: -9px;
-  right: 14px;
-  border-left: 10px solid transparent;
-  border-right: 10px solid transparent;
-  border-bottom: 10px solid #fff;
 }
 
 .pwa-install-header {

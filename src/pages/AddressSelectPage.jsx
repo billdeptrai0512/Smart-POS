@@ -317,7 +317,7 @@ export default function AddressSelectPage() {
                     onClick={handleSignOut}
                     className="flex-1 min-w-0 flex items-center justify-center gap-2 rounded-[12px] border border-border/60 bg-bg px-4 py-3 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light hover:text-danger active:scale-95 transition-all"
                 >
-                    <LogOut size={16} className="shrink-0" />
+                    {/* <LogOut size={16} className="shrink-0" /> */}
                     <span className="truncate">Đăng xuất</span>
                 </button>
 
@@ -326,7 +326,7 @@ export default function AddressSelectPage() {
                         onClick={() => setShowCreateModal(true)}
                         className="flex-1 min-w-0 flex items-center justify-center gap-2 rounded-[12px] bg-primary px-4 py-3 text-[13px] font-black uppercase text-bg hover:bg-primary/90 active:scale-95 transition-all"
                     >
-                        <Plus size={16} className="shrink-0" />
+                        {/* <Plus size={16} className="shrink-0" /> */}
                         <span className="truncate">Tạo địa chỉ</span>
                     </button>
                 )}
