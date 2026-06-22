@@ -1,6 +1,27 @@
 import { useMemo } from 'react'
 import { dateStringVN } from '../utils/dateVN'
 
+// Gom các dòng cùng tên+option lại: "1 Trà Đá" x3 → "3 Trà Đá".
+// rawItems: [{ label, quantity, cost, productId }] (label = tên + option, chưa có số lượng)
+function groupItems(rawItems) {
+    const byLabel = new Map()
+    for (const it of rawItems) {
+        const prev = byLabel.get(it.label)
+        if (prev) {
+            prev.quantity += it.quantity
+            prev.cost += it.cost
+        } else {
+            byLabel.set(it.label, { ...it })
+        }
+    }
+    return [...byLabel.values()].map(i => ({
+        text: `${i.quantity} ${i.label}`,
+        cost: i.cost,
+        quantity: i.quantity,
+        productId: i.productId,
+    }))
+}
+
 // Normalize today's online orders + pending offline orders into the row shape
 // HistoryPage's OrdersList expects:
 //   { id, total, cost, createdAt, staffName, deletedAt, deletedBy,
@@ -14,19 +35,19 @@ import { dateStringVN } from '../utils/dateVN'
 export function useFormatHistoryOrders({ baseOrders, pendingOrders, productById, getItemCost, isTodayScope }) {
     // Per-item cost computed once and reused for the order-total fallback.
     const formattedOnline = useMemo(() => baseOrders.map(o => {
-        const items = o.order_items ? o.order_items.map(i => {
+        const items = o.order_items ? groupItems(o.order_items.map(i => {
             const options = i.options
                 ? i.options.split(', ').filter(opt => opt !== 'Tiền mặt' && opt !== 'MoMo').join(' - ')
                 : ''
             const pName = productById.get(i.product_id)?.name || i.products?.name || '☕'
             const unitCost = getItemCost(i.product_id, i.extras || [], i.unit_cost || 0)
             return {
-                text: `${i.quantity} ${pName}${options ? ` (${options})` : ''}`,
+                label: `${pName}${options ? ` (${options})` : ''}`,
                 cost: unitCost * i.quantity,
                 quantity: i.quantity,
                 productId: i.product_id
             }
-        }) : []
+        })) : []
         const cost = (o.total_cost > 0)
             ? o.total_cost
             : items.reduce((sum, item) => sum + item.cost, 0)
@@ -50,20 +71,20 @@ export function useFormatHistoryOrders({ baseOrders, pendingOrders, productById,
             .filter(o => dateStringVN(new Date(o.createdAt)) === todayStr)
             .map((o) => {
                 const items = o.cart
-                    ? o.cart.map(i => {
+                    ? groupItems(o.cart.map(i => {
                         const extras = i.extras.filter(e => e.name !== 'Tiền mặt' && e.name !== 'MoMo')
                         const unitCost = getItemCost(i.productId, i.extras, i.unitCost || 0)
                         return {
-                            text: `${i.quantity} ${i.name}${extras.length ? ` (${extras.map(e => e.name).join(' - ')})` : ''}`,
+                            label: `${i.name}${extras.length ? ` (${extras.map(e => e.name).join(' - ')})` : ''}`,
                             cost: unitCost * i.quantity,
                             quantity: i.quantity,
                             productId: i.productId
                         }
-                    })
-                    : o.orderItems ? o.orderItems.map(i => {
+                    }))
+                    : o.orderItems ? groupItems(o.orderItems.map(i => {
                         const unitCost = getItemCost(i.productId, i.extras, i.unitCost || 0)
-                        return { text: `${i.quantity} ${i.name}`, cost: unitCost * i.quantity, quantity: i.quantity, productId: i.productId }
-                    }) : []
+                        return { label: `${i.name}`, cost: unitCost * i.quantity, quantity: i.quantity, productId: i.productId }
+                    })) : []
                 const cost = o.totalCost > 0
                     ? o.totalCost
                     : items.reduce((sum, item) => sum + item.cost, 0)
