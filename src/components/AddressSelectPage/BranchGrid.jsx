@@ -9,6 +9,8 @@ import ErrorBanner from '../common/ErrorBanner'
 import { formatVND } from '../../utils'
 import SubscriptionBadge from './SubscriptionBadge'
 
+const isManagerRole = (role) => (role === 'manager' || role === 'co-manager') ? 1 : 0
+
 export default function BranchGrid({
     addresses, fetchError, cupsMap, revenueMap, sessionsMap,
     isStaff, isAdmin, error, setError,
@@ -111,28 +113,27 @@ export default function BranchGrid({
 
                                     {/* Uniform label:value list — số liệu vận hành */}
                                     <div className="flex flex-col gap-1.5 text-sm">
+                                        {/* Mỗi người đang trong ca một dòng — nhãn theo vai trò, quản lý trước */}
+                                        {hasStats && [...sessionUsers]
+                                            .sort((a, b) => isManagerRole(b.role) - isManagerRole(a.role))
+                                            .map((u, i) => (
+                                                <div key={i} className="flex items-baseline gap-1.5 min-w-0">
+                                                    <span className="text-text-secondary shrink-0">{isManagerRole(u.role) ? 'Quản lý:' : 'Nhân viên:'}</span>
+                                                    <span className="text-text truncate">{u.name}</span>
+                                                </div>
+                                            ))}
                                         {hasStats && (
                                             <>
                                                 <div className="flex items-baseline gap-1.5">
                                                     <span className="text-text-secondary">Hôm nay bán:</span>
-                                                    <span className="font-bold text-text">{cups} ly</span>
+                                                    <span className="text-text">{cups} ly</span>
                                                 </div>
                                                 <div className="flex items-baseline gap-1.5">
                                                     <span className="text-text-secondary">Tổng doanh thu:</span>
-                                                    <span className="font-bold text-text">{formatVND(revenue)}</span>
+                                                    <span className="text-text">{formatVND(revenue)}</span>
                                                 </div>
                                             </>
                                         )}
-                                        {/* Mỗi người đang trong ca một dòng — nhãn theo vai trò */}
-                                        {hasStats && sessionUsers.map((u, i) => {
-                                            const isManager = u.role === 'manager' || u.role === 'co-manager'
-                                            return (
-                                                <div key={i} className="flex items-baseline gap-1.5 min-w-0">
-                                                    <span className="text-text-secondary shrink-0">{isManager ? 'Quản lý:' : 'Nhân viên:'}</span>
-                                                    <span className="font-bold text-text opacity-70 truncate">{u.name}</span>
-                                                </div>
-                                            )
-                                        })}
                                     </div>
                                 </button>
 
