@@ -800,8 +800,23 @@ export default function DailyReportPage() {
         return () => window.removeEventListener('beforeunload', handler)
     }, [hasUnsaved])
     // Bọc các thao tác rời trang (back / đổi tab) — xác nhận nếu còn thay đổi chưa lưu.
+    // Liệt kê cụ thể field nào sắp mất (tối đa 5 dòng) để confirm rõ nghĩa, không mơ hồ.
     const guardLeave = async (proceed) => {
-        if (hasUnsaved && !await confirm({ title: 'Còn thay đổi chưa lưu trong báo cáo.', detail: 'Rời trang và bỏ các thay đổi?', danger: true, confirmLabel: 'Rời trang' })) return
+        if (hasUnsaved) {
+            const fmtVND = (n) => n.toLocaleString('vi-VN')
+            const cashLines = []
+            if ((parseVNDInput(cashInput) || 0) !== persistedCash)
+                cashLines.push(`Thực thu · Tiền mặt: ${fmtVND(persistedCash)} → ${fmtVND(parseVNDInput(cashInput) || 0)}`)
+            if ((parseVNDInput(transferInput) || 0) !== persistedTransfer)
+                cashLines.push(`Thực thu · Chuyển khoản: ${fmtVND(persistedTransfer)} → ${fmtVND(parseVNDInput(transferInput) || 0)}`)
+            const lines = [...inventory.dirtySummary, ...cashLines]
+            const list = lines.slice(0, 5).map(l => `• ${l}`).join('\n')
+            const more = lines.length > 5 ? `\nvà ${lines.length - 5} mục khác…` : ''
+            const detail = lines.length
+                ? `${list}${more}\n\nRời trang và bỏ các thay đổi?`
+                : 'Rời trang và bỏ các thay đổi?'
+            if (!await confirm({ title: 'Còn thay đổi chưa lưu trong báo cáo.', detail, danger: true, confirmLabel: 'Rời trang' })) return
+        }
         proceed()
     }
 
