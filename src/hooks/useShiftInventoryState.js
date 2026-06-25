@@ -100,7 +100,12 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
             if (Object.keys(openings).length) setOpeningInputs(openings)
             if (Object.keys(locked).length) setOpeningLocked(locked)
             // Snapshot baseline = whatever just got hydrated from the existing closing.
-            commitBaseline(openings, locked, restocks, inputs)
+            // Đầu kỳ: nếu phiếu KHÔNG lưu opening (vd chỉ nhập Cuối kỳ), đừng reset baseline.opening
+            // về {} — reloadStocks có thể đã seed openingInputs từ hôm qua. Reset sẽ khiến
+            // input(seed) ≠ baseline({}) ⇒ phantom-dirty (FAB Lưu + chặn thoát) dù chưa gõ gì.
+            // Giữ seed đang có trong baseline để 2 thứ khớp ở cả 2 thứ tự resolve của race.
+            const openBase = Object.keys(openings).length ? openings : baselineRef.current.opening
+            commitBaseline(openBase, locked, restocks, inputs)
         }).finally(() => setIsLoadingExisting(false))
     }, [addressId, dateKey, commitBaseline])
 
@@ -288,6 +293,33 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [openingInputs, openingLocked, restockInputs, inventoryInputs, baselineVersion])
 
+    // Danh sách field đã đổi so với baseline, dạng người-đọc-được — để confirm "rời trang"
+    // chú thích cụ thể thay đổi nào sắp mất (thay vì câu chung chung gây mơ hồ khi user
+    // nghĩ mình chưa đổi gì). Mỗi dòng: "Nguyên liệu · Loại: cũ → mới".
+    const dirtySummary = useMemo(() => {
+        const norm = (v) => (v === undefined || v === null || v === '' ? null : String(v))
+        const fmt = (v) => (v == null ? '(trống)' : v)
+        const b = baselineRef.current
+        const lines = []
+        const fields = [
+            ['Đầu kỳ', openingInputs, b.opening],
+            ['Cuối kỳ', inventoryInputs, b.inventory],
+            ['Lấy ra', restockInputs, b.restock],
+        ]
+        for (const [label, cur, base] of fields) {
+            for (const ing of new Set([...Object.keys(cur || {}), ...Object.keys(base || {})])) {
+                if (norm(cur[ing]) !== norm(base[ing]))
+                    lines.push(`${ing} · ${label}: ${fmt(norm(base[ing]))} → ${fmt(norm(cur[ing]))}`)
+            }
+        }
+        for (const ing of new Set([...Object.keys(openingLocked || {}), ...Object.keys(b.openingLocked || {})])) {
+            if (!!openingLocked[ing] !== !!b.openingLocked[ing])
+                lines.push(`${ing} · Khoá đầu kỳ: ${openingLocked[ing] ? 'bật' : 'tắt'}`)
+        }
+        return lines
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [openingInputs, inventoryInputs, restockInputs, openingLocked, baselineVersion])
+
     // Restock có đổi so với baseline không. Lưu có restock thay đổi = chuyển kho ra quầy
     // (trừ kho tổng server-side) → cần confirm; lưu chỉ-đếm (Đầu/Cuối kỳ) thì không.
     const restockDirty = useMemo(() => {
@@ -434,7 +466,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         isLoadingExisting,
         restockOverflowIngredients,
         // dirty tracking (derived from baseline comparison; baseline advances on push/remote merge)
-        isDirty, restockDirty,
+        isDirty, restockDirty, dirtySummary,
         // last-persisted snapshot (bumps on load / save / lock) — used by the card to
         // sort and to remount rows so they auto-collapse after a successful save.
         baselineSnapshot, baselineVersion,
