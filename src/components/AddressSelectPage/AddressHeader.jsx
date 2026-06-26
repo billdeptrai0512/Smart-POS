@@ -31,9 +31,9 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
                                 ? 'bg-primary/5 border-primary/20 shadow-[0_4px_20px_rgba(242,119,77,0.08)]'
                                 : 'bg-bg border-border/60 hover:bg-surface-light'}`}
                         >
-                            <div className="flex flex-col justify-between items-start relative z-10 mb-[8px] gap-[3px]">
-                                <span className="text-[12px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider">Xin chào</span>
-                                <span className={`text-[15px] sm:text-[16px] font-black tracking-tight leading-tight ${valColor(activeTab === 'branches')}`}>
+                            <div className="flex flex-col justify-between items-start relative z-10 mb-[8px] gap-[3px] min-w-0 w-full">
+                                <span className="text-[12px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider truncate w-full">Xin chào</span>
+                                <span className={`text-[15px] sm:text-[16px] font-black tracking-tight leading-tight truncate w-full ${valColor(activeTab === 'branches')}`}>
                                     {profile?.name || '...'}
                                 </span>
                             </div>

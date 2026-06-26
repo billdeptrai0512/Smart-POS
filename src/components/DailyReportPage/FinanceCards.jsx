@@ -43,7 +43,6 @@ export default function FinanceCards({
     compareLabel = 'So với hôm trước',
     expenses = [],
     expenseCategories = [],
-    onRecipesClick,
     // Category split of totalCOGS — caller passes raw bucket; we normalize so lines sum to totalCOGS.
     // Tools is folded into packaging per UX decision ("Bao bì (ly, nắp, ống hút, dụng cụ...)").
     cogsByCategory = null,
@@ -84,12 +83,12 @@ export default function FinanceCards({
             {/* 2. GIÁ VỐN (COGS) */}
             <SimpleCard title="Giá vốn (COGS)" totalLabel="Tổng giá vốn" totalAmount={cogsTotal} totalTone="warning">
                 <LineItem label="· Nguyên liệu trực tiếp" amount={cogsLines.direct} />
-                <LineItem label="· Bao bì (ly, nắp, ống hút...)" amount={cogsLines.packaging} />
+                <LineItem label="· Bao bì" amount={cogsLines.packaging} />
                 <LineItem label="· Hao hụt / hủy" amount={lossValue} />
             </SimpleCard>
 
             {/* 3. LỢI NHUẬN GỘP */}
-            <ProfitBanner label="Lợi nhuận gộp" amount={grossProfit} onClick={onRecipesClick}>
+            <ProfitBanner label="Lợi nhuận gộp" amount={grossProfit}>
                 <div className="flex justify-between items-center mt-2 pl-1">
                     <span className="text-[11px] font-bold text-text-secondary uppercase">Biên lợi nhuận gộp</span>
                     <span className="text-[13px] font-black text-success tabular-nums">
@@ -114,7 +113,14 @@ export default function FinanceCards({
             </SimpleCard>
 
             {/* 5. LỢI NHUẬN VẬN HÀNH */}
-            <ProfitBanner label="Lợi nhuận vận hành" amount={operatingProfit} onClick={onRecipesClick} />
+            <ProfitBanner label="Lợi nhuận vận hành" amount={operatingProfit}>
+                <div className="flex justify-between items-center mt-2 pl-1">
+                    <span className="text-[11px] font-bold text-text-secondary uppercase">Biên vận hành</span>
+                    <span className={`text-[13px] font-black tabular-nums ${operatingProfit >= 0 ? 'text-success' : 'text-danger'}`}>
+                        {totalRevenue > 0 ? (operatingProfit / totalRevenue * 100).toFixed(2) : '0.00'}%
+                    </span>
+                </div>
+            </ProfitBanner>
 
             {/* 6. CHI PHÍ QUẢN LÝ & KHÁC — dynamic by category */}
             <SimpleCard title="Chi phí quản lý & khác" totalLabel="Tổng cộng" totalAmount={overheadTotal} totalTone="danger">
@@ -125,7 +131,7 @@ export default function FinanceCards({
             </SimpleCard>
 
             {/* 7. LỢI NHUẬN RÒNG (NET PROFIT) */}
-            <NetProfitCard netProfit={netProfit} yesterdayNetProfit={yesterdayNetProfit} compareLabel={compareLabel} />
+            <NetProfitCard netProfit={netProfit} yesterdayNetProfit={yesterdayNetProfit} compareLabel={compareLabel} totalRevenue={totalRevenue} />
         </div>
     )
 }
@@ -195,15 +201,15 @@ function ProfitBanner({ label, amount, onClick, children }) {
         >
             <div className={`absolute top-0 left-0 w-1.5 h-full ${isPositive ? 'bg-success/60' : 'bg-danger/60'}`} />
             <div className="flex justify-between items-center pl-1">
-                <span className="text-[13px] font-black text-text uppercase tracking-wide">{label}</span>
-                <span className={`text-[14px] font-black tabular-nums ${isPositive ? 'text-success' : 'text-danger'}`}>{formatVND(amount)}</span>
+                <span className="text-[13px] font-black text-text uppercase tracking-wide min-w-0 truncate">{label}</span>
+                <span className={`text-[14px] font-black tabular-nums shrink-0 ml-2 ${isPositive ? 'text-success' : 'text-danger'}`}>{formatVND(amount)}</span>
             </div>
             {children}
         </div>
     )
 }
 
-function NetProfitCard({ netProfit, yesterdayNetProfit, compareLabel }) {
+function NetProfitCard({ netProfit, yesterdayNetProfit, compareLabel, totalRevenue }) {
     const hasYesterday = yesterdayNetProfit !== null && yesterdayNetProfit !== undefined
     const isPositive = netProfit >= 0
     return (
@@ -217,6 +223,12 @@ function NetProfitCard({ netProfit, yesterdayNetProfit, compareLabel }) {
                     <div className={`text-[14px] font-black tabular-nums ${isPositive ? 'text-success' : 'text-danger'}`}>
                         {formatVND(netProfit)}
                     </div>
+                </div>
+                <div className="flex justify-between items-center pl-1 mt-2">
+                    <span className="text-[11px] font-bold text-text-secondary uppercase">Biên ròng</span>
+                    <span className={`text-[13px] font-black tabular-nums ${isPositive ? 'text-success' : 'text-danger'}`}>
+                        {totalRevenue > 0 ? (netProfit / totalRevenue * 100).toFixed(2) : '0.00'}%
+                    </span>
                 </div>
                 {hasYesterday && SHOW_COMPARE_ROW && (
                     <div className="flex justify-between items-center pl-1">
