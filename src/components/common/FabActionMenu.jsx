@@ -34,10 +34,8 @@ export default function FabActionMenu({ items = [] }) {
                 <button
                     key={item.key || i}
                     onClick={() => { item.onClick?.(); setOpen(false) }}
-                    style={{ animationDelay: `${i * 30}ms` }}
-                    className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm animate-slide-up"
+                    className="bg-surface border border-border/60 rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light active:scale-95 transition-all shadow-sm"
                 >
-                    {item.icon}
                     {item.label}
                 </button>
             ))}

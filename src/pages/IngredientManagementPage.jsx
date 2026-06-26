@@ -64,7 +64,7 @@ export default function IngredientManagementPage() {
     // Create form
     const [newName, setNewName] = useState('')
     const [newUnit, setNewUnit] = useState('')
-    const [newCost, setNewCost] = useState('')
+
     const [newCategory, setNewCategory] = useState(null)
     const [showCreateModal, setShowCreateModal] = useState(false)
 
@@ -285,15 +285,13 @@ export default function IngredientManagementPage() {
         if (!newName.trim()) return
         const key = normalizeIngredientKey(newName)
         const unit = newUnit || 'đv'
-        const cost = parseVNDInput(newCost)
         setSaving(true)
         try {
-            await upsertIngredientCost(key, cost, selectedAddress?.id, unit, { category: newCategory })
-            setIngredientCosts(prev => ({ ...prev, [key]: cost }))
+            await upsertIngredientCost(key, 0, selectedAddress?.id, unit, { category: newCategory })
             setIngredientUnits(prev => ({ ...prev, [key]: unit }))
             // Refresh configs so the new ingredient picks up its category in `configByIngredient`.
             refreshProducts?.()
-            setNewName(''); setNewUnit(''); setNewCost(''); setNewCategory(null)
+            setNewName(''); setNewUnit(''); setNewCategory(null)
             setShowCreateModal(false)
             showToast('Đã tạo nguyên liệu', 'success')
         } catch (err) {
@@ -457,8 +455,8 @@ export default function IngredientManagementPage() {
                         <div className="flex justify-end px-4 pb-[max(env(safe-area-inset-bottom),16px)] pointer-events-auto">
                             <FabActionMenu
                                 items={[
-                                    { key: 'sort', icon: <ArrowUpDown size={14} />, label: 'Sắp xếp', onClick: enterSortMode },
-                                    { key: 'create', icon: <Plus size={14} />, label: 'Tạo NVL', onClick: () => { setNewCategory(viewMode); setShowCreateModal(true) } },
+                                    { key: 'create', label: viewMode === 'packaging' ? 'Tạo bao bì' : 'Tạo nguyên liệu', onClick: () => { setNewCategory(viewMode); setShowCreateModal(true) } },
+                                    { key: 'sort', label: 'Sắp xếp', onClick: enterSortMode },
                                 ]}
                             />
                         </div>
@@ -474,7 +472,7 @@ export default function IngredientManagementPage() {
                         onClick={e => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between">
-                            <span className="text-[16px] font-black text-text">Tạo nguyên liệu mới</span>
+                            <span className="text-[16px] font-black text-text">{newCategory === 'packaging' ? 'Tạo bao bì mới' : 'Tạo nguyên liệu mới'}</span>
                             <button
                                 onClick={() => setShowCreateModal(false)}
                                 disabled={saving}
@@ -486,13 +484,9 @@ export default function IngredientManagementPage() {
                         <CreateIngredientForm
                             name={newName}
                             unit={newUnit}
-                            cost={newCost}
-                            category={newCategory}
                             saving={saving}
                             onNameChange={setNewName}
                             onUnitChange={setNewUnit}
-                            onCostChange={setNewCost}
-                            onCategoryChange={setNewCategory}
                             onSubmit={handleCreateIngredient}
                         />
                     </div>
