@@ -33,7 +33,7 @@ export default function HistoryPage() {
     const { products, recipes, ingredientCosts, extraIngredients, refreshProducts } = useProducts()
     const {
         todayOrders, todayExpenses, isLoadingHistory,
-        handleDeleteOrder, handleAddExpense, handleUpdateExpense, handleDeleteExpense, handleLoadHistory, retrySync,
+        handleDeleteOrder, handleUpdateOrderDiscount, handleAddExpense, handleUpdateExpense, handleDeleteExpense, handleLoadHistory, retrySync,
         toast, showToast,
     } = usePOS()
 
@@ -399,6 +399,7 @@ export default function HistoryPage() {
                     onRetrySync={handleRetrySync}
                     onDeleteOffline={handleDeleteOffline}
                     onDeleteOrder={handleDeleteOrder}
+                    onUpdateDiscount={handleUpdateOrderDiscount}
                     deletingId={deletingId}
                     setDeletingId={setDeletingId}
                 />

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { fetchTodayStats, fetchInventory, submitOrder, fetchTodayOrders, deleteOrder, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchLatestOrder, invalidateDailyContext } from '../services/orderService'
+import { fetchTodayStats, fetchInventory, submitOrder, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext } from '../services/orderService'
 import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder } from '../hooks/useOfflineSync'
 import { dateStringVN } from '../utils/dateVN'
@@ -35,6 +35,7 @@ export function POSProvider() {
     const addressId = selectedAddress?.id
 
     const localOrderIds = useRef(new Set())
+    const cartRef = useRef([])
 
     // ---- Persisted State ----
     const loadLocalJSON = (key, fallback) => {
@@ -51,7 +52,6 @@ export function POSProvider() {
     const [totalCost, setTotalCost] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.TOTAL_COST)) || 0)
     const [cupsSold, setCupsSold] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.CUPS)) || 0)
     const [inventory, setInventory] = useState(() => loadLocalJSON(STORAGE_KEYS.INVENTORY, {}))
-    const [isSubmitting, setIsSubmitting] = useState(false)
     const [isOnline, setIsOnline] = useState(navigator.onLine)
     const { toast, showToast, showError } = useToast()
 
@@ -59,7 +59,12 @@ export function POSProvider() {
     const [todayOrders, setTodayOrders] = useState([])
     const [todayExpenses, setTodayExpenses] = useState([])
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
-    const [lastOrder, setLastOrder] = useState(null)
+    // Last few orders, newest first (max 3) — shown in the header "Nhật ký" card.
+    const [recentOrders, setRecentOrders] = useState([])
+    // createdAt of the row that should play the slide-in. Set only on a local
+    // commit so the realtime DB echo (which refetches with a different server
+    // timestamp → different key → remount) can't replay the animation.
+    const [enterKey, setEnterKey] = useState(null)
 
     // ---- Offline sync ----
     const handleSyncComplete = useCallback(() => {
@@ -77,12 +82,12 @@ export function POSProvider() {
 
         async function load() {
             try {
-                const [{ revenue: rev, cups }, inv, latest] = await Promise.all([
+                const [{ revenue: rev, cups }, inv, recent] = await Promise.all([
                     fetchTodayStats(addressId),
                     fetchInventory(),
-                    fetchLatestOrder(addressId)
+                    fetchRecentOrders(addressId, 3)
                 ])
-                if (latest) setLastOrder(buildLastOrderFromDB(latest))
+                setRecentOrders(recent.map(buildLastOrderFromDB))
                 if (supabase) {
                     setRevenue(rev)
                     setInventory(inv)
@@ -153,6 +158,8 @@ export function POSProvider() {
 
         let ordersChannel = null
         let statsTimer = null
+        let recentTimer = null
+        let ordersTimer = null
 
         const scheduleStatsRefresh = () => {
             clearTimeout(statsTimer)
@@ -161,6 +168,30 @@ export function POSProvider() {
                     setRevenue(revenue); setCupsSold(cups)
                 })
             }, 2000)
+        }
+
+        // Debounce the journal refetch the same way as stats. The bulk RPC returns
+        // no id so localOrderIds can't dedup our own echoes — without this, a burst
+        // of N orders fires N refetches that each replace the whole list and remount
+        // the rows (the "laggy + loạn" under rapid entry). Coalesce to one trailing
+        // reconcile; the optimistic rows already show each order instantly.
+        const scheduleRecentRefresh = () => {
+            clearTimeout(recentTimer)
+            recentTimer = setTimeout(() => {
+                fetchRecentOrders(addressId, 3).then(recent => {
+                    setRecentOrders(recent.map(buildLastOrderFromDB))
+                })
+            }, 1500)
+        }
+
+        // Reconcile the /history list (todayOrders) after an edit/soft-delete on
+        // ANOTHER device. Low-volume (manual actions, not order bursts) so a plain
+        // debounced refetch is enough — no need for the localOrderIds dance.
+        const scheduleOrdersRefresh = () => {
+            clearTimeout(ordersTimer)
+            ordersTimer = setTimeout(() => {
+                fetchTodayOrders(addressId).then(setTodayOrders).catch(() => { })
+            }, 1500)
         }
 
         const subscribe = () => {
@@ -173,10 +204,18 @@ export function POSProvider() {
 
                         // Detect if it's from another device
                         if (!localOrderIds.current.has(payload.new.id)) {
-                            fetchLatestOrder(addressId).then(latest => {
-                                if (latest) setLastOrder(buildLastOrderFromDB(latest))
-                            })
+                            scheduleRecentRefresh()
                         }
+                    }
+                })
+                // A discount edit or soft-delete (deleted_at set) lands as an UPDATE.
+                // Reconcile revenue, the POS journal header, and the history list so a
+                // change on one device shows on the others without a reload.
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
+                    if (payload.new?.address_id === addressId) {
+                        scheduleStatsRefresh()
+                        scheduleRecentRefresh()
+                        scheduleOrdersRefresh()
                     }
                 })
                 .subscribe()
@@ -189,15 +228,20 @@ export function POSProvider() {
             }
         }
 
+        let hiddenAt = 0
         const handleVisibility = () => {
             if (document.visibilityState === 'visible') {
-                subscribe()
-                // Catch up on anything missed while tab was hidden
-                fetchTodayStats(addressId).then(({ revenue, cups }) => {
-                    setRevenue(revenue); setCupsSold(cups)
-                })
-                fetchTodayExpenses(addressId).then(setTodayExpenses).catch(() => { })
+                subscribe() // always reconnect the socket — it's cheap and required
+                // Catch-up fetches only after a real absence, so rapid app-switching
+                // doesn't pile reads onto a flaky connection (lag-after-foreground).
+                if (Date.now() - hiddenAt > 30000) {
+                    fetchTodayStats(addressId).then(({ revenue, cups }) => {
+                        setRevenue(revenue); setCupsSold(cups)
+                    })
+                    fetchTodayExpenses(addressId).then(setTodayExpenses).catch(() => { })
+                }
             } else {
+                hiddenAt = Date.now()
                 unsubscribe()
             }
         }
@@ -208,6 +252,8 @@ export function POSProvider() {
 
         return () => {
             clearTimeout(statsTimer)
+            clearTimeout(recentTimer)
+            clearTimeout(ordersTimer)
             document.removeEventListener('visibilitychange', handleVisibility)
             unsubscribe()
         }
@@ -247,6 +293,10 @@ export function POSProvider() {
         return () => clearTimeout(t)
     }, [cart, revenue, totalCost, cupsSold, inventory])
 
+    // cartRef mirrors cart so commitHeld / handleAddItem can read the latest
+    // held item (with extras) synchronously without going stale.
+    useEffect(() => { cartRef.current = cart }, [cart])
+
     // ---- Last order helpers ----
     function buildLastOrderFromDB(order) {
         const map = {}
@@ -260,7 +310,7 @@ export function POSProvider() {
             map[key].qty += i.quantity
         }
         const items = Object.values(map).map(({ qty, name, opts }) =>
-            `${qty} ${name}${opts ? ` (${opts})` : ''}`)
+            `${qty > 1 ? qty + ' ' : ''}${name}${opts ? ` (${opts})` : ''}`)
         return { total: order.total, createdAt: order.created_at, items }
     }
 
@@ -274,7 +324,7 @@ export function POSProvider() {
             map[key].qty += i.quantity
         }
         const items = Object.values(map).map(({ qty, name, opts }) =>
-            `${qty} ${name}${opts ? ` (${opts})` : ''}`)
+            `${qty > 1 ? qty + ' ' : ''}${name}${opts ? ` (${opts})` : ''}`)
         return { total, createdAt: new Date().toISOString(), items }
     }
 
@@ -289,150 +339,146 @@ export function POSProvider() {
 
     const { discountAmount, finalTotal } = computeDiscount(total, discount)
 
+    // Live draft of the currently-held (not-yet-saved) item — shown as the top
+    // line of the header journal so it appears the instant you tap, and extras
+    // overwrite it in place (stable 'draft' key in Header → no remount/flash).
+    const draftOrder = useMemo(() => cart.length ? { ...buildLastOrderFromCart(cart, total), cartItemId: cart[cart.length - 1].cartItemId } : null, [cart, total])
+
     // Cart composition / total changed → clear any applied discount so it must be re-entered.
     const clearDiscount = () => setDiscount(d => ({ ...d, value: 0 }))
 
     // ---- Handlers ----
+
+    // ponytail: fire-and-forget single-item submit, no isSubmitting gate
+    function doSubmit(cartItems) {
+        if (!cartItems || cartItems.length === 0) return
+
+        const costPerItem = {}
+        const cartCost = cartItems.reduce((sum, item) => {
+            const c = calculateProductCost(item.productId, item.extras || [], recipes, extraIngredients, ingredientCosts)
+            costPerItem[item.cartItemId] = c
+            return sum + c * item.quantity
+        }, 0)
+        const itemTotal = cartItems.reduce((sum, item) => {
+            const extrasPrice = item.extras.reduce((s, e) => s + e.price, 0)
+            return sum + (item.basePrice + extrasPrice) * item.quantity
+        }, 0)
+        const countableQty = cartItems.reduce((sum, item) => {
+            const prod = products?.find(p => p.id === item.productId)
+            return prod?.count_as_cup === false ? sum : sum + item.quantity
+        }, 0)
+
+        // Optimistic UI
+        setRevenue(prev => prev + itemTotal)
+        setTotalCost(prev => prev + cartCost)
+        setCupsSold(prev => prev + countableQty)
+        // The header "Nhật ký" card shows the last 3 orders (newest first, sliding
+        // in) — that's the confirmation. No success toast (it conflicts with the
+        // card + lags a tap). Keep the added row's identity to undo it on failure.
+        const addedRow = buildLastOrderFromCart(cartItems, itemTotal)
+        setRecentOrders(prev => [addedRow, ...prev].slice(0, 3))
+        setEnterKey(addedRow.createdAt)
+
+        if (navigator.onLine && supabase) {
+            submitOrder(cartItems, itemTotal, null, addressId, cartCost, costPerItem, profile?.name, 0)
+                .then(res => { if (res?.id) localOrderIds.current.add(res.id) })
+                .catch(err => {
+                    if (!navigator.onLine || /fetch|network|NetworkError/i.test(err?.message || '')) {
+                        addPendingOrder(
+                            cartItems.map(item => ({ ...item, unitCost: costPerItem[item.cartItemId] || 0, extraIds: item.extras.map(e => e.id).filter(Boolean) })),
+                            itemTotal, null, addressId, cartCost, profile?.name, 0
+                        )
+                        showToast('Lỗi mạng – lưu offline', 'warning')
+                    } else {
+                        setRevenue(prev => prev - itemTotal)
+                        setTotalCost(prev => Math.max(0, prev - cartCost))
+                        setCupsSold(prev => Math.max(0, prev - countableQty))
+                        setRecentOrders(prev => prev.filter(o => o !== addedRow)) // genuine failure → don't leave a phantom order in the journal
+                        showError(err, 'Ghi đơn')
+                    }
+                })
+        } else {
+            addPendingOrder(
+                cartItems.map(item => ({ ...item, unitCost: costPerItem[item.cartItemId] || 0, extraIds: item.extras.map(e => e.id) })),
+                itemTotal, null, addressId, cartCost, profile?.name, 0
+            )
+            showToast(`Lưu offline (${getPendingCount()} đơn chờ)`, 'warning')
+        }
+    }
+
+    // 1-tap model: each tap submits the previously-held item, then holds the
+    // new one. Extras toggle on the held item until the next tap.
     function handleAddItem(product) {
+        if (cartRef.current.length > 0) doSubmit(cartRef.current)
+
         const cartItemId = crypto.randomUUID()
         const stickyExtras = (productExtras[product.id] || []).filter(e => e.is_sticky && enabledStickyExtraIds.includes(e.id))
-        setCart(prev => [...prev, {
-            cartItemId,
-            productId: product.id,
-            name: product.name,
-            basePrice: product.price,
-            quantity: 1,
-            extras: [...stickyExtras]
-        }])
+        const newItem = { cartItemId, productId: product.id, name: product.name, basePrice: product.price, quantity: 1, extras: [...stickyExtras] }
+        // Update cartRef SYNCHRONOUSLY (not just via the [cart] effect) so a very
+        // fast next tap reads this held item and submits it — otherwise the effect
+        // lags one frame and the item can be overwritten unsubmitted (lost order).
+        cartRef.current = [newItem]
+        setCart([newItem])
         setActiveCartItemId(cartItemId)
         clearDiscount()
     }
 
-    function handleRemoveCartItem(cartItemId) {
-        const next = cart.filter(item => item.cartItemId !== cartItemId)
-        setCart(next)
-        // Xoá đúng món đang focus → nhảy focus sang món mới nhất còn lại (món trên
-        // cùng của MiniCart, cũng là nơi chọn extra áp vào). Hết món → bỏ focus.
-        if (cartItemId === activeCartItemId) {
-            setActiveCartItemId(next.length ? next[next.length - 1].cartItemId : null)
-        }
-        clearDiscount()
+    // Cancel the currently-held item without submitting (undo a mis-tap).
+    function cancelHeld() {
+        cartRef.current = []
+        setCart([])
+        setActiveCartItemId(null)
     }
 
+    // Submit the held item and clear — used by the ✓ button (confirm the LAST order
+    // without holding a new one) and by the unmount flush when leaving the POS
+    // screen. Without it the last held order would never reach the DB.
+    function commitHeld() {
+        if (cartRef.current.length === 0) return
+        doSubmit(cartRef.current)
+        cartRef.current = [] // sync guard: a fast double-press must not re-submit
+        setCart([])
+        setActiveCartItemId(null)
+    }
+
+    // Extras read/write cartRef.current synchronously (not setCart's prev) so the
+    // held item's extras are never stale when the next tap submits it.
     function handleToggleStickyExtra(extra) {
-        setEnabledStickyExtraIds(prev => {
-            const isEnabledNow = prev.includes(extra.id)
-            const nextState = isEnabledNow ? prev.filter(id => id !== extra.id) : [...prev, extra.id]
+        const isEnabledNow = enabledStickyExtraIds.includes(extra.id)
+        setEnabledStickyExtraIds(isEnabledNow ? enabledStickyExtraIds.filter(id => id !== extra.id) : [...enabledStickyExtraIds, extra.id])
 
-            // Sync current active item to match the new global state
-            setCart(prevCart => {
-                if (prevCart.length === 0) return prevCart
-                let targetIndex = prevCart.findIndex(item => item.cartItemId === activeCartItemId)
-                if (targetIndex === -1) targetIndex = prevCart.length - 1
-
-                const next = [...prevCart]
-                const targetItem = next[targetIndex]
-
-                let newExtras = [...targetItem.extras]
-                if (!isEnabledNow) {
-                    if (!newExtras.some(e => e.id === extra.id)) newExtras.push(extra)
-                } else {
-                    newExtras = newExtras.filter(e => e.id !== extra.id)
-                }
-
-                next[targetIndex] = { ...targetItem, extras: newExtras }
-                return next
-            })
-
-            return nextState
-        })
-        if (cart.length) clearDiscount()
+        const prev = cartRef.current
+        if (prev.length > 0) {
+            let idx = prev.findIndex(item => item.cartItemId === activeCartItemId)
+            if (idx === -1) idx = prev.length - 1
+            const target = prev[idx]
+            let newExtras = [...target.extras]
+            if (!isEnabledNow) {
+                if (!newExtras.some(e => e.id === extra.id)) newExtras.push(extra)
+            } else {
+                newExtras = newExtras.filter(e => e.id !== extra.id)
+            }
+            const next = [...prev]
+            next[idx] = { ...target, extras: newExtras }
+            cartRef.current = next
+            setCart(next)
+            clearDiscount()
+        }
     }
 
     function handleToggleExtra(extra) {
-        setCart(prev => {
-            if (prev.length === 0) return prev
-            let targetIndex = prev.findIndex(item => item.cartItemId === activeCartItemId)
-            if (targetIndex === -1) targetIndex = prev.length - 1
-
-            const next = [...prev]
-            const targetItem = next[targetIndex]
-            const hasExtra = targetItem.extras.some(e => e.id === extra.id)
-            const newExtras = hasExtra ? targetItem.extras.filter(e => e.id !== extra.id) : [...targetItem.extras, extra]
-
-            next[targetIndex] = { ...targetItem, extras: newExtras }
-            return next
-        })
-        if (cart.length) clearDiscount()
-    }
-
-    async function handleConfirm() {
-        if (cart.length === 0 || isSubmitting) return
-        setIsSubmitting(true)
-
-        // Build cost snapshot: per-item and total
-        const costPerItem = {}
-        const cartCost = cart.reduce((sum, item) => {
-            const itemCost = calculateProductCost(item.productId, item.extras || [], recipes, extraIngredients, ingredientCosts)
-            costPerItem[item.cartItemId] = itemCost
-            return sum + (itemCost * item.quantity)
-        }, 0)
-
-        // Optimistic: update UI immediately
-        const savedCart = [...cart]
-        const savedTotal = finalTotal
-        const savedDiscount = discountAmount
-        const prevLastOrder = lastOrder
-        const countableQty = cart.reduce((sum, item) => {
-            const prod = products?.find(p => p.id === item.productId)
-            if (prod?.count_as_cup === false) return sum
-            return sum + item.quantity
-        }, 0)
-        setRevenue(prev => prev + savedTotal)
-        setTotalCost(prev => prev + cartCost)
-        setCupsSold(prev => prev + countableQty)
-        setLastOrder(buildLastOrderFromCart(savedCart, savedTotal))
-        setCart([])
-        setActiveCartItemId(null)
+        const prev = cartRef.current
+        if (prev.length === 0) return
+        let idx = prev.findIndex(item => item.cartItemId === activeCartItemId)
+        if (idx === -1) idx = prev.length - 1
+        const target = prev[idx]
+        const hasExtra = target.extras.some(e => e.id === extra.id)
+        const newExtras = hasExtra ? target.extras.filter(e => e.id !== extra.id) : [...target.extras, extra]
+        const next = [...prev]
+        next[idx] = { ...target, extras: newExtras }
+        cartRef.current = next
+        setCart(next)
         clearDiscount()
-        showToast('Tạo thành công', 'success')
-
-        // Submit in background (with COGS snapshot)
-        if (navigator.onLine && supabase) {
-            submitOrder(savedCart, savedTotal, null, addressId, cartCost, costPerItem, profile?.name, savedDiscount).then(res => {
-                localOrderIds.current.add(res.id)
-            }).catch((err) => {
-                // Only fallback to offline for genuine network errors
-                if (!navigator.onLine || err?.message?.includes('fetch') || err?.message?.includes('network') || err?.message?.includes('NetworkError')) {
-                    const enrichedCart = savedCart.map(item => ({
-                        ...item,
-                        unitCost: costPerItem[item.cartItemId] || 0,
-                        extraIds: (item.extras || []).map(e => e.id).filter(Boolean)
-                    }))
-                    addPendingOrder(enrichedCart, savedTotal, null, addressId, cartCost, profile?.name, savedDiscount)
-                    showToast('Lỗi mạng – đã lưu offline', 'warning')
-                } else {
-                    // Genuine write failure (RLS / constraint / server), not a network drop.
-                    // Roll back the optimistic counters so revenue/cups/cost don't drift.
-                    // (Cart/discount are left untouched — the submit is async and staff may
-                    // already be building the next order; clobbering it would lose data.)
-                    setRevenue(prev => prev - savedTotal)
-                    setTotalCost(prev => Math.max(0, prev - cartCost))
-                    setCupsSold(prev => Math.max(0, prev - countableQty))
-                    setLastOrder(prevLastOrder)
-                    showError(err, 'Tạo đơn hàng')
-                }
-            })
-        } else {
-            const enrichedCart = savedCart.map(item => ({
-                ...item,
-                unitCost: costPerItem[item.cartItemId] || 0,
-                extraIds: (item.extras || []).map(e => e.id)
-            }))
-            addPendingOrder(enrichedCart, savedTotal, null, addressId, cartCost, profile?.name, savedDiscount)
-            showToast(`Lưu offline (${getPendingCount()} đơn chờ)`, 'warning')
-        }
-        setIsSubmitting(false)
     }
 
     async function handleLoadHistory() {
@@ -460,11 +506,34 @@ export function POSProvider() {
                 const { revenue: rev, cups } = await fetchTodayStats(addressId)
                 setRevenue(rev)
                 setCupsSold(cups)
+                // Keep the POS journal header in sync — without this a delete here
+                // leaves the removed order showing on /pos until the next reload.
+                fetchRecentOrders(addressId, 3).then(recent => setRecentOrders(recent.map(buildLastOrderFromDB)))
                 invalidateDailyContext(addressId)
             }
             showToast('Đã xóa đơn hàng', 'success')
         } catch (err) {
             showError(err, 'Xóa đơn hàng')
+        }
+    }
+
+    // Re-apply / edit a discount on an existing order. `total` is the new charged
+    // amount (already computed from subtotal − discount by the caller). Updates the
+    // local raw row + recomputes stats + the POS journal header (total changed).
+    async function handleUpdateOrderDiscount(orderId, total, discountAmount) {
+        try {
+            await updateOrderDiscount(orderId, total, discountAmount)
+            setTodayOrders(prev => prev.map(o => o.id === orderId ? { ...o, total, discount_amount: discountAmount } : o))
+            if (addressId) {
+                const { revenue: rev, cups } = await fetchTodayStats(addressId)
+                setRevenue(rev)
+                setCupsSold(cups)
+                fetchRecentOrders(addressId, 3).then(recent => setRecentOrders(recent.map(buildLastOrderFromDB)))
+                invalidateDailyContext(addressId)
+            }
+            showToast('Đã cập nhật giảm giá', 'success')
+        } catch (err) {
+            showError(err, 'Cập nhật giảm giá')
         }
     }
 
@@ -536,14 +605,14 @@ export function POSProvider() {
     // deps don't change; the original code already recreated them every render,
     // so this is no worse and slices keep change frequencies separated.)
     const cartValue = useMemo(() => ({
-        cart, activeCartItemId, setActiveCartItemId,
-        handleAddItem, handleRemoveCartItem, handleToggleExtra, handleToggleStickyExtra, handleConfirm,
+        cart, activeCartItemId,
+        handleAddItem, cancelHeld, handleToggleExtra, handleToggleStickyExtra, commitHeld,
         enabledStickyExtraIds, setEnabledStickyExtraIds,
-        total, orderCount, hasOrder, isSubmitting,
+        total, orderCount, hasOrder,
         discount, setDiscount, discountAmount, finalTotal,
-        lastOrder,
+        recentOrders, draftOrder, enterKey,
         toast, showToast,
-    }), [cart, activeCartItemId, enabledStickyExtraIds, total, orderCount, hasOrder, isSubmitting, discount, discountAmount, finalTotal, lastOrder, toast, showToast])
+    }), [cart, activeCartItemId, enabledStickyExtraIds, total, orderCount, hasOrder, discount, discountAmount, finalTotal, recentOrders, draftOrder, enterKey, toast, showToast])
 
     const statsValue = useMemo(() => ({
         revenue, totalCost, cupsSold, inventory, isOnline,
@@ -552,7 +621,7 @@ export function POSProvider() {
 
     const historyValue = useMemo(() => ({
         todayOrders, todayExpenses, isLoadingHistory,
-        handleLoadHistory, handleDeleteOrder, handleAddExpense, handleUpdateExpense, handleDeleteExpense, refreshTodayExpenses,
+        handleLoadHistory, handleDeleteOrder, handleUpdateOrderDiscount, handleAddExpense, handleUpdateExpense, handleDeleteExpense, refreshTodayExpenses,
         userRole,
     }), [todayOrders, todayExpenses, isLoadingHistory, userRole])
 

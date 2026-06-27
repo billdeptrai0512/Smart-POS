@@ -1,10 +1,13 @@
-import { formatVND } from '../../utils'
+import { useState } from 'react'
+import { Percent, Trash2 } from 'lucide-react'
+import { formatVND, computeDiscount } from '../../utils'
 import { useConfirm } from '../../contexts/ConfirmContext'
+import DiscountModal from '../POSPage/DiscountModal'
 
 export default function OrdersList({
     orders, runningTotals, isLoading, isTodayScope,
     pendingOrders, isSyncing, onRetrySync, onDeleteOffline,
-    onDeleteOrder, deletingId, setDeletingId,
+    onDeleteOrder, onUpdateDiscount, deletingId, setDeletingId,
 }) {
     return (
         <main className="flex-1 overflow-y-auto px-4 py-5 pb-4 space-y-3 bg-bg">
@@ -41,6 +44,7 @@ export default function OrdersList({
                         deletingId={deletingId}
                         setDeletingId={setDeletingId}
                         onDeleteOrder={onDeleteOrder}
+                        onUpdateDiscount={onUpdateDiscount}
                         onDeleteOffline={onDeleteOffline}
                     />
                 ))
@@ -49,10 +53,27 @@ export default function OrdersList({
     )
 }
 
-function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrder, onDeleteOffline }) {
+function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrder, onUpdateDiscount, onDeleteOffline }) {
     const confirm = useConfirm()
+    const [showDiscount, setShowDiscount] = useState(false)
     const date = new Date(order.createdAt)
     const time = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+
+    const discountAmount = order.discountAmount || 0
+    const subtotal = order.total + discountAmount   // pre-discount price (for the modal + struck original)
+    // Only stored the đ reduced, not %/đ type → reopen as a fixed amount; user can switch in the modal.
+    const seedDiscount = discountAmount ? { type: 'amount', value: discountAmount } : { type: 'percent', value: 0 }
+    // Online, non-deleted orders are the only ones we can edit/discount against the DB.
+    const editable = !order.deletedAt && !order.isOffline
+
+    async function handleDelete() {
+        if (deletingId === order.id) return
+        const text = order.items?.map(i => i.text).join(', ') || ''
+        if (await confirm({ title: `Xóa đơn ${text} (${formatVND(order.total)})?`, detail: 'Hành động này không thể hoàn tác!', danger: true, confirmLabel: 'Xóa' })) {
+            setDeletingId(order.id)
+            onDeleteOrder(order.id).finally(() => setDeletingId(null))
+        }
+    }
 
     return (
         <div className={`bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden ${order.deletedAt ? 'opacity-50 grayscale select-none' : ''}`}>
@@ -67,60 +88,77 @@ function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrd
                 </div>
             )}
             <div className="flex justify-between items-center mb-1">
-                <span className="font-black text-[14px] text-primary mt-1">+ {formatVND(order.total)}</span>
+                <div className="flex items-baseline gap-2 mt-1">
+                    <span className="font-black text-[14px] text-primary">+ {formatVND(order.total)}</span>
+                    {discountAmount > 0 && (
+                        <span className="text-text-secondary/60 text-[12px] font-bold line-through tabular-nums">{formatVND(subtotal)}</span>
+                    )}
+                </div>
                 {!order.deletedAt && (
                     <span className="text-success leading-none text-[14px] mt-1 font-bold tabular-nums">
                         {formatVND(runningTotal)}
                     </span>
                 )}
             </div>
-            <div className="flex justify-between items-stretch mb-1 border-t border-border/40 pt-2">
-                <div className="flex flex-col justify-between flex-1 gap-1.5 mt-0.5 mr-2">
-                    <div className="flex flex-col gap-1.5 flex-1">
-                        {order.items?.length > 0 ? order.items.map((item, idx) => (
-                            <div key={idx} className="flex flex-row gap-2 items-start w-full">
-                                <span className={`text-[14px] leading-snug font-medium max-w-[85%] whitespace-pre-wrap text-text ${order.deletedAt ? 'line-through' : ''}`}>{item.text}</span>
-                            </div>
-                        )) : (
-                            <span className="text-text text-[14px] leading-snug font-medium whitespace-pre-wrap">Không có chi tiết</span>
-                        )}
-                    </div>
-                    {order.staffName && (
-                        <div className="flex items-end pb-[1px] mt-1">
-                            <span className="text-text-secondary/70 text-[12px] font-bold truncate max-w-[150px] leading-none">{order.staffName}</span>
+            <div className="mb-1 border-t border-border/40 pt-2">
+                <div className="flex flex-col gap-1.5">
+                    {order.items?.length > 0 ? order.items.map((item, idx) => (
+                        <div key={idx} className="flex flex-row gap-2 items-start w-full">
+                            <span className={`text-[14px] leading-snug font-medium max-w-[85%] whitespace-pre-wrap text-text ${order.deletedAt ? 'line-through' : ''}`}>{item.text}</span>
                         </div>
-                    )}
-                </div>
-                <div className="flex flex-col justify-end items-end gap-2 shrink-0 mt-0.5">
-                    {order.deletedAt ? (
-                        <span className="text-text-secondary/50 text-[14px] font-bold leading-none">{time}</span>
-                    ) : !order.isOffline ? (
-                        <span
-                            className="text-text-secondary text-[14px] text-end font-bold cursor-pointer underline decoration-dashed decoration-text-secondary/50 underline-offset-4 hover:text-danger hover:decoration-danger active:text-danger/80 transition-all select-none leading-none"
-                            onClick={async () => {
-                                if (deletingId === order.id) return
-                                const text = order.items?.map(i => i.text).join(', ') || ''
-                                if (await confirm({ title: `Xóa đơn ${text} (${formatVND(order.total)})?`, detail: 'Hành động này không thể hoàn tác!', danger: true, confirmLabel: 'Xóa' })) {
-                                    setDeletingId(order.id)
-                                    onDeleteOrder(order.id).finally(() => setDeletingId(null))
-                                }
-                            }}
-                        >
-                            {deletingId === order.id ? '⏳' : time}
-                        </span>
-                    ) : (
-                        <div className="flex items-end gap-2 leading-none">
-                            <span
-                                className="text-warning/70 hover:text-danger text-[11px] font-bold cursor-pointer underline underline-offset-2 transition-colors leading-none"
-                                onClick={() => onDeleteOffline(order.createdAt_key)}
-                            >
-                                Xóa
-                            </span>
-                            <span className="text-text-secondary text-[14px] font-bold leading-none">{time}</span>
-                        </div>
+                    )) : (
+                        <span className="text-text text-[14px] leading-snug font-medium whitespace-pre-wrap">Không có chi tiết</span>
                     )}
                 </div>
             </div>
+
+            <div className="border-t border-border/40 pt-2 flex justify-between items-center gap-3 leading-none">
+                <span className="text-text-secondary/70 text-[12px] font-bold truncate min-w-0 leading-none">
+                    {time}{order.staffName ? ` · ${order.staffName}` : ''}
+                </span>
+                {!order.deletedAt && (
+                    !order.isOffline ? (
+                        <div className="flex items-center gap-4 shrink-0">
+                            <button
+                                onClick={() => setShowDiscount(true)}
+                                aria-label="Giảm giá"
+                                className="text-text-secondary hover:text-primary transition-colors"
+                            >
+                                <Percent size={17} strokeWidth={2.25} />
+                            </button>
+                            <button
+                                onClick={handleDelete}
+                                disabled={deletingId === order.id}
+                                aria-label="Xóa đơn"
+                                className="text-text-secondary hover:text-danger transition-colors disabled:opacity-50"
+                            >
+                                <Trash2 size={17} strokeWidth={2.25} />
+                            </button>
+                        </div>
+                    ) : (
+                        <button
+                            onClick={() => onDeleteOffline(order.createdAt_key)}
+                            aria-label="Xóa đơn offline"
+                            className="text-warning/70 hover:text-danger transition-colors shrink-0"
+                        >
+                            <Trash2 size={17} strokeWidth={2.25} />
+                        </button>
+                    )
+                )}
+            </div>
+
+            {editable && (
+                <DiscountModal
+                    open={showDiscount}
+                    onClose={() => setShowDiscount(false)}
+                    subtotal={subtotal}
+                    discount={seedDiscount}
+                    onApply={(d) => {
+                        const { discountAmount: amt, finalTotal } = computeDiscount(subtotal, d)
+                        onUpdateDiscount(order.id, finalTotal, amt)
+                    }}
+                />
+            )}
         </div>
     )
 }

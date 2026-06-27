@@ -54,6 +54,7 @@ export function useFormatHistoryOrders({ baseOrders, pendingOrders, productById,
         return {
             id: o.id,
             total: o.total,
+            discountAmount: o.discount_amount || 0,
             cost,
             createdAt: o.created_at,
             staffName: o.staff_name,

@@ -638,6 +638,17 @@ export const deleteLocalOrder = (orderId, staffName) => {
     return true;
 };
 
+export const updateLocalOrderDiscount = (orderId, total, discountAmount) => {
+    const orders = get(KEYS.ORDERS);
+    const o = orders.find(o => o.id === orderId);
+    if (o) {
+        o.total = total;
+        o.discount_amount = discountAmount;
+        set(KEYS.ORDERS, orders);
+    }
+    return true;
+};
+
 export const deleteLocalRecipeRow = (productId, ingredient) => {
     let recipes = get(KEYS.RECIPES);
     recipes = recipes.filter(r => !(r.product_id === productId && r.ingredient === ingredient));

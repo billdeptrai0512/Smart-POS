@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { usePOS } from '../contexts/POSContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
@@ -7,7 +8,6 @@ import { DAY_NAMES } from '../constants'
 
 import Header from '../components/POSPage/Header'
 import MenuGrid from '../components/POSPage/MenuGrid'
-import MiniCart from '../components/POSPage/MiniCart'
 import OrderFooter from '../components/POSPage/OrderFooter'
 import Toast from '../components/POSPage/Toast'
 
@@ -17,17 +17,21 @@ export default function POSPage() {
     const { products, productExtras } = useProducts()
     const { selectedAddress } = useAddress()
     const {
-        cart, activeCartItemId, setActiveCartItemId,
-        handleAddItem, handleRemoveCartItem, handleToggleExtra, handleConfirm,
-        total, hasOrder, isSubmitting,
-        discount, setDiscount, discountAmount, finalTotal,
+        cart, activeCartItemId,
+        handleAddItem, cancelHeld, handleToggleExtra,
         isOnline,
-        toast, handleLoadHistory, lastOrder,
+        toast, handleLoadHistory, recentOrders, draftOrder, enterKey,
         enabledStickyExtraIds,
         handleToggleStickyExtra,
+        commitHeld,
     } = usePOS()
 
-    // Format date
+    // Commit the last held item to DB when leaving the POS screen.
+    // Ref keeps the unmount cleanup pointed at the latest commitHeld.
+    const flushRef = useRef(commitHeld)
+    flushRef.current = commitHeld
+    useEffect(() => () => flushRef.current(), [])
+
     const today = new Date()
     const dayName = DAY_NAMES[today.getDay()]
     const dateOnly = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`
@@ -46,37 +50,26 @@ export default function POSPage() {
                 onOpenHistory={handleOpenHistory}
                 addressName={selectedAddress?.name}
                 onAddressClick={() => navigate(isGuest ? '/login' : '/addresses')}
-                lastOrder={lastOrder}
+                recentOrders={recentOrders}
+                draftOrder={draftOrder}
+                enterKey={enterKey}
             />
 
             <MenuGrid
                 products={products}
                 cart={cart}
                 onAddItem={handleAddItem}
-            />
-
-            <MiniCart
-                cart={cart}
-                activeCartItemId={activeCartItemId}
-                onSelectItem={setActiveCartItemId}
-                onRemoveItem={handleRemoveCartItem}
+                onCancelHeld={cancelHeld}
+                onCommitHeld={commitHeld}
             />
 
             <OrderFooter
                 cart={cart}
                 activeCartItemId={activeCartItemId}
-                total={total}
-                hasOrder={hasOrder}
-                isSubmitting={isSubmitting}
                 onToggleExtra={handleToggleExtra}
-                onConfirm={handleConfirm}
                 productExtras={productExtras}
                 enabledStickyExtraIds={enabledStickyExtraIds}
                 onToggleStickyExtra={handleToggleStickyExtra}
-                discount={discount}
-                discountAmount={discountAmount}
-                finalTotal={finalTotal}
-                onApplyDiscount={setDiscount}
             />
 
             <Toast toast={toast} />

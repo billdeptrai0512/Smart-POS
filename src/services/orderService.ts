@@ -254,6 +254,24 @@ export async function deleteOrder(orderId: UUID, staffName: string | null = null
     return true
 }
 
+// Re-apply / edit a per-order discount after the fact. `total` is the new charged
+// amount (subtotal − discount); discount_amount stores the đ reduced. COGS (total_cost)
+// is unchanged — a discount affects revenue, not cost. addressId unknown → flush all.
+export async function updateOrderDiscount(orderId: UUID, total: number, discountAmount: number): Promise<boolean> {
+    invalidateReportCache(null)
+    if (localRepo.isGuest()) return (localRepo.updateLocalOrderDiscount as any)(orderId, total, discountAmount)
+    if (!supabase) throw new Error('No Supabase connection')
+
+    const { error } = await supabase
+        .from('orders')
+        .update({ total, discount_amount: discountAmount })
+        .eq('id', orderId)
+
+    if (error) throw error
+
+    return true
+}
+
 // Fetch all orders for yesterday (start of yesterday to start of today), scoped by address
 export async function fetchYesterdayOrders(addressId: UUID | null): Promise<any> {
     if (localRepo.isGuest()) {
@@ -321,26 +339,27 @@ export async function fetchOrdersByRange(addressId: UUID | null, start: Date, en
 }
 
 // Fetch the most recent order today for an address (with items + product names)
-export async function fetchLatestOrder(addressId: UUID | null): Promise<any> {
+export async function fetchRecentOrders(addressId: UUID | null, limit = 3): Promise<any[]> {
     if (localRepo.isGuest()) {
         const todayStr = dateStringVN()
-        const today = localRepo.fetchAllLocalOrders(addressId)
-            .filter((o: any) => dateStringVN(new Date(o.created_at)) === todayStr)
+        return localRepo.fetchAllLocalOrders(addressId)
+            .filter((o: any) => !o.deleted_at && dateStringVN(new Date(o.created_at)) === todayStr)
             .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        return today[0] || null
+            .slice(0, limit)
     }
-    if (!supabase) return null
+    if (!supabase) return []
     const today = startOfDayVN()
 
     let query = supabase
         .from('orders')
         .select(`id, total, created_at, deleted_at, deleted_by, order_items(quantity, options, product_id, products(name))`)
         .gte('created_at', today.toISOString())
+        .is('deleted_at', null)
 
     if (addressId) query = query.eq('address_id', addressId)
 
-    const { data, error } = await query.order('created_at', { ascending: false }).limit(1).maybeSingle()
-    if (error || !data) return null
+    const { data, error } = await query.order('created_at', { ascending: false }).limit(limit)
+    if (error || !data) return []
     return data
 }
 

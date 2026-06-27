@@ -16,11 +16,24 @@ export function useAddress() {
 // Normalize a name for duplicate detection (trim + collapse spaces + lowercase)
 const normalizeName = (s) => (s || '').trim().replace(/\s+/g, ' ').toLowerCase()
 
+// Cached selected-address object → lets the POS render on cold start without
+// waiting for the addresses network fetch (which can hang 5s behind the SW
+// NetworkFirst timeout on a flaky connection = "lag không bấm được order").
+function readCachedAddress() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ)
+        return raw ? JSON.parse(raw) : null
+    } catch { return null }
+}
+
 export function AddressProvider() {
     const { profile, isGuest } = useAuth()
+    const cachedAddress = readCachedAddress()
     const [addresses, setAddresses] = useState([])
-    const [selectedAddress, setSelectedAddressState] = useState(null)
-    const [loading, setLoading] = useState(true)
+    const [selectedAddress, setSelectedAddressState] = useState(() => (isGuest ? null : cachedAddress))
+    // Start unblocked when we already have a cached address — RequireAddress lets
+    // POS through immediately and the real list refetches in the background.
+    const [loading, setLoading] = useState(() => isGuest ? true : !cachedAddress)
     const [fetchError, setFetchError] = useState(null)
 
     // Load addresses when profile is available. Synchronous setState in the
@@ -56,10 +69,13 @@ export function AddressProvider() {
             return
         }
 
-        if (addresses.length === 0) setLoading(true)
+        // Only gate the UI when we have nothing to show yet. With a cached address
+        // the POS is already interactive; this fetch just reconciles in the background.
+        if (!selectedAddress) setLoading(true)
         setFetchError(null)
         fetchAddresses(addressOwnerId).then(({ data, error }) => {
             if (error) {
+                // Network/RLS failure → keep any cached address so POS stays usable offline.
                 setFetchError(error.message || 'Không tải được danh sách địa chỉ')
                 setLoading(false)
                 return
@@ -72,10 +88,21 @@ export function AddressProvider() {
             const saved = addrs.find(a => a.id === savedId)
             if (saved) {
                 setSelectedAddressState(saved)
+                localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, JSON.stringify(saved))
             } else if (addrs.length === 1) {
                 // Auto-select if only one address
                 setSelectedAddressState(addrs[0])
                 localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS, addrs[0].id)
+                localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, JSON.stringify(addrs[0]))
+            } else if (!saved && addrs.length) {
+                // Saved address genuinely no longer exists for this account → drop the
+                // stale selection + cache so RequireAddress sends the user to pick a
+                // valid one. (An empty result — likely a transient read — keeps the cache.)
+                if (cachedAddress) {
+                    setSelectedAddressState(null)
+                    localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS)
+                    localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ)
+                }
             }
 
             setLoading(false)
@@ -87,12 +114,14 @@ export function AddressProvider() {
         setSelectedAddressState(addr)
         if (addr) {
             localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS, addr.id)
+            localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, JSON.stringify(addr))
             if (profile?.id) {
                 upsertSession(profile.id, addr.id)
                 localStorage.setItem(STORAGE_KEYS.ACTIVE_USER_ID, profile.id)
             }
         } else {
             localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS)
+            localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ)
             localStorage.removeItem(STORAGE_KEYS.ACTIVE_USER_ID)
         }
     }, [profile])
@@ -126,6 +155,7 @@ export function AddressProvider() {
         setAddresses(prev => prev.map(a => a.id === addressId ? updatedAddr : a))
         if (selectedAddress?.id === addressId) {
             setSelectedAddressState(updatedAddr)
+            localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, JSON.stringify(updatedAddr))
         }
         return updatedAddr
     }, [profile, selectedAddress, addresses])
@@ -138,6 +168,7 @@ export function AddressProvider() {
         if (selectedAddress?.id === addressId) {
             setSelectedAddressState(null)
             localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS)
+            localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ)
         }
     }, [profile, selectedAddress])
 

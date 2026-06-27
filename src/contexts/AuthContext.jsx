@@ -2,8 +2,26 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import { supabase } from '../lib/supabaseClient'
 import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, signUpWithInvite as authSignUpWithInvite, fetchProfileByAuthId, removeSession, fetchDefaultIngredientSort } from '../services/authService'
 import { isGuest as getLocalIsGuest, setIsGuest as setLocalIsGuest, initializeGuestFromGlobal, clearGuestData, setGuestIngredientSortOrder } from '../services/localRepository'
+import { STORAGE_KEYS } from '../constants/storageKeys'
 
 const AuthContext = createContext(null)
+
+// Cached auth user/profile. On cold start (the OS killed the PWA) we hydrate
+// these so the loading gate passes immediately, and — crucially — if the
+// launch-time token refresh fails on a flaky connection we keep the user signed
+// in instead of bouncing them to /login. Only a real onAuthStateChange
+// 'SIGNED_OUT' clears them.
+function readCachedAuth(key) {
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null }
+    catch { return null }
+}
+function cacheAuth(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)) } catch { /* quota */ }
+}
+function clearCachedAuth() {
+    localStorage.removeItem(STORAGE_KEYS.AUTH_USER)
+    localStorage.removeItem(STORAGE_KEYS.AUTH_PROFILE)
+}
 
 export function useAuth() {
     const ctx = useContext(AuthContext)
@@ -12,8 +30,8 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }) {
-    const [user, setUser] = useState(null)       // Supabase auth user
-    const [profile, setProfile] = useState(null)  // User profile row (from 'users' table)
+    const [user, setUser] = useState(() => getLocalIsGuest() ? null : readCachedAuth(STORAGE_KEYS.AUTH_USER))       // Supabase auth user (hydrated from cache on cold start)
+    const [profile, setProfile] = useState(() => getLocalIsGuest() ? null : readCachedAuth(STORAGE_KEYS.AUTH_PROFILE))  // User profile row (from 'users' table)
     const [loading, setLoading] = useState(true)
     const [isGuest, setIsGuestState] = useState(() => getLocalIsGuest())
 
@@ -108,7 +126,14 @@ export function AuthProvider({ children }) {
             retries--
         }
 
-        setProfile(pf)
+        // Keep a cached profile across a transient null (network) so we don't blank
+        // role-gated UI on a flaky refetch; only overwrite when we actually got one.
+        if (pf) {
+            setProfile(pf)
+            cacheAuth(STORAGE_KEYS.AUTH_PROFILE, pf)
+        } else if (!readCachedAuth(STORAGE_KEYS.AUTH_PROFILE)) {
+            setProfile(null)
+        }
     }, [])
 
     // Initialize: check existing session
@@ -118,11 +143,16 @@ export function AuthProvider({ children }) {
             return
         }
 
-        // Get initial session
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        // Get initial session. Run once via finish(); whichever fires first —
+        // getSession resolving or the safety valve — wins.
+        let settled = false
+        const finish = (session) => {
+            if (settled) return
+            settled = true
             const authUser = session?.user ?? null
-            setUser(authUser)
             if (authUser) {
+                setUser(authUser)
+                cacheAuth(STORAGE_KEYS.AUTH_USER, authUser)
                 setIsGuest(false)
                 loadProfile(authUser).finally(() => setLoading(false))
             } else if (getLocalIsGuest()) {
@@ -130,24 +160,46 @@ export function AuthProvider({ children }) {
                 setIsGuestState(true)
                 setProfile({ id: 'guest', name: 'Khách Ghé Thăm', role: 'manager', email: 'guest@demo.local' })
                 setLoading(false)
+            } else if (readCachedAuth(STORAGE_KEYS.AUTH_USER)) {
+                // We had a real session but getSession came back empty (or too slow) —
+                // on a flaky launch that's a failed/hung token refresh, NOT a sign-out.
+                // Stay in (cached user/profile already hydrated); a genuine sign-out
+                // arrives below as 'SIGNED_OUT' and clears us out.
+                setLoading(false)
             } else {
-                // No session, not a returning guest → show login page
+                // No session, never logged in → show login page
                 setLoading(false)
             }
-        })
+        }
+        supabase.auth.getSession().then(({ data: { session } }) => finish(session))
+        // Safety valve: getSession refreshes an expired token over the network with
+        // NO timeout, so it can hang ~30s on a dead connection and freeze the loading
+        // gate. If we already have a cached session, stop blocking after 2.5s and let
+        // onAuthStateChange reconcile once the refresh eventually resolves.
+        const valve = setTimeout(() => {
+            if (readCachedAuth(STORAGE_KEYS.AUTH_USER)) finish(null)
+        }, 2500)
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_OUT') {
+                // The only definitive sign-out signal — now it's safe to drop the user
+                // and the cached credentials (a flaky refresh never reaches here).
+                setUser(null)
+                setProfile(null)
+                clearCachedAuth()
+                return
+            }
             const authUser = session?.user ?? null
-            setUser(authUser)
             if (authUser) {
+                setUser(authUser)
+                cacheAuth(STORAGE_KEYS.AUTH_USER, authUser)
                 setIsGuest(false)
                 loadProfile(authUser)
             }
-            // On sign-out: do NOT auto-guest; user must click "Dùng thử" on LoginPage
         })
 
-        return () => subscription.unsubscribe()
+        return () => { clearTimeout(valve); subscription.unsubscribe() }
     }, [loadProfile])
 
     const signIn = useCallback(async (username, password) => {
@@ -157,6 +209,8 @@ export function AuthProvider({ children }) {
         // guest_* keys don't linger (signUp / signUpWithInvite already do this). Only after
         // a SUCCESSFUL sign-in, so a failed attempt doesn't wipe an active guest session.
         clearGuestData()
+        // Account switch on a shared device → drop the previous user's cached address.
+        localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ)
         setIsGuest(false)
         return data
     }, [setIsGuest])
@@ -164,6 +218,11 @@ export function AuthProvider({ children }) {
     const signOut = useCallback(async () => {
         if (profile?.id) await removeSession(profile.id)
         await authSignOut()
+        clearCachedAuth()
+        // Drop the cached address OBJECT so a different user signing in on a shared
+        // device doesn't briefly see the previous branch name (the SELECTED_ADDRESS
+        // id stays, so the SAME user's selection still auto-restores after refetch).
+        localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ)
         setUser(null)
         setProfile(null)
     }, [profile])
@@ -172,6 +231,8 @@ export function AuthProvider({ children }) {
         const data = await authSignUp(username, password, name, email)
         setUser(data.user)
         setProfile(data.profile)
+        cacheAuth(STORAGE_KEYS.AUTH_USER, data.user)
+        cacheAuth(STORAGE_KEYS.AUTH_PROFILE, data.profile)
         // Transition from guest to real user — clear sandbox
         clearGuestData()
         setIsGuest(false)
@@ -182,6 +243,8 @@ export function AuthProvider({ children }) {
         const data = await authSignUpWithInvite(token, username, password, name)
         setUser(data.user)
         setProfile(data.profile)
+        cacheAuth(STORAGE_KEYS.AUTH_USER, data.user)
+        cacheAuth(STORAGE_KEYS.AUTH_PROFILE, data.profile)
         // Transition from guest to real user — clear sandbox
         clearGuestData()
         setIsGuest(false)

@@ -1,10 +1,103 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useRef } from 'react'
+import { X, Check } from 'lucide-react'
 import { formatVND } from '../../utils'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useProducts } from '../../contexts/ProductContext'
 
-export default function MenuGrid({ products, cart, onAddItem }) {
+// Held item (qty>0): the WHOLE card is the gesture surface.
+//   quick tap    → order another (onAdd)
+//   press & hold → a green fill rises on the corner X (~600ms); when full it
+//                  commits THIS last order (onCommit). Release mid-fill = abort.
+//   tap corner X → cancel the held order (onCancel).
+// CSS animation-delay keeps the green hidden during quick taps; commit fires on
+// the fill's animationend so the visual == the action.
+function ProductCard({ product, qty, onAdd, onCancel, onCommit }) {
+    const held = qty > 0
+    const [pressing, setPressing] = useState(false)   // fill mounted (covers the pre-delay window)
+    const [engaged, setEngaged] = useState(false)     // green actually rising (past the delay) → show ✓
+    const holdStarted = useRef(false)                 // fill animation began = this press is a hold, not a tap
+    const suppressClick = useRef(false)               // swallow the click that trails a hold (commit or release)
+
+    // Add fires on the card's onClick (kept for mouse/keyboard/screen-reader a11y).
+    // A hold (commit, or release after the green started) leaves a trailing click
+    // that must NOT add — suppressClick eats exactly that one click. Only pointerup
+    // sets it (drag-off via leave/cancel produces no click, so it never sticks).
+    const down = () => { holdStarted.current = false; setEngaged(false); setPressing(true) }
+    const up = () => {
+        setPressing(false); setEngaged(false)
+        if (holdStarted.current) suppressClick.current = true
+    }
+    const abort = () => { setPressing(false); setEngaged(false) }
+    const fillStart = () => { holdStarted.current = true; setEngaged(true) }
+    const fillDone = () => { suppressClick.current = true; setPressing(false); setEngaged(false); onCommit() }
+    const click = () => {
+        if (suppressClick.current) { suppressClick.current = false; return }
+        onAdd(product)
+    }
+    const stop = (e) => e.stopPropagation()
+    const cancel = (e) => { e.stopPropagation(); onCancel() }
+
+    return (
+        <div
+            id={`menu-${product.id}`}
+            role="button"
+            tabIndex={0}
+            aria-pressed={held}
+            aria-label={`Thêm ${product.name}`}
+            onClick={click}
+            onPointerDown={held ? down : undefined}
+            onPointerUp={held ? up : undefined}
+            onPointerLeave={held ? abort : undefined}
+            onPointerCancel={held ? abort : undefined}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAdd(product) }
+            }}
+            className={`menu-btn relative rounded-[1.5rem] p-3 sm:p-4 text-left min-h-[100px] flex flex-col justify-between border cursor-pointer transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-primary/30 ${held
+                ? 'bg-gradient-to-br from-primary/15 to-primary/5 border-primary/40 shadow-[0_8px_24px_var(--color-primary-glow)] ring-1 ring-primary/20'
+                : 'bg-surface border-border/60 shadow-sm hover:border-text/30 hover:shadow-md hover:bg-surface-hover'
+                }`}
+        >
+            {/* Glow Effect */}
+            {held && <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />}
+
+            {/* Corner X: tap = cancel. Hold lives on the card body; the green fill
+                is driven by the card's pressing state but rendered here. */}
+            {held && (
+                <button
+                    onPointerDown={stop}
+                    onPointerUp={stop}
+                    onClick={cancel}
+                    aria-label={`Huỷ ${product.name}`}
+                    className="absolute -top-4 -right-4 z-20 p-2.5 active:scale-90 transition-transform"
+                >
+                    <span className="relative w-7 h-7 rounded-full flex items-center justify-center shadow-lg border-2 border-primary/10 overflow-hidden bg-text">
+                        {pressing && <span onAnimationStart={fillStart} onAnimationEnd={fillDone} className="absolute inset-0 bg-success origin-bottom hold-fill" />}
+                        <span className={`relative z-10 ${engaged ? 'text-white' : 'text-bg'}`}>
+                            {engaged ? <Check size={15} strokeWidth={3} /> : <X size={15} strokeWidth={3} />}
+                        </span>
+                    </span>
+                </button>
+            )}
+
+            {/* Top: Name */}
+            <div className="relative z-10 w-full">
+                <h3 className={`font-black text-[15px] sm:text-[16px] leading-tight break-words pt-0.25 ${held ? 'text-primary drop-shadow-sm' : 'text-text'}`}>
+                    {product.name}
+                </h3>
+            </div>
+
+            {/* Bottom: Price */}
+            <div className="flex items-end justify-between mt-3 relative z-10 w-full gap-2">
+                <span className={`font-extrabold text-[13px] pb-1 ${held ? 'text-primary/90' : 'text-text-secondary'}`}>
+                    {formatVND(product.price)}
+                </span>
+            </div>
+        </div>
+    )
+}
+
+export default function MenuGrid({ products, cart, onAddItem, onCancelHeld, onCommitHeld }) {
     const navigate = useNavigate()
     const { isManager, isAdmin } = useAuth()
     const { loading, loadError } = useProducts()
@@ -67,52 +160,16 @@ export default function MenuGrid({ products, cart, onAddItem }) {
     return (
         <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-6 pb-6 pt-5">
             <div className="grid grid-cols-2 gap-4 pt-1">
-                {products.map(product => {
-                    const qty = cartQtyMap.get(product.id) || 0
-                    return (
-                        <div
-                            key={product.id}
-                            id={`menu-${product.id}`}
-                            role="button"
-                            tabIndex={0}
-                            aria-pressed={qty > 0}
-                            aria-label={`Thêm ${product.name}`}
-                            onClick={() => onAddItem(product)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    onAddItem(product);
-                                }
-                            }}
-                            className={`menu-btn relative rounded-[1.5rem] p-3 sm:p-4 text-left min-h-[100px] flex flex-col justify-between border cursor-pointer transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-primary/30 ${qty > 0
-                                ? 'bg-gradient-to-br from-primary/15 to-primary/5 border-primary/40 shadow-[0_8px_24px_var(--color-primary-glow)] ring-1 ring-primary/20'
-                                : 'bg-surface border-border/60 shadow-sm hover:border-text/30 hover:shadow-md hover:bg-surface-hover'
-                                }`}
-                        >
-                            {/* Glow Effect */}
-                            {qty > 0 && <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />}
-
-                            {/* Top: Name */}
-                            <div className="relative z-10 w-full">
-                                <h3 className={`font-black text-[15px] sm:text-[16px] leading-tight break-words pt-0.25 ${qty > 0 ? 'text-primary drop-shadow-sm' : 'text-text'}`}>
-                                    {product.name}
-                                </h3>
-                            </div>
-
-                            {/* Bottom: Price & Badge */}
-                            <div className="flex items-end justify-between mt-3 relative z-10 w-full gap-2">
-                                <span className={`font-extrabold text-[13px] pb-1 ${qty > 0 ? 'text-primary/90' : 'text-text-secondary'}`}>
-                                    {formatVND(product.price)}
-                                </span>
-                                {qty > 0 && (
-                                    <span className="badge-pop absolute -top-1.5 -right-1 bg-text text-bg text-[14px] font-black w-8 h-8 rounded-full flex items-center justify-center shadow-lg border-2 border-primary/10" aria-hidden="true">
-                                        {qty}
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                    )
-                })}
+                {products.map(product => (
+                    <ProductCard
+                        key={product.id}
+                        product={product}
+                        qty={cartQtyMap.get(product.id) || 0}
+                        onAdd={onAddItem}
+                        onCancel={onCancelHeld}
+                        onCommit={onCommitHeld}
+                    />
+                ))}
             </div>
         </main>
     )

@@ -143,6 +143,40 @@ body {
   animation: badge-pop 200ms ease-out;
 }
 
+/* ====== Hold-to-confirm fill on the held item's corner button ====== */
+@keyframes hold-fill {
+  from {
+    transform: scaleY(0);
+  }
+
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/* 150ms delay (fill-mode both) so a quick tap-to-add never flashes green;
+   the green only rises once the press is a real hold. */
+.hold-fill {
+  animation: hold-fill 450ms linear 150ms both;
+}
+
+/* ====== Committed order settles down into the journal (POS header) ====== */
+@keyframes order-enter {
+  from {
+    transform: translateY(-7px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.order-enter {
+  animation: order-enter 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 /* ====== Modal slide-up ====== */
 @keyframes slide-up {
   0% {

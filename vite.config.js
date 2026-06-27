@@ -84,7 +84,11 @@ export default defineConfig({
             handler: 'NetworkFirst',
             options: {
               cacheName: 'supabase-rest-cache',
-              networkTimeoutSeconds: 5,
+              // 3s (was 5s): on a flaky cafe connection a stuck read falls back to
+              // cache faster. The UI no longer waits on these anyway (auth/address/
+              // products all hydrate from localStorage first), so this only trims
+              // how long background refetches can hang.
+              networkTimeoutSeconds: 3,
               expiration: {
                 maxEntries: 50,
                 maxAgeSeconds: 10 * 60 // 10 minutes
@@ -97,6 +101,8 @@ export default defineConfig({
     })
   ],
   server: {
-    allowedHosts: ["friends-bloggers-share-colors.trycloudflare.com"]
+    // Leading dot = allow this domain and ALL subdomains, so each new Cloudflare
+    // quick-tunnel (random subdomain) works without editing this every time.
+    allowedHosts: [".trycloudflare.com"]
   }
 })
