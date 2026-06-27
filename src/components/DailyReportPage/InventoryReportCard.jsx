@@ -53,6 +53,9 @@ export default function InventoryReportCard({
     consumptionBreakdown = {}, // ingredient → { [variantKey]: { name, qty, totalAmount } } for expand-on-tap
     ingredientToProduct = {}, // ingredient → { amountPerCup, productName } for "Tương đương N ly" label
     canUnlock, isSubmitting,
+    // Sửa lịch sử (ngày cũ): khóa Đầu kỳ + Nhập thêm read-only, chỉ cho sửa Cuối kỳ —
+    // tránh đụng kho tổng (Nhập thêm nằm trong công thức warehouse anchor).
+    lockWarehouseInputs = false,
     // Last-persisted snapshot — drives sort + collapse so live keystrokes don't
     // re-order rows while staff is mid-edit; row key includes baselineVersion so
     // every row remounts (→ collapses) right after a successful save.
@@ -155,6 +158,7 @@ export default function InventoryReportCard({
                     productRef={ingredientToProduct[ing.ingredient]}
                     canUnlock={canUnlock}
                     isSubmitting={isSubmitting}
+                    lockWarehouseInputs={lockWarehouseInputs}
                     onOpeningChange={onOpeningChange}
                     onOpeningLock={onOpeningLock}
                     onRestockChange={onRestockChange}
@@ -196,7 +200,7 @@ function lookupByLabel(ingredient, map) {
 const IngredientRow = memo(function IngredientRow({
     ing, ingredientUnits, openingValue, openingFallback, isLocked, restockValue, inventoryValue,
     warehouseAvailable, used, breakdown, productRef,
-    isSubmitting,
+    isSubmitting, lockWarehouseInputs,
     onOpeningChange, onRestockChange, onInventoryChange,
 }) {
     // Whole-row collapse: default closed so staff can scroll the list of NVL fast and
@@ -318,17 +322,18 @@ const IngredientRow = memo(function IngredientRow({
                         label="Đầu kỳ"
                         value={openingDisplay}
                         unit={unit}
-                        disabled={isLocked || isSubmitting}
+                        disabled={isLocked || isSubmitting || lockWarehouseInputs}
                         onChange={(v) => onOpeningChange(ing.ingredient, v)}
-                        locked={isLocked}
+                        locked={isLocked || lockWarehouseInputs}
                     />
                     <ColumnInput
                         label="Nhập thêm"
                         value={restockValue || ''}
                         unit={unit}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || lockWarehouseInputs}
                         onChange={(v) => onRestockChange(ing.ingredient, v)}
                         overflow={restockOverflow}
+                        locked={lockWarehouseInputs}
                     />
                     <ColumnInput
                         label="Cuối kỳ"

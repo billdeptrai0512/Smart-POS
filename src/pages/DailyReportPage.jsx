@@ -22,6 +22,7 @@ import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import { fetchExpenseCategories } from '../services/expenseService'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
+import PastInventoryEditor from '../components/DailyReportPage/PastInventoryEditor'
 import InventoryReportCard from '../components/DailyReportPage/InventoryReportCard'
 import ShiftPrepCard from '../components/DailyReportPage/ShiftPrepCard'
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
@@ -790,9 +791,15 @@ export default function DailyReportPage() {
         return sum
     }, [isTodayScope, todayOrders, offlineToday])
 
+    // Sửa Cuối kỳ ngày cũ (PastInventoryEditor) chưa lưu — lift lên để guard rời trang.
+    const [pastInvDirty, setPastInvDirty] = useState({ dirty: false, lines: [] })
+    const handlePastInvDirty = useCallback((dirty, lines) => setPastInvDirty({ dirty, lines }), [])
+
     // Có thay đổi chưa lưu ở khu Tồn kho / Thực thu (today scope) → cảnh báo trước khi rời,
     // chống mất tick/soạn (chỉ bền sau khi Lưu, không còn localStorage).
-    const hasUnsaved = isTodayScope && (inventory.isDirty || cashDirty)
+    const hasUnsaved = isTodayScope
+        ? (inventory.isDirty || cashDirty)
+        : (scope === 'day' && pastInvDirty.dirty)
     useEffect(() => {
         if (!hasUnsaved) return
         const handler = (e) => { e.preventDefault(); e.returnValue = '' }
@@ -809,7 +816,7 @@ export default function DailyReportPage() {
                 cashLines.push(`Thực thu · Tiền mặt: ${fmtVND(persistedCash)} → ${fmtVND(parseVNDInput(cashInput) || 0)}`)
             if ((parseVNDInput(transferInput) || 0) !== persistedTransfer)
                 cashLines.push(`Thực thu · Chuyển khoản: ${fmtVND(persistedTransfer)} → ${fmtVND(parseVNDInput(transferInput) || 0)}`)
-            const lines = [...inventory.dirtySummary, ...cashLines]
+            const lines = isTodayScope ? [...inventory.dirtySummary, ...cashLines] : pastInvDirty.lines
             const list = lines.slice(0, 5).map(l => `• ${l}`).join('\n')
             const more = lines.length > 5 ? `\nvà ${lines.length - 5} mục khác…` : ''
             const detail = lines.length
@@ -852,6 +859,28 @@ export default function DailyReportPage() {
     }
     // Ref tới bản handleSaveInventory mới nhất để timer auto-lưu gọi đúng state hiện tại.
     handleSaveInvRef.current = handleSaveInventory
+
+    // Sửa "Tồn kho" (remaining) cuối ca của 1 NGÀY QUÁ KHỨ — fix khi kết ca nhập sai làm
+    // hao hụt/lợi nhuận ngày đó sai. Ghi thẳng inventory_report vào đúng phiếu của ngày đó
+    // (UPDATE theo id, KHÔNG qua merge RPC vì merge khoá cứng phiếu hôm nay). Tồn được tính
+    // lúc đọc nên setShiftClosing là audit + lossValue + lợi nhuận tự tính lại; đầu kỳ ngày
+    // kế cascade theo openingMap. Không đụng kho tổng (chỉ sửa remaining, không sửa restock).
+    const handleSavePastInventory = async (newReport) => {
+        if (!selectedAddress?.id || !shiftClosing?.id) return false
+        if (!await confirm({ title: 'Cập nhật tồn cuối ca của ngày này?', detail: 'Hao hụt và lợi nhuận của ngày sẽ được tính lại.' })) return false
+        try {
+            const saved = await saveShiftClosing(
+                { address_id: selectedAddress.id, inventory_report: newReport },
+                { existingId: shiftClosing.id },
+            )
+            setShiftClosing(saved || { ...shiftClosing, inventory_report: newReport })
+            showToast('Đã cập nhật tồn cuối ca', 'success')
+            return true
+        } catch (err) {
+            showError(err, 'Cập nhật tồn cuối ca')
+            return false
+        }
+    }
 
     // isSavingShift (cờ của hook) chỉ true trong lúc GHI, nhả ngay khi save() xong — nhưng
     // nút chỉ ẩn khi cashDirty=false, mà cashDirty phụ thuộc shiftClosing chỉ cập nhật SAU
@@ -927,20 +956,20 @@ export default function DailyReportPage() {
                     guardLeave(() => navigate('/history', { replace: true, state: { from: backTo, tab, ...dateNavState } }))
                 }}
                 canGoForward={canGoForwardPeriod}
-                onOffsetPrev={goOffsetPrev}
-                onOffsetNext={goOffsetNext}
+                onOffsetPrev={() => guardLeave(goOffsetPrev)}
+                onOffsetNext={() => guardLeave(goOffsetNext)}
                 rangeStartISO={rangeStart ? dateStringVN(rangeStart) : undefined}
                 rangeEndISO={rangeEnd ? dateStringVN(rangeEnd) : undefined}
                 dayInputValue={dayInputValue}
                 todayISO={todayISO}
                 canGoForwardDay={canGoForwardDay}
-                onPrevDay={goPrevDay}
-                onNextDay={goNextDay}
+                onPrevDay={() => guardLeave(goPrevDay)}
+                onNextDay={() => guardLeave(goNextDay)}
                 customRange={customRange}
-                onRangeChange={applyRange}
-                onShiftRange={shiftRange}
+                onRangeChange={(r) => guardLeave(() => applyRange(r))}
+                onShiftRange={(d) => guardLeave(() => shiftRange(d))}
                 canShiftRangeForward={canShiftRangeForward}
-                onPresetSelect={applyPreset}
+                onPresetSelect={(p) => guardLeave(() => applyPreset(p))}
             />
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-6 pb-6 space-y-4 bg-bg">
@@ -1101,19 +1130,40 @@ export default function DailyReportPage() {
                                         )}
                                     </div>
                                 ) : scope === 'day' ? (
-                                    <InventoryRefillCard
-                                        shiftClosing={shiftClosing}
-                                        yesterdayClosing={yesterdayClosing}
-                                        todayOrders={displayOrders}
-                                        offlineToday={[]}
-                                        recipes={recipes}
-                                        extraIngredients={extraIngredients}
-                                        selectedAddress={selectedAddress}
-                                        products={products}
-                                        productExtras={productExtras}
-                                        ingredientUnits={ingredientUnits}
-                                        isPastDate={true}
-                                    />
+                                    // Ngày cũ: chủ/quản lý dùng CHÍNH editor như hôm nay (sửa Cuối kỳ để fix
+                                    // kết ca sai); staff — hoặc ngày KHÔNG có phiếu chốt (không có id để
+                                    // UPDATE) — chỉ xem audit read-only (InventoryRefillCard null nếu rỗng).
+                                    !isStaff && shiftClosing?.id ? (
+                                        <PastInventoryEditor
+                                            shiftClosing={shiftClosing}
+                                            yesterdayClosing={yesterdayClosing}
+                                            dayOrders={displayOrders}
+                                            recipes={recipes}
+                                            extraIngredients={extraIngredients}
+                                            products={products}
+                                            productExtras={productExtras}
+                                            ingredientUnits={ingredientUnits}
+                                            ingredientsList={inventory.ingredientsList}
+                                            isLoading={inventory.isLoadingIngredients}
+                                            isSaving={isSavingShift}
+                                            onSave={handleSavePastInventory}
+                                            onDirtyChange={handlePastInvDirty}
+                                        />
+                                    ) : (
+                                        <InventoryRefillCard
+                                            shiftClosing={shiftClosing}
+                                            yesterdayClosing={yesterdayClosing}
+                                            todayOrders={displayOrders}
+                                            offlineToday={[]}
+                                            recipes={recipes}
+                                            extraIngredients={extraIngredients}
+                                            selectedAddress={selectedAddress}
+                                            products={products}
+                                            productExtras={productExtras}
+                                            ingredientUnits={ingredientUnits}
+                                            isPastDate={true}
+                                        />
+                                    )
                                 ) : (
                                     // Range scopes (week/month/custom): aggregate loss across all
                                     // closings in the period — mirrors what /range-report shows.
