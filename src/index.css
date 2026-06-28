@@ -160,6 +160,19 @@ body {
   animation: hold-fill 450ms linear 150ms both;
 }
 
+/* Peek teaser: when a card first becomes held, the corner fill rises ~34% then
+   recedes — a one-shot demo of the hold-to-commit gesture (no text needed). */
+@keyframes hold-peek {
+  0% { transform: scaleY(0); }
+  35% { transform: scaleY(0.5); }
+  62% { transform: scaleY(0.5); }
+  100% { transform: scaleY(0); }
+}
+
+.hold-peek {
+  animation: hold-peek 850ms ease-in-out both;
+}
+
 /* ====== Committed order settles down into the journal (POS header) ====== */
 @keyframes order-enter {
   from {

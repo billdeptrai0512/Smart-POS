@@ -12,18 +12,42 @@ import { useProducts } from '../../contexts/ProductContext'
 //   tap corner X → cancel the held order (onCancel).
 // CSS animation-delay keeps the green hidden during quick taps; commit fires on
 // the fill's animationend so the visual == the action.
+
+// Peek teaser fires once per session — the first card to become held demos the
+// hold gesture, then this latches so every later order isn't nagged. Resets on
+// full reload (a new session = re-teach), which is fine.
+let peekedThisSession = false
+
 function ProductCard({ product, qty, onAdd, onCancel, onCommit }) {
     const held = qty > 0
     const [pressing, setPressing] = useState(false)   // fill mounted (covers the pre-delay window)
     const [engaged, setEngaged] = useState(false)     // green actually rising (past the delay) → show ✓
+    const [peeking, setPeeking] = useState(false)     // one-shot teaser fill on becoming held
+    const [peekCheck, setPeekCheck] = useState(false) // flash ✓ at the peek's peak
     const holdStarted = useRef(false)                 // fill animation began = this press is a hold, not a tap
     const suppressClick = useRef(false)               // swallow the click that trails a hold (commit or release)
+    const wasHeld = useRef(held)
+
+    // First time a card becomes held (qty 0→1), play a quick "peek": the corner
+    // fill rises ~34% and recedes, X flashes ✓ — demoing the hold gesture once,
+    // without any text. Only on 0→1, so adding more (1→2) doesn't re-tease.
+    useEffect(() => {
+        const becameHeld = held && !wasHeld.current
+        wasHeld.current = held
+        if (!held) { setPeeking(false); setPeekCheck(false) } // un-held (cancel/commit) → drop any in-flight teaser so it can't replay
+        if (!becameHeld || peekedThisSession) return
+        peekedThisSession = true
+        setPeeking(true)
+        const t1 = setTimeout(() => setPeekCheck(true), 120)
+        const t2 = setTimeout(() => setPeekCheck(false), 620)
+        return () => { clearTimeout(t1); clearTimeout(t2) }
+    }, [held])
 
     // Add fires on the card's onClick (kept for mouse/keyboard/screen-reader a11y).
     // A hold (commit, or release after the green started) leaves a trailing click
     // that must NOT add — suppressClick eats exactly that one click. Only pointerup
     // sets it (drag-off via leave/cancel produces no click, so it never sticks).
-    const down = () => { holdStarted.current = false; setEngaged(false); setPressing(true) }
+    const down = () => { holdStarted.current = false; setEngaged(false); setPressing(true); setPeeking(false); setPeekCheck(false) }
     const up = () => {
         setPressing(false); setEngaged(false)
         if (holdStarted.current) suppressClick.current = true
@@ -72,9 +96,11 @@ function ProductCard({ product, qty, onAdd, onCancel, onCommit }) {
                     className="absolute -top-4 -right-4 z-20 p-2.5 active:scale-90 transition-transform"
                 >
                     <span className="relative w-7 h-7 rounded-full flex items-center justify-center shadow-lg border-2 border-primary/10 overflow-hidden bg-text">
-                        {pressing && <span onAnimationStart={fillStart} onAnimationEnd={fillDone} className="absolute inset-0 bg-success origin-bottom hold-fill" />}
-                        <span className={`relative z-10 ${engaged ? 'text-white' : 'text-bg'}`}>
-                            {engaged ? <Check size={15} strokeWidth={3} /> : <X size={15} strokeWidth={3} />}
+                        {pressing
+                            ? <span onAnimationStart={fillStart} onAnimationEnd={fillDone} className="absolute inset-0 bg-success origin-bottom hold-fill" />
+                            : peeking && <span onAnimationEnd={() => setPeeking(false)} className="absolute inset-0 bg-success origin-bottom hold-peek" />}
+                        <span className="relative z-10 text-bg">
+                            {engaged || peekCheck ? <Check size={15} strokeWidth={3} /> : <X size={15} strokeWidth={3} />}
                         </span>
                     </span>
                 </button>
