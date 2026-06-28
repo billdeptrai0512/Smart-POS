@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateRefillTarget } from './inventory';
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateRefillTarget, calculateLossValue, buildRecipeIngredientSet } from './inventory';
 
 const recipes = [
     { product_id: 'cf_den', ingredient: 'coffee_g', amount: 18 },
@@ -20,6 +20,46 @@ const products = [
     { id: 'cf_den', name: 'Cà phê đen' },
     { id: 'cf_sua', name: 'Cà phê sữa' },
 ];
+
+// ─── calculateLossValue (split non-recipe consumption from waste) ─────────────
+
+describe('calculateLossValue', () => {
+    const closedAt = '2026-06-20T10:00:00';
+    const dayStr = new Date(closedAt).toLocaleDateString('sv-SE');
+    const closings = [{
+        closed_at: closedAt,
+        inventory_report: [
+            { ingredient: 'coffee_g', opening: 100, restock: 0, remaining: 70 },
+            { ingredient: 'straw', opening: 50, restock: 0, remaining: 30 },
+        ],
+    }];
+    const ingredientConfigs = [
+        { ingredient: 'coffee_g', unit_cost: 0.5 },
+        { ingredient: 'straw', unit_cost: 10 },
+    ];
+    // coffee_g sold-through 25 (theoretical); straw is in no recipe → used 0.
+    const dailyConsumption = { [dayStr]: { coffee_g: 25 } };
+
+    it('routes non-recipe depletion to consumption, recipe variance to loss', () => {
+        const recipeIngredients = buildRecipeIngredientSet(recipes, extraIngredients);
+        const { loss, consumption } = calculateLossValue({
+            shiftClosings: closings, dailyConsumption, ingredientConfigs, recipeIngredients,
+        });
+        // coffee_g: theoretical 100-25=75, actual 70 → -5 × 0.5 = 2.5 thất thoát
+        expect(loss).toBeCloseTo(2.5);
+        // straw: không công thức → 50-30=20 dùng × 10 = 200 tiêu hao (KHÔNG phải thất thoát)
+        expect(consumption.straw).toBeCloseTo(200);
+        expect(consumption.coffee_g).toBeUndefined();
+    });
+
+    it('without recipeIngredients, everything is loss (back-compat)', () => {
+        const { loss, consumption } = calculateLossValue({
+            shiftClosings: closings, dailyConsumption, ingredientConfigs,
+        });
+        expect(loss).toBeCloseTo(202.5);
+        expect(Object.keys(consumption)).toHaveLength(0);
+    });
+});
 
 // ─── calculateEstimatedConsumption ───────────────────────────────────────────
 

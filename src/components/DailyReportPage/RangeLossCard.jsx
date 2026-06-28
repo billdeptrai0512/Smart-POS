@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { calculateEstimatedConsumption } from '../../utils/inventory';
+import { calculateEstimatedConsumption, buildRecipeIngredientSet } from '../../utils/inventory';
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients';
 import { ChevronDown, Lock } from 'lucide-react';
 import { useProducts } from '../../contexts/ProductContext';
@@ -76,6 +76,11 @@ export default function RangeLossCard({
     const auditData = useMemo(() => {
         if (!shiftClosings || shiftClosings.length === 0) return { rows: [], totalLossValue: 0 };
 
+        // Bao bì/vật tư không có công thức (ống hút, bịch chữ T) chỉ đếm tồn — tiêu hao của
+        // chúng là dùng thật, không phải thất thoát. Bỏ khỏi card "Hao hụt trong kỳ" (đã ghi
+        // tên riêng trong COGS), khớp với cách FinanceCards tách chúng ra.
+        const recipeSet = buildRecipeIngredientSet(recipes, extraIngredients);
+
         // --- Step 1: Build daily order-item lists keyed by YYYY-MM-DD ---
         const dailyOrderItems = {};
         orders.forEach(o => {
@@ -144,6 +149,8 @@ export default function RangeLossCard({
                 // Skip ingredients where staff didn't count actual remaining at end of shift —
                 // treating null as 0 would surface a fake hao hụt = −theoretical (the whole stock).
                 if (item.remaining == null) return;
+                // Không trong công thức nào → tiêu hao thật, không phải thất thoát.
+                if (!recipeSet.has(item.ingredient)) return;
 
                 const config = ingredientConfigs.find(c => c.ingredient === item.ingredient) || {};
                 const unitCost = config.unit_cost || 0;

@@ -10,7 +10,7 @@ import { fetchCashClosedToday } from '../services/reportService'
 import { useShiftClosingSave } from '../hooks/useShiftClosingSave'
 import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
 import { useDailyReportData } from '../hooks/useDailyReportData'
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogsByCategory, calculateLossValue } from '../utils/inventory'
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet } from '../utils/inventory'
 import { ingredientLabel, getIngredientUnit } from '../utils/ingredients'
 import { dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { useDateScope } from '../hooks/useDateScope'
@@ -375,7 +375,7 @@ export default function DailyReportPage() {
         [displayOrders, offlineToday, recipes, extraIngredients, ingredientCosts, categoryByIngredient]
     )
 
-    const lossValue = useMemo(() => {
+    const lossInfo = useMemo(() => {
         // Daily scope: today's single closing + yesterday as the opening source.
         // Range scope: all closings in the period + prev-period closings.
         const isDayScope = scope === 'day'
@@ -387,7 +387,7 @@ export default function DailyReportPage() {
         const closings = isDayScope
             ? (usableClosing ? [usableClosing] : [])
             : (apiShiftClosings || [])
-        if (closings.length === 0) return 0
+        if (closings.length === 0) return { lossValue: 0, consumptionLines: [] }
 
         // Bucket orders by VN date string so calculateLossValue can look up
         // per-day consumption (same dayStr key the RangeLossCard uses).
@@ -420,16 +420,28 @@ export default function DailyReportPage() {
             : (prevShiftClosings || [])
         // Làm tròn về VND nguyên (hao hụt = qty lẻ × giá vốn nên hay ra .5) → row + tổng
         // giá vốn + lợi nhuận đều dùng số nguyên nhất quán, không còn hiển thị "...,5đ".
-        return Math.round(calculateLossValue({
+        const { loss, consumption } = calculateLossValue({
             shiftClosings: closings,
             prevShiftClosings: prevClosings,
             dailyConsumption,
             ingredientConfigs,
-        }))
+            recipeIngredients: buildRecipeIngredientSet(recipes, extraIngredients),
+        })
+        // Bao bì/vật tư không công thức: tiêu hao của chúng tách riêng, ghi đúng tên
+        // (Ống hút, Bịch chữ T...) trong COGS thay vì gộp vào "Hao hụt / hủy".
+        const consumptionLines = Object.entries(consumption)
+            .map(([ingredient, value]) => ({ ingredient, label: ingredientLabel(ingredient), value: Math.round(value) }))
+            .filter(l => l.value > 0)
+            .sort((a, b) => b.value - a.value)
+        return { lossValue: Math.round(loss), consumptionLines }
     }, [scope, isTodayScope, isTodaysClosing, shiftClosing, yesterdayClosing, apiShiftClosings, prevShiftClosings, apiOrders, displayOrders, offlineToday, recipes, extraIngredients, ingredientConfigs])
 
-    // P&L = Revenue - COGS - Hao hụt - Tất cả chi phí thực chi. NVL không trừ (đã nằm trong COGS).
-    const netProfit = totalRevenue - totalCOGS - lossValue - operationalExpense
+    const { lossValue, consumptionLines } = lossInfo
+    const consumptionTotal = consumptionLines.reduce((s, l) => s + l.value, 0)
+
+    // P&L = Revenue - COGS - Hao hụt - Tiêu hao bao bì không-công-thức - chi phí thực chi.
+    // NVL refill không trừ ở đây (đã nằm trong COGS/tiêu hao qua kiểm kê).
+    const netProfit = totalRevenue - totalCOGS - lossValue - consumptionTotal - operationalExpense
 
     const yesterdayNetProfit = useMemo(() => {
         let rev = 0, cogs = 0
@@ -998,6 +1010,7 @@ export default function DailyReportPage() {
                                 expenseCategories={expenseCategories}
                                 cogsByCategory={cogsByCategory}
                                 lossValue={lossValue}
+                                consumptionLines={consumptionLines}
                                 onRecipesClick={() => guardLeave(() => navigate('/recipes', { state: { from: '/daily-report' } }))}
                             />
                         )}

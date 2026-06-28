@@ -260,16 +260,32 @@ export function splitCogsByCategory(orders, recipes, extraIngredients, ingredien
  *   Caller computes via calculateEstimatedConsumption on orders bucketed
  *   by VN local date (matches the existing cards' dayStr key).
  *
- * Returns 0 when there are no closings.
+ * `recipeIngredients` (optional Set): ingredients consumed by some recipe/extra.
+ *   An item NOT in this set has 0 theoretical usage, so its whole depletion is
+ *   real consumption (ống hút, bịch chữ T — bao bì chỉ đếm tồn, không vào công
+ *   thức), not waste. Those are split into `consumption` keyed by ingredient so
+ *   the P&L can name them instead of lumping into "Hao hụt". Omit → all to loss.
+ *
+ * Returns { loss, consumption: { ingredient: value } }; {loss:0,consumption:{}}
+ * when there are no closings.
  */
+export function buildRecipeIngredientSet(recipes = [], extraIngredients = {}) {
+    const set = new Set()
+    for (const r of recipes) if (r?.ingredient) set.add(r.ingredient)
+    for (const list of Object.values(extraIngredients || {}))
+        for (const ei of (list || [])) if (ei?.ingredient) set.add(ei.ingredient)
+    return set
+}
+
 export function calculateLossValue({
     shiftClosings,
     prevShiftClosings = [],
     dailyConsumption = {},
     ingredientConfigs = [],
     openingOverrideMap = null,
+    recipeIngredients = null,
 }) {
-    if (!shiftClosings || shiftClosings.length === 0) return 0
+    if (!shiftClosings || shiftClosings.length === 0) return { loss: 0, consumption: {} }
     const sorted = [...shiftClosings].sort((a, b) =>
         new Date(a.closed_at || a.created_at) - new Date(b.closed_at || b.created_at)
     )
@@ -289,6 +305,7 @@ export function calculateLossValue({
     }
 
     let totalLoss = 0
+    const consumption = {}
     sorted.forEach((closing, idx) => {
         if (!closing.inventory_report) return
         const dayStr = new Date(closing.closed_at || closing.created_at).toLocaleDateString('sv-SE')
@@ -312,11 +329,16 @@ export function calculateLossValue({
             const diff = Math.round((item.remaining - theoretical) * 10) / 10
             const diffValue = diff * (costByIngredient.get(item.ingredient) || 0)
             if (diffValue < 0) {
-                totalLoss += Math.abs(diffValue)
+                // Không có trong công thức nào → tiêu hao thật, không phải thất thoát.
+                if (recipeIngredients && !recipeIngredients.has(item.ingredient)) {
+                    consumption[item.ingredient] = (consumption[item.ingredient] || 0) + Math.abs(diffValue)
+                } else {
+                    totalLoss += Math.abs(diffValue)
+                }
             }
         }
     })
-    return totalLoss
+    return { loss: totalLoss, consumption }
 }
 
 // Format a base-unit quantity into pack-aware text. e.g. 5350 + (1000, 'bịch', 'g')
