@@ -154,23 +154,11 @@ body {
   }
 }
 
-/* 150ms delay (fill-mode both) so a quick tap-to-add never flashes green;
-   the green only rises once the press is a real hold. */
+/* 200ms delay (fill-mode both) so a quick tap-to-add never engages; the green
+   only rises once the press is a real hold. 800ms rise = a comfortable window to
+   release and abort the commit before it fills. */
 .hold-fill {
-  animation: hold-fill 450ms linear 150ms both;
-}
-
-/* Peek teaser: when a card first becomes held, the corner fill rises ~34% then
-   recedes — a one-shot demo of the hold-to-commit gesture (no text needed). */
-@keyframes hold-peek {
-  0% { transform: scaleY(0); }
-  35% { transform: scaleY(0.5); }
-  62% { transform: scaleY(0.5); }
-  100% { transform: scaleY(0); }
-}
-
-.hold-peek {
-  animation: hold-peek 850ms ease-in-out both;
+  animation: hold-fill 800ms linear 200ms both;
 }
 
 /* ====== Committed order settles down into the journal (POS header) ====== */

@@ -311,7 +311,7 @@ export function POSProvider() {
         }
         const items = Object.values(map).map(({ qty, name, opts }) =>
             `${qty > 1 ? qty + ' ' : ''}${name}${opts ? ` (${opts})` : ''}`)
-        return { total: order.total, createdAt: order.created_at, items }
+        return { id: order.id, total: order.total, createdAt: order.created_at, items }
     }
 
     function buildLastOrderFromCart(cartItems, total) {
@@ -325,7 +325,9 @@ export function POSProvider() {
         }
         const items = Object.values(map).map(({ qty, name, opts }) =>
             `${qty > 1 ? qty + ' ' : ''}${name}${opts ? ` (${opts})` : ''}`)
-        return { total, createdAt: new Date().toISOString(), items }
+        // id = stable unique React key. createdAt is ms-resolution, so two orders
+        // committed in the same millisecond would collide as keys → dup-key render bug.
+        return { id: crypto.randomUUID(), total, createdAt: new Date().toISOString(), items }
     }
 
     // ---- Derived values ----

@@ -5,62 +5,68 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useProducts } from '../../contexts/ProductContext'
 
-// Held item (qty>0): the WHOLE card is the gesture surface.
-//   quick tap    → order another (onAdd)
-//   press & hold → a green fill rises on the corner X (~600ms); when full it
-//                  commits THIS last order (onCommit). Release mid-fill = abort.
-//   tap corner X → cancel the held order (onCancel).
-// CSS animation-delay keeps the green hidden during quick taps; commit fires on
-// the fill's animationend so the visual == the action.
-
-// Peek teaser fires once per session — the first card to become held demos the
-// hold gesture, then this latches so every later order isn't nagged. Resets on
-// full reload (a new session = re-teach), which is fine.
-let peekedThisSession = false
+// The WHOLE card is the gesture surface. A green fill rises on the corner badge
+// while you hold and COMMITS the order when the fill completes (on its animationend,
+// so the visual == the action). The press is captured (setPointerCapture) so the
+// hold survives grid reflow + finger drift. CSS animation-delay hides it on quick taps.
+//   tap (any card)      → activate/order that item (onAdd); extras bar opens
+//   hold a fresh card   → commit a 1-item order in one press. Release mid-fill = abort.
+//   hold an active card → commit THIS order (onCommit). Release mid-fill = abort.
+//   tap corner X        → cancel the active order (onCancel).
+// Holding never switches the active card until the commit lands, so an open extras
+// bar (and the cards under your finger) stay put through the whole hold.
+// The fill doubles as the gesture's tutorial: hold a beat longer, watch the bar climb.
 
 function ProductCard({ product, qty, onAdd, onCancel, onCommit }) {
     const held = qty > 0
     const [pressing, setPressing] = useState(false)   // fill mounted (covers the pre-delay window)
     const [engaged, setEngaged] = useState(false)     // green actually rising (past the delay) → show ✓
-    const [peeking, setPeeking] = useState(false)     // one-shot teaser fill on becoming held
-    const [peekCheck, setPeekCheck] = useState(false) // flash ✓ at the peek's peak
     const holdStarted = useRef(false)                 // fill animation began = this press is a hold, not a tap
     const suppressClick = useRef(false)               // swallow the click that trails a hold (commit or release)
-    const wasHeld = useRef(held)
-
-    // First time a card becomes held (qty 0→1), play a quick "peek": the corner
-    // fill rises ~34% and recedes, X flashes ✓ — demoing the hold gesture once,
-    // without any text. Only on 0→1, so adding more (1→2) doesn't re-tease.
-    useEffect(() => {
-        const becameHeld = held && !wasHeld.current
-        wasHeld.current = held
-        if (!held) { setPeeking(false); setPeekCheck(false) } // un-held (cancel/commit) → drop any in-flight teaser so it can't replay
-        if (!becameHeld || peekedThisSession) return
-        peekedThisSession = true
-        setPeeking(true)
-        const t1 = setTimeout(() => setPeekCheck(true), 120)
-        const t2 = setTimeout(() => setPeekCheck(false), 620)
-        return () => { clearTimeout(t1); clearTimeout(t2) }
-    }, [held])
 
     // Add fires on the card's onClick (kept for mouse/keyboard/screen-reader a11y).
-    // A hold (commit, or release after the green started) leaves a trailing click
-    // that must NOT add — suppressClick eats exactly that one click. Only pointerup
-    // sets it (drag-off via leave/cancel produces no click, so it never sticks).
-    const down = () => { holdStarted.current = false; setEngaged(false); setPressing(true); setPeeking(false); setPeekCheck(false) }
+    // A hold (commit, or a held card's mid-fill release) leaves a trailing click
+    // that must NOT add — suppressClick eats exactly that one click.
+    // Reset suppressClick every press: a long-press commit can release with no
+    // trailing click (common on touch), leaving it stuck true → the next tap would
+    // be swallowed. Clearing here means a stale flag can never outlive its gesture.
+    // setPointerCapture binds the hold to THIS card for the whole press, so the
+    // gesture survives the grid reflow when the active card's extras bar moves, and
+    // any finger drift over the long hold — instead of firing pointerleave → abort.
+    const down = (e) => {
+        try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* synthetic / inactive pointer */ }
+        holdStarted.current = false; suppressClick.current = false; setEngaged(false); setPressing(true)
+    }
     const up = () => {
         setPressing(false); setEngaged(false)
+        // Past the delay (holdStarted) the press is a hold: releasing before the fill
+        // completes is an ABORT — suppress the trailing click so nothing is added.
+        // A sub-delay tap never engages, so its click falls through to onAdd normally.
         if (holdStarted.current) suppressClick.current = true
     }
     const abort = () => { setPressing(false); setEngaged(false) }
     const fillStart = () => { holdStarted.current = true; setEngaged(true) }
-    const fillDone = () => { suppressClick.current = true; setPressing(false); setEngaged(false); onCommit() }
+    // Fill complete → commit. Activating happens HERE, not mid-hold, so a hold never
+    // switches the active item (reflowing the grid) until the order closes. Fresh
+    // card: add then commit — handleAddItem sets cartRef synchronously. Held: commit.
+    const fillDone = () => { suppressClick.current = true; setPressing(false); setEngaged(false); if (!held) onAdd(product); onCommit() }
     const click = () => {
         if (suppressClick.current) { suppressClick.current = false; return }
         onAdd(product)
     }
     const stop = (e) => e.stopPropagation()
     const cancel = (e) => { e.stopPropagation(); onCancel() }
+
+    // Shared circle: green fill (while pressing) under an X, swapped to ✓ once the
+    // hold engages. Rendered in a bare span during a press, or the cancel button at rest.
+    const badge = (
+        <span className="relative w-7 h-7 rounded-full flex items-center justify-center shadow-lg border-2 border-primary/10 overflow-hidden bg-text">
+            {pressing && <span onAnimationStart={fillStart} onAnimationEnd={fillDone} className="absolute inset-0 bg-success origin-bottom hold-fill" />}
+            <span className="relative z-10 text-bg">
+                {engaged ? <Check size={15} strokeWidth={3} /> : <X size={15} strokeWidth={3} />}
+            </span>
+        </span>
+    )
 
     return (
         <div
@@ -70,10 +76,10 @@ function ProductCard({ product, qty, onAdd, onCancel, onCommit }) {
             aria-pressed={held}
             aria-label={`Thêm ${product.name}`}
             onClick={click}
-            onPointerDown={held ? down : undefined}
-            onPointerUp={held ? up : undefined}
-            onPointerLeave={held ? abort : undefined}
-            onPointerCancel={held ? abort : undefined}
+            onPointerDown={down}
+            onPointerUp={up}
+            onPointerLeave={abort}
+            onPointerCancel={abort}
             onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAdd(product) }
             }}
@@ -85,9 +91,13 @@ function ProductCard({ product, qty, onAdd, onCancel, onCommit }) {
             {/* Glow Effect */}
             {held && <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />}
 
-            {/* Corner X: tap = cancel. Hold lives on the card body; the green fill
-                is driven by the card's pressing state but rendered here. */}
-            {held && (
+            {/* Corner badge. During a press: the rising fill (fresh cards stay invisible
+                until engaged so quick taps don't flash). At rest, when active: X = cancel. */}
+            {pressing ? (
+                <span className={`absolute -top-4 -right-4 z-20 p-2.5 pointer-events-none transition-opacity ${engaged || held ? 'opacity-100' : 'opacity-0'}`}>
+                    {badge}
+                </span>
+            ) : held ? (
                 <button
                     onPointerDown={stop}
                     onPointerUp={stop}
@@ -95,16 +105,9 @@ function ProductCard({ product, qty, onAdd, onCancel, onCommit }) {
                     aria-label={`Huỷ ${product.name}`}
                     className="absolute -top-4 -right-4 z-20 p-2.5 active:scale-90 transition-transform"
                 >
-                    <span className="relative w-7 h-7 rounded-full flex items-center justify-center shadow-lg border-2 border-primary/10 overflow-hidden bg-text">
-                        {pressing
-                            ? <span onAnimationStart={fillStart} onAnimationEnd={fillDone} className="absolute inset-0 bg-success origin-bottom hold-fill" />
-                            : peeking && <span onAnimationEnd={() => setPeeking(false)} className="absolute inset-0 bg-success origin-bottom hold-peek" />}
-                        <span className="relative z-10 text-bg">
-                            {engaged || peekCheck ? <Check size={15} strokeWidth={3} /> : <X size={15} strokeWidth={3} />}
-                        </span>
-                    </span>
+                    {badge}
                 </button>
-            )}
+            ) : null}
 
             {/* Top: Name */}
             <div className="relative z-10 w-full">

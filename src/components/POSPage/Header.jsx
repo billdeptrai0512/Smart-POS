@@ -23,7 +23,7 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
     const rows = [
         ...(draftOrder ? [{ key: 'draft', draft: true, isNew: false, typeKey: draftOrder.cartItemId, text: draftOrder.items.join(' · ') }] : []),
         ...recentOrders.map(o => ({
-            key: o.createdAt,
+            key: o.id ?? o.createdAt, // id is collision-proof; createdAt (ms) can repeat on same-tick commits
             draft: false,
             isNew: o.createdAt === enterKey,
             text: o.items.join(' · '),
