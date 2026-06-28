@@ -101,7 +101,7 @@ export default function DailyReportPage() {
         apiOrders,
         apiExpenses,
         apiPayments,
-        todayPayments,
+        todayPayments, setTodayPayments,
         apiShiftClosings,
         prevShiftClosings,
         isAsyncReady,
@@ -1252,7 +1252,15 @@ export default function DailyReportPage() {
                                 subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate,
                                 ...snapshot,
                             })
-                            await Promise.all([inventory.reloadStocks?.(), inventory.reloadIngredients?.(), refreshProducts?.(), refreshTodayExpenses?.()])
+                            // Nhập kho tạo payment (paid_at) → dòng tiền refill đọc từ todayPayments,
+                            // không phải expenses. refreshTodayExpenses chỉ làm tươi expenses, nên kéo
+                            // luôn context mới để cashflow cập nhật ngay. KHÔNG setShiftClosing ở đây —
+                            // restock không đổi actual_cash/transfer, set lại sẽ xoá ô tiền đang gõ.
+                            const [, , , , fresh] = await Promise.all([
+                                inventory.reloadStocks?.(), inventory.reloadIngredients?.(), refreshProducts?.(), refreshTodayExpenses?.(),
+                                fetchDailyReportContext(selectedAddress.id),
+                            ])
+                            setTodayPayments(fresh?.target_payments || [])
                             showToast('Đã nhập kho', 'success')
                             return result
                         }}

@@ -128,7 +128,7 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
         apiOrders,
         apiExpenses,
         apiPayments,
-        todayPayments,
+        todayPayments, setTodayPayments,
         apiShiftClosings,
         prevShiftClosings,
         isAsyncReady,
