@@ -19,6 +19,7 @@ export default function FastIngredientFill({
 }) {
     const [revealed, setRevealed] = useState(() => new Set()) // chip-tapped, not yet saved
     const [creatingCat, setCreatingCat] = useState(null) // 'main' | 'packaging' while typing a new name
+    const [addOpen, setAddOpen] = useState(false) // chip palette hidden until tapped — keeps the screen tidy
 
     const amountByKey = useMemo(() => {
         const m = {}
@@ -59,9 +60,16 @@ export default function FastIngredientFill({
                 ))}
             </div>
 
-            {canEdit && CATS.map(cat => (
+            {canEdit && !addOpen && (
+                <button onClick={() => setAddOpen(true)}
+                    className="text-[12px] border border-dashed border-border/70 text-text-secondary px-2.5 py-1.5 rounded-lg font-medium hover:text-primary hover:border-primary/50 transition-colors">
+                    + Thêm nguyên liệu / bao bì
+                </button>
+            )}
+
+            {canEdit && addOpen && CATS.map(cat => (
                 <div key={cat.key} className="space-y-1">
-                    <span className="text-[11px] text-text-secondary">{cat.label}</span>
+                    <span className="text-[12px] text-text-secondary">{cat.label}</span>
                     <div className="flex flex-wrap gap-1.5">
                         {itemsOf(cat.key).map(k => (
                             <button key={k} onClick={() => reveal(k)}
@@ -89,6 +97,15 @@ export default function FastIngredientFill({
                     )}
                 </div>
             ))}
+
+            {canEdit && addOpen && (
+                <div className="flex justify-end">
+                    <button onClick={() => setAddOpen(false)}
+                        className="text-[12px] text-text-secondary px-1 py-0.5 font-medium hover:text-text transition-colors">
+                        Thu gọn
+                    </button>
+                </div>
+            )}
         </div>
     )
 }
@@ -99,7 +116,7 @@ function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, autoFo
     useEffect(() => { setDraft(amount != null ? String(amount) : '') }, [amount])
 
     const commit = () => {
-        const v = parseFloat(draft) || 0
+        const v = parseFloat(draft.replace(',', '.')) || 0 // VN keyboards send "0,5"
         if (v === (amount || 0)) return // unchanged — skip the write
         onCommit(ingredient, v, unit)
     }

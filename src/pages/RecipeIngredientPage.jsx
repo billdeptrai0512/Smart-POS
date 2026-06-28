@@ -43,7 +43,7 @@ export default function RecipeIngredientPage() {
     } = useProducts()
     const { selectedAddress } = useAddress()
     const { isManager, isAdmin } = useAuth()
-    const { toast, showError } = useToast()
+    const { toast, showError, showToast } = useToast()
     const confirm = useConfirm()
     const canEdit = isManager || isAdmin
 
@@ -106,21 +106,23 @@ export default function RecipeIngredientPage() {
     }
 
     // ─── Base recipe handlers ─────────────────────────────────────────
-    // Fast-fill: amount>0 upserts the row, amount<=0 removes it. One handler for
-    // both add/update/delete so a single number box per ingredient is all the UI needs.
+    // Amount box only upserts (0 stays a 0-amount row, never deletes — removal is the
+    // ✕ button). Optimistic state is authoritative; no refetch on a pure amount edit.
     async function setBaseAmount(ingredient, amount, unit) {
         await withSaving('Lưu công thức', async () => {
-            if (amount > 0) {
-                await upsertRecipe(productId, ingredient, amount, selectedAddress?.id, unit)
-                setRecipes(prev => {
-                    const exists = prev.some(r => r.product_id === productId && r.ingredient === ingredient)
-                    if (exists) return prev.map(r => r.product_id === productId && r.ingredient === ingredient ? { ...r, amount } : r)
-                    return [...prev, { product_id: productId, ingredient, amount, unit: unit || getIngredientUnit(ingredient) }]
-                })
-            } else {
-                await deleteRecipeRow(productId, ingredient, selectedAddress?.id)
-                setRecipes(prev => prev.filter(r => !(r.product_id === productId && r.ingredient === ingredient)))
-            }
+            await upsertRecipe(productId, ingredient, amount, selectedAddress?.id, unit)
+            setRecipes(prev => {
+                const exists = prev.some(r => r.product_id === productId && r.ingredient === ingredient)
+                if (exists) return prev.map(r => r.product_id === productId && r.ingredient === ingredient ? { ...r, amount } : r)
+                return [...prev, { product_id: productId, ingredient, amount, unit: unit || getIngredientUnit(ingredient) }]
+            })
+        })
+    }
+
+    async function removeBaseIngredient(ingredient) {
+        await withSaving('Xóa nguyên liệu khỏi công thức', async () => {
+            await deleteRecipeRow(productId, ingredient, selectedAddress?.id)
+            setRecipes(prev => prev.filter(r => !(r.product_id === productId && r.ingredient === ingredient)))
             refreshProducts?.()
         })
     }
@@ -229,6 +231,10 @@ export default function RecipeIngredientPage() {
 
     // ─── Extras handlers ──────────────────────────────────────────────
     async function handleAddExtra(name, price) {
+        if (extras.some(e => e.name.trim().toLowerCase() === name.trim().toLowerCase())) {
+            showToast(`Đã có tùy chọn "${name.trim()}"`, 'warning')
+            return
+        }
         await withSaving('Thêm tùy chọn', async () => {
             const newExtra = await insertProductExtra(productId, name, price, selectedAddress?.id)
             setExtras(prev => [...prev, { id: newExtra.id, name: newExtra.name, price: newExtra.price }])
@@ -255,13 +261,11 @@ export default function RecipeIngredientPage() {
     }
 
     async function toggleExtraSticky(extraId, nextValue) {
-        try {
+        await withSaving('Cập nhật sticky', async () => {
             await updateProductExtraSticky(extraId, nextValue)
             setExtras(prev => prev.map(e => e.id === extraId ? { ...e, is_sticky: nextValue } : e))
             refreshProducts?.()
-        } catch (err) {
-            showError(err, 'Cập nhật sticky')
-        }
+        })
     }
 
     async function deleteExtra(extraId, extraName) {
@@ -327,7 +331,6 @@ export default function RecipeIngredientPage() {
                     ei.ingredient === ingredient ? { ...ei, amount: newAmount } : ei
                 ),
             }))
-            refreshProducts?.()
         })
     }
 
@@ -388,7 +391,7 @@ export default function RecipeIngredientPage() {
                     canEdit={canEdit}
                     showCost
                     onSetAmount={setBaseAmount}
-                    onRemove={(ing) => setBaseAmount(ing, 0)}
+                    onRemove={removeBaseIngredient}
                     onAddCustom={handleAddBaseIngredients}
                 />
 
