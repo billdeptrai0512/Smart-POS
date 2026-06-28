@@ -8,7 +8,6 @@ import { DAY_NAMES } from '../constants'
 
 import Header from '../components/POSPage/Header'
 import MenuGrid from '../components/POSPage/MenuGrid'
-import OrderFooter from '../components/POSPage/OrderFooter'
 import Toast from '../components/POSPage/Toast'
 
 export default function POSPage() {
@@ -61,13 +60,9 @@ export default function POSPage() {
                 onAddItem={handleAddItem}
                 onCancelHeld={cancelHeld}
                 onCommitHeld={commitHeld}
-            />
-
-            <OrderFooter
-                cart={cart}
+                productExtras={productExtras}
                 activeCartItemId={activeCartItemId}
                 onToggleExtra={handleToggleExtra}
-                productExtras={productExtras}
                 enabledStickyExtraIds={enabledStickyExtraIds}
                 onToggleStickyExtra={handleToggleStickyExtra}
             />
