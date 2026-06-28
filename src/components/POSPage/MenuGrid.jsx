@@ -10,11 +10,12 @@ import { useProducts } from '../../contexts/ProductContext'
 // so the visual == the action). The press is captured (setPointerCapture) so the
 // hold survives grid reflow + finger drift. CSS animation-delay hides it on quick taps.
 //   tap (any card)      → activate/order that item (onAdd); extras bar opens
-//   hold a fresh card   → commit a 1-item order in one press. Release mid-fill = abort.
+//   hold a fresh card   → adds + opens its extras as the fill engages; held to full = commit.
 //   hold an active card → commit THIS order (onCommit). Release mid-fill = abort.
 //   tap corner X        → cancel the active order (onCancel).
-// Holding never switches the active card until the commit lands, so an open extras
-// bar (and the cards under your finger) stay put through the whole hold.
+// A hold engages the card (activates it, opens extras) at the START of the fill, so
+// touch-then-keep-pressing is ONE motion: see the extras, hold on to commit. Switching
+// active can reflow the grid, but setPointerCapture keeps the press bound to this card.
 // The fill doubles as the gesture's tutorial: hold a beat longer, watch the bar climb.
 
 function ProductCard({ product, qty, onAdd, onCancel, onCommit }) {
@@ -44,12 +45,14 @@ function ProductCard({ product, qty, onAdd, onCancel, onCommit }) {
         // A sub-delay tap never engages, so its click falls through to onAdd normally.
         if (holdStarted.current) suppressClick.current = true
     }
-    const abort = () => { setPressing(false); setEngaged(false) }
-    const fillStart = () => { holdStarted.current = true; setEngaged(true) }
-    // Fill complete → commit. Activating happens HERE, not mid-hold, so a hold never
-    // switches the active item (reflowing the grid) until the order closes. Fresh
-    // card: add then commit — handleAddItem sets cartRef synchronously. Held: commit.
-    const fillDone = () => { suppressClick.current = true; setPressing(false); setEngaged(false); if (!held) onAdd(product); onCommit() }
+    // Same as up()'s guard: once engaged the item is already added, so suppress the
+    // trailing click (if any follows a pointercancel/leave) — never let it re-add.
+    const abort = () => { setPressing(false); setEngaged(false); if (holdStarted.current) suppressClick.current = true }
+    // Engage = the press became a hold. Activate a fresh card NOW (adds it, opens its
+    // extras) so the hold doubles as "show me the options"; held cards are already active.
+    const fillStart = () => { holdStarted.current = true; setEngaged(true); if (!held) onAdd(product) }
+    // Fill complete → commit. The add already happened at engage, so just close the order.
+    const fillDone = () => { suppressClick.current = true; setPressing(false); setEngaged(false); onCommit() }
     const click = () => {
         if (suppressClick.current) { suppressClick.current = false; return }
         onAdd(product)
