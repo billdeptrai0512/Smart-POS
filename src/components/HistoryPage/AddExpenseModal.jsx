@@ -150,7 +150,7 @@ export default function AddExpenseModal({
                             onClick={() => onAfterShiftChange?.(true)}
                             className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${isAfterShift ? 'bg-primary text-white' : 'text-text-secondary'}`}
                         >
-                            Sau chốt ca
+                            Sau ca
                         </button>
                     </div>
                 </div>
