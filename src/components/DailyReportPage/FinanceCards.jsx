@@ -50,7 +50,7 @@ export default function FinanceCards({
     lossValue = 0,
     // Tiêu hao của bao bì/vật tư KHÔNG nằm trong công thức (ống hút, bịch chữ T): mỗi
     // dòng { ingredient, label, value } — hiện theo tên trong COGS, tách khỏi "Hao hụt".
-    consumptionLines = [],
+    nonRecipeUsageLines = [],
 }) {
     const { operatingRows, overheadRows, inventoryRows, operatingTotal, overheadTotal, inventoryTotal } = useMemo(
         () => buildCategoryBreakdown({ expenses, expenseCategories }),
@@ -69,8 +69,8 @@ export default function FinanceCards({
         return { direct: totalCOGS - packagingScaled, packaging: packagingScaled }
     }, [cogsByCategory, totalCOGS])
 
-    const consumptionTotal = consumptionLines.reduce((s, l) => s + (l.value || 0), 0)
-    const cogsTotal = totalCOGS + lossValue + consumptionTotal
+    const nonRecipeUsageTotal = nonRecipeUsageLines.reduce((s, l) => s + (l.value || 0), 0)
+    const cogsTotal = totalCOGS + lossValue + nonRecipeUsageTotal
     const grossProfit = totalRevenue - cogsTotal
     // Chi phí tồn kho (vật tư không kiểm kê) trừ sau Lợi nhuận gộp — KHÔNG lẫn COGS
     // (COGS tính từ tiêu hao công thức của hàng có kiểm kê), rồi mới tới vận hành.
@@ -88,7 +88,7 @@ export default function FinanceCards({
             <SimpleCard title="Giá vốn (COGS)" totalLabel="Tổng giá vốn" totalAmount={cogsTotal} totalTone="warning">
                 <LineItem label="· Nguyên liệu trực tiếp" amount={cogsLines.direct} />
                 <LineItem label="· Bao bì" amount={cogsLines.packaging} />
-                {consumptionLines.map(l => (
+                {nonRecipeUsageLines.map(l => (
                     <LineItem key={l.ingredient} label={`· ${l.label}`} amount={l.value} />
                 ))}
                 <LineItem label="· Hao hụt / hủy" amount={lossValue} />

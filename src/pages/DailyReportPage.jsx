@@ -387,7 +387,7 @@ export default function DailyReportPage() {
         const closings = isDayScope
             ? (usableClosing ? [usableClosing] : [])
             : (apiShiftClosings || [])
-        if (closings.length === 0) return { lossValue: 0, consumptionLines: [] }
+        if (closings.length === 0) return { lossValue: 0, nonRecipeUsageLines: [] }
 
         // Bucket orders by VN date string so calculateLossValue can look up
         // per-day consumption (same dayStr key the RangeLossCard uses).
@@ -429,19 +429,19 @@ export default function DailyReportPage() {
         })
         // Bao bì/vật tư không công thức: tiêu hao của chúng tách riêng, ghi đúng tên
         // (Ống hút, Bịch chữ T...) trong COGS thay vì gộp vào "Hao hụt / hủy".
-        const consumptionLines = Object.entries(consumption)
+        const nonRecipeUsageLines = Object.entries(consumption)
             .map(([ingredient, value]) => ({ ingredient, label: ingredientLabel(ingredient), value: Math.round(value) }))
             .filter(l => l.value > 0)
             .sort((a, b) => b.value - a.value)
-        return { lossValue: Math.round(loss), consumptionLines }
+        return { lossValue: Math.round(loss), nonRecipeUsageLines }
     }, [scope, isTodayScope, isTodaysClosing, shiftClosing, yesterdayClosing, apiShiftClosings, prevShiftClosings, apiOrders, displayOrders, offlineToday, recipes, extraIngredients, ingredientConfigs])
 
-    const { lossValue, consumptionLines } = lossInfo
-    const consumptionTotal = consumptionLines.reduce((s, l) => s + l.value, 0)
+    const { lossValue, nonRecipeUsageLines } = lossInfo
+    const nonRecipeUsageTotal = nonRecipeUsageLines.reduce((s, l) => s + l.value, 0)
 
     // P&L = Revenue - COGS - Hao hụt - Tiêu hao bao bì không-công-thức - chi phí thực chi.
     // NVL refill không trừ ở đây (đã nằm trong COGS/tiêu hao qua kiểm kê).
-    const netProfit = totalRevenue - totalCOGS - lossValue - consumptionTotal - operationalExpense
+    const netProfit = totalRevenue - totalCOGS - lossValue - nonRecipeUsageTotal - operationalExpense
 
     const yesterdayNetProfit = useMemo(() => {
         let rev = 0, cogs = 0
@@ -1010,7 +1010,7 @@ export default function DailyReportPage() {
                                 expenseCategories={expenseCategories}
                                 cogsByCategory={cogsByCategory}
                                 lossValue={lossValue}
-                                consumptionLines={consumptionLines}
+                                nonRecipeUsageLines={nonRecipeUsageLines}
                                 onRecipesClick={() => guardLeave(() => navigate('/recipes', { state: { from: '/daily-report' } }))}
                             />
                         )}
