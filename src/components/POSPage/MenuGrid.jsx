@@ -97,7 +97,11 @@ function ProductCard({ product, qty, onAdd, onCancel, onCommit, pressingRef }) {
             onPointerLeave={abort}
             onPointerCancel={abort}
             onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAdd(product) }
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    suppressClick.current = true
+                    onAdd(product)
+                }
             }}
             className={`menu-btn relative rounded-[1.5rem] p-3 sm:p-4 text-left min-h-[100px] flex flex-col justify-between border cursor-pointer transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-primary/30 ${held
                 ? 'bg-gradient-to-br from-primary/15 to-primary/5 border-primary/40 shadow-[0_8px_24px_var(--color-primary-glow)] ring-1 ring-primary/20'
@@ -279,36 +283,39 @@ export default function MenuGrid({ products, cart, onAddItem, onCancelHeld, onCo
         )
     }
 
+    const gridItems = []
+    products.forEach((product, idx) => {
+        gridItems.push(
+            <ProductCard
+                key={product.id}
+                product={product}
+                qty={cartQtyMap.get(product.id) || 0}
+                onAdd={onAddItem}
+                onCancel={onCancelHeld}
+                onCommit={onCommitHeld}
+                pressingRef={pressingRef}
+            />
+        )
+        if (idx === extrasAfterIdx) {
+            gridItems.push(
+                <ExtrasPopover
+                    key="extras"
+                    activeProductId={activeProductId}
+                    extras={activeExtras}
+                    activeItem={activeItem}
+                    enabledStickyExtraIds={enabledStickyExtraIds}
+                    onToggleExtra={onToggleExtra}
+                    onToggleStickyExtra={onToggleStickyExtra}
+                    pressingRef={pressingRef}
+                />
+            )
+        }
+    })
+
     return (
         <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-6 pb-6 pt-5">
             <div className="grid grid-cols-2 gap-4 pt-1">
-                {products.map((product, idx) => {
-                    const card = (
-                        <ProductCard
-                            key={product.id}
-                            product={product}
-                            qty={cartQtyMap.get(product.id) || 0}
-                            onAdd={onAddItem}
-                            onCancel={onCancelHeld}
-                            onCommit={onCommitHeld}
-                            pressingRef={pressingRef}
-                        />
-                    )
-                    if (idx !== extrasAfterIdx) return card
-                    return [
-                        card,
-                        <ExtrasPopover
-                            key="extras"
-                            activeProductId={activeProductId}
-                            extras={activeExtras}
-                            activeItem={activeItem}
-                            enabledStickyExtraIds={enabledStickyExtraIds}
-                            onToggleExtra={onToggleExtra}
-                            onToggleStickyExtra={onToggleStickyExtra}
-                            pressingRef={pressingRef}
-                        />,
-                    ]
-                })}
+                {gridItems}
             </div>
         </main>
     )
