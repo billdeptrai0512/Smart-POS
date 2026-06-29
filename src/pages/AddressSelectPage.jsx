@@ -199,7 +199,9 @@ export default function AddressSelectPage() {
         setGenerating(true)
         setLink('')
         try {
-            const { token, expires_at } = await createInviteToken(profile.id, role)
+            // Invitee phải gắn vào top manager (chủ địa chỉ), không phải người mời —
+            // nếu không, staff do co-manager mời sẽ không share chung địa chỉ.
+            const { token, expires_at } = await createInviteToken(profile.manager_id || profile.id, role)
             setLink(`${window.location.origin}/signup/${token}`)
             setExpiry(new Date(expires_at))
         } catch (err) {
