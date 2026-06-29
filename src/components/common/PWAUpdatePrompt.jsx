@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 
 export default function PWAUpdatePrompt() {
+    const [updating, setUpdating] = useState(false)
     const {
         needRefresh: [needRefresh],
         updateServiceWorker,
@@ -38,9 +40,10 @@ export default function PWAUpdatePrompt() {
                     </button> */}
                     <button
                         className="pwa-update-btn"
-                        onClick={() => updateServiceWorker(true)}
+                        disabled={updating}
+                        onClick={() => { setUpdating(true); updateServiceWorker(true) }}
                     >
-                        Cập nhật
+                        {updating ? 'Đang cập nhật…' : 'Cập nhật'}
                     </button>
                 </div>
             </div>
