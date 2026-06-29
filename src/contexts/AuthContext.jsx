@@ -154,7 +154,18 @@ export function AuthProvider({ children }) {
                 setUser(authUser)
                 cacheAuth(STORAGE_KEYS.AUTH_USER, authUser)
                 setIsGuest(false)
-                loadProfile(authUser).finally(() => setLoading(false))
+                // Profile is already hydrated from cache (see useState init), so the UI
+                // can render immediately. Don't gate PageLoading on the refetch: on
+                // peak-hours / flaky wifi loadProfile retries fetchProfileByAuthId up to
+                // 3×500ms (+ slow network each), freezing the whole app on the loading
+                // skeleton for seconds. Release now and refresh in the background; only a
+                // genuine first launch (no cache, role-gating needs the profile) waits.
+                if (readCachedAuth(STORAGE_KEYS.AUTH_PROFILE)) {
+                    setLoading(false)
+                    loadProfile(authUser)
+                } else {
+                    loadProfile(authUser).finally(() => setLoading(false))
+                }
             } else if (getLocalIsGuest()) {
                 // Returning guest (page refresh) — restore guest profile without fetching
                 setIsGuestState(true)
