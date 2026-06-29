@@ -12,6 +12,8 @@ import { useState } from 'react'
 export default function InlineEditor({
     value, canEdit, onSave,
     type = 'number', step,
+    allowNegative = false,
+    transform,
     parse,
     format,
     renderDisplay,
@@ -44,11 +46,11 @@ export default function InlineEditor({
         return (
             <span className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                 <input
-                    type={type}
+                    type={type === 'number' ? 'text' : type}
+                    inputMode={type === 'number' ? (allowNegative ? undefined : 'decimal') : undefined}
                     autoFocus
-                    step={step}
                     value={draft}
-                    onChange={e => setDraft(e.target.value)}
+                    onChange={e => setDraft(transform ? transform(e.target.value) : e.target.value)}
                     onKeyDown={e => {
                         if (e.key === 'Enter') commit()
                         if (e.key === 'Escape') setEditing(false)

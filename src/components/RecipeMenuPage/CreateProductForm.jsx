@@ -1,5 +1,5 @@
 import MoneyInput from '../common/MoneyInput'
-import { parseVNDInput } from '../../utils'
+import { parseVNDInput, capitalizeWords } from '../../utils'
 
 export default function CreateProductForm({
     name, price, saving,
@@ -12,9 +12,10 @@ export default function CreateProductForm({
             <div className="flex gap-2">
                 <input
                     type="text"
+                    autoCapitalize="words"
                     placeholder="Tên món mới..."
                     value={name}
-                    onChange={e => onNameChange(e.target.value)}
+                    onChange={e => onNameChange(capitalizeWords(e.target.value))}
                     className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
                 />
                 <MoneyInput

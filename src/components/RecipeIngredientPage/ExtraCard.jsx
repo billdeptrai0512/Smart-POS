@@ -57,6 +57,7 @@ export default function ExtraCard({
                     canEdit={canEdit}
                     onSave={onSavePrice}
                     type="number"
+                    allowNegative
                     suffix="đ"
                     inputWidthClassName="w-[80px]"
                     renderDisplay={(v) => (

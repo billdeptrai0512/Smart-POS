@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { setMyPhone } from '../services/authService'
 import { useNavigate, Link } from 'react-router-dom'
 import ErrorBanner from '../components/common/ErrorBanner'
+import { capitalizeWords } from '../utils'
 
 export default function SignUpPage() {
     const { signUp } = useAuth()
@@ -89,8 +90,9 @@ export default function SignUpPage() {
                         <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Họ và Tên</label>
                         <input
                             type="text"
+                            autoCapitalize="words"
                             value={name}
-                            onChange={e => setName(e.target.value)}
+                            onChange={e => setName(capitalizeWords(e.target.value))}
                             required
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
                             placeholder=""
