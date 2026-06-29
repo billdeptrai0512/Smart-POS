@@ -27,18 +27,18 @@ function ProductCard({ product, qty, onAdd, onCancel, onCommit, pressingRef }) {
     const suppressClick = useRef(false)               // swallow the click that trails a hold (commit or release)
     const pointer = useRef(null)                       // {el, id} of the live press, so capture can wait for engage
 
-    // Add fires on the card's onClick (kept for mouse/keyboard/screen-reader a11y).
-    // A hold (commit, or a held card's mid-fill release) leaves a trailing click
-    // that must NOT add — suppressClick eats exactly that one click.
-    // Reset suppressClick every press: a long-press commit can release with no
-    // trailing click (common on touch), leaving it stuck true → the next tap would
-    // be swallowed. Clearing here means a stale flag can never outlive its gesture.
-    // NB: do NOT setPointerCapture here — iOS Safari swallows the trailing `click`
-    // on a captured element, so capturing every tap kills repeat taps on a held card.
-    // Capture is deferred to engage (fillStart), where only real holds need it.
+    // Taps add on pointerup (see up()); the trailing compatibility `click` must be eaten
+    // so it can't add again — that's all suppressClick does now. Do NOT reset it on down:
+    // a click lags its pointerup, so on rapid taps the PREVIOUS tap's click can land AFTER
+    // the next down — resetting here un-suppresses it and DOUBLES the order. Leaving it set
+    // is safe: up() adds independently of the flag, so a stale true never swallows a tap,
+    // only an unwanted trailing click.
+    // NB: do NOT setPointerCapture here — iOS Safari swallows the trailing `click` on a
+    // captured element, so capturing every tap kills repeat taps on a held card. Capture
+    // is deferred to engage (fillStart), where only real holds need it.
     const down = (e) => {
         pointer.current = { el: e.currentTarget, id: e.pointerId }
-        holdStarted.current = false; suppressClick.current = false; setEngaged(false); setPressing(true)
+        holdStarted.current = false; setEngaged(false); setPressing(true)
     }
     const up = () => {
         setPressing(false); setEngaged(false)
