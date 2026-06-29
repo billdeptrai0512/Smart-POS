@@ -127,9 +127,8 @@ function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, autoFo
         <div className="flex items-center gap-2 px-3 py-2 rounded-[12px] border bg-surface border-border/60">
             <span className="flex-1 text-[13px] text-text truncate">{ingredientLabel(ingredient)}</span>
             <input
-                type="number"
+                type="text"
                 inputMode="decimal"
-                step="any"
                 autoFocus={autoFocus}
                 value={draft}
                 disabled={!canEdit}

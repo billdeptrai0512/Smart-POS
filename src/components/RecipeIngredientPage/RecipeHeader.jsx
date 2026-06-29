@@ -1,5 +1,5 @@
 import { ArrowLeft, Copy } from 'lucide-react'
-import { formatVND } from '../../utils'
+import { formatVND, capitalizeWords } from '../../utils'
 import InlineEditor from './InlineEditor'
 import MenuTabsBar from '../common/MenuTabsBar'
 
@@ -24,6 +24,7 @@ export default function RecipeHeader({
                             canEdit={canEdit}
                             onSave={onSaveName}
                             type="text"
+                            transform={capitalizeWords}
                             inputWidthClassName="w-full"
                             displayClassName="text-[13px] font-black text-primary uppercase line-clamp-1 break-words w-full px-2"
                             inputClassName="!text-center uppercase"
