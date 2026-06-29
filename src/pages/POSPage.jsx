@@ -31,6 +31,10 @@ export default function POSPage() {
     flushRef.current = commitHeld
     useEffect(() => () => flushRef.current(), [])
 
+    // Prefetch the lazy History chunk on mount so "go next" doesn't flash the Suspense
+    // fallback while it loads. Same module App.jsx lazy-imports → warms the same chunk.
+    useEffect(() => { import('./HistoryPage') }, [])
+
     const today = new Date()
     const dayName = DAY_NAMES[today.getDay()]
     const dateOnly = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`

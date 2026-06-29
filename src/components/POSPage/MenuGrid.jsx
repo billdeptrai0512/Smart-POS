@@ -18,12 +18,14 @@ import { useProducts } from '../../contexts/ProductContext'
 // active can reflow the grid, but setPointerCapture keeps the press bound to this card.
 // The fill doubles as the gesture's tutorial: hold a beat longer, watch the bar climb.
 
-function ProductCard({ product, qty, onAdd, onCancel, onCommit }) {
+function ProductCard({ product, qty, onAdd, onCancel, onCommit, pressingRef }) {
     const held = qty > 0
     const [pressing, setPressing] = useState(false)   // fill mounted (covers the pre-delay window)
     const [engaged, setEngaged] = useState(false)     // green actually rising (past the delay) → show ✓
+    const [pulseKey, setPulseKey] = useState(0)        // bump per tap-add → replays the confirm pulse
     const holdStarted = useRef(false)                 // fill animation began = this press is a hold, not a tap
     const suppressClick = useRef(false)               // swallow the click that trails a hold (commit or release)
+    const pointer = useRef(null)                       // {el, id} of the live press, so capture can wait for engage
 
     // Add fires on the card's onClick (kept for mouse/keyboard/screen-reader a11y).
     // A hold (commit, or a held card's mid-fill release) leaves a trailing click
@@ -31,28 +33,39 @@ function ProductCard({ product, qty, onAdd, onCancel, onCommit }) {
     // Reset suppressClick every press: a long-press commit can release with no
     // trailing click (common on touch), leaving it stuck true → the next tap would
     // be swallowed. Clearing here means a stale flag can never outlive its gesture.
-    // setPointerCapture binds the hold to THIS card for the whole press, so the
-    // gesture survives the grid reflow when the active card's extras bar moves, and
-    // any finger drift over the long hold — instead of firing pointerleave → abort.
+    // NB: do NOT setPointerCapture here — iOS Safari swallows the trailing `click`
+    // on a captured element, so capturing every tap kills repeat taps on a held card.
+    // Capture is deferred to engage (fillStart), where only real holds need it.
     const down = (e) => {
-        try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* synthetic / inactive pointer */ }
+        pointer.current = { el: e.currentTarget, id: e.pointerId }
         holdStarted.current = false; suppressClick.current = false; setEngaged(false); setPressing(true)
     }
     const up = () => {
         setPressing(false); setEngaged(false)
-        // Past the delay (holdStarted) the press is a hold: releasing before the fill
-        // completes is an ABORT — suppress the trailing click so nothing is added.
-        // A sub-delay tap never engages, so its click falls through to onAdd normally.
-        if (holdStarted.current) suppressClick.current = true
+        // Fire the TAP's add HERE on pointerup, not on the click: iOS Safari drops the
+        // synthetic `click` on rapid repeat taps (it waits to see a double-tap), so
+        // relying on click loses every tap after the first. A hold (holdStarted) instead
+        // committed/aborted via the fill, so it must NOT add. Either way suppress the
+        // trailing click (if one arrives) so it can never double-add.
+        suppressClick.current = true
+        pressingRef.current = false
+        if (!holdStarted.current) { onAdd(product); setPulseKey(k => k + 1) }
     }
     // Same as up()'s guard: once engaged the item is already added, so suppress the
     // trailing click (if any follows a pointercancel/leave) — never let it re-add.
-    const abort = () => { setPressing(false); setEngaged(false); if (holdStarted.current) suppressClick.current = true }
-    // Engage = the press became a hold. Activate a fresh card NOW (adds it, opens its
-    // extras) so the hold doubles as "show me the options"; held cards are already active.
-    const fillStart = () => { holdStarted.current = true; setEngaged(true); if (!held) onAdd(product) }
+    const abort = () => { setPressing(false); setEngaged(false); pressingRef.current = false; if (holdStarted.current) suppressClick.current = true }
+    // Engage = the press became a hold. Capture the pointer NOW (binds the hold to THIS
+    // card so it survives the grid reflow below + finger drift), THEN activate a fresh
+    // card (adds it, opens extras) so the hold doubles as "show me the options".
+    const fillStart = () => {
+        try { pointer.current?.el.setPointerCapture(pointer.current.id) } catch { /* inactive pointer */ }
+        // Flag the press so ExtrasPopover skips scrollIntoView — activating mid-hold must
+        // not scroll the grid out from under the finger.
+        pressingRef.current = true
+        holdStarted.current = true; setEngaged(true); if (!held) onAdd(product)
+    }
     // Fill complete → commit. The add already happened at engage, so just close the order.
-    const fillDone = () => { suppressClick.current = true; setPressing(false); setEngaged(false); onCommit() }
+    const fillDone = () => { suppressClick.current = true; setPressing(false); setEngaged(false); pressingRef.current = false; onCommit() }
     const click = () => {
         if (suppressClick.current) { suppressClick.current = false; return }
         onAdd(product)
@@ -94,6 +107,11 @@ function ProductCard({ product, qty, onAdd, onCancel, onCommit }) {
             {/* Glow Effect */}
             {held && <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />}
 
+            {/* Confirm pulse: a primary ring that pings out on each tap-add — the ack the
+                chained 1-tap flow otherwise lacks (card stays held, no toast). Keyed so it
+                replays every tap. */}
+            {pulseKey > 0 && <span key={pulseKey} className="tap-pulse absolute inset-0 rounded-[1.5rem] ring-2 ring-primary pointer-events-none z-30" />}
+
             {/* Corner badge. During a press: the rising fill (fresh cards stay invisible
                 until engaged so quick taps don't flash). At rest, when active: X = cancel. */}
             {pressing ? (
@@ -132,7 +150,7 @@ function ProductCard({ product, qty, onAdd, onCancel, onCommit }) {
 // Extras for the active (held) item. Inserted as a full-width grid item right
 // after the active card's row (see MenuGrid) so it pushes the cards below down
 // instead of covering them — no reflow holes regardless of column/row.
-function ExtrasPopover({ activeProductId, extras, activeItem, enabledStickyExtraIds, onToggleExtra, onToggleStickyExtra }) {
+function ExtrasPopover({ activeProductId, extras, activeItem, enabledStickyExtraIds, onToggleExtra, onToggleStickyExtra, pressingRef }) {
     const { sticky, normal } = useMemo(() => {
         const s = [], n = []
         for (const e of extras) (e.is_sticky ? s : n).push(e)
@@ -142,7 +160,9 @@ function ExtrasPopover({ activeProductId, extras, activeItem, enabledStickyExtra
     // Tapping the bottom card drops the bar below the fold. Pull it into view when
     // the active item changes — `nearest` stays put if it's already visible.
     const ref = useRef(null)
-    useEffect(() => { ref.current?.scrollIntoView({ block: 'nearest' }) }, [activeProductId])
+    // Skip while a card is being pressed: a hold activating a fresh card would otherwise
+    // scroll the grid out from under the finger mid-hold.
+    useEffect(() => { if (!pressingRef.current) ref.current?.scrollIntoView({ block: 'nearest' }) }, [activeProductId])
 
     return (
         <div ref={ref} className="col-span-2 bg-surface border border-border/80 rounded-[14px] shadow-xl shadow-black/10">
@@ -188,6 +208,9 @@ export default function MenuGrid({ products, cart, onAddItem, onCancelHeld, onCo
     const { isManager, isAdmin } = useAuth()
     const { loading, loadError } = useProducts()
     const canSetup = isManager || isAdmin
+    // Shared press flag: ProductCard sets it during a hold so ExtrasPopover can skip
+    // scrollIntoView and not yank the grid under the finger mid-hold.
+    const pressingRef = useRef(false)
 
     // PERF: index cart qty by productId once per cart change.
     // Was: cart.filter().reduce() called per product per render — O(N×M).
@@ -268,6 +291,7 @@ export default function MenuGrid({ products, cart, onAddItem, onCancelHeld, onCo
                             onAdd={onAddItem}
                             onCancel={onCancelHeld}
                             onCommit={onCommitHeld}
+                            pressingRef={pressingRef}
                         />
                     )
                     if (idx !== extrasAfterIdx) return card
@@ -281,6 +305,7 @@ export default function MenuGrid({ products, cart, onAddItem, onCancelHeld, onCo
                             enabledStickyExtraIds={enabledStickyExtraIds}
                             onToggleExtra={onToggleExtra}
                             onToggleStickyExtra={onToggleStickyExtra}
+                            pressingRef={pressingRef}
                         />,
                     ]
                 })}

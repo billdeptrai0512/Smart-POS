@@ -110,10 +110,25 @@ body {
 /* ====== Active press animations ====== */
 .menu-btn {
   transition: transform 50ms ease, background-color 50ms ease;
+  /* iOS Safari shows a text-selection / "Copy" callout on a long-press over text —
+     exactly the hold-to-confirm gesture. Kill the callout + selection on the card. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .menu-btn:active {
   transform: scale(0.96);
+}
+
+/* Tap-add confirmation: a ring that pings outward and fades. Keyed remount in
+   ProductCard replays it on every tap — the ack the chained 1-tap flow lacks. */
+@keyframes tap-pulse {
+  from { opacity: 0.6; transform: scale(0.98); }
+  to   { opacity: 0;   transform: scale(1.05); }
+}
+.tap-pulse {
+  animation: tap-pulse 350ms ease-out forwards;
 }
 
 .order-item-btn {
