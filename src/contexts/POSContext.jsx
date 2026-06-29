@@ -36,6 +36,9 @@ export function POSProvider() {
 
     const localOrderIds = useRef(new Set())
     const cartRef = useRef([])
+    // Promise of the last in-flight order insert. handleLoadHistory awaits it so a
+    // just-flushed order (e.g. on "go next") is in the DB before /history refetches.
+    const pendingSubmit = useRef(Promise.resolve())
 
     // ---- Persisted State ----
     const loadLocalJSON = (key, fallback) => {
@@ -382,20 +385,50 @@ export function POSProvider() {
         setEnterKey(addedRow.createdAt)
 
         if (navigator.onLine && supabase) {
-            submitOrder(cartItems, itemTotal, null, addressId, cartCost, costPerItem, profile?.name, 0)
-                .then(res => { if (res?.id) localOrderIds.current.add(res.id) })
+            // Optimistic /history row (raw fetchTodayOrders shape) so a just-submitted
+            // order shows there instantly — e.g. to delete a mis-entry. handleLoadHistory
+            // awaits pendingSubmit then refetches, swapping this for the real DB row.
+            const optimisticOrder = {
+                id: cartItems[0]?.cartItemId || addedRow.id,   // temp key; the refetch swaps in the real id
+                total: itemTotal,
+                discount_amount: 0,
+                total_cost: Math.round(cartCost),
+                created_at: addedRow.createdAt,
+                staff_name: profile?.name || null,
+                deleted_at: null,
+                deleted_by: null,
+                payment_method: null,
+                order_items: cartItems.map(item => ({
+                    quantity: item.quantity,
+                    options: item.extras?.length ? item.extras.map(e => e.name).join(', ') : null,
+                    product_id: item.productId,
+                    unit_cost: Math.round(costPerItem[item.cartItemId] || 0),
+                    extra_ids: item.extras?.map(e => e.id).filter(Boolean) || [],
+                    products: { name: item.name },
+                })),
+            }
+            setTodayOrders(prev => [optimisticOrder, ...prev])
+            pendingSubmit.current = submitOrder(cartItems, itemTotal, null, addressId, cartCost, costPerItem, profile?.name, 0)
+                .then(res => {
+                    if (res?.id) {
+                        localOrderIds.current.add(res.id)
+                        setTodayOrders(prev => prev.map(o => o === optimisticOrder ? { ...o, id: res.id } : o))
+                    }
+                })
                 .catch(err => {
                     if (!navigator.onLine || /fetch|network|NetworkError/i.test(err?.message || '')) {
                         addPendingOrder(
                             cartItems.map(item => ({ ...item, unitCost: costPerItem[item.cartItemId] || 0, extraIds: item.extras.map(e => e.id).filter(Boolean) })),
                             itemTotal, null, addressId, cartCost, profile?.name, 0
                         )
+                        setTodayOrders(prev => prev.filter(o => o !== optimisticOrder)) // offline pending list shows it instead
                         showToast('Lỗi mạng – lưu offline', 'warning')
                     } else {
                         setRevenue(prev => prev - itemTotal)
                         setTotalCost(prev => Math.max(0, prev - cartCost))
                         setCupsSold(prev => Math.max(0, prev - countableQty))
                         setRecentOrders(prev => prev.filter(o => o !== addedRow)) // genuine failure → don't leave a phantom order in the journal
+                        setTodayOrders(prev => prev.filter(o => o !== optimisticOrder))
                         showError(err, 'Ghi đơn')
                     }
                 })
@@ -487,6 +520,14 @@ export function POSProvider() {
         if (!addressId) return
         setIsLoadingHistory(true)
         try {
+            // Wait for a just-flushed order's insert to land so the fetch includes it
+            // (and replaces its optimistic row with the real, deletable DB row). Cap the
+            // wait at 3s so a hung insert on a dead connection can't freeze /history —
+            // the optimistic row already shows it; offline reconcile catches the rest.
+            await Promise.race([
+                pendingSubmit.current.catch(() => { }),
+                new Promise(res => setTimeout(res, 3000)),
+            ])
             const [orders, expenses] = await Promise.all([
                 fetchTodayOrders(addressId),
                 fetchTodayExpenses(addressId),
