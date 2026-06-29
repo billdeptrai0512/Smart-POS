@@ -2,12 +2,12 @@ import { supabase } from '../lib/supabaseClient'
 import { isGuest } from './localRepository'
 import { startOfDayVN } from '../utils/dateVN'
 
+// Canonical login username: lowercase, only [a-z0-9_.-]. This is what the user
+// actually types to log in, so it's also what we persist to users.username.
+const sanitizeUsername = (username) => username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '')
+
 // Formats username to a dummy email for Supabase Auth
-const formatUsernameToEmail = (username) => {
-    // Remove spaces and convert to lowercase for the dummy email
-    const safeUsername = username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '')
-    return `${safeUsername}@coffee.local`
-}
+const formatUsernameToEmail = (username) => `${sanitizeUsername(username)}@coffee.local`
 
 // Sign in with username and password via Supabase Auth
 export async function signIn(username, password) {
@@ -52,7 +52,7 @@ export async function signUp(username, password, name, email) {
     // 2. Create profile row linked to auth user
     const { data: profile, error: profileError } = await supabase
         .from('users')
-        .insert({ auth_id: authUser.id, name, role: 'manager', manager_id: null, email: trimmedEmail || null })
+        .insert({ auth_id: authUser.id, name, role: 'manager', manager_id: null, email: trimmedEmail || null, username: sanitizeUsername(username) })
         .select()
         .single()
 
@@ -150,7 +150,7 @@ export async function signUpWithInvite(token, username, password, name) {
     const userRole = validation.role === 'co-manager' ? 'manager' : 'staff'
     const { data: profile, error: profileError } = await supabase
         .from('users')
-        .insert({ auth_id: authUser.id, name, role: userRole, manager_id: validation.managerId })
+        .insert({ auth_id: authUser.id, name, role: userRole, manager_id: validation.managerId, username: sanitizeUsername(username) })
         .select()
         .single()
     if (profileError) throw profileError
@@ -170,7 +170,7 @@ export async function fetchStaffByManager(managerId) {
     if (!supabase) return []
     const { data, error } = await supabase
         .from('users')
-        .select('id, name, role')
+        .select('id, name, role, username')
         .in('role', ['staff', 'manager'])
         .eq('manager_id', managerId)
         .order('name')
@@ -195,6 +195,68 @@ export async function removeTeamMember(userId) {
     if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase.rpc('remove_team_member', { p_user_id: userId })
     if (error) throw error
+}
+
+// Rename a team member. Authorization enforced server-side by set_team_member_name RPC.
+export async function setTeamMemberName(userId, name) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase.rpc('set_team_member_name', { p_user_id: userId, p_name: name })
+    if (error) throw error
+}
+
+// Prefetch the whole team's revoked rows in one query so opening a member panel is
+// instant (no per-open round trip). RLS scopes the result to the caller's team.
+// Returns rows [{ user_id, address_id }].
+export async function fetchTeamRevokedAddresses() {
+    if (!supabase) return []
+    const { data, error } = await supabase
+        .from('user_address_revoked')
+        .select('user_id, address_id')
+    if (error) {
+        console.error('fetchTeamRevokedAddresses error:', error)
+        return []
+    }
+    return data
+}
+
+// Branch visibility uses a REVOKE model (default = see all). Returns the set of
+// address IDs this staff member is BLOCKED from. RLS lets only their manager read.
+export async function fetchStaffRevokedAddresses(userId) {
+    if (!supabase) return []
+    const { data, error } = await supabase
+        .from('user_address_revoked')
+        .select('address_id')
+        .eq('user_id', userId)
+    if (error) {
+        console.error('fetchStaffRevokedAddresses error:', error)
+        return []
+    }
+    return data.map(r => r.address_id)
+}
+
+// Toggle one branch's visibility for one staff member (p_allowed: true = can see).
+export async function setStaffAddressAccess(userId, addressId, allowed) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase.rpc('set_staff_address_access', {
+        p_user_id: userId, p_address_id: addressId, p_allowed: allowed,
+    })
+    if (error) throw error
+}
+
+// Reset a team member's login password — manager-only, via Edge Function (needs
+// service_role; the browser SDK can only change the current user's own password).
+export async function setStaffPassword(userId, password) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { data, error } = await supabase.functions.invoke('set-staff-password', {
+        body: { user_id: userId, password },
+    })
+    if (error) {
+        // functions.invoke wraps a non-2xx response in FunctionsHttpError; dig out our JSON message.
+        let msg = error.message
+        try { const ctx = await error.context?.json(); if (ctx?.error) msg = ctx.error } catch { /* keep msg */ }
+        throw new Error(msg)
+    }
+    return data
 }
 
 

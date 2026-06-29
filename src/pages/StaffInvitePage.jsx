@@ -61,6 +61,8 @@ export default function StaffInvitePage() {
         }
     }
 
+    const isCoManagerInvite = tokenInfo?.role === 'co-manager'
+
     if (validating) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-bg">
@@ -93,14 +95,19 @@ export default function StaffInvitePage() {
             <div className="w-full max-w-sm">
                 <div className="text-center mb-4">
                     <h1 className="text-2xl font-black text-text mt-3">Tạo tài khoản</h1>
-                    {tokenInfo?.managerName && (
-                        <p className="text-text-secondary text-xs mt-1">
-                            Bạn được <span className="font-bold text-text">{tokenInfo.managerName}</span> mời tham gia
-                            {tokenInfo.role === 'co-manager'
-                                ? <span className="ml-1 text-primary font-bold">với tư cách đồng quản lý</span>
-                                : <span className="ml-1 text-text-secondary">với tư cách nhân viên</span>
-                            }
-                        </p>
+                    {tokenInfo && (
+                        <div className="mt-2 flex flex-col items-center gap-1.5">
+                            <span className={`text-xs font-black uppercase tracking-wide px-3 py-1 rounded-full border ${isCoManagerInvite
+                                ? 'bg-blue-500/10 border-blue-500/25 text-blue-500'
+                                : 'bg-primary/10 border-primary/25 text-primary'}`}>
+                                {isCoManagerInvite ? 'Đồng quản lý' : 'Nhân viên'}
+                            </span>
+                            {tokenInfo.managerName && (
+                                <p className="text-text-secondary text-xs">
+                                    Được <span className="font-bold text-text">{tokenInfo.managerName}</span> mời tham gia
+                                </p>
+                            )}
+                        </div>
                     )}
                 </div>
 
@@ -138,10 +145,13 @@ export default function StaffInvitePage() {
                         <input
                             type="password"
                             value={password}
-                            onChange={e => setPassword(e.target.value)}
+                            onChange={e => setPassword(isCoManagerInvite ? e.target.value : e.target.value.replace(/\D/g, ''))}
                             required
+                            inputMode={isCoManagerInvite ? 'text' : 'numeric'}
+                            maxLength={isCoManagerInvite ? undefined : 6}
+                            autoComplete="new-password"
                             className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder={tokenInfo?.role === 'co-manager' ? 'Ít nhất 8 ký tự, gồm cả chữ và số' : 'Mã PIN gồm 6 chữ số'}
+                            placeholder={isCoManagerInvite ? 'Ít nhất 8 ký tự, gồm cả chữ và số' : 'Mã PIN gồm 6 chữ số'}
                         />
                     </div>
 

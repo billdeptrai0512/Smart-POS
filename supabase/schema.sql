@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('manager', 'staff', 'admin')),
   manager_id UUID REFERENCES users(id), -- staff belongs to a manager
   email TEXT,
-  password TEXT NOT NULL DEFAULT ''
+  password TEXT NOT NULL DEFAULT '',
+  username TEXT -- login username (= phần trước @ của email giả), hiển thị ở panel Nhân sự
 );
 
 -- Addresses (locations managed by a manager)
@@ -25,6 +26,16 @@ CREATE TABLE IF NOT EXISTS addresses (
   referred_from_address_id UUID REFERENCES addresses(id) ON DELETE SET NULL, -- địa chỉ nguồn đã share-clone (hook referral)
   referral_rewarded_at TIMESTAMPTZ, -- đã thưởng người mời cho địa chỉ này chưa (dedup, §11)
   created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Phân quyền chi nhánh theo mô hình REVOKE (mặc định thành viên thấy tất cả).
+-- Ghi 1 hàng = 1 chi nhánh bị CẤM với 1 thành viên. Trigger uaa_on_* dựng lại
+-- user_address_access (bảng này định nghĩa trong migrations 20260501/20260629) loại trừ
+-- các hàng ở đây. Ghi chỉ qua RPC set_staff_address_access; đọc = manager của team.
+CREATE TABLE IF NOT EXISTS user_address_revoked (
+  user_id    UUID NOT NULL REFERENCES users(id)     ON DELETE CASCADE,
+  address_id UUID NOT NULL REFERENCES addresses(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, address_id)
 );
 
 -- Mã chia sẻ cấu hình: chủ địa chỉ phát mã → manager khác clone xuyên tài khoản.

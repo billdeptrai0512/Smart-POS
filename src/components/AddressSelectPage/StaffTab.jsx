@@ -1,31 +1,131 @@
-import { useState } from 'react'
-import { Users, Loader, MoreVertical, ArrowUp, ArrowDown, Trash2, X } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Users, Loader, MoreVertical, ArrowUp, ArrowDown, Trash2, X, Check, KeyRound, Store } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
 import MonetizationToggle from './MonetizationToggle'
+import { capitalizeWords } from '../../utils'
+import { fetchStaffRevokedAddresses, fetchTeamRevokedAddresses, setStaffAddressAccess, setStaffPassword } from '../../services/authService'
 
-// Slide-up sheet for managing one member: promote/demote + remove, each behind a confirm tap.
-function MemberActionSheet({ member, onSetRole, onRemove, onClose }) {
-    const [pending, setPending] = useState(null) // { type, role, message, danger }
-    const [busy, setBusy] = useState(false)
-    const [err, setErr] = useState('')
-
+// Full management sheet for one member: rename, change role, reset password,
+// per-branch visibility, and remove. Each destructive action behind a confirm tap.
+function MemberPanel({ member, addresses, initialRevoked, onRevokedChange, onRename, onSetRole, onRemove, onClose }) {
     const isStaff = member.role === 'staff'
-    const roleAction = isStaff
-        ? { type: 'promote', role: 'manager', label: 'Thăng lên quản lý', icon: ArrowUp, message: `Thăng "${member.name}" lên quản lý?` }
-        : { type: 'demote', role: 'staff', label: 'Hạ xuống nhân viên', icon: ArrowDown, message: `Hạ "${member.name}" xuống nhân viên?` }
 
-    async function handleConfirm() {
-        setBusy(true)
-        setErr('')
+    // Name — savedName tracks the last committed value (member prop is stale until reopen).
+    const [nameDraft, setNameDraft] = useState(member.name)
+    const [savedName, setSavedName] = useState(member.name)
+    const [savingName, setSavingName] = useState(false)
+    const [nameSaved, setNameSaved] = useState(false)
+    const [nameErr, setNameErr] = useState('')
+
+    // Role
+    const [roleBusy, setRoleBusy] = useState(false)
+    const [roleErr, setRoleErr] = useState('')
+
+    // Password
+    const [pwDraft, setPwDraft] = useState('')
+    const [savingPw, setSavingPw] = useState(false)
+    const [pwMsg, setPwMsg] = useState('') // success text
+    const [pwErr, setPwErr] = useState('')
+
+    // Branch visibility (staff + co-manager) — revoked is the set of BLOCKED address ids.
+    // Seeded from the team prefetch (instant); only falls back to a per-open fetch when
+    // the prefetch hasn't landed yet.
+    const [revoked, setRevoked] = useState(initialRevoked ?? null) // null = loading
+    const [accessErr, setAccessErr] = useState('')
+    const [togglingId, setTogglingId] = useState(null)
+
+    // Remove
+    const [confirmRemove, setConfirmRemove] = useState(false)
+    const [removing, setRemoving] = useState(false)
+    const [removeErr, setRemoveErr] = useState('')
+
+    const busy = savingName || roleBusy || savingPw || removing
+
+    // Password requirement depends on the member's current role: staff = 6-digit PIN,
+    // co-manager (role 'manager') = ≥8 chars with a letter and a number (mirrors signup).
+    const pwValid = isStaff
+        ? /^\d{6}$/.test(pwDraft)
+        : pwDraft.length >= 8 && /[a-zA-Z]/.test(pwDraft) && /\d/.test(pwDraft)
+
+    const nameDirty = nameDraft.trim() !== '' && nameDraft.trim() !== savedName
+
+    useEffect(() => {
+        if (initialRevoked) return // already seeded from the team prefetch
+        let cancelled = false
+        fetchStaffRevokedAddresses(member.id).then(ids => {
+            if (!cancelled) setRevoked(new Set(ids))
+        })
+        return () => { cancelled = true }
+    }, [member.id, initialRevoked])
+
+    async function handleSaveName() {
+        const name = nameDraft.trim()
+        if (!name || name === savedName) return
+        setSavingName(true); setNameErr(''); setNameSaved(false)
         try {
-            if (pending.type === 'remove') await onRemove(member.id)
-            else await onSetRole(member.id, pending.role)
+            await onRename(member.id, name)
+            setSavedName(name)
+            setNameSaved(true)
+            setTimeout(() => setNameSaved(false), 1500)
+        } catch (e) {
+            setNameErr(e?.message || 'Không lưu được tên')
+        } finally {
+            setSavingName(false)
+        }
+    }
+
+    async function handleSetRole() {
+        setRoleBusy(true); setRoleErr('')
+        try {
+            await onSetRole(member.id, isStaff ? 'manager' : 'staff')
             onClose()
         } catch (e) {
-            setErr(e?.message || 'Thao tác thất bại')
+            setRoleErr(e?.message || 'Không đổi được vai trò')
+            setRoleBusy(false)
+        }
+    }
+
+    async function handleSetPassword() {
+        if (!pwValid) return
+        setSavingPw(true); setPwErr(''); setPwMsg('')
+        try {
+            await setStaffPassword(member.id, pwDraft)
+            setPwMsg('✓ Đã đổi mật khẩu')
+            setPwDraft('')
+            setTimeout(() => setPwMsg(''), 2000)
+        } catch (e) {
+            setPwErr(e?.message || 'Không đổi được mật khẩu')
         } finally {
-            setBusy(false)
+            setSavingPw(false)
+        }
+    }
+
+    async function handleToggleAccess(addrId) {
+        if (!revoked) return
+        const allowed = revoked.has(addrId) // currently revoked → this tap allows it
+        const next = new Set(revoked)
+        allowed ? next.delete(addrId) : next.add(addrId)
+        setTogglingId(addrId); setAccessErr('')
+        setRevoked(next); onRevokedChange?.(member.id, next) // optimistic + keep parent cache in sync
+        try {
+            await setStaffAddressAccess(member.id, addrId, allowed)
+        } catch (e) {
+            setRevoked(revoked); onRevokedChange?.(member.id, revoked) // revert
+            setAccessErr(e?.message || 'Không đổi được quyền chi nhánh')
+        } finally {
+            setTogglingId(null)
+        }
+    }
+
+    async function handleRemove() {
+        setRemoving(true); setRemoveErr('')
+        try {
+            await onRemove(member.id)
+            onClose()
+        } catch (e) {
+            setRemoveErr(e?.message || 'Không xoá được')
+            setRemoving(false)
         }
     }
 
@@ -33,11 +133,11 @@ function MemberActionSheet({ member, onSetRole, onRemove, onClose }) {
         <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={() => !busy && onClose()}>
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
             <div
-                className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
+                className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-5 animate-slide-up max-h-[88vh] overflow-y-auto overscroll-contain hide-scrollbar"
                 onClick={e => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between">
-                    <span className="text-[16px] font-black text-text truncate">{member.name}</span>
+                    <span className="text-[16px] font-black text-text truncate">Quản lý nhân sự</span>
                     <button
                         onClick={onClose}
                         disabled={busy}
@@ -47,57 +147,183 @@ function MemberActionSheet({ member, onSetRole, onRemove, onClose }) {
                     </button>
                 </div>
 
-                {pending ? (
-                    <div className="flex flex-col gap-4">
-                        <p className="text-[14px] font-medium text-text-secondary">{pending.message}</p>
-                        <ErrorBanner message={err} small />
+                {/* ── Họ tên ── */}
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-[11px] font-black uppercase tracking-wide text-text-secondary">Họ tên</label>
+                    <div className="relative">
+                        <input
+                            type="text"
+                            value={nameDraft}
+                            onChange={e => setNameDraft(capitalizeWords(e.target.value))}
+                            onKeyDown={e => { if (e.key === 'Enter' && nameDirty) handleSaveName() }}
+                            className="w-full bg-bg border border-border/60 rounded-[12px] pl-3 pr-[68px] py-2.5 text-[14px] font-bold text-text focus:outline-none focus:border-primary/40 transition-colors"
+                        />
+                        <button
+                            onClick={handleSaveName}
+                            disabled={savingName || !nameDirty}
+                            className={`absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-[10px] text-[12px] font-black uppercase flex items-center gap-1.5 transition-all ${nameDirty && !savingName
+                                ? 'bg-primary text-bg hover:bg-primary/90'
+                                : 'bg-surface-light text-text-secondary/50 cursor-not-allowed'}`}
+                        >
+                            {savingName ? <Loader size={12} className="animate-spin" /> : nameSaved ? <Check size={13} /> : 'Lưu'}
+                        </button>
+                    </div>
+                    <p className="text-text-secondary/60 text-[11px] px-1">Tự viết hoa chữ đầu mỗi từ</p>
+                    <ErrorBanner message={nameErr} small />
+                </div>
+
+                {/* ── Tài khoản ── */}
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-[11px] font-black uppercase tracking-wide text-text-secondary">Tài khoản</label>
+                    <div className="bg-bg border border-border/40 rounded-[12px] px-3 py-2.5 text-[14px] font-bold text-text-secondary">
+                        {member.username || <span className="italic font-medium opacity-60">chưa có tên đăng nhập</span>}
+                    </div>
+                    {member.username && (
+                        <>
+                            <div className="relative mt-1">
+                                <input
+                                    type="text"
+                                    value={pwDraft}
+                                    onChange={e => setPwDraft(isStaff ? e.target.value.replace(/\D/g, '') : e.target.value)}
+                                    autoComplete="new-password"
+                                    inputMode={isStaff ? 'numeric' : 'text'}
+                                    maxLength={isStaff ? 6 : undefined}
+                                    onKeyDown={e => { if (e.key === 'Enter' && pwValid) handleSetPassword() }}
+                                    placeholder="Mật khẩu mới"
+                                    className="w-full bg-bg border border-border/60 rounded-[12px] pl-3 pr-[82px] py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
+                                />
+                                <button
+                                    onClick={handleSetPassword}
+                                    disabled={savingPw || !pwValid}
+                                    className={`absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-[10px] text-[12px] font-black uppercase flex items-center gap-1.5 transition-all ${pwValid && !savingPw
+                                        ? 'bg-primary text-bg hover:bg-primary/90'
+                                        : 'bg-surface-light text-text-secondary/50 cursor-not-allowed'}`}
+                                >
+                                    {savingPw ? <Loader size={12} className="animate-spin" /> : <KeyRound size={13} />}
+                                    Đổi
+                                </button>
+                            </div>
+                            <p className="text-text-secondary/60 text-[11px] px-1">
+                                {isStaff ? 'Mã PIN gồm 6 chữ số' : 'Tối thiểu 8 ký tự, gồm cả chữ và số'}
+                            </p>
+                            {pwMsg && <p className="text-success text-[12px] font-bold px-1">{pwMsg}</p>}
+                            <ErrorBanner message={pwErr} small />
+                        </>
+                    )}
+                </div>
+
+                {/* ── Chi nhánh được xem (nhân viên + co-manager) ── */}
+                <div className="flex flex-col gap-1.5">
+                        <label className="text-[11px] font-black uppercase tracking-wide text-text-secondary flex items-center gap-1.5">
+                            <Store size={13} /> Chi nhánh được xem
+                        </label>
+                        {addresses.length === 0 ? (
+                            <p className="text-text-secondary/70 text-[12px] px-1">Chưa có chi nhánh nào</p>
+                        ) : (
+                            <div className="flex flex-col gap-1.5">
+                                {addresses.map(addr => {
+                                    // Render rows instantly from the in-memory address list; the toggle
+                                    // slot shows a spinner until revoked state loads (or while toggling),
+                                    // so the panel never jumps and all toggles resolve together.
+                                    const loading = revoked === null || togglingId === addr.id
+                                    const allowed = revoked ? !revoked.has(addr.id) : true
+                                    return (
+                                        <button
+                                            key={addr.id}
+                                            onClick={() => handleToggleAccess(addr.id)}
+                                            disabled={loading}
+                                            className="flex items-center gap-2.5 bg-bg border border-border/40 rounded-[12px] px-3 py-2.5 text-left hover:bg-surface-light transition-colors disabled:hover:bg-bg"
+                                        >
+                                            <span className="flex-1 text-[14px] font-bold text-text truncate">{addr.name}</span>
+                                            {loading ? (
+                                                <Loader size={15} className="animate-spin text-text-secondary/50 shrink-0" />
+                                            ) : (
+                                                <span className={`w-9 h-5 rounded-full p-0.5 flex transition-colors shrink-0 ${allowed ? 'bg-primary justify-end' : 'bg-border justify-start'}`}>
+                                                    <span className="w-4 h-4 rounded-full bg-white" />
+                                                </span>
+                                            )}
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        )}
+                        <ErrorBanner message={accessErr} small />
+                    </div>
+
+                {/* ── Vai trò + Xoá ── */}
+                <div className="flex flex-col gap-2">
+                    <button
+                        onClick={handleSetRole}
+                        disabled={roleBusy}
+                        className="w-full py-3 px-3 rounded-[12px] bg-surface-light border border-border/60 text-text text-[14px] font-bold hover:bg-bg transition-colors flex items-center gap-2.5 disabled:opacity-50"
+                    >
+                        {roleBusy
+                            ? <Loader size={16} className="animate-spin text-primary" />
+                            : isStaff ? <ArrowUp size={16} className="text-primary" /> : <ArrowDown size={16} className="text-primary" />}
+                        {isStaff ? 'Thăng lên quản lý' : 'Hạ xuống nhân viên'}
+                    </button>
+                    <ErrorBanner message={roleErr} small />
+
+                    {confirmRemove ? (
                         <div className="flex gap-2">
                             <button
-                                onClick={() => { setPending(null); setErr('') }}
-                                disabled={busy}
+                                onClick={() => setConfirmRemove(false)}
+                                disabled={removing}
                                 className="flex-1 py-3 rounded-[12px] bg-surface-light border border-border/60 text-text text-[14px] font-black hover:bg-bg transition-colors disabled:opacity-50 uppercase"
                             >
                                 Huỷ
                             </button>
                             <button
-                                onClick={handleConfirm}
-                                disabled={busy}
-                                className={`flex-1 py-3 rounded-[12px] text-[14px] font-black transition-colors disabled:opacity-50 uppercase flex items-center justify-center gap-1.5 ${pending.danger
-                                    ? 'bg-danger text-white hover:bg-danger/90'
-                                    : 'bg-primary text-bg hover:bg-primary/90'}`}
+                                onClick={handleRemove}
+                                disabled={removing}
+                                className="flex-1 py-3 rounded-[12px] bg-danger text-white text-[14px] font-black hover:bg-danger/90 transition-colors disabled:opacity-50 uppercase flex items-center justify-center gap-1.5"
                             >
-                                {busy ? <><Loader size={13} className="animate-spin" /> Đang xử lý...</> : 'Xác nhận'}
+                                {removing ? <><Loader size={13} className="animate-spin" /> Đang xoá...</> : 'Xác nhận xoá'}
                             </button>
                         </div>
-                    </div>
-                ) : (
-                    <div className="flex flex-col gap-2">
+                    ) : (
                         <button
-                            onClick={() => setPending(roleAction)}
-                            className="w-full py-3 px-3 rounded-[12px] bg-surface-light border border-border/60 text-text text-[14px] font-bold hover:bg-bg transition-colors flex items-center gap-2.5"
-                        >
-                            <roleAction.icon size={16} className="text-primary" />
-                            {roleAction.label}
-                        </button>
-                        <button
-                            onClick={() => setPending({ type: 'remove', danger: true, message: `Xoá "${member.name}" khỏi cửa hàng? Hành động này không thể hoàn tác.` })}
+                            onClick={() => setConfirmRemove(true)}
                             className="w-full py-3 px-3 rounded-[12px] bg-danger/10 border border-danger/20 text-danger text-[14px] font-bold hover:bg-danger/15 transition-colors flex items-center gap-2.5"
                         >
                             <Trash2 size={16} />
                             Xoá khỏi cửa hàng
                         </button>
-                    </div>
-                )}
+                    )}
+                    <ErrorBanner message={removeErr} small />
+                </div>
             </div>
         </div>
     )
 }
 
 export default function StaffTab({
-    staffList, staffLoading,
-    onSetMemberRole, onRemoveMember,
+    staffList, staffLoading, addresses = [],
+    onSetMemberRole, onRemoveMember, onRenameMember,
 }) {
     const [actionMember, setActionMember] = useState(null)
+
+    // Prefetch the whole team's revoked branches once so opening a panel is instant.
+    // Map<userId, Set<addressId>>; null until the first fetch resolves.
+    const [revokedByUser, setRevokedByUser] = useState(null)
+    const staffIdsKey = staffList.map(m => m.id).join('|')
+    useEffect(() => {
+        let cancelled = false
+        fetchTeamRevokedAddresses().then(rows => {
+            if (cancelled) return
+            const map = new Map()
+            for (const r of rows) {
+                if (!map.has(r.user_id)) map.set(r.user_id, new Set())
+                map.get(r.user_id).add(r.address_id)
+            }
+            setRevokedByUser(map)
+        })
+        return () => { cancelled = true }
+    }, [staffIdsKey])
+
+    const handleRevokedChange = useCallback((userId, set) => {
+        setRevokedByUser(prev => new Map(prev ?? []).set(userId, set))
+    }, [])
 
     // 1 danh sách gộp, quản lý trước rồi nhân viên.
     const members = [...staffList].sort((a, b) => (b.role === 'manager') - (a.role === 'manager'))
@@ -131,7 +357,12 @@ export default function StaffTab({
                                         : 'bg-primary/10 border-primary/25 text-primary'}`}>
                                         {isManager ? 'Quản lý' : 'Nhân viên'}
                                     </span>
-                                    <span className="flex-1 text-text text-sm font-bold truncate">{member.name}</span>
+                                    <div className="flex-1 min-w-0">
+                                        <span className="block text-text text-sm font-bold truncate">{member.name}</span>
+                                        {member.username && (
+                                            <span className="block text-text-secondary text-[11px] truncate">@{member.username}</span>
+                                        )}
+                                    </div>
                                     <button
                                         onClick={() => setActionMember(member)}
                                         className="w-8 h-8 flex items-center justify-center rounded-full text-text-secondary hover:bg-surface-light hover:text-text active:scale-95 transition-all shrink-0"
@@ -147,8 +378,12 @@ export default function StaffTab({
             </div>
 
             {actionMember && (
-                <MemberActionSheet
+                <MemberPanel
                     member={actionMember}
+                    addresses={addresses}
+                    initialRevoked={revokedByUser ? (revokedByUser.get(actionMember.id) ?? new Set()) : null}
+                    onRevokedChange={handleRevokedChange}
+                    onRename={onRenameMember}
                     onSetRole={onSetMemberRole}
                     onRemove={onRemoveMember}
                     onClose={() => setActionMember(null)}

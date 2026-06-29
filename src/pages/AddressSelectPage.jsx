@@ -3,7 +3,7 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAddressStats } from '../contexts/AddressStatsContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { createInviteToken, fetchDefaultIngredientSort, setTeamMemberRole, removeTeamMember, setMyPhone } from '../services/authService'
+import { createInviteToken, fetchDefaultIngredientSort, setTeamMemberRole, removeTeamMember, setTeamMemberName, setMyPhone } from '../services/authService'
 import { useMonetizationEnabled } from '../hooks/useEntitlement'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { cloneFromShareCode, getSharedConfig } from '../services/backupService'
@@ -221,6 +221,11 @@ export default function AddressSelectPage() {
         await refreshStaff()
     }
 
+    async function handleRenameMember(memberId, name) {
+        await setTeamMemberName(memberId, name)
+        await refreshStaff()
+    }
+
     async function handleSignOut() {
         await signOut()
         navigate('/login', { replace: true })
@@ -300,6 +305,7 @@ export default function AddressSelectPage() {
                     <StaffTab
                         staffList={staffList}
                         staffLoading={staffLoading}
+                        addresses={addresses}
                         error={error}
                         staffInviteLink={staffInviteLink}
                         staffInviteExpiry={staffInviteExpiry}
@@ -307,6 +313,7 @@ export default function AddressSelectPage() {
                         coManagerInviteExpiry={coManagerInviteExpiry}
                         onSetMemberRole={handleSetMemberRole}
                         onRemoveMember={handleRemoveMember}
+                        onRenameMember={handleRenameMember}
                     />
                 )}
             </div>
