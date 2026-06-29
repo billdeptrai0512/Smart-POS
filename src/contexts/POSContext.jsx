@@ -36,9 +36,6 @@ export function POSProvider() {
 
     const localOrderIds = useRef(new Set())
     const cartRef = useRef([])
-    // Promise of the last in-flight order insert. handleLoadHistory awaits it so a
-    // just-flushed order (e.g. on "go next") is in the DB before /history refetches.
-    const pendingSubmit = useRef(Promise.resolve())
 
     // ---- Persisted State ----
     const loadLocalJSON = (key, fallback) => {
@@ -386,10 +383,12 @@ export function POSProvider() {
 
         if (navigator.onLine && supabase) {
             // Optimistic /history row (raw fetchTodayOrders shape) so a just-submitted
-            // order shows there instantly — e.g. to delete a mis-entry. handleLoadHistory
-            // awaits pendingSubmit then refetches, swapping this for the real DB row.
+            // order shows there instantly — e.g. to delete a mis-entry. The real id is
+            // patched in on submit-resolve (deletable WITHOUT a refetch); _optimistic lets
+            // handleLoadHistory keep it until a fetch confirms it (no extra query, no wait).
             const optimisticOrder = {
-                id: cartItems[0]?.cartItemId || addedRow.id,   // temp key; the refetch swaps in the real id
+                _optimistic: true,
+                id: cartItems[0]?.cartItemId || addedRow.id,   // temp key; real id patched in on submit-resolve
                 total: itemTotal,
                 discount_amount: 0,
                 total_cost: Math.round(cartCost),
@@ -408,7 +407,7 @@ export function POSProvider() {
                 })),
             }
             setTodayOrders(prev => [optimisticOrder, ...prev])
-            pendingSubmit.current = submitOrder(cartItems, itemTotal, null, addressId, cartCost, costPerItem, profile?.name, 0)
+            submitOrder(cartItems, itemTotal, null, addressId, cartCost, costPerItem, profile?.name, 0)
                 .then(res => {
                     if (res?.id) {
                         localOrderIds.current.add(res.id)
@@ -520,19 +519,19 @@ export function POSProvider() {
         if (!addressId) return
         setIsLoadingHistory(true)
         try {
-            // Wait for a just-flushed order's insert to land so the fetch includes it
-            // (and replaces its optimistic row with the real, deletable DB row). Cap the
-            // wait at 3s so a hung insert on a dead connection can't freeze /history —
-            // the optimistic row already shows it; offline reconcile catches the rest.
-            await Promise.race([
-                pendingSubmit.current.catch(() => { }),
-                new Promise(res => setTimeout(res, 3000)),
-            ])
             const [orders, expenses] = await Promise.all([
                 fetchTodayOrders(addressId),
                 fetchTodayExpenses(addressId),
             ])
-            setTodayOrders(orders)
+            // Merge, don't clobber: keep optimistic rows the fetch doesn't have yet (their
+            // insert is still in flight) so a just-tapped order never vanishes. Once the
+            // fetch includes an id, its real row wins and the optimistic copy is dropped —
+            // no duplicates, no extra query, no waiting on the insert.
+            setTodayOrders(prev => {
+                const fetchedIds = new Set(orders.map(o => o.id))
+                const stillPending = prev.filter(o => o._optimistic && !fetchedIds.has(o.id))
+                return [...stillPending, ...orders]
+            })
             setTodayExpenses(expenses)
         } catch (err) {
             showError(err, 'Tải lịch sử đơn hàng')

@@ -40,9 +40,9 @@ export default function POSPage() {
     const dateOnly = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`
 
     function handleOpenHistory() {
-        // Flush the held order NOW (sync) so its insert is in flight before we load —
-        // handleLoadHistory awaits it, so /history shows the just-tapped order (and can
-        // delete a mis-entry). The unmount flush below then no-ops (cartRef cleared).
+        // Flush the held order NOW (sync) so its optimistic /history row is in place
+        // before we load — /history shows the just-tapped order instantly (and can delete
+        // a mis-entry). The unmount flush below then no-ops (cartRef cleared).
         commitHeld()
         handleLoadHistory()
         navigate('/history')
