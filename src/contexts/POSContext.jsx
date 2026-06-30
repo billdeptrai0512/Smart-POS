@@ -17,6 +17,26 @@ import { HistoryContext } from './HistoryContext'
 
 const POSContext = createContext(null)
 
+function mergeFetchedOrders(prev, fetchedOrders) {
+    const fetchedIds = new Set(fetchedOrders.map(o => o.id))
+    const stillPending = prev.filter(o => {
+        if (!o._optimistic) return false
+        if (fetchedIds.has(o.id)) return false
+        
+        // Match by total, creation time (within 10 seconds), and items count
+        const isMatched = fetchedOrders.some(fetched => {
+            if (fetched.total !== o.total) return false
+            const diff = Math.abs(new Date(fetched.created_at).getTime() - new Date(o.created_at).getTime())
+            if (diff > 10000) return false
+            if (fetched.order_items?.length !== o.order_items?.length) return false
+            if (fetched.staff_name !== o.staff_name) return false
+            return true
+        })
+        return !isMatched
+    })
+    return [...stillPending, ...fetchedOrders]
+}
+
 // usePOS returns the merged slice (cart + stats + history + shared) for
 // back-compat. Prefer the focused hooks in new code:
 //   useCart()    — re-renders only on cart-related changes
@@ -190,7 +210,9 @@ export function POSProvider() {
         const scheduleOrdersRefresh = () => {
             clearTimeout(ordersTimer)
             ordersTimer = setTimeout(() => {
-                fetchTodayOrders(addressId).then(setTodayOrders).catch(() => { })
+                fetchTodayOrders(addressId)
+                    .then(orders => setTodayOrders(prev => mergeFetchedOrders(prev, orders)))
+                    .catch(() => { })
             }, 1500)
         }
 
@@ -527,11 +549,7 @@ export function POSProvider() {
             // insert is still in flight) so a just-tapped order never vanishes. Once the
             // fetch includes an id, its real row wins and the optimistic copy is dropped —
             // no duplicates, no extra query, no waiting on the insert.
-            setTodayOrders(prev => {
-                const fetchedIds = new Set(orders.map(o => o.id))
-                const stillPending = prev.filter(o => o._optimistic && !fetchedIds.has(o.id))
-                return [...stillPending, ...orders]
-            })
+            setTodayOrders(prev => mergeFetchedOrders(prev, orders))
             setTodayExpenses(expenses)
         } catch (err) {
             showError(err, 'Tải lịch sử đơn hàng')
