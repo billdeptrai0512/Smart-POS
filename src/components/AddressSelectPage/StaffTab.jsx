@@ -344,7 +344,7 @@ export default function StaffTab({
                     <div className="px-4 py-8 text-center">
                         <Users size={20} className="text-text-secondary/60 mx-auto mb-2" />
                         <p className="text-text-secondary text-sm font-medium">Chưa có thành viên nào</p>
-                        <p className="text-text-secondary/70 text-xs mt-0.5">Mời người mới bằng nút bên dưới</p>
+                        <p className="text-text-secondary/70 text-xs mt-0.5">Thêm người mới bằng nút bên dưới</p>
                     </div>
                 ) : (
                     <div className="p-3 flex flex-col gap-2">

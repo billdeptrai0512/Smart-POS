@@ -113,55 +113,24 @@ export async function validateInviteToken(token) {
     return { valid: true, tokenId: data.id, managerId: data.manager_id, managerName, role: data.role || 'staff' }
 }
 
-// Create an invite token for a manager (role = 'staff' | 'co-manager')
-export async function createInviteToken(managerId, role = 'staff') {
+// Create a team member directly via Edge Function
+export async function createTeamMember(name, username, password, role) {
     if (!supabase) throw new Error('No Supabase connection')
-    const { data, error } = await supabase
-        .from('invite_tokens')
-        .insert({ manager_id: managerId, role })
-        .select('token, expires_at')
-        .single()
-    if (error) throw error
-    return data
-}
-
-// Sign up staff via invite token
-export async function signUpWithInvite(token, username, password, name) {
-    if (!supabase) throw new Error('No Supabase connection')
-
-    const validation = await validateInviteToken(token)
-    if (!validation.valid) throw new Error(validation.error)
-
-    const email = formatUsernameToEmail(username)
-
-    const { data: authData, error: authError } = await supabase.auth.signUp({ email, password })
-    if (authError) throw authError
-
-    let authUser = authData.user
-    if (!authUser) throw new Error('Đăng ký thất bại')
-
-    if (!authData.session) {
-        const { data: signData, error: signError } = await supabase.auth.signInWithPassword({ email, password })
-        if (signError) throw new Error('Tài khoản đã tạo nhưng không thể tự động đăng nhập: ' + signError.message)
-        authUser = signData.user
+    const { data, error } = await supabase.functions.invoke('create-team-member', {
+        body: { name, username, password, role },
+    })
+    if (error) {
+        // FunctionsHttpError wraps the response; dig out our JSON message.
+        let msg = error.message
+        try { const ctx = await error.context?.json(); if (ctx?.error) msg = ctx.error } catch { /* keep msg */ }
+        throw new Error(msg)
     }
-
-    // co-manager → role 'manager' with manager_id pointing to the original manager
-    const userRole = validation.role === 'co-manager' ? 'manager' : 'staff'
-    const { data: profile, error: profileError } = await supabase
-        .from('users')
-        .insert({ auth_id: authUser.id, name, role: userRole, manager_id: validation.managerId, username: sanitizeUsername(username) })
-        .select()
-        .single()
-    if (profileError) throw profileError
-
-    // Mark token as used
-    await supabase
-        .from('invite_tokens')
-        .update({ used_at: new Date().toISOString() })
-        .eq('id', validation.tokenId)
-
-    return { user: authUser, profile }
+    // Edge Function trả { error: "..." } với status 4xx/5xx nhưng supabase-js
+    // vẫn có thể đặt vào data thay vì error tuỳ phiên bản SDK.
+    if (data?.error) {
+        throw new Error(data.error)
+    }
+    return data
 }
 
 // Fetch staff and co-managers belonging to a manager

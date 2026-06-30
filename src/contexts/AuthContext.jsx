@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, signUpWithInvite as authSignUpWithInvite, fetchProfileByAuthId, removeSession, fetchDefaultIngredientSort } from '../services/authService'
+import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, fetchProfileByAuthId, removeSession, fetchDefaultIngredientSort } from '../services/authService'
 import { isGuest as getLocalIsGuest, setIsGuest as setLocalIsGuest, initializeGuestFromGlobal, clearGuestData, setGuestIngredientSortOrder } from '../services/localRepository'
 import { STORAGE_KEYS } from '../constants/storageKeys'
 
@@ -250,17 +250,6 @@ export function AuthProvider({ children }) {
         return data
     }, [])
 
-    const signUpWithInvite = useCallback(async (token, username, password, name) => {
-        const data = await authSignUpWithInvite(token, username, password, name)
-        setUser(data.user)
-        setProfile(data.profile)
-        cacheAuth(STORAGE_KEYS.AUTH_USER, data.user)
-        cacheAuth(STORAGE_KEYS.AUTH_PROFILE, data.profile)
-        // Transition from guest to real user — clear sandbox
-        clearGuestData()
-        setIsGuest(false)
-        return data
-    }, [])
 
     // Re-fetch profile row (vd: sau khi lưu SĐT qua set_my_phone)
     const refreshProfile = useCallback(() => loadProfile(user), [user, loadProfile])
@@ -270,7 +259,7 @@ export function AuthProvider({ children }) {
     const isAdmin = profile?.role === 'admin'
 
     return (
-        <AuthContext.Provider value={{ user, profile, loading, isGuest, setIsGuest, initGuestMode, signIn, signUp, signUpWithInvite, signOut, refreshProfile, isManager, isStaff, isAdmin }}>
+        <AuthContext.Provider value={{ user, profile, loading, isGuest, setIsGuest, initGuestMode, signIn, signUp, signOut, refreshProfile, isManager, isStaff, isAdmin }}>
             {children}
         </AuthContext.Provider>
     )

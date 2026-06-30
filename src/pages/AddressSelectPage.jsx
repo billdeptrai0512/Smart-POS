@@ -3,7 +3,7 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAddressStats } from '../contexts/AddressStatsContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { createInviteToken, fetchDefaultIngredientSort, setTeamMemberRole, removeTeamMember, setTeamMemberName, setMyPhone } from '../services/authService'
+import { fetchDefaultIngredientSort, setTeamMemberRole, removeTeamMember, setTeamMemberName, setMyPhone } from '../services/authService'
 import { useMonetizationEnabled } from '../hooks/useEntitlement'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { cloneFromShareCode, getSharedConfig } from '../services/backupService'
@@ -13,7 +13,7 @@ import BackupModal from '../components/AddressSelectPage/BackupModal'
 import AddressHeader from '../components/AddressSelectPage/AddressHeader'
 import BranchGrid from '../components/AddressSelectPage/BranchGrid'
 import StaffTab from '../components/AddressSelectPage/StaffTab'
-import InviteModal from '../components/AddressSelectPage/InviteModal'
+import CreateStaffModal from '../components/AddressSelectPage/CreateStaffModal'
 import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 
 export default function AddressSelectPage() {
@@ -24,7 +24,7 @@ export default function AddressSelectPage() {
     const navigate = useNavigate()
 
     const [activeTab, setActiveTab] = useState('branches')
-    const [showInviteModal, setShowInviteModal] = useState(false)
+    const [showCreateStaffModal, setShowCreateStaffModal] = useState(false)
     const [error, setError] = useState('')
     const [backupSource, setBackupSource] = useState(null)
     const [newAddressName, setNewAddressName] = useState('')
@@ -34,14 +34,6 @@ export default function AddressSelectPage() {
     const [creating, setCreating] = useState(false)
     const [showCreateModal, setShowCreateModal] = useState(false)
     const createGuardRef = useRef(false)
-
-    // Staff tab invite state
-    const [staffInviteLink, setStaffInviteLink] = useState('')
-    const [staffInviteExpiry, setStaffInviteExpiry] = useState(null)
-    const [generatingStaffLink, setGeneratingStaffLink] = useState(false)
-    const [coManagerInviteLink, setCoManagerInviteLink] = useState('')
-    const [coManagerInviteExpiry, setCoManagerInviteExpiry] = useState(null)
-    const [generatingCoManagerLink, setGeneratingCoManagerLink] = useState(false)
 
     // Stable signature of address IDs — changes only when an address is added/removed,
     // not on rename. Avoids re-running the heavy prefetch + stats effects unnecessarily.
@@ -190,26 +182,7 @@ export default function AddressSelectPage() {
         }
     }
 
-    async function handleGenerateInvite(role) {
-        if (!profile?.id) return
-        const isCoManager = role === 'co-manager'
-        const setLink = isCoManager ? setCoManagerInviteLink : setStaffInviteLink
-        const setExpiry = isCoManager ? setCoManagerInviteExpiry : setStaffInviteExpiry
-        const setGenerating = isCoManager ? setGeneratingCoManagerLink : setGeneratingStaffLink
-        setGenerating(true)
-        setLink('')
-        try {
-            // Invitee phải gắn vào top manager (chủ địa chỉ), không phải người mời —
-            // nếu không, staff do co-manager mời sẽ không share chung địa chỉ.
-            const { token, expires_at } = await createInviteToken(profile.manager_id || profile.id, role)
-            setLink(`${window.location.origin}/signup/${token}`)
-            setExpiry(new Date(expires_at))
-        } catch (err) {
-            setError(err.message || 'Không thể tạo link')
-        } finally {
-            setGenerating(false)
-        }
-    }
+
 
     async function handleSetMemberRole(memberId, role) {
         await setTeamMemberRole(memberId, role)
@@ -307,10 +280,6 @@ export default function AddressSelectPage() {
                         staffLoading={staffLoading}
                         addresses={addresses}
                         error={error}
-                        staffInviteLink={staffInviteLink}
-                        staffInviteExpiry={staffInviteExpiry}
-                        coManagerInviteLink={coManagerInviteLink}
-                        coManagerInviteExpiry={coManagerInviteExpiry}
                         onSetMemberRole={handleSetMemberRole}
                         onRemoveMember={handleRemoveMember}
                         onRenameMember={handleRenameMember}
@@ -342,27 +311,19 @@ export default function AddressSelectPage() {
                     <button
                         onClick={() => {
                             setError('')
-                            setShowInviteModal(true)
-                            if (!staffInviteLink) handleGenerateInvite('staff')
-                            if (!coManagerInviteLink) handleGenerateInvite('co-manager')
+                            setShowCreateStaffModal(true)
                         }}
                         className="flex-1 min-w-0 flex items-center justify-center rounded-[12px] bg-primary px-4 py-3 text-[13px] font-black uppercase text-bg hover:bg-primary/90 active:scale-95 transition-all"
                     >
-                        <span className="truncate">Mời nhân sự</span>
+                        <span className="truncate">Thêm nhân sự</span>
                     </button>
                 </div>
             )}
 
-            {showInviteModal && (
-                <InviteModal
-                    onClose={() => setShowInviteModal(false)}
-                    staffInviteLink={staffInviteLink}
-                    staffInviteExpiry={staffInviteExpiry}
-                    coManagerInviteLink={coManagerInviteLink}
-                    coManagerInviteExpiry={coManagerInviteExpiry}
-                    generatingStaff={generatingStaffLink}
-                    generatingCoManager={generatingCoManagerLink}
-                    error={error}
+            {showCreateStaffModal && (
+                <CreateStaffModal
+                    onClose={() => setShowCreateStaffModal(false)}
+                    onSuccess={refreshStaff}
                 />
             )}
 

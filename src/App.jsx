@@ -12,7 +12,7 @@ import './index.css'
 // Pages — lazy-loaded for route-level code splitting
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const SignUpPage = lazy(() => import('./pages/SignUpPage'))
-const StaffInvitePage = lazy(() => import('./pages/StaffInvitePage'))
+
 const AddressSelectPage = lazy(() => import('./pages/AddressSelectPage'))
 const SubscriptionPage = lazy(() => import('./pages/SubscriptionPage'))
 const POSPage = lazy(() => import('./pages/POSPage'))
@@ -96,7 +96,7 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignUpPage />} />
-            <Route path="/signup/:token" element={<StaffInvitePage />} />
+
             <Route element={<ProtectedRoute />}>
               <Route element={<AddressProvider />}>
                 <Route element={<AddressStatsProvider />}>
