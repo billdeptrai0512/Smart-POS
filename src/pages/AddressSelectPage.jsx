@@ -47,6 +47,16 @@ export default function AddressSelectPage() {
     // not on rename. Avoids re-running the heavy prefetch + stats effects unnecessarily.
     const addressIdsKey = useMemo(() => addresses.map(a => a.id).join('|'), [addresses])
 
+    // Staff panel: only show addresses that belong to the caller's team (manager_id
+    // matches the team owner). Admin sees ALL addresses globally via is_admin_auth(),
+    // but their team members only have access to addresses owned by the admin — so the
+    // panel must not display addresses from other teams (whose toggles would be misleading).
+    const teamOwnerId = profile?.manager_id || profile?.id
+    const teamAddresses = useMemo(() => {
+        if (!teamOwnerId) return addresses
+        return addresses.filter(a => a.manager_id === teamOwnerId)
+    }, [addresses, teamOwnerId])
+
     // PERF: count by role in a single pass instead of two .filter() walks per render.
     const { staffCount, managerCount } = useMemo(() => {
         let s = 0, m = 0
@@ -305,7 +315,7 @@ export default function AddressSelectPage() {
                     <StaffTab
                         staffList={staffList}
                         staffLoading={staffLoading}
-                        addresses={addresses}
+                        addresses={teamAddresses}
                         error={error}
                         staffInviteLink={staffInviteLink}
                         staffInviteExpiry={staffInviteExpiry}
