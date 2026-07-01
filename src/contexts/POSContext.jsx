@@ -299,6 +299,16 @@ export function POSProvider() {
         return () => clearInterval(interval)
     }, [addressId])
 
+    const revenueRef = useRef(revenue)
+    const totalCostRef = useRef(totalCost)
+    const cupsSoldRef = useRef(cupsSold)
+    const inventoryRef = useRef(inventory)
+
+    useEffect(() => { revenueRef.current = revenue }, [revenue])
+    useEffect(() => { totalCostRef.current = totalCost }, [totalCost])
+    useEffect(() => { cupsSoldRef.current = cupsSold }, [cupsSold])
+    useEffect(() => { inventoryRef.current = inventory }, [inventory])
+
     // ---- Autosave Daemon ----
     // PERF: debounce 5 synchronous localStorage writes that were firing on every
     // keystroke/cart change. localStorage is sync I/O — on slower devices this caused
@@ -314,6 +324,17 @@ export function POSProvider() {
         }, 400)
         return () => clearTimeout(t)
     }, [cart, revenue, totalCost, cupsSold, inventory])
+
+    // Save absolute latest states synchronously on unmount
+    useEffect(() => {
+        return () => {
+            localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(cartRef.current))
+            localStorage.setItem(STORAGE_KEYS.REVENUE, revenueRef.current.toString())
+            localStorage.setItem(STORAGE_KEYS.TOTAL_COST, totalCostRef.current.toString())
+            localStorage.setItem(STORAGE_KEYS.CUPS, cupsSoldRef.current.toString())
+            localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventoryRef.current))
+        }
+    }, [])
 
     // cartRef mirrors cart so commitHeld / handleAddItem can read the latest
     // held item (with extras) synchronously without going stale.
@@ -484,6 +505,7 @@ export function POSProvider() {
         cartRef.current = []
         setCart([])
         setActiveCartItemId(null)
+        localStorage.setItem(STORAGE_KEYS.CART, '[]')
     }
 
     // Submit the held item and clear — used by the ✓ button (confirm the LAST order
@@ -495,6 +517,7 @@ export function POSProvider() {
         cartRef.current = [] // sync guard: a fast double-press must not re-submit
         setCart([])
         setActiveCartItemId(null)
+        localStorage.setItem(STORAGE_KEYS.CART, '[]')
     }
 
     // Extras read/write cartRef.current synchronously (not setCart's prev) so the

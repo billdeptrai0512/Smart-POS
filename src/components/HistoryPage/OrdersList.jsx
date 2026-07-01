@@ -66,6 +66,11 @@ function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrd
     // Online, non-deleted orders are the only ones we can edit/discount against the DB.
     const editable = !order.deletedAt && !order.isOffline
 
+    const deletedTimeStr = order.deletedAt ? (() => {
+        const d = new Date(order.deletedAt)
+        return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')} ${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`
+    })() : ''
+
     async function handleDelete() {
         if (deletingId === order.id) return
         const text = order.items?.map(i => i.text).join(', ') || ''
@@ -76,10 +81,11 @@ function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrd
     }
 
     return (
-        <div className={`bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden ${order.deletedAt ? 'opacity-50 grayscale select-none' : ''}`}>
+        <div className="bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden">
             {order.deletedAt && (
-                <div className="absolute top-0 left-0 bg-danger/20 text-danger text-[10px] font-black px-3 py-1 rounded-br-[14px] uppercase tracking-wider z-10">
-                    ĐÃ XÓA {order.deletedBy ? `BỞI ${order.deletedBy.toUpperCase()}` : ''}
+                <div className="absolute top-0 left-0 bg-danger/10 text-danger text-[10px] font-bold px-3 py-1.5 rounded-br-[14px] border-r border-b border-danger/10 flex items-center gap-1.5 uppercase tracking-wider z-10">
+                    <span className="w-1.5 h-1.5 rounded-full bg-danger animate-pulse" />
+                    <span>Đã xóa{order.deletedBy ? ` bởi ${order.deletedBy}` : ''} · {deletedTimeStr}</span>
                 </div>
             )}
             {order.isOffline && !order.deletedAt && (
@@ -87,64 +93,67 @@ function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrd
                     Offline
                 </div>
             )}
-            <div className="flex justify-between items-center mb-1">
-                <div className="flex items-baseline gap-2 mt-1">
-                    <span className="font-black text-[14px] text-primary">+ {formatVND(order.total)}</span>
-                    {discountAmount > 0 && (
-                        <span className="text-text-secondary/60 text-[12px] font-bold line-through tabular-nums">{formatVND(subtotal)}</span>
+            
+            <div className={`flex flex-col gap-2 ${order.deletedAt ? 'opacity-40 grayscale select-none' : ''}`}>
+                <div className="flex justify-between items-center mb-1">
+                    <div className="flex items-baseline gap-2 mt-1">
+                        <span className="font-black text-[14px] text-primary">+ {formatVND(order.total)}</span>
+                        {discountAmount > 0 && (
+                            <span className="text-text-secondary/60 text-[12px] font-bold line-through tabular-nums">{formatVND(subtotal)}</span>
+                        )}
+                    </div>
+                    {!order.deletedAt && (
+                        <span className="text-success leading-none text-[14px] mt-1 font-bold tabular-nums">
+                            {formatVND(runningTotal)}
+                        </span>
                     )}
                 </div>
-                {!order.deletedAt && (
-                    <span className="text-success leading-none text-[14px] mt-1 font-bold tabular-nums">
-                        {formatVND(runningTotal)}
-                    </span>
-                )}
-            </div>
-            <div className="mb-1 border-t border-border/40 pt-2">
-                <div className="flex flex-col gap-1.5">
-                    {order.items?.length > 0 ? order.items.map((item, idx) => (
-                        <div key={idx} className="flex flex-row gap-2 items-start w-full">
-                            <span className={`text-[14px] leading-snug font-medium max-w-[85%] whitespace-pre-wrap text-text ${order.deletedAt ? 'line-through' : ''}`}>{item.text}</span>
-                        </div>
-                    )) : (
-                        <span className="text-text text-[14px] leading-snug font-medium whitespace-pre-wrap">Không có chi tiết</span>
-                    )}
+                <div className="mb-1 border-t border-border/40 pt-2">
+                    <div className="flex flex-col gap-1.5">
+                        {order.items?.length > 0 ? order.items.map((item, idx) => (
+                            <div key={idx} className="flex flex-row gap-2 items-start w-full">
+                                <span className={`text-[14px] leading-snug font-medium max-w-[85%] whitespace-pre-wrap text-text ${order.deletedAt ? 'line-through' : ''}`}>{item.text}</span>
+                            </div>
+                        )) : (
+                            <span className="text-text text-[14px] leading-snug font-medium whitespace-pre-wrap">Không có chi tiết</span>
+                        )}
+                    </div>
                 </div>
-            </div>
 
-            <div className="border-t border-border/40 pt-2 flex justify-between items-center gap-3 leading-none">
-                <span className="text-text-secondary/70 text-[12px] font-bold truncate min-w-0 leading-none">
-                    {time}{order.staffName ? ` · ${order.staffName}` : ''}
-                </span>
-                {!order.deletedAt && (
-                    !order.isOffline ? (
-                        <div className="flex items-center gap-4 shrink-0">
+                <div className="border-t border-border/40 pt-2 flex justify-between items-center gap-3 leading-none">
+                    <span className="text-text-secondary/70 text-[12px] font-bold truncate min-w-0 leading-none">
+                        {time}{order.staffName ? ` · ${order.staffName}` : ''}
+                    </span>
+                    {!order.deletedAt && (
+                        !order.isOffline ? (
+                            <div className="flex items-center gap-4 shrink-0">
+                                <button
+                                    onClick={() => setShowDiscount(true)}
+                                    aria-label="Giảm giá"
+                                    className="text-text-secondary hover:text-primary transition-colors"
+                                >
+                                    <Percent size={17} strokeWidth={2.25} />
+                                </button>
+                                <button
+                                    onClick={handleDelete}
+                                    disabled={deletingId === order.id}
+                                    aria-label="Xóa đơn"
+                                    className="text-text-secondary hover:text-danger transition-colors disabled:opacity-50"
+                                >
+                                    <Trash2 size={17} strokeWidth={2.25} />
+                                </button>
+                            </div>
+                        ) : (
                             <button
-                                onClick={() => setShowDiscount(true)}
-                                aria-label="Giảm giá"
-                                className="text-text-secondary hover:text-primary transition-colors"
-                            >
-                                <Percent size={17} strokeWidth={2.25} />
-                            </button>
-                            <button
-                                onClick={handleDelete}
-                                disabled={deletingId === order.id}
-                                aria-label="Xóa đơn"
-                                className="text-text-secondary hover:text-danger transition-colors disabled:opacity-50"
+                                onClick={() => onDeleteOffline(order.createdAt_key)}
+                                aria-label="Xóa đơn offline"
+                                className="text-warning/70 hover:text-danger transition-colors shrink-0"
                             >
                                 <Trash2 size={17} strokeWidth={2.25} />
                             </button>
-                        </div>
-                    ) : (
-                        <button
-                            onClick={() => onDeleteOffline(order.createdAt_key)}
-                            aria-label="Xóa đơn offline"
-                            className="text-warning/70 hover:text-danger transition-colors shrink-0"
-                        >
-                            <Trash2 size={17} strokeWidth={2.25} />
-                        </button>
-                    )
-                )}
+                        )
+                    )}
+                </div>
             </div>
 
             {editable && (

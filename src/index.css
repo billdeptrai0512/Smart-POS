@@ -169,13 +169,13 @@ body {
   }
 }
 
-/* 320ms delay (fill-mode both) so a quick tap-to-add never engages; the green
+/* 240ms delay (fill-mode both) so a quick tap-to-add never engages; the green
    only rises once the press is a real hold. Wider than a plain tap so an accidental
    brush / hesitant scroll doesn't engage — engage now submits the held order, so a
-   stray hold must NOT trip it. 800ms rise = a comfortable window to release and
+   stray hold must NOT trip it. 600ms rise = a comfortable window to release and
    abort the commit before it fills. */
 .hold-fill {
-  animation: hold-fill 800ms linear 320ms both;
+  animation: hold-fill 600ms linear 240ms both;
 }
 
 /* ====== Committed order settles down into the journal (POS header) ====== */
