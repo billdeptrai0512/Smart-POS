@@ -15,18 +15,20 @@ export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfir
     const [amountInput, setAmountInput] = useState(formatVNDInput(owing))
     const [paymentMethod, setPaymentMethod] = useState('cash')
     const [paidDate, setPaidDate] = useState(today)
+    // Giờ trả tuỳ chọn để nhật ký biên nhận phản ánh đúng thời điểm trả thật.
+    // Mặc định = giờ VN hiện tại; RPC chỉ chặn theo NGÀY VN nên giờ nào cũng hợp lệ.
+    const [paidTime, setPaidTime] = useState(() =>
+        new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date()))
     const [isAfterShift, setIsAfterShift] = useState(false)
     const amount = parseVNDInput(amountInput)
     const isValid = amount > 0 && amount <= owing
 
     const handleConfirm = () => {
         if (!isValid || saving) return
-        // Noon-VN anchor — same rule for today and back-dated so the stored
-        // time is deterministic regardless of when the user opened the sheet.
         onConfirm({
             amount,
             paymentMethod,
-            paidAt: new Date(`${paidDate}T12:00:00+07:00`).toISOString(),
+            paidAt: new Date(`${paidDate}T${paidTime || '12:00'}:00+07:00`).toISOString(),
             cashPhase: isAfterShift ? 'post_close' : 'in_shift',
         })
     }
@@ -49,26 +51,37 @@ export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfir
                 </div>
 
                 <div className="flex flex-col gap-3">
-                    {/* 1. Ngày trả (lên đầu) */}
+                    {/* 1. Ngày + giờ trả (lên đầu) */}
                     <div className="flex flex-col gap-1.5">
                         <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Ngày trả</label>
-                        <DatePicker
-                            value={paidDate}
-                            min={invoiceDate}
-                            max={today}
-                            onChange={setPaidDate}
-                            presets={false}
-                            align="start"
-                            trigger={(label, toggle) => (
-                                <button
-                                    type="button"
-                                    onClick={toggle}
-                                    className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[14px] font-bold text-text text-left hover:border-primary/50 transition-colors"
-                                >
-                                    {label}
-                                </button>
-                            )}
-                        />
+                        <div className="flex gap-2">
+                            <div className="flex-1">
+                                <DatePicker
+                                    value={paidDate}
+                                    min={invoiceDate}
+                                    max={today}
+                                    onChange={setPaidDate}
+                                    presets={false}
+                                    align="start"
+                                    trigger={(label, toggle) => (
+                                        <button
+                                            type="button"
+                                            onClick={toggle}
+                                            className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[14px] font-bold text-text text-left hover:border-primary/50 transition-colors"
+                                        >
+                                            {label}
+                                        </button>
+                                    )}
+                                />
+                            </div>
+                            <input
+                                type="time"
+                                value={paidTime}
+                                onChange={e => setPaidTime(e.target.value)}
+                                aria-label="Giờ trả"
+                                className="bg-surface-light border border-border/60 rounded-[12px] px-3 py-3 text-[14px] font-bold text-text tabular-nums hover:border-primary/50 transition-colors [color-scheme:dark]"
+                            />
+                        </div>
                     </div>
 
                     {/* 2. Thời điểm trả */}

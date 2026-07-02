@@ -10,6 +10,8 @@ const localRepo = {
     isGuest: vi.fn(() => true),
     fetchLocalShiftClosing: vi.fn(() => null),
     upsertLocalShiftClosing: vi.fn((d) => ({ id: 'local', ...d })),
+    fetchAllLocalExpenses: vi.fn(() => []),
+    updateLocalExpense: vi.fn(),
 }
 
 vi.mock('../lib/supabaseClient', () => ({ supabase: null }))
@@ -47,6 +49,33 @@ describe('mergeShiftClosingInventory (merge semantics)', () => {
         const byIng = Object.fromEntries(res.inventory_report.map(e => [e.ingredient, e.remaining]))
         expect(byIng).toEqual({ milk: 999, sugar: 200 }) // milk updated, sugar untouched
         expect(res.system_total_revenue).toBeUndefined() // not re-seeded on existing row
+    })
+
+    // Bug 02/07: rút ra quầy nhập MUỘN (sau khi đã nhập kho trong ngày) → snapshot
+    // before/after_stock của phiếu nhập tạo sau phiếu chốt ca phải bị trừ delta rút,
+    // nếu không neo after_stock giữ kho chưa trừ rút → tồn thổi phồng vĩnh viễn.
+    it('restock delta cascades into refill snapshots created after the shift row', async () => {
+        localRepo.fetchLocalShiftClosing.mockReturnValue({
+            id: 'x', created_at: '2026-07-01T02:23:00Z', // 09:23 VN
+            inventory_report: [{ ingredient: 'milk', unit: 'g', opening: 1026, remaining: null, restock: null }],
+        })
+        localRepo.fetchAllLocalExpenses.mockReturnValue([
+            { // phiếu nhập 12:00 — TẠO SAU phiếu chốt ca → phải cascade −1026
+                id: 'r1', is_refill: true, created_at: '2026-07-01T05:00:00Z',
+                metadata: { ingredient: 'milk', qty: 10260, before_stock: 1026, after_stock: 11286 },
+            },
+            { // phiếu tạo TRƯỚC phiếu chốt ca → giữ nguyên
+                id: 'r0', is_refill: true, created_at: '2026-06-30T05:00:00Z',
+                metadata: { ingredient: 'milk', qty: 1026, before_stock: 0, after_stock: 1026 },
+            },
+        ])
+        await mergeShiftClosingInventory('addr', [
+            { ingredient: 'milk', unit: 'g', opening: 1026, opening_locked: false, remaining: null, restock: 1026 },
+        ], 'user')
+        expect(localRepo.updateLocalExpense).toHaveBeenCalledTimes(1)
+        expect(localRepo.updateLocalExpense).toHaveBeenCalledWith('r1', {
+            metadata: expect.objectContaining({ before_stock: 0, after_stock: 10260 }),
+        })
     })
 
     it('tombstone removes an existing ingredient, keeps the rest', async () => {

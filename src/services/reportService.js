@@ -107,11 +107,35 @@ export async function mergeShiftClosingInventory(addressId, patches, closedBy, s
         // Guest local-only: không có đua, merge tay rồi upsert cả mảng.
         const existing = localRepo.fetchLocalShiftClosing(addressId, new Date().toISOString())
         const report = Array.isArray(existing?.inventory_report) ? [...existing.inventory_report] : []
+        const restockDeltas = {}
         for (const p of patches) {
             const i = report.findIndex(e => e.ingredient === p.ingredient)
             const tombstone = p.opening == null && p.remaining == null && p.restock == null
+            const oldRestock = i >= 0 ? Number(report[i]?.restock) || 0 : 0
+            const newRestock = tombstone ? 0 : Number(p.restock) || 0
+            if (newRestock !== oldRestock)
+                restockDeltas[p.ingredient] = (restockDeltas[p.ingredient] || 0) + newRestock - oldRestock
             if (i >= 0) report.splice(i, 1)
             if (!tombstone) report.push(p)
+        }
+        // Mirror cascade của RPC merge_shift_closing_inventory: số rút đổi ⇒ trừ delta
+        // khỏi snapshot before/after_stock của phiếu refill tạo SAU phiếu chốt ca,
+        // nếu không neo after_stock giữ số kho chưa trừ rút → tồn thổi phồng vĩnh viễn.
+        const rowCreatedAt = existing?.created_at ? new Date(existing.created_at).getTime() : null
+        if (rowCreatedAt != null && Object.keys(restockDeltas).length) {
+            const round1 = (x) => Math.round(x * 10) / 10
+            for (const e of localRepo.fetchAllLocalExpenses(addressId)) {
+                const d = e.is_refill ? restockDeltas[e.metadata?.ingredient] : undefined
+                if (!d || e.metadata?.cancelled || e.metadata?.after_stock == null) continue
+                if (new Date(e.created_at).getTime() <= rowCreatedAt) continue
+                localRepo.updateLocalExpense(e.id, {
+                    metadata: {
+                        ...e.metadata,
+                        before_stock: round1((Number(e.metadata.before_stock) || 0) - d),
+                        after_stock: round1((Number(e.metadata.after_stock) || 0) - d),
+                    },
+                })
+            }
         }
         const payload = { address_id: addressId, closed_by: closedBy, inventory_report: report }
         if (!existing?.id) payload.system_total_revenue = systemTotalRevenue

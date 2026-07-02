@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { formatVND, parseVNDInput } from '../../utils'
 import { ingredientLabel, normalizeIngredientCategory, INGREDIENT_CATEGORIES } from '../../utils/ingredients'
-import { isSameDayVN } from '../../utils/dateVN'
 import { computeCashFlowTotals } from '../../utils/reportStats'
 import { useProducts } from '../../contexts/ProductContext'
 
@@ -82,45 +81,6 @@ export default function CashFlowCard({
         inShiftRefillCash, inShiftOpsCash,
     } = computeCashFlowTotals({ liveCash, liveTransfer, payments, shiftExpenses, afterShiftExpenses: afterShiftOps })
 
-    // Roll up NVL payments by ingredient/name, tách thành 2 nhóm:
-    //   - todayPurchases: payment paid_at cùng ngày invoice (= đi chợ trả ngay/1 phần ngay)
-    //   - debtRepayments: payment cho invoice tạo ngày khác (= trả nợ cũ)
-    // Cần JOIN-supplied `invoice_metadata` để so sánh; nếu thiếu (orphan) thì coi như debt.
-    // Map<expense_id, invoice.created_at> dựng từ expenses[] để bắt invoice cùng ngày của payments.
-    const invoiceCreatedById = new Map(
-        (expenses || []).filter(e => e.is_refill).map(e => [e.id, e.created_at])
-    )
-    // Bucket comparisons must use VN-tz dates — browser-local getFullYear/Month/Date
-    // would flip the bucket near midnight UTC for any non-VN device.
-    const groupByInvoice = (list) => {
-        const byName = new Map()
-        for (const p of list) {
-            const ing = p.invoice_metadata?.ingredient
-            const name = ing ? ingredientLabel(ing) : (p.invoice_name || 'Trả NCC')
-            const invDate = invoiceCreatedById.get(p.expense_id)
-            // Hiển thị ngày invoice cho debt repayments để user biết "trả nợ ngày nào".
-            const display = (() => {
-                if (!invDate) return name
-                const d = new Date(invDate)
-                return `${name} · ${d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`
-            })()
-            let g = byName.get(display)
-            if (!g) { g = { name: display, amount: 0, count: 0, key: p.id, hasIn: false, hasPost: false, hasCash: false, hasTransfer: false }; byName.set(display, g) }
-            g.amount += p.amount || 0
-            g.count += 1
-            if (paymentPhase(p) === 'in_shift') g.hasIn = true; else g.hasPost = true
-            if (methodOf(p) === 'transfer') g.hasTransfer = true; else g.hasCash = true
-        }
-        return [...byName.values()].map(g => ({ ...g, phase: groupPhase(g.hasIn, g.hasPost), method: groupMethod(g.hasCash, g.hasTransfer) }))
-    }
-    const purchaseToday = []
-    const debtRepayments = []
-    for (const p of nvlPayments) {
-        const invCreated = invoiceCreatedById.get(p.expense_id)
-        if (invCreated && isSameDayVN(invCreated, p.paid_at)) purchaseToday.push(p)
-        else debtRepayments.push(p)
-    }
-
     // Gộp đi chợ theo TÊN nguyên liệu, bỏ ngày (scope nhiều ngày tên lặp lại mỗi
     // ngày → 1 dòng/nguyên liệu ×số lần + tổng, sắp theo tổng giảm dần). Chi tiết
     // từng ngày xem ở Nhật ký của nguyên liệu đó.
@@ -186,8 +146,11 @@ export default function CashFlowCard({
         b.sortKey = Math.min(b.sortKey, sortKey)
         return b
     }
+    // Mọi payment NVL (đi chợ trả ngay LẪN trả nợ cũ) gom chung 1 lượt theo tên
+    // nguyên liệu — báo cáo dòng tiền chỉ quan tâm tiền ra trong kỳ, không phân
+    // biệt trả cho hoá đơn ngày nào.
     for (const cat of INGREDIENT_CATEGORIES) {
-        const pays = purchaseToday.filter(p => (catByKey.get(p.invoice_metadata?.ingredient) || 'main') === cat.key)
+        const pays = nvlPayments.filter(p => (catByKey.get(p.invoice_metadata?.ingredient) || 'main') === cat.key)
         if (pays.length === 0) continue
         const b = ensureBlock(cat.key === 'packaging' ? 'Mua bao bì' : 'Mua nguyên liệu', cat.key === 'packaging' ? 20 : 10)
         for (const r of groupByIngredient(pays)) {
@@ -203,16 +166,6 @@ export default function CashFlowCard({
         b.children.push({ key: e.id, date: dayMonth(e.created_at), name: capFirst(e.name || label), amount: e.amount, phase: phase === 'inShift' ? 'in_shift' : 'post_close', method: methodOf(e) })
     }
     const inventoryBlocks = [...invBlocks.values()].sort((a, b) => a.sortKey - b.sortKey || a.label.localeCompare(b.label, 'vi'))
-    // Trả nợ cũ giữ nhóm theo hoá đơn (tên · ngày hoá đơn gốc).
-    const debtRows = groupByInvoice(debtRepayments)
-    if (debtRows.length > 0) {
-        inventoryBlocks.push({
-            label: 'Trả nợ cũ',
-            total: debtRepayments.reduce((s, p) => s + (p.amount || 0), 0),
-            count: debtRepayments.length,
-            children: debtRows.map(r => ({ key: r.key, name: r.name, amount: r.amount, count: r.count, phase: r.phase, method: r.method })),
-        })
-    }
     const inventoryTotal = inventoryBlocks.reduce((s, b) => s + b.total, 0)
 
     return (
