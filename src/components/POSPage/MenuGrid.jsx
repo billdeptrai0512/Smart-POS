@@ -76,9 +76,9 @@ function ProductCard({ product, qty, onAdd, onCancel, onCommit, pressingRef }) {
     // Shared circle: green fill (while pressing) under an X, swapped to ✓ once the
     // hold engages. Rendered in a bare span during a press, or the cancel button at rest.
     const badge = (
-        <span className="relative w-7 h-7 rounded-full flex items-center justify-center shadow-lg border-2 border-primary/10 overflow-hidden bg-text">
+        <span className="relative w-7 h-7 rounded-full flex items-center justify-center shadow-lg border-2 border-white/20 overflow-hidden bg-primary">
             {pressing && <span onAnimationStart={fillStart} onAnimationEnd={fillDone} className="absolute inset-0 bg-success origin-bottom hold-fill" />}
-            <span className="relative z-10 text-bg">
+            <span className="relative z-10 text-white">
                 {engaged ? <Check size={15} strokeWidth={3} /> : <X size={15} strokeWidth={3} />}
             </span>
         </span>
@@ -103,9 +103,9 @@ function ProductCard({ product, qty, onAdd, onCancel, onCommit, pressingRef }) {
                     onAdd(product)
                 }
             }}
-            className={`menu-btn relative rounded-[1.5rem] p-3 sm:p-4 text-left min-h-[100px] flex flex-col justify-between border cursor-pointer transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-primary/30 ${held
-                ? 'bg-gradient-to-br from-primary/15 to-primary/5 border-primary/40 shadow-[0_8px_24px_var(--color-primary-glow)] ring-1 ring-primary/20'
-                : 'bg-surface border-border/60 shadow-sm hover:border-text/30 hover:shadow-md hover:bg-surface-hover'
+            className={`menu-btn relative rounded-[1.5rem] p-3 sm:p-4 text-left min-h-[100px] flex flex-col justify-between cursor-pointer transition-all duration-300 focus:outline-none focus-visible:ring-4 focus-visible:ring-primary/30 ${held
+                ? 'bg-surface border-2 border-primary shadow-[0_8px_24px_var(--color-primary-glow)]'
+                : 'bg-surface border border-border/60 shadow-sm hover:border-text/30 hover:shadow-md hover:bg-surface-hover'
                 }`}
         >
             {/* Glow Effect */}
@@ -136,14 +136,14 @@ function ProductCard({ product, qty, onAdd, onCancel, onCommit, pressingRef }) {
 
             {/* Top: Name */}
             <div className="relative z-10 w-full">
-                <h3 className={`font-black text-[15px] sm:text-[16px] leading-tight break-words pt-0.25 ${held ? 'text-primary drop-shadow-sm' : 'text-text'}`}>
+                <h3 className="font-black text-[15px] sm:text-[16px] leading-tight break-words pt-0.25 text-text">
                     {product.name}
                 </h3>
             </div>
 
             {/* Bottom: Price */}
             <div className="flex items-end justify-between mt-3 relative z-10 w-full gap-2">
-                <span className={`font-extrabold text-[13px] pb-1 ${held ? 'text-primary/90' : 'text-text-secondary'}`}>
+                <span className={`font-extrabold text-[13px] pb-1 ${held ? 'text-primary' : 'text-text-secondary'}`}>
                     {formatVND(product.price)}
                 </span>
             </div>
@@ -195,9 +195,9 @@ function ExtrasPopover({ activeProductId, extras, activeItem, enabledStickyExtra
                         <button
                             key={ex.id}
                             onClick={() => onToggleExtra(ex)}
-                            className={`shrink-0 h-[34px] px-3 rounded-[10px] border font-bold text-[12px] whitespace-nowrap focus:outline-none transition-all shadow-sm uppercase flex items-center gap-1.5 ${on ? 'bg-primary/10 border-primary/50 text-primary' : 'bg-surface-light border-border/80 text-text-secondary hover:text-text'}`}
+                            className={`shrink-0 h-[34px] px-3 rounded-[10px] border font-bold text-[12px] whitespace-nowrap focus:outline-none transition-all shadow-sm uppercase flex items-center gap-1.5 ${on ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/80 text-text-secondary hover:text-text'}`}
                         >
-                            {on && <span className="w-1.5 h-1.5 rounded-full bg-primary mb-[1px]" />}
+                            {on && <span className="w-1.5 h-1.5 rounded-full bg-warning mb-[1px]" />}
                             {ex.name}
                         </button>
                     )

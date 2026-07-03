@@ -15,9 +15,11 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
     const [phoneOpen, setPhoneOpen] = useState(false)
     const phone = profile?.phone
 
-    // Value: focus → text-text 85%, không focus → secondary. Icon: focus → primary (accent), không focus → secondary.
-    const valColor = (on) => on ? 'text-text opacity-[0.85]' : 'text-text-secondary'
-    const iconColor = (on) => on ? 'text-primary' : 'text-text-secondary'
+    // Card focus = nền primary đặc → chữ trắng theo brand mockup (WCAG chỉ ~2.8:1
+    // nhưng font-black + APCA đọc tốt; đây là lựa chọn thương hiệu có chủ đích).
+    const valColor = (on) => on ? 'text-white' : 'text-text-secondary'
+    const iconColor = (on) => on ? 'text-white' : 'text-text-secondary'
+    const lblColor = (on) => on ? 'text-white/70' : 'text-text-secondary'
 
     return (
         <header className="shrink-0 pt-6 pb-6 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)] relative z-20">
@@ -28,18 +30,18 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
                         <button
                             onClick={() => { setActiveTab('branches'); setError('') }}
                             className={`rounded-[20px] p-3 sm:p-3.5 border text-left flex flex-col justify-between gap-[2px] relative overflow-hidden transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${activeTab === 'branches'
-                                ? 'bg-primary/5 border-primary/20 shadow-[0_4px_20px_rgba(242,119,77,0.08)]'
+                                ? 'bg-linear-to-b from-primary to-primary-dark border-primary shadow-[0_4px_20px_rgba(244,119,75,0.3)]'
                                 : 'bg-bg border-border/60 hover:bg-surface-light'}`}
                         >
                             <div className="flex flex-col justify-between items-start relative z-10 mb-[8px] gap-[3px] min-w-0 w-full">
-                                <span className="text-[12px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider truncate w-full">Xin chào</span>
+                                <span className={`text-[12px] sm:text-[13px] font-bold uppercase tracking-wider truncate w-full ${lblColor(activeTab === 'branches')}`}>Xin chào</span>
                                 <span className={`text-[15px] sm:text-[16px] font-black tracking-tight leading-tight truncate w-full ${valColor(activeTab === 'branches')}`}>
                                     {profile?.name || '...'}
                                 </span>
                             </div>
-                            <div className={`w-full h-[1px] rounded-full relative z-10 my-[3px] mt-[4px] ${activeTab === 'branches' ? 'bg-primary/20' : 'bg-border/60'}`} />
+                            <div className={`w-full h-[1px] rounded-full relative z-10 my-[3px] mt-[4px] ${activeTab === 'branches' ? 'bg-white/25' : 'bg-border/60'}`} />
                             <div className="flex flex-col justify-between items-start relative z-10 mt-[2px] w-full gap-[3px]">
-                                <span className="text-[12px] sm:text-[13px] text-text-secondary font-black uppercase tracking-wider">Địa chỉ</span>
+                                <span className={`text-[12px] sm:text-[13px] font-black uppercase tracking-wider ${lblColor(activeTab === 'branches')}`}>Địa chỉ</span>
                                 <div className="flex items-center gap-1.5">
                                     <Building2 size={15} className={iconColor(activeTab === 'branches')} />
                                     <span className={`text-[14px] sm:text-[14px] font-black uppercase tracking-wider ${valColor(activeTab === 'branches')}`}>
@@ -50,7 +52,7 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
 
 
                             {activeTab === 'branches' && (
-                                <div className="absolute bottom-0 right-0 w-20 h-20 bg-primary/10 rounded-full blur-2xl -mr-8 -mb-8 pointer-events-none" />
+                                <div className="absolute bottom-0 right-0 w-20 h-20 bg-white/15 rounded-full blur-2xl -mr-8 -mb-8 pointer-events-none" />
                             )}
                         </button>
 
@@ -58,7 +60,7 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
                         <button
                             onClick={() => { setActiveTab('staff'); setError('') }}
                             className={`rounded-[20px] p-3 sm:p-3.5 border text-left flex flex-col justify-between gap-[2px] relative overflow-hidden transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${activeTab === 'staff'
-                                ? 'bg-primary/5 border-primary/20 shadow-[0_4px_20px_rgba(242,119,77,0.08)]'
+                                ? 'bg-linear-to-b from-primary to-primary-dark border-primary shadow-[0_4px_20px_rgba(244,119,75,0.3)]'
                                 : 'bg-bg border-border/60 hover:bg-surface-light'}`}
                         >
                             {/* SĐT — span role=button (tránh button lồng button gây hydration error) */}
@@ -68,14 +70,14 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
                                 onClick={(e) => { e.stopPropagation(); setPhoneOpen(true) }}
                                 className="flex flex-col items-start relative z-10 mb-[8px] w-full cursor-pointer gap-[3px]"
                             >
-                                <span className="text-[12px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider truncate w-full">Điện thoại</span>
-                                <span className={`text-[14px] sm:text-[14px] font-black tracking-tight leading-tight truncate w-full ${phone ? valColor(activeTab === 'staff') : 'text-text-secondary/60'}`}>
+                                <span className={`text-[12px] sm:text-[13px] font-bold uppercase tracking-wider truncate w-full ${lblColor(activeTab === 'staff')}`}>Điện thoại</span>
+                                <span className={`text-[14px] sm:text-[14px] font-black tracking-tight leading-tight truncate w-full ${phone ? valColor(activeTab === 'staff') : (activeTab === 'staff' ? 'text-white/50' : 'text-text-secondary/60')}`}>
                                     {phone ? formatPhoneVN(phone) : '—'}
                                 </span>
                             </span>
-                            <div className={`w-full h-[1px] rounded-full relative z-10 my-[2px]  ${activeTab === 'staff' ? 'bg-primary/20' : 'bg-border/60'}`} />
+                            <div className={`w-full h-[1px] rounded-full relative z-10 my-[2px]  ${activeTab === 'staff' ? 'bg-white/25' : 'bg-border/60'}`} />
                             <div className="flex flex-col justify-between items-start relative z-10 mt-[2px] w-full gap-[3px]">
-                                <span className="text-[12px] sm:text-[13px] text-text-secondary font-black uppercase tracking-wider">Nhân sự</span>
+                                <span className={`text-[12px] sm:text-[13px] font-black uppercase tracking-wider ${lblColor(activeTab === 'staff')}`}>Nhân sự</span>
                                 <div className="flex items-center gap-1.5">
                                     <Users size={15} className={iconColor(activeTab === 'staff')} />
                                     <span className={`text-[14px] sm:text-[14px] font-black uppercase tracking-wider ${valColor(activeTab === 'staff')}`}>
@@ -84,7 +86,7 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
                                 </div>
                             </div>
                             {activeTab === 'staff' && (
-                                <div className="absolute bottom-0 right-0 w-20 h-20 bg-primary/10 rounded-full blur-2xl -mr-8 -mb-8 pointer-events-none" />
+                                <div className="absolute bottom-0 right-0 w-20 h-20 bg-white/15 rounded-full blur-2xl -mr-8 -mb-8 pointer-events-none" />
                             )}
                         </button>
                     </div>

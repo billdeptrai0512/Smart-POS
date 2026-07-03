@@ -60,7 +60,7 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                     onClick={onOpenHistory}
                     role="button"
                     tabIndex={0}
-                    className="cursor-pointer bg-primary/5 rounded-[20px] p-3 sm:p-3.5 border border-primary/10 shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full hover:bg-primary/10 active:bg-primary/15 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    className="cursor-pointer bg-linear-to-b from-primary to-primary-dark rounded-[20px] p-3 sm:p-3.5 border border-primary shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full hover:brightness-105 active:brightness-95 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40"
                 >
                     {/* <div className="flex flex-col justify-between relative z-10">
                         <span className="text-[12px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider">{dayName}</span>
@@ -71,8 +71,8 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
 
                     <div className="flex flex-col justify-between items-start relative z-10 w-full">
                         <div className="flex items-center justify-between w-full">
-                            <span className="text-[12px] sm:text-[13px] text-primary font-black uppercase tracking-wider">Nhật ký</span>
-                            <ArrowRight size={20} strokeWidth={2.5} className="text-text shrink-0" />
+                            <span className="text-[12px] sm:text-[13px] text-white font-black uppercase tracking-wider">Nhật ký</span>
+                            <ArrowRight size={20} strokeWidth={2.5} className="text-white shrink-0" />
                         </div>
                         <div className="w-full">
                             {rows.length > 0 ? (
@@ -80,9 +80,9 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                                     {rows.map((r) => (
                                         <div
                                             key={r.key}
-                                            className={`${r.isNew ? 'order-enter' : ''} flex items-baseline gap-2 px-1 -mx-1 rounded text-[12px] font-bold uppercase tracking-tight leading-snug ${r.draft ? 'text-primary' : 'text-text-primary'}`}
+                                            className={`${r.isNew ? 'order-enter' : ''} flex items-baseline gap-2 px-1 -mx-1 rounded text-[12px] font-bold uppercase tracking-tight leading-snug text-white`}
                                         >
-                                            <span className={`shrink-0 text-[15px] leading-none ${r.draft ? 'text-primary' : 'text-text-secondary'}`}>•</span>
+                                            <span className={`shrink-0 text-[15px] leading-none ${r.draft ? 'text-white' : 'text-white/70'}`}>•</span>
                                             <span className="line-clamp-1">
                                                 {r.draft ? <Typewriter key={r.typeKey} text={r.text} /> : r.text}
                                             </span>
@@ -90,11 +90,11 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                                     ))}
                                 </div>
                             ) : (
-                                <span className="text-[13px] font-bold text-text-secondary">Chưa có đơn</span>
+                                <span className="text-[13px] font-bold text-white/70">Chưa có đơn</span>
                             )}
                         </div>
                     </div>
-                    <div className="absolute bottom-0 right-0 w-24 h-24 bg-primary/10 rounded-full blur-2xl -mr-10 -mb-10 pointer-events-none" />
+                    <div className="absolute bottom-0 right-0 w-24 h-24 bg-white/15 rounded-full blur-2xl -mr-10 -mb-10 pointer-events-none" />
                 </div>
             </div>
         </header >
