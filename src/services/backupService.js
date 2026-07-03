@@ -32,11 +32,19 @@ import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 
 // Read a source address (RLS-scoped to current user) into a snapshot.
 async function readSnapshot(sourceAddressId) {
-    const { data: products, error: e1 } = await supabase
+    let { data: products, error: e1 } = await supabase
         .from('products')
-        .select('id, name, price, sort_order, count_as_cup')
+        .select('id, name, price, sort_order, count_as_cup, is_divider')
         .eq('owner_address_id', sourceAddressId)
         .eq('is_active', true)
+    // 42703: cột is_divider chưa có (migration 20260703_menu_divider chưa chạy)
+    if (e1?.code === '42703') {
+        ({ data: products, error: e1 } = await supabase
+            .from('products')
+            .select('id, name, price, sort_order, count_as_cup')
+            .eq('owner_address_id', sourceAddressId)
+            .eq('is_active', true))
+    }
     if (e1) throw new Error('Lỗi khi đọc menu nguồn: ' + e1.message)
 
     const { data: recipes, error: e2 } = await supabase
@@ -134,6 +142,9 @@ async function applySnapshot(targetAddressId, snapshot, options, onProgress) {
                     count_as_cup: p.count_as_cup ?? true,
                     is_active: true,
                     owner_address_id: targetAddressId,
+                    // Chỉ gửi cột khi true: nguồn có divider nghĩa là DB đã migrate;
+                    // snapshot cũ không có field này thì insert vẫn chạy pre-migration.
+                    ...(p.is_divider ? { is_divider: true } : {}),
                 }
             })
             const { error: insErr } = await supabase.from('products').insert(rows)

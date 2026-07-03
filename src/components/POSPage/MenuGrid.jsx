@@ -4,6 +4,8 @@ import { formatVND } from '../../utils'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useProducts } from '../../contexts/ProductContext'
+import MenuDivider from '../common/MenuDivider'
+import { computeExtrasAfterIdx } from '../../utils/menuGridLayout'
 
 // The WHOLE card is the gesture surface. A green fill rises on the corner badge
 // while you hold and COMMITS the order when the fill completes (on its animationend,
@@ -235,11 +237,10 @@ export default function MenuGrid({ products, cart, onAddItem, onCancelHeld, onCo
     // Insert the extras bar after the END of the active card's row (its right-col
     // neighbour, or the card itself if it's right-col / last) so the full-width
     // span drops to a fresh row with no empty grid slot beside it.
-    const extrasAfterIdx = activeIdx < 0 ? -1
-        : activeIdx % 2 === 0 ? Math.min(activeIdx + 1, products.length - 1)
-            : activeIdx
+    const extrasAfterIdx = computeExtrasAfterIdx(products, activeIdx)
 
-    if (products.length === 0) {
+    // every([]) = true → giữ hành vi menu rỗng; menu chỉ toàn divider cũng coi là chưa có món
+    if (products.every(p => p.is_divider)) {
         const isLoading = loading
         const hasError = !!loadError
         const title = isLoading
@@ -285,7 +286,9 @@ export default function MenuGrid({ products, cart, onAddItem, onCancelHeld, onCo
 
     const gridItems = []
     products.forEach((product, idx) => {
-        gridItems.push(
+        gridItems.push(product.is_divider ? (
+            <MenuDivider key={product.id} name={product.name} />
+        ) : (
             <ProductCard
                 key={product.id}
                 product={product}
@@ -295,7 +298,7 @@ export default function MenuGrid({ products, cart, onAddItem, onCancelHeld, onCo
                 onCommit={onCommitHeld}
                 pressingRef={pressingRef}
             />
-        )
+        ))
         if (idx === extrasAfterIdx) {
             gridItems.push(
                 <ExtrasPopover

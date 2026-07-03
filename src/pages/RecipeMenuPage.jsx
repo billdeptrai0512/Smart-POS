@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Plus, X, ArrowUpDown } from 'lucide-react'
+import { Plus, X, ArrowUpDown, Minus } from 'lucide-react'
 import FabActionMenu from '../components/common/FabActionMenu'
+import MenuDivider from '../components/common/MenuDivider'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
-import { upsertProductPrice, insertProduct, updateProductSortOrder } from '../services/orderService'
+import { upsertProductPrice, insertProduct, updateProductSortOrder, updateProductName, removeProductFromAddress } from '../services/orderService'
 import { parseVNDInput } from '../utils'
 import { useToast } from '../hooks/useToast'
 import Toast from '../components/POSPage/Toast'
@@ -37,6 +38,9 @@ export default function RecipeMenuPage() {
     const [sortedProducts, setSortedProducts] = useState([])
     const [selectedSortProductId, setSelectedSortProductId] = useState(null)
     const [showCreateModal, setShowCreateModal] = useState(false)
+    // {mode:'create'} | {mode:'edit', id} — modal tạo/sửa mục (divider phân nhóm menu)
+    const [dividerModal, setDividerModal] = useState(null)
+    const [dividerName, setDividerName] = useState('')
 
     const mainRef = useRef(null)
 
@@ -96,6 +100,37 @@ export default function RecipeMenuPage() {
         }
     }
 
+    async function saveDivider() {
+        const name = dividerName.trim()
+        if (!name) return
+        setSaving(true)
+        try {
+            if (dividerModal.mode === 'create') await insertProduct(name, 0, selectedAddress?.id, true)
+            else await updateProductName(dividerModal.id, name)
+            refreshProducts?.()
+            setDividerModal(null)
+            showToast(dividerModal.mode === 'create' ? 'Đã tạo mục' : 'Đã đổi tên mục', 'success')
+        } catch (err) {
+            showError(err, 'Lưu mục')
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    async function deleteDivider() {
+        setSaving(true)
+        try {
+            await removeProductFromAddress(dividerModal.id, selectedAddress?.id)
+            refreshProducts?.()
+            setDividerModal(null)
+            showToast('Đã xóa mục', 'success')
+        } catch (err) {
+            showError(err, 'Xóa mục')
+        } finally {
+            setSaving(false)
+        }
+    }
+
     const enterSortMode = () => { setSortedProducts([...products]); setIsSorting(true); setSelectedSortProductId(null) }
     const cancelSortMode = () => { setIsSorting(false); setSortedProducts([]); setSelectedSortProductId(null) }
 
@@ -129,7 +164,7 @@ export default function RecipeMenuPage() {
             <Toast toast={toast} />
 
             <RecipeMenuHeader
-                productCount={products.length}
+                productCount={products.filter(p => !p.is_divider).length}
                 onBack={() => goToMenuStep('recipes', -1, { navigate, backTo, wizard: location.state?.wizard })}
                 onForward={() => goToMenuStep('recipes', +1, { navigate, backTo, wizard: location.state?.wizard })}
                 activeTab="recipes"
@@ -145,14 +180,20 @@ export default function RecipeMenuPage() {
                     <SortableList
                         items={sortedProducts}
                         getKey={p => p.id}
-                        getLabel={p => p.name}
+                        getLabel={p => p.is_divider ? `——— ${p.name} ———` : p.name}
                         selectedKey={selectedSortProductId}
                         onSelect={setSelectedSortProductId}
                         onMove={moveProduct}
                     />
                 ) : (
                     <div className="grid grid-cols-2 gap-3">
-                        {products.map(product => (
+                        {products.map(product => product.is_divider ? (
+                            <MenuDivider
+                                key={product.id}
+                                name={product.name}
+                                onClick={canEdit ? () => { setDividerName(product.name); setDividerModal({ mode: 'edit', id: product.id }) } : undefined}
+                            />
+                        ) : (
                             <ProductCard
                                 key={product.id}
                                 product={product}
@@ -194,6 +235,7 @@ export default function RecipeMenuPage() {
                             <FabActionMenu
                                 items={[
                                     { key: 'sort', icon: <ArrowUpDown size={14} />, label: 'Sắp xếp', onClick: enterSortMode },
+                                    { key: 'divider', icon: <Minus size={14} />, label: 'Tạo mục', onClick: () => { setDividerName(''); setDividerModal({ mode: 'create' }) } },
                                     { key: 'create', icon: <Plus size={14} />, label: 'Tạo món', onClick: () => setShowCreateModal(true) },
                                 ]}
                             />
@@ -227,6 +269,55 @@ export default function RecipeMenuPage() {
                             onPriceChange={setNewProductPrice}
                             onSubmit={handleCreateProduct}
                         />
+                    </div>
+                </div>
+            )}
+
+            {dividerModal && (
+                <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={() => !saving && setDividerModal(null)}>
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+                    <div
+                        className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between">
+                            <span className="text-[16px] font-black text-text">{dividerModal.mode === 'create' ? 'Tạo mục' : 'Sửa mục'}</span>
+                            <button
+                                onClick={() => setDividerModal(null)}
+                                disabled={saving}
+                                className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all disabled:opacity-50"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <p className="text-[13px] text-text-secondary -mt-2">Mục là dòng tiêu đề ——— tên ——— để phân nhóm menu trên trang bán hàng.</p>
+                        <input
+                            autoFocus
+                            value={dividerName}
+                            onChange={e => setDividerName(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') saveDivider() }}
+                            disabled={saving}
+                            placeholder="Tên mục (vd: Cà phê, Trà, Topping)"
+                            className="w-full px-4 py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50"
+                        />
+                        <div className="flex gap-2">
+                            {dividerModal.mode === 'edit' && (
+                                <button
+                                    onClick={deleteDivider}
+                                    disabled={saving}
+                                    className="flex-1 py-3 rounded-[12px] bg-danger-soft text-danger font-black text-[14px] active:scale-95 transition-all disabled:opacity-50"
+                                >
+                                    Xóa mục
+                                </button>
+                            )}
+                            <button
+                                onClick={saveDivider}
+                                disabled={saving || !dividerName.trim()}
+                                className="flex-1 py-3 rounded-[12px] bg-primary text-bg font-black text-[14px] hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50"
+                            >
+                                {dividerModal.mode === 'create' ? 'Tạo mục' : 'Lưu'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

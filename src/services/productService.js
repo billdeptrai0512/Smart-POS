@@ -8,15 +8,16 @@ export async function fetchProducts(addressId) {
     if (localRepo.isGuest()) return localRepo.fetchLocalProducts(addressId)
     if (!supabase) return []
 
-    let query = supabase.from('products').select('id, name, price, is_active, owner_address_id, sort_order, count_as_cup').eq('is_active', true)
-
-    if (addressId) {
-        query = query.eq('owner_address_id', addressId)
-    } else {
-        query = query.is('owner_address_id', null)
+    const run = (cols) => {
+        let q = supabase.from('products').select(cols).eq('is_active', true)
+        return addressId ? q.eq('owner_address_id', addressId) : q.is('owner_address_id', null)
     }
 
-    const { data: prods, error } = await query
+    let { data: prods, error } = await run('id, name, price, is_active, owner_address_id, sort_order, count_as_cup, is_divider')
+    // 42703: cột is_divider chưa có (migration 20260703_menu_divider chưa chạy) → fetch không có nó
+    if (error?.code === '42703') {
+        ({ data: prods, error } = await run('id, name, price, is_active, owner_address_id, sort_order, count_as_cup'))
+    }
 
     if (error) {
         console.error('fetchProducts error:', error)
@@ -68,12 +69,15 @@ export async function updateProductCountAsCup(productId, countAsCup) {
     if (error) throw error
 }
 
-// Create a new product and link to the current address
-export async function insertProduct(name, price, addressId = null) {
-    if (localRepo.isGuest()) return localRepo.insertLocalProduct({ name, price, owner_address_id: addressId })
+// Create a new product and link to the current address.
+// isDivider: dòng tiêu đề phân nhóm menu (không phải món bán) — chỉ gửi cột
+// is_divider khi true để insert món thường vẫn chạy trước khi migration apply.
+export async function insertProduct(name, price, addressId = null, isDivider = false) {
+    if (localRepo.isGuest()) return localRepo.insertLocalProduct({ name, price, owner_address_id: addressId, is_divider: isDivider })
     if (!supabase) throw new Error('No Supabase connection')
 
     const payload = { name, price }
+    if (isDivider) payload.is_divider = true
     if (addressId) payload.owner_address_id = addressId
 
     let query = supabase.from('products').select('sort_order')
