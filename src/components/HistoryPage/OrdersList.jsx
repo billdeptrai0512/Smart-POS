@@ -28,8 +28,11 @@ export default function OrdersList({
             )}
 
             {isLoading ? (
-                <div className="flex justify-center py-10">
-                    <span className="text-text-secondary font-medium">Đang tải...</span>
+                /* Skeleton giữ chỗ theo hình dáng OrderCard — cùng pattern ExpensePanel/DailyReport */
+                <div className="flex flex-col gap-3 animate-pulse">
+                    {[0, 1, 2].map(i => (
+                        <div key={i} className="bg-surface-light rounded-[20px] h-32 w-full" />
+                    ))}
                 </div>
             ) : orders.length === 0 ? (
                 <div className="flex justify-center py-10">

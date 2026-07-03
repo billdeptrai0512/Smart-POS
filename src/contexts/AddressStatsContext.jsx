@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, useMemo, useCal
 import { Outlet } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import { useAddress } from './AddressContext'
-import { fetchBranchesTodayStats, fetchActiveSessions, fetchStaffByManager } from '../services/authService'
+import { fetchBranchesTodayStats, fetchStaffByManager } from '../services/authService'
 
 const AddressStatsContext = createContext(null)
 
@@ -21,6 +21,7 @@ export function AddressStatsProvider() {
 
     const [cupsMap, setCupsMap] = useState({})
     const [revenueMap, setRevenueMap] = useState({})
+    const [prevRevenueMap, setPrevRevenueMap] = useState({})
     const [sessionsMap, setSessionsMap] = useState({})
     const [staffList, setStaffList] = useState([])
     const [statsLoading, setStatsLoading] = useState(false)
@@ -34,10 +35,8 @@ export function AddressStatsProvider() {
         const addrIds = addresses.map(a => a.id)
         setStatsLoading(true)
         try {
-            const [{ cupsMap: cups, revenueMap: revenue }, sessions] = await Promise.all([
-                fetchBranchesTodayStats(addrIds),
-                fetchActiveSessions(addrIds)
-            ])
+            // 1 RPC duy nhất trả cả stats + sessions (kèm tên/role) + prev — was 3 round-trips.
+            const { cupsMap: cups, revenueMap: revenue, prevRevenueMap: prevRevenue, sessionsMap: sessions } = await fetchBranchesTodayStats(addrIds)
             if (cancelRef.current) return
             const filledCups = {}, filledRev = {}
             addrIds.forEach(id => {
@@ -46,12 +45,8 @@ export function AddressStatsProvider() {
             })
             setCupsMap(filledCups)
             setRevenueMap(filledRev)
-            const grouped = {}
-            sessions.forEach(s => {
-                if (!grouped[s.address_id]) grouped[s.address_id] = []
-                grouped[s.address_id].push({ name: s.users?.name || 'Unknown', role: s.users?.role })
-            })
-            setSessionsMap(grouped)
+            setPrevRevenueMap(prevRevenue)
+            setSessionsMap(sessions)
         } finally {
             if (!cancelRef.current) setStatsLoading(false)
         }
@@ -99,6 +94,7 @@ export function AddressStatsProvider() {
         <AddressStatsContext.Provider value={{
             cupsMap,
             revenueMap,
+            prevRevenueMap,
             sessionsMap,
             staffList,
             statsLoading,

@@ -437,22 +437,40 @@ export async function fetchActiveSessions(addressIds) {
     return data.map(s => ({ ...s, users: userById[s.user_id] || {} }))
 }
 
-// Fetch today's cup count + revenue for multiple addresses in one RPC call.
-// Returns { cupsMap, revenueMap } so AddressSelectPage can render both in a
-// single round-trip. Falls back to two legacy queries if the RPC isn't
-// deployed yet.
+// Group fetchActiveSessions rows into { addressId: [{ name, role }] } — dùng làm
+// fallback khi RPC gộp sessions chưa deploy (see 20260703_branches_stats_include_sessions).
+async function legacySessionsMap(addressIds) {
+    const sessions = await fetchActiveSessions(addressIds)
+    const grouped = {}
+    for (const s of sessions) {
+        if (!grouped[s.address_id]) grouped[s.address_id] = []
+        grouped[s.address_id].push({ name: s.users?.name || 'Unknown', role: s.users?.role })
+    }
+    return grouped
+}
+
+// Fetch today's cup count + revenue + active sessions (kèm tên/role) for multiple
+// addresses in ONE RPC round-trip (was 3 sequential queries at login). Returns
+// { cupsMap, revenueMap, sessionsMap }. Falls back to legacy queries if the
+// updated RPC isn't deployed yet.
 export async function fetchBranchesTodayStats(addressIds) {
-    if (isGuest()) return { cupsMap: {}, revenueMap: {} }
-    if (!supabase || !addressIds?.length) return { cupsMap: {}, revenueMap: {} }
+    const empty = { cupsMap: {}, revenueMap: {}, prevRevenueMap: {}, prevCupsMap: {}, sessionsMap: {} }
+    if (isGuest()) return empty
+    if (!supabase || !addressIds?.length) return empty
 
     const { data, error } = await supabase.rpc('get_branches_today_stats', { p_address_ids: addressIds })
     if (!error && Array.isArray(data)) {
-        const cupsMap = {}, revenueMap = {}
+        const cupsMap = {}, revenueMap = {}, prevRevenueMap = {}, prevCupsMap = {}, sessionsMap = {}
         for (const row of data) {
             cupsMap[row.address_id] = Number(row.cups || 0)
             revenueMap[row.address_id] = Number(row.revenue || 0)
+            prevRevenueMap[row.address_id] = Number(row.prev_revenue || 0)
+            prevCupsMap[row.address_id] = Number(row.prev_cups || 0)
+            sessionsMap[row.address_id] = (row.sessions || []).map(s => ({ name: s.name || 'Unknown', role: s.role }))
         }
-        return { cupsMap, revenueMap }
+        // RPC bản cũ chưa có cột sessions (hoặc trả rỗng vì chưa migrate) → lấy rời như trước.
+        const hasSessions = data.length > 0 && data[0].sessions !== undefined
+        return { cupsMap, revenueMap, prevRevenueMap, prevCupsMap, sessionsMap: hasSessions ? sessionsMap : await legacySessionsMap(addressIds) }
     }
 
     if (error && error.code !== 'PGRST202' && error.code !== '42883') {
@@ -478,5 +496,6 @@ export async function fetchBranchesTodayStats(addressIds) {
         cupsMap[order.address_id] = (cupsMap[order.address_id] || 0) + qty
         revenueMap[order.address_id] = (revenueMap[order.address_id] || 0) + (order.total || 0)
     })
-    return { cupsMap, revenueMap }
+    // Legacy fallback không tính prev — thiếu delta thì card chỉ ẩn phần ↑/↓%.
+    return { cupsMap, revenueMap, prevRevenueMap: {}, prevCupsMap: {}, sessionsMap: await legacySessionsMap(addressIds) }
 }

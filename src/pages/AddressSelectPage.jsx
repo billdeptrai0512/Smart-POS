@@ -19,7 +19,7 @@ import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 
 export default function AddressSelectPage() {
     const { addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading, fetchError } = useAddress()
-    const { cupsMap, revenueMap, sessionsMap, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
+    const { cupsMap, revenueMap, prevRevenueMap, sessionsMap, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
     const { signOut, profile, refreshProfile, isStaff, isManager, isAdmin, isGuest } = useAuth()
     const { enabled: monetizationEnabled } = useMonetizationEnabled()
     const navigate = useNavigate()
@@ -65,36 +65,41 @@ export default function AddressSelectPage() {
     const prefetchedIdsRef = useRef(new Set())
 
     // Background prefetch ProductContext data into cache (only for new addresses).
+    // Hoãn 2.5s để ~5 query/địa chỉ không tranh băng thông với query stats lúc login
+    // (stats là thứ user đang nhìn skeleton chờ; prefetch chỉ là warm cache).
     useEffect(() => {
         if (!addresses.length) return
         const newAddrs = addresses.filter(a => !prefetchedIdsRef.current.has(a.id))
         if (!newAddrs.length) return
-        newAddrs.forEach(async addr => {
-            prefetchedIdsRef.current.add(addr.id)
-            try {
-                const [prods, recs, costsResult, extras] = await Promise.all([
-                    fetchProducts(addr.id),
-                    fetchAllRecipes(addr.id),
-                    fetchIngredientCostsAndUnits(addr.id),
-                    fetchProductExtras(addr.id),
-                ])
-                const extraIds = Object.values(extras).flat().map(e => e.id)
-                const extraIngs = await fetchExtraIngredients(extraIds)
-                const { costs, units } = costsResult
-                const key = name => buildCacheKey(addr.id, name)
+        const timer = setTimeout(() => {
+            newAddrs.forEach(async addr => {
+                prefetchedIdsRef.current.add(addr.id)
                 try {
-                    localStorage.setItem(key('products'), JSON.stringify(prods))
-                    localStorage.setItem(key('recipes'), JSON.stringify(recs))
-                    localStorage.setItem(key('costs'), JSON.stringify(costs))
-                    localStorage.setItem(key('units'), JSON.stringify(units))
-                    localStorage.setItem(key('extras'), JSON.stringify(extras))
-                    localStorage.setItem(key('extra_ingredients'), JSON.stringify(extraIngs))
-                } catch { /* ignore quota */ }
-            } catch {
-                // Allow retry on next render if prefetch failed
-                prefetchedIdsRef.current.delete(addr.id)
-            }
-        })
+                    const [prods, recs, costsResult, extras] = await Promise.all([
+                        fetchProducts(addr.id),
+                        fetchAllRecipes(addr.id),
+                        fetchIngredientCostsAndUnits(addr.id),
+                        fetchProductExtras(addr.id),
+                    ])
+                    const extraIds = Object.values(extras).flat().map(e => e.id)
+                    const extraIngs = await fetchExtraIngredients(extraIds)
+                    const { costs, units } = costsResult
+                    const key = name => buildCacheKey(addr.id, name)
+                    try {
+                        localStorage.setItem(key('products'), JSON.stringify(prods))
+                        localStorage.setItem(key('recipes'), JSON.stringify(recs))
+                        localStorage.setItem(key('costs'), JSON.stringify(costs))
+                        localStorage.setItem(key('units'), JSON.stringify(units))
+                        localStorage.setItem(key('extras'), JSON.stringify(extras))
+                        localStorage.setItem(key('extra_ingredients'), JSON.stringify(extraIngs))
+                    } catch { /* ignore quota */ }
+                } catch {
+                    // Allow retry on next render if prefetch failed
+                    prefetchedIdsRef.current.delete(addr.id)
+                }
+            })
+        }, 2500)
+        return () => clearTimeout(timer)
     }, [addressIdsKey])
 
     // Smart clone link: a ?clone=CODE captured at app load (App.CloneCapture) lands here
@@ -263,6 +268,7 @@ export default function AddressSelectPage() {
                         fetchError={fetchError}
                         cupsMap={cupsMap}
                         revenueMap={revenueMap}
+                        prevRevenueMap={prevRevenueMap}
                         sessionsMap={sessionsMap}
                         statsLoading={statsLoading}
                         isStaff={isStaff}

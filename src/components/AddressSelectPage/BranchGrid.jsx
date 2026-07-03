@@ -6,13 +6,14 @@ import {
     CupSoda, Wallet, Users, HelpCircle,
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
+import Skeleton from '../common/Skeleton'
 import { formatVND } from '../../utils'
 import SubscriptionBadge from './SubscriptionBadge'
 
 const isManagerRole = (role) => (role === 'manager' || role === 'co-manager') ? 1 : 0
 
 export default function BranchGrid({
-    addresses, fetchError, cupsMap, revenueMap, sessionsMap,
+    addresses, fetchError, cupsMap, revenueMap, prevRevenueMap = {}, sessionsMap, statsLoading,
     isStaff, isAdmin, error, setError,
     onSelect, onSelectReport, onSelectIngredients, onBackup, onRename, onRemove, onDefaultTemplate,
     onSupportClick,
@@ -63,6 +64,12 @@ export default function BranchGrid({
                 {addresses.map(addr => {
                     const cups = cupsMap[addr.id] || 0
                     const revenue = revenueMap[addr.id] || 0
+                    // Doanh thu hôm qua tính đến cùng giờ này → delta ↑/↓%. 0 (chưa migrate
+                    // RPC / hôm qua nghỉ) thì ẩn delta, tránh chia 0.
+                    const prevRevenue = prevRevenueMap[addr.id] || 0
+                    const revenueDeltaPct = prevRevenue > 0
+                        ? Math.round(((revenue - prevRevenue) / prevRevenue) * 100)
+                        : null
                     const sessionUsers = sessionsMap[addr.id] || []
                     const isEditing = editingAddressId === addr.id
                     // Stale-while-revalidate: only hide stats on initial load.
@@ -114,6 +121,13 @@ export default function BranchGrid({
 
                                     {/* Uniform label:value list — số liệu vận hành */}
                                     <div className="flex flex-col gap-1.5 text-sm">
+                                        {/* Skeleton giữ chỗ 2 dòng stats trong lần load đầu — card không còn trống trơn */}
+                                        {statsLoading && !hasStats && (
+                                            <>
+                                                <Skeleton className="h-4 w-32 rounded-md" />
+                                                <Skeleton className="h-4 w-44 rounded-md" />
+                                            </>
+                                        )}
                                         {/* Mỗi người đang trong ca một dòng — nhãn theo vai trò, quản lý trước */}
                                         {hasStats && [...sessionUsers]
                                             .sort((a, b) => isManagerRole(b.role) - isManagerRole(a.role))
@@ -132,6 +146,14 @@ export default function BranchGrid({
                                                 <div className="flex items-baseline gap-1.5">
                                                     <span className="text-text-secondary">Tổng doanh thu:</span>
                                                     <span className="text-text">{formatVND(revenue)}</span>
+                                                    {revenueDeltaPct !== null && revenueDeltaPct !== 0 && (
+                                                        <span
+                                                            title="So với hôm qua cùng giờ"
+                                                            className={`text-[12px] font-bold tabular-nums ${revenueDeltaPct > 0 ? 'text-success' : 'text-danger'}`}
+                                                        >
+                                                            {revenueDeltaPct > 0 ? '↑' : '↓'}{Math.abs(revenueDeltaPct)}%
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </>
                                         )}

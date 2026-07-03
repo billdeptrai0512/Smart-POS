@@ -467,7 +467,3 @@ export async function fetchReportByRange(addressId, targetStart, targetEnd, prev
     })
 }
 
-// Fetch current inventory (Disabled for now)
-export async function fetchInventory() {
-    return {}
-}

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { fetchTodayStats, fetchInventory, submitOrder, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext } from '../services/orderService'
+import { fetchTodayStats, submitOrder, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext } from '../services/orderService'
 import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder } from '../hooks/useOfflineSync'
 import { dateStringVN } from '../utils/dateVN'
@@ -71,7 +71,6 @@ export function POSProvider() {
     const [revenue, setRevenue] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.REVENUE)) || 0)
     const [totalCost, setTotalCost] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.TOTAL_COST)) || 0)
     const [cupsSold, setCupsSold] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.CUPS)) || 0)
-    const [inventory, setInventory] = useState(() => loadLocalJSON(STORAGE_KEYS.INVENTORY, {}))
     const [isOnline, setIsOnline] = useState(navigator.onLine)
     const { toast, showToast, showError } = useToast()
 
@@ -90,7 +89,6 @@ export function POSProvider() {
     const handleSyncComplete = useCallback(() => {
         if (!addressId) return
         fetchTodayStats(addressId).then(({ revenue, cups }) => { setRevenue(revenue); setCupsSold(cups) })
-        fetchInventory().then(setInventory)
         showToast('Đã đồng bộ đơn hàng offline!', 'success')
     }, [addressId])
 
@@ -102,18 +100,14 @@ export function POSProvider() {
 
         async function load() {
             try {
-                const [{ revenue: rev, cups }, inv, recent] = await Promise.all([
+                const [{ revenue: rev, cups }, recent] = await Promise.all([
                     fetchTodayStats(addressId),
-                    fetchInventory(),
                     fetchRecentOrders(addressId, 3)
                 ])
                 setRecentOrders(recent.map(buildLastOrderFromDB))
                 if (supabase) {
                     setRevenue(rev)
-                    setInventory(inv)
                     setCupsSold(cups)
-                } else {
-                    setInventory(prev => Object.keys(prev).length ? prev : inv)
                 }
             } catch (error) {
                 showError(error, 'Tải dữ liệu hôm nay')
@@ -302,12 +296,10 @@ export function POSProvider() {
     const revenueRef = useRef(revenue)
     const totalCostRef = useRef(totalCost)
     const cupsSoldRef = useRef(cupsSold)
-    const inventoryRef = useRef(inventory)
 
     useEffect(() => { revenueRef.current = revenue }, [revenue])
     useEffect(() => { totalCostRef.current = totalCost }, [totalCost])
     useEffect(() => { cupsSoldRef.current = cupsSold }, [cupsSold])
-    useEffect(() => { inventoryRef.current = inventory }, [inventory])
 
     // ---- Autosave Daemon ----
     // PERF: debounce 5 synchronous localStorage writes that were firing on every
@@ -320,10 +312,9 @@ export function POSProvider() {
             localStorage.setItem(STORAGE_KEYS.REVENUE, revenue.toString())
             localStorage.setItem(STORAGE_KEYS.TOTAL_COST, totalCost.toString())
             localStorage.setItem(STORAGE_KEYS.CUPS, cupsSold.toString())
-            localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventory))
         }, 400)
         return () => clearTimeout(t)
-    }, [cart, revenue, totalCost, cupsSold, inventory])
+    }, [cart, revenue, totalCost, cupsSold])
 
     // Save absolute latest states synchronously on unmount
     useEffect(() => {
@@ -332,7 +323,6 @@ export function POSProvider() {
             localStorage.setItem(STORAGE_KEYS.REVENUE, revenueRef.current.toString())
             localStorage.setItem(STORAGE_KEYS.TOTAL_COST, totalCostRef.current.toString())
             localStorage.setItem(STORAGE_KEYS.CUPS, cupsSoldRef.current.toString())
-            localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventoryRef.current))
         }
     }, [])
 
@@ -698,9 +688,9 @@ export function POSProvider() {
     }), [cart, activeCartItemId, enabledStickyExtraIds, total, orderCount, hasOrder, discount, discountAmount, finalTotal, recentOrders, draftOrder, enterKey, toast, showToast])
 
     const statsValue = useMemo(() => ({
-        revenue, totalCost, cupsSold, inventory, isOnline,
+        revenue, totalCost, cupsSold, isOnline,
         retrySync,
-    }), [revenue, totalCost, cupsSold, inventory, isOnline, retrySync])
+    }), [revenue, totalCost, cupsSold, isOnline, retrySync])
 
     const historyValue = useMemo(() => ({
         todayOrders, todayExpenses, isLoadingHistory,

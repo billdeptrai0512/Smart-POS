@@ -227,3 +227,33 @@ fallback **Twilio OTP** nếu kẹt pháp nhân (xác thực OA cần hộ KD/GP
 - [ ] Khi OTP volume >100/tháng: migrate Twilio → eSMS/Stringee qua Edge Function (Phase 4 trong MONETIZATION.md §3).
 
 *Cập nhật: 2026-06-11.*
+
+---
+
+# 🆕 TASK (2026-07-03) — Hạ tầng, góc nhìn CTO
+
+## A. Error tracking (Sentry) — ưu tiên cao
+**Vấn đề:** PWA chạy trên điện thoại nhân viên ở 8 chi nhánh; mọi lỗi runtime hiện chỉ
+`console.error` rồi biến mất. Khi quán báo "app không lưu đơn" không có gì để tra.
+Vercel Analytics chỉ đo traffic, không bắt lỗi.
+- [ ] Tích hợp `@sentry/react` — init trong entry (main.jsx), DSN qua env `VITE_SENTRY_DSN`
+- [ ] Gắn context mỗi event: addressId + role (KHÔNG gửi tên/SĐT — tránh PII)
+- [ ] ErrorBoundary hiện có → `captureException` thay vì chỉ console
+- [ ] Upload source maps khi build (vite plugin) để stack trace production đọc được
+- [ ] Alert email khi có lỗi mới (rule mặc định của Sentry là đủ)
+
+## B. Test logic tiền ở tầng SQL
+**Vấn đề:** 200 unit test hiện tại toàn utils JS. WAC, cash_phase, cascade tồn kho — chỗ
+tiền thật — sống trong các RPC (`process_ingredient_restock`, `edit_ingredient_restock`,
+`cancel_restock`, `record_invoice_payment`…) và không test nào chạm tới. Git log đầy
+"fix tồn kho neo sai" — loại regression này chỉ chặn được bằng test chạy trên DB thật.
+- [ ] Supabase project staging (free tier) + `supabase db push` toàn bộ migrations
+- [ ] Seed script: 1 address + 2 nguyên liệu + vài phiếu nhập/rút mẫu
+- [ ] Script assert (node script gọi RPC, hoặc pgTAP): nhập kho → sửa phiếu → hủy phiếu,
+      mỗi bước assert tồn kho + WAC + owing khớp số tính tay. ~10 case đầu tiên:
+      WAC full re-average sau edit/cancel (mô hình cancel_restock, không phải moving-average),
+      cash_phase in_shift/post_close vào đúng Thực thu, backdate không phá cascade after_stock.
+- [ ] Chạy trong CI trước khi merge migration mới
+
+*Thêm 2026-07-03. Mục index audit cùng đợt review đã kiểm xong — hot paths đủ index
+(idx_orders_address_created v.v. từ các sweep 2026-05), không cần làm gì.*
