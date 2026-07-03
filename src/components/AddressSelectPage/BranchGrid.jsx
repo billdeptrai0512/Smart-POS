@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
     Pencil, Trash2, ClipboardCopy, MoreHorizontal, X,
     Coffee, Loader, FileText, BarChart3, Package, ChevronRight,
-    CupSoda, Wallet, Users,
+    CupSoda, Wallet, Users, HelpCircle,
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import { formatVND } from '../../utils'
@@ -15,6 +15,7 @@ export default function BranchGrid({
     addresses, fetchError, cupsMap, revenueMap, sessionsMap,
     isStaff, isAdmin, error, setError,
     onSelect, onSelectReport, onSelectIngredients, onBackup, onRename, onRemove, onDefaultTemplate,
+    onSupportClick,
 }) {
     const [editingAddressId, setEditingAddressId] = useState(null)
     const [editName, setEditName] = useState('')
@@ -297,6 +298,20 @@ export default function BranchGrid({
                         <span className="text-text-secondary font-bold text-sm">Mẫu mặc định</span>
                     </button>
                 )}
+
+                {/* Hỗ trợ & Góp ý card */}
+                <button
+                    onClick={onSupportClick}
+                    className="bg-surface border border-dashed border-border/85 rounded-[20px] overflow-hidden shadow-sm flex flex-col items-center justify-center p-4 gap-2 hover:bg-surface-light hover:border-primary/30 active:bg-border/30 transition-all min-h-[100px] text-center"
+                >
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                        <HelpCircle size={18} />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                        <span className="text-text font-black text-sm">Bạn cần hỗ trợ / có góp ý?</span>
+                        <span className="text-text-secondary text-[11px] font-medium">Nhấp để liên hệ với chúng tôi</span>
+                    </div>
+                </button>
             </div>
 
             <ErrorBanner message={error} small className="mb-3" />
@@ -324,3 +339,4 @@ function ActionIcon({ icon, title, tone = 'primary', onClick }) {
         </button>
     )
 }
+

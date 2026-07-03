@@ -27,6 +27,7 @@ import InventoryReportCard from '../components/DailyReportPage/InventoryReportCa
 import ShiftPrepCard from '../components/DailyReportPage/ShiftPrepCard'
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import RangeLossCard from '../components/DailyReportPage/RangeLossCard'
+import SupportModal from '../components/common/SupportModal'
 import { Truck, Package, Loader2 } from 'lucide-react'
 import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY } from '../components/DailyReportPage/ReportViewFilter'
 import { useAddress } from '../contexts/AddressContext'
@@ -65,6 +66,7 @@ export default function DailyReportPage() {
     const mainRef = useRef(null)
     useEffect(() => { mainRef.current?.scrollTo(0, 0) }, [view])
     const [selectedProductId, setSelectedProductId] = useState('all')
+    const [showSupportModal, setShowSupportModal] = useState(false)
     const { selectedAddress } = useAddress()
     const initialDate = location.state?.initialDate || null
 
@@ -1195,13 +1197,14 @@ export default function DailyReportPage() {
                         )}
 
                         <div className="flex flex-col items-center justify-center p-3">
-                            <a href="https://github.com/billdeptrai0512" target="_blank" rel="noopener noreferrer"
-                                className="flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-surface-light border border-border/50 hover:border-[#c8956c]/40 hover:bg-[#c8956c]/5 transition-all duration-300">
-                                <span className="text-[10px] font-black uppercase tracking-[0.2em] whitespace-nowrap mt-[1px] bg-clip-text text-transparent"
-                                    style={{ backgroundImage: 'linear-gradient(135deg, #c8956c, #e2b77d, #d4a06a, #b8865a)' }}>
-                                    Developed by billdeptrai0512
+                            <button
+                                onClick={() => setShowSupportModal(true)}
+                                className="flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-surface-light border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all duration-300 cursor-pointer"
+                            >
+                                <span className="text-[10px] font-black uppercase tracking-[0.15em] whitespace-nowrap mt-[1px] text-primary">
+                                    Bạn cần hỗ trợ / có góp ý?
                                 </span>
-                            </a>
+                            </button>
                         </div>
                     </div>
                 )}
@@ -1280,6 +1283,12 @@ export default function DailyReportPage() {
                     />
                 )
             })()}
+
+            {/* Support Modal */}
+            <SupportModal
+                open={showSupportModal}
+                onClose={() => setShowSupportModal(false)}
+            />
         </div>
     )
 }

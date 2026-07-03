@@ -14,6 +14,7 @@ import AddressHeader from '../components/AddressSelectPage/AddressHeader'
 import BranchGrid from '../components/AddressSelectPage/BranchGrid'
 import StaffTab from '../components/AddressSelectPage/StaffTab'
 import CreateStaffModal from '../components/AddressSelectPage/CreateStaffModal'
+import SupportModal from '../components/common/SupportModal'
 import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 
 export default function AddressSelectPage() {
@@ -33,6 +34,7 @@ export default function AddressSelectPage() {
     const [clonePreview, setClonePreview] = useState(null) // { status: 'loading'|'valid'|'invalid', counts? }
     const [creating, setCreating] = useState(false)
     const [showCreateModal, setShowCreateModal] = useState(false)
+    const [showSupportModal, setShowSupportModal] = useState(false)
     const createGuardRef = useRef(false)
 
     // Stable signature of address IDs — changes only when an address is added/removed,
@@ -274,6 +276,7 @@ export default function AddressSelectPage() {
                         onBackup={setBackupSource}
                         onRename={renameAddress}
                         onRemove={removeAddress}
+                        onSupportClick={() => setShowSupportModal(true)}
                         onDefaultTemplate={async () => {
                             // Load persisted ingredient sort so /ingredients respects admin's saved order.
                             const ingredient_sort_order = await fetchDefaultIngredientSort()
@@ -427,6 +430,12 @@ export default function AddressSelectPage() {
                     onClose={() => setBackupSource(null)}
                 />
             )}
+
+            {/* Support Modal */}
+            <SupportModal
+                open={showSupportModal}
+                onClose={() => setShowSupportModal(false)}
+            />
         </div>
     )
 }
