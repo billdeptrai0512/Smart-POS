@@ -19,7 +19,7 @@ import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 
 export default function AddressSelectPage() {
     const { addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading, fetchError } = useAddress()
-    const { cupsMap, revenueMap, prevRevenueMap, sessionsMap, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
+    const { cupsMap, revenueMap, prevCupsMap, sessionsMap, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
     const { signOut, profile, refreshProfile, isStaff, isManager, isAdmin, isGuest } = useAuth()
     const { enabled: monetizationEnabled } = useMonetizationEnabled()
     const navigate = useNavigate()
@@ -268,7 +268,7 @@ export default function AddressSelectPage() {
                         fetchError={fetchError}
                         cupsMap={cupsMap}
                         revenueMap={revenueMap}
-                        prevRevenueMap={prevRevenueMap}
+                        prevCupsMap={prevCupsMap}
                         sessionsMap={sessionsMap}
                         statsLoading={statsLoading}
                         isStaff={isStaff}

@@ -21,7 +21,7 @@ export function AddressStatsProvider() {
 
     const [cupsMap, setCupsMap] = useState({})
     const [revenueMap, setRevenueMap] = useState({})
-    const [prevRevenueMap, setPrevRevenueMap] = useState({})
+    const [prevCupsMap, setPrevCupsMap] = useState({})
     const [sessionsMap, setSessionsMap] = useState({})
     const [staffList, setStaffList] = useState([])
     const [statsLoading, setStatsLoading] = useState(false)
@@ -36,7 +36,7 @@ export function AddressStatsProvider() {
         setStatsLoading(true)
         try {
             // 1 RPC duy nhất trả cả stats + sessions (kèm tên/role) + prev — was 3 round-trips.
-            const { cupsMap: cups, revenueMap: revenue, prevRevenueMap: prevRevenue, sessionsMap: sessions } = await fetchBranchesTodayStats(addrIds)
+            const { cupsMap: cups, revenueMap: revenue, prevCupsMap: prevCups, sessionsMap: sessions } = await fetchBranchesTodayStats(addrIds)
             if (cancelRef.current) return
             const filledCups = {}, filledRev = {}
             addrIds.forEach(id => {
@@ -45,7 +45,7 @@ export function AddressStatsProvider() {
             })
             setCupsMap(filledCups)
             setRevenueMap(filledRev)
-            setPrevRevenueMap(prevRevenue)
+            setPrevCupsMap(prevCups)
             setSessionsMap(sessions)
         } finally {
             if (!cancelRef.current) setStatsLoading(false)
@@ -94,7 +94,7 @@ export function AddressStatsProvider() {
         <AddressStatsContext.Provider value={{
             cupsMap,
             revenueMap,
-            prevRevenueMap,
+            prevCupsMap,
             sessionsMap,
             staffList,
             statsLoading,
