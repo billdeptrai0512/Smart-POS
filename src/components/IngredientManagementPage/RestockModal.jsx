@@ -3,8 +3,9 @@ import { X } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
 import MoneyInput from '../common/MoneyInput'
 import { parseVNDInput, formatVND, formatVNDInput } from '../../utils'
-import { dateStringVN } from '../../utils/dateVN'
+import { dateStringVN, timeStringVN } from '../../utils/dateVN'
 import DatePicker from '../common/DatePicker'
+import TimeInput from '../common/TimeInput'
 
 export default function RestockModal({
     ingredient,
@@ -36,6 +37,9 @@ export default function RestockModal({
     const [qty, setQty] = useState(initQty)
     const [subtotal, setSubtotal] = useState(initial?.subtotal ? formatVNDInput(initial.subtotal) : '')
     const [purchaseDate, setPurchaseDate] = useState(initial?.purchaseDate || today)
+    // Giờ mua — edit: giữ giờ gốc của phiếu; create: default giờ VN hiện tại.
+    const [purchaseTime, setPurchaseTime] = useState(() => initial?.purchaseTime || timeStringVN())
+    const [userTouchedTime, setUserTouchedTime] = useState(false)
     const [discountMode, setDiscountMode] = useState('amount') // 'amount' | 'percent'
     const [discountInput, setDiscountInput] = useState(initial?.discount ? formatVNDInput(initial.discount) : '')
     const [extraCostInput, setExtraCostInput] = useState(initial?.extraCost ? formatVNDInput(initial.extraCost) : '')
@@ -100,9 +104,12 @@ export default function RestockModal({
                 // Phân loại cố định trên phiếu: chỉ 'in_shift' (tiền mặt, trước chốt) mới
                 // cộng vào Thực thu. CK / sau chốt → 'post_close'.
                 cashPhase: paymentMethod === 'cash' ? cashPhase : 'post_close',
-                // Chỉ truyền khi user đổi sang ngày khác hôm nay — giữ default NOW() server-side.
-                // Anchor noon VN để rơi gọn vào ngày đó bất chấp TZ của client/DB.
-                purchaseDate: isBackdated ? new Date(`${purchaseDate}T12:00:00+07:00`).toISOString() : null,
+                // Edit: luôn gửi timestamp đầy đủ để giữ giờ gốc của phiếu (trước đây gửi null
+                // khi date = hôm nay → RPC reset created_at về NOW/noon). Create: chỉ gửi khi
+                // lùi ngày hoặc user tự chỉnh giờ — còn lại giữ default NOW() server-side.
+                purchaseDate: mode === 'edit' || isBackdated || userTouchedTime
+                    ? new Date(`${purchaseDate}T${purchaseTime || '12:00'}:00+07:00`).toISOString()
+                    : null,
             })
             onClose()
         } catch {
@@ -138,28 +145,41 @@ export default function RestockModal({
                 <div className="flex flex-col gap-4">
                     <div className="flex flex-col gap-3 p-3 bg-surface-light rounded-[14px] border border-border/40">
                         {/* Ngày mua */}
-                        <div className="flex items-center justify-between gap-3">
-                            <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Ngày mua</span>
-                            <DatePicker
-                                value={purchaseDate}
-                                max={today}
-                                onChange={setPurchaseDate}
-                                presets={false}
-                                align="end"
-                                trigger={(label, toggle) => (
-                                    <button
-                                        type="button"
-                                        onClick={toggle}
-                                        className="w-32 bg-surface border border-border/60 rounded-[8px] px-3 py-1.5 text-[13px] font-bold text-text text-center hover:border-primary/50 transition-colors"
-                                    >
-                                        {label}
-                                    </button>
-                                )}
-                            />
+                        {/* relative: anchor cho popover calendar (anchor="parent") — căn giữa theo cả row, cân với modal */}
+                        <div className="relative flex items-center justify-between gap-3">
+                            <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide whitespace-nowrap">Ngày mua</span>
+                            {/* Ngày | giờ chung 1 khối — cùng pattern toggle-trong-ô của Số lượng / Giảm giá.
+                                KHÔNG overflow-hidden: popover calendar của DatePicker nằm absolute bên trong, sẽ bị cắt. */}
+                            <div className="flex items-center bg-surface border border-border/60 rounded-[8px] hover:border-primary/50 focus-within:border-primary/50 transition-colors">
+                                <DatePicker
+                                    value={purchaseDate}
+                                    max={today}
+                                    onChange={setPurchaseDate}
+                                    presets={false}
+                                    align="center"
+                                    anchor="parent"
+                                    trigger={(label, toggle) => (
+                                        <button
+                                            type="button"
+                                            onClick={toggle}
+                                            className="px-2 py-1.5 text-[13px] font-bold text-text text-center tabular-nums"
+                                        >
+                                            {label}
+                                        </button>
+                                    )}
+                                />
+                                <span className="w-px self-stretch bg-border/60" />
+                                <TimeInput
+                                    value={purchaseTime}
+                                    onChange={v => { setUserTouchedTime(true); setPurchaseTime(v) }}
+                                    aria-label="Giờ mua"
+                                    className="w-14 bg-transparent px-1.5 py-1.5 text-[13px] font-bold text-text text-center tabular-nums placeholder:text-text-dim focus:outline-none"
+                                />
+                            </div>
                         </div>
                         {isBackdated && (
                             <p className="text-[11px] text-warning leading-snug text-right">
-                                Sẽ ghi vào ngày {purchaseDate.split('-').reverse().join('/')}, không phải hôm nay.
+                                Sẽ ghi vào {purchaseTime || '12:00'} ngày {purchaseDate.split('-').reverse().join('/')}, không phải hôm nay.
                             </p>
                         )}
 

@@ -3,6 +3,7 @@ import MoneyInput from '../common/MoneyInput'
 import { formatVND, formatVNDInput, parseVNDInput } from '../../utils'
 import { dateStringVN } from '../../utils/dateVN'
 import DatePicker from '../common/DatePicker'
+import TimeInput from '../common/TimeInput'
 
 // Bottom-sheet form to record a payment against an existing refill invoice.
 // Caller provides the invoice row (already includes nested `payments`).
@@ -54,8 +55,10 @@ export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfir
                     {/* 1. Ngày + giờ trả (lên đầu) */}
                     <div className="flex flex-col gap-1.5">
                         <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Ngày trả</label>
-                        <div className="flex gap-2">
-                            <div className="flex-1">
+                        {/* Ngày | giờ chung 1 khối — cùng pattern với ô ngày mua của RestockModal */}
+                        <div className="flex items-center bg-surface-light border border-border/60 rounded-[12px] hover:border-primary/50 focus-within:border-primary/50 transition-colors">
+                            {/* grid: blockify wrapper inline-flex của DatePicker để nút date stretch full width */}
+                            <div className="flex-1 grid">
                                 <DatePicker
                                     value={paidDate}
                                     min={invoiceDate}
@@ -67,19 +70,19 @@ export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfir
                                         <button
                                             type="button"
                                             onClick={toggle}
-                                            className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[14px] font-bold text-text text-left hover:border-primary/50 transition-colors"
+                                            className="w-full px-4 py-3 text-[14px] font-bold text-text text-left tabular-nums"
                                         >
                                             {label}
                                         </button>
                                     )}
                                 />
                             </div>
-                            <input
-                                type="time"
+                            <span className="w-px self-stretch bg-border/60" />
+                            <TimeInput
                                 value={paidTime}
-                                onChange={e => setPaidTime(e.target.value)}
+                                onChange={setPaidTime}
                                 aria-label="Giờ trả"
-                                className="bg-surface-light border border-border/60 rounded-[12px] px-3 py-3 text-[14px] font-bold text-text tabular-nums hover:border-primary/50 transition-colors [color-scheme:dark]"
+                                className="w-16 bg-transparent px-3 py-3 text-[14px] font-bold text-text text-center tabular-nums placeholder:text-text-dim focus:outline-none"
                             />
                         </div>
                     </div>

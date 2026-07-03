@@ -14,6 +14,11 @@ export function dateStringVN(date = new Date()) {
     return date.toLocaleDateString('en-CA', { timeZone: VN_TZ })
 }
 
+// "HH:mm" (24h) string in Vietnam timezone for the given Date (defaults to now).
+export function timeStringVN(date = new Date()) {
+    return date.toLocaleTimeString('en-GB', { timeZone: VN_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+}
+
 // Start of "today in Vietnam" — i.e. 00:00:00.000 local VN time, as a UTC-aware Date.
 // Equivalent to: midnight in VN expressed in absolute time.
 //   At 02:00 VN on 2026-05-18 (= 19:00 UTC on 2026-05-17):

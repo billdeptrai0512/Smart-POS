@@ -30,6 +30,9 @@ const WEEKDAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
 //   range          boolean — enable two-tap range selection.
 //   trigger        (label, toggle) => ReactNode — the chip/button that opens it.
 //   align          'center' | 'start' | 'end' — popover horizontal alignment.
+//   anchor         'self' (default) | 'parent' — 'parent' bỏ `relative` trên wrapper
+//                  để popover neo vào positioned ancestor gần nhất của CALLER
+//                  (vd: cả row form) thay vì chỉ cái nút trigger.
 export default function DatePicker({
     value,
     max,
@@ -42,6 +45,7 @@ export default function DatePicker({
     range = false,
     trigger,
     align = 'center',
+    anchor = 'self',
 }) {
     const [open, setOpen] = useState(false)
     const anchorIso = range ? value?.startISO : value
@@ -130,7 +134,7 @@ export default function DatePicker({
     const alignCls = align === 'start' ? 'left-0' : align === 'end' ? 'right-0' : 'left-1/2 -translate-x-1/2'
 
     return (
-        <div ref={wrapRef} className="relative inline-flex">
+        <div ref={wrapRef} className={`${anchor === 'self' ? 'relative ' : ''}inline-flex`}>
             {trigger
                 ? trigger(displayLabel, toggle)
                 : (

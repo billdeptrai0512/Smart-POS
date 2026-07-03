@@ -29,6 +29,11 @@ import Toast from '../components/POSPage/Toast'
 import { keySyncDismissedKey, orphanIgnoredKey } from '../constants/storageKeys'
 import { goToMenuStep } from '../utils/menuSequence'
 
+// Chuẩn hoá để search không phân biệt hoa/thường & dấu tiếng Việt.
+function normalizeText(s = '') {
+    return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd')
+}
+
 // Module-level scroll cache. Set when user opens a card to drill into
 // /ingredients/:key; consumed once on next mount of /ingredients (back nav).
 // Mirrors the /recipes pattern so back-from-detail lands at the same scroll
@@ -71,6 +76,9 @@ export default function IngredientManagementPage() {
     // View mode = active category tab. Uncategorized NVL (category=null) shown under 'main'.
     // Seed from location.state so deep-links from /recipes' tabbar land on the right view.
     const [viewMode, setViewMode] = useState(location.state?.viewMode || 'main')
+
+    // Search theo tên — không phân biệt hoa/thường & dấu tiếng Việt.
+    const [search, setSearch] = useState('')
 
     const mainRef = useRef(null)
 
@@ -251,8 +259,10 @@ export default function IngredientManagementPage() {
     // Card grid shows only the active category tab. Uncategorized (null) → 'main';
     // legacy 'tools' → 'packaging' (see normalizeIngredientCategory). Keeps no NVL hidden.
     const visibleIngredients = useMemo(() => {
+        const q = normalizeText(search.trim())
         const filtered = allIngredients.filter(ing => {
-            return normalizeIngredientCategory(configByIngredient.get(ing)?.category) === viewMode
+            if (normalizeIngredientCategory(configByIngredient.get(ing)?.category) !== viewMode) return false
+            return !q || normalizeText(ingredientLabel(ing)).includes(q)
         })
         // Sort: hết (out) → sắp hết (low) → bình thường. Skip if no alerts.
         const getStockPriority = (ing) => {
@@ -265,7 +275,7 @@ export default function IngredientManagementPage() {
         const hasAlerts = filtered.some(ing => getStockPriority(ing) < 2)
         if (!hasAlerts) return filtered
         return [...filtered].sort((a, b) => getStockPriority(a) - getStockPriority(b))
-    }, [allIngredients, configByIngredient, viewMode, stockByIngredient])
+    }, [allIngredients, configByIngredient, viewMode, stockByIngredient, search])
 
     // ─── Action handlers ───────────────────────────────────────────────
     async function saveCost(ingredient, newCostVal) {
@@ -367,6 +377,17 @@ export default function IngredientManagementPage() {
             />
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-48 bg-bg">
+                {!isSorting && (
+                    <div className="mb-3">
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            placeholder={viewMode === 'packaging' ? 'Tìm bao bì…' : 'Tìm nguyên liệu…'}
+                            className="w-full px-3 py-2.5 rounded-[12px] bg-surface border border-border/60 text-text text-[14px] placeholder:text-text-dim focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
+                        />
+                    </div>
+                )}
                 {canEdit && !isSorting && stockDeficits.length > 0 && (
                     <StockDeficitBanner
                         deficits={stockDeficits}
@@ -424,7 +445,9 @@ export default function IngredientManagementPage() {
                         })}
                         {visibleIngredients.length === 0 && (
                             <p className="text-text-secondary text-[13px] text-center py-6">
-                                {allIngredients.length === 0 ? 'Chưa có nguyên liệu nào.' : 'Chưa có nguyên liệu trong nhóm này.'}
+                                {search.trim()
+                                    ? 'Không tìm thấy nguyên liệu nào.'
+                                    : allIngredients.length === 0 ? 'Chưa có nguyên liệu nào.' : 'Chưa có nguyên liệu trong nhóm này.'}
                             </p>
                         )}
                     </div>

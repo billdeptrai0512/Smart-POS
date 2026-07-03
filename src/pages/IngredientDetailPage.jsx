@@ -24,7 +24,7 @@ import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../contexts/ConfirmContext'
-import { dateStringVN } from '../utils/dateVN'
+import { dateStringVN, timeStringVN } from '../utils/dateVN'
 
 // Page-level orchestrator: fetches data, owns the canonical state (stock, history,
 // config), and exposes per-field save callbacks. All edit-mode UI state lives
@@ -531,6 +531,7 @@ export default function IngredientDetailPage() {
                         paymentMethod: editingEntry.payment_method || 'cash',
                         cashPhase: editingEntry.metadata?.cash_phase || 'post_close',
                         purchaseDate: dateStringVN(new Date(editingEntry.created_at)),
+                        purchaseTime: timeStringVN(new Date(editingEntry.created_at)),
                     }}
                     onConfirm={(form) => handleEditRestock(editingEntry, form)}
                     onClose={() => setEditingEntry(null)}
