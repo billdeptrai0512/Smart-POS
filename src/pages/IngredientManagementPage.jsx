@@ -64,7 +64,6 @@ export default function IngredientManagementPage() {
     // Sort mode
     const [isSorting, setIsSorting] = useState(false)
     const [sortedIngredients, setSortedIngredients] = useState([])
-    const [selectedSortIngredient, setSelectedSortIngredient] = useState(null)
 
     // Create form
     const [newName, setNewName] = useState('')
@@ -332,8 +331,8 @@ export default function IngredientManagementPage() {
     }
 
     // Sort mode
-    const enterSortMode = () => { setSortedIngredients([...allIngredients]); setIsSorting(true); setSelectedSortIngredient(null) }
-    const cancelSortMode = () => { setIsSorting(false); setSortedIngredients([]); setSelectedSortIngredient(null) }
+    const enterSortMode = () => { setSortedIngredients([...allIngredients]); setIsSorting(true) }
+    const cancelSortMode = () => { setIsSorting(false); setSortedIngredients([]) }
     const moveIngredient = (from, to) => {
         if (to < 0 || to >= sortedIngredients.length) return
         const updated = [...sortedIngredients]
@@ -349,7 +348,6 @@ export default function IngredientManagementPage() {
             // routes to app_settings in that case so the order persists for the playground.
             await updateSortOrder(selectedAddress.id ?? null, sortedIngredients)
             setIsSorting(false)
-            setSelectedSortIngredient(null)
         } catch (err) {
             showError(err, 'Lưu thứ tự nguyên liệu')
         } finally {
@@ -411,8 +409,6 @@ export default function IngredientManagementPage() {
                         items={sortedIngredients}
                         getKey={i => i}
                         getLabel={i => ingredientLabel(i)}
-                        selectedKey={selectedSortIngredient}
-                        onSelect={setSelectedSortIngredient}
                         onMove={moveIngredient}
                     />
                 ) : (

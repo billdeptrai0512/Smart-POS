@@ -36,7 +36,6 @@ export default function RecipeMenuPage() {
     const [saving, setSaving] = useState(false)
     const [isSorting, setIsSorting] = useState(false)
     const [sortedProducts, setSortedProducts] = useState([])
-    const [selectedSortProductId, setSelectedSortProductId] = useState(null)
     const [showCreateModal, setShowCreateModal] = useState(false)
     // {mode:'create'} | {mode:'edit', id} — modal tạo/sửa mục (divider phân nhóm menu)
     const [dividerModal, setDividerModal] = useState(null)
@@ -131,8 +130,8 @@ export default function RecipeMenuPage() {
         }
     }
 
-    const enterSortMode = () => { setSortedProducts([...products]); setIsSorting(true); setSelectedSortProductId(null) }
-    const cancelSortMode = () => { setIsSorting(false); setSortedProducts([]); setSelectedSortProductId(null) }
+    const enterSortMode = () => { setSortedProducts([...products]); setIsSorting(true) }
+    const cancelSortMode = () => { setIsSorting(false); setSortedProducts([]) }
 
     const moveProduct = (from, to) => {
         if (to < 0 || to >= sortedProducts.length) return
@@ -151,7 +150,6 @@ export default function RecipeMenuPage() {
             refreshProducts?.()
             setIsSorting(false)
             setSortedProducts([])
-            setSelectedSortProductId(null)
         } catch (err) {
             showError(err, 'Lưu thứ tự món')
         } finally {
@@ -180,9 +178,8 @@ export default function RecipeMenuPage() {
                     <SortableList
                         items={sortedProducts}
                         getKey={p => p.id}
-                        getLabel={p => p.is_divider ? `——— ${p.name} ———` : p.name}
-                        selectedKey={selectedSortProductId}
-                        onSelect={setSelectedSortProductId}
+                        getLabel={p => p.name}
+                        isDivider={p => p.is_divider}
                         onMove={moveProduct}
                     />
                 ) : (
