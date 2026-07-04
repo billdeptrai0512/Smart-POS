@@ -14,7 +14,7 @@ const CATS = [
 // Each category has its own "create new" so a brand-new ingredient lands in the right one.
 export default function FastIngredientFill({
     entries, dbIngredients, getUnit, categoryOf = () => 'main',
-    ingredientCosts, canEdit, showCost = false,
+    ingredientCosts, canEdit, showCost = false, allowNegative = false,
     onSetAmount, onRemove, onAddCustom,
 }) {
     const [revealed, setRevealed] = useState(() => new Set()) // chip-tapped, not yet saved
@@ -53,6 +53,7 @@ export default function FastIngredientFill({
                         unitCost={ingredientCosts?.[k] || 0}
                         canEdit={canEdit}
                         showCost={showCost}
+                        allowNegative={allowNegative}
                         autoFocus={revealed.has(k) && !(amountByKey[k] != null)}
                         onCommit={onSetAmount}
                         onRemove={() => { onRemove(k); drop(k) }}
@@ -110,7 +111,7 @@ export default function FastIngredientFill({
     )
 }
 
-function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, autoFocus, onCommit, onRemove }) {
+function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowNegative, autoFocus, onCommit, onRemove }) {
     const [draft, setDraft] = useState(amount != null ? String(amount) : '')
     // Re-sync when the saved amount changes elsewhere (copy-from, context refresh).
     useEffect(() => { setDraft(amount != null ? String(amount) : '') }, [amount])
@@ -126,6 +127,19 @@ function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, autoFo
     return (
         <div className="flex items-center gap-2 px-3 py-2 rounded-[12px] border bg-surface border-border/60">
             <span className="flex-1 text-[13px] text-text truncate">{ingredientLabel(ingredient)}</span>
+            {allowNegative && canEdit && (
+                // ± toggle: bàn phím decimal trên mobile không có phím "-". Dùng cho extra
+                // "bớt nguyên liệu". preventDefault để không blur→commit khi bấm.
+                <button
+                    type="button"
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => setDraft(d => d.startsWith('-') ? d.slice(1) : '-' + d)}
+                    className={`shrink-0 w-6 h-6 flex items-center justify-center rounded border text-[14px] font-bold ${draft.startsWith('-') ? 'border-danger/50 text-danger' : 'border-border/60 text-text-secondary hover:text-primary hover:border-primary/50'}`}
+                    title="Đổi dấu âm/dương"
+                >
+                    {draft.startsWith('-') ? '−' : '+'}
+                </button>
+            )}
             <input
                 type="text"
                 inputMode="decimal"

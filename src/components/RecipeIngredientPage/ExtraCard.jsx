@@ -85,6 +85,7 @@ export default function ExtraCard({
                     getUnit={(k) => getIngredientUnit(k, unitByKey[k], ingredientUnits)}
                     categoryOf={categoryOf}
                     canEdit={canEdit}
+                    allowNegative
                     onSetAmount={(ing, v) => onSaveExtraAmount(ing, v)}
                     onRemove={(ing) => onDeleteExtraIngredient(ing)}
                     onAddCustom={onAddExtraIngredients}
