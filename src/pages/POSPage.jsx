@@ -40,12 +40,14 @@ export default function POSPage() {
     const dateOnly = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`
 
     function handleOpenHistory() {
-        // Flush the held order NOW (sync) so its optimistic /history row is in place
-        // before we load — /history shows the just-tapped order instantly (and can delete
-        // a mis-entry). The unmount flush below then no-ops (cartRef cleared).
-        commitHeld()
-        handleLoadHistory()
+        // Do NOT commit synchronously here: setCart([]) clears draftOrder, which repaints
+        // the journal's ArrowRight for a frame before the route change lands (the "flash").
+        // Just navigate — POSPage's unmount effect (flushRef) commits the held order as the
+        // page leaves, so the cart (and its Check icon) stays intact until POSPage is gone.
+        // handleLoadHistory's fetch resolves after that unmount flush, so its merge still
+        // sees the optimistic /history row.
         navigate('/history')
+        handleLoadHistory()
     }
 
     return (
@@ -67,7 +69,6 @@ export default function POSPage() {
                 cart={cart}
                 onAddItem={handleAddItem}
                 onCancelHeld={cancelHeld}
-                onCommitHeld={commitHeld}
                 productExtras={productExtras}
                 activeCartItemId={activeCartItemId}
                 onToggleExtra={handleToggleExtra}

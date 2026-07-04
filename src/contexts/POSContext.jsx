@@ -76,6 +76,7 @@ export function POSProvider() {
 
     // ---- History State ----
     const [todayOrders, setTodayOrders] = useState([])
+    const historyFetchedRef = useRef({ addressId: null, at: 0 }) // last successful handleLoadHistory fetch
     const [todayExpenses, setTodayExpenses] = useState([])
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
     // Last few orders, newest first (max 3) — shown in the header "Nhật ký" card.
@@ -552,12 +553,19 @@ export function POSProvider() {
 
     async function handleLoadHistory() {
         if (!addressId) return
+        // Freshness guard: optimistic rows + realtime UPDATEs already keep todayOrders
+        // current; this refetch only catches other-device INSERTs. Rapid tap→commit→
+        // /history loops would otherwise refetch the whole day every time.
+        // ponytail: 30s TTL, wire INSERT → scheduleOrdersRefresh if 2-máy cần realtime hơn
+        const last = historyFetchedRef.current
+        if (last.addressId === addressId && Date.now() - last.at < 30000) return
         setIsLoadingHistory(true)
         try {
             const [orders, expenses] = await Promise.all([
                 fetchTodayOrders(addressId),
                 fetchTodayExpenses(addressId),
             ])
+            historyFetchedRef.current = { addressId, at: Date.now() }
             // Merge, don't clobber: keep optimistic rows the fetch doesn't have yet (their
             // insert is still in flight) so a just-tapped order never vanishes. Once the
             // fetch includes an id, its real row wins and the optimistic copy is dropped —

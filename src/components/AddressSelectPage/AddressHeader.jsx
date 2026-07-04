@@ -25,22 +25,22 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
         <header className="shrink-0 pt-6 pb-6 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)] relative z-20">
             <div className="px-6">
                 {showTabs ? (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-3 mb-1">
                         {/* Card trái: user + Cơ sở tab */}
                         <button
                             onClick={() => { setActiveTab('branches'); setError('') }}
-                            className={`rounded-[20px] p-3 sm:p-3.5 border text-left flex flex-col justify-between gap-[2px] relative overflow-hidden transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${activeTab === 'branches'
+                            className={`rounded-[20px] p-3 sm:p-3.5 border text-left flex flex-col justify-center gap-[2px] relative overflow-hidden transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${activeTab === 'branches'
                                 ? 'bg-linear-to-b from-primary to-primary-dark border-primary shadow-[0_4px_20px_rgba(244,119,75,0.3)]'
                                 : 'bg-bg border-border/60 hover:bg-surface-light'}`}
                         >
-                            <div className="flex flex-col justify-between items-start relative z-10 mb-[8px] gap-[3px] min-w-0 w-full">
+                            <div className="flex flex-col justify-between items-start relative z-10 gap-[3px] min-w-0 w-full">
                                 <span className={`text-[12px] sm:text-[13px] font-bold uppercase tracking-wider truncate w-full ${lblColor(activeTab === 'branches')}`}>Xin chào</span>
                                 <span className={`text-[15px] sm:text-[16px] font-black tracking-tight leading-tight truncate w-full ${valColor(activeTab === 'branches')}`}>
                                     {profile?.name || '...'}
                                 </span>
                             </div>
                             <div className={`w-full h-[1px] rounded-full relative z-10 my-[3px] mt-[4px] ${activeTab === 'branches' ? 'bg-white/25' : 'bg-border/60'}`} />
-                            <div className="flex flex-col justify-between items-start relative z-10 mt-[2px] w-full gap-[3px]">
+                            <div className="flex flex-col justify-between items-start relative z-10 mt-[6px] w-full gap-[3px]">
                                 <span className={`text-[12px] sm:text-[13px] font-black uppercase tracking-wider ${lblColor(activeTab === 'branches')}`}>Địa chỉ</span>
                                 <div className="flex items-center gap-1.5">
                                     <Building2 size={15} className={iconColor(activeTab === 'branches')} />
@@ -59,7 +59,7 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
                         {/* Card phải: SĐT (mở modal) + Nhân sự tab */}
                         <button
                             onClick={() => { setActiveTab('staff'); setError('') }}
-                            className={`rounded-[20px] p-3 sm:p-3.5 border text-left flex flex-col justify-between gap-[2px] relative overflow-hidden transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${activeTab === 'staff'
+                            className={`rounded-[20px] p-3 sm:p-3.5 border text-left flex flex-col justify-center gap-[2px] relative overflow-hidden transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${activeTab === 'staff'
                                 ? 'bg-linear-to-b from-primary to-primary-dark border-primary shadow-[0_4px_20px_rgba(244,119,75,0.3)]'
                                 : 'bg-bg border-border/60 hover:bg-surface-light'}`}
                         >
@@ -68,7 +68,7 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
                                 role="button"
                                 tabIndex={0}
                                 onClick={(e) => { e.stopPropagation(); setPhoneOpen(true) }}
-                                className="flex flex-col items-start relative z-10 mb-[8px] w-full cursor-pointer gap-[3px]"
+                                className="flex flex-col items-start relative z-10 w-full cursor-pointer gap-[3px]"
                             >
                                 <span className={`text-[12px] sm:text-[13px] font-bold uppercase tracking-wider truncate w-full ${lblColor(activeTab === 'staff')}`}>Điện thoại</span>
                                 <span className={`text-[14px] sm:text-[14px] font-black tracking-tight leading-tight truncate w-full ${phone ? valColor(activeTab === 'staff') : (activeTab === 'staff' ? 'text-white/50' : 'text-text-secondary/60')}`}>
@@ -76,7 +76,7 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
                                 </span>
                             </span>
                             <div className={`w-full h-[1px] rounded-full relative z-10 my-[2px]  ${activeTab === 'staff' ? 'bg-white/25' : 'bg-border/60'}`} />
-                            <div className="flex flex-col justify-between items-start relative z-10 mt-[2px] w-full gap-[3px]">
+                            <div className="flex flex-col justify-between items-start relative z-10 mt-[6px] w-full gap-[3px]">
                                 <span className={`text-[12px] sm:text-[13px] font-black uppercase tracking-wider ${lblColor(activeTab === 'staff')}`}>Nhân sự</span>
                                 <div className="flex items-center gap-1.5">
                                     <Users size={15} className={iconColor(activeTab === 'staff')} />

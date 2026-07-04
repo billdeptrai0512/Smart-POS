@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Check } from 'lucide-react'
 
 // Types the draft text out left→right. Keyed by the held item's id (in render)
 // so a NEW tap retypes from scratch; toggling extras only grows the text, so the
@@ -72,7 +72,12 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                     <div className="flex flex-col justify-between items-start relative z-10 w-full">
                         <div className="flex items-center justify-between w-full">
                             <span className="text-[12px] sm:text-[13px] text-white font-black uppercase tracking-wider">Nhật ký</span>
-                            <ArrowRight size={20} strokeWidth={2.5} className="text-white shrink-0" />
+                            {/* Draft pending → check: "tap to commit". Otherwise arrow: "go to history". */}
+                            <span className="shrink-0 w-7 h-7 rounded-full bg-white border-2 border-white/50 flex items-center justify-center">
+                                {draftOrder
+                                    ? <Check size={16} strokeWidth={3.125} className="text-bg" />
+                                    : <ArrowRight size={16} strokeWidth={3.125} className="text-bg" />}
+                            </span>
                         </div>
                         <div className="w-full">
                             {rows.length > 0 ? (
