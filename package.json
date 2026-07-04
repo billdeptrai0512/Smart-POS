@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:money": "node scripts/test-money-staging.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

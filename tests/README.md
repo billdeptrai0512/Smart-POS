@@ -39,8 +39,9 @@ Mỗi file có **header** ghi: test cái gì + file nguồn. Từng case đọc 
 `TINH_TOAN_TON_KHO.md` (trong `inventory/`) giải thích công thức giá vốn/tiêu hao mà bộ
 test inventory kiểm chứng.
 
-## Còn thiếu — logic tiền tầng SQL
+## Logic tiền tầng SQL — chạy riêng trên staging
 
-WAC (giá vốn trung bình), `cash_phase`, cascade tồn khi sửa/hủy phiếu **sống trong RPC
-Postgres**, chưa test được vì cần Supabase **staging** riêng (cấm trỏ prod). Kế hoạch:
-[docs/SQL_MONEY_TESTS.md](../docs/SQL_MONEY_TESTS.md).
+WAC, `cash_phase`, owing, cancel **sống trong RPC Postgres**, không unit-test JS được. Test
+bằng `npm run test:money` (`scripts/test-money-staging.mjs`) — gọi RPC thật trên Supabase
+**staging** (cần `.env.staging.local`, cấm trỏ prod). Setup + danh sách case:
+[docs/SQL_MONEY_TESTS.md](../docs/SQL_MONEY_TESTS.md). Không chạy trong `npm test`.
