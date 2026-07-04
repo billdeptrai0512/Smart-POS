@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import * as Sentry from '@sentry/react'
 
 // navigator.clipboard fails in non-secure contexts and inside iframes without
 // `allow="clipboard-write"`. Falls back to the legacy execCommand path which
@@ -49,6 +50,8 @@ export function useToast(duration = 3500) {
         ].join('\n')
 
         console.error(`[${actionLabel}]`, err)
+        // No-op khi Sentry chưa init (dev) — tag `action` để lọc lỗi theo thao tác.
+        Sentry.captureException(err, { tags: { action: actionLabel } })
         showToast('Có lỗi xảy ra', 'error', {
             label: 'Sao chép lỗi',
             onClick: async () => {
