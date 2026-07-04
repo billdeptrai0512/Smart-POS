@@ -45,9 +45,22 @@ export default function InlineEditor({
     if (editing) {
         return (
             <span className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                {allowNegative && (
+                    // ± toggle: some phones' numeric keyboards have no reachable "-".
+                    // preventDefault keeps the input focused so onBlur doesn't commit+close.
+                    <button
+                        type="button"
+                        onMouseDown={e => e.preventDefault()}
+                        onClick={() => setDraft(d => d.startsWith('-') ? d.slice(1) : '-' + d)}
+                        className="shrink-0 w-6 h-6 flex items-center justify-center rounded border border-border/60 text-[13px] font-bold text-text-secondary hover:text-primary hover:border-primary/50"
+                        title="Đổi dấu âm/dương"
+                    >
+                        ±
+                    </button>
+                )}
                 <input
                     type={type === 'number' ? 'text' : type}
-                    inputMode={type === 'number' ? (allowNegative ? undefined : 'decimal') : undefined}
+                    inputMode={type === 'number' ? 'decimal' : undefined}
                     autoFocus
                     value={draft}
                     onChange={e => setDraft(transform ? transform(e.target.value) : e.target.value)}
