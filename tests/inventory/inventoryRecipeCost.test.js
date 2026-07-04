@@ -1,3 +1,6 @@
+// Tồn kho — giá vốn từ công thức + extras (calculateItemCost).
+// Nguồn: src/utils/inventory.js · xem TINH_TOAN_TON_KHO.md cùng thư mục
+
 import { describe, it, expect } from 'vitest';
 import { calculateItemCost, calculateEstimatedConsumption } from '../../src/utils/inventory';
 

@@ -1,5 +1,8 @@
+// Tồn kho — tiêu hao & hao hụt: calculateEstimatedConsumption, calculateLossValue, refillTarget.
+// Nguồn: src/utils/inventory.js
+
 import { describe, it, expect } from 'vitest';
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateRefillTarget, calculateLossValue, buildRecipeIngredientSet } from './inventory';
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateRefillTarget, calculateLossValue, buildRecipeIngredientSet } from '../../src/utils/inventory';
 
 const recipes = [
     { product_id: 'cf_den', ingredient: 'coffee_g', amount: 18 },

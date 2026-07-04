@@ -1,8 +1,11 @@
+// Ngày — parseIsoDay và tiện ích date-picker.
+// Nguồn: src/components/common/datePickerUtils.js
+
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
     getMonthGrid, shiftMonth, monthTitle, formatIsoDisplay, formatIsoShort,
     isIsoBefore, isIsoAfter, isIsoEqual, presetRanges, parseIsoDay, applyPresetToScope,
-} from './datePickerUtils'
+} from '../../src/components/common/datePickerUtils'
 
 // NOTE: all date math flows through utils/dateVN, which pins boundaries to
 // Asia/Ho_Chi_Minh (+07:00). These tests assert that VN-anchored behaviour and

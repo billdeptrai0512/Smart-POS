@@ -1,5 +1,8 @@
+// Báo cáo — mô hình "thực chi": splitExpenses, aggregateOrderStats, computeCashFlowTotals, dedupe chốt ca.
+// Nguồn: src/utils/reportStats.js
+
 import { describe, it, expect } from 'vitest'
-import { splitExpenses, aggregateOrderStats, computeCashFlowTotals, dedupeShiftClosingsByDay } from './reportStats'
+import { splitExpenses, aggregateOrderStats, computeCashFlowTotals, dedupeShiftClosingsByDay } from '../../src/utils/reportStats'
 
 describe('splitExpenses (thực chi model)', () => {
     it('sums non-refill expenses into dailyExpense', () => {

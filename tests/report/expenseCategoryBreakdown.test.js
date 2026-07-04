@@ -1,5 +1,8 @@
+// Báo cáo — gộp chi phí theo nhóm (buildCategoryBreakdown).
+// Nguồn: src/utils/expenseCategoryBreakdown.js
+
 import { describe, it, expect } from 'vitest'
-import { buildCategoryBreakdown } from './expenseCategoryBreakdown'
+import { buildCategoryBreakdown } from '../../src/utils/expenseCategoryBreakdown'
 
 const cats = [
     { id: 'op-salary', name: 'Lương nhân viên', group_section: 'operating', sort_order: 10, is_default: true },

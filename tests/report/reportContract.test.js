@@ -1,3 +1,6 @@
+// Báo cáo — contract: fetcher guest ↔ Supabase phải cùng shape dữ liệu.
+// Nguồn: src/services/reportService.js (mock cache + supabaseClient)
+
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 // Mutable container the mocked Supabase RPC reads from (vi.mock is hoisted, so the
@@ -6,14 +9,14 @@ const h = vi.hoisted(() => ({ rpcData: { current: {} } }))
 
 // Make the report cache a pass-through so every call actually executes its branch
 // (no stale cache bleeding across cases).
-vi.mock('./cache', () => {
+vi.mock('../../src/services/cache', () => {
     const passthrough = { through: (_key, fn) => fn() }
     return { reportCache: passthrough, historicalCache: passthrough, invalidateReportCache: () => {} }
 })
 
 // Mock the Supabase client. rpc() returns the documented RPC contract; from()...single()
 // returns null so attachCashClosedAt is a no-op.
-vi.mock('../lib/supabaseClient', () => {
+vi.mock('../../src/lib/supabaseClient', () => {
     const qb = {
         select: () => qb, eq: () => qb, gte: () => qb, lte: () => qb, lt: () => qb,
         order: () => qb, limit: () => qb,
@@ -28,8 +31,8 @@ vi.mock('../lib/supabaseClient', () => {
     }
 })
 
-import * as repo from './localRepository'
-import { fetchDailyReportContext, fetchReportByDate, fetchReportByRange } from './reportService'
+import * as repo from '../../src/services/localRepository'
+import { fetchDailyReportContext, fetchReportByDate, fetchReportByRange } from '../../src/services/reportService'
 
 function installLocalStorage() {
     const store = new Map()

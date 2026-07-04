@@ -1,8 +1,11 @@
+// Menu — thứ tự MENU_SEQUENCE.
+// Nguồn: src/utils/menuSequence.js
+
 import { describe, it, expect, vi } from 'vitest'
 import {
     MENU_SEQUENCE, MENU_BOUNDARY_ROUTE,
     menuStep, menuNext, menuPrev, goToMenuStep,
-} from './menuSequence'
+} from '../../src/utils/menuSequence'
 
 describe('MENU_SEQUENCE shape', () => {
     it('is the 2-stop dashboard line in order', () => {

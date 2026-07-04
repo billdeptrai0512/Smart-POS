@@ -1,6 +1,9 @@
+// Tiền — computeDiscount, parse/format VND, và COGS calculateItemCost.
+// Nguồn: src/utils/money.js + src/utils/inventory.js
+
 import { describe, it, expect } from 'vitest'
-import { computeDiscount, parseVNDInput, formatVNDInput } from './money'
-import { calculateItemCost } from './inventory'
+import { computeDiscount, parseVNDInput, formatVNDInput } from '../../src/utils/money'
+import { calculateItemCost } from '../../src/utils/inventory'
 
 describe('calculateItemCost (COGS)', () => {
     const recipes = [

@@ -1,5 +1,8 @@
+// Menu — bố cục lưới: computeExtrasAfterIdx.
+// Nguồn: src/utils/menuGridLayout.js
+
 import { describe, it, expect } from 'vitest'
-import { computeExtrasAfterIdx } from './menuGridLayout'
+import { computeExtrasAfterIdx } from '../../src/utils/menuGridLayout'
 
 const p = (id) => ({ id })
 const div = (id) => ({ id, is_divider: true })

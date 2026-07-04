@@ -1,5 +1,8 @@
+// Tồn kho — phát hiện lệch key nguyên liệu (detectKeyMismatches, suggestCanonical).
+// Nguồn: src/utils/ingredientKeySync.js
+
 import { describe, it, expect } from 'vitest'
-import { detectKeyMismatches, suggestCanonical } from './ingredientKeySync'
+import { detectKeyMismatches, suggestCanonical } from '../../src/utils/ingredientKeySync'
 
 describe('detectKeyMismatches — orphan classification', () => {
     it('flags a recipe key missing from ingredient_costs', () => {

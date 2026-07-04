@@ -1,5 +1,8 @@
+// Guest mode — localRepository: parity đổi tên key nguyên liệu (sync_ingredient_key).
+// Nguồn: src/services/localRepository.js
+
 import { describe, it, expect, beforeEach } from 'vitest'
-import * as repo from './localRepository'
+import * as repo from '../../src/services/localRepository'
 
 // vitest runs in the `node` environment (no DOM), so localRepository's direct
 // `localStorage` access would throw. Install a fresh in-memory shim per test.

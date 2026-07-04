@@ -55,15 +55,15 @@ Xe cà phê mang đi quy mô nhỏ (1–3 nhân viên), bán buổi sáng, vận
 ## Roadmap ưu tiên
 
 ### Ngắn hạn
-- [ ] **Cải thiện /address**: KPI realtime (doanh thu hôm nay, số ly) hiển thị trực tiếp trên card địa điểm
+- [x] **Cải thiện /address**: KPI realtime (doanh thu hôm nay, số ly) hiển thị trực tiếp trên card địa điểm
 - [ ] **Share báo cáo**: Nút share trên /daily-report → screenshot đẹp gửi Zalo
 
 ### Trung hạn
-- [ ] **Daily target + KPI**: Chủ đặt mục tiêu ly / doanh thu ngày. Hiển thị tiến độ trên POS. Đồng bộ với 2 lớp kiểm soát (tiền khớp + nguyên liệu khớp) để tính KPI ca thực tế.
+- [x] **Daily target + KPI**: Chủ đặt mục tiêu ly / doanh thu ngày. Hiển thị tiến độ trên POS. Đồng bộ với 2 lớp kiểm soát (tiền khớp + nguyên liệu khớp) để tính KPI ca thực tế.
 - [ ] **Push notification**: Cảnh báo tồn kho thấp, doanh thu đạt mục tiêu
 
 ### Dài hạn (khi có traction)
-- [ ] Cổng thanh toán (thu 17k/ngày/xe)
+- [x] Cổng thanh toán (thu 17k/ngày/xe)
 - [ ] Admin dashboard tổng hợp toàn bộ địa điểm
 - [ ] Onboarding tự động
 

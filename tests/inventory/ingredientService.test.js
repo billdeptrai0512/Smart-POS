@@ -1,6 +1,9 @@
+// Tồn kho — guest ingredient service, parity đổi tên key với localRepository.
+// Nguồn: src/services/ingredientService.js
+
 import { describe, it, expect, beforeEach } from 'vitest'
-import * as repo from './localRepository'
-import * as ingredientService from './ingredientService'
+import * as repo from '../../src/services/localRepository'
+import * as ingredientService from '../../src/services/ingredientService'
 
 function installLocalStorage() {
     const store = new Map()

@@ -1,6 +1,9 @@
+// POS — bulkSubmitOrders: flush đơn offline ở guest mode.
+// Nguồn: src/services/orderService.js
+
 import { describe, it, expect, beforeEach } from 'vitest'
-import * as repo from './localRepository'
-import { bulkSubmitOrders } from './orderService'
+import * as repo from '../../src/services/localRepository'
+import { bulkSubmitOrders } from '../../src/services/orderService'
 
 // vitest `node` env has no localStorage; install an in-memory shim per test.
 function installLocalStorage() {

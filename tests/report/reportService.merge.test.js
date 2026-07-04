@@ -1,3 +1,6 @@
+// Báo cáo — mergeShiftClosingInventory: ngữ nghĩa gộp tồn khi nhiều lần chốt ca.
+// Nguồn: src/services/reportService.js
+
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // The guest path of mergeShiftClosingInventory merges patches into inventory_report
@@ -14,16 +17,16 @@ const localRepo = {
     updateLocalExpense: vi.fn(),
 }
 
-vi.mock('../lib/supabaseClient', () => ({ supabase: null }))
-vi.mock('./localRepository', () => localRepo)
-vi.mock('./cache', () => ({
+vi.mock('../../src/lib/supabaseClient', () => ({ supabase: null }))
+vi.mock('../../src/services/localRepository', () => localRepo)
+vi.mock('../../src/services/cache', () => ({
     reportCache: new Map(), historicalCache: new Map(), invalidateReportCache: vi.fn(),
 }))
-vi.mock('../utils/dateVN', () => ({
+vi.mock('../../src/utils/dateVN', () => ({
     startOfDayVN: () => new Date(0), endOfDayVN: () => new Date(0), dateStringVN: () => '2026-06-19',
 }))
 
-const { mergeShiftClosingInventory, stripInsertOnlyDefaults } = await import('./reportService')
+const { mergeShiftClosingInventory, stripInsertOnlyDefaults } = await import('../../src/services/reportService')
 
 const entry = (ingredient, remaining) => ({ ingredient, unit: 'g', opening: null, opening_locked: false, remaining, restock: null })
 
