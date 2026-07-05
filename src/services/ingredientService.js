@@ -103,8 +103,10 @@ export async function fetchIngredientCostsAndUnits(addressId) {
     }
 
     // Try newest schema first, degrade column-by-column on undefined_column (42703)
-    // so the page still loads if count_in_audit / category migrations aren't deployed.
-    let { data, error } = await runQuery(`${BASE}, category, count_in_audit`)
+    // so the page still loads if tare_weight / count_in_audit / category migrations
+    // aren't deployed.
+    let { data, error } = await runQuery(`${BASE}, category, count_in_audit, tare_weight`)
+    if (error?.code === '42703') ({ data, error } = await runQuery(`${BASE}, category, count_in_audit`))
     if (error?.code === '42703') ({ data, error } = await runQuery(`${BASE}, category`))
     if (error?.code === '42703') ({ data, error } = await runQuery(BASE))
     if (error) {
@@ -119,7 +121,7 @@ export async function fetchIngredientCostsAndUnits(addressId) {
     for (const d of data) {
         costs[d.ingredient] = d.unit_cost
         units[d.ingredient] = d.unit || 'đv'
-        rows.push({ ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, min_stock: d.min_stock, category: d.category || null, count_in_audit: d.count_in_audit ?? true })
+        rows.push({ ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, min_stock: d.min_stock, category: d.category || null, count_in_audit: d.count_in_audit ?? true, tare_weight: d.tare_weight ?? null })
     }
     return { costs, units, rows }
 }
@@ -152,6 +154,7 @@ export async function upsertIngredientCost(ingredient, unitCost, addressId = nul
     if (opts.minStock !== undefined) payload.min_stock = opts.minStock ?? null
     if (opts.category !== undefined) payload.category = opts.category ?? null
     if (opts.countInAudit !== undefined) payload.count_in_audit = !!opts.countInAudit
+    if (opts.tareWeight !== undefined) payload.tare_weight = opts.tareWeight ?? null
 
     const upsert = (body) => supabase
         .from('ingredient_costs')
@@ -161,18 +164,15 @@ export async function upsertIngredientCost(ingredient, unitCost, addressId = nul
     const missingCol = (error, col) =>
         !!error && (error.code === 'PGRST204' || error.code === '42703' || new RegExp(col).test(error.message || ''))
 
-    let { error } = await upsert(payload)
-    // Degrade dần nếu cột optional chưa migrate: bỏ count_in_audit trước, rồi category.
-    if (missingCol(error, 'count_in_audit') && 'count_in_audit' in payload) {
-        const { count_in_audit: _a, ...rest } = payload
-        ;({ error } = await upsert(rest))
-        if (missingCol(error, 'category') && 'category' in rest) {
-            const { category: _c, ...rest2 } = rest
-            ;({ error } = await upsert(rest2))
-        }
-    } else if (missingCol(error, 'category') && 'category' in payload) {
-        const { category: _drop, ...rest } = payload
-        ;({ error } = await upsert(rest))
+    // Degrade dần nếu cột optional chưa migrate: bỏ từng cột (mới nhất trước) rồi thử lại.
+    let body = payload
+    let { error } = await upsert(body)
+    for (const col of ['tare_weight', 'count_in_audit', 'category']) {
+        if (!error) break
+        if (!missingCol(error, col) || !(col in body)) continue
+        const { [col]: _drop, ...rest } = body
+        body = rest
+        ;({ error } = await upsert(body))
     }
     if (error) throw error
 }

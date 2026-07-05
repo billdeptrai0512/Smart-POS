@@ -146,7 +146,8 @@ export const fetchLocalIngredientCosts = (addressId) => {
         pack_unit: item.pack_unit !== undefined ? item.pack_unit : item.packUnit,
         min_stock: item.min_stock !== undefined ? item.min_stock : item.minStock,
         category: item.category,
-        count_in_audit: item.count_in_audit !== undefined ? item.count_in_audit : (item.countInAudit !== undefined ? item.countInAudit : true)
+        count_in_audit: item.count_in_audit !== undefined ? item.count_in_audit : (item.countInAudit !== undefined ? item.countInAudit : true),
+        tare_weight: item.tare_weight ?? null
     }));
 };
 
@@ -174,6 +175,9 @@ export const upsertLocalIngredientCost = (payload) => {
     
     const countInAudit = payload.count_in_audit !== undefined ? payload.count_in_audit : payload.countInAudit;
     if (countInAudit !== undefined) mapped.count_in_audit = countInAudit;
+
+    const tareWeight = payload.tare_weight !== undefined ? payload.tare_weight : payload.tareWeight;
+    if (tareWeight !== undefined) mapped.tare_weight = tareWeight;
 
     if (idx >= 0) items[idx] = { ...items[idx], ...mapped };
     else items.push(mapped);

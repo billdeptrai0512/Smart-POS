@@ -78,6 +78,8 @@ export default function IngredientDetailPage() {
     // a stored 0 stays as 0). See ingredientService.upsertIngredientCost for the
     // matching write-side rule.
     const minStock = config.min_stock ?? null
+    // Khối lượng bì của hộp/chai đựng tại quầy — null/0 = không có bì.
+    const tareWeight = config.tare_weight ?? null
     // Mặc định true (chưa migrate / phiếu cũ → vẫn kiểm kê).
     const countInAudit = config.count_in_audit ?? true
     const currentStock = stockData?.current_stock ?? null
@@ -304,6 +306,21 @@ export default function IngredientDetailPage() {
         finally { setSaving(false) }
     }
 
+    async function saveTareWeight(newTare) {
+        if (newTare === (tareWeight || 0)) return
+        setSaving(true)
+        try {
+            await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, unit, {
+                category: config.category,
+                packSize: config.pack_size,
+                packUnit: config.pack_unit,
+                tareWeight: newTare || null, // 0 = xoá bì
+            })
+            refreshProducts?.()
+        } catch (err) { showError(err, 'Lưu khối lượng bì') }
+        finally { setSaving(false) }
+    }
+
     async function handleRecordPayment({ amount, paymentMethod, paidAt, cashPhase }) {
         if (!paymentInvoice) return
         setSaving(true)
@@ -456,6 +473,7 @@ export default function IngredientDetailPage() {
                         packSize={packSize}
                         packUnit={packUnit}
                         minStock={minStock}
+                        tareWeight={tareWeight}
                         warehouseStock={stockData?.warehouse_stock ?? null}
                         counterStock={stockData?.counter_stock ?? null}
                         currentStock={currentStock}
@@ -468,6 +486,7 @@ export default function IngredientDetailPage() {
                         onSaveUnit={saveUnit}
                         onSaveCost={saveCost}
                         onSaveMinStock={saveMinStock}
+                        onSaveTareWeight={saveTareWeight}
                         onChangeCategory={saveCategory}
                         onToggleAudit={saveCountInAudit}
                         onConfigurePack={() => setPackModalOpen(true)}

@@ -619,13 +619,18 @@ export default function DailyReportPage() {
         const out = []
         for (const ing of inventory.ingredientsList || []) {
             const oRaw = inventory.openingInputs[ing.ingredient]
-            const opening = r1Inv(oRaw !== undefined && oRaw !== '' ? oRaw : (inventory.openingStock[ing.ingredient] ?? 0))
+            const openingGross = r1Inv(oRaw !== undefined && oRaw !== '' ? oRaw : (inventory.openingStock[ing.ingredient] ?? 0))
+            // Đầu kỳ = số cân hộp (gồm bì) → matcha THẬT để bán = trừ bì, kẹp 0. Bì tự khử
+            // trong Hao hụt (đầu+cuối cùng gross) nên chỉ trừ ở đây — chỗ cần lượng thật.
+            const tare = r1Inv(ing.tare_weight)
+            const opening = Math.max(0, r1Inv(openingGross - tare))
             const item = toPrepItem(ing, opening, forecastFor(ing.ingredient, lastWeekUsedMap))
             if (item) {
                 // Kho tổng hiện có (warehouse_stock thực tế, KHÔNG phải số đầu ca) để rút ra
                 // quầy. Lookup theo key trực tiếp; null nếu NVL không theo dõi kho.
                 const wh = (inventory.warehouseStocks || {})[ing.ingredient]
                 item.warehouse = wh != null ? r1Inv(wh) : null
+                item.tare = tare // >0 → card hiện "bì X + <thật>"
                 out.push(item)
             }
         }
@@ -689,14 +694,18 @@ export default function DailyReportPage() {
                 const used = r1Inv(byLabelInv(ing.ingredient, usedMap))
                 counter = Math.max(0, r1Inv(opening + restock - used))
             }
-            const total = Math.max(0, r1Inv(warehouse - restock + counter))
+            // counter là số cân hộp (gồm bì) → lượng THẬT tại quầy = trừ bì, kẹp 0.
+            // Kho tổng (bịch, không hộp) không có bì. Tổng tồn thật = kho + quầy thật.
+            const tare = r1Inv(ing.tare_weight)
+            const counterReal = Math.max(0, r1Inv(counter - tare))
+            const total = Math.max(0, r1Inv(warehouse - restock + counterReal))
             const target = Math.max(forecastFor(ing.ingredient, nextDowUsedMap), r1Inv(ing.min_stock || 0))
             const item = toPrepItem(ing, total, target)
             if (item) {
-                // Tách tồn để dễ kiểm kê: kho riêng (đã trừ phần rút ra quầy) + tồn quầy.
+                // Tách tồn để dễ kiểm kê: kho riêng (đã trừ phần rút ra quầy) + tồn quầy thật.
                 // need vẫn tính từ TỔNG tồn ở toPrepItem; have đổi thành tồn quầy để hiển thị.
                 item.warehouse = Math.max(0, r1Inv(warehouse - restock))
-                item.have = counter
+                item.have = counterReal
                 out.push(item)
             }
         }
