@@ -57,7 +57,7 @@ export default function ShiftPrepCard({
                         const muted = isDone || isSkipped // đã xử lý (nhập hoặc bỏ qua) → mờ + gạch ngang
                         // Kho không đủ cho NHU CẦU hôm nay (kho < Cần) → tô đỏ: soạn hết kho vẫn
                         // thiếu, cần mua thêm. Đã xử lý rồi thì thôi cảnh báo.
-                        const shortfall = !muted && it.warehouse != null && it.warehouse < it.need
+                        const shortfall = !muted && !restockMode && it.warehouse != null && it.warehouse < it.need
 
                         const body = (
                             <>
@@ -78,14 +78,14 @@ export default function ShiftPrepCard({
                                     <span className={`block text-[14px] font-bold leading-tight ${muted ? 'text-text-dim line-through' : 'text-text'}`}>
                                         {ingredientLabel(it.ingredient)}
                                     </span>
-                                    <span className="block text-[10px] text-text-dim mt-0.5">
+                                    <div className="text-[11px] text-text-dim mt-0.5">
                                         {it.warehouse != null && (
-                                            <span className={shortfall ? 'text-danger font-bold' : ''}>
-                                                Kho {it.warehouse} {it.unit}{' · '}
+                                            <span className={`block ${shortfall ? 'text-danger font-bold' : ''}`}>
+                                                Tồn kho: {it.warehouse} {it.unit}
                                             </span>
                                         )}
-                                        {haveLabel} {it.have} {it.unit}
-                                    </span>
+                                        <span className="block">{haveLabel}: {it.have} {it.unit}</span>
+                                    </div>
                                 </div>
                                 <div className="flex flex-col items-end shrink-0">
                                     {packVerb && it.needPacks > 0 ? (

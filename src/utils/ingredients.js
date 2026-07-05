@@ -40,6 +40,19 @@ export function ingredientLabel(key) {
     return name.charAt(0).toUpperCase() + name.slice(1)
 }
 
+// Đọc giá trị của một nguyên liệu từ `map` kèm fallback theo LABEL: nếu không có key trực
+// tiếp, dò một key khác cùng nhãn (dữ liệu cũ lưu theo biến thể key). Trả `fallback` nếu
+// không thấy. Dùng chung cho tồn kho / dự báo để mọi nơi tra key giống nhau (tránh lệch).
+export function lookupByLabel(key, map, fallback = 0) {
+    if (!map) return fallback
+    if (map[key] != null) return map[key]
+    const label = ingredientLabel(key).toLowerCase()
+    for (const [k, v] of Object.entries(map)) {
+        if (k !== key && ingredientLabel(k).toLowerCase() === label) return v
+    }
+    return fallback
+}
+
 export function getIngredientUnit(key, storedUnit, ingredientUnits) {
     if (storedUnit && storedUnit !== 'đv') return storedUnit;
     if (ingredientUnits?.[key] && ingredientUnits[key] !== 'đv') return ingredientUnits[key];

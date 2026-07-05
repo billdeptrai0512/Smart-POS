@@ -7,7 +7,7 @@ import {
 import { mergeShiftClosingInventory, fetchYesterdayShiftClosing } from '../services/reportService'
 import { supabase } from '../lib/supabaseClient'
 import { isGuest } from '../services/localRepository'
-import { sortIngredients } from '../utils/ingredients'
+import { sortIngredients, lookupByLabel } from '../utils/ingredients'
 import { dateStringVN } from '../utils/dateVN'
 
 // Owns all the inventory-side state and side-effects that used to live in
@@ -359,7 +359,10 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         const list = []
         for (const ing of ingredientsList) {
             const r = Number(restockInputs[ing.ingredient] || 0)
-            const avail = effectiveWarehouseStocks[ing.ingredient]
+            // Tra kèm fallback theo label (giống warehousePrepList) — nếu chỉ tra key trực tiếp,
+            // NVL lưu key biến thể sẽ ra undefined → bỏ qua guard → restock vượt kho lọt qua,
+            // server clamp warehouse về 0. Dùng undefined làm "không theo dõi kho" (bỏ kiểm).
+            const avail = lookupByLabel(ing.ingredient, effectiveWarehouseStocks, undefined)
             if (avail !== undefined && r > Number(avail || 0)) list.push(ing.ingredient)
         }
         return list

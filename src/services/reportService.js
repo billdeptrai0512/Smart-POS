@@ -296,16 +296,16 @@ export async function fetchPastDaysOrderItems(addressId, days = 7) {
     })
 }
 
-// Fetch order items for exactly "same day last week" (for tomorrow's prediction, so 6 days ago)
-export async function fetchLastWeekSameDayOrderItems(addressId) {
-    return historicalCache.through([addressId, 'lastWeekSameDay', dateStringVN()], async () => {
+// Fetch order items for the same weekday one week ago, `daysAgo` days back.
+//   daysAgo = 7 → same weekday as TODAY   → dự báo "Soạn cho hôm nay".
+//   daysAgo = 6 → same weekday as TOMORROW → dự báo "Chuẩn bị ngày mai".
+export async function fetchLastWeekSameDayOrderItems(addressId, daysAgo = 6) {
+    return historicalCache.through([addressId, 'lastWeekSameDay', daysAgo, dateStringVN()], async () => {
         if (!supabase) return []
-        // If today is Tuesday, tomorrow is Wednesday. We want to predict tomorrow using Today and Last Wednesday.
-        // Last Wednesday is Today - 6 days.
         const today = startOfDayVN()
 
         const targetDate = new Date(today)
-        targetDate.setDate(targetDate.getDate() - 6)
+        targetDate.setDate(targetDate.getDate() - daysAgo)
 
         const nextDate = new Date(targetDate)
         nextDate.setDate(nextDate.getDate() + 1)
