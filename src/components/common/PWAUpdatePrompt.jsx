@@ -11,7 +11,8 @@ export default function PWAUpdatePrompt() {
             // Check for updates every 30 minutes
             if (r) {
                 setInterval(() => {
-                    r.update()
+                    // ponytail: nuốt lỗi mạng lúc check update, tránh unhandled rejection bắn noise lên Sentry
+                    r.update().catch(() => {})
                 }, 30 * 60 * 1000)
             }
         },

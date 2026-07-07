@@ -15,6 +15,13 @@ if (import.meta.env.PROD) {
     dsn: 'https://53998493c765f2153e300936a8e7b9ef@o4511676122988544.ingest.us.sentry.io/4511676137865216',
     tracesSampleRate: 0,
     release: __APP_UPDATE_LOG__,
+    // ponytail: chặn noise không phải lỗi app — script Zalo in-app browser tiêm vào trang,
+    // và cơ chế tự phục hồi lock đa-tab của Supabase auth (không ảnh hưởng đăng nhập)
+    ignoreErrors: [
+      'isReCreate is not defined',
+      'zaloJSV2 is not defined',
+      'Lock was stolen by another request',
+    ],
   })
 }
 
