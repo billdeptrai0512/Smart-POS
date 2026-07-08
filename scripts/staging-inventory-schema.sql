@@ -1,4 +1,6 @@
--- STAGING MONEY SCHEMA (subset) — chỉ để test 4 RPC money. KHÔNG phải full app schema.
+-- STAGING INVENTORY SCHEMA (subset) — chỉ để test 4 RPC tiền nhập kho (WAC/cash_phase/owing).
+-- KHÔNG phải full app schema. Tiền bán hàng (bulk_create_orders) có schema riêng, xem
+-- scripts/staging-order-schema.sql.
 -- Sinh tự động từ supabase/schema.sql + migrations. Paste vào SQL Editor STAGING, Run.
 -- An toàn re-run: tables IF NOT EXISTS, functions CREATE OR REPLACE.
 

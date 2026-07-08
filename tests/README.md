@@ -41,7 +41,11 @@ test inventory kiểm chứng.
 
 ## Logic tiền tầng SQL — chạy riêng trên staging
 
-WAC, `cash_phase`, owing, cancel **sống trong RPC Postgres**, không unit-test JS được. Test
-bằng `npm run test:money` (`scripts/test-money-staging.mjs`) — gọi RPC thật trên Supabase
-**staging** (cần `.env.staging.local`, cấm trỏ prod). Setup + danh sách case:
+Sống trong RPC Postgres, không unit-test JS được. Gọi RPC thật trên Supabase **staging**
+(cần `.env.staging.local`, cấm trỏ prod). Setup + danh sách case:
 [docs/SQL_MONEY_TESTS.md](../docs/SQL_MONEY_TESTS.md). Không chạy trong `npm test`.
+
+- `npm run test:inventory` (`scripts/test-inventory-staging.mjs`) — tiền NHẬP KHO: WAC,
+  `cash_phase`, owing NCC, cancel/edit phiếu (`process_ingredient_restock` và họ hàng).
+- `npm run test:money` (`scripts/test-money-staging.mjs`) — tiền BÁN HÀNG: `bulk_create_orders`
+  tự tính giá bán/giá vốn server-side, không tin client.

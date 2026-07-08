@@ -1,10 +1,18 @@
-// Test logic TIỀN ở tầng SQL (WAC, cash_phase, owing, cancel) — chạy trên Supabase STAGING.
+// Test logic TIỀN BÁN HÀNG ở tầng SQL (bulk_create_orders: giá bán + giá vốn tự tính
+// server-side, không tin số client gửi) — chạy trên Supabase STAGING.
 //
-// Vì WAC/cascade sống trong RPC Postgres, không có JS để unit-test. Script này gọi RPC thật
-// qua supabase-js (service_role) rồi assert kết quả trả về + đọc lại state.
+// Đây là tiền của ĐƠN HÀNG (bán ra) — xem scripts/test-inventory-staging.mjs cho tiền
+// NHẬP KHO (process_ingredient_restock và họ hàng).
+//
+// Bối cảnh: trước 20260708_bulk_create_orders_server_pricing.sql, client tự tính total/
+// unit_cost rồi gửi thẳng lên RPC — bất kỳ session nhân viên nào (kể cả tự gọi RPC qua
+// DevTools) đều có thể ghi total sai lệch. Giờ RPC tự tính từ products/product_extras
+// (giá bán) và recipes/extra_ingredients/ingredient_costs (giá vốn), client chỉ khai
+// product_id + quantity + extra_ids. Script này assert đúng điều đó bằng RPC thật, không
+// phải chỉ đọc code.
 //
 // Cần: .env.staging.local với STAGING_SUPABASE_URL + STAGING_SUPABASE_SECRET, và đã chạy
-// scripts/staging-money-schema.sql lên staging (tạo 7 bảng + 6 hàm).
+// scripts/staging-order-schema.sql lên staging.
 //
 //   node scripts/test-money-staging.mjs      (hoặc: npm run test:money)
 //
@@ -25,10 +33,13 @@ if (URL_.includes(PROD_REF)) { console.error('❌ URL trỏ PROD — abort.'); p
 
 const sb = createClient(URL_, KEY, { auth: { persistSession: false } })
 
-// Fixed test fixtures (re-runnable: seed() dọn sạch trước mỗi case).
-const MANAGER_ID = '00000000-0000-4000-8000-000000000001'
-const ADDRESS_ID = '00000000-0000-4000-8000-000000000002'
-const ING = 'test_ing_ca_phe'
+// Fixed test fixtures, tách khỏi test-inventory-staging.mjs (...0001x thay vì ...0001)
+// để 2 script chạy trên cùng staging DB không đụng nhau.
+const MANAGER_ID = '00000000-0000-4000-8000-000000000011'
+const ADDRESS_ID = '00000000-0000-4000-8000-000000000012'
+const OTHER_ADDRESS_ID = '00000000-0000-4000-8000-000000000013' // cho case cross-tenant
+const ING_MAIN = 'test_ing_tra'
+const ING_EXTRA = 'test_ing_duong'
 
 let pass = 0, fail = 0
 function check(name, cond, detail = '') {
@@ -40,113 +51,125 @@ async function expectError(name, promise) {
   check(name, !!error, error ? '' : '(không raise error như mong đợi)')
 }
 
-// Xoá sạch data test-address rồi seed lại user + address + ingredient_costs(0).
-// UPDATE ingredient_costs trong RPC chỉ ăn nếu row đã tồn tại → phải seed sẵn.
+let PRODUCT_ID, EXTRA_ID, OTHER_PRODUCT_ID, OTHER_EXTRA_ID
+
 async function seed() {
-  await sb.from('expenses').delete().eq('address_id', ADDRESS_ID)       // cascade → expense_payments
-  await sb.from('shift_closings').delete().eq('address_id', ADDRESS_ID)
+  await sb.from('orders').delete().eq('address_id', ADDRESS_ID)          // cascade → order_items
+  await sb.from('orders').delete().eq('address_id', OTHER_ADDRESS_ID)
+  await sb.from('products').delete().eq('owner_address_id', ADDRESS_ID)  // cascade → product_extras → extra_ingredients, recipes
+  await sb.from('products').delete().eq('owner_address_id', OTHER_ADDRESS_ID)
   await sb.from('ingredient_costs').delete().eq('address_id', ADDRESS_ID)
+
   await sb.from('users').upsert({ id: MANAGER_ID, name: 'Test Manager', role: 'manager' })
-  await sb.from('addresses').upsert({ id: ADDRESS_ID, manager_id: MANAGER_ID, name: 'Test Staging' })
-  await sb.from('ingredient_costs').insert({ ingredient: ING, unit_cost: 0, unit: 'g', address_id: ADDRESS_ID })
+  await sb.from('addresses').upsert({ id: ADDRESS_ID, manager_id: MANAGER_ID, name: 'Test Staging Order' })
+  await sb.from('addresses').upsert({ id: OTHER_ADDRESS_ID, manager_id: MANAGER_ID, name: 'Test Staging Order — địa chỉ khác' })
+
+  // "Trà sữa" giá 25000, công thức 10 đơn vị nguyên liệu chính @ 50đ/đv = 500đ giá vốn.
+  const { data: prod } = await sb.from('products')
+    .insert({ name: 'Trà sữa test', price: 25000, owner_address_id: ADDRESS_ID })
+    .select('id').single()
+  PRODUCT_ID = prod.id
+
+  const { data: extra } = await sb.from('product_extras')
+    .insert({ product_id: PRODUCT_ID, address_id: ADDRESS_ID, name: 'Size L test', price: 5000 })
+    .select('id').single()
+  EXTRA_ID = extra.id
+
+  await sb.from('ingredient_costs').insert([
+    { ingredient: ING_MAIN, unit_cost: 50, unit: 'g', address_id: ADDRESS_ID },
+    { ingredient: ING_EXTRA, unit_cost: 20, unit: 'g', address_id: ADDRESS_ID },
+  ])
+  await sb.from('recipes').insert({ product_id: PRODUCT_ID, ingredient: ING_MAIN, amount: 10, address_id: ADDRESS_ID })
+  await sb.from('extra_ingredients').insert({ extra_id: EXTRA_ID, ingredient: ING_EXTRA, amount: 5 })
+
+  // Sản phẩm + extra ở ĐỊA CHỈ KHÁC — dùng cho case cross-tenant / extra sai product.
+  const { data: otherProd } = await sb.from('products')
+    .insert({ name: 'Trà sữa địa chỉ khác', price: 99999, owner_address_id: OTHER_ADDRESS_ID })
+    .select('id').single()
+  OTHER_PRODUCT_ID = otherProd.id
+  const { data: otherExtra } = await sb.from('product_extras')
+    .insert({ product_id: OTHER_PRODUCT_ID, address_id: OTHER_ADDRESS_ID, name: 'Extra địa chỉ khác', price: 1 })
+    .select('id').single()
+  OTHER_EXTRA_ID = otherExtra.id
 }
 
-const restock = (p) => sb.rpc('process_ingredient_restock', {
-  p_address_id: ADDRESS_ID, p_ingredient: ING, p_staff_name: 't',
-  p_payment_method: 'cash', p_cash_phase: 'in_shift', ...p,
-})
-const unitCost = async () => (await sb.from('ingredient_costs').select('unit_cost')
-  .eq('address_id', ADDRESS_ID).eq('ingredient', ING).single()).data?.unit_cost
-const paidTotal = async (expId) => ((await sb.from('expense_payments').select('amount')
-  .eq('expense_id', expId)).data || []).reduce((s, r) => s + Number(r.amount), 0)
-const expenseRow = async (expId) => (await sb.from('expenses').select('amount, metadata')
-  .eq('id', expId).single()).data
+const bulkCreate = (order) => sb.rpc('bulk_create_orders', { orders_payload: [order] })
+const orderRow = async (id) => (await sb.from('orders').select('*').eq('id', id).single()).data
+const itemRows = async (orderId) => (await sb.from('order_items').select('*').eq('order_id', orderId)).data
 
 async function main() {
-  // ── Case 1: nhập lần đầu → WAC = amountDue/qty, owing = amountDue − paid ─────
-  console.log('\nCase 1 — nhập lần đầu: WAC = amountDue/qty')
+  // ── Case 1: giá bán + giá vốn tự tính từ DB, client chỉ khai product_id/quantity/extra_ids ──
+  console.log('\nCase 1 — server tự tính total/unit_cost, không cần client gửi giá')
   await seed()
+  const orderId1 = '00000000-0000-4000-8000-0000000000a1'
   {
-    const { data, error } = await restock({ p_qty: 1000, p_subtotal: 100000, p_initial_payment: 100000 })
+    const { error } = await bulkCreate({
+      id: orderId1, address_id: ADDRESS_ID, staff_name: 't', discount_amount: 0,
+      items: [{ product_id: PRODUCT_ID, quantity: 2, extra_ids: [EXTRA_ID] }],
+    })
     if (error) throw error
-    check('amount = 100000', data.amount == 100000)
-    check('owing = 0 (trả đủ)', data.owing == 0)
-    check('new_unit_cost = 100 (=100000/1000)', data.new_unit_cost == 100)
-    check('after_stock = 1000', data.after_stock == 1000)
-    check('ingredient_costs.unit_cost đã ghi = 100', (await unitCost()) == 100)
+    const row = await orderRow(orderId1)
+    check('orders.id = id do client sinh (identity, không phải gen_random_uuid)', row?.id === orderId1)
+    check('total = 60000 (=(25000+5000)*2, KHÔNG do client gửi)', row?.total === 60000, `got ${row?.total}`)
+    check('total_cost = 1200 (=(10*50 + 5*20)*2)', row?.total_cost === 1200, `got ${row?.total_cost}`)
+    const items = await itemRows(orderId1)
+    check('order_items có 1 dòng, quantity=2', items?.length === 1 && items[0].quantity === 2)
+    check('order_items.unit_cost = 600 (giá vốn/đơn vị, chưa nhân quantity)', items?.[0]?.unit_cost === 600, `got ${items?.[0]?.unit_cost}`)
+    check('order_items.options tự build = "Size L test" (server, không phải client)', items?.[0]?.options === 'Size L test')
   }
 
-  // ── Case 2: nhập lần 2 giá khác (có tồn đếm) → WAC moving-average ────────────
-  console.log('\nCase 2 — WAC moving-average trên tồn đã đếm')
+  // ── Case 2: client cố gửi total/unit_cost giả trong payload → RPC bỏ qua, vẫn tính đúng ──
+  console.log('\nCase 2 — client gửi total giả bị bỏ qua (không tin client)')
   await seed()
-  await sb.from('ingredient_costs').update({ unit_cost: 100 }).eq('address_id', ADDRESS_ID).eq('ingredient', ING)
-  // shift_closing với remaining=500 → v_current_stock=500 cho WAC.
-  await sb.from('shift_closings').insert({ address_id: ADDRESS_ID, inventory_report: [{ ingredient: ING, remaining: 500, restock: 0 }] })
+  const orderId2 = '00000000-0000-4000-8000-0000000000a2'
   {
-    const { data, error } = await restock({ p_qty: 500, p_subtotal: 150000, p_initial_payment: 150000 })
+    const { error } = await bulkCreate({
+      id: orderId2, address_id: ADDRESS_ID, staff_name: 't', discount_amount: 0,
+      total: 1, total_cost: 1, // giả mạo — RPC không đọc field này
+      items: [{ product_id: PRODUCT_ID, quantity: 1, extra_ids: [], unit_cost: 1 }],
+    })
     if (error) throw error
-    // ROUND((500*100 + 150000) / (500+500)) = ROUND(200000/1000) = 200
-    check('old_unit_cost = 100', data.old_unit_cost == 100)
-    check('new_unit_cost = 200 (moving-average)', data.new_unit_cost == 200, `got ${data.new_unit_cost}`)
+    const row = await orderRow(orderId2)
+    check('total thật = 25000, KHÔNG phải total=1 client gửi', row?.total === 25000, `got ${row?.total}`)
   }
 
-  // ── Case 3: discount + extra_cost → amountDue = subtotal − discount + extra ───
-  console.log('\nCase 3 — amountDue = subtotal − discount + extra')
+  // ── Case 3: product thuộc địa chỉ KHÁC → RAISE (chặn cross-tenant) ──────────────
+  console.log('\nCase 3 — guard: product của địa chỉ khác bị từ chối')
   await seed()
+  await expectError('product_id thuộc OTHER_ADDRESS_ID nhưng order gắn ADDRESS_ID → lỗi',
+    bulkCreate({
+      address_id: ADDRESS_ID, staff_name: 't', discount_amount: 0,
+      items: [{ product_id: OTHER_PRODUCT_ID, quantity: 1, extra_ids: [] }],
+    }))
+
+  // ── Case 4: extra thuộc product/địa chỉ khác → RAISE ────────────────────────────
+  console.log('\nCase 4 — guard: extra không thuộc product này bị từ chối')
+  await seed()
+  await expectError('extra_ids chứa extra của product khác → lỗi',
+    bulkCreate({
+      address_id: ADDRESS_ID, staff_name: 't', discount_amount: 0,
+      items: [{ product_id: PRODUCT_ID, quantity: 1, extra_ids: [OTHER_EXTRA_ID] }],
+    }))
+
+  // ── Case 5: discount_amount trừ đúng vào total đã tính ──────────────────────────
+  console.log('\nCase 5 — discount_amount trừ vào total server-computed')
+  await seed()
+  const orderId5 = '00000000-0000-4000-8000-0000000000a5'
   {
-    const { data, error } = await restock({ p_qty: 100, p_subtotal: 60000, p_discount: 10000, p_extra_cost: 5000 })
+    const { error } = await bulkCreate({
+      id: orderId5, address_id: ADDRESS_ID, staff_name: 't', discount_amount: 10000,
+      items: [{ product_id: PRODUCT_ID, quantity: 1, extra_ids: [] }],
+    })
     if (error) throw error
-    check('amount = 55000 (60000−10000+5000)', data.amount == 55000, `got ${data.amount}`)
-    check('new_unit_cost = 550 (=55000/100)', data.new_unit_cost == 550, `got ${data.new_unit_cost}`)
-    check('owing = 0 (paid mặc định = amountDue)', data.owing == 0)
+    const row = await orderRow(orderId5)
+    check('total = 15000 (=25000-10000)', row?.total === 15000, `got ${row?.total}`)
   }
-
-  // ── Case 4: trả một phần → owing đúng; record_invoice_payment → owing 0; overpay bị chặn ─
-  console.log('\nCase 4 — trả nợ NCC: partial → record_invoice_payment → owing 0; chặn overpay')
-  await seed()
-  {
-    const { data, error } = await restock({ p_qty: 100, p_subtotal: 100000, p_initial_payment: 40000 })
-    if (error) throw error
-    check('owing = 60000 sau khi trả 40000', data.owing == 60000, `got ${data.owing}`)
-    const { error: e2 } = await sb.rpc('record_invoice_payment', { p_expense_id: data.expense_id, p_amount: 60000, p_cash_phase: 'post_close' })
-    check('record_invoice_payment 60000 thành công', !e2, e2?.message)
-    check('Σ payments = 100000 (owing về 0)', (await paidTotal(data.expense_id)) == 100000)
-    await expectError('trả thêm 1đ → chặn overpay', sb.rpc('record_invoice_payment', { p_expense_id: data.expense_id, p_amount: 1 }))
-  }
-
-  // ── Case 5: cash_phase lưu đúng trên phiếu + trên payment ────────────────────
-  console.log('\nCase 5 — cash_phase (in_shift vs post_close) lưu đúng')
-  await seed()
-  {
-    const { data } = await restock({ p_qty: 10, p_subtotal: 10000, p_initial_payment: 5000, p_cash_phase: 'in_shift' })
-    const row = await expenseRow(data.expense_id)
-    check("metadata.cash_phase = 'in_shift' trên phiếu", row?.metadata?.cash_phase === 'in_shift')
-    await sb.rpc('record_invoice_payment', { p_expense_id: data.expense_id, p_amount: 5000, p_cash_phase: 'post_close' })
-    const pay = (await sb.from('expense_payments').select('cash_phase').eq('expense_id', data.expense_id).eq('amount', 5000)).data
-    check("payment trả nợ có cash_phase = 'post_close'", pay?.some(p => p.cash_phase === 'post_close'))
-  }
-
-  // ── Case 6: cancel_restock → zero-out + cờ cancelled + hoàn tiền (xoá payments) ─
-  console.log('\nCase 6 — cancel_restock: đảo phiếu (amount 0, cancelled, payments xoá)')
-  await seed()
-  {
-    const { data } = await restock({ p_qty: 100, p_subtotal: 100000, p_initial_payment: 100000 })
-    const { error } = await sb.rpc('cancel_restock', { p_address_id: ADDRESS_ID, p_expense_id: data.expense_id })
-    check('cancel_restock không lỗi', !error, error?.message)
-    const row = await expenseRow(data.expense_id)
-    check('metadata.cancelled = true', row?.metadata?.cancelled === true)
-    check('amount về 0', row?.amount == 0, `got ${row?.amount}`)
-    check('payments đã xoá (Σ = 0)', (await paidTotal(data.expense_id)) == 0)
-  }
-
-  // ── Case 7: guard — discount âm bị từ chối ─────────────────────────────────
-  console.log('\nCase 7 — guard: discount âm bị RAISE')
-  await seed()
-  await expectError('discount = −1 → error', restock({ p_qty: 10, p_subtotal: 10000, p_discount: -1 }))
 
   // Dọn sau cùng.
-  await sb.from('expenses').delete().eq('address_id', ADDRESS_ID)
-  await sb.from('shift_closings').delete().eq('address_id', ADDRESS_ID)
+  await sb.from('orders').delete().eq('address_id', ADDRESS_ID)
+  await sb.from('orders').delete().eq('address_id', OTHER_ADDRESS_ID)
+  await sb.from('products').delete().eq('owner_address_id', ADDRESS_ID)
+  await sb.from('products').delete().eq('owner_address_id', OTHER_ADDRESS_ID)
   await sb.from('ingredient_costs').delete().eq('address_id', ADDRESS_ID)
 
   console.log(`\n${'─'.repeat(48)}\n${fail === 0 ? '✅ PASS' : '❌ FAIL'}  ${pass} pass, ${fail} fail`)

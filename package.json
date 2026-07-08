@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:inventory": "node scripts/test-inventory-staging.mjs",
     "test:money": "node scripts/test-money-staging.mjs"
   },
   "dependencies": {
