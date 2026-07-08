@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { usePOS } from '../contexts/POSContext'
+import { useHistory } from '../contexts/HistoryContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { calculateProductCost, formatVNDInput, parseVNDInput } from '../utils'
@@ -52,7 +52,7 @@ export default function DailyReportPage() {
     const location = useLocation()
     const backTo = location.state?.from || '/history'
     const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits, ingredientConfigs, refreshProducts } = useProducts()
-    const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, refreshTodayExpenses } = usePOS()
+    const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, refreshTodayExpenses } = useHistory()
     const { isStaff, profile } = useAuth()
     const { activeModules, loading: entitlementLoading, enabled: monetizationEnabled } = useEntitlement()
     const { toast, showToast, showError } = useToast()

@@ -10,7 +10,9 @@ import { useHistoryRangeFetch } from '../hooks/useHistoryRangeFetch'
 import { useFormatHistoryOrders } from '../hooks/useFormatHistoryOrders'
 import { useAddress } from '../contexts/AddressContext'
 import { useProducts } from '../contexts/ProductContext'
-import { usePOS } from '../contexts/POSContext'
+import { useCart } from '../contexts/CartContext'
+import { useStats } from '../contexts/StatsContext'
+import { useHistory } from '../contexts/HistoryContext'
 import { useConfirm } from '../contexts/ConfirmContext'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import OrdersList from '../components/HistoryPage/OrdersList'
@@ -33,9 +35,10 @@ export default function HistoryPage() {
     const { products, recipes, ingredientCosts, extraIngredients, refreshProducts } = useProducts()
     const {
         todayOrders, todayExpenses, isLoadingHistory,
-        handleDeleteOrder, handleUpdateOrderDiscount, handleAddExpense, handleUpdateExpense, handleDeleteExpense, handleLoadHistory, retrySync,
-        toast, showToast,
-    } = usePOS()
+        handleDeleteOrder, handleUpdateOrderDiscount, handleAddExpense, handleUpdateExpense, handleDeleteExpense, handleLoadHistory,
+    } = useHistory()
+    const { retrySync } = useStats()
+    const { toast, showToast } = useCart()
 
     useEffect(() => {
         if (todayOrders.length === 0 && !isLoadingHistory) handleLoadHistory()

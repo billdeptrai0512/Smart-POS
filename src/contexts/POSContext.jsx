@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { fetchTodayStats, submitOrder, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext } from '../services/orderService'
 import { upsertSession } from '../services/authService'
@@ -15,37 +15,13 @@ import { CartContext } from './CartContext'
 import { StatsContext } from './StatsContext'
 import { HistoryContext } from './HistoryContext'
 
-const POSContext = createContext(null)
-
 function mergeFetchedOrders(prev, fetchedOrders) {
+    // The optimistic row's id IS the real orders.id (client-generated in
+    // doSubmit, sent straight to the RPC) — a fetched row with the same id
+    // is the confirmed copy of that exact row, no heuristic matching needed.
     const fetchedIds = new Set(fetchedOrders.map(o => o.id))
-    const stillPending = prev.filter(o => {
-        if (!o._optimistic) return false
-        if (fetchedIds.has(o.id)) return false
-        
-        // Match by total, creation time (within 10 seconds), and items count
-        const isMatched = fetchedOrders.some(fetched => {
-            if (fetched.total !== o.total) return false
-            const diff = Math.abs(new Date(fetched.created_at).getTime() - new Date(o.created_at).getTime())
-            if (diff > 10000) return false
-            if (fetched.order_items?.length !== o.order_items?.length) return false
-            if (fetched.staff_name !== o.staff_name) return false
-            return true
-        })
-        return !isMatched
-    })
+    const stillPending = prev.filter(o => o._optimistic && !fetchedIds.has(o.id))
     return [...stillPending, ...fetchedOrders]
-}
-
-// usePOS returns the merged slice (cart + stats + history + shared) for
-// back-compat. Prefer the focused hooks in new code:
-//   useCart()    — re-renders only on cart-related changes
-//   useStats()   — re-renders only on running totals
-//   useHistory() — re-renders only on orders/expenses/fixed costs
-export function usePOS() {
-    const ctx = useContext(POSContext)
-    if (!ctx) throw new Error('usePOS must be used within POSProvider')
-    return ctx
 }
 
 export function POSProvider() {
@@ -416,13 +392,19 @@ export function POSProvider() {
         setEnterKey(addedRow.createdAt)
 
         if (navigator.onLine && supabase) {
+            // id is generated here, client-side, and sent straight to the RPC as the
+            // real orders.id — the optimistic row and its DB row share one identity
+            // from the start, so merging a fetch just needs a Set lookup (see
+            // mergeFetchedOrders), no matching by total/time/items/staff.
+            const orderId = crypto.randomUUID()
+            localOrderIds.current.add(orderId)
+
             // Optimistic /history row (raw fetchTodayOrders shape) so a just-submitted
-            // order shows there instantly — e.g. to delete a mis-entry. The real id is
-            // patched in on submit-resolve (deletable WITHOUT a refetch); _optimistic lets
+            // order shows there instantly — e.g. to delete a mis-entry. _optimistic lets
             // handleLoadHistory keep it until a fetch confirms it (no extra query, no wait).
             const optimisticOrder = {
                 _optimistic: true,
-                id: cartItems[0]?.cartItemId || addedRow.id,   // temp key; real id patched in on submit-resolve
+                id: orderId,
                 total: itemTotal,
                 discount_amount: 0,
                 total_cost: Math.round(cartCost),
@@ -441,13 +423,7 @@ export function POSProvider() {
                 })),
             }
             setTodayOrders(prev => [optimisticOrder, ...prev])
-            submitOrder(cartItems, itemTotal, null, addressId, cartCost, costPerItem, profile?.name, 0)
-                .then(res => {
-                    if (res?.id) {
-                        localOrderIds.current.add(res.id)
-                        setTodayOrders(prev => prev.map(o => o === optimisticOrder ? { ...o, id: res.id } : o))
-                    }
-                })
+            submitOrder(cartItems, itemTotal, null, addressId, cartCost, costPerItem, profile?.name, 0, orderId)
                 .catch(err => {
                     if (!navigator.onLine || /fetch|network|NetworkError/i.test(err?.message || '')) {
                         addPendingOrder(
@@ -706,18 +682,11 @@ export function POSProvider() {
         userRole,
     }), [todayOrders, todayExpenses, isLoadingHistory, userRole])
 
-    // Merged value for usePOS() back-compat. New code should use the focused hooks.
-    const mergedValue = useMemo(() => ({
-        ...cartValue, ...statsValue, ...historyValue,
-    }), [cartValue, statsValue, historyValue])
-
     return (
         <CartContext.Provider value={cartValue}>
             <StatsContext.Provider value={statsValue}>
                 <HistoryContext.Provider value={historyValue}>
-                    <POSContext.Provider value={mergedValue}>
-                        <Outlet />
-                    </POSContext.Provider>
+                    <Outlet />
                 </HistoryContext.Provider>
             </StatsContext.Provider>
         </CartContext.Provider>

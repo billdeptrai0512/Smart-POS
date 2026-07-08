@@ -3,7 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
-import { usePOS } from '../contexts/POSContext'
+import { useHistory } from '../contexts/HistoryContext'
 import {
     fetchIngredientRestockHistory, fetchIngredientStocks, fetchIngredientWithdrawals,
     deleteIngredientCost, upsertIngredientCost, renameIngredient,
@@ -36,7 +36,7 @@ export default function IngredientDetailPage() {
     const { ingredientCosts, ingredientUnits, ingredientConfigs, refreshProducts } = useProducts()
     const { selectedAddress } = useAddress()
     const { isManager, isAdmin, profile } = useAuth()
-    const { refreshTodayExpenses } = usePOS()
+    const { refreshTodayExpenses } = useHistory()
     const canEdit = isManager || isAdmin
     const { toast, showToast, showError } = useToast()
     const confirm = useConfirm()

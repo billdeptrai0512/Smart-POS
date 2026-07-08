@@ -37,19 +37,20 @@ export interface DiscountResult {
     finalTotal: number
 }
 
-/** One item inside a bulk_create_orders RPC payload. */
+/** One item inside a bulk_create_orders RPC payload. Declares WHAT was bought
+ *  only — price and cost are looked up server-side from products/recipes, the
+ *  client is not trusted to state its own total (see 20260708 migration). */
 export interface OrderItemPayload {
     product_id: UUID
     quantity: number
-    options: string | null
-    unit_cost: number
     extra_ids: string[]
 }
 
 /** A single order in the bulk_create_orders RPC payload. */
 export interface OrderPayload {
-    total: number
-    total_cost: number
+    /** Client-generated — becomes the real orders.id so optimistic UI and the
+     *  DB row share one identity from creation, no post-hoc matching needed. */
+    id?: UUID | null
     discount_amount: number
     payment_method: string | null
     address_id: UUID | null

@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { usePOS } from '../contexts/POSContext'
+import { useCart } from '../contexts/CartContext'
+import { useStats } from '../contexts/StatsContext'
+import { useHistory } from '../contexts/HistoryContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -18,12 +20,13 @@ export default function POSPage() {
     const {
         cart, activeCartItemId,
         handleAddItem, cancelHeld, handleToggleExtra,
-        isOnline,
-        toast, handleLoadHistory, recentOrders, draftOrder, enterKey,
+        toast, recentOrders, draftOrder, enterKey,
         enabledStickyExtraIds,
         handleToggleStickyExtra,
         commitHeld,
-    } = usePOS()
+    } = useCart()
+    const { isOnline } = useStats()
+    const { handleLoadHistory } = useHistory()
 
     // Commit the last held item to DB when leaving the POS screen.
     // Ref keeps the unmount cleanup pointed at the latest commitHeld.

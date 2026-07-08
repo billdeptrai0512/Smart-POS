@@ -129,11 +129,13 @@ export async function submitOrder(
     totalCost = 0,
     costPerItem: CostPerItem = {},
     staffName: string | null = null,
-    discountAmount = 0
+    discountAmount = 0,
+    id: UUID | null = null
 ): Promise<{ id: string | null }> {
     invalidateReportCache(addressId)
     if (localRepo.isGuest()) {
         return localRepo.submitLocalOrder({
+            id,
             total,
             total_cost: Math.round(totalCost),
             discount_amount: Math.round(discountAmount),
@@ -150,33 +152,31 @@ export async function submitOrder(
     }
     if (!supabase) throw new Error('No Supabase connection')
 
+    // total/totalCost/costPerItem are NOT sent — bulk_create_orders recomputes
+    // price and COGS server-side from products/recipes, so a tampered client
+    // can't write an arbitrary total. The client only declares WHAT was bought.
     const orderPayload: OrderPayload = {
-        total,
-        total_cost: Math.round(totalCost),
+        id,
         discount_amount: Math.round(discountAmount),
         payment_method: paymentMethod,
         address_id: addressId,
         staff_name: staffName,
-        items: cart.map(item => {
-            const optionsText = item.extras?.length > 0 ? item.extras.map(e => e.name).join(', ') : null
-            const extraIds = item.extras?.length > 0 ? item.extras.map(e => e.id).filter(Boolean) : []
-            return {
-                product_id: item.productId,
-                quantity: item.quantity,
-                options: optionsText,
-                unit_cost: Math.round(costPerItem[item.cartItemId] || 0),
-                extra_ids: extraIds
-            }
-        })
+        items: cart.map(item => ({
+            product_id: item.productId,
+            quantity: item.quantity,
+            extra_ids: item.extras?.length > 0 ? item.extras.map(e => e.id).filter(Boolean) : []
+        }))
     }
 
-    // Call RPC function for single transaction order creation
+    // Call RPC function for single transaction order creation. id is
+    // client-generated (see caller) and echoed back — no server round-trip
+    // needed to learn it, so the optimistic row never has to be re-keyed.
     const { error } = await supabase.rpc('bulk_create_orders', {
         orders_payload: [orderPayload]
     })
 
     if (error) throw error
-    return { id: null }
+    return { id }
 }
 
 // Bulk submit offline orders in ONE HTTP Request
@@ -207,25 +207,19 @@ export async function bulkSubmitOrders(ordersArray: any[]): Promise<boolean> {
     }
     if (!supabase) throw new Error('No Supabase connection')
 
+    // Same server-priced contract as submitOrder — total/unit_cost aren't sent,
+    // bulk_create_orders recomputes them from products/recipes.
     const payload = ordersArray.map((o: any) => ({
-        total: o.total,
-        total_cost: o.totalCost || 0,
         discount_amount: o.discountAmount || 0,
         payment_method: o.paymentMethod,
         address_id: o.addressId,
         created_at: o.createdAt,
         staff_name: o.staffName,
-        items: o.orderItems.map((item: any) => {
-            const optionsText = item.extras?.length > 0 ? item.extras.map((e: any) => e.name).join(', ') : null
-            const extraIds = item.extras?.length > 0 ? item.extras.map((e: any) => e.id).filter(Boolean) : (item.extraIds || []).filter(Boolean)
-            return {
-                product_id: item.productId,
-                quantity: item.quantity,
-                options: optionsText,
-                unit_cost: Math.round(item.unitCost || 0),
-                extra_ids: extraIds
-            }
-        })
+        items: o.orderItems.map((item: any) => ({
+            product_id: item.productId,
+            quantity: item.quantity,
+            extra_ids: item.extras?.length > 0 ? item.extras.map((e: any) => e.id).filter(Boolean) : (item.extraIds || []).filter(Boolean)
+        }))
     }))
 
     const { error } = await supabase.rpc('bulk_create_orders', {

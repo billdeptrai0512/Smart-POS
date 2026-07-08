@@ -5,7 +5,7 @@ import FabActionMenu from '../components/common/FabActionMenu'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
-import { usePOS } from '../contexts/POSContext'
+import { useHistory } from '../contexts/HistoryContext'
 import {
     upsertIngredientCost, deleteIngredientCost,
     syncIngredientKey,
@@ -51,7 +51,7 @@ export default function IngredientManagementPage() {
     } = useProducts()
     const { selectedAddress, updateSortOrder } = useAddress()
     const { isManager, isAdmin, profile } = useAuth()
-    const { refreshTodayExpenses } = usePOS()
+    const { refreshTodayExpenses } = useHistory()
     const { toast, showToast, showError } = useToast()
     const confirm = useConfirm()
     const canEdit = isManager || isAdmin
