@@ -6,7 +6,7 @@ import { supabase } from '../../lib/supabaseClient'
 import { usePaymentListener } from '../../hooks/usePaymentListener'
 import { usePaymentPoll } from '../../hooks/usePaymentPoll'
 import { formatVND } from '../../utils'
-import { PLAN, ALL_TIER, BANK_INFO } from '../../constants/monetization'
+import { PLAN, ALL_TIER, BANK_INFO, TRIAL_DAYS } from '../../constants/monetization'
 
 // Gradient vàng thương hiệu (đồng bộ badge "developed by").
 const GOLD = 'linear-gradient(135deg, #f8c577, #f59e0b, #d4882f, #b8732a)'
@@ -35,6 +35,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
         didInit.current = true
     }, [addresses, preselectAddressId, selectedAddress?.id])
     const [isMocking, setIsMocking] = useState(false)
+    const [isTrialMock, setIsTrialMock] = useState(false) // Mock cấp trial 7 ngày (khác admin_override 6 tháng)
     const [isResetting, setIsResetting] = useState(false)
     const [confirmReset, setConfirmReset] = useState(false) // 2-step confirm (không dùng window.confirm — bị chặn trong webview)
     const [adminError, setAdminError] = useState(null)
@@ -125,6 +126,10 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
             const next = new Date(vt + 'T00:00:00'); next.setDate(next.getDate() + 1)
             if (next > today) from = next
         }
+        if (isTrialMock) {
+            const d = new Date(from); d.setDate(d.getDate() + TRIAL_DAYS)
+            return d
+        }
         return addMonths(from, PLAN.months)
     }
     const fmtDate = (d) => d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -179,17 +184,19 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
         setIsMocking(true)
         setAdminError(null)
         try {
-            // Cấp/gia hạn qua RPC admin_set_subscription (SECURITY DEFINER, guard is_admin_auth).
-            // RPC tự áp quy tắc gia hạn nối tiếp (§4) cho từng chi nhánh.
+            // Cấp trial 7 ngày qua RPC admin_set_subscription (note='trial' → RPC tự dùng
+            // 7 ngày cố định, bỏ qua p_months — xem 20260709_admin_mock_trial_grant.sql).
+            // Dùng để test flow + cấp lại trial thủ công khi trial tự động bị chặn.
             const { error } = await supabase.rpc('admin_set_subscription', {
                 p_address_ids: selectedAddressIds,
                 p_modules: [ALL_TIER],
-                p_months: PLAN.months,
-                p_amount_paid: PLAN.price,
-                p_note: 'admin_override',
+                p_months: 1,
+                p_amount_paid: 0,
+                p_note: 'trial',
             })
             if (error) throw error
             // Đi cùng đường với webhook thật → hiện panel xác nhận (test được UI success).
+            setIsTrialMock(true)
             setIsMocking(false)
             handleConfirmed()
         } catch (err) {
@@ -233,9 +240,11 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                 <div className="rounded-[18px] border border-success/30 bg-success-soft/40 px-4 py-7 flex flex-col items-center gap-3 text-center">
                     <CheckCircle2 size={52} strokeWidth={1.6} className="text-success animate-scale-up" />
                     <div>
-                        <p className="text-[16px] font-black text-text">Thanh toán thành công</p>
+                        <p className="text-[16px] font-black text-text">{isTrialMock ? 'Đã cấp trial' : 'Thanh toán thành công'}</p>
                         <p className="text-[12px] text-text-secondary mt-1">
-                            Đã mở khoá {addrCount} chi nhánh · {formatVND(total)}
+                            {isTrialMock
+                                ? `Trial ${TRIAL_DAYS} ngày · ${addrCount} chi nhánh`
+                                : `Đã mở khoá ${addrCount} chi nhánh · ${formatVND(total)}`}
                         </p>
                     </div>
                 </div>
@@ -244,7 +253,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                 {selectedAddressIds.map(id => (
                     <div key={id} className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2">
                         <CopyRow label="Địa chỉ" value={addresses.find(a => a.id === id)?.name || '—'} />
-                        <CopyRow label="Thời hạn" value={PLAN.periodLabel} />
+                        <CopyRow label="Thời hạn" value={isTrialMock ? `${TRIAL_DAYS} ngày` : PLAN.periodLabel} />
                         <CopyRow label="Sử dụng đến" value={fmtDate(newExpiryFor(id))} />
                     </div>
                 ))}
@@ -409,7 +418,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                         disabled={isMocking || isResetting || !canSubmit}
                         className="w-full py-2.5 rounded-[12px] bg-red-500/10 text-red-500 text-[12px] font-bold hover:bg-red-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                     >
-                        {isMocking ? <Loader2 size={14} className="animate-spin" /> : 'Mock mở khoá (Admin)'}
+                        {isMocking ? <Loader2 size={14} className="animate-spin" /> : `Mock trial ${TRIAL_DAYS} ngày (Admin)`}
                     </button>
                     <button
                         onClick={handleReset}
