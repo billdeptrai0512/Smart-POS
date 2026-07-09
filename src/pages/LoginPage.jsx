@@ -53,7 +53,7 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-4 py-8">
+        <div className="flex flex-col items-center justify-start min-h-screen bg-bg px-4 py-8">
             <div className="w-full max-w-sm space-y-6">
                 <div className="text-center">
                     {/* Logo KOPOS — nền trong suốt nên hoà thẳng vào bg-bg của trang login */}

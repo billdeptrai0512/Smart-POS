@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import {
     Pencil, Trash2, ClipboardCopy, MoreHorizontal, X,
     Coffee, Loader, FileText, BarChart3, Package, ChevronRight,
-    CupSoda, Wallet, Users, HelpCircle,
+    CupSoda, Wallet, Users, HelpCircle, Eraser,
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
 import { formatVND } from '../../utils'
+import { supabase } from '../../lib/supabaseClient'
 import SubscriptionBadge from './SubscriptionBadge'
 
 const isManagerRole = (role) => (role === 'manager' || role === 'co-manager') ? 1 : 0
@@ -23,8 +24,25 @@ export default function BranchGrid({
     const [renaming, setRenaming] = useState(false)
     const [deletingAddressId, setDeletingAddressId] = useState(null)
     const [expandedActionsId, setExpandedActionsId] = useState(null) // which card has the 3-action menu open
+    const [wipingAddressId, setWipingAddressId] = useState(null) // which card has the wipe-sales-data confirm modal open
+    const [wipeConfirmName, setWipeConfirmName] = useState('')
+    const [wiping, setWiping] = useState(false)
     const submitGuardRef = useRef(false)
     const navigate = useNavigate()
+
+    async function handleWipeSalesData(addr) {
+        if (wipeConfirmName.trim() !== addr.name || wiping) return
+        setWiping(true)
+        setError('')
+        try {
+            const { error: rpcError } = await supabase.rpc('admin_wipe_address_sales_data', { p_address_id: addr.id })
+            if (rpcError) throw rpcError
+            window.location.reload() // đơn giản nhất để làm mới cupsMap/revenueMap sau khi xoá
+        } catch (err) {
+            setError(err.message || 'Không thể xoá dữ liệu bán hàng')
+            setWiping(false)
+        }
+    }
 
     async function handleRename(e, addrId) {
         e.preventDefault()
@@ -217,6 +235,14 @@ export default function BranchGrid({
                                                 tone="danger"
                                                 onClick={(e) => { e.stopPropagation(); setDeletingAddressId(addr.id); setExpandedActionsId(null) }}
                                             />
+                                            {isAdmin && (
+                                                <ActionIcon
+                                                    icon={<Eraser size={16} />}
+                                                    title="Xoá dữ liệu bán hàng (Admin)"
+                                                    tone="danger"
+                                                    onClick={(e) => { e.stopPropagation(); setWipingAddressId(addr.id); setWipeConfirmName(''); setExpandedActionsId(null) }}
+                                                />
+                                            )}
                                             <ActionIcon
                                                 icon={<X size={16} />}
                                                 title="Đóng"
@@ -305,6 +331,76 @@ export default function BranchGrid({
                                             </div>
                                         </div>
                                     </form>
+                                </div>
+                            )}
+
+                            {/* Modal xoá dữ liệu bán hàng (Admin) — bắt gõ lại tên địa chỉ vì đây là hard-delete
+                                không thể hoàn tác (orders/expenses/shift_closings), không đụng config/menu. */}
+                            {wipingAddressId === addr.id && (
+                                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                                    <div
+                                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                                        onClick={() => { if (!wiping) { setWipingAddressId(null); setError('') } }}
+                                    />
+                                    <div className="relative w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
+                                        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
+                                            <div className="flex items-center gap-2.5">
+                                                <div className="w-8 h-8 rounded-[10px] bg-danger/10 flex items-center justify-center">
+                                                    <Eraser size={15} className="text-danger" />
+                                                </div>
+                                                <p className="text-text font-black text-sm leading-none">Xoá dữ liệu bán hàng</p>
+                                            </div>
+                                            {!wiping && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setWipingAddressId(null); setError('') }}
+                                                    className="p-1.5 text-text-secondary hover:text-text transition-colors rounded-lg hover:bg-surface-light"
+                                                >
+                                                    <X size={16} />
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div className="p-5 flex flex-col gap-4">
+                                            <p className="text-text-secondary text-xs leading-relaxed">
+                                                Xoá toàn bộ đơn hàng, chi phí, phiếu chốt ca của <span className="font-bold text-text">{addr.name}</span>. Menu, công thức, nguyên liệu, gói đăng ký được giữ nguyên. <span className="text-danger font-bold">Không thể hoàn tác.</span>
+                                            </p>
+                                            <div>
+                                                <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Gõ lại tên địa chỉ để xác nhận</label>
+                                                <input
+                                                    type="text"
+                                                    value={wipeConfirmName}
+                                                    onChange={e => setWipeConfirmName(e.target.value)}
+                                                    disabled={wiping}
+                                                    placeholder={addr.name}
+                                                    className="w-full px-4 py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-danger/40 focus:border-danger disabled:opacity-50"
+                                                    autoFocus
+                                                />
+                                            </div>
+                                            {/* Modal là overlay z-50 toàn màn hình nên ErrorBanner cuối trang bị che khuất —
+                                                lỗi RPC phải hiện ngay trong modal, không thì admin không biết vì sao thất bại. */}
+                                            {wipingAddressId === addr.id && error && (
+                                                <p className="text-danger text-xs font-medium -mt-2">{error}</p>
+                                            )}
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    disabled={wiping}
+                                                    onClick={() => { setWipingAddressId(null); setError('') }}
+                                                    className="flex-1 py-3 rounded-[14px] bg-bg border border-border/60 text-text-secondary font-bold text-sm hover:bg-surface-light transition-colors disabled:opacity-50"
+                                                >
+                                                    Hủy
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={wiping || wipeConfirmName.trim() !== addr.name}
+                                                    onClick={() => handleWipeSalesData(addr)}
+                                                    className="flex-1 py-3 rounded-[14px] bg-danger text-white font-black text-sm hover:bg-danger/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                                >
+                                                    {wiping ? <Loader size={14} className="animate-spin" /> : 'Xoá vĩnh viễn'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>

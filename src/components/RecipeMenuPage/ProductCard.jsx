@@ -1,9 +1,11 @@
 import { formatVND } from '../../utils'
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
+import { useAuth } from '../../contexts/AuthContext'
 
 const SYMBOL_UNITS = new Set(['g', 'ml', 'l', 'kg', 'oz', 'mg'])
 
 export default function ProductCard({ product, prodRecipes, cost, ingredientUnits, onClick }) {
+    const { isStaff } = useAuth()
     const isOrphan = prodRecipes.length === 0
 
     return (
@@ -40,9 +42,11 @@ export default function ProductCard({ product, prodRecipes, cost, ingredientUnit
                     </div>
                 )}
 
-                <div className="flex items-center gap-1.5 text-[12px] text-text-secondary mt-0.5">
-                    <span>Giá vốn: <span className="text-primary font-bold">{formatVND(cost)}</span></span>
-                </div>
+                {!isStaff && (
+                    <div className="flex items-center gap-1.5 text-[12px] text-text-secondary mt-0.5">
+                        <span>Giá vốn: <span className="text-primary font-bold">{formatVND(cost)}</span></span>
+                    </div>
+                )}
             </div>
         </div>
     )
