@@ -7,6 +7,7 @@ import { usePaymentListener } from '../../hooks/usePaymentListener'
 import { usePaymentPoll } from '../../hooks/usePaymentPoll'
 import { formatVND } from '../../utils'
 import { PLAN, ALL_TIER, BANK_INFO, TRIAL_DAYS } from '../../constants/monetization'
+import { invalidateEntitlementCache } from '../AddressSelectPage/SubscriptionBadge'
 
 // Gradient vàng thương hiệu (đồng bộ badge "developed by").
 const GOLD = 'linear-gradient(135deg, #f8c577, #f59e0b, #d4882f, #b8732a)'
@@ -195,6 +196,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                 p_note: 'trial',
             })
             if (error) throw error
+            invalidateEntitlementCache(selectedAddressIds)
             // Đi cùng đường với webhook thật → hiện panel xác nhận (test được UI success).
             setIsTrialMock(true)
             setIsMocking(false)
@@ -223,6 +225,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                 p_modules: null,   // null = xoá hết
             })
             if (error) throw error
+            invalidateEntitlementCache(selectedAddressIds)
             if (onDone) onDone()
             else window.location.reload()
         } catch (err) {

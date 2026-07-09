@@ -30,6 +30,13 @@ import { startOfDayVN } from '../../utils/dateVN'
 // phải fetch, nháy trống chờ load. Gói cước gần như không đổi trong 1 phiên.
 const entitlementCache = new Map()
 
+// Gọi sau khi Mock/Reset gói (admin) đổi address_subscriptions trực tiếp trong DB —
+// điều hướng dùng navigate() (SPA, không reload) nên cache cũ không tự rớt.
+// eslint-disable-next-line react-refresh/only-export-components -- cache helper dùng chung với SubscriptionPanel
+export function invalidateEntitlementCache(addressIds) {
+    (Array.isArray(addressIds) ? addressIds : [addressIds]).forEach(id => entitlementCache.delete(id))
+}
+
 export default function SubscriptionBadge({ addressId, onRenewClick }) {
     const { enabled } = useMonetizationEnabled()
     const [rows, setRows] = useState(() => entitlementCache.get(addressId) ?? [])
