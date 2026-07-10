@@ -114,13 +114,24 @@ export default function IngredientDetailPage() {
             .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     }, [selectedAddress?.id, ingredientKey, fromDate, toDate])
 
+    const reloadStock = useCallback(async () => {
+        if (!selectedAddress?.id) return
+        const stocks = await fetchIngredientStocks(selectedAddress.id)
+        setStockData(stocks.find(s => s.ingredient === ingredientKey))
+    }, [selectedAddress?.id, ingredientKey])
+
+    const reloadHistory = useCallback(async () => {
+        if (!selectedAddress?.id) return
+        setHistory(await loadHistory())
+    }, [selectedAddress?.id, loadHistory])
+
     useEffect(() => {
         if (!selectedAddress?.id || !ingredientKey) return
         setLoading(true)
         loadHistory()
             .then(setHistory)
             .finally(() => setLoading(false))
-    }, [loadHistory])
+    }, [loadHistory, selectedAddress?.id, ingredientKey])
 
     // Realtime subscription
     useEffect(() => {
@@ -158,7 +169,7 @@ export default function IngredientDetailPage() {
         return () => {
             supabase.removeChannel(channel)
         }
-    }, [selectedAddress?.id, ingredientKey])
+    }, [selectedAddress?.id, ingredientKey, reloadHistory, reloadStock])
 
     const summary = useMemo(() => {
         let totalSpent = 0, totalQty = 0, totalOwing = 0, totalPaidInMonth = 0
@@ -184,16 +195,6 @@ export default function IngredientDetailPage() {
         })
         return { totalSpent, totalQty, totalOwing, totalPaidInMonth, count: purchaseCount }
     }, [history, fromDate, toDate])
-
-    async function reloadStock() {
-        if (!selectedAddress?.id) return
-        const stocks = await fetchIngredientStocks(selectedAddress.id)
-        setStockData(stocks.find(s => s.ingredient === ingredientKey))
-    }
-    async function reloadHistory() {
-        if (!selectedAddress?.id) return
-        setHistory(await loadHistory())
-    }
 
     // ── Save callbacks for child rows ───────────────────────────────────────
     async function saveCategory(newCat) {

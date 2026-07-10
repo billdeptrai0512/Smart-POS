@@ -43,7 +43,10 @@ export default function RecipeMenuPage() {
 
     const mainRef = useRef(null)
 
-    // Fetch fresh data on mount to avoid showing stale localStorage cache
+    // Fetch fresh data on mount to avoid showing stale localStorage cache.
+    // ponytail: mount-only — refreshProducts already refetches on address change via
+    // its own effect in ProductContext; adding it here would double-fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { refreshProducts?.() }, [])
 
     // Restore scroll on back nav from /recipes/:productId; clear cache after use

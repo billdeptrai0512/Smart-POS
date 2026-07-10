@@ -67,7 +67,7 @@ export default function InventoryRefillCard({
             setLastWeekItems(result);
             try { sessionStorage.setItem(cacheKey, JSON.stringify(result)); } catch { /* storage full, skip */ }
         }).finally(() => setIsLoadingPast(false));
-    }, [selectedAddress?.id]);
+    }, [selectedAddress?.id, isPastDate]);
 
     const openingMap = useMemo(() => {
         const map = {};

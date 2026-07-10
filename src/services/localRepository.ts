@@ -4,6 +4,7 @@
  * Mimics Supabase CRUD operations for products, recipes, orders, etc.
  */
 import { dateStringVN, startOfDayVN } from '../utils/dateVN'
+import type { Row } from '../types/domain'
 
 const generateId = () => crypto.randomUUID();
 
@@ -23,7 +24,7 @@ const KEYS = {
     IS_GUEST: 'pos_is_guest'
 };
 
-const get = (key, fallback = []) => {
+const get = (key: string, fallback: Row[] = []): Row[] => {
     try {
         const val = localStorage.getItem(key);
         return val ? JSON.parse(val) : fallback;
@@ -32,10 +33,10 @@ const get = (key, fallback = []) => {
     }
 };
 
-const set = (key, val) => localStorage.setItem(key, JSON.stringify(val));
+const set = (key: string, val: unknown) => localStorage.setItem(key, JSON.stringify(val));
 
 // --- Auth / State ---
-export const setIsGuest = (val) => localStorage.setItem(KEYS.IS_GUEST, val ? 'true' : 'false');
+export const setIsGuest = (val: boolean) => localStorage.setItem(KEYS.IS_GUEST, val ? 'true' : 'false');
 export const isGuest = () => localStorage.getItem(KEYS.IS_GUEST) === 'true';
 
 // --- Addresses ---
@@ -49,7 +50,7 @@ export const getGuestIngredientSortOrder = () => {
     } catch { return null; }
 };
 
-export const setGuestIngredientSortOrder = (arr) => {
+export const setGuestIngredientSortOrder = (arr: string[]) => {
     localStorage.setItem(KEY_GUEST_INGREDIENT_SORT, JSON.stringify(arr || []));
 };
 
@@ -62,23 +63,23 @@ export const getDemoAddress = () => ({
 });
 
 // --- Seeding ---
-export const initializeGuestFromGlobal = (data) => {
+export const initializeGuestFromGlobal = (data: Row) => {
     const addressId = DEMO_ADDRESS_ID;
 
     if (data.ingredients) {
-        set(KEYS.INGREDIENT_COSTS, data.ingredients.map(i => ({ ...i, address_id: addressId })));
+        set(KEYS.INGREDIENT_COSTS, data.ingredients.map((i: Row) => ({ ...i, address_id: addressId })));
     }
     if (data.products) {
-        set(KEYS.PRODUCTS, data.products.map(p => ({ ...p, owner_address_id: addressId, is_active: true })));
+        set(KEYS.PRODUCTS, data.products.map((p: Row) => ({ ...p, owner_address_id: addressId, is_active: true })));
     }
     if (data.recipes) {
-        set(KEYS.RECIPES, data.recipes.map(r => ({ ...r, address_id: addressId })));
+        set(KEYS.RECIPES, data.recipes.map((r: Row) => ({ ...r, address_id: addressId })));
     }
     if (data.extras) {
-        set(KEYS.PRODUCT_EXTRAS, data.extras.map(e => ({ ...e, address_id: addressId })));
+        set(KEYS.PRODUCT_EXTRAS, data.extras.map((e: Row) => ({ ...e, address_id: addressId })));
     }
     if (data.extraIngredients) {
-        set(KEYS.EXTRA_INGREDIENTS, data.extraIngredients.map(i => ({ ...i })));
+        set(KEYS.EXTRA_INGREDIENTS, data.extraIngredients.map((i: Row) => ({ ...i })));
     }
 
     set(KEYS.ORDERS, []);
@@ -88,8 +89,8 @@ export const initializeGuestFromGlobal = (data) => {
     // Each seeded refill has amount=0 (no fake cash impact on P&L) and metadata.seeded=true
     // so it can be filtered out of the Đi chợ tab if we want to hide them later.
     const seededExpenses = (data.stocks || [])
-        .filter(s => s && s.ingredient && Number(s.current_stock) > 0)
-        .map(s => ({
+        .filter((s: Row) => s && s.ingredient && Number(s.current_stock) > 0)
+        .map((s: Row) => ({
             id: generateId(),
             name: `Tồn ban đầu: ${s.ingredient}`,
             amount: 0,
@@ -109,7 +110,7 @@ export const initializeGuestFromGlobal = (data) => {
 
 // --- CRUD Helpers ---
 
-export const fetchLocalProducts = (addressId) => {
+export const fetchLocalProducts = (addressId: string | null) => {
     const list = get(KEYS.PRODUCTS).filter(p => p.owner_address_id === addressId && p.is_active);
     list.sort((a, b) => {
         const aSort = a.sort_order ?? 999999;
@@ -119,7 +120,7 @@ export const fetchLocalProducts = (addressId) => {
     });
     return list;
 };
-export const insertLocalProduct = (payload) => {
+export const insertLocalProduct = (payload: Row) => {
     const products = get(KEYS.PRODUCTS);
     const newProd = { id: generateId(), is_active: true, ...payload, created_at: new Date().toISOString() };
     products.push(newProd);
@@ -127,8 +128,8 @@ export const insertLocalProduct = (payload) => {
     return newProd;
 };
 
-export const fetchLocalRecipes = (addressId) => get(KEYS.RECIPES).filter(r => r.address_id === addressId);
-export const upsertLocalRecipe = (payload) => {
+export const fetchLocalRecipes = (addressId: string | null) => get(KEYS.RECIPES).filter(r => r.address_id === addressId);
+export const upsertLocalRecipe = (payload: Row) => {
     const recipes = get(KEYS.RECIPES);
     const idx = recipes.findIndex(r => r.product_id === payload.product_id && r.ingredient === payload.ingredient && r.address_id === payload.address_id);
     if (idx >= 0) recipes[idx] = { ...recipes[idx], ...payload };
@@ -136,7 +137,7 @@ export const upsertLocalRecipe = (payload) => {
     set(KEYS.RECIPES, recipes);
 };
 
-export const fetchLocalIngredientCosts = (addressId) => {
+export const fetchLocalIngredientCosts = (addressId: string | null) => {
     const list = get(KEYS.INGREDIENT_COSTS).filter(i => i.address_id === addressId || i.address_id === null);
     return list.map(item => ({
         ingredient: item.ingredient,
@@ -151,11 +152,11 @@ export const fetchLocalIngredientCosts = (addressId) => {
     }));
 };
 
-export const upsertLocalIngredientCost = (payload) => {
+export const upsertLocalIngredientCost = (payload: Row) => {
     const items = get(KEYS.INGREDIENT_COSTS);
     const idx = items.findIndex(i => i.ingredient === payload.ingredient && i.address_id === payload.address_id);
     
-    const mapped = {
+    const mapped: Row = {
         ingredient: payload.ingredient,
         unit_cost: payload.unit_cost !== undefined ? payload.unit_cost : payload.unitCost,
         address_id: payload.address_id,
@@ -184,7 +185,7 @@ export const upsertLocalIngredientCost = (payload) => {
     set(KEYS.INGREDIENT_COSTS, items);
 };
 
-export const fetchLocalProductExtras = (addressId) => {
+export const fetchLocalProductExtras = (addressId: string | null) => {
     const list = get(KEYS.PRODUCT_EXTRAS).filter(e => e.address_id === addressId);
     // Match Supabase path: order by sort_order ASC, nulls last.
     list.sort((a, b) => {
@@ -193,7 +194,7 @@ export const fetchLocalProductExtras = (addressId) => {
         if (aSort !== bSort) return aSort - bSort;
         return (a.name || '').localeCompare(b.name || '');
     });
-    const map = {};
+    const map: Record<string, Row[]> = {};
     list.forEach(ex => {
         if (!map[ex.product_id]) map[ex.product_id] = [];
         map[ex.product_id].push({ id: ex.id, name: ex.name, price: ex.price, is_sticky: ex.is_sticky });
@@ -201,12 +202,12 @@ export const fetchLocalProductExtras = (addressId) => {
     return map;
 };
 
-export const fetchLocalExtraIngredients = (extraIds = null) => {
+export const fetchLocalExtraIngredients = (extraIds: string[] | null = null) => {
     let list = get(KEYS.EXTRA_INGREDIENTS);
     if (extraIds) {
         list = list.filter(i => extraIds.includes(i.extra_id));
     }
-    const map = {};
+    const map: Record<string, Row[]> = {};
     list.forEach(i => {
         if (!map[i.extra_id]) map[i.extra_id] = [];
         map[i.extra_id].push(i);
@@ -214,7 +215,7 @@ export const fetchLocalExtraIngredients = (extraIds = null) => {
     return map;
 };
 
-export const submitLocalOrder = (order) => {
+export const submitLocalOrder = (order: Row) => {
     const orders = get(KEYS.ORDERS);
     const newOrder = {
         id: generateId(),
@@ -226,7 +227,7 @@ export const submitLocalOrder = (order) => {
     return newOrder;
 };
 
-export const fetchLocalOrders = (addressId, dateStr = null) => {
+export const fetchLocalOrders = (addressId: string | null, dateStr: string | null = null) => {
     let orders = get(KEYS.ORDERS).filter(o => o.address_id === addressId);
     const d = dateStr ? dateStringVN(new Date(dateStr)) : dateStringVN();
     orders = orders.filter(o => dateStringVN(new Date(o.created_at)) === d);
@@ -234,18 +235,18 @@ export const fetchLocalOrders = (addressId, dateStr = null) => {
     return orders.map(o => ({ ...o, order_items: o.order_items || o.items }));
 };
 
-export const fetchLocalExpenses = (addressId, dateStr = null) => {
+export const fetchLocalExpenses = (addressId: string | null, dateStr: string | null = null) => {
     let list = get(KEYS.EXPENSES).filter(e => e.address_id === addressId);
     const d = dateStr ? dateStringVN(new Date(dateStr)) : dateStringVN();
     list = list.filter(e => dateStringVN(new Date(e.created_at)) === d);
     return list;
 };
 
-export const fetchAllLocalOrders = (addressId) => get(KEYS.ORDERS).filter(o => o.address_id === addressId).map(o => ({ ...o, order_items: o.order_items || o.items }));
-export const fetchAllLocalExpenses = (addressId) => get(KEYS.EXPENSES).filter(e => e.address_id === addressId);
-export const fetchAllLocalShiftClosings = (addressId) => get(KEYS.SHIFT_CLOSINGS).filter(s => s.address_id === addressId);
+export const fetchAllLocalOrders = (addressId: string | null) => get(KEYS.ORDERS).filter(o => o.address_id === addressId).map(o => ({ ...o, order_items: o.order_items || o.items }));
+export const fetchAllLocalExpenses = (addressId: string | null) => get(KEYS.EXPENSES).filter(e => e.address_id === addressId);
+export const fetchAllLocalShiftClosings = (addressId: string | null) => get(KEYS.SHIFT_CLOSINGS).filter(s => s.address_id === addressId);
 
-export const insertLocalExpense = (payload) => {
+export const insertLocalExpense = (payload: Row) => {
     const list = get(KEYS.EXPENSES);
     // payload.created_at có thể được truyền khi user backdate (RestockModal). Fallback now() khi không có.
     const newItem = { id: generateId(), created_at: new Date().toISOString(), discount_amount: 0, extra_cost: 0, ...payload };
@@ -255,17 +256,17 @@ export const insertLocalExpense = (payload) => {
 };
 
 // expense_payments mirror — same fallback shape as remote table.
-export const fetchAllLocalExpensePayments = (addressId) =>
+export const fetchAllLocalExpensePayments = (addressId: string | null) =>
     get(KEYS.EXPENSE_PAYMENTS).filter(p => p.address_id === addressId);
 
 // Remove every payment linked to an expense (mirrors the DB's ON DELETE CASCADE
 // on expense_payments.expense_id, used when cancelling a restock in guest mode).
-export const deleteLocalExpensePaymentsByExpense = (expenseId) => {
+export const deleteLocalExpensePaymentsByExpense = (expenseId: string) => {
     set(KEYS.EXPENSE_PAYMENTS, get(KEYS.EXPENSE_PAYMENTS).filter(p => p.expense_id !== expenseId));
     return true;
 };
 
-export const insertLocalExpensePayment = (payload) => {
+export const insertLocalExpensePayment = (payload: Row) => {
     const list = get(KEYS.EXPENSE_PAYMENTS);
     const paidAt = payload.paid_at || new Date().toISOString();
     const newItem = {
@@ -279,41 +280,41 @@ export const insertLocalExpensePayment = (payload) => {
     return newItem;
 };
 
-export const fetchLocalShiftClosing = (addressId, dateStr) => {
+export const fetchLocalShiftClosing = (addressId: string | null, dateStr: string) => {
     const list = get(KEYS.SHIFT_CLOSINGS);
     const d = dateStringVN(new Date(dateStr));
     return list.find(s => s.address_id === addressId && dateStringVN(new Date(s.created_at)) === d);
 };
 
-export const fetchLocalYesterdayShiftClosing = (addressId) => {
+export const fetchLocalYesterdayShiftClosing = (addressId: string | null) => {
     const list = get(KEYS.SHIFT_CLOSINGS).filter(s => s.address_id === addressId);
     const today = startOfDayVN();
 
     // Find the latest closing before today
     const past = list
         .filter(s => new Date(s.created_at) < today)
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     return past[0] || null;
 };
 
-export const fetchLocalIngredientStocks = (addressId) => {
+export const fetchLocalIngredientStocks = (addressId: string | null) => {
     const expenses = get(KEYS.EXPENSES).filter(e => e.address_id === addressId && e.is_refill);
-    const closings = get(KEYS.SHIFT_CLOSINGS).filter(s => s.address_id === addressId).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const closings = get(KEYS.SHIFT_CLOSINGS).filter(s => s.address_id === addressId).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     const latestClosing = closings[0];
 
-    const ingredients = new Set();
+    const ingredients = new Set<string>();
     expenses.forEach(e => { if (e.metadata?.ingredient) ingredients.add(e.metadata.ingredient) });
     if (latestClosing?.inventory_report) {
-        latestClosing.inventory_report.forEach(item => { if (item.ingredient) ingredients.add(item.ingredient) });
+        latestClosing.inventory_report.forEach((item: Row) => { if (item.ingredient) ingredients.add(item.ingredient) });
     }
 
     // Walk closings DESC for the most-recent non-null `remaining` per ingredient.
     // null = staff didn't count this ingredient that shift; we carry the previous
     // count forward instead of resetting counter_stock to 0.
-    const counterByIngredient = {};
+    const counterByIngredient: Record<string, number> = {};
     closings.forEach(closing => {
-        (closing.inventory_report || []).forEach(item => {
+        (closing.inventory_report || []).forEach((item: Row) => {
             if (item?.ingredient && item.remaining != null && counterByIngredient[item.ingredient] === undefined) {
                 counterByIngredient[item.ingredient] = Number(item.remaining);
             }
@@ -328,7 +329,7 @@ export const fetchLocalIngredientStocks = (addressId) => {
         // Σ restock
         const totalRestock = closings
             .reduce((sum, s) => {
-                const item = (s.inventory_report || []).find(i => i.ingredient === ing);
+                const item = (s.inventory_report || []).find((i: Row) => i.ingredient === ing);
                 return sum + (Number(item?.restock) || 0);
             }, 0);
 
@@ -345,7 +346,7 @@ export const fetchLocalIngredientStocks = (addressId) => {
         if (anchorAfter !== undefined) {
             const restockSinceAnchor = closings.reduce((sum, s) => {
                 if (new Date(s.created_at).getTime() <= anchorAt) return sum;
-                const item = (s.inventory_report || []).find(i => i.ingredient === ing);
+                const item = (s.inventory_report || []).find((i: Row) => i.ingredient === ing);
                 return sum + (Number(item?.restock) || 0);
             }, 0);
             warehouseRaw = anchorAfter - restockSinceAnchor;
@@ -353,7 +354,7 @@ export const fetchLocalIngredientStocks = (addressId) => {
             warehouseRaw = totalRefill - totalRestock;
         }
         const warehouse = Math.max(0, warehouseRaw);
-        const item = (latestClosing?.inventory_report || []).find(i => i.ingredient === ing);
+        const item = (latestClosing?.inventory_report || []).find((i: Row) => i.ingredient === ing);
         const counter = counterByIngredient[ing] ?? 0;
 
         return {
@@ -371,7 +372,7 @@ export const fetchLocalIngredientStocks = (addressId) => {
 // Always-merge mode: if newKey already exists in ingredient_costs for this address, the
 // oldKey cost row is dropped (newKey kept canonical) — mirrors migration 20260519/20260520.
 // Scoped by address_id like every other guest helper. Returns the same shape as the RPC.
-export const renameLocalIngredient = (addressId, oldKey, newKey) => {
+export const renameLocalIngredient = (addressId: string | null, oldKey: string, newKey: string) => {
     if (!oldKey || !newKey) {
         return { recipes_updated: 0, closings_updated: 0, expenses_updated: 0, costs_action: 'none' };
     }
@@ -458,7 +459,7 @@ const DEFAULT_EXPENSE_CATEGORIES = [
     { name: 'Rút vốn / cá nhân',   group_section: 'non_operating', sort_order: 10 },
 ];
 
-const seedLocalExpenseCategoriesIfNeeded = (addressId) => {
+const seedLocalExpenseCategoriesIfNeeded = (addressId: string | null) => {
     const list = get(KEYS.EXPENSE_CATEGORIES);
     const hasAny = list.some(c => c.address_id === addressId && c.is_default);
     if (hasAny) return list;
@@ -475,14 +476,14 @@ const seedLocalExpenseCategoriesIfNeeded = (addressId) => {
     return next;
 };
 
-export const fetchLocalExpenseCategories = (addressId) => {
+export const fetchLocalExpenseCategories = (addressId: string | null) => {
     const list = seedLocalExpenseCategoriesIfNeeded(addressId);
     return list
         .filter(c => c.address_id === addressId && c.is_active)
         .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
 };
 
-export const insertLocalExpenseCategory = (payload) => {
+export const insertLocalExpenseCategory = (payload: Row) => {
     const list = get(KEYS.EXPENSE_CATEGORIES);
     const newItem = {
         id: generateId(),
@@ -497,7 +498,7 @@ export const insertLocalExpenseCategory = (payload) => {
     return newItem;
 };
 
-export const updateLocalExpenseCategory = (id, updates) => {
+export const updateLocalExpenseCategory = (id: string, updates: Row) => {
     const list = get(KEYS.EXPENSE_CATEGORIES);
     const idx = list.findIndex(c => c.id === id);
     if (idx >= 0) {
@@ -508,20 +509,20 @@ export const updateLocalExpenseCategory = (id, updates) => {
     return null;
 };
 
-export const fetchLocalExpensesByCategory = (addressId, categoryId) =>
+export const fetchLocalExpensesByCategory = (addressId: string | null, categoryId: string) =>
     get(KEYS.EXPENSES)
         .filter(e => e.address_id === addressId && e.category_id === categoryId)
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-export const fetchLocalExpenseCategoryCounts = (addressId) => {
-    const counts = {};
+export const fetchLocalExpenseCategoryCounts = (addressId: string | null) => {
+    const counts: Record<string, number> = {};
     for (const e of get(KEYS.EXPENSES)) {
         if (e.address_id === addressId && e.category_id) counts[e.category_id] = (counts[e.category_id] || 0) + 1;
     }
     return counts;
 };
 
-export const restoreLocalExpenseCategory = (id) => {
+export const restoreLocalExpenseCategory = (id: string) => {
     const list = get(KEYS.EXPENSE_CATEGORIES);
     const idx = list.findIndex(c => c.id === id);
     if (idx >= 0) {
@@ -532,7 +533,7 @@ export const restoreLocalExpenseCategory = (id) => {
     return true;
 };
 
-export const deleteLocalExpenseCategory = (id) => {
+export const deleteLocalExpenseCategory = (id: string) => {
     const list = get(KEYS.EXPENSE_CATEGORIES);
     const idx = list.findIndex(c => c.id === id);
     if (idx >= 0) {
@@ -543,7 +544,7 @@ export const deleteLocalExpenseCategory = (id) => {
     return true;
 };
 
-export const upsertLocalShiftClosing = (payload) => {
+export const upsertLocalShiftClosing = (payload: Row) => {
     const list = get(KEYS.SHIFT_CLOSINGS);
     const dateStr = dateStringVN();
     const idx = list.findIndex(s => s.address_id === payload.address_id && dateStringVN(new Date(s.created_at)) === dateStr);
@@ -574,27 +575,27 @@ export const clearGuestData = () => {
 };
 
 // --- Missing Product & Order Helpers ---
-export const updateLocalProductPrice = (productId, price) => {
+export const updateLocalProductPrice = (productId: string, price: number) => {
     const products = get(KEYS.PRODUCTS);
     const p = products.find(p => p.id === productId);
     if (p) { p.price = price; set(KEYS.PRODUCTS, products); }
 };
 
-export const updateLocalProductName = (productId, name) => {
+export const updateLocalProductName = (productId: string, name: string) => {
     const products = get(KEYS.PRODUCTS);
     const p = products.find(p => p.id === productId);
     if (p) { p.name = name; set(KEYS.PRODUCTS, products); }
 };
 
-export const updateLocalProductCountAsCup = (productId, countAsCup) => {
+export const updateLocalProductCountAsCup = (productId: string, countAsCup: boolean) => {
     const products = get(KEYS.PRODUCTS);
     const p = products.find(p => p.id === productId);
     if (p) { p.count_as_cup = countAsCup; set(KEYS.PRODUCTS, products); }
 };
 
-export const updateLocalProductSortOrder = (orderedProductIds) => {
+export const updateLocalProductSortOrder = (orderedProductIds: string[]) => {
     const products = get(KEYS.PRODUCTS);
-    orderedProductIds.forEach((id, index) => {
+    orderedProductIds.forEach((id: string, index: number) => {
         const p = products.find(p => p.id === id);
         if (p) p.sort_order = index;
     });
@@ -603,7 +604,7 @@ export const updateLocalProductSortOrder = (orderedProductIds) => {
 
 // Soft-delete a product (mirror of the remote `is_active = false` write). Lives here so
 // callers never reach into localStorage with an out-of-module key constant.
-export const deleteLocalProduct = (productId) => {
+export const deleteLocalProduct = (productId: string) => {
     const products = get(KEYS.PRODUCTS);
     const idx = products.findIndex(p => p.id === productId);
     if (idx >= 0) {
@@ -613,7 +614,7 @@ export const deleteLocalProduct = (productId) => {
     return true;
 };
 
-export const updateLocalExpense = (id, updates) => {
+export const updateLocalExpense = (id: string, updates: Row) => {
     const list = get(KEYS.EXPENSES);
     const idx = list.findIndex(e => e.id === id);
     if (idx >= 0) {
@@ -624,14 +625,14 @@ export const updateLocalExpense = (id, updates) => {
     return null;
 };
 
-export const deleteLocalExpense = (expenseId) => {
+export const deleteLocalExpense = (expenseId: string) => {
     let expenses = get(KEYS.EXPENSES);
     expenses = expenses.filter(e => e.id !== expenseId);
     set(KEYS.EXPENSES, expenses);
     return true;
 };
 
-export const deleteLocalOrder = (orderId, staffName) => {
+export const deleteLocalOrder = (orderId: string, staffName: string | null) => {
     const orders = get(KEYS.ORDERS);
     const o = orders.find(o => o.id === orderId);
     if (o) {
@@ -642,7 +643,7 @@ export const deleteLocalOrder = (orderId, staffName) => {
     return true;
 };
 
-export const updateLocalOrderDiscount = (orderId, total, discountAmount) => {
+export const updateLocalOrderDiscount = (orderId: string, total: number, discountAmount: number) => {
     const orders = get(KEYS.ORDERS);
     const o = orders.find(o => o.id === orderId);
     if (o) {
@@ -653,61 +654,61 @@ export const updateLocalOrderDiscount = (orderId, total, discountAmount) => {
     return true;
 };
 
-export const deleteLocalRecipeRow = (productId, ingredient) => {
+export const deleteLocalRecipeRow = (productId: string, ingredient: string) => {
     let recipes = get(KEYS.RECIPES);
     recipes = recipes.filter(r => !(r.product_id === productId && r.ingredient === ingredient));
     set(KEYS.RECIPES, recipes);
 };
 
-export const deleteLocalIngredientCost = (ingredient) => {
+export const deleteLocalIngredientCost = (ingredient: string) => {
     let costs = get(KEYS.INGREDIENT_COSTS);
     costs = costs.filter(c => c.ingredient !== ingredient);
     set(KEYS.INGREDIENT_COSTS, costs);
 };
 
 // --- Missing Extras Helpers ---
-export const insertLocalProductExtra = (payload) => {
+export const insertLocalProductExtra = (payload: Row) => {
     const extras = get(KEYS.PRODUCT_EXTRAS);
-    const maxSort = extras.filter(e => e.product_id === payload.product_id).reduce((max, e) => Math.max(max, e.sort_order || -1), -1);
+    const maxSort = extras.filter(e => e.product_id === payload.product_id).reduce((max: number, e) => Math.max(max, e.sort_order || -1), -1);
     const newExtra = { id: generateId(), sort_order: maxSort + 1, is_sticky: false, ...payload };
     extras.push(newExtra);
     set(KEYS.PRODUCT_EXTRAS, extras);
     return newExtra;
 };
 
-export const updateLocalProductExtraName = (extraId, name) => {
+export const updateLocalProductExtraName = (extraId: string, name: string) => {
     const extras = get(KEYS.PRODUCT_EXTRAS);
     const e = extras.find(e => e.id === extraId);
     if (e) { e.name = name; set(KEYS.PRODUCT_EXTRAS, extras); }
 };
 
-export const updateLocalProductExtraPrice = (extraId, price) => {
+export const updateLocalProductExtraPrice = (extraId: string, price: number) => {
     const extras = get(KEYS.PRODUCT_EXTRAS);
     const e = extras.find(e => e.id === extraId);
     if (e) { e.price = price; set(KEYS.PRODUCT_EXTRAS, extras); }
 };
 
-export const updateLocalProductExtraSticky = (extraId, isSticky) => {
+export const updateLocalProductExtraSticky = (extraId: string, isSticky: boolean) => {
     const extras = get(KEYS.PRODUCT_EXTRAS);
     const e = extras.find(e => e.id === extraId);
     if (e) { e.is_sticky = isSticky; set(KEYS.PRODUCT_EXTRAS, extras); }
 };
 
-export const updateLocalExtrasSortOrder = (orderedExtraIds) => {
+export const updateLocalExtrasSortOrder = (orderedExtraIds: string[]) => {
     const extras = get(KEYS.PRODUCT_EXTRAS);
-    orderedExtraIds.forEach((id, index) => {
+    orderedExtraIds.forEach((id: string, index: number) => {
         const e = extras.find(e => e.id === id);
         if (e) e.sort_order = index;
     });
     set(KEYS.PRODUCT_EXTRAS, extras);
 };
 
-export const duplicateLocalProductExtra = (extraId, newName, addressId) => {
+export const duplicateLocalProductExtra = (extraId: string, newName: string, addressId: string | null) => {
     const extras = get(KEYS.PRODUCT_EXTRAS);
     const src = extras.find(e => e.id === extraId);
     if (!src) return null;
     
-    const maxSort = extras.filter(e => e.product_id === src.product_id).reduce((max, e) => Math.max(max, e.sort_order || -1), -1);
+    const maxSort = extras.filter(e => e.product_id === src.product_id).reduce((max: number, e) => Math.max(max, e.sort_order || -1), -1);
     const newExtra = { id: generateId(), product_id: src.product_id, name: newName, price: src.price, address_id: addressId, sort_order: maxSort + 1, is_sticky: false };
     extras.push(newExtra);
     set(KEYS.PRODUCT_EXTRAS, extras);
@@ -722,7 +723,7 @@ export const duplicateLocalProductExtra = (extraId, newName, addressId) => {
     return newExtra;
 };
 
-export const deleteLocalProductExtra = (extraId) => {
+export const deleteLocalProductExtra = (extraId: string) => {
     let extras = get(KEYS.PRODUCT_EXTRAS);
     extras = extras.filter(e => e.id !== extraId);
     set(KEYS.PRODUCT_EXTRAS, extras);
@@ -733,7 +734,7 @@ export const deleteLocalProductExtra = (extraId) => {
     return true;
 };
 
-export const upsertLocalExtraIngredient = (payload) => {
+export const upsertLocalExtraIngredient = (payload: Row) => {
     const extraIngs = get(KEYS.EXTRA_INGREDIENTS);
     const idx = extraIngs.findIndex(i => i.extra_id === payload.extra_id && i.ingredient === payload.ingredient);
     if (idx >= 0) {
@@ -744,7 +745,7 @@ export const upsertLocalExtraIngredient = (payload) => {
     set(KEYS.EXTRA_INGREDIENTS, extraIngs);
 };
 
-export const deleteLocalExtraIngredient = (extraId, ingredient) => {
+export const deleteLocalExtraIngredient = (extraId: string, ingredient: string) => {
     let extraIngs = get(KEYS.EXTRA_INGREDIENTS);
     extraIngs = extraIngs.filter(i => !(i.extra_id === extraId && i.ingredient === ingredient));
     set(KEYS.EXTRA_INGREDIENTS, extraIngs);

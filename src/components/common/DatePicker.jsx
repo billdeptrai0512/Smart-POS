@@ -57,15 +57,12 @@ export default function DatePicker({
     const dayPickEnabled = typeof onChange === 'function'
 
     // Re-anchor month + reset any in-progress range each time the popover opens.
-    // Intentional state-sync on the `open` edge — not a cascading-render hazard.
-    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         if (open) {
             setViewMonth(parseIsoDay(anchorIso) || new Date())
             setPendingStart(null)
         }
     }, [open, anchorIso])
-    /* eslint-enable react-hooks/set-state-in-effect */
 
     // Outside click + Escape close — listeners only live while open.
     useEffect(() => {
@@ -84,8 +81,12 @@ export default function DatePicker({
 
     // todayISO + presets re-derive on open so a terminal left past VN midnight
     // doesn't keep highlighting yesterday or hand back a stale "Hôm nay" range.
+    // ponytail: `open` is a deliberate recompute trigger, not a real data dependency —
+    // ESLint can't see that dateStringVN()/presetRanges() read the current clock.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const todayISO = useMemo(() => dateStringVN(), [open])
     const grid = useMemo(() => getMonthGrid(viewMonth), [viewMonth])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const presetList = useMemo(() => (presets ? Object.values(presetRanges()) : []), [presets, open])
 
     const handlePick = (iso, disabled) => {

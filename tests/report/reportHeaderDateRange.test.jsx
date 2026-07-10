@@ -1,8 +1,8 @@
 // Báo cáo — getDateRange: tính khoảng ngày cho header (hôm nay/tuần/tháng).
-// Nguồn: src/components/DailyReportPage/ReportHeader.jsx
+// Nguồn: src/utils/rangeCalc.js
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getDateRange } from '../../src/components/DailyReportPage/ReportHeader';
+import { getDateRange } from '../../src/utils/rangeCalc';
 
 describe('getDateRange', () => {
     beforeEach(() => {

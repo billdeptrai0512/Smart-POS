@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import * as Sentry from '@sentry/react'
 
 // navigator.clipboard fails in non-secure contexts and inside iframes without
@@ -32,13 +32,16 @@ export function useToast(duration = 3500) {
     const [toast, setToast] = useState(null)
     const timer = useRef(null)
 
-    function showToast(message, type = 'info', action = null) {
+    // Stable identity so consumers can safely list these in effect/callback deps
+    // without refiring on every render (they used to be plain functions, recreated
+    // every render, which made that unsafe).
+    const showToast = useCallback((message, type = 'info', action = null) => {
         if (timer.current) clearTimeout(timer.current)
         setToast({ message, type, action })
         timer.current = setTimeout(() => setToast(null), duration)
-    }
+    }, [duration])
 
-    function showError(err, actionLabel) {
+    const showError = useCallback((err, actionLabel) => {
         const errMsg = err?.message || String(err) || 'Lỗi không xác định'
         const errCode = err?.code ? `\nCode: ${err.code}` : ''
         const errDetails = err?.details ? `\nDetails: ${err.details}` : ''
@@ -59,7 +62,7 @@ export function useToast(duration = 3500) {
                 showToast(ok ? 'Đã sao chép lỗi' : 'Không sao chép được — copy thủ công từ console', ok ? 'success' : 'warning')
             }
         })
-    }
+    }, [showToast])
 
     return { toast, showToast, showError }
 }

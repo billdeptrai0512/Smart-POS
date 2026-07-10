@@ -3,6 +3,11 @@
 
 export type UUID = string
 
+// Loosely-shaped JSON from Supabase/localStorage — precise interfaces for every
+// RPC/table shape is a much bigger effort than incremental adoption warrants yet;
+// `Record` keeps call sites honest about "unknown shape" instead of pretending via `any`.
+export type Row = Record<string, any>
+
 /** An extra/topping selected on a cart line (mirrors the `extras` table shape used in the cart). */
 export interface CartExtra {
     id: string

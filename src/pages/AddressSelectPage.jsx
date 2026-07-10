@@ -111,6 +111,10 @@ export default function AddressSelectPage() {
             })
         }, 2500)
         return () => clearTimeout(timer)
+        // ponytail: keyed on addressIdsKey (ids only), not `addresses` — the array gets a
+        // new reference on every refetch even when the id set is unchanged, which would
+        // restart this 2.5s prefetch timer on every such refresh.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [addressIdsKey])
 
     // Smart clone link: a ?clone=CODE captured at app load (App.CloneCapture) lands here
