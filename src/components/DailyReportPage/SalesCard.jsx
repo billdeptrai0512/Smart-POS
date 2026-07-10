@@ -199,9 +199,6 @@ function SalesCard({
 
             {/* Revenue chart — hidden on range scopes (bar chart shown separately) */}
             {showChart && (<>
-            {/* Divider */}
-            <div className="h-[1px] bg-border/30 -mx-1" />
-
             <div>
                 {lineChartData.length > 0 ? (
                     <div
