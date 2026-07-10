@@ -39,7 +39,7 @@ export function usePaymentListener({ addressIds = [], onConfirmed, enabled = tru
             .channel(`subpay-${key}`)
             .on(
                 'postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'address_subscriptions' },
+                { event: 'INSERT', schema: 'public', table: 'address_subscriptions', filter: `address_id=in.(${key})` },
                 (payload) => {
                     const row = payload.new
                     if (row && watched.has(row.address_id)) {

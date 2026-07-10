@@ -191,25 +191,21 @@ export function POSProvider() {
             if (ordersChannel) return
             ordersChannel = supabase
                 .channel(`orders-realtime-${addressId}`)
-                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
-                    if (payload.new?.address_id === addressId) {
-                        scheduleStatsRefresh()
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders', filter: `address_id=eq.${addressId}` }, (payload) => {
+                    scheduleStatsRefresh()
 
-                        // Detect if it's from another device
-                        if (!localOrderIds.current.has(payload.new.id)) {
-                            scheduleRecentRefresh()
-                        }
+                    // Detect if it's from another device
+                    if (!localOrderIds.current.has(payload.new.id)) {
+                        scheduleRecentRefresh()
                     }
                 })
                 // A discount edit or soft-delete (deleted_at set) lands as an UPDATE.
                 // Reconcile revenue, the POS journal header, and the history list so a
                 // change on one device shows on the others without a reload.
-                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
-                    if (payload.new?.address_id === addressId) {
-                        scheduleStatsRefresh()
-                        scheduleRecentRefresh()
-                        scheduleOrdersRefresh()
-                    }
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `address_id=eq.${addressId}` }, () => {
+                    scheduleStatsRefresh()
+                    scheduleRecentRefresh()
+                    scheduleOrdersRefresh()
                 })
                 .subscribe()
         }
