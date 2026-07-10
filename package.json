@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:inventory": "node scripts/test-inventory-staging.mjs",
-    "test:money": "node scripts/test-money-staging.mjs"
+    "test:money": "node scripts/test-money-staging.mjs",
+    "check:search-path": "node scripts/check-search-path.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
