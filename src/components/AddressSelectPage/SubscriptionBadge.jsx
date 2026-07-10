@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { useMonetizationEnabled } from '../../hooks/useEntitlement'
-import { startOfDayVN } from '../../utils/dateVN'
+import { computeSubscriptionStatus } from '../../utils/subscriptionStatus'
 
 /**
  * SubscriptionBadge — hiển thị trạng thái gói cước cho từng address card.
@@ -68,17 +68,10 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
     // Monetization OFF hoặc chưa load xong → không render
     if (!enabled || !loaded) return null
 
-    const today = startOfDayVN()
     const handleClick = (e) => { e.stopPropagation(); onRenewClick?.() }
+    const { status, daysLeft } = computeSubscriptionStatus(rows)
 
-    // Dòng còn hiệu lực hôm nay (valid_from ≤ today ≤ valid_to).
-    const active = rows.filter(r => {
-        const from = startOfDayVN(new Date(r.valid_from))
-        const to = startOfDayVN(new Date(r.valid_to))
-        return from <= today && today <= to
-    })
-
-    if (active.length === 0) {
+    if (status === 'none') {
         return (
             <StatusLine
                 id={`sub-badge-locked-${addressId}`}
@@ -91,12 +84,6 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
         )
     }
 
-    // Gói hiệu lực = dòng valid_to muộn nhất (valid_to là 'YYYY-MM-DD' → so sánh chuỗi
-    // = so sánh ngày). Paid nối tiếp trial → dòng muộn nhất là paid.
-    const dominant = active.reduce((a, b) => (b.valid_to > a.valid_to ? b : a))
-    const isTrial = dominant.note === 'trial'
-    const daysLeft = Math.round((startOfDayVN(new Date(dominant.valid_to)) - today) / 86400000)
-
     const dotClass = daysLeft <= 3 ? 'bg-danger' : daysLeft <= 14 ? 'bg-warning' : 'bg-success'
     // Chữ trầm (subtitle) cho trạng thái bình thường; chỉ đỏ lên khi gấp (≤3 ngày).
     const textClass = daysLeft <= 3 ? 'text-danger' : 'text-text-secondary'
@@ -108,7 +95,7 @@ export default function SubscriptionBadge({ addressId, onRenewClick }) {
             dotClass={dotClass}
             textClass={textClass}
         >
-            {isTrial ? 'Đang dùng thử' : 'Đã đăng ký'} · còn {daysLeft} ngày
+            {status === 'trial' ? 'Đang dùng thử' : 'Đã đăng ký'} · còn {daysLeft} ngày
         </StatusLine>
     )
 }

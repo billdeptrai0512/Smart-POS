@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
     Pencil, Trash2, ClipboardCopy, MoreHorizontal, X,
     Coffee, Loader, FileText, BarChart3, Package, ChevronRight,
-    CupSoda, Wallet, Users, HelpCircle, Eraser,
+    CupSoda, Wallet, Users, Eraser,
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
@@ -417,19 +417,17 @@ export default function BranchGrid({
                     </button>
                 )}
 
-                {/* Hỗ trợ & Góp ý card */}
-                <button
-                    onClick={onSupportClick}
-                    className="bg-surface border border-dashed border-border/85 rounded-[20px] overflow-hidden shadow-sm flex flex-col items-center justify-center p-4 gap-2 hover:bg-surface-light hover:border-primary/30 active:bg-border/30 transition-all min-h-[100px] text-center"
-                >
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                        <HelpCircle size={18} />
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                        <span className="text-text font-black text-sm">Bạn cần hỗ trợ / có góp ý?</span>
-                        <span className="text-text-secondary text-[11px] font-medium">Nhấp để liên hệ với chúng tôi</span>
-                    </div>
-                </button>
+                {/* Hỗ trợ & Góp ý */}
+                <div className="flex flex-col items-center justify-center p-3">
+                    <button
+                        onClick={onSupportClick}
+                        className="flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-surface-light border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all duration-300 cursor-pointer"
+                    >
+                        <span className="text-[10px] font-black uppercase tracking-[0.15em] whitespace-nowrap mt-[1px] text-primary">
+                            Bạn cần hỗ trợ / có góp ý?
+                        </span>
+                    </button>
+                </div>
             </div>
 
             <ErrorBanner message={error} small className="mb-3" />

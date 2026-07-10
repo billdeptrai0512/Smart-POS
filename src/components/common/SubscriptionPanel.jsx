@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Loader2, CheckCircle2, Copy, Check } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
+import { useAddressStats } from '../../contexts/AddressStatsContext'
 import { supabase } from '../../lib/supabaseClient'
 import { usePaymentListener } from '../../hooks/usePaymentListener'
 import { usePaymentPoll } from '../../hooks/usePaymentPoll'
@@ -22,6 +23,7 @@ const GOLD = 'linear-gradient(135deg, #f8c577, #f59e0b, #d4882f, #b8732a)'
 export default function SubscriptionPanel({ preselectAddressId, onDone }) {
     const { isAdmin } = useAuth()
     const { addresses, selectedAddress } = useAddress()
+    const { refreshSubscriptionStatuses } = useAddressStats()
 
     const [selectedAddressIds, setSelectedAddressIds] = useState([])
 
@@ -75,7 +77,13 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
     }, [addresses])
 
     // Xác nhận thanh toán: hiện panel thành công, user tự bấm "Xong" (không auto-redirect).
-    const handleConfirmed = () => setConfirmed(true)
+    // Làm tươi cả badge từng card (entitlementCache) lẫn thứ tự sort (subscriptionStatusMap) —
+    // dùng chung cho mock trial, webhook thật (usePaymentListener) và poll (usePaymentPoll).
+    const handleConfirmed = () => {
+        invalidateEntitlementCache(addresses.map(a => a.id))
+        refreshSubscriptionStatuses()
+        setConfirmed(true)
+    }
 
     // Realtime listener: webhook SePay → Edge Function → INSERT address_subscriptions
     // → đẩy về đây → tự xác nhận + mở khoá. Theo dõi mọi chi nhánh của owner.
@@ -196,8 +204,8 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                 p_note: 'trial',
             })
             if (error) throw error
-            invalidateEntitlementCache(selectedAddressIds)
             // Đi cùng đường với webhook thật → hiện panel xác nhận (test được UI success).
+            // handleConfirmed() tự invalidate cache + refresh sort bên dưới.
             setIsTrialMock(true)
             setIsMocking(false)
             handleConfirmed()
@@ -226,6 +234,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
             })
             if (error) throw error
             invalidateEntitlementCache(selectedAddressIds)
+            refreshSubscriptionStatuses()
             if (onDone) onDone()
             else window.location.reload()
         } catch (err) {

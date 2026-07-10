@@ -2,7 +2,8 @@ import { createContext, useContext, useState, useEffect, useRef, useMemo, useCal
 import { Outlet } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import { useAddress } from './AddressContext'
-import { fetchBranchesTodayStats, fetchStaffByManager } from '../services/authService'
+import { useMonetizationEnabled } from '../hooks/useEntitlement'
+import { fetchBranchesTodayStats, fetchStaffByManager, fetchSubscriptionStatuses } from '../services/authService'
 
 const AddressStatsContext = createContext(null)
 
@@ -18,11 +19,13 @@ export function useAddressStats() {
 export function AddressStatsProvider() {
     const { profile, isStaff } = useAuth()
     const { addresses } = useAddress()
+    const { enabled: monetizationEnabled } = useMonetizationEnabled()
 
     const [cupsMap, setCupsMap] = useState({})
     const [revenueMap, setRevenueMap] = useState({})
     const [prevCupsMap, setPrevCupsMap] = useState({})
     const [sessionsMap, setSessionsMap] = useState({})
+    const [subscriptionStatusMap, setSubscriptionStatusMap] = useState({})
     const [staffList, setStaffList] = useState([])
     const [statsLoading, setStatsLoading] = useState(false)
     const [staffLoading, setStaffLoading] = useState(false)
@@ -51,6 +54,23 @@ export function AddressStatsProvider() {
             if (!cancelRef.current) setStatsLoading(false)
         }
     }, [addresses])
+
+    // Trạng thái gói dùng để sort BranchGrid (dùng thử → đã đăng ký → chưa đăng ký).
+    // Không gọi khi monetization tắt — cột address_subscriptions vô nghĩa lúc đó.
+    const loadSubscriptionStatuses = useCallback(async () => {
+        if (!monetizationEnabled || !addresses.length) {
+            setSubscriptionStatusMap({})
+            return
+        }
+        const map = await fetchSubscriptionStatuses(addresses.map(a => a.id))
+        if (!cancelRef.current) setSubscriptionStatusMap(map)
+    }, [addresses, monetizationEnabled])
+
+    // Expose để SubscriptionPanel gọi lại sau Mock/Reset gói (admin) — invalidateEntitlementCache
+    // chỉ làm tươi badge từng card, không tự đụng tới thứ tự sort ở đây.
+    useEffect(() => {
+        loadSubscriptionStatuses()
+    }, [addressIdsKey, monetizationEnabled, loadSubscriptionStatuses])
 
     const loadStaff = useCallback(async () => {
         if (!profile?.id || isStaff) return
@@ -96,11 +116,13 @@ export function AddressStatsProvider() {
             revenueMap,
             prevCupsMap,
             sessionsMap,
+            subscriptionStatusMap,
             staffList,
             statsLoading,
             staffLoading,
             refreshStats: loadStats,
             refreshStaff: loadStaff,
+            refreshSubscriptionStatuses: loadSubscriptionStatuses,
         }}>
             <Outlet />
         </AddressStatsContext.Provider>
