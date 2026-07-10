@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabaseClient'
 import { isGuest } from './localRepository'
 import { startOfDayVN } from '../utils/dateVN'
+import { computeSubscriptionStatus } from '../utils/subscriptionStatus'
 
 // Canonical login username: lowercase, only [a-z0-9_.-]. This is what the user
 // actually types to log in, so it's also what we persist to users.username.
@@ -150,6 +151,18 @@ export async function fetchStaffByManager(managerId) {
     return data
 }
 
+// Lần đăng nhập gần nhất của từng thành viên (auth.users.last_sign_in_at, qua RPC vì
+// client không query thẳng schema auth được). Trả về Map<userId, ISOString|null>.
+export async function fetchStaffLastLogins(userIds) {
+    if (isGuest() || !supabase || !userIds.length) return new Map()
+    const { data, error } = await supabase.rpc('get_staff_last_logins', { p_user_ids: userIds })
+    if (error) {
+        console.error('fetchStaffLastLogins error:', error)
+        return new Map()
+    }
+    return new Map((data || []).map(r => [r.user_id, r.last_sign_in_at]))
+}
+
 // Promote (staff → manager) or demote (manager → staff) a team member.
 // Authorization is enforced server-side by the set_team_member_role RPC.
 export async function setTeamMemberRole(userId, role) {
@@ -284,6 +297,26 @@ export async function fetchAddresses(managerId) {
         return { data: [], error }
     }
     return { data, error: null }
+}
+
+// Trạng thái gói ('trial'|'paid'|'none') cho từng address, dùng để sắp xếp
+// BranchGrid (dùng thử → đã đăng ký → chưa đăng ký). 1 query duy nhất, không
+// per-card như SubscriptionBadge (badge cache riêng cho hiển thị khi mở card).
+export async function fetchSubscriptionStatuses(addressIds) {
+    if (isGuest() || !supabase || !addressIds.length) return {}
+    const { data, error } = await supabase
+        .from('address_subscriptions')
+        .select('address_id, valid_from, valid_to, note')
+        .in('address_id', addressIds)
+    if (error) {
+        console.error('fetchSubscriptionStatuses error:', error)
+        return {}
+    }
+    const byAddress = {}
+    ;(data || []).forEach(r => { (byAddress[r.address_id] ??= []).push(r) })
+    const statusMap = {}
+    addressIds.forEach(id => { statusMap[id] = computeSubscriptionStatus(byAddress[id]).status })
+    return statusMap
 }
 
 // Translate Postgres unique-violation (23505) into a user-facing message.

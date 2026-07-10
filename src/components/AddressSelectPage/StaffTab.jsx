@@ -4,7 +4,19 @@ import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
 import MonetizationToggle from './MonetizationToggle'
 import { capitalizeWords } from '../../utils'
-import { fetchStaffRevokedAddresses, fetchTeamRevokedAddresses, setStaffAddressAccess, setStaffPassword } from '../../services/authService'
+import { fetchStaffRevokedAddresses, fetchTeamRevokedAddresses, fetchStaffLastLogins, setStaffAddressAccess, setStaffPassword } from '../../services/authService'
+
+// "Đăng nhập gần nhất: 5 phút trước" / "... 3 giờ trước" / "... 2 ngày trước" / ngày cụ thể nếu đã lâu.
+function formatLastLogin(iso) {
+    if (!iso) return 'Chưa đăng nhập'
+    const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+    const rel = minutes < 1 ? 'Vừa xong'
+        : minutes < 60 ? `${minutes} phút trước`
+        : minutes < 1440 ? `${Math.floor(minutes / 60)} giờ trước`
+        : minutes < 43200 ? `${Math.floor(minutes / 1440)} ngày trước`
+        : new Date(iso).toLocaleDateString('vi-VN')
+    return `Truy cập lần cuối: ${rel}`
+}
 
 // Full management sheet for one member: rename, change role, reset password,
 // per-branch visibility, and remove. Each destructive action behind a confirm tap.
@@ -325,6 +337,16 @@ export default function StaffTab({
         setRevokedByUser(prev => new Map(prev ?? []).set(userId, set))
     }, [])
 
+    // Prefetch lần đăng nhập gần nhất của cả team, cùng nhịp với revokedByUser.
+    const [lastLoginByUser, setLastLoginByUser] = useState(new Map())
+    useEffect(() => {
+        let cancelled = false
+        fetchStaffLastLogins(staffList.map(m => m.id)).then(map => {
+            if (!cancelled) setLastLoginByUser(map)
+        })
+        return () => { cancelled = true }
+    }, [staffIdsKey])
+
     // 1 danh sách gộp, quản lý trước rồi nhân viên.
     const members = [...staffList].sort((a, b) => (b.role === 'manager') - (a.role === 'manager'))
 
@@ -352,16 +374,16 @@ export default function StaffTab({
                             const isManager = member.role === 'manager'
                             return (
                                 <div key={member.id} className="p-2.5 flex items-center gap-2.5 bg-bg rounded-[12px] border border-border/40">
-                                    <span className={`text-[10px] font-black uppercase tracking-wide px-2 py-1 rounded-full border whitespace-nowrap shrink-0 ${isManager
-                                        ? 'bg-blue-500/10 border-blue-500/25 text-blue-500'
-                                        : 'bg-primary/10 border-primary/25 text-primary'}`}>
-                                        {isManager ? 'Quản lý' : 'Nhân viên'}
-                                    </span>
                                     <div className="flex-1 min-w-0">
-                                        <span className="block text-text text-sm font-bold truncate">{member.name}</span>
-                                        {member.username && (
-                                            <span className="block text-text-secondary text-[11px] truncate">@{member.username}</span>
-                                        )}
+                                        <div className="flex items-center gap-1.5">
+                                            <span className={`text-[10px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${isManager
+                                                ? 'bg-blue-500/10 border-blue-500/25 text-blue-500'
+                                                : 'bg-primary/10 border-primary/25 text-primary'}`}>
+                                                {isManager ? 'Quản lý' : 'Nhân viên'}
+                                            </span>
+                                            <span className="text-text text-sm font-bold truncate">{member.name}</span>
+                                        </div>
+                                        <span className="block text-text-secondary text-[11px] truncate mt-1">· {formatLastLogin(lastLoginByUser.get(member.id))}</span>
                                     </div>
                                     <button
                                         onClick={() => setActionMember(member)}

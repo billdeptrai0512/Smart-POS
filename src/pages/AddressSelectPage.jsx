@@ -17,9 +17,12 @@ import CreateStaffModal from '../components/AddressSelectPage/CreateStaffModal'
 import SupportModal from '../components/common/SupportModal'
 import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 
+// Dùng thử → đã đăng ký → chưa đăng ký.
+const SUBSCRIPTION_RANK = { trial: 0, paid: 1, none: 2 }
+
 export default function AddressSelectPage() {
     const { addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading, fetchError } = useAddress()
-    const { cupsMap, revenueMap, prevCupsMap, sessionsMap, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
+    const { cupsMap, revenueMap, prevCupsMap, sessionsMap, subscriptionStatusMap, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
     const { signOut, profile, refreshProfile, isStaff, isManager, isAdmin, isGuest } = useAuth()
     const { enabled: monetizationEnabled } = useMonetizationEnabled()
     const navigate = useNavigate()
@@ -50,6 +53,14 @@ export default function AddressSelectPage() {
         if (!teamOwnerId) return addresses
         return addresses.filter(a => a.manager_id === teamOwnerId)
     }, [addresses, teamOwnerId])
+
+    // Trong cùng nhóm giữ nguyên thứ tự created_at có sẵn từ query (Array.sort ổn định) làm tie-break phụ.
+    const sortedAddresses = useMemo(() => {
+        if (!monetizationEnabled) return addresses
+        return [...addresses].sort((a, b) =>
+            (SUBSCRIPTION_RANK[subscriptionStatusMap[a.id]] ?? 2) - (SUBSCRIPTION_RANK[subscriptionStatusMap[b.id]] ?? 2)
+        )
+    }, [addresses, subscriptionStatusMap, monetizationEnabled])
 
     // PERF: count by role in a single pass instead of two .filter() walks per render.
     const { staffCount, managerCount } = useMemo(() => {
@@ -268,7 +279,7 @@ export default function AddressSelectPage() {
                 {/* ── BRANCHES TAB ── */}
                 {(activeTab === 'branches' || isStaff) && (
                     <BranchGrid
-                        addresses={addresses}
+                        addresses={sortedAddresses}
                         fetchError={fetchError}
                         cupsMap={cupsMap}
                         revenueMap={revenueMap}
