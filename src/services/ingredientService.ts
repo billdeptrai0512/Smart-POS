@@ -3,11 +3,14 @@ import * as localRepo from './localRepository'
 import { startOfDayVN } from '../utils/dateVN'
 import { insertExpense } from './expenseService'
 import { invalidateReportCache } from './cache'
+import type { UUID, Row } from '../types/domain'
+
+type SupabaseError = { code?: string; message?: string } | null
 
 // ---- Recipes ----
 
 // Fetch all recipes from Supabase (Pure isolated by address)
-export async function fetchAllRecipes(addressId) {
+export async function fetchAllRecipes(addressId: UUID | null) {
     if (localRepo.isGuest()) return localRepo.fetchLocalRecipes(addressId)
     if (!supabase) return []
     let query = supabase.from('recipes').select('product_id, ingredient, amount, unit, address_id')
@@ -28,7 +31,7 @@ export async function fetchAllRecipes(addressId) {
 }
 
 // Fetch recipes for a list of product IDs
-export async function fetchRecipes(productIds) {
+export async function fetchRecipes(productIds: UUID[]) {
     if (!supabase) return []
     const { data, error } = await supabase
         .from('recipes')
@@ -42,11 +45,11 @@ export async function fetchRecipes(productIds) {
 }
 
 // Upsert a recipe row (insert or update ingredient amount for a product)
-export async function upsertRecipe(productId, ingredient, amount, addressId = null, unit = null) {
+export async function upsertRecipe(productId: UUID, ingredient: string, amount: number, addressId: UUID | null = null, unit: string | null = null) {
     if (localRepo.isGuest()) return localRepo.upsertLocalRecipe({ product_id: productId, ingredient, amount, address_id: addressId, unit })
     if (!supabase) throw new Error('No Supabase connection')
 
-    const payload = { product_id: productId, ingredient, amount }
+    const payload: Row = { product_id: productId, ingredient, amount }
     if (unit) payload.unit = unit
     if (addressId) payload.address_id = addressId
 
@@ -57,7 +60,7 @@ export async function upsertRecipe(productId, ingredient, amount, addressId = nu
 }
 
 // Delete a recipe row
-export async function deleteRecipeRow(productId, ingredient, addressId = null) {
+export async function deleteRecipeRow(productId: UUID, ingredient: string, addressId: UUID | null = null) {
     if (localRepo.isGuest()) return localRepo.deleteLocalRecipeRow(productId, ingredient)
     if (!supabase) throw new Error('No Supabase connection')
 
@@ -77,11 +80,11 @@ export async function deleteRecipeRow(productId, ingredient, addressId = null) {
 // ---- Ingredient Costs ----
 
 // Fetch ingredient costs + units in one query, return both shapes
-export async function fetchIngredientCostsAndUnits(addressId) {
+export async function fetchIngredientCostsAndUnits(addressId: UUID | null) {
     if (localRepo.isGuest()) {
         const rows = localRepo.fetchLocalIngredientCosts(addressId)
-        const costs = {}, units = {}
-        rows.forEach(r => {
+        const costs: Row = {}, units: Row = {}
+        rows.forEach((r: Row) => {
             costs[r.ingredient] = r.unit_cost
             units[r.ingredient] = r.unit
         })
@@ -96,10 +99,13 @@ export async function fetchIngredientCostsAndUnits(addressId) {
     // Try with category first; fall back to legacy SELECT if migration
     // 20260523_add_ingredient_category.sql isn't deployed yet (Postgres 42703).
     const BASE = 'ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock'
-    const runQuery = async (cols) => {
+    const runQuery = async (cols: string) => {
+        if (!supabase) return { data: null, error: null } as { data: Row[] | null; error: SupabaseError }
         let q = supabase.from('ingredient_costs').select(cols)
         q = addressId ? q.eq('address_id', addressId) : q.is('address_id', null)
-        return await q
+        // .select(cols) with a dynamic column string (not a literal) makes supabase-js
+        // fall back to its GenericStringError type — cast to the real loose shape.
+        return await q as unknown as { data: Row[] | null; error: SupabaseError }
     }
 
     // Try newest schema first, degrade column-by-column on undefined_column (42703)
@@ -115,9 +121,9 @@ export async function fetchIngredientCostsAndUnits(addressId) {
     }
     if (!data || data.length === 0) return { costs: {}, units: {}, rows: [] }
 
-    const costs = {}
-    const units = {}
-    const rows = []
+    const costs: Row = {}
+    const units: Row = {}
+    const rows: Row[] = []
     for (const d of data) {
         costs[d.ingredient] = d.unit_cost
         units[d.ingredient] = d.unit || 'đv'
@@ -127,23 +133,24 @@ export async function fetchIngredientCostsAndUnits(addressId) {
 }
 
 // Kept for backward-compat with callers that only need the costs map
-export async function fetchIngredientCosts(addressId) {
+export async function fetchIngredientCosts(addressId: UUID | null) {
     const { costs } = await fetchIngredientCostsAndUnits(addressId)
     return costs
 }
 
 // Kept for backward-compat — delegates to fetchIngredientCostsAndUnits
-export async function fetchIngredientCostsWithUnits(addressId) {
+export async function fetchIngredientCostsWithUnits(addressId: UUID | null) {
     const { rows } = await fetchIngredientCostsAndUnits(addressId)
     return rows
 }
 
 // Upsert an ingredient cost
-export async function upsertIngredientCost(ingredient, unitCost, addressId = null, unit = null, opts = {}) {
+export async function upsertIngredientCost(ingredient: string, unitCost: number, addressId: UUID | null = null, unit: string | null = null, opts: Row = {}) {
     if (localRepo.isGuest()) return localRepo.upsertLocalIngredientCost({ ingredient, unit_cost: unitCost, address_id: addressId, unit, ...opts })
     if (!supabase) throw new Error('No Supabase connection')
+    const sb = supabase
 
-    const payload = { ingredient, unit_cost: unitCost }
+    const payload: Row = { ingredient, unit_cost: unitCost }
     if (unit) payload.unit = unit
     if (addressId) payload.address_id = addressId
 
@@ -156,16 +163,16 @@ export async function upsertIngredientCost(ingredient, unitCost, addressId = nul
     if (opts.countInAudit !== undefined) payload.count_in_audit = !!opts.countInAudit
     if (opts.tareWeight !== undefined) payload.tare_weight = opts.tareWeight ?? null
 
-    const upsert = (body) => supabase
+    const upsert = (body: Row) => sb
         .from('ingredient_costs')
         .upsert(body, { onConflict: 'ingredient,address_id' })
     // PostgREST trả PGRST204 ("could not find column in schema cache") khi WRITE cột
     // chưa migrate; Postgres trả 42703. Bắt cả hai + dò tên cột để degrade an toàn.
-    const missingCol = (error, col) =>
+    const missingCol = (error: SupabaseError, col: string) =>
         !!error && (error.code === 'PGRST204' || error.code === '42703' || new RegExp(col).test(error.message || ''))
 
     // Degrade dần nếu cột optional chưa migrate: bỏ từng cột (mới nhất trước) rồi thử lại.
-    let body = payload
+    let body: Row = payload
     let { error } = await upsert(body)
     for (const col of ['tare_weight', 'count_in_audit', 'category']) {
         if (!error) break
@@ -184,7 +191,7 @@ export async function upsertIngredientCost(ingredient, unitCost, addressId = nul
 //
 // Returns: { recipes_updated, closings_updated, expenses_updated, costs_action }
 //   costs_action ∈ 'renamed' | 'merged' | 'none' | 'noop'
-export async function syncIngredientKey(addressId, oldKey, newKey) {
+export async function syncIngredientKey(addressId: UUID, oldKey: string, newKey: string) {
     if (localRepo.isGuest()) {
         return localRepo.renameLocalIngredient(addressId, oldKey, newKey)
     }
@@ -203,13 +210,13 @@ export async function syncIngredientKey(addressId, oldKey, newKey) {
 // Backwards-compat shim — old callers used `renameIngredient(oldKey, newKey)` without addressId.
 // The old `rename_ingredient` RPC was never deployed, so this path was broken.
 // Now delegates to syncIngredientKey. AddressId must be passed explicitly going forward.
-export async function renameIngredient(oldKey, newKey, addressId) {
+export async function renameIngredient(oldKey: string, newKey: string, addressId: UUID) {
     return await syncIngredientKey(addressId, oldKey, newKey)
 }
 
 // Delete an ingredient cost entry — also cleans recipes + extra_ingredients for this address.
 // Uses the delete_ingredient RPC for atomic cleanup across all tables.
-export async function deleteIngredientCost(ingredient, addressId = null) {
+export async function deleteIngredientCost(ingredient: string, addressId: UUID | null = null) {
     if (localRepo.isGuest()) return localRepo.deleteLocalIngredientCost(ingredient)
     if (!supabase) throw new Error('No Supabase connection')
 
@@ -240,7 +247,7 @@ export async function deleteIngredientCost(ingredient, addressId = null) {
 // Path nhanh: RPC `get_ingredient_stocks_v2` aggregate server-side (1 round-trip).
 // Fallback: smart 2-step JS aggregate khi RPC chưa deploy (PGRST202 / 42883).
 let _warnedFetchStocksFallback = false
-export async function fetchIngredientStocks(addressId) {
+export async function fetchIngredientStocks(addressId: UUID | null) {
     if (localRepo.isGuest()) return localRepo.fetchLocalIngredientStocks(addressId)
     if (!supabase) return []
 
@@ -248,7 +255,7 @@ export async function fetchIngredientStocks(addressId) {
     // read expenses/shift_closings directly (RLS), so use a SECURITY DEFINER RPC that
     // returns aggregated stock for address_id IS NULL.
     const isDefault = !addressId
-    const mapRow = (row) => ({
+    const mapRow = (row: Row) => ({
         ingredient: row.ingredient,
         current_stock: Number(row.current_stock) || 0,
         restocked_qty: Number(row.restocked_qty) || 0,
@@ -276,7 +283,7 @@ export async function fetchIngredientStocks(addressId) {
         }
     }
 
-    const applyAddrFilter = (q) => isDefault ? q.is('address_id', null) : q.eq('address_id', addressId)
+    const applyAddrFilter = (q: any) => isDefault ? q.is('address_id', null) : q.eq('address_id', addressId)
 
     // Fallback step 1: recent closings + all refills (parallel, both small).
     // Walk N=30 latest closings (DESC) so we can carry forward the most-recent
@@ -297,13 +304,13 @@ export async function fetchIngredientStocks(addressId) {
         ).eq('is_refill', true).limit(10000)  // disaster cap; RPC path has no such ceiling.
     ])
 
-    const counter = {}
-    const todayRestock = {}
+    const counter: Record<string, number> = {}
+    const todayRestock: Record<string, number> = {}
     const closingsDesc = Array.isArray(latestRes.data) ? latestRes.data : []
 
     // todayRestock = restock from THE latest closing only (today's restock).
     const latestReport = Array.isArray(closingsDesc[0]?.inventory_report) ? closingsDesc[0].inventory_report : []
-    latestReport.forEach(item => {
+    latestReport.forEach((item: Row) => {
         if (item.ingredient && item.restock != null) {
             todayRestock[item.ingredient] = Number(item.restock)
         }
@@ -311,9 +318,9 @@ export async function fetchIngredientStocks(addressId) {
 
     // counter = most-recent non-null remaining per ingredient. Walking DESC and
     // only writing on first hit means yesterday's count wins when today is null.
-    closingsDesc.forEach(closing => {
+    closingsDesc.forEach((closing: Row) => {
         const report = Array.isArray(closing.inventory_report) ? closing.inventory_report : []
-        report.forEach(item => {
+        report.forEach((item: Row) => {
             if (!item.ingredient) return
             if (item.remaining != null && counter[item.ingredient] === undefined) {
                 counter[item.ingredient] = Number(item.remaining)
@@ -323,11 +330,11 @@ export async function fetchIngredientStocks(addressId) {
 
     // First refill timestamp + total refill per ingredient. Đồng thời lấy MỐC NEO =
     // phiếu nhập/hiệu chỉnh MỚI NHẤT có `after_stock` (chốt số kho tuyệt đối).
-    const totalRefill = {}
-    const firstRefillAt = {}
-    const anchorAfter = {}   // after_stock của phiếu neo gần nhất
-    const anchorAt = {}      // thời điểm phiếu neo gần nhất
-    ;(refillsRes.data || []).forEach(e => {
+    const totalRefill: Record<string, number> = {}
+    const firstRefillAt: Record<string, number> = {}
+    const anchorAfter: Record<string, number> = {}   // after_stock của phiếu neo gần nhất
+    const anchorAt: Record<string, number> = {}      // thời điểm phiếu neo gần nhất
+    ;(refillsRes.data || []).forEach((e: Row) => {
         const ing = e.metadata?.ingredient
         if (!ing) return
         totalRefill[ing] = (totalRefill[ing] || 0) + (Number(e.metadata?.qty) || 0)
@@ -349,8 +356,8 @@ export async function fetchIngredientStocks(addressId) {
     // so we skip fetching them entirely. Skip the query if no refills exist yet.
     // totalRestock = Σ sau lần refill đầu (công thức cũ, dùng khi không có mốc neo).
     // restockSinceAnchor = Σ restock sau MỐC NEO (dùng cho công thức neo).
-    const totalRestock = {}
-    const restockSinceAnchor = {}
+    const totalRestock: Record<string, number> = {}
+    const restockSinceAnchor: Record<string, number> = {}
     const refillTimes = Object.values(firstRefillAt)
     if (refillTimes.length > 0) {
         const earliestRefillISO = new Date(Math.min(...refillTimes)).toISOString()
@@ -360,10 +367,10 @@ export async function fetchIngredientStocks(addressId) {
                 .select('created_at, inventory_report')
         ).gte('created_at', earliestRefillISO)
 
-        ;(closingsData || []).forEach(closing => {
+        ;(closingsData || []).forEach((closing: Row) => {
             const report = Array.isArray(closing.inventory_report) ? closing.inventory_report : []
             const closingTime = new Date(closing.created_at).getTime()
-            report.forEach(item => {
+            report.forEach((item: Row) => {
                 const ing = item.ingredient
                 if (!ing) return
                 const refillStart = firstRefillAt[ing]
@@ -405,11 +412,11 @@ export async function fetchIngredientStocks(addressId) {
 // warehouse_stock (from fetchIngredientStocks) to derive:
 //   warehouse_end_of_today   = current warehouse_stock
 //   warehouse_start_of_today = warehouse_end + today_restock − today_refill
-export async function fetchIngredientDailyContext(addressId) {
+export async function fetchIngredientDailyContext(addressId: UUID | null) {
     const startISO = startOfDayVN().toISOString()
     if (localRepo.isGuest()) {
         const startMs = new Date(startISO).getTime()
-        const result = {}
+        const result: Record<string, { today_refill: number; today_restock: number }> = {}
         const expenses = localRepo.fetchAllLocalExpenses(addressId)
         for (const e of expenses) {
             if (!e.is_refill || !e.metadata?.ingredient) continue
@@ -431,12 +438,12 @@ export async function fetchIngredientDailyContext(addressId) {
     }
     if (!supabase) return {}
     const isDefault = !addressId
-    const apply = (q) => isDefault ? q.is('address_id', null) : q.eq('address_id', addressId)
+    const apply = (q: any) => isDefault ? q.is('address_id', null) : q.eq('address_id', addressId)
     const [refillsRes, closingsRes] = await Promise.all([
         apply(supabase.from('expenses').select('metadata')).eq('is_refill', true).gte('created_at', startISO),
         apply(supabase.from('shift_closings').select('inventory_report')).gte('created_at', startISO)
     ])
-    const result = {}
+    const result: Record<string, { today_refill: number; today_restock: number }> = {}
     for (const e of refillsRes.data || []) {
         const ing = e.metadata?.ingredient
         if (!ing) continue
@@ -472,8 +479,8 @@ export async function fetchIngredientDailyContext(addressId) {
 // staff_name = người TẠO phiếu chốt ca (closed_by) — phiếu được người khác sửa
 // sau đó thì không có dấu vết, đành chịu (DB không ghi ai update).
 // Trả về [{ id, created_at, qty, before_stock, after_stock, staff_name }] DESC.
-export async function fetchIngredientWithdrawals(addressId, ingredient, fromDate, toDate) {
-    const replay = (refills, closings) => {
+export async function fetchIngredientWithdrawals(addressId: UUID | null, ingredient: string, fromDate: string | Date, toDate: string | Date) {
+    const replay = (refills: Row[], closings: Row[]) => {
         const events = []
         for (const e of refills || []) {
             if (e.metadata?.ingredient !== ingredient) continue
@@ -538,17 +545,18 @@ export async function fetchIngredientWithdrawals(addressId, ingredient, fromDate
 
     if (localRepo.isGuest()) {
         return replay(
-            localRepo.fetchAllLocalExpenses(addressId).filter(e => e.is_refill),
+            localRepo.fetchAllLocalExpenses(addressId).filter((e: Row) => e.is_refill),
             localRepo.fetchAllLocalShiftClosings(addressId),
         )
     }
     if (!supabase || !addressId) return []
-    const closingsQuery = (sel) => supabase
+    const sb = supabase
+    const closingsQuery = async (sel: string) => await sb
         .from('shift_closings')
         .select(sel)
-        .eq('address_id', addressId)
+        .eq('address_id', addressId) as unknown as { data: Row[] | null; error: SupabaseError }
     const [refillsRes, closingsRes] = await Promise.all([
-        supabase
+        sb
             .from('expenses')
             .select('created_at, metadata')
             .eq('address_id', addressId)
@@ -569,22 +577,22 @@ export async function fetchIngredientWithdrawals(addressId, ingredient, fromDate
         }
         closings = retry.data
     }
-    return replay(refillsRes.data, closings)
+    return replay((refillsRes.data || []) as Row[], closings || [])
 }
 
 // Compute raw warehouse balance per ingredient (Σ refill_qty − Σ restock_post_first_refill).
 // Without the `max(0, ...)` clamp that fetchIngredientStocks applies. Negative values mean
 // staff over-reported restock OR bought outside the system — `/ingredients` surfaces these
 // as a "kho lệch sổ sách" banner so manager can reconcile via the Kiểm kê & reset flow.
-export async function fetchIngredientDeficits(addressId) {
+export async function fetchIngredientDeficits(addressId: UUID | null) {
     if (localRepo.isGuest()) {
-        const expenses = localRepo.fetchAllLocalExpenses(addressId).filter(e => e.is_refill && e.metadata?.ingredient)
+        const expenses = localRepo.fetchAllLocalExpenses(addressId).filter((e: Row) => e.is_refill && e.metadata?.ingredient)
         const closings = localRepo.fetchAllLocalShiftClosings(addressId)
         return computeDeficits(expenses, closings)
     }
     if (!supabase) return []
     const isDefault = !addressId
-    const applyAddrFilter = (q) => isDefault ? q.is('address_id', null) : q.eq('address_id', addressId)
+    const applyAddrFilter = (q: any) => isDefault ? q.is('address_id', null) : q.eq('address_id', addressId)
     const [refillsRes, closingsRes] = await Promise.all([
         applyAddrFilter(supabase.from('expenses').select('created_at, metadata')).eq('is_refill', true),
         applyAddrFilter(supabase.from('shift_closings').select('created_at, inventory_report'))
@@ -592,10 +600,10 @@ export async function fetchIngredientDeficits(addressId) {
     return computeDeficits(refillsRes.data || [], closingsRes.data || [])
 }
 
-function computeDeficits(refills, closings) {
+function computeDeficits(refills: Row[], closings: Row[]) {
     // Group refills: Σ qty + earliest created_at per ingredient
-    const totalRefill = {}
-    const firstRefillAt = {}
+    const totalRefill: Record<string, number> = {}
+    const firstRefillAt: Record<string, number> = {}
     for (const e of refills) {
         const ing = e.metadata?.ingredient
         if (!ing) continue
@@ -604,7 +612,7 @@ function computeDeficits(refills, closings) {
         if (firstRefillAt[ing] === undefined || t < firstRefillAt[ing]) firstRefillAt[ing] = t
     }
     // Σ restock per ingredient, only counting closings on/after that ingredient's first refill
-    const totalRestock = {}
+    const totalRestock: Record<string, number> = {}
     for (const sc of closings) {
         const report = Array.isArray(sc.inventory_report) ? sc.inventory_report : []
         const t = new Date(sc.created_at).getTime()
@@ -616,7 +624,7 @@ function computeDeficits(refills, closings) {
             totalRestock[ing] = (totalRestock[ing] || 0) + (Number(item.restock) || 0)
         }
     }
-    const deficits = []
+    const deficits: Row[] = []
     for (const ing of Object.keys(totalRefill)) {
         const raw = totalRefill[ing] - (totalRestock[ing] || 0)
         if (raw < 0) deficits.push({ ingredient: ing, refill: totalRefill[ing], restock: totalRestock[ing] || 0, deficit: raw })
@@ -634,10 +642,10 @@ function computeDeficits(refills, closings) {
 // Nhật ký card can render "Tồn X → Y" honestly. Best-effort — two concurrent
 // edits would race, but for a 1–3 staff coffee cart that's an acceptable
 // approximation. Caller passes `null` / omits when the value isn't known.
-export async function adjustIngredientStock(addressId, ingredient, delta, staffName, opts = {}) {
+export async function adjustIngredientStock(addressId: UUID | null, ingredient: string, delta: number, staffName: string | null, opts: Row = {}) {
     if (!Number.isFinite(delta) || delta === 0) return null
     const displayName = `Hiệu chỉnh tồn ${ingredient}`
-    const meta = { ingredient, qty: delta, adjustment: true }
+    const meta: Row = { ingredient, qty: delta, adjustment: true }
     if (Number.isFinite(opts?.beforeStock)) {
         // 1-decimal round matches the Tồn kho display, so the snapshot reads
         // identically to what the user saw on the row when they opened edit.
@@ -655,21 +663,21 @@ export async function adjustIngredientStock(addressId, ingredient, delta, staffN
 // Stock numbers are stored as floats (WAC math can produce arbitrary precision).
 // Card UI rounds to 1 decimal; persist the same precision so historical reads
 // don't reveal accumulated float noise.
-function roundStock(x) {
+function roundStock(x: number) {
     return Math.round(x * 10) / 10
 }
 
 // Đặt tồn QUẦY (counter) = số đếm tuyệt đối, bằng cách ghi `remaining` của NVL vào
 // phiếu chốt ca MỚI NHẤT — cùng nguồn dữ liệu mà card Hao hụt đọc/ghi, nên số ở
 // /ingredients và số chốt ca luôn khớp nhau. Trả null nếu chưa có phiếu chốt nào.
-export async function setCounterStock(addressId, ingredient, newRemaining) {
+export async function setCounterStock(addressId: UUID | null, ingredient: string, newRemaining: number) {
     if (!addressId || !ingredient) return null
     if (!Number.isFinite(newRemaining) || newRemaining < 0) return null
     const remaining = roundStock(newRemaining)
-    const applyToReport = (report) => {
+    const applyToReport = (report: Row[] | null) => {
         const arr = Array.isArray(report) ? report : []
         let found = false
-        const next = arr.map(item => {
+        const next = arr.map((item: Row) => {
             if (item?.ingredient === ingredient) { found = true; return { ...item, remaining } }
             return item
         })
@@ -679,8 +687,8 @@ export async function setCounterStock(addressId, ingredient, newRemaining) {
 
     if (localRepo.isGuest()) {
         const latest = localRepo.fetchAllLocalShiftClosings(addressId)
-            .filter(c => c.inventory_report != null)
-            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
+            .filter((c: Row) => c.inventory_report != null)
+            .sort((a: Row, b: Row) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
         if (!latest) return null
         invalidateReportCache(addressId)
         return localRepo.upsertLocalShiftClosing({ ...latest, inventory_report: applyToReport(latest.inventory_report) })
@@ -722,7 +730,7 @@ export async function setCounterStock(addressId, ingredient, newRemaining) {
 //
 // Server tự tính `amount = subtotal − discount + extra`, WAC dùng amount này.
 // Trả full mặc định khi `paid` không được truyền (backward-compat với callers cũ).
-export async function processIngredientRestock(addressId, ingredient, qty, staffName, opts = {}) {
+export async function processIngredientRestock(addressId: UUID | null, ingredient: string, qty: number, staffName: string | null, opts: Row = {}) {
     const {
         subtotal = 0, discount = 0, extraCost = 0,
         paid = null, paymentMethod = 'cash', purchaseDate = null,
@@ -735,7 +743,7 @@ export async function processIngredientRestock(addressId, ingredient, qty, staff
     const paidAmount = paid == null ? amountDue : Math.max(0, Math.min(Number(paid), amountDue))
     // Snapshot only on non-RPC paths (guest / default-address). The address RPC
     // computes its own authoritative snapshot inside the same transaction.
-    const buildSnapshotMeta = (base) => {
+    const buildSnapshotMeta = (base: Row) => {
         if (!Number.isFinite(Number(beforeStock))) return base
         const b = roundStock(Number(beforeStock))
         return { ...base, before_stock: b, after_stock: roundStock(b + Number(qty || 0)) }
@@ -770,7 +778,7 @@ export async function processIngredientRestock(addressId, ingredient, qty, staff
         if (purchaseDate && invoice?.id) {
             const invoiceCreatedAt = new Date(purchaseDate).getTime()
             const allAfter = localRepo.fetchAllLocalExpenses(addressId)
-                .filter(e => e.is_refill && e.metadata?.ingredient === ingredient
+                .filter((e: Row) => e.is_refill && e.metadata?.ingredient === ingredient
                     && !e.metadata?.cancelled && e.metadata?.after_stock != null
                     && e.id !== invoice.id
                     && new Date(e.created_at).getTime() > invoiceCreatedAt)
@@ -790,7 +798,7 @@ export async function processIngredientRestock(addressId, ingredient, qty, staff
     } else {
         if (!supabase) throw new Error('No Supabase connection')
         if (addressId) {
-            const params = {
+            const params: Row = {
                 p_address_id: addressId,
                 p_ingredient: ingredient,
                 p_qty: qty,
@@ -853,7 +861,7 @@ export async function processIngredientRestock(addressId, ingredient, qty, staff
 }
 
 // Sửa một phiếu nhập kho tại chỗ (RPC edit_ingredient_restock)
-export async function editIngredientRestock(addressId, expenseId, opts = {}) {
+export async function editIngredientRestock(addressId: UUID, expenseId: UUID, opts: Row = {}) {
     const {
         qty,
         subtotal,
@@ -873,7 +881,7 @@ export async function editIngredientRestock(addressId, expenseId, opts = {}) {
     let result
     if (localRepo.isGuest()) {
         const all = localRepo.fetchAllLocalExpenses(addressId)
-        const target = all.find(e => e.id === expenseId)
+        const target = all.find((e: Row) => e.id === expenseId)
         if (!target || !target.is_refill) {
             throw new Error('Không phải phiếu nhập kho hợp lệ')
         }
@@ -905,7 +913,7 @@ export async function editIngredientRestock(addressId, expenseId, opts = {}) {
         if (qtyDelta !== 0) {
             const targetCreatedAt = new Date(purchaseDate || target.created_at).getTime()
             const allAfter = localRepo.fetchAllLocalExpenses(addressId)
-                .filter(e => e.is_refill && e.metadata?.ingredient === ingredient
+                .filter((e: Row) => e.is_refill && e.metadata?.ingredient === ingredient
                     && !e.metadata?.cancelled && e.metadata?.after_stock != null
                     && e.id !== expenseId
                     && new Date(e.created_at).getTime() > targetCreatedAt)
@@ -938,10 +946,10 @@ export async function editIngredientRestock(addressId, expenseId, opts = {}) {
 
         // 3. Tính lại WAC local
         const remaining = localRepo.fetchAllLocalExpenses(addressId)
-            .filter(e => e.is_refill && e.metadata?.ingredient === ingredient
+            .filter((e: Row) => e.is_refill && e.metadata?.ingredient === ingredient
                 && !e.metadata?.adjustment && !e.metadata?.cancelled && e.amount > 0)
-        const totalQty = remaining.reduce((s, e) => s + (Number(e.metadata?.qty) || 0), 0)
-        const totalCost = remaining.reduce((s, e) => s + (Number(e.amount) || 0), 0)
+        const totalQty = remaining.reduce((s: number, e: Row) => s + (Number(e.metadata?.qty) || 0), 0)
+        const totalCost = remaining.reduce((s: number, e: Row) => s + (Number(e.amount) || 0), 0)
         
         let newUnitCost = null
         if (totalQty > 0) {
@@ -949,7 +957,7 @@ export async function editIngredientRestock(addressId, expenseId, opts = {}) {
             await upsertIngredientCost(ingredient, newUnitCost, addressId)
             
             // Cập nhật lại new_unit_cost trong metadata
-            const updatedTarget = localRepo.fetchAllLocalExpenses(addressId).find(e => e.id === expenseId)
+            const updatedTarget = localRepo.fetchAllLocalExpenses(addressId).find((e: Row) => e.id === expenseId)
             if (updatedTarget) {
                 localRepo.updateLocalExpense(expenseId, {
                     metadata: {
@@ -963,7 +971,7 @@ export async function editIngredientRestock(addressId, expenseId, opts = {}) {
         result = { success: true, expense_id: expenseId, amount: amountDue, paid: paidAmount, owing: amountDue - paidAmount, new_unit_cost: newUnitCost }
     } else {
         if (!supabase) throw new Error('No Supabase connection')
-        const params = {
+        const params: Row = {
             p_address_id: addressId,
             p_expense_id: expenseId,
             p_qty: qty,
@@ -994,7 +1002,7 @@ export async function editIngredientRestock(addressId, expenseId, opts = {}) {
 // `paidAt` ISO string — default NOW server-side.
 // `cashPhase` 'in_shift' | 'post_close' — phân loại tiền mặt của LẦN TRẢ này
 // (độc lập với cờ cash_phase trên hoá đơn gốc lúc nhập kho).
-export async function recordInvoicePayment(addressId, expenseId, amount, paymentMethod = 'cash', staffName = null, paidAt = null, cashPhase = null) {
+export async function recordInvoicePayment(addressId: UUID | null, expenseId: UUID, amount: number, paymentMethod = 'cash', staffName: string | null = null, paidAt: string | null = null, cashPhase: string | null = null) {
     if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
         throw new Error('amount must be > 0')
     }
@@ -1011,7 +1019,7 @@ export async function recordInvoicePayment(addressId, expenseId, amount, payment
         })
     } else {
         if (!supabase) throw new Error('No Supabase connection')
-        const params = {
+        const params: Row = {
             p_expense_id: expenseId,
             p_amount: amount,
             p_payment_method: paymentMethod,
@@ -1031,12 +1039,12 @@ export async function recordInvoicePayment(addressId, expenseId, amount, payment
 // (xem migration cancel_restock). Xóa expense (CASCADE xóa payments → đảo cash-out),
 // tính lại WAC từ các phiếu mua thật còn lại, và ghi 1 dòng audit qty=0. Không nhận
 // các dòng cancel-marker (metadata.cancel_restock).
-export async function cancelRestock(addressId, expenseId, staffName = null) {
+export async function cancelRestock(addressId: UUID | null, expenseId: UUID, staffName: string | null = null) {
     if (!expenseId) throw new Error('expenseId is required')
     let result
     if (localRepo.isGuest()) {
         const all = localRepo.fetchAllLocalExpenses(addressId)
-        const target = all.find(e => e.id === expenseId)
+        const target = all.find((e: Row) => e.id === expenseId)
         if (!target || !target.is_refill) {
             throw new Error('Không phải phiếu nhập kho / hiệu chỉnh hợp lệ')
         }
@@ -1064,7 +1072,7 @@ export async function cancelRestock(addressId, expenseId, staffName = null) {
         if (cancelledQty !== 0) {
             const targetCreatedAt = new Date(target.created_at).getTime()
             const allAfter = localRepo.fetchAllLocalExpenses(addressId)
-                .filter(e => e.is_refill && e.metadata?.ingredient === ingredient
+                .filter((e: Row) => e.is_refill && e.metadata?.ingredient === ingredient
                     && !e.metadata?.cancelled && e.metadata?.after_stock != null
                     && e.id !== expenseId
                     && new Date(e.created_at).getTime() > targetCreatedAt)
@@ -1084,17 +1092,17 @@ export async function cancelRestock(addressId, expenseId, staffName = null) {
         localRepo.deleteLocalExpensePaymentsByExpense(expenseId)
         // 3. Tính lại WAC từ các phiếu mua thật còn lại (loại adjustment + cancelled + amount 0).
         const remaining = localRepo.fetchAllLocalExpenses(addressId)
-            .filter(e => e.is_refill && e.metadata?.ingredient === ingredient
+            .filter((e: Row) => e.is_refill && e.metadata?.ingredient === ingredient
                 && !e.metadata?.adjustment && !e.metadata?.cancelled && e.amount > 0)
-        const totalQty = remaining.reduce((s, e) => s + (Number(e.metadata?.qty) || 0), 0)
-        const totalCost = remaining.reduce((s, e) => s + (Number(e.amount) || 0), 0)
+        const totalQty = remaining.reduce((s: number, e: Row) => s + (Number(e.metadata?.qty) || 0), 0)
+        const totalCost = remaining.reduce((s: number, e: Row) => s + (Number(e.amount) || 0), 0)
         if (totalQty > 0) {
             await upsertIngredientCost(ingredient, Math.round(totalCost / totalQty), addressId)
         }
         result = { success: true, ingredient, cancelled_qty: cancelledQty, was_adjustment: wasAdjustment }
     } else {
         if (!supabase) throw new Error('No Supabase connection')
-        const params = { p_address_id: addressId, p_expense_id: expenseId }
+        const params: Row = { p_address_id: addressId, p_expense_id: expenseId }
         if (staffName) params.p_staff_name = staffName
         const { data, error } = await supabase.rpc('cancel_restock', params)
         if (error) throw error

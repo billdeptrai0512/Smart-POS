@@ -39,6 +39,13 @@ export async function fetchTodayExpenses(addressId) {
 // - categoryId: FK into expense_categories. NULL is allowed for NVL refills (NVL is
 //   in COGS, not a tagged expense). For all other expenses callers should pass the
 //   category picked in the form, or omit to let UI default to "Chi phí khác".
+/**
+ * @param {string} name @param {number} amount @param {string | null} [addressId]
+ * @param {boolean} [isFixed] @param {string | null} [staffName] @param {boolean} [isRefill]
+ * @param {string} [paymentMethod] @param {Record<string, any>} [metadata]
+ * @param {string | null} [categoryId] @param {string | null} [createdAt]
+ * @param {Record<string, any> | null} [extraCols]
+ */
 export async function insertExpense(name, amount, addressId = null, isFixed = false, staffName = null, isRefill = false, paymentMethod = 'cash', metadata = {}, categoryId = null, createdAt = null, extraCols = null) {
     invalidateReportCache(addressId)
     if (localRepo.isGuest()) return localRepo.insertLocalExpense({ name, amount, address_id: addressId, is_fixed: isFixed, staff_name: staffName, is_refill: isRefill, payment_method: paymentMethod, metadata, category_id: categoryId, created_at: createdAt || undefined, ...(extraCols || {}) })
