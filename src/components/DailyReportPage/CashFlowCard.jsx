@@ -212,7 +212,7 @@ export default function CashFlowCard({
                         className="flex justify-between items-center cursor-pointer hover:opacity-85 active:scale-[0.99] transition-all"
                     >
                         <span className="text-[12px] font-bold text-text-secondary decoration-text-secondary/50 underline-offset-2">
-                            Chi trong ca
+                            Chi phí trong ca
                         </span>
                         <span className="text-[13px] font-bold text-warning tabular-nums">
                             {formatVND(inShiftOpsCash)}
@@ -231,8 +231,8 @@ export default function CashFlowCard({
                 </div>
                 <div className="w-full h-[1px] bg-border/60 rounded-full my-3" />
                 <div className="flex justify-between items-center mt-1 pl-1">
-                    <span className="text-[13px] font-black text-text uppercase tracking-wide">Tổng thực thu</span>
-                    <span className="text-[14px] font-black text-success tabular-nums">
+                    <span className="text-[13px] font-black text-text uppercase tracking-wide leading-none">Tổng thực thu</span>
+                    <span className="text-[14px] font-black text-success tabular-nums leading-none">
                         {formatVND(actualTotal)}
                     </span>
                 </div>
@@ -276,8 +276,8 @@ export default function CashFlowCard({
 
                 {/* TỔNG THỰC CHI — cùng panel, cùng kiểu với Tổng thực nhận. */}
                 <div className="flex justify-between items-center mt-1 pl-1">
-                    <span className="text-[13px] font-black text-text uppercase tracking-wide">Tổng thực chi</span>
-                    <span className="text-[14px] font-black text-danger tabular-nums">
+                    <span className="text-[13px] font-black text-text uppercase tracking-wide leading-none">Tổng thực chi</span>
+                    <span className="text-[14px] font-black text-danger tabular-nums leading-none">
                         -{formatVND(totalExpenses)}
                     </span>
                 </div>
@@ -288,13 +288,13 @@ export default function CashFlowCard({
                 <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Thực nhận</h3>
                 <div className="flex flex-col gap-2.5 pl-2">
                     <div className="flex justify-between items-center">
-                        <span className="text-[12px] font-bold text-text-secondary">Tiền mặt thực tế:</span>
+                        <span className="text-[12px] font-bold text-text-secondary">Tiền mặt</span>
                         <span className={`text-[13px] font-bold tabular-nums ${takeHomeCash < 0 ? 'text-danger' : 'text-text'}`}>
                             {formatVND(takeHomeCash)}
                         </span>
                     </div>
                     <div className="flex justify-between items-center">
-                        <span className="text-[12px] font-bold text-text-secondary">Chuyển khoản thực tế:</span>
+                        <span className="text-[12px] font-bold text-text-secondary">Chuyển khoản</span>
                         <span className={`text-[13px] font-bold tabular-nums ${takeHomeTransfer < 0 ? 'text-danger' : 'text-text'}`}>
                             {formatVND(takeHomeTransfer)}
                         </span>
@@ -304,8 +304,8 @@ export default function CashFlowCard({
                 <div className="w-full h-[1px] bg-border/60 rounded-full my-3" />
 
                 <div className="flex justify-between items-center mt-1 pl-1">
-                    <span className="text-[13px] font-black text-text uppercase tracking-wide">Tổng thực nhận</span>
-                    <span className={`text-[14px] font-black tabular-nums ${takeHome < 0 ? 'text-danger' : 'text-success'}`}>
+                    <span className="text-[13px] font-black text-text uppercase tracking-wide leading-none">Tổng thực nhận</span>
+                    <span className={`text-[14px] font-black tabular-nums leading-none ${takeHome < 0 ? 'text-danger' : 'text-success'}`}>
                         {formatVND(takeHome)}
                     </span>
                 </div>
@@ -473,7 +473,7 @@ function MoneyInputRow({ label, value, disabled, onChange }) {
     return (
         <div className="flex items-center justify-between gap-3">
             <span className="text-[12px] font-bold text-text-secondary shrink-0">{label}</span>
-            <div className="relative flex items-center bg-surface-light border border-border/60 rounded-[10px] focus-within:border-primary/40 transition-colors overflow-hidden max-w-[180px] flex-1">
+            <div className="flex items-center gap-0.5 max-w-[180px] flex-1 justify-end">
                 <input
                     type="text"
                     inputMode="numeric"
@@ -481,10 +481,10 @@ function MoneyInputRow({ label, value, disabled, onChange }) {
                     value={value}
                     onChange={e => onChange?.(e.target.value)}
                     disabled={disabled}
-                    className="w-full bg-transparent px-2.5 py-1.5 text-right text-[13px] font-bold text-text tabular-nums placeholder:text-text-secondary/40 focus:outline-none disabled:opacity-50"
+                    className="flex-1 w-0 min-w-0 bg-transparent text-right text-[13px] font-bold text-text tabular-nums placeholder:text-text-secondary/40 focus:outline-none disabled:opacity-50"
                 />
                 {value && (
-                    <span className="text-[12px] font-bold text-text-secondary pr-2 shrink-0 pointer-events-none">đ</span>
+                    <span className="text-[12px] font-bold text-text-secondary shrink-0 pointer-events-none">đ</span>
                 )}
             </div>
         </div>
