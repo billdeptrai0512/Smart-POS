@@ -3,36 +3,13 @@ import { useAuth } from '../../contexts/AuthContext'
 import HistoryTabsBar from '../HistoryPage/HistoryTabsBar'
 import DatePicker from '../common/DatePicker'
 import { formatIsoDisplay } from '../common/datePickerUtils'
-import { startOfDayVN, endOfDayVN, startOfWeekVN, startOfMonthVN, endOfMonthVN, addDaysVN, dateStringVN } from '../../utils/dateVN'
+import { dateStringVN } from '../../utils/dateVN'
+import { getDateRange } from '../../utils/rangeCalc'
 
 // Display "dd/mm" using VN-local components.
 const fmt = (d) => {
     const [, m, day] = dateStringVN(d).split('-')
     return `${day}/${m}`
-}
-
-export function getDateRange(range, offset = 0) {
-    if (range === 'week') {
-        const thisMonday = startOfWeekVN()
-        const start = addDaysVN(thisMonday, offset * 7)
-        const end = new Date(addDaysVN(start, 7).getTime() - 1)
-        // Current week: count up to today; past/future weeks always 7 days.
-        const todayDiff = Math.round((startOfDayVN().getTime() - thisMonday.getTime()) / 86_400_000)
-        const days = offset === 0 ? todayDiff + 1 : 7
-        return { start, end, days }
-    }
-    if (range === 'month') {
-        const start = startOfMonthVN(new Date(), offset)
-        if (offset === 0) {
-            const today = startOfDayVN()
-            return { start, end: endOfDayVN(), days: Math.round((today.getTime() - start.getTime()) / 86_400_000) + 1 }
-        }
-        const end = endOfMonthVN(new Date(), offset)
-        // end is the last ms of the month, so (end - start) already rounds to # days
-        const days = Math.round((end.getTime() - start.getTime()) / 86_400_000)
-        return { start, end, days }
-    }
-    return { start: startOfDayVN(), end: endOfDayVN(), days: 1 }
 }
 
 function getSubtitle(range, offset) {

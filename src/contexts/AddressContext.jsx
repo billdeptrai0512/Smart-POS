@@ -7,6 +7,9 @@ import { Outlet } from 'react-router-dom'
 
 const AddressContext = createContext(null)
 
+// ponytail: hook co-located with its Provider (standard context pattern) —
+// splitting into its own file isn't worth the diff for a fast-refresh (dev-only HMR) nag.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAddress() {
     const ctx = useContext(AddressContext)
     if (!ctx) throw new Error('useAddress must be used within AddressProvider')
@@ -38,7 +41,6 @@ export function AddressProvider() {
 
     // Load addresses when profile is available. Synchronous setState in the
     // guest/no-profile branches is an intentional init reset, not a cascade hazard.
-    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         if (isGuest) {
             const demo = getDemoAddress()
@@ -107,8 +109,12 @@ export function AddressProvider() {
 
             setLoading(false)
         })
+        // ponytail: isGuest/cachedAddress/selectedAddress are read once as this-render
+        // snapshots (gating UI / one-time stale-cache cleanup), not live reactive state —
+        // every path that flips isGuest also updates `profile` (sync or one async hop via
+        // loadProfile), which already re-triggers this effect.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [profile])
-    /* eslint-enable react-hooks/set-state-in-effect */
 
     const setSelectedAddress = useCallback((addr) => {
         setSelectedAddressState(addr)
@@ -140,7 +146,7 @@ export function AddressProvider() {
         const newAddr = await apiCreateAddress(ownerId, cleanName)
         setAddresses(prev => [...prev, newAddr])
         return newAddr
-    }, [profile, addresses])
+    }, [profile, addresses, isGuest])
 
     const renameAddress = useCallback(async (addressId, newName) => {
         if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
@@ -158,7 +164,7 @@ export function AddressProvider() {
             localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, JSON.stringify(updatedAddr))
         }
         return updatedAddr
-    }, [profile, selectedAddress, addresses])
+    }, [profile, selectedAddress, addresses, isGuest])
 
     const removeAddress = useCallback(async (addressId) => {
         if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
@@ -170,7 +176,7 @@ export function AddressProvider() {
             localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS)
             localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ)
         }
-    }, [profile, selectedAddress])
+    }, [profile, selectedAddress, isGuest])
 
     const updateSortOrder = useCallback(async (addressId, sortOrderArray) => {
         if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có quyền')

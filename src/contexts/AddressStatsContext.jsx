@@ -6,6 +6,9 @@ import { fetchBranchesTodayStats, fetchStaffByManager } from '../services/authSe
 
 const AddressStatsContext = createContext(null)
 
+// ponytail: hook co-located with its Provider (standard context pattern) —
+// splitting into its own file isn't worth the diff for a fast-refresh (dev-only HMR) nag.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAddressStats() {
     const ctx = useContext(AddressStatsContext)
     if (!ctx) throw new Error('useAddressStats must be used within AddressStatsProvider')
@@ -84,6 +87,9 @@ export function AddressStatsProvider() {
             clearInterval(intervalId)
             document.removeEventListener('visibilitychange', handleVisibility)
         }
+        // ponytail: keyed on addressIdsKey (ids only) — addresses.length is only an
+        // early-bail snapshot, not something that should restart the poll interval.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [addressIdsKey, loadStats])
 
     useEffect(() => {

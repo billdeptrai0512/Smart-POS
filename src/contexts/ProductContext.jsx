@@ -8,6 +8,9 @@ import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 
 const ProductContext = createContext(null)
 
+// ponytail: hook co-located with its Provider (standard context pattern) —
+// splitting into its own file isn't worth the diff for a fast-refresh (dev-only HMR) nag.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useProducts() {
     const ctx = useContext(ProductContext)
     if (!ctx) throw new Error('useProducts must be used within ProductProvider')
@@ -19,14 +22,14 @@ export function ProductProvider() {
     const activeManagerId = profile?.role === 'manager' ? profile.id : profile?.manager_id
     const { selectedAddress } = useAddress()
 
-    const cacheKey = (name) => buildCacheKey(selectedAddress?.id || 'default', name)
+    const cacheKey = useCallback((name) => buildCacheKey(selectedAddress?.id || 'default', name), [selectedAddress?.id])
 
-    const readCache = (name, fallback) => {
+    const readCache = useCallback((name, fallback) => {
         try {
             const cached = localStorage.getItem(cacheKey(name))
             return cached ? JSON.parse(cached) : fallback
         } catch { return fallback }
-    }
+    }, [cacheKey])
 
     const [products, setProducts] = useState(() => readCache('products', []))
     const [recipes, setRecipes] = useState(() => readCache('recipes', []))
@@ -91,7 +94,7 @@ export function ProductProvider() {
             }
         }
         load()
-    }, [activeManagerId, selectedAddress?.id])
+    }, [activeManagerId, selectedAddress?.id, applyData, readCache])
 
     const refreshProducts = useCallback(async () => {
         const addressId = selectedAddress?.id
@@ -104,7 +107,7 @@ export function ProductProvider() {
         const extraIds = Object.values(extras).flat().map(e => e.id)
         const extraIngs = await fetchExtraIngredients(extraIds)
         applyData(prods, recs, costsResult, extras, extraIngs, addressId)
-    }, [activeManagerId, selectedAddress?.id, applyData])
+    }, [selectedAddress?.id, applyData])
 
     // Refresh menu/recipe/cost/extras when tab becomes visible again.
     // Replaces a per-address realtime channel that previously held an open

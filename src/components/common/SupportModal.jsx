@@ -2,7 +2,7 @@ import { X } from 'lucide-react'
 import zaloImg from '../../assets/zalo.webp'
 import facebookImg from '../../assets/facebook.webp'
 
-export const SUPPORT_LINKS = {
+const SUPPORT_LINKS = {
     zalo: 'https://zalo.me/g/yvsgvae1kejljidlxyih',
     facebook: 'https://www.facebook.com/groups/1540591197862324',
 }

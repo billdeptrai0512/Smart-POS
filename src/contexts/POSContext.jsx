@@ -67,7 +67,7 @@ export function POSProvider() {
         if (!addressId) return
         fetchTodayStats(addressId).then(({ revenue, cups }) => { setRevenue(revenue); setCupsSold(cups) })
         showToast('Đã đồng bộ đơn hàng offline!', 'success')
-    }, [addressId])
+    }, [addressId, showToast])
 
     const { getPendingCount, retrySync } = useOfflineSync(handleSyncComplete)
 
@@ -91,7 +91,7 @@ export function POSProvider() {
             }
         }
         load()
-    }, [addressId])
+    }, [addressId, showError])
 
     // ---- Online/offline status ----
     useEffect(() => {
@@ -136,7 +136,7 @@ export function POSProvider() {
             window.removeEventListener('focus', checkNewDay)
             window.removeEventListener('visibilitychange', handleVisibility)
         }
-    }, [addressId])
+    }, [addressId, showToast])
 
     // ---- Supabase realtime subscriptions ----
     // Only subscribe to orders channel; only when tab is visible. Expenses are
@@ -669,6 +669,8 @@ export function POSProvider() {
         discount, setDiscount, discountAmount, finalTotal,
         recentOrders, draftOrder, enterKey,
         toast, showToast,
+        // deliberately partial deps, see comment above
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }), [cart, activeCartItemId, enabledStickyExtraIds, total, orderCount, hasOrder, discount, discountAmount, finalTotal, recentOrders, draftOrder, enterKey, toast, showToast])
 
     const statsValue = useMemo(() => ({
@@ -680,6 +682,8 @@ export function POSProvider() {
         todayOrders, todayExpenses, isLoadingHistory,
         handleLoadHistory, handleDeleteOrder, handleUpdateOrderDiscount, handleAddExpense, handleUpdateExpense, handleDeleteExpense, refreshTodayExpenses,
         userRole,
+        // deliberately partial deps, see comment above
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }), [todayOrders, todayExpenses, isLoadingHistory, userRole])
 
     return (

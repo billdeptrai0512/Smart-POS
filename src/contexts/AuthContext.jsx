@@ -23,6 +23,10 @@ function clearCachedAuth() {
     localStorage.removeItem(STORAGE_KEYS.AUTH_PROFILE)
 }
 
+// ponytail: hook co-located with its Provider (standard context pattern) —
+// 15+ call sites import useAuth from here, splitting into its own file isn't
+// worth the diff for a fast-refresh (dev-only HMR) nag.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
     const ctx = useContext(AuthContext)
     if (!ctx) throw new Error('useAuth must be used within AuthProvider')
@@ -211,7 +215,7 @@ export function AuthProvider({ children }) {
         })
 
         return () => { clearTimeout(valve); subscription.unsubscribe() }
-    }, [loadProfile])
+    }, [loadProfile, setIsGuest])
 
     const signIn = useCallback(async (username, password) => {
         const data = await authSignIn(username, password)
@@ -248,7 +252,7 @@ export function AuthProvider({ children }) {
         clearGuestData()
         setIsGuest(false)
         return data
-    }, [])
+    }, [setIsGuest])
 
 
     // Re-fetch profile row (vd: sau khi lưu SĐT qua set_my_phone)

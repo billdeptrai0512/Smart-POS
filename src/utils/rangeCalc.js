@@ -5,10 +5,36 @@
 // offset: negative for past, 0 = current period, only meaningful for day/week/month
 // customRange?: { startISO, endISO } (YYYY-MM-DD in VN local)
 
-import { startOfDayVN, endOfDayVN, dateStringVN } from './dateVN'
-import { getDateRange } from '../components/DailyReportPage/ReportHeader'
+import { startOfDayVN, endOfDayVN, startOfWeekVN, startOfMonthVN, endOfMonthVN, addDaysVN, dateStringVN } from './dateVN'
 
 const fmtDM = (d) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+
+// Moved from ReportHeader.jsx: pure date math had no business living in a
+// component file, and it was already being imported back into this util
+// (component importing utils is fine; utils importing a component is backwards).
+export function getDateRange(range, offset = 0) {
+    if (range === 'week') {
+        const thisMonday = startOfWeekVN()
+        const start = addDaysVN(thisMonday, offset * 7)
+        const end = new Date(addDaysVN(start, 7).getTime() - 1)
+        // Current week: count up to today; past/future weeks always 7 days.
+        const todayDiff = Math.round((startOfDayVN().getTime() - thisMonday.getTime()) / 86_400_000)
+        const days = offset === 0 ? todayDiff + 1 : 7
+        return { start, end, days }
+    }
+    if (range === 'month') {
+        const start = startOfMonthVN(new Date(), offset)
+        if (offset === 0) {
+            const today = startOfDayVN()
+            return { start, end: endOfDayVN(), days: Math.round((today.getTime() - start.getTime()) / 86_400_000) + 1 }
+        }
+        const end = endOfMonthVN(new Date(), offset)
+        // end is the last ms of the month, so (end - start) already rounds to # days
+        const days = Math.round((end.getTime() - start.getTime()) / 86_400_000)
+        return { start, end, days }
+    }
+    return { start: startOfDayVN(), end: endOfDayVN(), days: 1 }
+}
 
 // Returns { start, end } for the given scope/offset/customRange.
 export function calcRange(scope, offset, customRange) {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Plus, X, ArrowUpDown } from 'lucide-react'
 import FabActionMenu from '../components/common/FabActionMenu'
@@ -13,7 +13,6 @@ import {
 } from '../services/orderService'
 import { fetchCashClosedToday } from '../services/reportService'
 import { sortIngredients, ingredientLabel, getIngredientUnit, normalizeIngredientCategory, normalizeIngredientKey } from '../utils/ingredients'
-import { parseVNDInput } from '../utils'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
@@ -204,9 +203,12 @@ export default function IngredientManagementPage() {
         } catch { /* localStorage may be full or disabled */ }
     }
 
+    // ponytail: mount-only refresh — refreshProducts already refetches on address
+    // change via its own effect in ProductContext; adding it here would double-fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { refreshProducts?.() }, [])
 
-    const loadStocks = async () => {
+    const loadStocks = useCallback(async () => {
         // selectedAddress.id may be null for the default template — fetchIngredientStocks
         // handles that (queries rows with address_id IS NULL) so admins can manage stock on
         // the playground template too.
@@ -219,8 +221,12 @@ export default function IngredientManagementPage() {
         setIngredientStocks(stocks)
         setStockDeficits(deficits)
         setDailyContext(daily)
-    }
-    useEffect(() => { loadStocks() }, [selectedAddress?.id, selectedAddress?.name])
+        // ponytail: deliberately keyed on id+name, not the whole object — selectedAddress
+        // gets a new reference on every context refetch even when nothing relevant changed
+        // (e.g. ingredient_sort_order edits), which would refire this on every such update.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedAddress?.id, selectedAddress?.name])
+    useEffect(() => { loadStocks() }, [loadStocks])
 
     useEffect(() => { setIngredientCosts(contextCosts) }, [contextCosts])
     useEffect(() => { setIngredientUnits(contextUnits || {}) }, [contextUnits])

@@ -114,6 +114,8 @@ export default function FastIngredientFill({
 function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowNegative, autoFocus, onCommit, onRemove }) {
     const [draft, setDraft] = useState(amount != null ? String(amount) : '')
     // Re-sync when the saved amount changes elsewhere (copy-from, context refresh).
+    // Intentional prop→state sync, not a cascade: only fires when `amount` itself changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     useEffect(() => { setDraft(amount != null ? String(amount) : '') }, [amount])
 
     const commit = () => {
