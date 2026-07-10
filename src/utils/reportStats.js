@@ -143,7 +143,6 @@ export function computeCashFlowTotals({
 //  - offline orders: { total, totalCost?, createdAt, cart: [{ productId, quantity, unitCost?, extras: [{ id, name, price }] }] }
 //
 // `useTotalCostShortcut`: when true, trusts o.total_cost (Range) and skips per-item COGS sum.
-// `selectedProductId`: 'all' counts all non-excluded products into totalCups; otherwise only that product.
 export function aggregateOrderStats({
     orders,
     productMap,
@@ -152,16 +151,13 @@ export function aggregateOrderStats({
     recipes,
     extraIngredients,
     ingredientCosts,
-    selectedProductId = 'all',
     useTotalCostShortcut = false,
 }) {
-    let totalRevenue = 0, totalDiscount = 0, totalCOGS = 0, totalCups = 0
+    let totalRevenue = 0, totalDiscount = 0, totalCOGS = 0
     const productStats = {}
     const soldProducts = new Set()
     const hourlyRevenue = {}, hourlyOrders = {}
     const activeHours = new Set()
-
-    const isExcluded = (pid) => productMap.get(pid)?.count_as_cup === false
 
     for (const o of orders || []) {
         if (o.deleted_at) continue
@@ -185,12 +181,6 @@ export function aggregateOrderStats({
             const qty = i.quantity || i.qty || 1
             const productId = i.product_id || i.productId
             const prodDef = productMap.get(productId)
-
-            if (selectedProductId === 'all') {
-                if (!isExcluded(productId)) totalCups += qty
-            } else if (selectedProductId === productId) {
-                totalCups += qty
-            }
 
             soldProducts.add(productId)
 
@@ -230,7 +220,7 @@ export function aggregateOrderStats({
         }
     }
 
-    return { totalRevenue, totalDiscount, totalCOGS, totalCups, productStats, soldProducts, hourlyRevenue, hourlyOrders, activeHours }
+    return { totalRevenue, totalDiscount, totalCOGS, productStats, soldProducts, hourlyRevenue, hourlyOrders, activeHours }
 }
 
 // Builds the hourly cumulative line-chart series from aggregator output. Daily-only.

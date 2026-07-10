@@ -65,7 +65,6 @@ export default function DailyReportPage() {
     // Mỗi view là 1 "trang" riêng → đổi view thì cuộn lại đầu (cùng 1 <main> nên scroll bị dính).
     const mainRef = useRef(null)
     useEffect(() => { mainRef.current?.scrollTo(0, 0) }, [view])
-    const [selectedProductId, setSelectedProductId] = useState('all')
     const [showSupportModal, setShowSupportModal] = useState(false)
     const { selectedAddress } = useAddress()
     const initialDate = location.state?.initialDate || null
@@ -295,7 +294,6 @@ export default function DailyReportPage() {
             extraPriceMap: extraMaps.priceMap,
             extraNameMap: extraMaps.nameMap,
             recipes, extraIngredients, ingredientCosts,
-            selectedProductId: 'all',
         })
 
         return {
@@ -309,32 +307,24 @@ export default function DailyReportPage() {
         }
     }, [displayOrders, productMap, extraMaps, recipes, extraIngredients, ingredientCosts, scope, offset])
 
-    // totalCups separated: only reruns when filter or orders change, not on other UI state
-    // When 'all' filter, products with count_as_cup=false are excluded; when filtering a specific product, always count it.
+    // totalCups separated: only reruns when orders change, not on other UI state.
+    // Products with count_as_cup=false are excluded.
     const totalCups = useMemo(() => {
         let cups = 0
         const isExcluded = (pid) => productMap.get(pid)?.count_as_cup === false
         displayOrders.filter(o => !o.deleted_at).forEach(o => {
             ; (o.order_items || []).forEach(i => {
                 const pid = i.product_id || i.productId
-                if (selectedProductId === 'all') {
-                    if (!isExcluded(pid)) cups += i.quantity || i.qty || 1
-                } else if (selectedProductId === pid) {
-                    cups += i.quantity || i.qty || 1
-                }
+                if (!isExcluded(pid)) cups += i.quantity || i.qty || 1
             })
         })
         offlineToday.forEach(o => {
             ; (o.cart || o.orderItems || []).forEach(i => {
-                if (selectedProductId === 'all') {
-                    if (!isExcluded(i.productId)) cups += i.quantity || 1
-                } else if (selectedProductId === i.productId) {
-                    cups += i.quantity || 1
-                }
+                if (!isExcluded(i.productId)) cups += i.quantity || 1
             })
         })
         return cups
-    }, [displayOrders, offlineToday, selectedProductId, productMap])
+    }, [displayOrders, offlineToday, productMap])
 
     const { dailyExpense, refillFreeForm } = useMemo(
         () => splitExpenses(displayExpenses),
@@ -1062,8 +1052,6 @@ export default function DailyReportPage() {
                                     <div className="flex flex-col gap-4">
                                         <SalesCard
                                             totalCups={totalCups}
-                                            selectedProductId={selectedProductId}
-                                            onFilterChange={setSelectedProductId}
                                             products={products}
                                             soldProducts={soldProducts}
                                             totalRevenue={totalRevenue}
