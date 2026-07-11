@@ -1,0 +1,21 @@
+-- =============================================
+-- Re-grant get_default_ingredient_stocks() to anon (guest mode regression)
+-- =============================================
+-- 20260517_rpc_default_ingredient_stocks.sql granted this to `anon, authenticated`
+-- specifically so unauthenticated guests (LoginPage → "Dùng thử") can load the
+-- default/playground ingredient stock template. The function is SECURITY
+-- DEFINER but hard-scoped to address_id IS NULL — no real tenant data reachable.
+--
+-- 20260603_fix_security_advisor_part3.sql section 3 lumped this function into
+-- a "Client RPCs" REVOKE loop meant for genuinely authenticated-only writes
+-- (bulk_create_orders, process_ingredient_restock, record_invoice_payment) and
+-- revoked anon from it too — breaking the guest-mode default stock view since
+-- 2026-06-03. Found via a live pentest on 2026-07-11 (anon call now returns
+-- "permission denied for function get_default_ingredient_stocks").
+--
+-- Fix: restore the original anon grant. Only this one function — the other
+-- three in that 20260603 loop stay authenticated-only, that part was correct.
+--
+-- Safe to run multiple times.
+
+GRANT EXECUTE ON FUNCTION public.get_default_ingredient_stocks() TO anon, authenticated;
