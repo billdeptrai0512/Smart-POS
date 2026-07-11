@@ -65,7 +65,7 @@ function PhaseChecklist({ progress }) {
     )
 }
 
-export default function BackupModal({ sourceAddress, onClose }) {
+export default function BackupModal({ sourceAddress, onClose, onBack }) {
     const { createNewAddress, removeAddress } = useAddress()
 
     const [tab, setTab] = useState('self') // 'self' = nhân bản trong tài khoản này | 'other' = sang tài khoản khác
@@ -236,7 +236,7 @@ export default function BackupModal({ sourceAddress, onClose }) {
 
                                     <div className="flex gap-2 pb-1">
                                         <button
-                                            onClick={onClose}
+                                            onClick={onBack ?? onClose}
                                             className="flex-1 py-3 rounded-[14px] bg-bg border border-border/60 text-text-secondary font-bold text-sm hover:bg-surface-light transition-colors"
                                         >
                                             Hủy

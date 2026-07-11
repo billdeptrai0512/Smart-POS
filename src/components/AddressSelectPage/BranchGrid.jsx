@@ -2,27 +2,31 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
     Pencil, Trash2, ClipboardCopy, MoreHorizontal, X,
-    Coffee, Loader, FileText, BarChart3, Package, ChevronRight,
-    CupSoda, Wallet, Users, Eraser,
+    Coffee, Loader, FileText, Package, ChevronRight, Eraser,
+    Banknote, Receipt, Wallet, Boxes, TrendingUp, ChefHat, Box,
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
 import { formatVND } from '../../utils'
 import { supabase } from '../../lib/supabaseClient'
 import SubscriptionBadge from './SubscriptionBadge'
+import BackupModal from './BackupModal'
 
 const isManagerRole = (role) => (role === 'manager' || role === 'co-manager') ? 1 : 0
 
 export default function BranchGrid({
     addresses, fetchError, cupsMap, revenueMap, prevCupsMap = {}, sessionsMap, statsLoading,
     isStaff, isAdmin, error, setError,
-    onSelect, onSelectReport, onSelectIngredients, onBackup, onRename, onRemove, onDefaultTemplate,
-    onSupportClick,
+    onSelect, onSelectReport, onSelectHistory, onSelectIngredients, onSelectRecipes,
+    onRename, onRemove, onDefaultTemplate, onSupportClick,
 }) {
     const [editingAddressId, setEditingAddressId] = useState(null)
     const [editName, setEditName] = useState('')
     const [renaming, setRenaming] = useState(false)
     const [deletingAddressId, setDeletingAddressId] = useState(null)
+    const [deleteConfirmName, setDeleteConfirmName] = useState('')
+    const [deleting, setDeleting] = useState(false)
+    const [backupAddressId, setBackupAddressId] = useState(null) // which card has the "Nhân bản cấu hình" modal open
     const [expandedActionsId, setExpandedActionsId] = useState(null) // which card has the 3-action menu open
     const [wipingAddressId, setWipingAddressId] = useState(null) // which card has the wipe-sales-data confirm modal open
     const [wipeConfirmName, setWipeConfirmName] = useState('')
@@ -44,6 +48,21 @@ export default function BranchGrid({
         }
     }
 
+    async function handleRemoveAddress(addr) {
+        if (deleteConfirmName.trim() !== addr.name || deleting) return
+        setDeleting(true)
+        setError('')
+        try {
+            await onRemove(addr.id)
+            setDeletingAddressId(null)
+            setExpandedActionsId(null)
+        } catch (err) {
+            setError(err.message || 'Không thể xóa địa chỉ')
+        } finally {
+            setDeleting(false)
+        }
+    }
+
     async function handleRename(e, addrId) {
         e.preventDefault()
         if (!editName.trim()) return
@@ -54,6 +73,7 @@ export default function BranchGrid({
         try {
             await onRename(addrId, editName.trim())
             setEditingAddressId(null)
+            setExpandedActionsId(null)
         } catch (err) {
             setError(err.message || 'Không thể đổi tên')
         } finally {
@@ -106,33 +126,8 @@ export default function BranchGrid({
                                     onClick={() => onSelect(addr)}
                                     className="group relative flex-1 p-3 text-left hover:bg-surface-light active:bg-border/30 transition-colors min-w-0"
                                 >
-                                    {/* Quick-access manager: Báo cáo + Tồn kho — absolute để cột nút (cao hơn
-                                            tiêu đề) không kéo giãn chiều cao header. span role=button vì nằm TRONG
-                                            button card (button lồng button gây hydration error). */}
-                                    {!isStaff && onSelectReport && (
-                                        <div className="absolute top-3 right-3 flex flex-col gap-3">
-                                            <span
-                                                role="button"
-                                                tabIndex={0}
-                                                onClick={(e) => { e.stopPropagation(); onSelectReport(addr) }}
-                                                title="Xem báo cáo ngày"
-                                                className="relative w-8 h-8 rounded-full bg-success/10 border border-success/25 text-success flex items-center justify-center hover:bg-success/20 active:scale-95 transition-all cursor-pointer before:absolute before:-inset-1.5 before:content-['']"
-                                            >
-                                                <BarChart3 size={16} strokeWidth={2.5} />
-                                            </span>
-                                            <span
-                                                role="button"
-                                                tabIndex={0}
-                                                onClick={(e) => { e.stopPropagation(); onSelectIngredients?.(addr) }}
-                                                title="Xem tồn kho"
-                                                className="relative w-8 h-8 rounded-full bg-primary/10 border border-primary/25 text-primary flex items-center justify-center hover:bg-primary/20 active:scale-95 transition-all cursor-pointer before:absolute before:-inset-1.5 before:content-['']"
-                                            >
-                                                <Package size={16} strokeWidth={2.5} />
-                                            </span>
-                                        </div>
-                                    )}
-                                    {/* Tên + chevron = tín hiệu "bấm card để vào quán" (giữ 2 nút quick góc phải). */}
-                                    <div className="mb-1.5 pr-12 flex items-center gap-1">
+                                    {/* Tên + chevron = tín hiệu "bấm card để vào quán". Báo cáo/Tồn kho chuyển vào modal thao tác (nút ⋯). */}
+                                    <div className="mb-1.5 flex items-center justify-between gap-1">
                                         <span className="text-text font-black text-sm transition-colors line-clamp-2 leading-tight truncate">{addr.name}</span>
                                         <ChevronRight size={18} strokeWidth={2.5} className="text-text-secondary shrink-0 group-hover:text-primary group-active:translate-x-0.5 transition-all" />
                                     </div>
@@ -180,107 +175,149 @@ export default function BranchGrid({
 
                                 {/* Footer: trạng thái gói (mọi role) + menu quản lý (chỉ manager) */}
                                 <div className="border-t border-border/40 px-2 py-1.5">
-                                    {deletingAddressId === addr.id ? (
-                                        /* Delete-confirm: full-width 2-col grid so tap targets are clear on small screens */
-                                        <div className="grid grid-cols-2 gap-1.5">
+                                    <div className="flex items-center justify-between gap-2 px-1.5">
+                                        {/* Trạng thái gói — tự ẩn khi monetization OFF (badge return null) */}
+                                        <SubscriptionBadge
+                                            addressId={addr.id}
+                                            onRenewClick={() => navigate('/subscription', {
+                                                state: { preselectAddressId: addr.id, from: '/addresses' },
+                                            })}
+                                        />
+                                        {!isStaff && (
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); setDeletingAddressId(null) }}
-                                                className="py-2 bg-bg border border-border/60 text-text-secondary text-[12px] font-bold rounded-[10px] hover:bg-surface-light transition-colors"
+                                                onClick={(e) => { e.stopPropagation(); setExpandedActionsId(addr.id) }}
+                                                className="relative w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/50 text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all shrink-0 before:absolute before:-inset-1.5 before:content-['']"
+                                                title="Thao tác khác"
+                                                aria-label="Mở menu thao tác"
                                             >
-                                                Hủy
+                                                <MoreHorizontal size={16} />
                                             </button>
-                                            <button
-                                                onClick={async (e) => {
-                                                    e.stopPropagation()
-                                                    try {
-                                                        await onRemove(addr.id)
-                                                    } catch (err) {
-                                                        setError(err.message || 'Không thể xóa địa chỉ')
-                                                    } finally {
-                                                        setDeletingAddressId(null)
-                                                    }
-                                                }}
-                                                className="py-2 bg-danger text-white text-[12px] font-black rounded-[10px] hover:bg-danger/90 transition-colors"
-                                            >
-                                                Xác nhận xóa
-                                            </button>
-                                        </div>
-                                    ) : expandedActionsId === addr.id ? (
-                                        /* Expanded: hàng nút tròn icon-only, cùng chiều cao với hàng default
-                                           (không stack label nên không break height). Badge ẩn tạm (đã cache
-                                           → hiện lại tức thì khi đóng). */
-                                        <div className="flex items-center justify-end gap-3 px-1.5">
-                                            <ActionIcon
-                                                icon={<ClipboardCopy size={16} />}
-                                                title="Sao lưu cấu hình"
-                                                tone="primary"
-                                                onClick={(e) => { e.stopPropagation(); onBackup(addr); setExpandedActionsId(null) }}
-                                            />
-                                            <ActionIcon
-                                                icon={<Pencil size={16} />}
-                                                title="Đổi tên địa chỉ"
-                                                tone="primary"
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    setEditingAddressId(addr.id)
-                                                    setEditName(addr.name)
-                                                    setDeletingAddressId(null)
-                                                    setExpandedActionsId(null)
-                                                    setError('')
-                                                }}
-                                            />
-                                            <ActionIcon
-                                                icon={<Trash2 size={16} />}
-                                                title="Xóa địa chỉ"
-                                                tone="danger"
-                                                onClick={(e) => { e.stopPropagation(); setDeletingAddressId(addr.id); setExpandedActionsId(null) }}
-                                            />
-                                            {isAdmin && (
-                                                <ActionIcon
-                                                    icon={<Eraser size={16} />}
-                                                    title="Xoá dữ liệu bán hàng (Admin)"
-                                                    tone="danger"
-                                                    onClick={(e) => { e.stopPropagation(); setWipingAddressId(addr.id); setWipeConfirmName(''); setExpandedActionsId(null) }}
-                                                />
-                                            )}
-                                            <ActionIcon
-                                                icon={<X size={16} />}
-                                                title="Đóng"
-                                                tone="neutral"
-                                                onClick={(e) => { e.stopPropagation(); setExpandedActionsId(null) }}
-                                            />
-                                        </div>
-                                    ) : (
-                                        /* Default: trạng thái gói bên trái, menu quản lý bên phải */
-                                        <div className="flex items-center justify-between gap-2 px-1.5">
-                                            {/* Trạng thái gói — tự ẩn khi monetization OFF (badge return null) */}
-                                            <SubscriptionBadge
-                                                addressId={addr.id}
-                                                onRenewClick={() => navigate('/subscription', {
-                                                    state: { preselectAddressId: addr.id, from: '/addresses' },
-                                                })}
-                                            />
-                                            {!isStaff && (
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); setExpandedActionsId(addr.id) }}
-                                                    className="relative w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/50 text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all shrink-0 before:absolute before:-inset-1.5 before:content-['']"
-                                                    title="Thao tác khác"
-                                                    aria-label="Mở menu thao tác"
-                                                >
-                                                    <MoreHorizontal size={16} />
-                                                </button>
-                                            )}
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
                                 </div>
                             </>
 
-                            {/* Modal đổi tên — đồng bộ với modal Sao lưu (BackupModal). */}
+                            {/* Modal thao tác — Lối tắt (pill grid, điều hướng) tách riêng khỏi Quản lý (list, sửa/xoá địa chỉ). */}
+                            {expandedActionsId === addr.id && (
+                                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                                    <div
+                                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                                        onClick={() => setExpandedActionsId(null)}
+                                    />
+                                    <div className="relative w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+                                        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40 shrink-0">
+                                            <p className="text-text font-black text-sm leading-none truncate pr-2">{addr.name}</p>
+                                            <button
+                                                onClick={() => setExpandedActionsId(null)}
+                                                className="p-1.5 text-text-secondary hover:text-text transition-colors rounded-lg hover:bg-surface-light shrink-0"
+                                            >
+                                                <X size={16} />
+                                            </button>
+                                        </div>
+                                        <div className="overflow-y-auto">
+                                            {!isStaff && (
+                                                <div className="px-3 pt-3 pb-1">
+                                                    <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Lối tắt</p>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <ActionPill
+                                                            icon={<Banknote size={15} />}
+                                                            label="Thu nhập"
+                                                            tone="primary"
+                                                            onClick={() => { onSelectHistory?.(addr, 'orders'); setExpandedActionsId(null) }}
+                                                        />
+                                                        <ActionPill
+                                                            icon={<Receipt size={15} />}
+                                                            label="Chi phí"
+                                                            tone="primary"
+                                                            onClick={() => { onSelectHistory?.(addr, 'expense'); setExpandedActionsId(null) }}
+                                                        />
+                                                        <ActionPill
+                                                            icon={<Wallet size={15} />}
+                                                            label="Dòng tiền"
+                                                            tone="success"
+                                                            onClick={() => { onSelectReport?.(addr, 'cashflow'); setExpandedActionsId(null) }}
+                                                        />
+                                                        <ActionPill
+                                                            icon={<TrendingUp size={15} />}
+                                                            label="Lợi nhuận"
+                                                            tone="success"
+                                                            onClick={() => { onSelectReport?.(addr, 'profit'); setExpandedActionsId(null) }}
+                                                        />
+                                                        <ActionPill
+                                                            icon={<Boxes size={15} />}
+                                                            label="Tồn kho"
+                                                            tone="warning"
+                                                            onClick={() => { onSelectReport?.(addr, 'inventory'); setExpandedActionsId(null) }}
+                                                        />
+                                                        <ActionPill
+                                                            icon={<ChefHat size={15} />}
+                                                            label="Công thức"
+                                                            tone="primary"
+                                                            onClick={() => { onSelectRecipes?.(addr); setExpandedActionsId(null) }}
+                                                        />
+                                                        <ActionPill
+                                                            icon={<Package size={15} />}
+                                                            label="Nguyên liệu"
+                                                            tone="primary"
+                                                            onClick={() => { onSelectIngredients?.(addr); setExpandedActionsId(null) }}
+                                                        />
+                                                        <ActionPill
+                                                            icon={<Box size={15} />}
+                                                            label="Bao bì"
+                                                            tone="warning"
+                                                            onClick={() => { onSelectIngredients?.(addr, 'packaging'); setExpandedActionsId(null) }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div className="px-3 pt-2 pb-2">
+                                                <p className="px-1 pb-1 text-[10px] font-black uppercase tracking-wider text-text-secondary">Quản lý</p>
+                                                <div className="flex flex-col">
+                                                    <ActionRow
+                                                        icon={<ClipboardCopy size={16} />}
+                                                        label="Sao lưu cấu hình"
+                                                        tone="primary"
+                                                        onClick={() => setBackupAddressId(addr.id)}
+                                                    />
+                                                    <ActionRow
+                                                        icon={<Pencil size={16} />}
+                                                        label="Đổi tên địa chỉ"
+                                                        tone="primary"
+                                                        onClick={() => {
+                                                            setEditingAddressId(addr.id)
+                                                            setEditName(addr.name)
+                                                            setError('')
+                                                        }}
+                                                    />
+                                                    <ActionRow
+                                                        icon={<Trash2 size={16} />}
+                                                        label="Xóa địa chỉ"
+                                                        tone="danger"
+                                                        onClick={() => { setDeletingAddressId(addr.id); setDeleteConfirmName(''); setError('') }}
+                                                    />
+                                                    {isAdmin && (
+                                                        <ActionRow
+                                                            icon={<Eraser size={16} />}
+                                                            label="Xoá dữ liệu bán hàng (Admin)"
+                                                            tone="danger"
+                                                            onClick={() => { setWipingAddressId(addr.id); setWipeConfirmName(''); setError('') }}
+                                                        />
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Modal đổi tên — "Hủy" quay lại modal thao tác (expandedActionsId giữ nguyên), X/tap-outside mới thoát hẳn.
+                                Render SAU modal thao tác trong DOM để đè lên (2 modal cùng z-50, phần tử sau luôn nổi lên trên). */}
                             {isEditing && (
                                 <div className="fixed inset-0 z-50 flex items-center justify-center">
                                     <div
                                         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                                        onClick={() => { if (!renaming) { setEditingAddressId(null); setError('') } }}
+                                        onClick={() => { if (!renaming) { setEditingAddressId(null); setExpandedActionsId(null); setError('') } }}
                                     />
                                     <form
                                         onSubmit={(e) => handleRename(e, addr.id)}
@@ -296,7 +333,7 @@ export default function BranchGrid({
                                             {!renaming && (
                                                 <button
                                                     type="button"
-                                                    onClick={() => { setEditingAddressId(null); setError('') }}
+                                                    onClick={() => { setEditingAddressId(null); setExpandedActionsId(null); setError('') }}
                                                     className="p-1.5 text-text-secondary hover:text-text transition-colors rounded-lg hover:bg-surface-light"
                                                 >
                                                     <X size={16} />
@@ -334,13 +371,23 @@ export default function BranchGrid({
                                 </div>
                             )}
 
+                            {/* Modal sao lưu — "Hủy" quay lại modal thao tác (expandedActionsId giữ nguyên), X mới thoát hẳn. */}
+                            {backupAddressId === addr.id && (
+                                <BackupModal
+                                    sourceAddress={addr}
+                                    onClose={() => { setBackupAddressId(null); setExpandedActionsId(null) }}
+                                    onBack={() => setBackupAddressId(null)}
+                                />
+                            )}
+
                             {/* Modal xoá dữ liệu bán hàng (Admin) — bắt gõ lại tên địa chỉ vì đây là hard-delete
-                                không thể hoàn tác (orders/expenses/shift_closings), không đụng config/menu. */}
+                                không thể hoàn tác (orders/expenses/shift_closings), không đụng config/menu.
+                                "Hủy" quay lại modal thao tác, X/tap-outside mới thoát hẳn. */}
                             {wipingAddressId === addr.id && (
                                 <div className="fixed inset-0 z-50 flex items-center justify-center">
                                     <div
                                         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                                        onClick={() => { if (!wiping) { setWipingAddressId(null); setError('') } }}
+                                        onClick={() => { if (!wiping) { setWipingAddressId(null); setExpandedActionsId(null); setError('') } }}
                                     />
                                     <div className="relative w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
                                         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
@@ -353,7 +400,7 @@ export default function BranchGrid({
                                             {!wiping && (
                                                 <button
                                                     type="button"
-                                                    onClick={() => { setWipingAddressId(null); setError('') }}
+                                                    onClick={() => { setWipingAddressId(null); setExpandedActionsId(null); setError('') }}
                                                     className="p-1.5 text-text-secondary hover:text-text transition-colors rounded-lg hover:bg-surface-light"
                                                 >
                                                     <X size={16} />
@@ -403,6 +450,74 @@ export default function BranchGrid({
                                     </div>
                                 </div>
                             )}
+
+                            {/* Modal xoá địa chỉ — bắt gõ lại tên như modal xoá dữ liệu bán hàng, vì đây cũng là hard-delete
+                                không thể hoàn tác. "Hủy" quay lại modal thao tác, X/tap-outside mới thoát hẳn. */}
+                            {deletingAddressId === addr.id && (
+                                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                                    <div
+                                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                                        onClick={() => { if (!deleting) { setDeletingAddressId(null); setExpandedActionsId(null); setError('') } }}
+                                    />
+                                    <div className="relative w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
+                                        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
+                                            <div className="flex items-center gap-2.5">
+                                                <div className="w-8 h-8 rounded-[10px] bg-danger/10 flex items-center justify-center">
+                                                    <Trash2 size={15} className="text-danger" />
+                                                </div>
+                                                <p className="text-text font-black text-sm leading-none">Xóa địa chỉ</p>
+                                            </div>
+                                            {!deleting && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setDeletingAddressId(null); setExpandedActionsId(null); setError('') }}
+                                                    className="p-1.5 text-text-secondary hover:text-text transition-colors rounded-lg hover:bg-surface-light"
+                                                >
+                                                    <X size={16} />
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div className="p-5 flex flex-col gap-4">
+                                            <p className="text-text-secondary text-xs leading-relaxed">
+                                                Xoá toàn bộ dữ liệu của <span className="font-bold text-text">{addr.name}</span> — menu, công thức, nguyên liệu, đơn hàng, chi phí, gói đăng ký. <span className="text-danger font-bold">Không thể hoàn tác.</span>
+                                            </p>
+                                            <div>
+                                                <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Gõ lại tên địa chỉ để xác nhận</label>
+                                                <input
+                                                    type="text"
+                                                    value={deleteConfirmName}
+                                                    onChange={e => setDeleteConfirmName(e.target.value)}
+                                                    disabled={deleting}
+                                                    placeholder={addr.name}
+                                                    className="w-full px-4 py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-danger/40 focus:border-danger disabled:opacity-50"
+                                                    autoFocus
+                                                />
+                                            </div>
+                                            {deletingAddressId === addr.id && error && (
+                                                <p className="text-danger text-xs font-medium -mt-2">{error}</p>
+                                            )}
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    disabled={deleting}
+                                                    onClick={() => { setDeletingAddressId(null); setError('') }}
+                                                    className="flex-1 py-3 rounded-[14px] bg-bg border border-border/60 text-text-secondary font-bold text-sm hover:bg-surface-light transition-colors disabled:opacity-50"
+                                                >
+                                                    Hủy
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={deleting || deleteConfirmName.trim() !== addr.name}
+                                                    onClick={() => handleRemoveAddress(addr)}
+                                                    className="flex-1 py-3 rounded-[14px] bg-danger text-white font-black text-sm hover:bg-danger/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                                >
+                                                    {deleting ? <Loader size={14} className="animate-spin" /> : 'Xóa vĩnh viễn'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )
                 })}
@@ -435,23 +550,42 @@ export default function BranchGrid({
     )
 }
 
-// Nút tròn icon-only dùng ở expanded menu — cùng kích thước/viền với Báo cáo/Tồn kho/⋯
-// để mở menu không break chiều cao card. title= cho biết hành động (không còn label).
-const ACTION_TONES = {
-    primary: 'bg-primary/10 border-primary/25 text-primary hover:bg-primary/20',
-    danger: 'bg-danger/10 border-danger/25 text-danger hover:bg-danger/20',
-    neutral: 'bg-surface-light border-border/50 text-text-secondary hover:text-text hover:bg-border/40',
+// Hàng "Quản lý" trong modal thao tác — icon tròn + label, tone màu theo mức độ nguy hiểm.
+const ROW_TONES = {
+    primary: 'bg-primary/10 text-primary',
+    danger: 'bg-danger/10 text-danger',
+    success: 'bg-success/10 text-success',
 }
-function ActionIcon({ icon, title, tone = 'primary', onClick }) {
+function ActionRow({ icon, label, tone = 'primary', onClick }) {
     return (
         <button
             onClick={onClick}
-            title={title}
-            aria-label={title}
-            // before:-inset-1.5 = mở vùng chạm ra 44px (32px + 6px mỗi phía), visual giữ 32px.
-            className={`relative w-8 h-8 flex items-center justify-center rounded-full border active:scale-95 transition-all shrink-0 before:absolute before:-inset-1.5 before:content-[''] ${ACTION_TONES[tone]}`}
+            className="flex items-center gap-3 px-3 py-3 rounded-[14px] hover:bg-surface-light active:bg-border/30 transition-colors text-left w-full"
         >
-            {icon}
+            <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${ROW_TONES[tone]}`}>
+                {icon}
+            </span>
+            <span className={`font-bold text-sm ${tone === 'danger' ? 'text-danger' : 'text-text'}`}>{label}</span>
+        </button>
+    )
+}
+
+// Pill lối tắt điều hướng — 2 cột, icon nhỏ + label 1 dòng, tách hẳn khỏi list "Quản lý".
+const PILL_TONES = {
+    primary: 'bg-primary/10 text-primary',
+    success: 'bg-success/10 text-success',
+    warning: 'bg-warning/10 text-warning',
+}
+function ActionPill({ icon, label, tone = 'primary', onClick }) {
+    return (
+        <button
+            onClick={onClick}
+            className="flex items-center gap-2 px-3 py-2.5 rounded-[14px] bg-surface-light border border-border/50 hover:border-primary/40 hover:bg-border/20 active:scale-95 transition-all text-left min-w-0"
+        >
+            <span className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${PILL_TONES[tone]}`}>
+                {icon}
+            </span>
+            <span className="text-text text-[12px] font-bold leading-tight truncate">{label}</span>
         </button>
     )
 }

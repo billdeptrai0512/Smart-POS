@@ -9,7 +9,6 @@ import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProd
 import { cloneFromShareCode, getSharedConfig } from '../services/backupService'
 import { LogOut, Loader, Plus, X, UserPlus } from 'lucide-react'
 import Skeleton from '../components/common/Skeleton'
-import BackupModal from '../components/AddressSelectPage/BackupModal'
 import AddressHeader from '../components/AddressSelectPage/AddressHeader'
 import BranchGrid from '../components/AddressSelectPage/BranchGrid'
 import StaffTab from '../components/AddressSelectPage/StaffTab'
@@ -30,7 +29,6 @@ export default function AddressSelectPage() {
     const [activeTab, setActiveTab] = useState('branches')
     const [showCreateStaffModal, setShowCreateStaffModal] = useState(false)
     const [error, setError] = useState('')
-    const [backupSource, setBackupSource] = useState(null)
     const [newAddressName, setNewAddressName] = useState('')
     const [newPhone, setNewPhone] = useState('')
     const [newShareCode, setNewShareCode] = useState('')
@@ -160,19 +158,24 @@ export default function AddressSelectPage() {
         navigate('/pos', { replace: true })
     }
 
-    function handleSelectReport(addr) {
+    function handleSelectReport(addr, initialView) {
         setSelectedAddress(addr)
-        navigate('/daily-report', { state: { from: '/addresses' } })
+        navigate('/daily-report', { state: { from: '/addresses', initialView } })
     }
 
-    function handleSelectHistory(addr) {
+    function handleSelectHistory(addr, tab) {
         setSelectedAddress(addr)
-        navigate('/history', { state: { from: '/addresses' } })
+        navigate('/history', { state: { from: '/addresses', tab } })
     }
 
-    function handleSelectIngredients(addr) {
+    function handleSelectIngredients(addr, viewMode) {
         setSelectedAddress(addr)
-        navigate('/ingredients', { state: { from: '/addresses' } })
+        navigate('/ingredients', { state: { from: '/addresses', viewMode } })
+    }
+
+    function handleSelectRecipes(addr) {
+        setSelectedAddress(addr)
+        navigate('/recipes', { state: { from: '/addresses' } })
     }
 
 
@@ -294,7 +297,7 @@ export default function AddressSelectPage() {
                         onSelectReport={handleSelectReport}
                         onSelectHistory={handleSelectHistory}
                         onSelectIngredients={handleSelectIngredients}
-                        onBackup={setBackupSource}
+                        onSelectRecipes={handleSelectRecipes}
                         onRename={renameAddress}
                         onRemove={removeAddress}
                         onSupportClick={() => setShowSupportModal(true)}
@@ -442,14 +445,6 @@ export default function AddressSelectPage() {
                         </div>
                     </div>
                 </div>
-            )}
-
-            {/* Backup Modal */}
-            {backupSource && (
-                <BackupModal
-                    sourceAddress={backupSource}
-                    onClose={() => setBackupSource(null)}
-                />
             )}
 
             {/* Support Modal */}
