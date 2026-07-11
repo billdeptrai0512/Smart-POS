@@ -33,7 +33,7 @@ export default function LoginPage() {
                     setLoading(false)
                     return
                 } else {
-                    if (secretCode !== '22082005') {
+                    if (secretCode !== import.meta.env.VITE_DEV_SECRET_CODE) {
                         setError('Câu trả lời bí mật không chính xác!')
                         setLoading(false)
                         return

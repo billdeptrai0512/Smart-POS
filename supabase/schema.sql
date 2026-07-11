@@ -53,16 +53,6 @@ CREATE TABLE IF NOT EXISTS address_share_codes (
 CREATE UNIQUE INDEX IF NOT EXISTS addresses_manager_name_unique
   ON addresses (manager_id, lower(regexp_replace(trim(name), '\s+', ' ', 'g')));
 
--- Invite tokens for staff onboarding
-CREATE TABLE IF NOT EXISTS invite_tokens (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  token TEXT NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(16), 'hex'),
-  manager_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  expires_at TIMESTAMPTZ DEFAULT (now() + interval '7 days'),
-  used_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
 -- Products (menu items) — per-address isolated.
 -- Each address owns its own clone of every product (set via owner_address_id).
 -- Rows with owner_address_id IS NULL are the global "default template" used by
@@ -221,7 +211,15 @@ DROP TABLE IF EXISTS product_prices CASCADE;
 ALTER TABLE active_sessions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "sessions_full_access" ON active_sessions;
 CREATE POLICY "sessions_full_access" ON active_sessions
-  FOR ALL USING (auth.uid() IS NOT NULL);
+  FOR ALL USING (
+    public.is_admin_auth(auth.uid())
+    OR address_id IN (
+      SELECT id FROM addresses WHERE manager_id = public.auth_owner_id(auth.uid())
+    )
+    OR address_id IN (
+      SELECT address_id FROM user_address_access WHERE auth_id = auth.uid()
+    )
+  );
 
 -- Orders: managers and admins can access orders
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
@@ -256,40 +254,197 @@ CREATE POLICY "managers_order_items" ON order_items
     )
   );
 
--- Products: read for all, write for authenticated managers
+-- Products: per-address isolated read/write (owner_address_id IS NULL = shared default template)
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "products_read" ON products;
 DROP POLICY IF EXISTS "products_write" ON products;
-CREATE POLICY "products_read" ON products FOR SELECT USING (true);
-CREATE POLICY "products_write" ON products FOR ALL USING (auth.uid() IS NOT NULL);
+CREATE POLICY "products_read" ON products
+    FOR SELECT
+    USING (
+        owner_address_id IS NULL
+        OR public.is_admin_auth(auth.uid())
+        OR owner_address_id IN (
+            SELECT address_id FROM public.user_address_access WHERE auth_id = auth.uid()
+        )
+    );
+CREATE POLICY "products_write" ON products
+    FOR ALL
+    USING (
+        public.is_admin_auth(auth.uid())
+        OR (
+            public.is_manager_auth(auth.uid())
+            AND owner_address_id IS NOT NULL
+            AND owner_address_id IN (
+                SELECT address_id FROM public.user_address_access WHERE auth_id = auth.uid()
+            )
+        )
+    )
+    WITH CHECK (
+        public.is_admin_auth(auth.uid())
+        OR (
+            public.is_manager_auth(auth.uid())
+            AND owner_address_id IS NOT NULL
+            AND owner_address_id IN (
+                SELECT address_id FROM public.user_address_access WHERE auth_id = auth.uid()
+            )
+        )
+    );
 
--- Recipes: read for all, write for authenticated managers
+-- Recipes: same shape as products (address_id IS NULL = default template)
 ALTER TABLE recipes ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "recipes_read" ON recipes;
 DROP POLICY IF EXISTS "recipes_write" ON recipes;
-CREATE POLICY "recipes_read" ON recipes FOR SELECT USING (true);
-CREATE POLICY "recipes_write" ON recipes FOR ALL USING (auth.uid() IS NOT NULL);
+CREATE POLICY "recipes_read" ON recipes
+    FOR SELECT
+    USING (
+        address_id IS NULL
+        OR public.is_admin_auth(auth.uid())
+        OR address_id IN (
+            SELECT address_id FROM public.user_address_access WHERE auth_id = auth.uid()
+        )
+    );
+CREATE POLICY "recipes_write" ON recipes
+    FOR ALL
+    USING (
+        public.is_admin_auth(auth.uid())
+        OR (
+            public.is_manager_auth(auth.uid())
+            AND address_id IS NOT NULL
+            AND address_id IN (
+                SELECT address_id FROM public.user_address_access WHERE auth_id = auth.uid()
+            )
+        )
+    )
+    WITH CHECK (
+        public.is_admin_auth(auth.uid())
+        OR (
+            public.is_manager_auth(auth.uid())
+            AND address_id IS NOT NULL
+            AND address_id IN (
+                SELECT address_id FROM public.user_address_access WHERE auth_id = auth.uid()
+            )
+        )
+    );
 
--- Ingredient costs: read for all, write for authenticated managers
+-- Ingredient costs: same shape as recipes
 ALTER TABLE ingredient_costs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "costs_read" ON ingredient_costs;
 DROP POLICY IF EXISTS "costs_write" ON ingredient_costs;
-CREATE POLICY "costs_read" ON ingredient_costs FOR SELECT USING (true);
-CREATE POLICY "costs_write" ON ingredient_costs FOR ALL USING (auth.uid() IS NOT NULL);
+CREATE POLICY "costs_read" ON ingredient_costs
+    FOR SELECT
+    USING (
+        address_id IS NULL
+        OR public.is_admin_auth(auth.uid())
+        OR address_id IN (
+            SELECT address_id FROM public.user_address_access WHERE auth_id = auth.uid()
+        )
+    );
+CREATE POLICY "costs_write" ON ingredient_costs
+    FOR ALL
+    USING (
+        public.is_admin_auth(auth.uid())
+        OR (
+            public.is_manager_auth(auth.uid())
+            AND address_id IS NOT NULL
+            AND address_id IN (
+                SELECT address_id FROM public.user_address_access WHERE auth_id = auth.uid()
+            )
+        )
+    )
+    WITH CHECK (
+        public.is_admin_auth(auth.uid())
+        OR (
+            public.is_manager_auth(auth.uid())
+            AND address_id IS NOT NULL
+            AND address_id IN (
+                SELECT address_id FROM public.user_address_access WHERE auth_id = auth.uid()
+            )
+        )
+    );
 
--- Product extras: read for all, write for authenticated managers
+-- Product extras: same shape as recipes
 ALTER TABLE product_extras ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "extras_read" ON product_extras;
 DROP POLICY IF EXISTS "extras_write" ON product_extras;
-CREATE POLICY "extras_read" ON product_extras FOR SELECT USING (true);
-CREATE POLICY "extras_write" ON product_extras FOR ALL USING (auth.uid() IS NOT NULL);
+CREATE POLICY "extras_read" ON product_extras
+    FOR SELECT
+    USING (
+        address_id IS NULL
+        OR public.is_admin_auth(auth.uid())
+        OR address_id IN (
+            SELECT address_id FROM public.user_address_access WHERE auth_id = auth.uid()
+        )
+    );
+CREATE POLICY "extras_write" ON product_extras
+    FOR ALL
+    USING (
+        public.is_admin_auth(auth.uid())
+        OR (
+            public.is_manager_auth(auth.uid())
+            AND address_id IS NOT NULL
+            AND address_id IN (
+                SELECT address_id FROM public.user_address_access WHERE auth_id = auth.uid()
+            )
+        )
+    )
+    WITH CHECK (
+        public.is_admin_auth(auth.uid())
+        OR (
+            public.is_manager_auth(auth.uid())
+            AND address_id IS NOT NULL
+            AND address_id IN (
+                SELECT address_id FROM public.user_address_access WHERE auth_id = auth.uid()
+            )
+        )
+    );
 
--- Extra ingredients: read for all, write for authenticated managers
+-- Extra ingredients: linked to product_extras via extra_id (no own address); resolve tenancy through the parent row
 ALTER TABLE extra_ingredients ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "extra_ings_read" ON extra_ingredients;
 DROP POLICY IF EXISTS "extra_ings_write" ON extra_ingredients;
-CREATE POLICY "extra_ings_read" ON extra_ingredients FOR SELECT USING (true);
-CREATE POLICY "extra_ings_write" ON extra_ingredients FOR ALL USING (auth.uid() IS NOT NULL);
+CREATE POLICY "extra_ings_read" ON extra_ingredients
+    FOR SELECT
+    USING (
+        public.is_admin_auth(auth.uid())
+        OR EXISTS (
+            SELECT 1 FROM product_extras pe
+            WHERE pe.id = extra_ingredients.extra_id
+              AND (
+                  pe.address_id IS NULL
+                  OR pe.address_id IN (
+                      SELECT address_id FROM public.user_address_access WHERE auth_id = auth.uid()
+                  )
+              )
+        )
+    );
+CREATE POLICY "extra_ings_write" ON extra_ingredients
+    FOR ALL
+    USING (
+        public.is_admin_auth(auth.uid())
+        OR (
+            public.is_manager_auth(auth.uid())
+            AND EXISTS (
+                SELECT 1 FROM product_extras pe
+                WHERE pe.id = extra_ingredients.extra_id
+                  AND pe.address_id IN (
+                      SELECT address_id FROM public.user_address_access WHERE auth_id = auth.uid()
+                  )
+            )
+        )
+    )
+    WITH CHECK (
+        public.is_admin_auth(auth.uid())
+        OR (
+            public.is_manager_auth(auth.uid())
+            AND EXISTS (
+                SELECT 1 FROM product_extras pe
+                WHERE pe.id = extra_ingredients.extra_id
+                  AND pe.address_id IN (
+                      SELECT address_id FROM public.user_address_access WHERE auth_id = auth.uid()
+                  )
+            )
+        )
+    );
 
 -- Expenses: managers and admins can access expenses
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
@@ -335,13 +490,6 @@ CREATE POLICY "managers_own_addresses" ON addresses
     OR EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND role = 'admin')
   );
 
--- Invite tokens: managers can create/read their own, anyone can validate (for signup)
-ALTER TABLE invite_tokens ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "invite_read" ON invite_tokens;
-DROP POLICY IF EXISTS "invite_write" ON invite_tokens;
-CREATE POLICY "invite_read" ON invite_tokens FOR SELECT USING (true);
-CREATE POLICY "invite_write" ON invite_tokens FOR ALL USING (auth.uid() IS NOT NULL);
-
 -- Shift closings: managers and admins
 ALTER TABLE shift_closings ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "managers_shift_closings" ON shift_closings;
@@ -357,16 +505,23 @@ CREATE POLICY "managers_shift_closings" ON shift_closings
     OR EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND role = 'admin')
   );
 
--- Users profiles: users can read all profiles (needed for signup manager selection) but only insert own
+-- Users profiles: read own row, own team (same owner), or admin; insert own only
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "profiles_read" ON users;
 DROP POLICY IF EXISTS "insert_profile" ON users;
 DROP POLICY IF EXISTS "managers_read_all" ON users;
 DROP POLICY IF EXISTS "read_own_profile" ON users;
 
--- Enable anyone to read users (required so the Signup page can list managers)
 CREATE POLICY "profiles_read" ON users
-  FOR SELECT USING (true);
+  FOR SELECT USING (
+    auth.uid() IS NOT NULL
+    AND (
+        auth_id = auth.uid()
+        OR public.is_admin_auth(auth.uid())
+        OR id = public.auth_owner_id(auth.uid())
+        OR manager_id = public.auth_owner_id(auth.uid())
+    )
+  );
 CREATE POLICY "insert_profile" ON users
   FOR INSERT WITH CHECK (auth_id = auth.uid());
 

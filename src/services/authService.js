@@ -61,59 +61,6 @@ export async function signUp(username, password, name, email) {
     return { user: authUser, profile }
 }
 
-// Validate an invite token — returns { valid, tokenId, managerId, managerName, role, error }
-//
-// IMPORTANT: invitee opens this URL while UNAUTHENTICATED. The previous version
-// embedded `users(name)` into the invite_tokens select to fetch the inviting
-// manager's name. That join hits RLS on `users`, which calls `is_admin_auth()` —
-// a function whose EXECUTE was revoked from `anon` in migration 20260505. Result:
-// every anonymous signup link returned "permission denied for function
-// is_admin_auth" → UI showed "Link không hợp lệ". Bug affected BOTH staff and
-// co-manager invites (same code path).
-//
-// Fix: query invite_tokens alone (RLS permits anon `invite_read USING (true)`),
-// then attempt to read the manager name in a separate query and SWALLOW any
-// permission error — name is purely cosmetic.
-export async function validateInviteToken(token) {
-    if (!supabase) return { valid: false, error: 'No connection' }
-
-    // Sanitize the token: decode url-encoded characters, extract the segment before
-    // any slash/query/hash, and keep only hex characters to handle trailing slashes
-    // or tracking parameters appended by third-party in-app browsers (Zalo, FB, etc.).
-    let decodedToken = ''
-    try {
-        decodedToken = decodeURIComponent(token || '')
-    } catch {
-        decodedToken = token || ''
-    }
-    const rawSegment = decodedToken.trim().split(/[?#/]/)[0]
-    const cleanToken = rawSegment.replace(/[^a-fA-F0-9]/g, '').toLowerCase()
-
-    const { data, error } = await supabase
-        .from('invite_tokens')
-        .select('id, manager_id, role, expires_at, used_at')
-        .eq('token', cleanToken)
-        .maybeSingle()
-
-    if (error || !data) return { valid: false, error: 'Link không hợp lệ' }
-    if (data.used_at) return { valid: false, error: 'Link này đã được sử dụng' }
-    if (new Date(data.expires_at) < new Date()) return { valid: false, error: 'Link đã hết hạn' }
-
-    // Best-effort fetch of manager name. Anonymous role can't read users (RLS calls
-    // is_admin_auth which anon lacks EXECUTE on); we ignore that failure.
-    let managerName
-    try {
-        const { data: managerRow } = await supabase
-            .from('users')
-            .select('name')
-            .eq('id', data.manager_id)
-            .maybeSingle()
-        managerName = managerRow?.name
-    } catch { /* RLS blocked — leave name undefined */ }
-
-    return { valid: true, tokenId: data.id, managerId: data.manager_id, managerName, role: data.role || 'staff' }
-}
-
 // Create a team member directly via Edge Function
 export async function createTeamMember(name, username, password, role) {
     if (!supabase) throw new Error('No Supabase connection')
@@ -431,11 +378,10 @@ export async function removeSession(userId) {
 
 // Fetch active sessions for a list of address IDs (last_seen within 10 minutes).
 //
-// Avoid the embedded `users(name)` join — it triggers RLS on users which calls
-// is_admin_auth, a function whose EXECUTE was revoked from anon in migration
-// 20260505. If this ever gets reached from an unauthenticated context (e.g.
-// future guest/demo mode), the join would fail with `permission denied`.
-// Same root cause as the invite-link bug — see validateInviteToken.
+// Avoid the embedded `users(name)` join — it triggers RLS on users which now
+// scopes reads to the caller's own team (20260711 fix). If this ever gets
+// reached from an unauthenticated context (e.g. future guest/demo mode), the
+// join would fail with `permission denied`.
 //
 // Fix: fetch sessions alone, then resolve names in a separate best-effort query.
 export async function fetchActiveSessions(addressIds) {
