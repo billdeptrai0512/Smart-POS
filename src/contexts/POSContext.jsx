@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { fetchTodayStats, submitOrder, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext } from '../services/orderService'
-import { upsertSession } from '../services/authService'
+import { upsertSession, countActiveSessions } from '../services/authService'
 import { useOfflineSync, addPendingOrder } from '../hooks/useOfflineSync'
 import { dateStringVN } from '../utils/dateVN'
 import { calculateProductCost, computeDiscount } from '../utils'
@@ -48,6 +48,10 @@ export function POSProvider() {
     const [totalCost, setTotalCost] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.TOTAL_COST)) || 0)
     const [cupsSold, setCupsSold] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.CUPS)) || 0)
     const [isOnline, setIsOnline] = useState(navigator.onLine)
+    // Gate for the orders-realtime channel below: true once >= 2 devices are active
+    // on this address (nothing to sync cross-device with just 1). Kept up to date
+    // by the heartbeat effect further down ("Heartbeat for active_sessions").
+    const [hasMultiDevice, setHasMultiDevice] = useState(false)
     const { toast, showToast, showError } = useToast()
 
     // ---- History State ----
@@ -197,6 +201,7 @@ export function POSProvider() {
                     // Detect if it's from another device
                     if (!localOrderIds.current.has(payload.new.id)) {
                         scheduleRecentRefresh()
+                        scheduleOrdersRefresh()
                     }
                 })
                 // A discount edit or soft-delete (deleted_at set) lands as an UPDATE.
@@ -220,7 +225,9 @@ export function POSProvider() {
         let hiddenAt = 0
         const handleVisibility = () => {
             if (document.visibilityState === 'visible') {
-                subscribe() // always reconnect the socket — it's cheap and required
+                // Gate: only reconnect when >= 2 devices are active on this address —
+                // see hasMultiDevice / the heartbeat effect below.
+                if (hasMultiDevice) subscribe()
                 // Catch-up fetches only after a real absence, so rapid app-switching
                 // doesn't pile reads onto a flaky connection (lag-after-foreground).
                 if (Date.now() - hiddenAt > 30000) {
@@ -236,7 +243,7 @@ export function POSProvider() {
         }
 
         // Initial state
-        if (document.visibilityState === 'visible') subscribe()
+        if (hasMultiDevice && document.visibilityState === 'visible') subscribe()
         document.addEventListener('visibilitychange', handleVisibility)
 
         return () => {
@@ -246,11 +253,25 @@ export function POSProvider() {
             document.removeEventListener('visibilitychange', handleVisibility)
             unsubscribe()
         }
-    }, [addressId, isGuest])
+    }, [addressId, isGuest, hasMultiDevice])
 
     // ---- Heartbeat for active_sessions ----
     useEffect(() => {
         if (!addressId) return
+        let cancelled = false
+
+        // Re-check the orders-realtime gate: the device count can change mid-shift
+        // (another staff member opens/closes the app), so re-run this on the same
+        // 5-minute cadence as the session heartbeat instead of a separate interval.
+        // Also run once immediately so the channel can open right away on mount
+        // (not only after the first heartbeat tick) if 2+ devices are already active.
+        const checkMultiDevice = () => {
+            countActiveSessions(addressId).then(count => {
+                if (!cancelled) setHasMultiDevice(count >= 2)
+            })
+        }
+        checkMultiDevice()
+
         // Get profile from auth context via import would create circular dep,
         // so we read userId from localStorage or let AddressContext handle initial upsert
         const interval = setInterval(() => {
@@ -261,9 +282,13 @@ export function POSProvider() {
                 const userId = localStorage.getItem(STORAGE_KEYS.ACTIVE_USER_ID)
                 if (userId) upsertSession(userId, addressId)
             }
+            checkMultiDevice()
         }, 5 * 60 * 1000) // every 5 minutes
 
-        return () => clearInterval(interval)
+        return () => {
+            cancelled = true
+            clearInterval(interval)
+        }
     }, [addressId])
 
     const revenueRef = useRef(revenue)
@@ -525,12 +550,11 @@ export function POSProvider() {
 
     async function handleLoadHistory() {
         if (!addressId) return
-        // Freshness guard: optimistic rows + realtime UPDATEs already keep todayOrders
-        // current; this refetch only catches other-device INSERTs. Rapid tap→commit→
-        // /history loops would otherwise refetch the whole day every time.
-        // ponytail: 30s TTL, wire INSERT → scheduleOrdersRefresh if 2-máy cần realtime hơn
+        // Freshness guard: dedup truly-simultaneous re-invocations (React re-render
+        // churn), not a substitute for a real refetch — realtime INSERT now also
+        // wires into scheduleOrdersRefresh, so this only needs to be a few seconds.
         const last = historyFetchedRef.current
-        if (last.addressId === addressId && Date.now() - last.at < 30000) return
+        if (last.addressId === addressId && Date.now() - last.at < 4000) return
         setIsLoadingHistory(true)
         try {
             const [orders, expenses] = await Promise.all([

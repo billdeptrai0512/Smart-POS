@@ -470,6 +470,27 @@ export async function fetchActiveSessions(addressIds) {
     return data.map(s => ({ ...s, users: userById[s.user_id] || {} }))
 }
 
+// Count active sessions for a SINGLE address (last_seen within 10 minutes). Used
+// to gate the orders-realtime channel in POSContext: a 1-device shift has nothing
+// to sync cross-device, so the channel only opens when this returns >= 2. Same
+// cutoff/window as fetchActiveSessions, just scoped to one address and returning
+// a count instead of rows (no need for the name-lookup join here).
+export async function countActiveSessions(addressId) {
+    if (isGuest()) return 0
+    if (!supabase || !addressId) return 0
+    const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+    const { count, error } = await supabase
+        .from('active_sessions')
+        .select('user_id', { count: 'exact', head: true })
+        .eq('address_id', addressId)
+        .gte('last_seen', cutoff)
+    if (error) {
+        console.error('countActiveSessions error:', error)
+        return 0
+    }
+    return count || 0
+}
+
 // Group fetchActiveSessions rows into { addressId: [{ name, role }] } — dùng làm
 // fallback khi RPC gộp sessions chưa deploy (see 20260703_branches_stats_include_sessions).
 async function legacySessionsMap(addressIds) {

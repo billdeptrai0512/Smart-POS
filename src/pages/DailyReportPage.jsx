@@ -211,7 +211,7 @@ export default function DailyReportPage() {
     }, [selectedAddress?.id])
 
     useEffect(() => {
-        if (todayOrders.length === 0 && !isLoadingHistory) handleLoadHistory()
+        if (!isLoadingHistory) handleLoadHistory()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 

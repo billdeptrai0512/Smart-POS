@@ -65,11 +65,16 @@ export function ProductProvider() {
     useEffect(() => {
         const addressId = selectedAddress?.id
 
-        // Instantly apply address-specific cache while fresh data loads
+        // Instantly apply address-specific cache while fresh data loads. This is
+        // also the offline-fallback path: if the fetch below fails (no network at
+        // shift-open), this cache-hydrated state is simply left in place — the POS
+        // screen still shows the last-known menu/prices/extras and orders queue
+        // into the existing offline-order mechanism.
         setProducts(readCache('products', []))
         setRecipes(readCache('recipes', []))
         setIngredientCosts(readCache('costs', {}))
         setIngredientUnits(readCache('units', {}))
+        setIngredientConfigs(readCache('configs', []))
         setProductExtras(readCache('extras', {}))
         setExtraIngredients(readCache('extra_ingredients', {}))
 
@@ -87,6 +92,11 @@ export function ProductProvider() {
                 const extraIngs = await fetchExtraIngredients(extraIds)
                 applyData(prods, recs, costsResult, extras, extraIngs, addressId)
             } catch (error) {
+                // Offline-at-shift-open fallback: deliberately do NOT clear products/
+                // recipes/etc here. They're already holding the cache snapshot set
+                // above, so the POS screen keeps showing the last-known menu/prices
+                // instead of going blank. loadError only drives the UI copy ("offline,
+                // will sync" vs "no menu yet") — see MenuGrid.
                 console.error('Failed to load product data', error)
                 setLoadError(error)
             } finally {
