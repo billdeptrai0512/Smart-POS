@@ -31,8 +31,14 @@ export default function BranchGrid({
     const [wipingAddressId, setWipingAddressId] = useState(null) // which card has the wipe-sales-data confirm modal open
     const [wipeConfirmName, setWipeConfirmName] = useState('')
     const [wiping, setWiping] = useState(false)
+    const [actionsScrollFade, setActionsScrollFade] = useState(false) // còn nội dung bên dưới trong modal thao tác?
     const submitGuardRef = useRef(false)
     const navigate = useNavigate()
+
+    function checkActionsScrollFade(el) {
+        if (!el) return
+        setActionsScrollFade(el.scrollHeight - el.scrollTop - el.clientHeight > 4)
+    }
 
     async function handleWipeSalesData(addr) {
         if (wipeConfirmName.trim() !== addr.name || wiping) return
@@ -204,7 +210,7 @@ export default function BranchGrid({
                                         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
                                         onClick={() => setExpandedActionsId(null)}
                                     />
-                                    <div className="relative w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+                                    <div className="relative w-full max-w-sm mx-4 my-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden max-h-[calc(100dvh-2rem)] flex flex-col">
                                         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40 shrink-0">
                                             <p className="text-text font-black text-sm leading-none truncate pr-2">{addr.name}</p>
                                             <button
@@ -214,55 +220,59 @@ export default function BranchGrid({
                                                 <X size={16} />
                                             </button>
                                         </div>
-                                        <div className="overflow-y-auto">
+                                        <div
+                                            className="overflow-y-auto"
+                                            ref={checkActionsScrollFade}
+                                            onScroll={(e) => checkActionsScrollFade(e.currentTarget)}
+                                        >
                                             {!isStaff && (
                                                 <div className="px-3 pt-3 pb-1">
                                                     <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Lối tắt</p>
                                                     <div className="grid grid-cols-2 gap-2">
                                                         <ActionPill
-                                                            icon={<Banknote size={15} />}
+                                                            icon={<Banknote size={16} />}
                                                             label="Thu nhập"
                                                             tone="primary"
                                                             onClick={() => { onSelectHistory?.(addr, 'orders'); setExpandedActionsId(null) }}
                                                         />
                                                         <ActionPill
-                                                            icon={<Receipt size={15} />}
+                                                            icon={<Receipt size={16} />}
                                                             label="Chi phí"
                                                             tone="primary"
                                                             onClick={() => { onSelectHistory?.(addr, 'expense'); setExpandedActionsId(null) }}
                                                         />
                                                         <ActionPill
-                                                            icon={<Wallet size={15} />}
+                                                            icon={<Wallet size={16} />}
                                                             label="Dòng tiền"
                                                             tone="success"
                                                             onClick={() => { onSelectReport?.(addr, 'cashflow'); setExpandedActionsId(null) }}
                                                         />
                                                         <ActionPill
-                                                            icon={<TrendingUp size={15} />}
+                                                            icon={<TrendingUp size={16} />}
                                                             label="Lợi nhuận"
                                                             tone="success"
                                                             onClick={() => { onSelectReport?.(addr, 'profit'); setExpandedActionsId(null) }}
                                                         />
                                                         <ActionPill
-                                                            icon={<Boxes size={15} />}
+                                                            icon={<Boxes size={16} />}
                                                             label="Tồn kho"
                                                             tone="warning"
                                                             onClick={() => { onSelectReport?.(addr, 'inventory'); setExpandedActionsId(null) }}
                                                         />
                                                         <ActionPill
-                                                            icon={<ChefHat size={15} />}
+                                                            icon={<ChefHat size={16} />}
                                                             label="Công thức"
                                                             tone="primary"
                                                             onClick={() => { onSelectRecipes?.(addr); setExpandedActionsId(null) }}
                                                         />
                                                         <ActionPill
-                                                            icon={<Package size={15} />}
+                                                            icon={<Package size={16} />}
                                                             label="Nguyên liệu"
                                                             tone="primary"
                                                             onClick={() => { onSelectIngredients?.(addr); setExpandedActionsId(null) }}
                                                         />
                                                         <ActionPill
-                                                            icon={<Box size={15} />}
+                                                            icon={<Box size={16} />}
                                                             label="Bao bì"
                                                             tone="warning"
                                                             onClick={() => { onSelectIngredients?.(addr, 'packaging'); setExpandedActionsId(null) }}
@@ -271,18 +281,18 @@ export default function BranchGrid({
                                                 </div>
                                             )}
 
-                                            <div className="px-3 pt-2 pb-2">
-                                                <p className="px-1 pb-1 text-[10px] font-black uppercase tracking-wider text-text-secondary">Quản lý</p>
-                                                <div className="flex flex-col">
-                                                    <ActionRow
+                                            <div className="px-3 pt-2 pb-3">
+                                                <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Quản lý</p>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <ActionPill
                                                         icon={<ClipboardCopy size={16} />}
-                                                        label="Sao lưu cấu hình"
+                                                        label="Nhân bản"
                                                         tone="primary"
                                                         onClick={() => setBackupAddressId(addr.id)}
                                                     />
-                                                    <ActionRow
+                                                    <ActionPill
                                                         icon={<Pencil size={16} />}
-                                                        label="Đổi tên địa chỉ"
+                                                        label="Đổi tên"
                                                         tone="primary"
                                                         onClick={() => {
                                                             setEditingAddressId(addr.id)
@@ -290,23 +300,26 @@ export default function BranchGrid({
                                                             setError('')
                                                         }}
                                                     />
-                                                    <ActionRow
+                                                    {isAdmin && (
+                                                        <ActionPill
+                                                            icon={<Eraser size={16} />}
+                                                            label="Reset dữ liệu"
+                                                            tone="danger"
+                                                            onClick={() => { setWipingAddressId(addr.id); setWipeConfirmName(''); setError('') }}
+                                                        />
+                                                    )}
+                                                    <ActionPill
                                                         icon={<Trash2 size={16} />}
                                                         label="Xóa địa chỉ"
                                                         tone="danger"
                                                         onClick={() => { setDeletingAddressId(addr.id); setDeleteConfirmName(''); setError('') }}
                                                     />
-                                                    {isAdmin && (
-                                                        <ActionRow
-                                                            icon={<Eraser size={16} />}
-                                                            label="Xoá dữ liệu bán hàng (Admin)"
-                                                            tone="danger"
-                                                            onClick={() => { setWipingAddressId(addr.id); setWipeConfirmName(''); setError('') }}
-                                                        />
-                                                    )}
                                                 </div>
                                             </div>
                                         </div>
+                                        {actionsScrollFade && (
+                                            <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-surface to-transparent" />
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -550,42 +563,24 @@ export default function BranchGrid({
     )
 }
 
-// Hàng "Quản lý" trong modal thao tác — icon tròn + label, tone màu theo mức độ nguy hiểm.
-const ROW_TONES = {
-    primary: 'bg-primary/10 text-primary',
-    danger: 'bg-danger/10 text-danger',
-    success: 'bg-success/10 text-success',
-}
-function ActionRow({ icon, label, tone = 'primary', onClick }) {
-    return (
-        <button
-            onClick={onClick}
-            className="flex items-center gap-3 px-3 py-3 rounded-[14px] hover:bg-surface-light active:bg-border/30 transition-colors text-left w-full"
-        >
-            <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${ROW_TONES[tone]}`}>
-                {icon}
-            </span>
-            <span className={`font-bold text-sm ${tone === 'danger' ? 'text-danger' : 'text-text'}`}>{label}</span>
-        </button>
-    )
-}
-
-// Pill lối tắt điều hướng — 2 cột, icon nhỏ + label 1 dòng, tách hẳn khỏi list "Quản lý".
+// Pill hành động — 2 cột, icon nhỏ + label 1 dòng. Dùng chung cho "Lối tắt" (điều hướng)
+// và "Quản lý" (sửa/xoá địa chỉ), tone danger cho các thao tác nguy hiểm.
 const PILL_TONES = {
     primary: 'bg-primary/10 text-primary',
     success: 'bg-success/10 text-success',
     warning: 'bg-warning/10 text-warning',
+    danger: 'bg-danger/10 text-danger',
 }
 function ActionPill({ icon, label, tone = 'primary', onClick }) {
     return (
         <button
             onClick={onClick}
-            className="flex items-center gap-2 px-3 py-2.5 rounded-[14px] bg-surface-light border border-border/50 hover:border-primary/40 hover:bg-border/20 active:scale-95 transition-all text-left min-w-0"
+            className="flex flex-col items-center gap-1.5 px-2 py-3 rounded-[14px] bg-surface-light border border-border/50 hover:border-primary/40 hover:bg-border/20 active:scale-95 transition-all text-center min-w-0"
         >
-            <span className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${PILL_TONES[tone]}`}>
+            <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${PILL_TONES[tone]}`}>
                 {icon}
             </span>
-            <span className="text-text text-[12px] font-bold leading-tight truncate">{label}</span>
+            <span className={`text-[12px] font-bold leading-tight ${tone === 'danger' ? 'text-danger' : 'text-text'}`}>{label}</span>
         </button>
     )
 }
