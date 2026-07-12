@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Shield, UserPlus, Loader, X, Check } from 'lucide-react'
+import { Shield, UserPlus, Loader, X, Check, Eye, EyeOff } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import { capitalizeWords } from '../../utils'
 import { createTeamMember } from '../../services/authService'
@@ -14,6 +14,7 @@ export default function CreateStaffModal({ onClose, onSuccess }) {
     const [name, setName] = useState('')
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
+    const [pwVisible, setPwVisible] = useState(false)
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
 
@@ -107,48 +108,87 @@ export default function CreateStaffModal({ onClose, onSuccess }) {
 
                     {/* Họ tên */}
                     <div>
-                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Họ và Tên</label>
-                        <input
-                            type="text"
-                            autoCapitalize="words"
-                            value={name}
-                            onChange={e => setName(capitalizeWords(e.target.value))}
-                            required
-                            disabled={loading}
-                            className="w-full px-3 py-2.5 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all placeholder:text-text-secondary/40"
-                            placeholder="Nguyễn Văn A"
-                        />
+                        <div className="relative">
+                            <input
+                                id="create-staff-name"
+                                type="text"
+                                autoCapitalize="words"
+                                value={name}
+                                onChange={e => setName(capitalizeWords(e.target.value))}
+                                required
+                                disabled={loading}
+                                placeholder=" "
+                                className="peer w-full px-3 py-2.5 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+                            />
+                            <label
+                                htmlFor="create-staff-name"
+                                className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-xs font-bold uppercase tracking-wider transition-all duration-150 pointer-events-none
+                                    peer-focus:top-0 peer-focus:text-[10px] peer-focus:px-1 peer-focus:bg-surface peer-focus:text-primary
+                                    peer-[:not(:placeholder-shown)]:top-0 peer-[:not(:placeholder-shown)]:text-[10px] peer-[:not(:placeholder-shown)]:px-1 peer-[:not(:placeholder-shown)]:bg-surface"
+                            >
+                                Họ và Tên
+                            </label>
+                        </div>
                     </div>
 
                     {/* Tên đăng nhập */}
                     <div>
-                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Tên đăng nhập</label>
-                        <input
-                            type="text"
-                            value={username}
-                            onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, ''))}
-                            required
-                            disabled={loading}
-                            className="w-full px-3 py-2.5 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all placeholder:text-text-secondary/40"
-                            placeholder="username"
-                        />
+                        <div className="relative">
+                            <input
+                                id="create-staff-username"
+                                type="text"
+                                value={username}
+                                onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, ''))}
+                                required
+                                disabled={loading}
+                                placeholder=" "
+                                className="peer w-full px-3 py-2.5 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+                            />
+                            <label
+                                htmlFor="create-staff-username"
+                                className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-xs font-bold uppercase tracking-wider transition-all duration-150 pointer-events-none
+                                    peer-focus:top-0 peer-focus:text-[10px] peer-focus:px-1 peer-focus:bg-surface peer-focus:text-primary
+                                    peer-[:not(:placeholder-shown)]:top-0 peer-[:not(:placeholder-shown)]:text-[10px] peer-[:not(:placeholder-shown)]:px-1 peer-[:not(:placeholder-shown)]:bg-surface"
+                            >
+                                Tên đăng nhập
+                            </label>
+                        </div>
                     </div>
 
                     {/* Mật khẩu */}
                     <div>
-                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Mật khẩu</label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={e => setPassword(isCo ? e.target.value : e.target.value.replace(/\D/g, ''))}
-                            required
-                            disabled={loading}
-                            inputMode={isCo ? 'text' : 'numeric'}
-                            maxLength={isCo ? undefined : 6}
-                            autoComplete="new-password"
-                            className="w-full px-3 py-2.5 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all placeholder:text-text-secondary/40"
-                            placeholder={isCo ? 'Mật khẩu đăng nhập' : 'Mã PIN gồm 6 chữ số'}
-                        />
+                        <div className="relative">
+                            <input
+                                id="create-staff-password"
+                                type={pwVisible ? 'text' : 'password'}
+                                value={password}
+                                onChange={e => setPassword(isCo ? e.target.value : e.target.value.replace(/\D/g, ''))}
+                                required
+                                disabled={loading}
+                                inputMode={isCo ? 'text' : 'numeric'}
+                                maxLength={isCo ? undefined : 6}
+                                autoComplete="new-password"
+                                placeholder=" "
+                                className="peer w-full px-3 py-2.5 pr-10 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+                            />
+                            <label
+                                htmlFor="create-staff-password"
+                                className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-xs font-bold uppercase tracking-wider transition-all duration-150 pointer-events-none
+                                    peer-focus:top-0 peer-focus:text-[10px] peer-focus:px-1 peer-focus:bg-surface peer-focus:text-primary
+                                    peer-[:not(:placeholder-shown)]:top-0 peer-[:not(:placeholder-shown)]:text-[10px] peer-[:not(:placeholder-shown)]:px-1 peer-[:not(:placeholder-shown)]:bg-surface"
+                            >
+                                {isCo ? 'Mật khẩu đăng nhập' : 'Mã PIN gồm 6 chữ số'}
+                            </label>
+                            <button
+                                type="button"
+                                onClick={() => setPwVisible(v => !v)}
+                                tabIndex={-1}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text transition-colors"
+                                aria-label={pwVisible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                            >
+                                {pwVisible ? <EyeOff size={15} /> : <Eye size={15} />}
+                            </button>
+                        </div>
 
                         {isCo ? (
                             <ul className="mt-2 space-y-1">

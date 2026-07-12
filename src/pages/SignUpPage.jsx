@@ -4,6 +4,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { setMyPhone } from '../services/authService'
 import { useNavigate, Link } from 'react-router-dom'
 import ErrorBanner from '../components/common/ErrorBanner'
+import FloatingLabelInput from '../components/common/FloatingLabelInput'
+import PasswordInput from '../components/common/PasswordInput'
 import { capitalizeWords } from '../utils'
 
 export default function SignUpPage() {
@@ -86,53 +88,41 @@ export default function SignUpPage() {
                 <form onSubmit={handleSubmit} className="bg-surface border border-border/60 rounded-[20px] p-6 shadow-sm space-y-4">
                     <ErrorBanner message={error} />
 
-                    <div>
-                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Họ và Tên</label>
-                        <input
-                            type="text"
-                            autoCapitalize="words"
-                            value={name}
-                            onChange={e => setName(capitalizeWords(e.target.value))}
-                            required
-                            className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder=""
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Tài khoản</label>
-                        <input
-                            type="text"
-                            value={username}
-                            onChange={e => setUsername(e.target.value)}
-                            required
-                            autoComplete="username"
-                            className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder=""
-                        />
-                    </div>
+                    <FloatingLabelInput
+                        id="signup-name"
+                        label="Họ và Tên"
+                        autoCapitalize="words"
+                        value={name}
+                        onChange={e => setName(capitalizeWords(e.target.value))}
+                        required
+                    />
+
+                    <FloatingLabelInput
+                        id="signup-username"
+                        label="Tài khoản"
+                        value={username}
+                        onChange={e => setUsername(e.target.value)}
+                        required
+                        autoComplete="username"
+                    />
+
+                    <FloatingLabelInput
+                        id="signup-phone"
+                        label="Số điện thoại"
+                        type="tel"
+                        value={phone}
+                        onChange={e => setPhone(e.target.value)}
+                        required
+                        autoComplete="tel"
+                    />
 
                     <div>
-                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Số điện thoại</label>
-                        <input
-                            type="tel"
-                            value={phone}
-                            onChange={e => setPhone(e.target.value)}
-                            required
-                            autoComplete="tel"
-                            className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder=""
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">Mật khẩu</label>
-                        <input
-                            type="password"
+                        <PasswordInput
+                            id="signup-password"
+                            label="Mật khẩu"
                             value={password}
                             onChange={e => setPassword(e.target.value)}
                             required
-                            className="w-full px-4 py-3 rounded-[14px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            placeholder=""
                         />
                         <ul className="mt-2 space-y-1">
                             {[

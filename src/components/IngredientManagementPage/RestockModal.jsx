@@ -39,9 +39,11 @@ export default function RestockModal({
     }
     const [qty, setQty] = useState(initQty)
     const qtyInputRef = useRef(null)
-    // Số mớm sẵn: select toàn bộ để gõ là ghi đè ngay, không cần xoá tay.
+    const subtotalInputRef = useRef(null)
+    // Số lượng đã mớm sẵn (từ card "Chuẩn bị ngày mai") → khỏi cần sửa số lượng nữa,
+    // nhảy thẳng focus qua Tổng tiền để gõ tiếp.
     useEffect(() => {
-        if (initialQty != null) qtyInputRef.current?.select()
+        if (initialQty != null) subtotalInputRef.current?.focus()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
     const [subtotal, setSubtotal] = useState(initial?.subtotal ? formatVNDInput(initial.subtotal) : '')
@@ -204,7 +206,7 @@ export default function RestockModal({
                                         ref={qtyInputRef}
                                         type="text"
                                         inputMode="decimal"
-                                        autoFocus
+                                        autoFocus={initialQty == null}
                                         placeholder="0"
                                         value={qty}
                                         onChange={e => {
@@ -240,6 +242,7 @@ export default function RestockModal({
                         <div className="flex items-center justify-between gap-3">
                             <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Tổng tiền</span>
                             <MoneyInput
+                                inputRef={subtotalInputRef}
                                 value={subtotal}
                                 onChange={setSubtotal}
                                 onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}

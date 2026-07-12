@@ -161,15 +161,24 @@ function MemberPanel({ member, addresses, initialRevoked, onRevokedChange, onRen
 
                 {/* ── Họ tên ── */}
                 <div className="flex flex-col gap-1.5">
-                    <label className="text-[11px] font-black uppercase tracking-wide text-text-secondary">Họ tên</label>
                     <div className="relative">
                         <input
+                            id="member-name"
                             type="text"
                             value={nameDraft}
                             onChange={e => setNameDraft(capitalizeWords(e.target.value))}
                             onKeyDown={e => { if (e.key === 'Enter' && nameDirty) handleSaveName() }}
-                            className="w-full bg-bg border border-border/60 rounded-[12px] pl-3 pr-[68px] py-2.5 text-[14px] font-bold text-text focus:outline-none focus:border-primary/40 transition-colors"
+                            placeholder=" "
+                            className="peer w-full bg-bg border border-border/60 rounded-[12px] pl-3 pr-[68px] py-2.5 text-[14px] font-bold text-text focus:outline-none focus:border-primary/40 transition-colors"
                         />
+                        <label
+                            htmlFor="member-name"
+                            className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-xs font-black uppercase tracking-wide transition-all duration-150 pointer-events-none
+                                peer-focus:top-0 peer-focus:text-[10px] peer-focus:px-1 peer-focus:bg-surface peer-focus:text-primary
+                                peer-[:not(:placeholder-shown)]:top-0 peer-[:not(:placeholder-shown)]:text-[10px] peer-[:not(:placeholder-shown)]:px-1 peer-[:not(:placeholder-shown)]:bg-surface"
+                        >
+                            Họ tên
+                        </label>
                         <button
                             onClick={handleSaveName}
                             disabled={savingName || !nameDirty}
@@ -194,6 +203,7 @@ function MemberPanel({ member, addresses, initialRevoked, onRevokedChange, onRen
                         <>
                             <div className="relative mt-1">
                                 <input
+                                    id="member-password"
                                     type="text"
                                     value={pwDraft}
                                     onChange={e => setPwDraft(isStaff ? e.target.value.replace(/\D/g, '') : e.target.value)}
@@ -201,9 +211,17 @@ function MemberPanel({ member, addresses, initialRevoked, onRevokedChange, onRen
                                     inputMode={isStaff ? 'numeric' : 'text'}
                                     maxLength={isStaff ? 6 : undefined}
                                     onKeyDown={e => { if (e.key === 'Enter' && pwValid) handleSetPassword() }}
-                                    placeholder="Mật khẩu mới"
-                                    className="w-full bg-bg border border-border/60 rounded-[12px] pl-3 pr-[82px] py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
+                                    placeholder=" "
+                                    className="peer w-full bg-bg border border-border/60 rounded-[12px] pl-3 pr-[82px] py-2.5 text-[14px] font-medium text-text focus:outline-none focus:border-primary/40 transition-colors"
                                 />
+                                <label
+                                    htmlFor="member-password"
+                                    className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary/70 text-xs font-black uppercase tracking-wide transition-all duration-150 pointer-events-none
+                                        peer-focus:top-0 peer-focus:text-[10px] peer-focus:px-1 peer-focus:bg-surface peer-focus:text-primary
+                                        peer-[:not(:placeholder-shown)]:top-0 peer-[:not(:placeholder-shown)]:text-[10px] peer-[:not(:placeholder-shown)]:px-1 peer-[:not(:placeholder-shown)]:bg-surface"
+                                >
+                                    Mật khẩu mới
+                                </label>
                                 <button
                                     onClick={handleSetPassword}
                                     disabled={savingPw || !pwValid}

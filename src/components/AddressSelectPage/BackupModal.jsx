@@ -219,17 +219,25 @@ export default function BackupModal({ sourceAddress, onClose, onBack }) {
                                 </div>
                             ) : (
                                 <>
-                                    <div className="space-y-2">
-                                        <p className="text-xs font-black text-text-secondary uppercase tracking-wider">Tên địa chỉ mới</p>
+                                    <div className="relative">
                                         <input
+                                            id="backup-new-name"
                                             type="text"
                                             value={newName}
                                             onChange={e => setNewName(e.target.value)}
                                             onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
-                                            placeholder="vd: KOPHIN Cầu Giấy"
+                                            placeholder=" "
                                             autoFocus
-                                            className="w-full px-4 py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+                                            className="peer w-full px-4 py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
                                         />
+                                        <label
+                                            htmlFor="backup-new-name"
+                                            className="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary text-xs font-bold uppercase tracking-wider transition-all duration-150 pointer-events-none
+                                                peer-focus:top-0 peer-focus:text-[10px] peer-focus:px-1 peer-focus:bg-surface peer-focus:text-primary
+                                                peer-[:not(:placeholder-shown)]:top-0 peer-[:not(:placeholder-shown)]:text-[10px] peer-[:not(:placeholder-shown)]:px-1 peer-[:not(:placeholder-shown)]:bg-surface"
+                                        >
+                                            Tên địa chỉ mới
+                                        </label>
                                     </div>
 
                                     {error && <p className="text-danger text-xs font-medium px-1">{error}</p>}
