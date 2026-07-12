@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
 import MoneyInput from '../common/MoneyInput'
@@ -16,7 +16,10 @@ export default function RestockModal({
     onConfirm,
     onClose,
     mode = 'create',
-    initial = null
+    initial = null,
+    // Gợi ý số lượng cần mua (vd needPacks từ card "Chuẩn bị ngày mai") — mớm sẵn để
+    // đỡ gõ tay khi user mua đúng số dự báo (đa số trường hợp). Chỉ áp dụng create mode.
+    initialQty = null,
 }) {
     const today = dateStringVN()
     const hasPack = !!(packSize && packUnit)
@@ -28,13 +31,19 @@ export default function RestockModal({
     const [usePackMode, setUsePackMode] = useState(initPackMode)
     // Edit mode: nếu pack mode, hiển thị số lốc/thùng thay vì base unit.
     const initQty = () => {
-        if (initial?.qty == null) return ''
+        if (initial?.qty == null) return initialQty != null ? String(initialQty) : ''
         if (mode === 'edit' && hasPack && Number(initial.qty) % packSize === 0) {
             return String(Number(initial.qty) / packSize)
         }
         return String(initial.qty)
     }
     const [qty, setQty] = useState(initQty)
+    const qtyInputRef = useRef(null)
+    // Số mớm sẵn: select toàn bộ để gõ là ghi đè ngay, không cần xoá tay.
+    useEffect(() => {
+        if (initialQty != null) qtyInputRef.current?.select()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
     const [subtotal, setSubtotal] = useState(initial?.subtotal ? formatVNDInput(initial.subtotal) : '')
     const [purchaseDate, setPurchaseDate] = useState(initial?.purchaseDate || today)
     // Giờ mua — edit: giữ giờ gốc của phiếu; create: default giờ VN hiện tại.
@@ -192,6 +201,7 @@ export default function RestockModal({
                                 )}
                                 <div className="flex items-center bg-surface border border-border/60 rounded-[8px] overflow-hidden focus-within:border-primary/50 transition-colors w-40">
                                     <input
+                                        ref={qtyInputRef}
                                         type="text"
                                         inputMode="decimal"
                                         autoFocus

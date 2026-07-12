@@ -138,6 +138,7 @@ export default function DailyReportPage() {
     // từ tồn kho đạt target (món tự rớt khỏi list sau khi nhập), không còn tick thủ công.
     // Không gate chốt ca. cashClosedToday refetch khi mở modal để phân loại dòng tiền đúng.
     const [restockIngredient, setRestockIngredient] = useState(null)
+    const [restockSuggestedQty, setRestockSuggestedQty] = useState(null)
     const [cashClosedToday, setCashClosedToday] = useState(false)
     useEffect(() => {
         if (!restockIngredient) return
@@ -1146,7 +1147,7 @@ export default function DailyReportPage() {
                                             emptyTitle="Kho tổng đủ cho mai!"
                                             emptyHint="Không cần đi chợ đắp thêm cho ngày mai."
                                             items={warehousePrepList}
-                                            onRestock={setRestockIngredient}
+                                            onRestock={(ing, needPacks) => { setRestockIngredient(ing); setRestockSuggestedQty(needPacks > 0 ? needPacks : null) }}
                                             open={!!openCards.warehouse}
                                             onToggleOpen={() => toggleCard('warehouse')}
                                         />
@@ -1272,6 +1273,7 @@ export default function DailyReportPage() {
                         unit={getIngredientUnit(restockIngredient, ingredientUnits[restockIngredient])}
                         packSize={cfg?.pack_size}
                         packUnit={cfg?.pack_unit}
+                        initialQty={restockSuggestedQty}
                         cashClosedToday={cashClosedToday}
                         onClose={() => setRestockIngredient(null)}
                         onConfirm={async ({ ingredient: ing, qty, subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate }) => {

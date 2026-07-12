@@ -97,6 +97,12 @@ export default function ShiftPrepCard({
                                     <span className={`text-[12px] font-black leading-tight text-right ${muted ? 'text-text-dim line-through' : 'text-primary'}`}>
                                         {packVerb} {it.needPacks} {it.packUnit || ''}
                                     </span>
+                                ) : packVerb ? (
+                                    // Không cấu hình pack_size (mua rời, vd Ống hút) → vẫn dùng packVerb,
+                                    // cùng cỡ chữ với dòng "Mua N packUnit" thay vì rơi về "Cần" của card Soạn.
+                                    <span className={`text-[12px] font-black leading-tight text-right ${muted ? 'text-text-dim line-through' : 'text-primary'}`}>
+                                        {packVerb} {it.need} {it.unit}
+                                    </span>
                                 ) : (
                                     <>
                                         <span className={`text-[14px] font-black leading-none tabular-nums ${muted ? 'text-text-dim line-through' : 'text-primary'}`}>
@@ -145,7 +151,7 @@ export default function ShiftPrepCard({
                             <button
                                 key={it.ingredient}
                                 type="button"
-                                onClick={() => restockMode ? onRestock(it.ingredient) : onToggle?.(it.ingredient)}
+                                onClick={() => restockMode ? onRestock(it.ingredient, it.needPacks > 0 ? it.needPacks : it.need) : onToggle?.(it.ingredient)}
                                 className="flex items-start gap-3 py-2.5 border-b border-border/20 last:border-0 text-left active:scale-[0.99] transition"
                             >
                                 {leadIcon}
