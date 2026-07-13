@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, Loader, MoreVertical, ArrowUp, ArrowDown, Trash2, X, Check, KeyRound, Store, ClipboardList, ChevronRight } from 'lucide-react'
+import { Users, Loader, MoreVertical, ArrowUp, ArrowDown, Trash2, X, Check, KeyRound, Store, ClipboardList, LayoutDashboard, ChevronRight } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
 import MonetizationToggle from './MonetizationToggle'
@@ -376,6 +376,20 @@ export default function StaffTab({
         <div className="space-y-3">
             {/* Admin-only: công tắc thu phí (server kill switch). Tự ẩn nếu không phải admin. */}
             <MonetizationToggle />
+
+            {/* Admin-only: tổng quan billing + customer health toàn hệ thống. */}
+            {isAdmin && (
+                <button
+                    onClick={() => navigate('/admin/dashboard')}
+                    className="w-full bg-surface border border-border/60 rounded-[20px] p-3 flex items-center gap-3 hover:bg-border/10 active:scale-[0.99] transition-all"
+                >
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 bg-primary/10">
+                        <LayoutDashboard size={16} className="text-primary" />
+                    </div>
+                    <span className="flex-1 min-w-0 text-left text-text text-sm font-black">Admin Dashboard</span>
+                    <ChevronRight size={16} className="text-text-secondary shrink-0" />
+                </button>
+            )}
 
             {/* Admin-only: dashboard đối soát thanh toán (pending nghi webhook miss + manual_review). */}
             {isAdmin && (
