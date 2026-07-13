@@ -15,6 +15,7 @@ const SignUpPage = lazy(() => import('./pages/SignUpPage'))
 
 const AddressSelectPage = lazy(() => import('./pages/AddressSelectPage'))
 const SubscriptionPage = lazy(() => import('./pages/SubscriptionPage'))
+const AdminReconciliationPage = lazy(() => import('./pages/AdminReconciliationPage'))
 const POSPage = lazy(() => import('./pages/POSPage'))
 const HistoryPage = lazy(() => import('./pages/HistoryPage'))
 const RecipeMenuPage = lazy(() => import('./pages/RecipeMenuPage'))
@@ -102,6 +103,7 @@ export default function App() {
                 <Route element={<AddressStatsProvider />}>
                   <Route path="/addresses" element={<AddressSelectPage />} />
                   <Route path="/subscription" element={<SubscriptionPage />} />
+                  <Route path="/admin/reconciliation" element={<AdminReconciliationPage />} />
                   <Route element={<RequireAddress />}>
                     <Route element={<ProductProvider />}>
                       <Route element={<POSProvider />}>
