@@ -10,8 +10,6 @@ export default function LoginPage() {
     const navigate = useNavigate()
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
-    const [secretCode, setSecretCode] = useState('')
-    const [isPasswordVerified, setIsPasswordVerified] = useState(false)
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
     const [guestLoading, setGuestLoading] = useState(false)
@@ -29,24 +27,8 @@ export default function LoginPage() {
         setLoading(true)
 
         try {
-            if (username === 'billdeptrai0512') {
-                if (!isPasswordVerified) {
-                    setIsPasswordVerified(true)
-                    setLoading(false)
-                    return
-                } else {
-                    if (secretCode !== import.meta.env.VITE_DEV_SECRET_CODE) {
-                        setError('Câu trả lời bí mật không chính xác!')
-                        setLoading(false)
-                        return
-                    }
-                    await signIn(username, password)
-                    navigate('/addresses', { replace: true })
-                }
-            } else {
-                await signIn(username, password)
-                navigate('/addresses', { replace: true })
-            }
+            await signIn(username, password)
+            navigate('/addresses', { replace: true })
         } catch (err) {
             setError(err.message || 'Đăng nhập thất bại')
         } finally {
@@ -107,17 +89,6 @@ export default function LoginPage() {
                             required
                             autoComplete="current-password"
                         />
-
-                        {/* nếu user đăng nhập vào sử dụng username = billdeptrai0512 = admin thì phải hỏi thêm câu hỏi bí mật */}
-                        {username === 'billdeptrai0512' && isPasswordVerified && (
-                            <FloatingLabelInput
-                                id="login-secret-code"
-                                label="Câu hỏi dành cho developer"
-                                value={secretCode}
-                                onChange={e => setSecretCode(e.target.value)}
-                                required
-                            />
-                        )}
 
                         <button
                             type="submit"
