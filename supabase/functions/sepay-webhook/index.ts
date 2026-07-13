@@ -3,7 +3,7 @@
 //
 // SePay POST → verify HMAC-SHA256 → parse 'SP<số>' khỏi nội dung CK →
 // confirm_payment RPC (service_role) → INSERT address_subscriptions →
-// realtime đẩy về client (usePaymentListener).
+// client tự bắt kịp bằng poll-while-pending (usePaymentPoll, §7.1 MONETIZATION.md).
 //
 // Xác thực (theo mẫu SePay):
 //   x-sepay-signature = 'sha256=' + HMAC_SHA256( timestamp + '.' + rawBody , SECRET )

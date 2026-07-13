@@ -7,6 +7,7 @@ import {
 import { mergeShiftClosingInventory, fetchYesterdayShiftClosing } from '../services/reportService'
 import { supabase } from '../lib/supabaseClient'
 import { isGuest } from '../services/localRepository'
+import { countActiveSessions } from '../services/authService'
 import { sortIngredients, lookupByLabel } from '../utils/ingredients'
 import { dateStringVN } from '../utils/dateVN'
 
@@ -234,13 +235,29 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         setBaselineVersion(v => v + 1)
     }, [])
 
+    // ── Gate: only open the realtime channel below when >= 2 devices are active
+    // on this address (same pattern as POSContext's orders-realtime). A single
+    // device editing its own shift has no one to sync with — opening a channel
+    // for every solo session was needless connection load at scale.
+    const [hasMultiDevice, setHasMultiDevice] = useState(false)
+    useEffect(() => {
+        if (!addressId || isGuest()) return
+        let cancelled = false
+        const check = () => countActiveSessions(addressId).then(count => {
+            if (!cancelled) setHasMultiDevice(count >= 2)
+        })
+        check()
+        const interval = setInterval(check, 5 * 60 * 1000)
+        return () => { cancelled = true; clearInterval(interval) }
+    }, [addressId])
+
     // ── Realtime: subscribe to this address's shift_closings rows ─────────────
     // Replaces the old ephemeral broadcast (no replay, dropped packets = permanent
     // desync). Each device autosaves its edits (light merge RPC); postgres_changes pushes
     // the merged row to the other device → reconcileFromRemote converges them.
     // Guests are local-only and share one demo address id → skip Realtime entirely.
     useEffect(() => {
-        if (!addressId || !supabase || isGuest()) return
+        if (!addressId || !supabase || isGuest() || !hasMultiDevice) return
         const channel = supabase
             .channel(`shift-closing-db-${addressId}`)
             .on('postgres_changes',
@@ -254,7 +271,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
                 })
             .subscribe()
         return () => { supabase.removeChannel(channel) }
-    }, [addressId, dateKey, reconcileFromRemote])
+    }, [addressId, dateKey, reconcileFromRemote, hasMultiDevice])
 
     // ── Mutation handlers (plain setState; dirty is derived, autosave pushes) ─
     const onOpeningChange = useCallback((ingredient, value) => {

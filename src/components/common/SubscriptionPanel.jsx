@@ -4,7 +4,6 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAddressStats } from '../../contexts/AddressStatsContext'
 import { supabase } from '../../lib/supabaseClient'
-import { usePaymentListener } from '../../hooks/usePaymentListener'
 import { usePaymentPoll } from '../../hooks/usePaymentPoll'
 import { formatVND } from '../../utils'
 import { PLAN, ALL_TIER, BANK_INFO, TRIAL_DAYS } from '../../constants/monetization'
@@ -78,23 +77,17 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
 
     // Xác nhận thanh toán: hiện panel thành công, user tự bấm "Xong" (không auto-redirect).
     // Làm tươi cả badge từng card (entitlementCache) lẫn thứ tự sort (subscriptionStatusMap) —
-    // dùng chung cho mock trial, webhook thật (usePaymentListener) và poll (usePaymentPoll).
+    // dùng chung cho mock trial và poll-while-pending (usePaymentPoll).
     const handleConfirmed = () => {
         invalidateEntitlementCache(addresses.map(a => a.id))
         refreshSubscriptionStatuses()
         setConfirmed(true)
     }
 
-    // Realtime listener: webhook SePay → Edge Function → INSERT address_subscriptions
-    // → đẩy về đây → tự xác nhận + mở khoá. Theo dõi mọi chi nhánh của owner.
-    usePaymentListener({
-        addressIds: addresses.map(a => a.id),
-        enabled: !confirmed,
-        onConfirmed: handleConfirmed,
-    })
-
-    // Poll-while-pending (§7.1) — lưới an toàn khi realtime rớt đúng lúc webhook bắn:
-    // poll status của intent đang chờ, thấy 'paid' → confirm (guard chung `confirmed`).
+    // Poll-while-pending (§7.1) — xác nhận thanh toán: poll status của intent đang
+    // chờ mỗi 4s, thấy 'paid' → confirm (guard chung `confirmed`). Thay cho realtime
+    // (subpay-* channel) — stateless, không tốn quota kết nối realtime ở quy mô lớn,
+    // độ trễ vài giây không đáng kể so với chuyển khoản ngân hàng (5-30s).
     // manual_review = đã nhận tiền nhưng sai số tiền → báo user chờ admin (KHÔNG lặng lẽ
     // đổi mã QR mới). Hết hạn/huỷ → tạo intent mới để QR luôn dùng mã còn hiệu lực.
     usePaymentPoll({
