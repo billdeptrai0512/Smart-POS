@@ -8,12 +8,12 @@
 // Xác thực (theo mẫu SePay):
 //   x-sepay-signature = 'sha256=' + HMAC_SHA256( timestamp + '.' + rawBody , SECRET )
 //   x-sepay-timestamp = timestamp gửi kèm
-//   SECRET = env SEPAY_WEBHOOK_SECRET (đặt = 'smart-pos')
+//   SECRET = env SEPAY_WEBHOOK_SECRET (giá trị ngẫu nhiên mạnh, set qua Supabase secrets — không hardcode)
 //
 // HMAC tính trên RAW body (không parse rồi stringify lại — tránh lệch format).
 //
 // Deploy:  supabase functions deploy sepay-webhook --no-verify-jwt
-// Secret:  supabase secrets set SEPAY_WEBHOOK_SECRET=smart-pos
+// Secret:  supabase secrets set SEPAY_WEBHOOK_SECRET=<giá-trị-ngẫu-nhiên-mạnh>
 // URL:     https://<project-ref>.supabase.co/functions/v1/sepay-webhook
 // ============================================================
 
