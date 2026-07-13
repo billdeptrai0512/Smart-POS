@@ -19,3 +19,43 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run check:search-path
+
+  deploy-functions:
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: |
+          supabase functions deploy create-team-member --project-ref "$SUPABASE_PROJECT_REF"
+          supabase functions deploy set-staff-password --project-ref "$SUPABASE_PROJECT_REF"
+          supabase functions deploy sepay-webhook --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+  # DB migrations chạm schema production đang phục vụ merchant sống — chạy trong
+  # GitHub Environment "production" nên cần cấu hình required reviewer (Settings →
+  # Environments → production) để có 1 bước approve thủ công trước khi push.
+  deploy-migrations:
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      - run: supabase db push
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
