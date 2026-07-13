@@ -32,7 +32,7 @@ Xe cà phê mang đi quy mô nhỏ (1–3 nhân viên), bán buổi sáng, vận
 ### Báo cáo tuần / tháng
 - [x] Tổng hợp doanh thu, giá vốn, chi phí, lợi nhuận theo kỳ
 - [x] Biểu đồ hiệu suất từng ngày trong kỳ (DayPerformanceChart)
-- [x] Phân tích menu: Star / Plow / Puzzle / Dog (Menu Engineering)
+- [ ] Phân tích menu: Star / Plow / Puzzle / Dog (Menu Engineering)
 
 ### Gợi ý đi chợ
 - [x] Tính lượng mua dựa trên tiêu hao trung bình 7 ngày thực tế
@@ -63,7 +63,7 @@ Xe cà phê mang đi quy mô nhỏ (1–3 nhân viên), bán buổi sáng, vận
 - [ ] **Push notification**: Cảnh báo tồn kho thấp, doanh thu đạt mục tiêu
 
 ### Dài hạn (khi có traction)
-- [x] Cổng thanh toán (thu 17k/ngày/xe)
+- [x] Cổng thanh toán (888.888đ/6 tháng/địa chỉ)
 - [ ] Admin dashboard tổng hợp toàn bộ địa điểm
 - [ ] Onboarding tự động
 
@@ -71,7 +71,7 @@ Xe cà phê mang đi quy mô nhỏ (1–3 nhân viên), bán buổi sáng, vận
 
 ## Monetization
 - **Free**: Tạo đơn, menu, nguyên liệu — không giới hạn
-- **Trả phí**: 17.000đ/ngày/xe — mở khoá báo cáo ngày hôm đó
+- **Trả phí**: 888.888đ/6 tháng/địa chỉ — mở khoá trọn bộ báo cáo (dòng tiền, lợi nhuận, tồn kho)
 
 ---
 
