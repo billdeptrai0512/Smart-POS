@@ -165,6 +165,30 @@ async function main() {
     check('total = 15000 (=25000-10000)', row?.total === 15000, `got ${row?.total}`)
   }
 
+  // ── Case 6: retry cùng id (mất response sau khi server đã commit) → không nhân đôi ──
+  console.log('\nCase 6 — gọi RPC 2 lần cùng id → chỉ 1 đơn hàng tồn tại (ON CONFLICT DO NOTHING)')
+  await seed()
+  const orderId6 = '00000000-0000-4000-8000-0000000000a6'
+  {
+    const order = {
+      id: orderId6, address_id: ADDRESS_ID, staff_name: 't', discount_amount: 0,
+      items: [{ product_id: PRODUCT_ID, quantity: 3, extra_ids: [EXTRA_ID] }],
+    }
+    const { error: err1 } = await bulkCreate(order)
+    if (err1) throw err1
+    const { error: err2 } = await bulkCreate(order) // retry — giống hệt lần gọi trước
+    check('retry không raise lỗi (no-op thay vì duplicate-key)', !err2, err2?.message)
+
+    const { count } = await sb.from('orders').select('id', { count: 'exact', head: true }).eq('id', orderId6)
+    check('chỉ 1 order tồn tại với id này', count === 1, `got ${count}`)
+
+    const items = await itemRows(orderId6)
+    check('order_items chỉ có 1 dòng (không bị insert lại lần retry)', items?.length === 1, `got ${items?.length}`)
+
+    const row = await orderRow(orderId6)
+    check('total giữ nguyên đúng từ lần commit đầu = 90000 (=(25000+5000)*3)', row?.total === 90000, `got ${row?.total}`)
+  }
+
   // Dọn sau cùng.
   await sb.from('orders').delete().eq('address_id', ADDRESS_ID)
   await sb.from('orders').delete().eq('address_id', OTHER_ADDRESS_ID)

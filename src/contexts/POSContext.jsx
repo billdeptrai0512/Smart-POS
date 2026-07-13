@@ -447,9 +447,12 @@ export function POSProvider() {
             submitOrder(cartItems, itemTotal, null, addressId, cartCost, costPerItem, profile?.name, 0, orderId)
                 .catch(err => {
                     if (!navigator.onLine || /fetch|network|NetworkError/i.test(err?.message || '')) {
+                        // Reuse orderId already sent to the RPC above — if the server actually
+                        // committed it before the response was lost, the retry is a no-op
+                        // (ON CONFLICT) instead of creating a duplicate order.
                         addPendingOrder(
                             cartItems.map(item => ({ ...item, unitCost: costPerItem[item.cartItemId] || 0, extraIds: item.extras.map(e => e.id).filter(Boolean) })),
-                            itemTotal, null, addressId, cartCost, profile?.name, 0
+                            itemTotal, null, addressId, cartCost, profile?.name, 0, orderId
                         )
                         setTodayOrders(prev => prev.filter(o => o !== optimisticOrder)) // offline pending list shows it instead
                         showToast('Lỗi mạng – lưu offline', 'warning')

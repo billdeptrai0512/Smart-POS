@@ -189,6 +189,7 @@ export async function bulkSubmitOrders(ordersArray: any[]): Promise<boolean> {
         // Without this, fetchLocalOrders filters on `address_id` and never sees these orders →
         // a guest's offline orders silently vanish after sync.
         ordersArray.forEach((o: any) => localRepo.submitLocalOrder({
+            id: o.id,
             total: o.total,
             total_cost: o.totalCost || 0,
             discount_amount: o.discountAmount || 0,
@@ -208,8 +209,11 @@ export async function bulkSubmitOrders(ordersArray: any[]): Promise<boolean> {
     if (!supabase) throw new Error('No Supabase connection')
 
     // Same server-priced contract as submitOrder — total/unit_cost aren't sent,
-    // bulk_create_orders recomputes them from products/recipes.
+    // bulk_create_orders recomputes them from products/recipes. id is the fixed
+    // client-generated id from addPendingOrder — required for ON CONFLICT idempotency
+    // on retry (see 20260713_bulk_create_orders_idempotent_retry.sql).
     const payload = ordersArray.map((o: any) => ({
+        id: o.id,
         discount_amount: o.discountAmount || 0,
         payment_method: o.paymentMethod,
         address_id: o.addressId,

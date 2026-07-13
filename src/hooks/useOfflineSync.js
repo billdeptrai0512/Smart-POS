@@ -30,9 +30,13 @@ export function removePendingOrder(createdAt) {
     savePendingOrders(pending.filter(o => o.createdAt !== createdAt))
 }
 
-export function addPendingOrder(orderItems, total, paymentMethod = null, addressId = null, totalCost = 0, staffName = null, discountAmount = 0) {
+// id is fixed at creation and kept across every retry (see syncPending) so a batch
+// resend after a lost response is idempotent server-side (ON CONFLICT in bulk_create_orders)
+// instead of minting a new row each retry.
+export function addPendingOrder(orderItems, total, paymentMethod = null, addressId = null, totalCost = 0, staffName = null, discountAmount = 0, id = null) {
     const pending = getPendingOrders()
     pending.push({
+        id: id || crypto.randomUUID(),
         orderItems,
         total,
         totalCost,
