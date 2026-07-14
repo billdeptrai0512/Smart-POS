@@ -9,14 +9,3 @@ export async function resolvePaymentIntent(intentId, grant) {
     if (error) throw error
     return data
 }
-
-// Địa chỉ đã nhận thưởng referral (+1 tháng khi người được mời trả tiền lần đầu — §11).
-export async function fetchReferralRewards() {
-    const { data, error } = await supabase
-        .from('addresses')
-        .select('id, name, referral_rewarded_at, referrer:addresses!referred_from_address_id(name)')
-        .not('referral_rewarded_at', 'is', null)
-        .order('referral_rewarded_at', { ascending: false })
-    if (error) throw error
-    return data || []
-}

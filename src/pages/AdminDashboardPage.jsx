@@ -3,6 +3,7 @@ import { useNavigate, Navigate } from 'react-router-dom'
 import { ArrowLeft, Loader2, RefreshCw } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { fetchAdminDashboard } from '../services/adminDashboardService'
+import MonetizationToggle from '../components/AddressSelectPage/MonetizationToggle'
 
 const ACTIVITY_ICON = {
     payment: { bg: 'bg-success-soft', color: 'text-success', symbol: '₫' },
@@ -98,12 +99,19 @@ export default function AdminDashboardPage() {
 }
 
 function DashboardBody({ data, navigate }) {
-    const { subscription, attention, activity } = data
-    const paymentIssueCount = attention.filter((a) => a.reason === 'payment_review' || a.reason === 'payment_stale').length
+    const { subscription, attention, activity, attention_total_count, payment_issue_total_count } = data
+    // total_count = đếm không giới hạn (đã dedupe theo chi nhánh) từ RPC; attention
+    // (mảng) chỉ là top-20 hiển thị nên KHÔNG dùng .length làm KPI — sẽ undercount
+    // khi thực tế > 20 chi nhánh cần chú ý.
+    const attentionCount = attention_total_count ?? attention.length
+    const paymentIssueCount = payment_issue_total_count ?? attention.filter((a) => a.reason === 'payment_review' || a.reason === 'payment_stale').length
 
     return (
         <>
-            <KpiRow subscription={subscription} attentionCount={attention.length} paymentIssueCount={paymentIssueCount} navigate={navigate} />
+            <div className="mb-4">
+                <MonetizationToggle />
+            </div>
+            <KpiRow subscription={subscription} attentionCount={attentionCount} paymentIssueCount={paymentIssueCount} navigate={navigate} />
             <div className="flex flex-col gap-4">
                 <SubscriptionHealthCard subscription={subscription} />
                 <ActivityCard items={activity} />

@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
-import { ArrowLeft, Loader2, AlertTriangle, Gift, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Loader2, AlertTriangle, RefreshCw } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { formatVND } from '../utils/money'
 import { dateStringVN, timeStringVN } from '../utils/dateVN'
 import { fetchAdminDashboard } from '../services/adminDashboardService'
-import { resolvePaymentIntent, fetchReferralRewards } from '../services/reconciliationService'
+import { resolvePaymentIntent } from '../services/reconciliationService'
 
 const REASON_LABEL = {
     payment_review: 'Lệch tiền',
@@ -13,6 +13,8 @@ const REASON_LABEL = {
     trial_ending: 'Dùng thử sắp hết',
     expiring: 'Sắp hết hạn',
     inactive: 'Không hoạt động',
+    churned_recent: 'Đã rời bỏ',
+    trial_inactive: 'Trial chưa dùng',
 }
 const REASON_TAG_CLASS = {
     payment_review: 'bg-red-500/10 text-red-500',
@@ -20,6 +22,8 @@ const REASON_TAG_CLASS = {
     trial_ending: 'bg-warning-soft text-warning',
     expiring: 'bg-warning-soft text-warning',
     inactive: 'bg-danger-soft text-danger',
+    churned_recent: 'bg-danger-soft text-danger',
+    trial_inactive: 'bg-warning-soft text-warning',
 }
 
 const fmtDT = (iso) => {
@@ -44,6 +48,13 @@ function attentionDetail(item) {
             ? `Không hoạt động ${Math.floor((Date.now() - new Date(item.last_active_at).getTime()) / 86_400_000)} ngày`
             : 'Chưa từng hoạt động'
     }
+    if (item.reason === 'churned_recent') {
+        const d = Math.floor((Date.now() - new Date(item.valid_to).getTime()) / 86_400_000)
+        return d <= 0 ? 'Vừa hết hạn hôm nay' : `Hết hạn ${d} ngày trước — chưa gia hạn`
+    }
+    if (item.reason === 'trial_inactive') {
+        return 'Dùng thử nhưng chưa phát sinh đơn hàng nào'
+    }
     return `Mã SP${item.reference} · ${fmtDT(item.intent_created_at)}`
 }
 
@@ -67,14 +78,18 @@ export default function AdminReconciliationPage() {
     const { isAdmin, loading: authLoading } = useAuth()
 
     const [items, setItems] = useState(null)
-    const [rewards, setRewards] = useState(null)
+    const [totalCount, setTotalCount] = useState(0) // đếm thật (đã dedupe), items chỉ là top-20 hiển thị
     const [busyId, setBusyId] = useState(null)
     const [confirmId, setConfirmId] = useState(null) // 2-step confirm cho "Cấp gói tay"
     const [error, setError] = useState(null)
 
     const reload = useCallback(() => {
-        fetchAdminDashboard().then((d) => setItems(d.attention)).catch((e) => setError(e.message))
-        fetchReferralRewards().then(setRewards).catch((e) => setError(e.message))
+        fetchAdminDashboard()
+            .then((d) => {
+                setItems(d.attention)
+                setTotalCount(d.attention_total_count ?? d.attention.length)
+            })
+            .catch((e) => setError(e.message))
     }, [])
 
     useEffect(() => {
@@ -96,6 +111,7 @@ export default function AdminReconciliationPage() {
         try {
             await resolvePaymentIntent(id, grant)
             setItems((prev) => prev.filter((i) => i.intent_id !== id))
+            setTotalCount((prev) => Math.max(0, prev - 1))
         } catch (e) {
             setError(e.message)
         } finally {
@@ -135,7 +151,7 @@ export default function AdminReconciliationPage() {
                     <SectionHeader
                         icon={<AlertTriangle size={14} className="text-warning" />}
                         title="Cần chú ý"
-                        hint={items ? `${items.length} chi nhánh` : undefined}
+                        hint={items ? (totalCount > items.length ? `${items.length}/${totalCount} chi nhánh` : `${items.length} chi nhánh`) : undefined}
                     />
                     {items === null ? (
                         <Loader2 size={20} className="animate-spin text-text-dim mx-auto my-4" />
@@ -155,32 +171,6 @@ export default function AdminReconciliationPage() {
                                 />
                             )
                         })
-                    )}
-                </section>
-
-                {/* ── Referral reward ───────────────────────────────────────── */}
-                <section className="flex flex-col gap-2.5">
-                    <SectionHeader
-                        icon={<Gift size={14} className="text-primary" />}
-                        title="Referral reward"
-                        hint={rewards ? `${rewards.length}` : undefined}
-                    />
-                    {rewards === null ? (
-                        <Loader2 size={20} className="animate-spin text-text-dim mx-auto my-4" />
-                    ) : rewards.length === 0 ? (
-                        <EmptyCard text="Chưa có referral nào được thưởng." />
-                    ) : (
-                        rewards.map((r) => (
-                            <div key={r.id} className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-1">
-                                <div className="flex items-center justify-between gap-2">
-                                    <span className="text-[13px] font-bold text-text truncate">{r.referrer?.name || '—'}</span>
-                                    <span className="text-[11px] font-black text-success shrink-0">+1 tháng</span>
-                                </div>
-                                <p className="text-[11px] text-text-secondary">
-                                    Mời <b className="text-text">{r.name}</b> · {fmtDT(r.referral_rewarded_at)}
-                                </p>
-                            </div>
-                        ))
                     )}
                 </section>
             </div>
