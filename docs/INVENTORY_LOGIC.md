@@ -117,7 +117,7 @@ unit_cost_mới = (tồn_trước × unit_cost_cũ + tiền_lô_mua) / (tồn_tr
 Khi khách lên Size L: công thức gốc đã cộng 1 `Ly nhỏ`, nên extra Up-size phải **+1 Ly lớn và −1
 Ly nhỏ** để cân đối. `extra_ingredients.amount` cho phép số âm làm việc bù trừ này.
 `calculateEstimatedConsumption` cộng `amount × quantity`, dọn các NVL kết quả = 0.
-Chi tiết + unit test: `tests/inventoryCalculation/` (chạy `npx vitest run tests/inventoryCalculation/inventory.test.js`).
+Chi tiết + unit test: `tests/inventory/` (chạy `npx vitest run tests/inventory/inventory.test.js`).
 
 ---
 

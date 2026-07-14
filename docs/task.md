@@ -1,5 +1,10 @@
-# 🆕 TASK ĐANG GIAO (cho Gemini) — Sửa phiếu nhập kho tại chỗ
+# ✅ ĐÃ XONG (giao cho Gemini, hoàn thành) — Sửa phiếu nhập kho tại chỗ
 
+> **Trạng thái:** đã build đủ — RPC `edit_ingredient_restock` (migration `20260616_edit_ingredient_restock.sql`,
+> vá cascade backdate ở `20260617_fix_backdate_cascade.sql`) + `editIngredientRestock` trong
+> `ingredientService.ts` + `RestockModal` mode `edit` + nút bút chì trong `IngredientHistoryTab`.
+> Giữ nguyên spec gốc bên dưới làm tài liệu tham khảo thiết kế.
+>
 > **Đọc kỹ trước khi code.** Đây là codebase THẬT đang chạy production, KHÔNG phải sandbox.
 > Bắt buộc tuân `CLAUDE.md` (đặc biệt mục Migrations chống regression Security Advisor).
 > Trong lúc làm, nếu phát hiện bug nào khác (kể cả ngoài phạm vi task) → **cứ fix luôn**, ghi rõ trong commit.
@@ -156,7 +161,8 @@ Thêm `editIngredientRestock(addressId, expenseId, opts)` mirror `processIngredi
 
 # Task / Reminder — Monetization
 
-> Ưu tiên hiện tại: **thiết kế UI trước**. Chưa build payment backend.
+> Payment backend đã LIVE (SePay webhook + `confirm_payment`, xem §7.2 bên dưới) + admin dashboard/
+> đối soát thanh toán đã LIVE (§7.3). Còn lại chủ yếu là Phase 2 — Phone OTP thật (verify SĐT).
 > Nguồn chi tiết: `docs/MONETIZATION.md`.
 
 ## ✅ Migration — đã apply hết (2026-06-08)
@@ -198,7 +204,7 @@ Bỏ bán lẻ module, bỏ chu kỳ tháng/năm, bỏ bundle. Trial 7 ngày. Mu
 
 ## Còn lại (làm sau, không phải bây giờ)
 - [x] **Server-side kill switch** đọc `app_config` runtime (flip không cần redeploy). `useMonetizationEnabled()` trong `useEntitlement.js`; mọi consumer (gate/badge/route/listener) dùng enabled runtime.
-- [~] **Admin reconciliation**: RPC `admin_set_subscription` + `admin_reset_subscription` + nút admin trong SubscriptionPanel. Còn lại: dashboard đối soát `payment_intents` (cần trước khi public — xử lý ca `manual_review`/webhook mất).
+- [x] **Admin reconciliation**: RPC `admin_set_subscription` + `admin_reset_subscription` + nút admin trong SubscriptionPanel. Dashboard đối soát `payment_intents` (`/admin/reconciliation`, resolve có audit log) — LIVE 2026-07-13/14, xem `docs/MONETIZATION.md` §7.3.
 - [ ] **Phase 2**: thêm SĐT vào tài khoản → bind trial vào SĐT. Plan 3 giai đoạn bên dưới.
 - [x] **Phase 3 (c + a)** — xong 2026-06-10: Edge Function `sepay-webhook` (HMAC) + RPC `confirm_payment` + `create_payment_intent` + QR SePay + `usePaymentPoll` (poll-while-pending, chạy kèm realtime listener).
       Còn việc vận hành: deploy function + set secret + đăng ký URL webhook với SePay.
@@ -236,24 +242,32 @@ fallback **Twilio OTP** nếu kẹt pháp nhân (xác thực OA cần hộ KD/GP
 **Vấn đề:** PWA chạy trên điện thoại nhân viên ở 8 chi nhánh; mọi lỗi runtime hiện chỉ
 `console.error` rồi biến mất. Khi quán báo "app không lưu đơn" không có gì để tra.
 Vercel Analytics chỉ đo traffic, không bắt lỗi.
-- [ ] Tích hợp `@sentry/react` — init trong entry (main.jsx), DSN qua env `VITE_SENTRY_DSN`
-- [ ] Gắn context mỗi event: addressId + role (KHÔNG gửi tên/SĐT — tránh PII)
-- [ ] ErrorBoundary hiện có → `captureException` thay vì chỉ console
-- [ ] Upload source maps khi build (vite plugin) để stack trace production đọc được
-- [ ] Alert email khi có lỗi mới (rule mặc định của Sentry là đủ)
+- [x] Tích hợp `@sentry/react` — init PROD-only trong `main.jsx` (DSN hardcode, không qua env —
+  DSN client-side không phải secret); `captureException` gắn ở `useToast` (bọc phần lớn action
+  async trong app, tag theo `action`), không chỉ ErrorBoundary.
+- [ ] Gắn context mỗi event: addressId + role (KHÔNG gửi tên/SĐT — tránh PII) — chưa làm.
+- [ ] `ErrorBoundary.jsx` (`src/components/common/ErrorBoundary.jsx`) vẫn chỉ `console.error`,
+  CHƯA gọi `Sentry.captureException` — gap còn lại, lỗi render crash-toàn-trang không lên Sentry.
+- [ ] Upload source maps khi build (vite plugin) — chưa làm, stack trace production còn minified.
+- [ ] Alert email khi có lỗi mới — chưa xác nhận (cấu hình phía Sentry dashboard, không phải code).
 
 ## B. Test logic tiền ở tầng SQL
 **Vấn đề:** 200 unit test hiện tại toàn utils JS. WAC, cash_phase, cascade tồn kho — chỗ
 tiền thật — sống trong các RPC (`process_ingredient_restock`, `edit_ingredient_restock`,
 `cancel_restock`, `record_invoice_payment`…) và không test nào chạm tới. Git log đầy
 "fix tồn kho neo sai" — loại regression này chỉ chặn được bằng test chạy trên DB thật.
-- [ ] Supabase project staging (free tier) + `supabase db push` toàn bộ migrations
-- [ ] Seed script: 1 address + 2 nguyên liệu + vài phiếu nhập/rút mẫu
-- [ ] Script assert (node script gọi RPC, hoặc pgTAP): nhập kho → sửa phiếu → hủy phiếu,
-      mỗi bước assert tồn kho + WAC + owing khớp số tính tay. ~10 case đầu tiên:
-      WAC full re-average sau edit/cancel (mô hình cancel_restock, không phải moving-average),
-      cash_phase in_shift/post_close vào đúng Thực thu, backdate không phá cascade after_stock.
-- [ ] Chạy trong CI trước khi merge migration mới
+- [x] Supabase project staging (free tier), schema subset (`scripts/staging-inventory-schema.sql`,
+      `scripts/staging-order-schema.sql`) thay cho `db push` toàn bộ migrations
+- [x] Seed inline trong chính script assert (không tách file seed riêng) — 1 address + nguyên liệu +
+      phiếu nhập/rút mẫu, tạo lại mỗi lần chạy
+- [x] Script assert chạy RPC thật trên staging — `npm run test:inventory`
+      (`scripts/test-inventory-staging.mjs`, 21 assert / 7 case: WAC lần đầu + moving-average, owing,
+      `cash_phase`, `cancel_restock`) + `npm run test:money` (`scripts/test-money-staging.mjs`, 5 case
+      cho `bulk_create_orders` — server tự tính giá, chặn cross-tenant). Chi tiết + case còn thiếu
+      (cascade backdate, hủy giữa chuỗi nhiều phiếu, guest/local parity): `docs/SQL_MONEY_TESTS.md`.
+- [ ] Chạy trong CI trước khi merge migration mới — `ci.yml` hiện chỉ chạy `lint`/`typecheck`/
+      `test`/`check:search-path`, CHƯA gọi `test:inventory`/`test:money` (cần staging secret trong
+      repo secrets).
 
 *Thêm 2026-07-03. Mục index audit cùng đợt review đã kiểm xong — hot paths đủ index
 (idx_orders_address_created v.v. từ các sweep 2026-05), không cần làm gì.*

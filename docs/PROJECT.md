@@ -43,12 +43,23 @@ Xe cà phê mang đi quy mô nhỏ (1–3 nhân viên), bán buổi sáng, vận
 - [x] Backup & restore dữ liệu
 - [ ] Màn hình /address cải thiện: hiển thị KPI nhanh hơn, trực quan hơn
 
+### Admin (nội bộ, chỉ role admin)
+- [x] Admin Dashboard (`/admin/dashboard`): tổng quan billing + customer health toàn hệ thống — MRR-equivalent, số địa chỉ active/trial, delta so tháng trước, feed hoạt động (payment/địa chỉ mới/referral/review)
+- [x] Đối soát thanh toán (`/admin/reconciliation`): danh sách "Cần chú ý" (lệch tiền, thanh toán treo, sắp hết hạn, không hoạt động, đã rời bỏ...), resolve thủ công có audit log
+- [x] Mock/Reset gói cước cho địa chỉ (test flow không cần chuyển khoản thật)
+- [x] Xoá dữ liệu bán hàng theo địa chỉ (công cụ hỗ trợ)
+
 ### Infrastructure
 - [x] DB indexes cho orders, order_items, shift_closings, expenses
 - [x] RPC aggregate thay thế 2 query riêng (revenue + cups)
 - [x] Không còn select('*') — tất cả query dùng column list cụ thể
 - [x] Fetch cache trong RangeReportPage (navigation lần 2 instant)
 - [x] useMemo / O(1) Map lookup — không re-render thừa
+- [x] Error tracking: Sentry (`@sentry/react`), gắn context addressId/role, alert lỗi mới
+- [x] CI: GitHub Actions chạy lint/typecheck/test + check search_path trên mọi PR
+- [x] Realtime gate theo multi-device: chỉ mở kênh `orders-realtime` / `shift-closing-db` khi ≥2 phiên hoạt động cùng địa chỉ — tránh phí quota khi chỉ 1 thiết bị
+- [x] Đồng bộ đơn offline idempotent (order id client-generated UUID, retry không tạo trùng)
+- [x] Test tiền tầng SQL trên staging thật: `npm run test:inventory` (nhập kho/WAC), `npm run test:money` (bán hàng — `bulk_create_orders`)
 
 ---
 
@@ -59,12 +70,12 @@ Xe cà phê mang đi quy mô nhỏ (1–3 nhân viên), bán buổi sáng, vận
 - [ ] **Share báo cáo**: Nút share trên /daily-report → screenshot đẹp gửi Zalo
 
 ### Trung hạn
-- [x] **Daily target + KPI**: Chủ đặt mục tiêu ly / doanh thu ngày. Hiển thị tiến độ trên POS. Đồng bộ với 2 lớp kiểm soát (tiền khớp + nguyên liệu khớp) để tính KPI ca thực tế.
+- [ ] **Daily target + KPI**: Chủ đặt mục tiêu ly / doanh thu ngày. Hiển thị tiến độ trên POS. Đồng bộ với 2 lớp kiểm soát (tiền khớp + nguyên liệu khớp) để tính KPI ca thực tế.
 - [ ] **Push notification**: Cảnh báo tồn kho thấp, doanh thu đạt mục tiêu
 
 ### Dài hạn (khi có traction)
 - [x] Cổng thanh toán (888.888đ/6 tháng/địa chỉ)
-- [ ] Admin dashboard tổng hợp toàn bộ địa điểm
+- [x] Admin dashboard tổng hợp toàn bộ địa điểm (billing + customer health + đối soát thanh toán)
 - [ ] Onboarding tự động
 
 ---
@@ -75,4 +86,4 @@ Xe cà phê mang đi quy mô nhỏ (1–3 nhân viên), bán buổi sáng, vận
 
 ---
 
-*Cập nhật lần cuối: 2026-04-26*
+*Cập nhật lần cuối: 2026-07-14*

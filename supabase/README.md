@@ -8,11 +8,15 @@ The Supabase dashboard is editable. If you change the DB there (add a column, tw
 
 ## Applying
 
-For a new project:
+For a brand-new project: paste `schema.sql` into the dashboard SQL editor, or `supabase db push`.
 
-```bash
-supabase db push   # if using supabase CLI
-# or paste schema.sql into the dashboard SQL editor
-```
+For an existing project: write a new file in `supabase/migrations/` (see naming pattern of existing
+files — `YYYYMMDD_description.sql`). CI (`.github/workflows/ci.yml`, job `deploy-migrations`) runs
+`supabase db push` automatically on every push to `main` that passes lint/typecheck/test — no manual
+dashboard step needed. That job targets prod behind a required-reviewer approval gate (GitHub
+Environment `production`). Mirror the change into `schema.sql` in the same PR so it stays the source
+of truth for table structure.
 
-For migrations: keep using the dashboard for now, then update `schema.sql`. Move to proper `supabase/migrations/*.sql` files once schema churn slows.
+Function migrations (`CREATE OR REPLACE FUNCTION`) must follow the `SET search_path` + ownership
+guard + `REVOKE`/`GRANT` rules in the repo's `CLAUDE.md` — Security Advisor has flagged regressions
+here multiple times.
