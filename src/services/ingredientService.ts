@@ -667,6 +667,25 @@ function roundStock(x: number) {
     return Math.round(x * 10) / 10
 }
 
+// Địa chỉ đã có phiếu chốt ca nào kèm kiểm kê (inventory_report) chưa? Dùng để
+// ẩn/khoá ô "Tồn quầy" ở IngredientDetailPage trước khi cho sửa — setCounterStock
+// ghi vào phiếu gần nhất nên chưa có phiếu nào thì không có gì để ghi.
+export async function hasCounterShiftClosing(addressId: UUID | null) {
+    if (!addressId) return false
+    if (localRepo.isGuest()) {
+        return localRepo.fetchAllLocalShiftClosings(addressId).some((c: Row) => c.inventory_report != null)
+    }
+    if (!supabase) return false
+    const { data, error } = await supabase
+        .from('shift_closings')
+        .select('id')
+        .eq('address_id', addressId)
+        .not('inventory_report', 'is', null)
+        .limit(1)
+    if (error) throw error
+    return (data?.length ?? 0) > 0
+}
+
 // Đặt tồn QUẦY (counter) = số đếm tuyệt đối, bằng cách ghi `remaining` của NVL vào
 // phiếu chốt ca MỚI NHẤT — cùng nguồn dữ liệu mà card Hao hụt đọc/ghi, nên số ở
 // /ingredients và số chốt ca luôn khớp nhau. Trả null nếu chưa có phiếu chốt nào.

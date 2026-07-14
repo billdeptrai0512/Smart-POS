@@ -53,8 +53,12 @@ export function useToast(duration = 3500) {
         ].join('\n')
 
         console.error(`[${actionLabel}]`, err)
-        // No-op khi Sentry chưa init (dev) — tag `action` để lọc lỗi theo thao tác.
-        Sentry.captureException(err, { tags: { action: actionLabel } })
+        // err.expected = validation/guard-rail message, không phải lỗi thật (đã biết
+        // trước có thể xảy ra) — không đáng báo Sentry, chỉ cần console + toast.
+        if (!err?.expected) {
+            // No-op khi Sentry chưa init (dev) — tag `action` để lọc lỗi theo thao tác.
+            Sentry.captureException(err, { tags: { action: actionLabel } })
+        }
         showToast('Có lỗi xảy ra', 'error', {
             label: 'Sao chép lỗi',
             onClick: async () => {
