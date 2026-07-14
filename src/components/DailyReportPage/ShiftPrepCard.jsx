@@ -154,9 +154,14 @@ export default function ShiftPrepCard({
                                 onClick={() => restockMode ? onRestock(it.ingredient, it.needPacks > 0 ? it.needPacks : it.need) : onToggle?.(it.ingredient)}
                                 className="flex items-start gap-3 py-2.5 border-b border-border/20 last:border-0 text-left active:scale-[0.99] transition"
                             >
-                                {leadIcon}
+                                {!restockMode && leadIcon}
                                 {nameDesc}
-                                {ctaText}
+                                {restockMode ? (
+                                    <div className="flex flex-col items-center gap-1.5 shrink-0">
+                                        {ctaText}
+                                        {leadIcon}
+                                    </div>
+                                ) : ctaText}
                             </button>
                         )
                     })}
