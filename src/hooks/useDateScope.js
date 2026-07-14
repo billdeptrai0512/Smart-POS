@@ -5,6 +5,11 @@ import { offsetFromISO, dayCustomDateOf } from '../utils/rangeCalc'
 
 const MS_DAY = 86_400_000
 const VALID_SCOPES = ['day', 'week', 'month', 'custom']
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+// Rejects malformed/garbage query params before they reach `new Date(...)` —
+// a bad manual edit or stale share link must not crash toISOString() downstream.
+const isValidISODate = (iso) => ISO_DATE_RE.test(iso) && !isNaN(new Date(`${iso}T00:00:00+07:00`))
 
 // Read a date selection out of URL search params. Returns null when there's no
 // usable scope param, so callers can fall back to nav-state / defaults.
@@ -15,7 +20,7 @@ function readParamsSeed(sp) {
     if (scope === 'custom') {
         const startISO = sp.get('start')
         const endISO = sp.get('end')
-        if (!startISO || !endISO) return null
+        if (!isValidISODate(startISO) || !isValidISODate(endISO) || startISO > endISO) return null
         return { scope: 'custom', customRange: { startISO, endISO } }
     }
     const offset = Number(sp.get('offset'))
