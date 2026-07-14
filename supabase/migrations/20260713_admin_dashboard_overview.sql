@@ -41,8 +41,7 @@ DECLARE
     v_now          TIMESTAMPTZ := now();
     v_today        DATE := vn_business_date(v_now);
     v_month_start  DATE := date_trunc('month', v_today)::date;
-    v_prev_start   DATE := (date_trunc('month', v_today) - INTERVAL '1 month')::date;
-    v_chart_start  DATE := (date_trunc('month', v_today) - INTERVAL '5 months')::date;
+    v_prev_end     DATE := v_month_start - 1; -- ngày cuối tháng trước, mốc so sánh "so với tháng trước"
     v_result       JSONB;
 BEGIN
     IF NOT public.is_admin_auth(auth.uid()) THEN
@@ -55,27 +54,6 @@ BEGIN
         FROM address_subscriptions
         WHERE payment_intent_id IS NOT NULL
         GROUP BY address_id
-    ),
-    revenue_this_month AS (
-        SELECT COALESCE(SUM(amount_paid), 0)::bigint AS amt
-        FROM address_subscriptions
-        WHERE payment_intent_id IS NOT NULL AND vn_business_date(created_at) >= v_month_start
-    ),
-    revenue_last_month AS (
-        SELECT COALESCE(SUM(amount_paid), 0)::bigint AS amt
-        FROM address_subscriptions
-        WHERE payment_intent_id IS NOT NULL
-          AND vn_business_date(created_at) >= v_prev_start
-          AND vn_business_date(created_at) < v_month_start
-    ),
-    monthly_series AS (
-        SELECT
-            to_char(date_trunc('month', vn_business_date(created_at)), 'YYYY-MM') AS month,
-            COALESCE(SUM(amount_paid), 0)::bigint AS amount
-        FROM address_subscriptions
-        WHERE payment_intent_id IS NOT NULL AND vn_business_date(created_at) >= v_chart_start
-        GROUP BY 1
-        ORDER BY 1
     ),
     new_paid_this_month AS (
         SELECT COUNT(*) AS n FROM first_paid WHERE vn_business_date(first_paid_at) >= v_month_start
@@ -100,8 +78,32 @@ BEGIN
         FROM first_paid fp
         WHERE NOT EXISTS (SELECT 1 FROM dominant d WHERE d.address_id = fp.address_id)
     ),
+    -- Snapshot "như hôm nay" nhưng chốt tại ngày cuối tháng trước, để tính
+    -- delta thật cho tổng số địa chỉ và số đang trả phí (thay vì chỉ show
+    -- con số hiện tại không có gì so sánh).
+    addresses_now AS (
+        SELECT COUNT(*) AS n FROM addresses
+    ),
+    addresses_prev AS (
+        SELECT COUNT(*) AS n FROM addresses WHERE created_at < v_month_start
+    ),
+    dominant_prev AS (
+        SELECT DISTINCT ON (address_id) address_id, note
+        FROM address_subscriptions
+        WHERE valid_from <= v_prev_end AND valid_to >= v_prev_end
+        ORDER BY address_id, valid_to DESC
+    ),
+    paid_prev AS (
+        SELECT COUNT(*) AS n FROM dominant_prev WHERE note <> 'trial'
+    ),
     expiring_soon AS (
         SELECT address_id, valid_to FROM paid_addresses WHERE valid_to <= v_today + 7
+    ),
+    trial_ending AS (
+        -- Trial tối đa 7 ngày → "sắp hết" phải chặt hơn ngưỡng renewal (≤7 ngày sẽ
+        -- luôn đúng với MỌI trial). ≤3 ngày = còn chưa tới nửa thời gian, đây là lúc
+        -- gọi chốt chuyển đổi trước khi trial rơi mất, không phải renewal reminder.
+        SELECT address_id, valid_to FROM trial_addresses WHERE valid_to <= v_today + 3
     ),
     trial_starts AS (
         SELECT address_id, MIN(valid_from) AS trial_start
@@ -129,7 +131,8 @@ BEGIN
         SELECT
             a.id AS address_id, a.name, u.name AS owner_name, u.phone AS owner_phone,
             'expiring'::text AS reason, es.valid_to, la.last_active_at,
-            NULL::text AS reference, NULL::bigint AS amount
+            NULL::text AS reference, NULL::bigint AS amount,
+            NULL::uuid AS intent_id, NULL::timestamptz AS intent_created_at, NULL::int AS branch_extra
         FROM expiring_soon es
         JOIN addresses a ON a.id = es.address_id
         LEFT JOIN users u ON u.id = a.manager_id
@@ -140,7 +143,7 @@ BEGIN
         SELECT
             a.id, a.name, u.name, u.phone,
             'inactive', pa.valid_to, la.last_active_at,
-            NULL, NULL
+            NULL, NULL, NULL, NULL, NULL
         FROM paid_addresses pa
         JOIN addresses a ON a.id = pa.address_id
         LEFT JOIN users u ON u.id = a.manager_id
@@ -150,19 +153,46 @@ BEGIN
         UNION ALL
 
         SELECT
+            a.id, a.name, u.name, u.phone,
+            'trial_ending', te.valid_to, la.last_active_at,
+            NULL, NULL, NULL, NULL, NULL
+        FROM trial_ending te
+        JOIN addresses a ON a.id = te.address_id
+        LEFT JOIN users u ON u.id = a.manager_id
+        LEFT JOIN last_active la ON la.address_id = te.address_id
+
+        UNION ALL
+
+        SELECT
             a.id, COALESCE(a.name, 'SP' || pi.reference), u.name, u.phone,
             'payment_review', NULL, NULL,
-            pi.reference, pi.amount
+            pi.reference, pi.amount, pi.id, pi.created_at,
+            COALESCE(array_length(pi.address_ids, 1), 1) - 1
         FROM payment_intents pi
         LEFT JOIN addresses a ON a.id = pi.address_id
         LEFT JOIN users u ON u.id = a.manager_id
         WHERE pi.status = 'manual_review'
+
+        UNION ALL
+
+        -- Pending > 30' (nghi webhook miss/mất mạng — xem docs/MONETIZATION.md §7
+        -- edge cases): khách có thể đã CK đúng nhưng chưa được server ghi nhận,
+        -- cần admin đối chiếu sao kê thủ công, không tự động resolve.
+        SELECT
+            a.id, COALESCE(a.name, 'SP' || pi.reference), u.name, u.phone,
+            'payment_stale', NULL, NULL,
+            pi.reference, pi.amount, pi.id, pi.created_at,
+            COALESCE(array_length(pi.address_ids, 1), 1) - 1
+        FROM payment_intents pi
+        LEFT JOIN addresses a ON a.id = pi.address_id
+        LEFT JOIN users u ON u.id = a.manager_id
+        WHERE pi.status = 'pending' AND pi.created_at < v_now - INTERVAL '30 minutes'
     ),
     attention_ranked AS (
         SELECT *
         FROM attention_raw
         ORDER BY
-            CASE reason WHEN 'payment_review' THEN 0 WHEN 'expiring' THEN 1 ELSE 2 END,
+            CASE reason WHEN 'payment_review' THEN 0 WHEN 'payment_stale' THEN 1 WHEN 'trial_ending' THEN 2 WHEN 'expiring' THEN 3 ELSE 4 END,
             valid_to ASC NULLS LAST,
             last_active_at ASC NULLS FIRST
         LIMIT 20
@@ -188,7 +218,7 @@ BEGIN
         ORDER BY referral_rewarded_at DESC LIMIT 3
     ),
     recent_reviews AS (
-        SELECT 'review'::text, COALESCE(a.name, 'SP' || pi.reference), 'Thanh toán treo'::text, pi.created_at
+        SELECT 'review'::text, COALESCE(a.name, 'SP' || pi.reference), 'Lệch tiền'::text, pi.created_at
         FROM payment_intents pi
         LEFT JOIN addresses a ON a.id = pi.address_id
         WHERE pi.status = 'manual_review'
@@ -204,18 +234,14 @@ BEGIN
     )
     SELECT jsonb_build_object(
         'generated_at', v_now,
-        'revenue', jsonb_build_object(
-            'this_month', (SELECT amt FROM revenue_this_month),
-            'last_month', (SELECT amt FROM revenue_last_month),
-            'monthly_series', (SELECT COALESCE(jsonb_agg(jsonb_build_object(
-                'month', month, 'amount', amount
-            )), '[]'::jsonb) FROM monthly_series)
-        ),
         'subscription', jsonb_build_object(
             'paid_count', (SELECT COUNT(*) FROM paid_addresses),
+            'paid_count_prev', (SELECT n FROM paid_prev),
             'trial_count', (SELECT COUNT(*) FROM trial_addresses),
             'churned_count', (SELECT COUNT(*) FROM churned_addresses),
             'expiring_soon_count', (SELECT COUNT(*) FROM expiring_soon),
+            'total_addresses', (SELECT n FROM addresses_now),
+            'total_addresses_prev', (SELECT n FROM addresses_prev),
             'new_paid_this_month', (SELECT n FROM new_paid_this_month),
             'conversion_rate_30d', (
                 SELECT CASE WHEN trial_30d = 0 THEN NULL ELSE ROUND(converted_30d::numeric / trial_30d * 100, 1) END
@@ -225,7 +251,8 @@ BEGIN
         'attention', (SELECT COALESCE(jsonb_agg(jsonb_build_object(
             'address_id', address_id, 'name', name, 'owner_name', owner_name, 'owner_phone', owner_phone,
             'reason', reason, 'valid_to', valid_to, 'last_active_at', last_active_at,
-            'reference', reference, 'amount', amount
+            'reference', reference, 'amount', amount,
+            'intent_id', intent_id, 'intent_created_at', intent_created_at, 'branch_extra', branch_extra
         )), '[]'::jsonb) FROM attention_ranked),
         'activity', (SELECT COALESCE(jsonb_agg(jsonb_build_object(
             'type', type, 'address_name', address_name, 'detail', detail, 'at', at

@@ -1,18 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import { ArrowLeft, Loader2, RefreshCw } from 'lucide-react'
-import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from 'recharts'
 import { useAuth } from '../contexts/AuthContext'
-import { formatVND } from '../utils/money'
 import { fetchAdminDashboard } from '../services/adminDashboardService'
 
-const MONTH_LABELS = ['Th1', 'Th2', 'Th3', 'Th4', 'Th5', 'Th6', 'Th7', 'Th8', 'Th9', 'Th10', 'Th11', 'Th12']
-const REASON_LABEL = { expiring: 'Sắp hết hạn', inactive: 'Không hoạt động', payment_review: 'Thanh toán treo' }
-const REASON_TAG_CLASS = {
-    expiring: 'bg-warning-soft text-warning',
-    inactive: 'bg-danger-soft text-danger',
-    payment_review: 'bg-danger/20 text-danger',
-}
 const ACTIVITY_ICON = {
     payment: { bg: 'bg-success-soft', color: 'text-success', symbol: '₫' },
     new_branch: { bg: 'bg-primary/10', color: 'text-primary', symbol: '+' },
@@ -20,21 +11,13 @@ const ACTIVITY_ICON = {
     review: { bg: 'bg-danger-soft', color: 'text-danger', symbol: '!' },
 }
 
-function monthLabel(ym) {
-    const m = Number(ym.slice(5, 7))
-    return MONTH_LABELS[m - 1] || ym
-}
-
-function daysLeft(dateStr) {
-    return Math.ceil((new Date(dateStr) - Date.now()) / 86_400_000)
-}
-
-function lastActiveLabel(iso) {
-    if (!iso) return 'Chưa có hoạt động'
-    const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
-    if (d <= 0) return 'Hôm nay'
-    if (d === 1) return 'Hôm qua'
-    return `${d} ngày trước`
+function countDelta(current, prev) {
+    const diff = current - prev
+    if (diff === 0) return { text: 'Không đổi so với tháng trước', cls: 'text-text-dim' }
+    return {
+        text: `${diff > 0 ? '+' : ''}${diff} so với tháng trước`,
+        cls: diff > 0 ? 'text-success' : 'text-danger',
+    }
 }
 
 function activityAgo(iso) {
@@ -44,20 +27,6 @@ function activityAgo(iso) {
     if (minutes < 1440) return `${Math.floor(minutes / 60)} giờ trước`
     const days = Math.floor(minutes / 1440)
     return days === 1 ? 'Hôm qua' : `${days} ngày trước`
-}
-
-function attentionDetail(item) {
-    if (item.reason === 'expiring') {
-        const d = daysLeft(item.valid_to)
-        return d <= 0 ? 'Hết hạn hôm nay' : `Hết hạn ${d} ngày nữa`
-    }
-    if (item.reason === 'inactive') {
-        return item.last_active_at ? `Không hoạt động ${Math.floor((Date.now() - new Date(item.last_active_at).getTime()) / 86_400_000)} ngày` : 'Chưa từng hoạt động'
-    }
-    if (item.reason === 'payment_review') {
-        return `${item.reference ? 'SP' + item.reference : 'Giao dịch'} · ${formatVND(item.amount || 0)}`
-    }
-    return ''
 }
 
 /**
@@ -86,8 +55,8 @@ export default function AdminDashboardPage() {
     if (!isAdmin) return <Navigate to="/addresses" />
 
     return (
-        <div className="min-h-[100dvh] bg-bg">
-            <header className="sticky top-0 z-20 bg-surface border-b border-border/60 shadow-sm px-4 py-3 xl:px-8 flex items-center gap-3">
+        <div className="flex flex-col h-[100dvh] bg-bg">
+            <header className="shrink-0 bg-surface border-b border-border/60 shadow-sm px-4 py-3 xl:px-8 flex items-center gap-3">
                 <button
                     onClick={() => navigate('/addresses')}
                     className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shrink-0 focus:outline-none"
@@ -110,116 +79,90 @@ export default function AdminDashboardPage() {
                 </button>
             </header>
 
-            <div className="max-w-[1400px] mx-auto px-4 py-5 xl:px-8">
-                {error && (
-                    <p className="text-[12px] font-bold text-danger bg-danger-soft rounded-[12px] px-3 py-2 mb-4">Lỗi: {error}</p>
-                )}
-                {!data ? (
-                    <div className="flex justify-center py-16">
-                        <Loader2 size={24} className="animate-spin text-text-dim" />
-                    </div>
-                ) : (
-                    <DashboardBody data={data} navigate={navigate} />
-                )}
+            <div className="flex-1 overflow-y-auto">
+                <div className="max-w-[1400px] mx-auto px-4 py-5 xl:px-8">
+                    {error && (
+                        <p className="text-[12px] font-bold text-danger bg-danger-soft rounded-[12px] px-3 py-2 mb-4">Lỗi: {error}</p>
+                    )}
+                    {!data ? (
+                        <div className="flex justify-center py-16">
+                            <Loader2 size={24} className="animate-spin text-text-dim" />
+                        </div>
+                    ) : (
+                        <DashboardBody data={data} navigate={navigate} />
+                    )}
+                </div>
             </div>
         </div>
     )
 }
 
 function DashboardBody({ data, navigate }) {
-    const { revenue, subscription, attention, activity } = data
-    const growthPct = revenue.last_month > 0 ? Math.round(((revenue.this_month - revenue.last_month) / revenue.last_month) * 100) : null
-    const reviewCount = attention.filter((a) => a.reason === 'payment_review').length
+    const { subscription, attention, activity } = data
+    const paymentIssueCount = attention.filter((a) => a.reason === 'payment_review' || a.reason === 'payment_stale').length
 
     return (
         <>
-            <KpiRow revenue={revenue} subscription={subscription} attentionCount={attention.length} reviewCount={reviewCount} growthPct={growthPct} />
-            <div className="flex flex-col gap-4 xl:grid xl:grid-cols-[1fr_320px] xl:items-start">
-                <div className="flex flex-col gap-4 min-w-0">
-                    <RevenueCard revenue={revenue} />
-                    <SubscriptionHealthCard subscription={subscription} />
-                    <AttentionCard items={attention} navigate={navigate} />
-                </div>
-                <ActivityCard items={activity} className="xl:sticky xl:top-[88px]" />
+            <KpiRow subscription={subscription} attentionCount={attention.length} paymentIssueCount={paymentIssueCount} navigate={navigate} />
+            <div className="flex flex-col gap-4">
+                <SubscriptionHealthCard subscription={subscription} />
+                <ActivityCard items={activity} />
             </div>
         </>
     )
 }
 
-function KpiCard({ stripe, label, value, delta, deltaClass }) {
+function KpiCard({ stripe, label, value, delta, deltaClass, onClick }) {
+    const Tag = onClick ? 'button' : 'div'
     return (
-        <div className="relative bg-surface border border-border/60 rounded-[16px] pl-4 pr-3.5 py-3.5 overflow-hidden">
+        <Tag
+            onClick={onClick}
+            className={`relative bg-surface border border-border/60 rounded-[16px] pl-4 pr-3.5 py-3.5 overflow-hidden text-left ${onClick ? 'hover:bg-border/10 active:scale-[0.99] transition-all' : ''}`}
+        >
             <span className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-full ${stripe}`} />
             <p className="text-[10px] font-black uppercase tracking-wide text-text-dim mb-1">{label}</p>
             <p className="text-[19px] xl:text-[22px] font-black text-text tabular-nums leading-tight truncate">{value}</p>
             {delta && <p className={`text-[11px] font-bold mt-1 truncate ${deltaClass}`}>{delta}</p>}
-        </div>
+        </Tag>
     )
 }
 
-function KpiRow({ revenue, subscription, attentionCount, reviewCount, growthPct }) {
+function KpiRow({ subscription, attentionCount, paymentIssueCount, navigate }) {
+    const addressesDelta = countDelta(subscription.total_addresses, subscription.total_addresses_prev)
+    const paidDelta = countDelta(subscription.paid_count, subscription.paid_count_prev)
+    const needsAction = subscription.expiring_soon_count + subscription.trial_count
+
     return (
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
             <KpiCard
                 stripe="bg-primary"
-                label="Doanh thu tháng này"
-                value={formatVND(revenue.this_month)}
-                delta={growthPct === null ? 'Chưa có dữ liệu tháng trước' : `${growthPct >= 0 ? '▲' : '▼'} ${Math.abs(growthPct)}% so với tháng trước`}
-                deltaClass={growthPct === null ? 'text-text-dim' : growthPct >= 0 ? 'text-success' : 'text-danger'}
-            />
-            <KpiCard
-                stripe="bg-success"
-                label="Đang trả phí"
-                value={`${subscription.paid_count} chi nhánh`}
-                delta={`${subscription.trial_count} đang dùng thử`}
-                deltaClass="text-text-secondary"
-            />
-            <KpiCard
-                stripe="bg-warning"
-                label="Sắp hết hạn (≤7 ngày)"
-                value={`${subscription.expiring_soon_count} chi nhánh`}
-                delta={subscription.expiring_soon_count > 0 ? 'Cần thu phí sớm' : 'Không có'}
-                deltaClass={subscription.expiring_soon_count > 0 ? 'text-warning' : 'text-text-dim'}
+                label="Tổng số địa chỉ"
+                value={`${subscription.total_addresses} chi nhánh`}
+                delta={addressesDelta.text}
+                deltaClass={addressesDelta.cls}
             />
             <KpiCard
                 stripe="bg-danger"
                 label="Cần chú ý"
                 value={`${attentionCount} chi nhánh`}
-                delta={reviewCount > 0 ? `${reviewCount} thanh toán treo` : attentionCount > 0 ? 'Xem danh sách bên dưới' : 'Đang ổn'}
-                deltaClass={reviewCount > 0 ? 'text-danger' : attentionCount > 0 ? 'text-warning' : 'text-text-dim'}
+                delta={paymentIssueCount > 0 ? `${paymentIssueCount} cần đối soát` : attentionCount > 0 ? 'Xem tại đối soát' : 'Đang ổn'}
+                deltaClass={paymentIssueCount > 0 ? 'text-danger' : attentionCount > 0 ? 'text-warning' : 'text-text-dim'}
+                onClick={() => navigate('/admin/reconciliation')}
             />
-        </div>
-    )
-}
-
-function RevenueTooltip({ active, payload, label }) {
-    if (!active || !payload?.length) return null
-    const amount = payload[0].payload.amount
-    if (!amount) return null
-    return (
-        <div className="bg-surface border border-border-light rounded-[12px] px-3 py-2 shadow-xl">
-            <div className="text-[11px] font-black text-primary uppercase mb-1">{label}</div>
-            <div className="text-[12px] text-text font-bold">{formatVND(amount)}</div>
-        </div>
-    )
-}
-
-function RevenueCard({ revenue }) {
-    const chartData = revenue.monthly_series.map((m) => ({ label: monthLabel(m.month), amount: m.amount }))
-
-    return (
-        <div className="bg-surface border border-border/60 rounded-[20px] p-4">
-            <h3 className="text-[12px] font-black uppercase tracking-wide text-text-secondary">Doanh thu theo tháng</h3>
-            <p className="text-[11px] text-text-dim mb-3">Tiền thật đã thu (6 tháng gần nhất)</p>
-            <div className="h-[140px] w-full [&_*]:outline-none [&_*]:focus:outline-none">
-                <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} barCategoryGap="28%" margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-                        <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#7d9bb0', fontWeight: 700 }} axisLine={false} tickLine={false} tickMargin={6} />
-                        <Tooltip content={<RevenueTooltip />} cursor={false} />
-                        <Bar dataKey="amount" fill="#f4774b" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                </ResponsiveContainer>
-            </div>
+            <KpiCard
+                stripe="bg-success"
+                label="Đã đăng ký"
+                value={`${subscription.paid_count} chi nhánh`}
+                delta={paidDelta.text}
+                deltaClass={paidDelta.cls}
+            />
+            <KpiCard
+                stripe="bg-warning"
+                label="Sắp hết hạn (≤7 ngày)"
+                value={`${needsAction} chi nhánh`}
+                delta={needsAction > 0 ? 'Trả phí hết hạn hoặc dùng thử sắp hết' : 'Không có'}
+                deltaClass={needsAction > 0 ? 'text-warning' : 'text-text-dim'}
+            />
         </div>
     )
 }
@@ -252,7 +195,7 @@ function SubscriptionHealthCard({ subscription }) {
                 <div className="bg-border-light" style={{ width: `${(churned_count / total) * 100}%` }} />
             </div>
             <div className="flex flex-col gap-2">
-                <StatRow dotClass="bg-success" label="Đang trả phí" value={paid_count} />
+                <StatRow dotClass="bg-success" label="Đã đăng ký" value={paid_count} />
                 <StatRow dotClass="bg-warning" label="Dùng thử" value={trial_count} />
                 <StatRow dotClass="bg-border-light" label="Hết hạn / đã rời bỏ" value={churned_count} />
                 <StatRow label="Mới trả phí trong tháng" value={`+${new_paid_this_month}`} />
@@ -261,94 +204,9 @@ function SubscriptionHealthCard({ subscription }) {
     )
 }
 
-function ContactAction({ item, navigate }) {
-    if (item.reason === 'payment_review') {
-        return (
-            <button
-                onClick={() => navigate('/admin/reconciliation')}
-                className="text-[10.5px] font-black text-primary bg-primary/10 rounded-[7px] px-2.5 py-1 hover:bg-primary/20 transition-colors shrink-0"
-            >
-                Xem đối soát
-            </button>
-        )
-    }
-    if (!item.owner_phone) return <span className="text-[10.5px] text-text-dim shrink-0">—</span>
-    return (
-        <a
-            href={`tel:${item.owner_phone}`}
-            className="text-[10.5px] font-black text-primary bg-primary/10 rounded-[7px] px-2.5 py-1 hover:bg-primary/20 transition-colors shrink-0"
-        >
-            Gọi {item.owner_name ? item.owner_name.split(' ').slice(-1)[0] : 'chủ quán'}
-        </a>
-    )
-}
-
-function AttentionCard({ items, navigate }) {
+function ActivityCard({ items }) {
     return (
         <div className="bg-surface border border-border/60 rounded-[20px] p-4">
-            <div className="flex items-center justify-between mb-1">
-                <h3 className="text-[12px] font-black uppercase tracking-wide text-text-secondary">Cần chú ý</h3>
-                <span className="text-[11px] text-text-dim font-bold">{items.length} chi nhánh</span>
-            </div>
-            {items.length === 0 ? (
-                <p className="text-[12px] text-text-secondary py-4 text-center">Không có chi nhánh nào cần chú ý.</p>
-            ) : (
-                <>
-                    <div className="hidden md:block overflow-x-auto mt-3">
-                        <table className="w-full text-[12px]">
-                            <thead>
-                                <tr className="text-left text-[10px] uppercase text-text-dim">
-                                    <th className="pb-2 font-black">Chi nhánh</th>
-                                    <th className="pb-2 font-black">Lý do</th>
-                                    <th className="pb-2 font-black">Hoạt động cuối</th>
-                                    <th className="pb-2 font-black"></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {items.map((item, i) => (
-                                    <tr key={i} className="border-t border-border/60">
-                                        <td className="py-2.5 font-bold text-text">{item.name}</td>
-                                        <td className="py-2.5">
-                                            <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full ${REASON_TAG_CLASS[item.reason]}`}>
-                                                {REASON_LABEL[item.reason]}
-                                            </span>
-                                            <span className="ml-2 text-text-secondary">{attentionDetail(item)}</span>
-                                        </td>
-                                        <td className="py-2.5 text-text-secondary">{item.reason === 'payment_review' ? '—' : lastActiveLabel(item.last_active_at)}</td>
-                                        <td className="py-2.5 text-right">
-                                            <ContactAction item={item} navigate={navigate} />
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div className="md:hidden flex flex-col gap-2 mt-3">
-                        {items.map((item, i) => (
-                            <div key={i} className="rounded-[14px] border border-border/60 bg-surface-light px-3 py-2.5 flex flex-col gap-1.5">
-                                <div className="flex items-center justify-between gap-2">
-                                    <span className="text-[12.5px] font-black text-text truncate">{item.name}</span>
-                                    <span className={`shrink-0 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full ${REASON_TAG_CLASS[item.reason]}`}>
-                                        {REASON_LABEL[item.reason]}
-                                    </span>
-                                </div>
-                                <div className="flex items-center justify-between gap-2 text-[11px] text-text-secondary">
-                                    <span className="truncate">{attentionDetail(item)}</span>
-                                    <ContactAction item={item} navigate={navigate} />
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </>
-            )}
-        </div>
-    )
-}
-
-function ActivityCard({ items, className = '' }) {
-    return (
-        <div className={`bg-surface border border-border/60 rounded-[20px] p-4 ${className}`}>
             <h3 className="text-[12px] font-black uppercase tracking-wide text-text-secondary mb-3">Hoạt động gần đây</h3>
             {items.length === 0 ? (
                 <p className="text-[12px] text-text-secondary py-2">Chưa có hoạt động nào.</p>
