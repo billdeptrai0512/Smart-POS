@@ -38,7 +38,9 @@ async function readSnapshot(sourceAddressId) {
         .eq('owner_address_id', sourceAddressId)
         .eq('is_active', true)
     // 42703: cột is_divider chưa có (migration 20260703_menu_divider chưa chạy)
+    let hasDividerColumn = true
     if (e1?.code === '42703') {
+        hasDividerColumn = false
         ({ data: products, error: e1 } = await supabase
             .from('products')
             .select('id, name, price, sort_order, count_as_cup')
@@ -90,6 +92,7 @@ async function readSnapshot(sourceAddressId) {
         extraIngredients,
         costs: costs || [],
         ingredientSortOrder: srcAddr?.ingredient_sort_order || [],
+        hasDividerColumn,
     }
 }
 
@@ -131,6 +134,11 @@ async function applySnapshot(targetAddressId, snapshot, options, onProgress) {
         emit('menu', list.length)
 
         if (list.length) {
+            // Cột is_divider phải nhất quán trên MỌI row: PostgREST dựng câu INSERT theo
+            // union các key trong mảng, row nào thiếu key sẽ nhận NULL (không fallback
+            // default false) → vi phạm NOT NULL nếu chỉ vài row có divider (xem lỗi
+            // "null value in column is_divider"). Nên gửi cho tất cả hoặc không gửi cho ai.
+            const hasDivider = snapshot.hasDividerColumn !== false
             const rows = list.map(p => {
                 const newId = crypto.randomUUID()
                 productIdMap.set(p.id, newId)
@@ -142,9 +150,7 @@ async function applySnapshot(targetAddressId, snapshot, options, onProgress) {
                     count_as_cup: p.count_as_cup ?? true,
                     is_active: true,
                     owner_address_id: targetAddressId,
-                    // Chỉ gửi cột khi true: nguồn có divider nghĩa là DB đã migrate;
-                    // snapshot cũ không có field này thì insert vẫn chạy pre-migration.
-                    ...(p.is_divider ? { is_divider: true } : {}),
+                    ...(hasDivider ? { is_divider: p.is_divider ?? false } : {}),
                 }
             })
             const { error: insErr } = await supabase.from('products').insert(rows)
