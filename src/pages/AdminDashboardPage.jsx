@@ -10,6 +10,9 @@ const ACTIVITY_ICON = {
     new_branch: { bg: 'bg-primary/10', color: 'text-primary', symbol: '+' },
     referral: { bg: 'bg-warning-soft', color: 'text-warning', symbol: '🎁' },
     review: { bg: 'bg-danger-soft', color: 'text-danger', symbol: '!' },
+    rating: { bg: 'bg-warning-soft', color: 'text-warning', symbol: '★' },
+    new_account: { bg: 'bg-success-soft', color: 'text-success', symbol: '👤' },
+    new_staff: { bg: 'bg-primary/10', color: 'text-primary', symbol: '👥' },
 }
 
 function countDelta(current, prev) {
