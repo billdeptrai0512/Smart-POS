@@ -98,8 +98,9 @@ export async function fetchStaffByManager(managerId) {
     return data
 }
 
-// Lần đăng nhập gần nhất của từng thành viên (auth.users.last_sign_in_at, qua RPC vì
-// client không query thẳng schema auth được). Trả về Map<userId, ISOString|null>.
+// Lần hoạt động gần nhất của từng thành viên — GREATEST(auth.users.last_sign_in_at,
+// active_sessions.last_seen) qua RPC vì client không query thẳng schema auth được.
+// Trả về Map<userId, ISOString|null>.
 export async function fetchStaffLastLogins(userIds) {
     if (isGuest() || !supabase || !userIds.length) return new Map()
     const { data, error } = await supabase.rpc('get_staff_last_logins', { p_user_ids: userIds })

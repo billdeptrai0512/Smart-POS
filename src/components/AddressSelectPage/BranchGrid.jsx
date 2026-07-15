@@ -107,7 +107,7 @@ export default function BranchGrid({
     }
 
     async function handleWipeSalesData(addr) {
-        if (wipeConfirmName.trim() !== addr.name || wiping) return
+        if (wipeConfirmName.trim().toUpperCase() !== addr.name.toUpperCase() || wiping) return
         setWiping(true)
         setError('')
         try {
@@ -121,7 +121,7 @@ export default function BranchGrid({
     }
 
     async function handleRemoveAddress(addr) {
-        if (deleteConfirmName.trim() !== addr.name || deleting) return
+        if (deleteConfirmName.trim().toUpperCase() !== addr.name.toUpperCase() || deleting) return
         setDeleting(true)
         setError('')
         try {
@@ -292,57 +292,69 @@ export default function BranchGrid({
                                             onScroll={(e) => checkActionsScrollFade(e.currentTarget)}
                                         >
                                             {!isStaff && (
-                                                <div className="px-3 pt-3 pb-1">
-                                                    <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Lối tắt</p>
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        <ActionPill
-                                                            icon={<Banknote size={16} />}
-                                                            label="Thu nhập"
-                                                            tone="primary"
-                                                            onClick={() => { onSelectHistory?.(addr, 'orders'); setExpandedActionsId(null) }}
-                                                        />
-                                                        <ActionPill
-                                                            icon={<Receipt size={16} />}
-                                                            label="Chi phí"
-                                                            tone="primary"
-                                                            onClick={() => { onSelectHistory?.(addr, 'expense'); setExpandedActionsId(null) }}
-                                                        />
-                                                        <ActionPill
-                                                            icon={<Wallet size={16} />}
-                                                            label="Dòng tiền"
-                                                            tone="success"
-                                                            onClick={() => { onSelectReport?.(addr, 'cashflow'); setExpandedActionsId(null) }}
-                                                        />
-                                                        <ActionPill
-                                                            icon={<TrendingUp size={16} />}
-                                                            label="Lợi nhuận"
-                                                            tone="success"
-                                                            onClick={() => { onSelectReport?.(addr, 'profit'); setExpandedActionsId(null) }}
-                                                        />
-                                                        <ActionPill
-                                                            icon={<Boxes size={16} />}
-                                                            label="Tồn kho"
-                                                            tone="warning"
-                                                            onClick={() => { onSelectReport?.(addr, 'inventory'); setExpandedActionsId(null) }}
-                                                        />
-                                                        <ActionPill
-                                                            icon={<ChefHat size={16} />}
-                                                            label="Công thức"
-                                                            tone="primary"
-                                                            onClick={() => { onSelectRecipes?.(addr); setExpandedActionsId(null) }}
-                                                        />
-                                                        <ActionPill
-                                                            icon={<Package size={16} />}
-                                                            label="Nguyên liệu"
-                                                            tone="primary"
-                                                            onClick={() => { onSelectIngredients?.(addr); setExpandedActionsId(null) }}
-                                                        />
-                                                        <ActionPill
-                                                            icon={<Box size={16} />}
-                                                            label="Bao bì"
-                                                            tone="warning"
-                                                            onClick={() => { onSelectIngredients?.(addr, 'packaging'); setExpandedActionsId(null) }}
-                                                        />
+                                                <div className="px-3 pt-3 pb-1 flex flex-col gap-3">
+                                                    <div>
+                                                        <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Nhật ký</p>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <ActionPill
+                                                                icon={<Banknote size={16} />}
+                                                                label="Thu nhập"
+                                                                tone="primary"
+                                                                onClick={() => { onSelectHistory?.(addr, 'orders'); setExpandedActionsId(null) }}
+                                                            />
+                                                            <ActionPill
+                                                                icon={<Receipt size={16} />}
+                                                                label="Chi phí"
+                                                                tone="primary"
+                                                                onClick={() => { onSelectHistory?.(addr, 'expense'); setExpandedActionsId(null) }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Báo cáo</p>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <ActionPill
+                                                                icon={<Wallet size={16} />}
+                                                                label="Dòng tiền"
+                                                                tone="success"
+                                                                onClick={() => { onSelectReport?.(addr, 'cashflow'); setExpandedActionsId(null) }}
+                                                            />
+                                                            <ActionPill
+                                                                icon={<TrendingUp size={16} />}
+                                                                label="Lợi nhuận"
+                                                                tone="success"
+                                                                onClick={() => { onSelectReport?.(addr, 'profit'); setExpandedActionsId(null) }}
+                                                            />
+                                                            <ActionPill
+                                                                icon={<Boxes size={16} />}
+                                                                label="Tồn quầy"
+                                                                tone="warning"
+                                                                onClick={() => { onSelectReport?.(addr, 'inventory'); setExpandedActionsId(null) }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Kho hàng</p>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <ActionPill
+                                                                icon={<ChefHat size={16} />}
+                                                                label="Công thức"
+                                                                tone="primary"
+                                                                onClick={() => { onSelectRecipes?.(addr); setExpandedActionsId(null) }}
+                                                            />
+                                                            <ActionPill
+                                                                icon={<Package size={16} />}
+                                                                label="Nguyên liệu"
+                                                                tone="primary"
+                                                                onClick={() => { onSelectIngredients?.(addr); setExpandedActionsId(null) }}
+                                                            />
+                                                            <ActionPill
+                                                                icon={<Box size={16} />}
+                                                                label="Bao bì"
+                                                                tone="warning"
+                                                                onClick={() => { onSelectIngredients?.(addr, 'packaging'); setExpandedActionsId(null) }}
+                                                            />
+                                                        </div>
                                                     </div>
                                                 </div>
                                             )}
@@ -678,7 +690,7 @@ export default function BranchGrid({
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    disabled={wiping || wipeConfirmName.trim() !== addr.name}
+                                                    disabled={wiping || wipeConfirmName.trim().toUpperCase() !== addr.name.toUpperCase()}
                                                     onClick={() => handleWipeSalesData(addr)}
                                                     className="flex-1 py-3 rounded-[14px] bg-danger text-white font-black text-sm hover:bg-danger/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                                                 >
@@ -751,7 +763,7 @@ export default function BranchGrid({
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    disabled={deleting || deleteConfirmName.trim() !== addr.name}
+                                                    disabled={deleting || deleteConfirmName.trim().toUpperCase() !== addr.name.toUpperCase()}
                                                     onClick={() => handleRemoveAddress(addr)}
                                                     className="flex-1 py-3 rounded-[14px] bg-danger text-white font-black text-sm hover:bg-danger/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                                                 >

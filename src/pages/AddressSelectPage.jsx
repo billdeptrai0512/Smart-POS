@@ -199,7 +199,7 @@ export default function AddressSelectPage() {
                 await setMyPhone(newPhone.trim())
                 refreshProfile()
             }
-            const addr = await createNewAddress(newAddressName.trim())
+            const addr = await createNewAddress(newAddressName.trim().toUpperCase())
             createdId = addr.id
             // Nếu có mã hệ thống → chép toàn bộ cấu hình từ địa chỉ nguồn (xuyên tài khoản).
             if (code) await cloneFromShareCode(code, addr.id)

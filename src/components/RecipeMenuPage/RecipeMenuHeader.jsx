@@ -14,7 +14,7 @@ export default function RecipeMenuHeader({ productCount, onBack, onForward, acti
                 </button>
 
                 <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
-                    <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Tồn kho</span>
+                    <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Kho hàng</span>
                     <span className="text-[12px] font-bold text-text/80 leading-none mt-1 tabular-nums">{productCount} món</span>
                 </div>
 

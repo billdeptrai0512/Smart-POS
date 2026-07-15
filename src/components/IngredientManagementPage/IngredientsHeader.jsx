@@ -7,7 +7,7 @@ export default function IngredientsHeader({
 }) {
     // While sorting, swap the title to "Sắp xếp" and hide the tabs so the dedicated
     // sort UI (footer "Hủy / Lưu") owns the screen — matches pre-merge behavior.
-    const title = isSorting ? 'Sắp xếp' : 'Tồn kho'
+    const title = isSorting ? 'Sắp xếp' : 'Kho hàng'
 
     return (
         <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
