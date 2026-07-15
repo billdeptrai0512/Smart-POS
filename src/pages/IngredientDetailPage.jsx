@@ -7,7 +7,7 @@ import { useHistory } from '../contexts/HistoryContext'
 import {
     fetchIngredientRestockHistory, fetchIngredientStocks, fetchIngredientWithdrawals,
     deleteIngredientCost, upsertIngredientCost, updateIngredientUnitCost, renameIngredient,
-    adjustIngredientStock, setCounterStock, recordInvoicePayment, cancelRestock,
+    adjustIngredientStock, setCounterStock, hasCounterShiftClosing, recordInvoicePayment, cancelRestock,
     editIngredientRestock,
 } from '../services/orderService'
 import { supabase } from '../lib/supabaseClient'
@@ -60,6 +60,8 @@ export default function IngredientDetailPage() {
     const [history, setHistory] = useState([])
     const [loading, setLoading] = useState(true)
     const [stockData, setStockData] = useState(null)
+    // Mặc định true để không nháy khoá ô "Tồn quầy" trong lúc chờ fetch xong.
+    const [hasShiftClosing, setHasShiftClosing] = useState(true)
     const [saving, setSaving] = useState(false)
     const [packModalOpen, setPackModalOpen] = useState(false)
     const [paymentInvoice, setPaymentInvoice] = useState(null)
@@ -106,6 +108,13 @@ export default function IngredientDetailPage() {
         fetchIngredientStocks(selectedAddress.id)
             .then(stocks => setStockData(stocks.find(s => s.ingredient === ingredientKey)))
     }, [selectedAddress?.id, ingredientKey])
+
+    // Address-level (không phải per-ingredient) — có phiếu chốt ca nào để ghi "Tồn
+    // quầy" chưa. Khoá ô sửa nếu chưa, thay vì để user sửa rồi mới báo lỗi.
+    useEffect(() => {
+        if (!selectedAddress?.id) return
+        hasCounterShiftClosing(selectedAddress.id).then(setHasShiftClosing)
+    }, [selectedAddress?.id])
 
     // History is scoped to the displayed month. Gồm 2 nguồn xen kẽ theo thời gian:
     // phiếu nhập/hiệu chỉnh (expenses) + lượt "Rút ra quầy" (restock trong phiếu
@@ -278,7 +287,12 @@ export default function IngredientDetailPage() {
         setSaving(true)
         try {
             const res = await setCounterStock(selectedAddress?.id, ingredientKey, newCounter)
-            if (!res) { showError(new Error('Chưa có phiếu chốt ca nào để ghi tồn quầy.'), 'Sửa tồn quầy'); return }
+            if (!res) {
+                const err = new Error('Chưa có phiếu chốt ca nào để ghi tồn quầy.')
+                err.expected = true
+                showError(err, 'Sửa tồn quầy')
+                return
+            }
             await reloadStock()
             showToast('Đã sửa tồn quầy', 'success')
         } catch (err) { showError(err, 'Sửa tồn quầy') }
@@ -500,6 +514,7 @@ export default function IngredientDetailPage() {
                         warehouseStock={stockData?.warehouse_stock ?? null}
                         warehouseGroupNote={warehouseGroupNote}
                         counterStock={stockData?.counter_stock ?? null}
+                        hasShiftClosing={hasShiftClosing}
                         currentStock={currentStock}
                         countInAudit={countInAudit}
                         canEdit={canEdit}
