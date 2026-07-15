@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useHistory } from '../contexts/HistoryContext'
 import {
     fetchIngredientRestockHistory, fetchIngredientStocks, fetchIngredientWithdrawals,
-    deleteIngredientCost, upsertIngredientCost, renameIngredient,
+    deleteIngredientCost, upsertIngredientCost, updateIngredientUnitCost, renameIngredient,
     adjustIngredientStock, setCounterStock, recordInvoicePayment, cancelRestock,
     editIngredientRestock,
 } from '../services/orderService'
@@ -34,7 +34,22 @@ export default function IngredientDetailPage() {
     const location = useLocation()
     const { ingredientKey } = useParams()
     const { ingredientCosts, ingredientUnits, ingredientConfigs, refreshProducts } = useProducts()
-    const { selectedAddress } = useAddress()
+    const { selectedAddress, siblingsByAddress } = useAddress()
+    const warehouseSiblings = selectedAddress ? siblingsByAddress[selectedAddress.id] : null
+    const warehouseGroupNote = warehouseSiblings?.length
+        ? `Dùng chung với: ${warehouseSiblings.map(a => a.name).join(', ')}`
+        : null
+    // Nhật ký phải thấy phiếu nhập/rút ở CẢ NHÓM khi có kho tổng chung — 1 phần tử khi độc lập.
+    const groupAddressIds = useMemo(
+        () => selectedAddress ? [selectedAddress.id, ...(warehouseSiblings || []).map(a => a.id)] : [],
+        [selectedAddress, warehouseSiblings]
+    )
+    const addressNameById = useMemo(() => {
+        const map = {}
+        if (selectedAddress) map[selectedAddress.id] = selectedAddress.name
+        for (const a of warehouseSiblings || []) map[a.id] = a.name
+        return map
+    }, [selectedAddress, warehouseSiblings])
     const { isManager, isAdmin, profile } = useAuth()
     const { refreshTodayExpenses } = useHistory()
     const canEdit = isManager || isAdmin
@@ -97,8 +112,8 @@ export default function IngredientDetailPage() {
     // chốt ca). Lượt rút là chuyển kho nội bộ — không tiền, không payments.
     const loadHistory = useCallback(async () => {
         const [hist, withdrawals] = await Promise.all([
-            fetchIngredientRestockHistory(selectedAddress.id, ingredientKey, fromDate, toDate),
-            fetchIngredientWithdrawals(selectedAddress.id, ingredientKey, fromDate, toDate),
+            fetchIngredientRestockHistory(groupAddressIds, ingredientKey, fromDate, toDate),
+            fetchIngredientWithdrawals(groupAddressIds, ingredientKey, fromDate, toDate),
         ])
         const withdrawalEntries = withdrawals.map(w => ({
             id: `wd-${w.id}`,
@@ -107,12 +122,13 @@ export default function IngredientDetailPage() {
             amount: 0,
             payments: [],
             staff_name: w.staff_name,
+            address_id: w.address_id,
             // before/after kho — card vẽ "Tồn kho X → Y" y hệt phiếu nhập/hiệu chỉnh.
             metadata: { qty: w.qty, before_stock: w.before_stock, after_stock: w.after_stock },
         }))
         return [...hist, ...withdrawalEntries]
             .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    }, [selectedAddress?.id, ingredientKey, fromDate, toDate])
+    }, [groupAddressIds, ingredientKey, fromDate, toDate])
 
     const reloadStock = useCallback(async () => {
         if (!selectedAddress?.id) return
@@ -231,7 +247,8 @@ export default function IngredientDetailPage() {
         if (newCost === cost) return
         setSaving(true)
         try {
-            await upsertIngredientCost(ingredientKey, newCost, selectedAddress?.id, unit, { category: config.category })
+            // Qua RPC (không upsert thẳng) để fan-out đúng khi địa chỉ dùng chung kho tổng nhóm.
+            await updateIngredientUnitCost(ingredientKey, newCost, selectedAddress?.id)
             refreshProducts?.()
         } catch (err) { showError(err, 'Lưu giá vốn') }
         finally { setSaving(false) }
@@ -326,8 +343,10 @@ export default function IngredientDetailPage() {
         if (!paymentInvoice) return
         setSaving(true)
         try {
+            // Kho tổng nhóm: hoá đơn đang trả nợ có thể ghi nhận ở địa chỉ KHÁC địa chỉ đang xem —
+            // dùng address_id thật của hoá đơn để invalidate đúng cache báo cáo.
             await recordInvoicePayment(
-                selectedAddress?.id, paymentInvoice.id,
+                paymentInvoice.address_id || selectedAddress?.id, paymentInvoice.id,
                 amount, paymentMethod, profile?.name, paidAt, cashPhase,
             )
             await Promise.all([reloadHistory(), refreshTodayExpenses?.()])
@@ -353,7 +372,9 @@ export default function IngredientDetailPage() {
         if (!await confirm({ title: head, detail, danger: true, confirmLabel: 'Hủy phiếu' })) return
         setSaving(true)
         try {
-            await cancelRestock(selectedAddress?.id, entry.id, profile?.name)
+            // Kho tổng nhóm: Nhật ký có thể hiện phiếu ghi nhận ở địa chỉ KHÁC (đang xem chỉ là 1
+            // thành viên) — phải hủy đúng theo address_id thật của phiếu, không phải địa chỉ đang xem.
+            await cancelRestock(entry.address_id || selectedAddress?.id, entry.id, profile?.name)
             await Promise.all([reloadHistory(), reloadStock(), refreshProducts?.(), refreshTodayExpenses?.()])
             showToast(isAdjust ? 'Đã hủy hiệu chỉnh tồn' : 'Đã hủy phiếu nhập kho', 'success')
         } catch (err) { showError(err, isAdjust ? 'Hủy hiệu chỉnh tồn' : 'Hủy phiếu nhập kho') }
@@ -417,7 +438,8 @@ export default function IngredientDetailPage() {
         setEditingEntry(null)
 
         try {
-            await editIngredientRestock(selectedAddress?.id, entry.id, {
+            // Kho tổng nhóm: khớp lý do ở handleCancelRestock — sửa đúng theo address_id thật.
+            await editIngredientRestock(entry.address_id || selectedAddress?.id, entry.id, {
                 qty: qtyNum,
                 subtotal: subtotalNum,
                 discount: discountNum,
@@ -476,6 +498,7 @@ export default function IngredientDetailPage() {
                         minStock={minStock}
                         tareWeight={tareWeight}
                         warehouseStock={stockData?.warehouse_stock ?? null}
+                        warehouseGroupNote={warehouseGroupNote}
                         counterStock={stockData?.counter_stock ?? null}
                         currentStock={currentStock}
                         countInAudit={countInAudit}
@@ -506,6 +529,7 @@ export default function IngredientDetailPage() {
                         onOpenPayment={canEdit ? setPaymentInvoice : null}
                         onCancelRestock={canEdit ? handleCancelRestock : null}
                         onEditRestock={canEdit ? setEditingEntry : null}
+                        addressNameById={groupAddressIds.length > 1 ? addressNameById : null}
                     />
                 )}
             </main>

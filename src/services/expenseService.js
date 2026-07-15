@@ -177,9 +177,15 @@ export async function fetchRefillExpensesInRange(addressId, fromDate, toDate) {
     return data || []
 }
 
-// Fetch restock history for a specific ingredient within a date range
-export async function fetchIngredientRestockHistory(addressId, ingredient, fromDate, toDate) {
+// Fetch restock history for a specific ingredient within a date range.
+// addressIds: mảng — 1 phần tử cho địa chỉ độc lập, nhiều phần tử khi địa chỉ thuộc 1 warehouse
+// group (kho tổng dùng chung — Nhật ký phải thấy phiếu nhập ở BẤT KỲ địa chỉ nào trong nhóm,
+// vì tất cả cùng cộng vào 1 kho tổng). RLS tự giới hạn: manager thấy đủ cả nhóm (sở hữu mọi địa
+// chỉ), staff chỉ thấy các địa chỉ mình được cấp quyền — chấp nhận cho v1 (không cần RPC riêng).
+export async function fetchIngredientRestockHistory(addressIds, ingredient, fromDate, toDate) {
+    const ids = Array.isArray(addressIds) ? addressIds : [addressIds]
     if (localRepo.isGuest()) {
+        const addressId = ids[0] // guest không hỗ trợ nhóm kho tổng
         const expenses = localRepo.fetchAllLocalExpenses(addressId).filter(e =>
             e.is_refill && e.metadata?.ingredient === ingredient &&
             new Date(e.created_at) >= new Date(fromDate) &&
@@ -195,20 +201,20 @@ export async function fetchIngredientRestockHistory(addressId, ingredient, fromD
                 payments: payments.filter(p => p.expense_id === e.id),
             }))
     }
-    if (!supabase || !addressId) return []
+    if (!supabase || !ids.length) return []
     // Nested select kéo luôn payments để FE tính owing & hiển thị badge mà không cần round-trip phụ.
     // Có 3 cấp fallback nếu migration 20260528 chưa deploy: bỏ payments → bỏ discount/extra columns.
     const trySelects = [
-        'id, name, amount, staff_name, metadata, created_at, discount_amount, extra_cost, payment_method, expense_payments(id, amount, payment_method, staff_name, paid_at)',
-        'id, name, amount, staff_name, metadata, created_at, discount_amount, extra_cost, payment_method',
-        'id, name, amount, staff_name, metadata, created_at, payment_method',
+        'id, address_id, name, amount, staff_name, metadata, created_at, discount_amount, extra_cost, payment_method, expense_payments(id, amount, payment_method, staff_name, paid_at)',
+        'id, address_id, name, amount, staff_name, metadata, created_at, discount_amount, extra_cost, payment_method',
+        'id, address_id, name, amount, staff_name, metadata, created_at, payment_method',
     ]
     let data = null, error = null
     for (const sel of trySelects) {
         const res = await supabase
             .from('expenses')
             .select(sel)
-            .eq('address_id', addressId)
+            .in('address_id', ids)
             .eq('is_refill', true)
             .gte('created_at', fromDate)
             .lte('created_at', toDate)

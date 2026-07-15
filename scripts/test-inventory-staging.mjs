@@ -8,7 +8,7 @@
 // qua supabase-js (service_role) rồi assert kết quả trả về + đọc lại state.
 //
 // Cần: .env.staging.local với STAGING_SUPABASE_URL + STAGING_SUPABASE_SECRET, và đã chạy
-// scripts/staging-inventory-schema.sql lên staging (tạo 7 bảng + 6 hàm).
+// scripts/staging-inventory-schema.sql lên staging (tạo 8 bảng + 15 hàm — gồm warehouse_groups).
 //
 //   node scripts/test-inventory-staging.mjs      (hoặc: npm run test:inventory)
 //
@@ -32,6 +32,8 @@ const sb = createClient(URL_, KEY, { auth: { persistSession: false } })
 // Fixed test fixtures (re-runnable: seed() dọn sạch trước mỗi case).
 const MANAGER_ID = '00000000-0000-4000-8000-000000000001'
 const ADDRESS_ID = '00000000-0000-4000-8000-000000000002'
+const ADDRESS_ID_2 = '00000000-0000-4000-8000-000000000003' // chỉ dùng ở case kho tổng nhóm
+const GROUP_ID = '00000000-0000-4000-8000-000000000004'
 const ING = 'test_ing_ca_phe'
 
 let pass = 0, fail = 0
@@ -51,8 +53,22 @@ async function seed() {
   await sb.from('shift_closings').delete().eq('address_id', ADDRESS_ID)
   await sb.from('ingredient_costs').delete().eq('address_id', ADDRESS_ID)
   await sb.from('users').upsert({ id: MANAGER_ID, name: 'Test Manager', role: 'manager' })
-  await sb.from('addresses').upsert({ id: ADDRESS_ID, manager_id: MANAGER_ID, name: 'Test Staging' })
+  // warehouse_group_id: null — reset phòng khi case kho tổng nhóm chạy trước đó bị crash giữa chừng.
+  await sb.from('addresses').upsert({ id: ADDRESS_ID, manager_id: MANAGER_ID, name: 'Test Staging', warehouse_group_id: null })
   await sb.from('ingredient_costs').insert({ ingredient: ING, unit_cost: 0, unit: 'g', address_id: ADDRESS_ID })
+}
+
+// Case kho tổng nhóm cần 1 địa chỉ thứ 2 + 1 warehouse_group, cả 2 địa chỉ cùng vào nhóm.
+async function seedGroup() {
+  await seed()
+  await sb.from('expenses').delete().eq('address_id', ADDRESS_ID_2)
+  await sb.from('shift_closings').delete().eq('address_id', ADDRESS_ID_2)
+  await sb.from('ingredient_costs').delete().eq('address_id', ADDRESS_ID_2)
+  await sb.from('warehouse_groups').delete().eq('id', GROUP_ID) // FK ON DELETE SET NULL gỡ nhóm cũ khỏi mọi địa chỉ
+  await sb.from('addresses').upsert({ id: ADDRESS_ID_2, manager_id: MANAGER_ID, name: 'Test Staging B', warehouse_group_id: null })
+  await sb.from('ingredient_costs').insert({ ingredient: ING, unit_cost: 0, unit: 'g', address_id: ADDRESS_ID_2 })
+  await sb.from('warehouse_groups').insert({ id: GROUP_ID, manager_id: MANAGER_ID, name: 'Test Group' })
+  await sb.from('addresses').update({ warehouse_group_id: GROUP_ID }).in('id', [ADDRESS_ID, ADDRESS_ID_2])
 }
 
 const restock = (p) => sb.rpc('process_ingredient_restock', {
@@ -65,6 +81,13 @@ const paidTotal = async (expId) => ((await sb.from('expense_payments').select('a
   .eq('expense_id', expId)).data || []).reduce((s, r) => s + Number(r.amount), 0)
 const expenseRow = async (expId) => (await sb.from('expenses').select('amount, metadata')
   .eq('id', expId).single()).data
+const stocksOf = async (addrId) => {
+  const { data, error } = await sb.rpc('get_ingredient_stocks_v2', { p_address_id: addrId })
+  if (error) throw error
+  return data?.find(r => r.ingredient === ING)
+}
+const costOf = async (addrId) => (await sb.from('ingredient_costs').select('unit_cost')
+  .eq('address_id', addrId).eq('ingredient', ING).single()).data?.unit_cost
 
 async function main() {
   // ── Case 1: nhập lần đầu → WAC = amountDue/qty, owing = amountDue − paid ─────
@@ -147,6 +170,53 @@ async function main() {
   console.log('\nCase 7 — guard: discount âm bị RAISE')
   await seed()
   await expectError('discount = −1 → error', restock({ p_qty: 10, p_subtotal: 10000, p_discount: -1 }))
+
+  // ── Case 8: kho tổng dùng chung nhóm — nhập ở A, rút ở B → pool chung, WAC hợp nhất ──────────
+  console.log('\nCase 8 — kho tổng nhóm: nhập ở A, rút ra quầy ở B → warehouse_stock pool chung, quầy riêng')
+  await seedGroup()
+  {
+    const { data: r1, error: e1 } = await sb.rpc('process_ingredient_restock', {
+      p_address_id: ADDRESS_ID, p_ingredient: ING, p_staff_name: 't',
+      p_payment_method: 'cash', p_cash_phase: 'in_shift',
+      p_qty: 1000, p_subtotal: 100000, p_initial_payment: 100000,
+    })
+    if (e1) throw e1
+    check('nhập ở A: new_unit_cost = 100', r1.new_unit_cost == 100, `got ${r1.new_unit_cost}`)
+    check('unit_cost fan-out sang B = 100', (await costOf(ADDRESS_ID_2)) == 100, `got ${await costOf(ADDRESS_ID_2)}`)
+
+    const stockA = await stocksOf(ADDRESS_ID)
+    const stockB = await stocksOf(ADDRESS_ID_2)
+    check('warehouse_stock A = 1000 (pool)', stockA?.warehouse_stock == 1000, `got ${stockA?.warehouse_stock}`)
+    check('warehouse_stock B = 1000 (cùng pool dù chưa nhập gì ở B)', stockB?.warehouse_stock == 1000, `got ${stockB?.warehouse_stock}`)
+    check('counter_stock B = 0 (chưa rút)', stockB?.counter_stock == 0)
+
+    // Nhập thêm (rút ra quầy) ở B: 300g — rút từ kho tổng CHUNG, không phải kho riêng của B.
+    await sb.from('shift_closings').insert({
+      address_id: ADDRESS_ID_2,
+      inventory_report: [{ ingredient: ING, opening: 0, restock: 300, remaining: 300 }],
+    })
+
+    const stockA2 = await stocksOf(ADDRESS_ID)
+    const stockB2 = await stocksOf(ADDRESS_ID_2)
+    check('warehouse_stock A sau rút ở B = 700 (pool trừ chung)', stockA2?.warehouse_stock == 700, `got ${stockA2?.warehouse_stock}`)
+    check('warehouse_stock B sau rút = 700 (cùng pool)', stockB2?.warehouse_stock == 700, `got ${stockB2?.warehouse_stock}`)
+    check('counter_stock B = 300 (đếm tay riêng của B)', stockB2?.counter_stock == 300, `got ${stockB2?.counter_stock}`)
+    check('counter_stock A vẫn = 0 (quầy riêng, không bị ảnh hưởng)', stockA2?.counter_stock == 0, `got ${stockA2?.counter_stock}`)
+
+    // cancel_restock ở A → full re-average trên CẢ NHÓM (hết phiếu mua thật → unit_cost giữ NULL).
+    const { data: cancelData, error: e2 } = await sb.rpc('cancel_restock', { p_address_id: ADDRESS_ID, p_expense_id: r1.expense_id })
+    check('cancel_restock (nhóm) không lỗi', !e2, e2?.message)
+    check('new_unit_cost = null sau hủy (hết phiếu mua thật trong nhóm)', cancelData?.new_unit_cost == null, `got ${cancelData?.new_unit_cost}`)
+
+    const stockA3 = await stocksOf(ADDRESS_ID)
+    check('warehouse_stock A sau hủy = 0', stockA3?.warehouse_stock == 0, `got ${stockA3?.warehouse_stock}`)
+  }
+  // Dọn fixtures nhóm.
+  await sb.from('expenses').delete().eq('address_id', ADDRESS_ID_2)
+  await sb.from('shift_closings').delete().eq('address_id', ADDRESS_ID_2)
+  await sb.from('ingredient_costs').delete().eq('address_id', ADDRESS_ID_2)
+  await sb.from('warehouse_groups').delete().eq('id', GROUP_ID) // ON DELETE SET NULL gỡ nhóm khỏi A + B
+  await sb.from('addresses').delete().eq('id', ADDRESS_ID_2)
 
   // Dọn sau cùng.
   await sb.from('expenses').delete().eq('address_id', ADDRESS_ID)

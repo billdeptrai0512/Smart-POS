@@ -309,6 +309,44 @@ export async function deleteAddress(id) {
     return true
 }
 
+// Kho tổng dùng chung nhiều địa chỉ — nhóm thuộc về 1 manager (RLS lọc theo manager_id/user_address_access).
+export async function fetchWarehouseGroups(managerId) {
+    if (!supabase) return { data: [], error: null }
+    const { data, error } = await supabase
+        .from('warehouse_groups')
+        .select('*')
+        .eq('manager_id', managerId)
+        .order('created_at')
+    if (error) {
+        console.error('fetchWarehouseGroups error:', error)
+        return { data: [], error }
+    }
+    return { data: data || [], error: null }
+}
+
+// p_group_id null → tạo nhóm mới; có giá trị → đổi tên. Trả về group id.
+export async function upsertWarehouseGroup(groupId, name) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { data, error } = await supabase.rpc('upsert_warehouse_group', { p_group_id: groupId, p_name: name })
+    if (error) throw error
+    return data
+}
+
+export async function deleteWarehouseGroup(groupId) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase.rpc('delete_warehouse_group', { p_group_id: groupId })
+    if (error) throw error
+    return true
+}
+
+// p_group_id null → rời nhóm (kho tổng độc lập trở lại).
+export async function setAddressWarehouseGroup(addressId, groupId) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase.rpc('set_address_warehouse_group', { p_address_id: addressId, p_group_id: groupId })
+    if (error) throw error
+    return true
+}
+
 // Update ingredient sort order for an address.
 // addressId === null targets the global default template, persisted in app_settings.
 export async function updateAddressIngredientSort(addressId, sortOrderArray) {

@@ -1,499 +1,26 @@
--- STAGING INVENTORY SCHEMA (subset) — chỉ để test 4 RPC tiền nhập kho (WAC/cash_phase/owing).
--- KHÔNG phải full app schema. Tiền bán hàng (bulk_create_orders) có schema riêng, xem
--- scripts/staging-order-schema.sql.
--- Sinh tự động từ supabase/schema.sql + migrations. Paste vào SQL Editor STAGING, Run.
--- An toàn re-run: tables IF NOT EXISTS, functions CREATE OR REPLACE.
-
--- ============ TABLES ============
--- users (từ schema.sql)
-CREATE TABLE IF NOT EXISTS users (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  auth_id UUID REFERENCES auth.users(id),
-  name TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('manager', 'staff', 'admin')),
-  manager_id UUID REFERENCES users(id), -- staff belongs to a manager
-  email TEXT,
-  password TEXT NOT NULL DEFAULT '',
-  username TEXT -- login username (= phần trước @ của email giả), hiển thị ở panel Nhân sự
-);
-
--- addresses (từ schema.sql)
-CREATE TABLE IF NOT EXISTS addresses (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  manager_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  ingredient_sort_order JSONB DEFAULT '[]',
-  referred_from_address_id UUID REFERENCES addresses(id) ON DELETE SET NULL, -- địa chỉ nguồn đã share-clone (hook referral)
-  referral_rewarded_at TIMESTAMPTZ, -- đã thưởng người mời cho địa chỉ này chưa (dedup, §11)
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-ALTER TABLE addresses ADD COLUMN IF NOT EXISTS warehouse_group_id UUID REFERENCES warehouse_groups(id) ON DELETE SET NULL;
-
--- warehouse_groups (từ 20260714_warehouse_groups_1_schema) — kho tổng dùng chung nhiều địa chỉ
-CREATE TABLE IF NOT EXISTS warehouse_groups (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  manager_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- ingredient_costs (từ schema.sql)
-CREATE TABLE IF NOT EXISTS ingredient_costs (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  ingredient TEXT NOT NULL,
-  unit_cost INTEGER NOT NULL DEFAULT 0, -- cost per unit in VND
-  unit TEXT NOT NULL DEFAULT 'đv', -- ingredient unit (g, ml, ly, etc.)
-  address_id UUID REFERENCES addresses(id) ON DELETE CASCADE, -- null means default cost
-  UNIQUE NULLS NOT DISTINCT (ingredient, address_id)
-);
-
--- expenses (từ schema.sql)
-CREATE TABLE IF NOT EXISTS expenses (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  address_id UUID REFERENCES addresses(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  amount INTEGER NOT NULL, -- cost in VND
-  staff_name TEXT,
-  is_fixed BOOLEAN DEFAULT false,
-  is_refill BOOLEAN NOT NULL DEFAULT false,
-  payment_method TEXT NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash', 'transfer')),
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- shift_closings (từ schema.sql)
-CREATE TABLE IF NOT EXISTS shift_closings (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  address_id UUID REFERENCES addresses(id) ON DELETE CASCADE NOT NULL,
-  closed_by UUID REFERENCES users(id),
-  system_total_revenue BIGINT NOT NULL DEFAULT 0,
-  actual_cash BIGINT NOT NULL DEFAULT 0,
-  actual_transfer BIGINT NOT NULL DEFAULT 0,
-  inventory_report JSONB DEFAULT '[]',
-  note TEXT DEFAULT '',
-  closed_at TIMESTAMPTZ DEFAULT now(),
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
-ALTER TABLE expenses ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
-ALTER TABLE expenses ADD COLUMN IF NOT EXISTS discount_amount NUMERIC NOT NULL DEFAULT 0;
-ALTER TABLE expenses ADD COLUMN IF NOT EXISTS extra_cost      NUMERIC NOT NULL DEFAULT 0;
-
--- expense_payments (từ 20260528)
-CREATE TABLE IF NOT EXISTS expense_payments (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    expense_id      UUID NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
-    address_id      UUID NOT NULL REFERENCES addresses(id) ON DELETE CASCADE,
-    amount          NUMERIC NOT NULL CHECK (amount > 0),
-    payment_method  TEXT NOT NULL DEFAULT 'cash',
-    staff_name      TEXT,
-    paid_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    -- paid_at không được rơi trước thời điểm tạo row (1 phút buffer cho clock skew).
-    -- Caller cần đảm bảo paid_at >= invoice.created_at — kiểm thêm ở RPC.
-    CONSTRAINT chk_payment_paid_at_not_before_created
-        CHECK (paid_at >= created_at - interval '1 minute')
-);
-ALTER TABLE expense_payments ADD COLUMN IF NOT EXISTS cash_phase TEXT;
-
--- user_address_access (từ 20260501_rls_denorm_step1)
-CREATE TABLE IF NOT EXISTS user_address_access (
-    auth_id UUID NOT NULL,
-    address_id UUID NOT NULL REFERENCES addresses(id) ON DELETE CASCADE,
-    PRIMARY KEY (auth_id, address_id)
-);
-
--- ============ HELPER FUNCTIONS (từ 20260503) ============
-CREATE OR REPLACE FUNCTION public.auth_owner_id(p_auth_id UUID)
-RETURNS UUID
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-    SELECT COALESCE(manager_id, id) FROM users WHERE auth_id = p_auth_id;
-$$;
-
-CREATE OR REPLACE FUNCTION public.is_admin_auth(p_auth_id UUID)
-RETURNS BOOLEAN
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-    SELECT EXISTS (
-        SELECT 1 FROM users WHERE auth_id = p_auth_id AND role = 'admin'
-    );
-$$;
-
-CREATE OR REPLACE FUNCTION public.is_manager_auth(uid UUID)
-RETURNS BOOLEAN
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-    SELECT EXISTS (
-        SELECT 1 FROM public.users
-        WHERE auth_id = uid
-          AND role IN ('manager', 'admin')
-    );
-$$;
-
--- ============ warehouse groups — helper + management RPCs (từ 20260714_warehouse_groups_2) ====
-CREATE OR REPLACE FUNCTION public.get_warehouse_group_address_ids(p_address_id UUID)
-RETURNS UUID[]
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-    SELECT COALESCE(
-        (SELECT array_agg(a2.id)
-         FROM addresses a1
-         JOIN addresses a2 ON a2.warehouse_group_id = a1.warehouse_group_id
-         WHERE a1.id = p_address_id AND a1.warehouse_group_id IS NOT NULL),
-        ARRAY[p_address_id]
-    );
-$$;
-
--- UPDATE-only (không INSERT) — tránh fan-out tự tạo dòng ingredient_costs "ma" với unit mặc định
--- sai cho thành viên chưa có nguyên liệu đó trong danh mục.
-CREATE OR REPLACE FUNCTION public.sync_group_unit_cost(p_address_id UUID, p_ingredient TEXT, p_unit_cost NUMERIC)
-RETURNS VOID
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-    UPDATE ingredient_costs
-    SET unit_cost = p_unit_cost
-    WHERE ingredient = p_ingredient
-      AND address_id = ANY(public.get_warehouse_group_address_ids(p_address_id));
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.recompute_group_unit_cost(p_address_id UUID, p_ingredient TEXT)
-RETURNS NUMERIC
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-    v_total_qty  NUMERIC;
-    v_total_cost NUMERIC;
-    v_new_cost   NUMERIC;
-BEGIN
-    SELECT COALESCE(SUM(COALESCE((metadata->>'qty')::NUMERIC, 0)), 0),
-           COALESCE(SUM(amount), 0)
-    INTO v_total_qty, v_total_cost
-    FROM expenses
-    WHERE address_id = ANY(public.get_warehouse_group_address_ids(p_address_id))
-      AND is_refill = true
-      AND metadata->>'ingredient' = p_ingredient
-      AND COALESCE((metadata->>'adjustment')::BOOLEAN, false) = false
-      AND COALESCE((metadata->>'cancelled')::BOOLEAN, false) = false
-      AND amount > 0;
-
-    IF v_total_qty > 0 THEN
-        v_new_cost := ROUND(v_total_cost / v_total_qty);
-        PERFORM public.sync_group_unit_cost(p_address_id, p_ingredient, v_new_cost);
-    END IF;
-
-    RETURN v_new_cost;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.set_ingredient_unit_cost(p_address_id UUID, p_ingredient TEXT, p_unit_cost NUMERIC)
-RETURNS VOID
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-    IF p_address_id IS NULL OR p_ingredient IS NULL THEN
-        RAISE EXCEPTION 'p_address_id and p_ingredient are required';
-    END IF;
-    IF p_unit_cost IS NULL OR p_unit_cost < 0 THEN
-        RAISE EXCEPTION 'p_unit_cost must be >= 0';
-    END IF;
-
-    IF auth.uid() IS NOT NULL AND NOT EXISTS (
-        SELECT 1 FROM addresses
-        WHERE id = p_address_id
-          AND (
-              public.is_admin_auth(auth.uid())
-              OR manager_id = public.auth_owner_id(auth.uid())
-              OR id IN (SELECT address_id FROM user_address_access WHERE auth_id = auth.uid())
-          )
-    ) THEN
-        RAISE EXCEPTION 'Permission denied for address %', p_address_id USING ERRCODE = 'insufficient_privilege';
-    END IF;
-
-    PERFORM public.sync_group_unit_cost(p_address_id, p_ingredient, p_unit_cost);
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.upsert_warehouse_group(p_group_id UUID DEFAULT NULL, p_name TEXT DEFAULT NULL)
-RETURNS UUID
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-    v_id UUID;
-BEGIN
-    IF p_name IS NULL OR btrim(p_name) = '' THEN
-        RAISE EXCEPTION 'p_name is required';
-    END IF;
-
-    IF auth.uid() IS NOT NULL AND NOT public.is_manager_auth(auth.uid()) THEN
-        RAISE EXCEPTION 'Only managers can manage warehouse groups' USING ERRCODE = 'insufficient_privilege';
-    END IF;
-
-    IF p_group_id IS NULL THEN
-        INSERT INTO warehouse_groups (manager_id, name)
-        VALUES (public.auth_owner_id(auth.uid()), btrim(p_name))
-        RETURNING id INTO v_id;
-    ELSE
-        IF auth.uid() IS NOT NULL AND NOT EXISTS (
-            SELECT 1 FROM warehouse_groups
-            WHERE id = p_group_id
-              AND (public.is_admin_auth(auth.uid()) OR manager_id = public.auth_owner_id(auth.uid()))
-        ) THEN
-            RAISE EXCEPTION 'Group % is not yours', p_group_id USING ERRCODE = 'insufficient_privilege';
-        END IF;
-        UPDATE warehouse_groups SET name = btrim(p_name) WHERE id = p_group_id;
-        v_id := p_group_id;
-    END IF;
-
-    RETURN v_id;
-END;
-$$;
-
--- Tính lại giá vốn cho TỪNG cựu thành viên (nay solo) sau khi xoá nhóm — tránh giữ giá vốn
--- "chung" cũ tính cả phần mua hàng của các thành viên khác không còn liên quan.
-CREATE OR REPLACE FUNCTION public.delete_warehouse_group(p_group_id UUID)
-RETURNS VOID
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-    v_member_ids UUID[];
-    v_member_id  UUID;
-    v_ingredient TEXT;
-BEGIN
-    IF p_group_id IS NULL THEN
-        RAISE EXCEPTION 'p_group_id is required';
-    END IF;
-
-    IF auth.uid() IS NOT NULL AND NOT EXISTS (
-        SELECT 1 FROM warehouse_groups
-        WHERE id = p_group_id
-          AND (public.is_admin_auth(auth.uid()) OR manager_id = public.auth_owner_id(auth.uid()))
-    ) THEN
-        RAISE EXCEPTION 'Group % is not yours', p_group_id USING ERRCODE = 'insufficient_privilege';
-    END IF;
-
-    SELECT array_agg(id) INTO v_member_ids FROM addresses WHERE warehouse_group_id = p_group_id;
-
-    DELETE FROM warehouse_groups WHERE id = p_group_id;
-
-    IF v_member_ids IS NOT NULL THEN
-        FOREACH v_member_id IN ARRAY v_member_ids LOOP
-            FOR v_ingredient IN SELECT DISTINCT ingredient FROM ingredient_costs WHERE address_id = v_member_id LOOP
-                PERFORM public.recompute_group_unit_cost(v_member_id, v_ingredient);
-            END LOOP;
-        END LOOP;
-    END IF;
-END;
-$$;
-
--- Đồng bộ giá vốn cho cả nhóm MỚI lẫn nhóm CŨ (thành viên còn lại) khi 1 địa chỉ vào/rời/đổi nhóm.
-CREATE OR REPLACE FUNCTION public.set_address_warehouse_group(p_address_id UUID, p_group_id UUID DEFAULT NULL)
-RETURNS VOID
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-    v_owner        UUID;
-    v_old_group_id UUID;
-    v_anchor_id    UUID;
-    v_ingredient   TEXT;
-BEGIN
-    IF p_address_id IS NULL THEN
-        RAISE EXCEPTION 'p_address_id is required';
-    END IF;
-
-    IF auth.uid() IS NOT NULL THEN
-        v_owner := public.auth_owner_id(auth.uid());
-        IF NOT public.is_manager_auth(auth.uid()) THEN
-            RAISE EXCEPTION 'Only managers can manage warehouse groups' USING ERRCODE = 'insufficient_privilege';
-        END IF;
-        IF NOT EXISTS (
-            SELECT 1 FROM addresses
-            WHERE id = p_address_id AND (public.is_admin_auth(auth.uid()) OR manager_id = v_owner)
-        ) THEN
-            RAISE EXCEPTION 'Address % is not yours', p_address_id USING ERRCODE = 'insufficient_privilege';
-        END IF;
-        IF p_group_id IS NOT NULL AND NOT EXISTS (
-            SELECT 1 FROM warehouse_groups
-            WHERE id = p_group_id AND (public.is_admin_auth(auth.uid()) OR manager_id = v_owner)
-        ) THEN
-            RAISE EXCEPTION 'Group % is not yours', p_group_id USING ERRCODE = 'insufficient_privilege';
-        END IF;
-    END IF;
-
-    SELECT warehouse_group_id INTO v_old_group_id FROM addresses WHERE id = p_address_id;
-    UPDATE addresses SET warehouse_group_id = p_group_id WHERE id = p_address_id;
-
-    FOR v_ingredient IN
-        SELECT DISTINCT ingredient FROM ingredient_costs
-        WHERE address_id = ANY(public.get_warehouse_group_address_ids(p_address_id))
-    LOOP
-        PERFORM public.recompute_group_unit_cost(p_address_id, v_ingredient);
-    END LOOP;
-
-    IF v_old_group_id IS NOT NULL AND v_old_group_id IS DISTINCT FROM p_group_id THEN
-        SELECT id INTO v_anchor_id FROM addresses WHERE warehouse_group_id = v_old_group_id LIMIT 1;
-        IF v_anchor_id IS NOT NULL THEN
-            FOR v_ingredient IN
-                SELECT DISTINCT ingredient FROM ingredient_costs
-                WHERE address_id = ANY(public.get_warehouse_group_address_ids(v_anchor_id))
-            LOOP
-                PERFORM public.recompute_group_unit_cost(v_anchor_id, v_ingredient);
-            END LOOP;
-        END IF;
-    END IF;
-END;
-$$;
-
--- ============ record_invoice_payment (từ 20260612) ============
-CREATE OR REPLACE FUNCTION record_invoice_payment(
-    p_expense_id     UUID,
-    p_amount         NUMERIC,
-    p_payment_method TEXT DEFAULT 'cash',
-    p_staff_name     TEXT DEFAULT NULL,
-    p_paid_at        TIMESTAMPTZ DEFAULT NULL,
-    p_cash_phase     TEXT DEFAULT NULL
-)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-    v_address_id      UUID;
-    v_invoice_amount  NUMERIC;
-    v_invoice_created TIMESTAMPTZ;
-    v_paid_total      NUMERIC;
-    v_paid_at         TIMESTAMPTZ;
-    v_cash_phase      TEXT;
-    v_payment_id      UUID;
-BEGIN
-    IF p_amount IS NULL OR p_amount <= 0 THEN
-        RAISE EXCEPTION 'amount must be > 0';
-    END IF;
-
-    -- NULL = không phân loại (phiếu cũ / caller cũ) → report fallback cờ hoá đơn.
-    v_cash_phase := NULLIF(p_cash_phase, '');
-    IF v_cash_phase IS NOT NULL AND v_cash_phase NOT IN ('in_shift', 'post_close') THEN
-        RAISE EXCEPTION 'cash_phase must be in_shift | post_close (got %)', v_cash_phase;
-    END IF;
-
-    SELECT address_id, amount, created_at
-    INTO v_address_id, v_invoice_amount, v_invoice_created
-    FROM expenses
-    WHERE id = p_expense_id AND is_refill = true;
-
-    IF v_address_id IS NULL THEN
-        RAISE EXCEPTION 'invoice not found or not a refill';
-    END IF;
-
-    -- Ownership guard (SECURITY DEFINER bypass RLS nên phải tự check):
-    -- admin / chủ địa chỉ / thành viên qua user_address_access.
-    -- Skip khi auth.uid() IS NULL (service_role / migration).
-    IF auth.uid() IS NOT NULL AND NOT EXISTS (
-        SELECT 1 FROM addresses
-        WHERE id = v_address_id
-          AND (
-              public.is_admin_auth(auth.uid())
-              OR manager_id = public.auth_owner_id(auth.uid())
-              OR id IN (SELECT address_id FROM user_address_access WHERE auth_id = auth.uid())
-          )
-    ) THEN
-        RAISE EXCEPTION 'Permission denied for address %', v_address_id
-            USING ERRCODE = 'insufficient_privilege';
-    END IF;
-
-    v_paid_at := COALESCE(p_paid_at, NOW());
-
-    -- Chặn backdate sang trước NGÀY nhập (so theo ngày VN — client neo 12h trưa).
-    IF (v_paid_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
-         < (v_invoice_created AT TIME ZONE 'Asia/Ho_Chi_Minh')::date THEN
-        RAISE EXCEPTION 'paid_at (%) cannot be before invoice date (%)',
-            v_paid_at, (v_invoice_created AT TIME ZONE 'Asia/Ho_Chi_Minh')::date;
-    END IF;
-
-    -- Chặn overpay.
-    SELECT COALESCE(SUM(amount), 0) INTO v_paid_total
-    FROM expense_payments WHERE expense_id = p_expense_id;
-
-    IF v_paid_total + p_amount > v_invoice_amount THEN
-        RAISE EXCEPTION 'overpay: paid_total (% + %) would exceed invoice amount (%)',
-            v_paid_total, p_amount, v_invoice_amount;
-    END IF;
-
-    INSERT INTO expense_payments (
-        expense_id, address_id, amount, payment_method, staff_name, paid_at, created_at, cash_phase
-    ) VALUES (
-        p_expense_id,
-        v_address_id,
-        p_amount,
-        COALESCE(p_payment_method, 'cash'),
-        p_staff_name,
-        v_paid_at,
-        v_paid_at,
-        v_cash_phase
-    ) RETURNING id INTO v_payment_id;
-
-    RETURN jsonb_build_object('success', true, 'payment_id', v_payment_id);
-END;
-$$;
-
-REVOKE EXECUTE ON FUNCTION public.record_invoice_payment(UUID, NUMERIC, TEXT, TEXT, TIMESTAMPTZ, TEXT) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.record_invoice_payment(UUID, NUMERIC, TEXT, TEXT, TIMESTAMPTZ, TEXT) FROM anon;
-GRANT  EXECUTE ON FUNCTION public.record_invoice_payment(UUID, NUMERIC, TEXT, TEXT, TIMESTAMPTZ, TEXT) TO authenticated;
-
--- ============ get_ingredient_stocks_v2 + process/cancel/edit (từ 20260617) ============
 -- ==============================================================================================
--- Fix: Nhập kho backdate / hủy phiếu → tồn kho không cập nhật.
+-- Kho tổng dùng chung nhiều địa chỉ — Phase 3: làm 4 RPC tồn kho hiện có nhận biết nhóm.
 --
--- 3 BUG:
---   1. process_ingredient_restock: phiếu backdate (created_at quá khứ) có after_stock
---      nhưng nằm SAU các phiếu cũ hơn trong timeline → anchor_cte vẫn đọc neo CŨ
---      (phiếu có created_at mới nhất) → tồn kho không tăng.
---      FIX: sau INSERT, cascade cộng qty vào before_stock/after_stock của mọi phiếu
---      refill SAU phiếu backdate (cùng ingredient). Nhờ vậy phiếu neo mới nhất sẽ
---      có after_stock phản ánh đúng tổng nhập mới.
+-- CHỮ KÝ KHÔNG ĐỔI trên cả 4 hàm → không cần REVOKE/GRANT (chỉ bắt buộc khi đổi signature theo
+-- CLAUDE.md), nhưng vẫn khai lại SET search_path=public + giữ nguyên ownership guard.
 --
---   2. cancel_restock: zero-out qty nhưng GIỮ NGUYÊN after_stock trong metadata →
---      nếu phiếu hủy là neo mới nhất, anchor_cte đọc after_stock "chết" → tồn kho
---      không giảm. Không cascade trừ qty cho phiếu sau nếu hủy phiếu giữa timeline.
---      FIX: (a) xóa after_stock/before_stock khỏi metadata phiếu hủy,
---           (b) cascade trừ cancelled_qty cho mọi phiếu SAU.
---
---   3. get_ingredient_stocks_v2: anchor_cte không filter phiếu cancelled → phiếu hủy
---      vẫn được chọn làm neo.
---      FIX: thêm AND cancelled = false vào anchor_cte WHERE.
---
--- IDEMPOTENT — chạy lại an toàn (CREATE OR REPLACE).
+-- Nguyên tắc:
+--   - Kho tổng (refill + restock rút từ kho tổng): mở rộng sang cả nhóm qua
+--     get_warehouse_group_address_ids(p_address_id).
+--   - Quầy (counter, remaining đếm tay): GIỮ NGUYÊN scope theo p_address_id — không pool.
+--   - Anchor snapshot (before/after_stock) chỉ đúng trên timeline 1 địa chỉ → khi địa chỉ thuộc
+--     nhóm > 1 thành viên, get_ingredient_stocks_v2 BỎ QUA anchor, luôn dùng công thức fallback
+--     (Σrefill − Σrestock) nhưng tính trên cả nhóm. Cascade before/after_stock trong 3 RPC ghi
+--     GIỮ NGUYÊN scope theo p_address_id (không cần sửa — vẫn hợp lệ nếu địa chỉ rời nhóm sau này).
+--   - WAC: process_ingredient_restock giữ nguyên mô hình moving-average riêng (dùng tồn quầy hiện
+--     tại của p_address_id — tech debt đã biết, KHÔNG đồng bộ theo cancel_restock, ngoài phạm vi).
+--     cancel_restock/edit_ingredient_restock dùng recompute_group_unit_cost (full re-average trên
+--     cả nhóm). Cả 3 hàm ghi WAC qua sync_group_unit_cost/recompute_group_unit_cost để fan-out.
 -- ==============================================================================================
 
 BEGIN;
 
--- ── 1. get_ingredient_stocks_v2 — kho tổng mở rộng theo nhóm, bỏ anchor khi grouped (20260714) ──
+-- ── 1. get_ingredient_stocks_v2 — kho tổng mở rộng theo nhóm, bỏ anchor khi grouped ────────────
 CREATE OR REPLACE FUNCTION get_ingredient_stocks_v2(p_address_id UUID)
 RETURNS TABLE (
     ingredient TEXT,
@@ -574,7 +101,7 @@ BEGIN
         GROUP BY c.ing
     ),
     -- MỐC NEO: chỉ áp dụng khi địa chỉ KHÔNG thuộc nhóm > 1 thành viên (anchor chỉ đúng trên
-    -- timeline 1 địa chỉ). Grouped → CTE rỗng → fallback.
+    -- timeline 1 địa chỉ — cộng dồn qua nhiều địa chỉ là vô nghĩa). Grouped → CTE rỗng → fallback.
     anchor_cte AS (
         SELECT DISTINCT ON (e.metadata->>'ingredient')
             (e.metadata->>'ingredient')::TEXT AS ing,
@@ -633,7 +160,7 @@ $$;
 GRANT EXECUTE ON FUNCTION get_ingredient_stocks_v2(UUID) TO authenticated;
 
 
--- ── 2. process_ingredient_restock — cascade after_stock khi backdate ────────────────────────────
+-- ── 2. process_ingredient_restock — WAC ghi qua sync_group_unit_cost (fan-out khi có nhóm) ─────
 CREATE OR REPLACE FUNCTION process_ingredient_restock(
     p_address_id    UUID,
     p_ingredient    TEXT,
@@ -698,7 +225,9 @@ BEGIN
         RAISE EXCEPTION 'paid_at (%) cannot be before created_at (%)', v_paid_at, v_created_at;
     END IF;
 
-    -- 1. Tồn hiện tại (counter remaining từ shift_closing gần nhất) — cho WAC.
+    -- 1. Tồn hiện tại (counter remaining từ shift_closing gần nhất CỦA p_address_id) — cho WAC.
+    --    Mô hình moving-average này dùng tồn QUẦY riêng của p_address_id, không pool theo nhóm —
+    --    tech debt đã biết (task.md), KHÔNG đồng bộ theo cancel_restock, ngoài phạm vi thay đổi này.
     SELECT COALESCE(
         (SELECT (elem->>'remaining')::NUMERIC
          FROM jsonb_array_elements(inventory_report) AS elem
@@ -714,9 +243,8 @@ BEGIN
 
     IF v_current_stock IS NULL OR v_current_stock < 0 THEN v_current_stock := 0; END IF;
 
-    -- Snapshot warehouse-side, NEO theo after_stock của phiếu gần nhất (đồng bộ với
-    -- get_ingredient_stocks_v2): kho = số neo − Σ rút sau neo. Chưa có neo → công thức cũ.
-    -- FIX: filter cancelled khỏi anchor (khớp với anchor_cte trong get_ingredient_stocks_v2).
+    -- Snapshot warehouse-side (before/after_stock) — GIỮ NGUYÊN scope p_address_id, không pool
+    -- (anchor chỉ đúng trên timeline 1 địa chỉ; get_ingredient_stocks_v2 tự bỏ qua khi grouped).
     WITH anchor AS (
         SELECT (e.metadata->>'after_stock')::NUMERIC AS anchor_stock, e.created_at AS anchor_at
         FROM expenses e
@@ -761,7 +289,8 @@ BEGIN
 
     v_after_stock := ROUND(v_before_stock + COALESCE(p_qty, 0), 1);
 
-    -- 2. Giá vốn hiện tại
+    -- 2. Giá vốn hiện tại — đọc theo p_address_id, ĐÚNG nhờ bất biến "đã fan-out" (mọi thành viên
+    --    trong nhóm luôn có cùng unit_cost sau mỗi lần ghi qua sync_group_unit_cost).
     SELECT COALESCE(unit_cost, 0)
     INTO v_old_unit_cost
     FROM ingredient_costs
@@ -807,10 +336,7 @@ BEGIN
         v_created_at
     ) RETURNING id INTO v_expense_id;
 
-    -- FIX: Cascade after_stock cho phiếu SAU khi backdate.
-    -- Phiếu backdate nằm giữa timeline → các phiếu refill SAU nó cần +qty vào
-    -- before_stock/after_stock để neo mới nhất phản ánh đúng tổng nhập.
-    -- Chỉ cascade cho phiếu chưa bị hủy và có after_stock (= phiếu post-migration).
+    -- Cascade after_stock cho phiếu SAU khi backdate — GIỮ NGUYÊN scope p_address_id.
     UPDATE expenses SET
         metadata = jsonb_set(
             jsonb_set(
@@ -864,12 +390,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.process_ingredient_restock(UUID, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ, NUMERIC, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ, TEXT) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.process_ingredient_restock(UUID, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ, NUMERIC, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ, TEXT) FROM anon;
-GRANT  EXECUTE ON FUNCTION public.process_ingredient_restock(UUID, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ, NUMERIC, NUMERIC, NUMERIC, TEXT, TIMESTAMPTZ, TEXT) TO authenticated;
 
-
--- ── 3. cancel_restock — cascade trừ qty + xóa after_stock phiếu hủy ────────────────────────────
+-- ── 3. cancel_restock — WAC recompute qua recompute_group_unit_cost (full re-average / nhóm) ───
 CREATE OR REPLACE FUNCTION cancel_restock(
     p_address_id UUID,
     p_expense_id UUID,
@@ -933,7 +455,7 @@ BEGIN
 
     -- 1. Zero-out the row in place + flag cancelled. Original numbers preserved in
     --    metadata so the card can still show the struck-through "+qty / -amount".
-    --    FIX: xóa after_stock/before_stock (set null) để anchor_cte không đọc neo "chết".
+    --    xóa after_stock/before_stock (set null) để anchor_cte không đọc neo "chết".
     UPDATE expenses SET
         amount = 0,
         metadata = (v_meta - 'after_stock' - 'before_stock')
@@ -947,9 +469,8 @@ BEGIN
             )
     WHERE id = p_expense_id AND address_id = p_address_id;
 
-    -- FIX: Cascade trừ qty khỏi before_stock/after_stock của mọi phiếu refill SAU phiếu bị hủy.
-    -- Khi hủy 1 phiếu ở giữa timeline, các phiếu sau cần giảm snapshot để neo mới nhất phản ánh
-    -- đúng tồn kho thực tế (mất qty hộp đã hủy).
+    -- Cascade trừ qty khỏi before_stock/after_stock của mọi phiếu refill SAU phiếu bị hủy —
+    -- GIỮ NGUYÊN scope p_address_id (anchor snapshot chỉ đúng trên timeline 1 địa chỉ).
     IF v_qty != 0 THEN
         UPDATE expenses SET
             metadata = jsonb_set(
@@ -992,12 +513,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.cancel_restock(UUID, UUID, TEXT) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.cancel_restock(UUID, UUID, TEXT) FROM anon;
-GRANT  EXECUTE ON FUNCTION public.cancel_restock(UUID, UUID, TEXT) TO authenticated;
 
-
--- ── 4. edit_ingredient_restock — cascade delta và chỉ update record có after_stock ──────────
+-- ── 4. edit_ingredient_restock — WAC recompute qua recompute_group_unit_cost (nhóm) ─────────────
 CREATE OR REPLACE FUNCTION edit_ingredient_restock(
     p_address_id      UUID,
     p_expense_id      UUID,
@@ -1095,7 +612,7 @@ BEGIN
     v_amount := p_subtotal - COALESCE(p_discount, 0) + COALESCE(p_extra_cost, 0);
     IF v_amount < 0 THEN v_amount := 0; END IF;
 
-    -- [Fix 1] Prevent zero-amount rows — WAC query filters `amount > 0`, so a zero-amount
+    -- Prevent zero-amount rows — WAC query filters `amount > 0`, so a zero-amount
     -- row would add qty to stock while being silently excluded from WAC (undercount).
     IF v_amount <= 0 THEN
         RAISE EXCEPTION
@@ -1124,17 +641,13 @@ BEGIN
             'subtotal',   p_subtotal,
             'cash_phase', COALESCE(v_cash_phase, 'post_close'),
             'after_stock', v_after_stock,
-            -- [Impr] Audit trail: ai sửa + khi nào.
             'edited_at',  to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
             'edited_by',  p_staff_name
         )
     WHERE id = p_expense_id AND address_id = p_address_id;
 
-    -- 2. [Impr] Delta cascade: khi qty thay đổi, shift before/after_stock của
-    --    tất cả các phiếu refill TIẾP THEO (created_at > p_created_at) theo v_qty_delta.
-    --    Mathematically correct khi withdrawals (shift_closings) không thay đổi.
-    --    Adjustment rows được bỏ qua (amount=0, không ảnh hưởng WAC).
-    --    FIX: Chỉ cascade cho các phiếu có sau migration có after_stock (tránh legacy records).
+    -- 2. Delta cascade: khi qty thay đổi, shift before/after_stock của tất cả các phiếu refill
+    --    TIẾP THEO — GIỮ NGUYÊN scope p_address_id (anchor chỉ đúng trên timeline 1 địa chỉ).
     IF v_qty_delta != 0 THEN
         UPDATE expenses SET
             metadata = jsonb_set(
@@ -1167,7 +680,7 @@ BEGIN
     DELETE FROM expense_payments WHERE expense_id = p_expense_id;
 
     IF v_paid > 0 THEN
-        -- [Fix 2] Check if cash_phase column exists before including it.
+        -- Check if cash_phase column exists before including it.
         --  If 20260612_invoice_payment_cash_phase.sql not yet applied, degrade gracefully.
         SELECT EXISTS (
             SELECT 1 FROM information_schema.columns
@@ -1222,12 +735,4 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.edit_ingredient_restock(UUID, UUID, NUMERIC, NUMERIC, NUMERIC, NUMERIC, NUMERIC, TEXT, TEXT, TIMESTAMPTZ, TEXT) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.edit_ingredient_restock(UUID, UUID, NUMERIC, NUMERIC, NUMERIC, NUMERIC, NUMERIC, TEXT, TEXT, TIMESTAMPTZ, TEXT) FROM anon;
-GRANT  EXECUTE ON FUNCTION public.edit_ingredient_restock(UUID, UUID, NUMERIC, NUMERIC, NUMERIC, NUMERIC, NUMERIC, TEXT, TEXT, TIMESTAMPTZ, TEXT) TO authenticated;
-
 COMMIT;
-
--- ============ TEST GRANT: cho service_role gọi RPC (staging test only) ============
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO service_role, authenticated;
-GRANT USAGE ON SCHEMA public TO service_role;

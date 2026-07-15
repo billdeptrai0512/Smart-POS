@@ -154,3 +154,64 @@ Chi tiết + unit test: `tests/inventory/` (chạy `npx vitest run tests/invento
 2. **Lệch ở quầy** → kiểm tra `remaining` ca gần nhất có bị nhập sai / bỏ trống không.
 3. **Lệch ở kho tổng** → gần như chắc là drift (rút kho không ghi Nhập thêm / vỡ hỏng) → **Hiệu chỉnh tồn**.
 4. Kiểm Nhập kho có đủ phiếu không, có phiếu nào nhập nhầm số lượng / nhầm ngày không.
+
+---
+
+## 9. Kho tổng dùng chung nhiều địa chỉ (warehouse groups)
+
+*Thêm 2026-07-14.* Usecase: 1 manager có nhiều địa chỉ (chi nhánh), muốn 1 tập con trong đó
+**dùng chung 1 kho tổng** (mua hàng ở địa chỉ nào trong nhóm cũng cộng vào cùng 1 pool, giá vốn
+hợp nhất) trong khi **quầy vẫn riêng từng địa chỉ** (đếm tay mỗi ca, không đổi).
+
+### Mô hình
+- `addresses.warehouse_group_id` (nullable, FK `warehouse_groups`) — null = độc lập như mục 1-8
+  ở trên (hành vi mặc định không đổi). 1 địa chỉ thuộc tối đa 1 nhóm. Manager chọn linh hoạt
+  từng địa chỉ vào/ra nhóm (không bắt buộc gộp toàn bộ), có thể nhiều nhóm song song.
+- **Không có "kho chính"** — bất kỳ địa chỉ nào trong nhóm cũng Nhập kho được, cộng dồn chung 1
+  pool (công thức pool đối xứng, không cần chỉ định địa chỉ chịu trách nhiệm mua hàng).
+- Công thức `warehouse_stock` (mục 2.1) mở rộng lọc `address_id = p_address_id` thành
+  `address_id = ANY(get_warehouse_group_address_ids(p_address_id))` — vẫn `Σrefill − Σrestock`,
+  chỉ khác là tính trên TOÀN NHÓM thay vì 1 địa chỉ.
+- `counter_stock` (mục 2.2) **không đổi** — vẫn carry-forward `remaining` riêng của từng địa chỉ.
+- **Mốc neo (anchor, mục "Có mốc neo…" trong get_ingredient_stocks_v2) bị bỏ qua khi grouped** —
+  anchor chỉ đúng trên timeline 1 địa chỉ, cộng dồn qua nhiều địa chỉ vô nghĩa. Địa chỉ thuộc
+  nhóm > 1 thành viên luôn dùng công thức fallback (Σrefill − Σrestock trên nhóm).
+- **WAC hợp nhất**: mỗi lần giá vốn 1 nguyên liệu đổi (Nhập kho / hủy / sửa phiếu / sửa tay), giá
+  trị mới được fan-out ghi vào dòng `ingredient_costs` của MỌI thành viên trong nhóm
+  (`sync_group_unit_cost`) — mỗi địa chỉ vẫn giữ dòng `ingredient_costs` riêng (category/pack/
+  min_stock/tare_weight/unit không hợp nhất), chỉ `unit_cost` là chung. `cancel_restock`/
+  `edit_ingredient_restock` tính lại full re-average (`Σamount/Σqty`) trên purchase history của
+  CẢ NHÓM (`recompute_group_unit_cost`) thay vì chỉ 1 địa chỉ.
+  `process_ingredient_restock` vẫn giữ mô hình moving-average riêng cũ (dùng tồn quầy hiện tại
+  của địa chỉ đang nhập — tech debt đã biết, không đồng bộ 2 mô hình, xem mục 4 ở trên).
+
+### Edge case chấp nhận (không giải quyết bằng code)
+- **Gộp/rời nhóm giữa chừng làm số kho tổng đổi ngay lập tức** — vì mọi thứ là dữ liệu suy ra,
+  không lưu sẵn (như mọi phần khác của tài liệu này). UI cảnh báo khi mở modal gộp nhóm.
+- **Staff chỉ có quyền ở 1 địa chỉ thành viên vẫn thấy được lịch sử mua hàng của các địa chỉ khác
+  trong nhóm** qua các RPC tồn kho — chủ đích (đúng bản chất "dùng chung kho"), không phải lỗ hổng.
+- Tên nguyên liệu (TEXT key) phải khớp chính xác giữa các địa chỉ trong nhóm để pool đúng — không
+  enforce ở code, là yêu cầu vận hành.
+- **Catalog nguyên liệu (`ingredient_costs`) không tự đồng bộ giữa các thành viên** — 1 nguyên liệu
+  chỉ hiện ở trang Nguyên liệu / Nhập kho của địa chỉ nào đã tự tạo nó. Nếu tạo nguyên liệu mới ở
+  địa chỉ A trong nhóm, các địa chỉ B/C phải tự tạo (cùng TEXT key) mới nhập kho được — dù kho tổng
+  đã pool chung. Chấp nhận vì catalog vốn đã per-address từ trước khi có nhóm (category/pack/
+  min_stock riêng từng nơi), không phải regression do tính năng nhóm gây ra.
+- **Xoá 1 địa chỉ đang thuộc nhóm làm tồn kho tổng của các thành viên còn lại tụt xuống** —
+  `expenses.address_id`/`shift_closings.address_id` đều `ON DELETE CASCADE`, nên xoá địa chỉ xoá
+  luôn lịch sử mua hàng/rút hàng của nó; vì `warehouse_stock` là dữ liệu suy ra trên toàn nhóm
+  (`Σrefill − Σrestock` của mọi thành viên), phần đóng góp của địa chỉ bị xoá biến mất khỏi pool dù
+  hàng vật lý không mất. Xác nhận live 2026-07-15: xoá 1 địa chỉ đã đóng góp 200g vào nhóm 2 thành
+  viên → thành viên còn lại tụt đúng 200g ngay lập tức. Không chặn xoá (giữ đúng ngữ nghĩa "xoá =
+  xoá hết dữ liệu địa chỉ"), chỉ cảnh báo rõ hậu quả trong modal xác nhận xoá
+  (`BranchGrid.jsx`) khi địa chỉ đang có thành viên nhóm khác.
+
+### Implementation
+| Thành phần | Vị trí |
+|---|---|
+| Schema | `supabase/migrations/20260714_warehouse_groups_1_schema.sql` |
+| Helper + RPC quản lý nhóm | `supabase/migrations/20260714_warehouse_groups_2_rpcs.sql` (`get_warehouse_group_address_ids`, `sync_group_unit_cost`, `recompute_group_unit_cost`, `set_ingredient_unit_cost`, `upsert_warehouse_group`, `delete_warehouse_group`, `set_address_warehouse_group`) |
+| 4 RPC tồn kho làm group-aware | `supabase/migrations/20260714_warehouse_groups_3_inventory_rpcs.sql` |
+| UI quản lý nhóm | `src/components/AddressSelectPage/BranchGrid.jsx` (modal "Kho tổng chung" trong menu Quản lý mỗi địa chỉ) |
+| Context | `src/contexts/AddressContext.jsx` — `warehouseGroups`, `siblingsByAddress`, `createWarehouseGroup`/`renameWarehouseGroup`/`removeWarehouseGroup`/`setAddressGroup` |
+| Sửa giá vốn thủ công | `updateIngredientUnitCost` (`src/services/ingredientService.ts`) → RPC `set_ingredient_unit_cost` (thay vì upsert thẳng, để đi qua fan-out) |

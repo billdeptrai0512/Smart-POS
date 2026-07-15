@@ -7,7 +7,7 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useHistory } from '../contexts/HistoryContext'
 import {
-    upsertIngredientCost, deleteIngredientCost,
+    upsertIngredientCost, deleteIngredientCost, updateIngredientUnitCost,
     syncIngredientKey,
     fetchIngredientStocks, processIngredientRestock, fetchIngredientDeficits, fetchIngredientDailyContext,
 } from '../services/orderService'
@@ -48,7 +48,12 @@ export default function IngredientManagementPage() {
         productExtras: contextProductExtras, extraIngredients: contextExtraIngs,
         refreshProducts,
     } = useProducts()
-    const { selectedAddress, updateSortOrder } = useAddress()
+    const { selectedAddress, updateSortOrder, siblingsByAddress } = useAddress()
+    const warehouseSiblings = selectedAddress ? siblingsByAddress[selectedAddress.id] : null
+    const groupAddressIds = useMemo(
+        () => selectedAddress ? [selectedAddress.id, ...(warehouseSiblings || []).map(a => a.id)] : [selectedAddress?.id ?? null],
+        [selectedAddress, warehouseSiblings]
+    )
     const { isManager, isAdmin, profile } = useAuth()
     const { refreshTodayExpenses } = useHistory()
     const { toast, showToast, showError } = useToast()
@@ -215,7 +220,7 @@ export default function IngredientManagementPage() {
         if (!selectedAddress) return
         const [stocks, deficits, daily] = await Promise.all([
             fetchIngredientStocks(selectedAddress.id ?? null),
-            fetchIngredientDeficits(selectedAddress.id ?? null),
+            fetchIngredientDeficits(groupAddressIds),
             fetchIngredientDailyContext(selectedAddress.id ?? null),
         ])
         setIngredientStocks(stocks)
@@ -225,7 +230,7 @@ export default function IngredientManagementPage() {
         // gets a new reference on every context refetch even when nothing relevant changed
         // (e.g. ingredient_sort_order edits), which would refire this on every such update.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedAddress?.id, selectedAddress?.name])
+    }, [selectedAddress?.id, selectedAddress?.name, groupAddressIds])
     useEffect(() => { loadStocks() }, [loadStocks])
 
     useEffect(() => { setIngredientCosts(contextCosts) }, [contextCosts])
@@ -286,7 +291,7 @@ export default function IngredientManagementPage() {
     async function saveCost(ingredient, newCostVal) {
         setSaving(true)
         try {
-            await upsertIngredientCost(ingredient, newCostVal, selectedAddress?.id)
+            await updateIngredientUnitCost(ingredient, newCostVal, selectedAddress?.id)
             setIngredientCosts(prev => ({ ...prev, [ingredient]: newCostVal }))
         } catch (err) {
             showError(err, 'Lưu giá nguyên liệu')

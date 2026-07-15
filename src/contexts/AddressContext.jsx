@@ -1,6 +1,11 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from './AuthContext'
-import { fetchAddresses, createAddress as apiCreateAddress, updateAddress as apiUpdateAddress, deleteAddress as apiDeleteAddress, upsertSession, updateAddressIngredientSort as apiUpdateAddressIngredientSort } from '../services/authService'
+import {
+    fetchAddresses, createAddress as apiCreateAddress, updateAddress as apiUpdateAddress, deleteAddress as apiDeleteAddress,
+    upsertSession, updateAddressIngredientSort as apiUpdateAddressIngredientSort,
+    fetchWarehouseGroups, upsertWarehouseGroup as apiUpsertWarehouseGroup,
+    deleteWarehouseGroup as apiDeleteWarehouseGroup, setAddressWarehouseGroup as apiSetAddressWarehouseGroup
+} from '../services/authService'
 import { getDemoAddress, setGuestIngredientSortOrder } from '../services/localRepository'
 import { STORAGE_KEYS } from '../constants/storageKeys'
 import { Outlet } from 'react-router-dom'
@@ -33,6 +38,7 @@ export function AddressProvider() {
     const { profile, isGuest } = useAuth()
     const cachedAddress = readCachedAddress()
     const [addresses, setAddresses] = useState([])
+    const [warehouseGroups, setWarehouseGroups] = useState([])
     const [selectedAddress, setSelectedAddressState] = useState(() => (isGuest ? null : cachedAddress))
     // Start unblocked when we already have a cached address — RequireAddress lets
     // POS through immediately and the real list refetches in the background.
@@ -46,12 +52,14 @@ export function AddressProvider() {
             const demo = getDemoAddress()
             setAddresses([demo])
             setSelectedAddressState(demo)
+            setWarehouseGroups([]) // grouping không áp dụng guest/local mode
             setLoading(false)
             return
         }
 
         if (!profile?.id) {
             setAddresses([])
+            setWarehouseGroups([])
             setLoading(false)
             return
         }
@@ -84,6 +92,12 @@ export function AddressProvider() {
             }
             const addrs = data || []
             setAddresses(addrs)
+
+            if (addressOwnerId === 'ALL') {
+                setWarehouseGroups([]) // admin xem toàn hệ thống — nhóm kho tổng chỉ có ý nghĩa trong 1 manager
+            } else {
+                fetchWarehouseGroups(addressOwnerId).then(({ data: groups }) => setWarehouseGroups(groups || []))
+            }
 
             // Restore previously selected address from localStorage
             const savedId = localStorage.getItem(STORAGE_KEYS.SELECTED_ADDRESS)
@@ -178,6 +192,50 @@ export function AddressProvider() {
         }
     }, [profile, selectedAddress, isGuest])
 
+    // Kho tổng dùng chung nhiều địa chỉ — 1 địa chỉ chỉ thuộc tối đa 1 nhóm (groupId=null = rời nhóm).
+    const createWarehouseGroup = useCallback(async (name) => {
+        if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
+        if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể tạo nhóm kho tổng')
+        const cleanName = (name || '').trim()
+        if (!cleanName) throw new Error('Tên nhóm không được để trống')
+        const ownerId = profile.manager_id || profile.id
+        const groupId = await apiUpsertWarehouseGroup(null, cleanName)
+        setWarehouseGroups(prev => [...prev, { id: groupId, manager_id: ownerId, name: cleanName, created_at: new Date().toISOString() }])
+        return groupId
+    }, [profile, isGuest])
+
+    const renameWarehouseGroup = useCallback(async (groupId, name) => {
+        if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
+        const cleanName = (name || '').trim()
+        if (!cleanName) throw new Error('Tên nhóm không được để trống')
+        await apiUpsertWarehouseGroup(groupId, cleanName)
+        setWarehouseGroups(prev => prev.map(g => g.id === groupId ? { ...g, name: cleanName } : g))
+    }, [isGuest])
+
+    const removeWarehouseGroup = useCallback(async (groupId) => {
+        if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
+        await apiDeleteWarehouseGroup(groupId)
+        setWarehouseGroups(prev => prev.filter(g => g.id !== groupId))
+        setAddresses(prev => prev.map(a => a.warehouse_group_id === groupId ? { ...a, warehouse_group_id: null } : a))
+    }, [isGuest])
+
+    // groupId=null → rời nhóm, kho tổng của địa chỉ này trở lại độc lập.
+    const setAddressGroup = useCallback(async (addressId, groupId) => {
+        if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
+        await apiSetAddressWarehouseGroup(addressId, groupId ?? null)
+        setAddresses(prev => prev.map(a => a.id === addressId ? { ...a, warehouse_group_id: groupId ?? null } : a))
+    }, [isGuest])
+
+    // Địa chỉ "anh em" cùng nhóm kho tổng — dùng để hiển thị nhãn "Kho tổng chung với: X, Y".
+    const siblingsByAddress = useMemo(() => {
+        const map = {}
+        for (const addr of addresses) {
+            if (!addr.warehouse_group_id) continue
+            map[addr.id] = addresses.filter(a => a.id !== addr.id && a.warehouse_group_id === addr.warehouse_group_id)
+        }
+        return map
+    }, [addresses])
+
     const updateSortOrder = useCallback(async (addressId, sortOrderArray) => {
         if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có quyền')
         if (isGuest) {
@@ -204,6 +262,12 @@ export function AddressProvider() {
             renameAddress,
             removeAddress,
             updateSortOrder,
+            warehouseGroups,
+            siblingsByAddress,
+            createWarehouseGroup,
+            renameWarehouseGroup,
+            removeWarehouseGroup,
+            setAddressGroup,
             loading,
             fetchError
         }}>

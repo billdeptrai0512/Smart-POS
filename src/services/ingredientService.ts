@@ -184,6 +184,16 @@ export async function upsertIngredientCost(ingredient: string, unitCost: number,
     if (error) throw error
 }
 
+// Sửa giá vốn thủ công — đi qua RPC (không upsert thẳng) để giá vốn fan-out đúng khi địa chỉ
+// thuộc 1 warehouse group dùng chung kho tổng (xem set_ingredient_unit_cost). Guest/local mode
+// không có khái niệm nhóm nên giữ nguyên đường upsert local cũ.
+export async function updateIngredientUnitCost(ingredient: string, unitCost: number, addressId: UUID) {
+    if (localRepo.isGuest()) return localRepo.upsertLocalIngredientCost({ ingredient, unit_cost: unitCost, address_id: addressId })
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase.rpc('set_ingredient_unit_cost', { p_address_id: addressId, p_ingredient: ingredient, p_unit_cost: unitCost })
+    if (error) throw error
+}
+
 // Sync (rename or merge) an ingredient key across ingredient_costs, recipes,
 // shift_closings.inventory_report (JSONB), and expenses.metadata (JSONB).
 // Always-merge mode: if newKey already exists in ingredient_costs for this address,
@@ -479,7 +489,14 @@ export async function fetchIngredientDailyContext(addressId: UUID | null) {
 // staff_name = người TẠO phiếu chốt ca (closed_by) — phiếu được người khác sửa
 // sau đó thì không có dấu vết, đành chịu (DB không ghi ai update).
 // Trả về [{ id, created_at, qty, before_stock, after_stock, staff_name }] DESC.
-export async function fetchIngredientWithdrawals(addressId: UUID | null, ingredient: string, fromDate: string | Date, toDate: string | Date) {
+// addressIds: mảng — 1 phần tử cho địa chỉ độc lập, nhiều phần tử khi thuộc 1 warehouse group
+// (kho tổng dùng chung). Khi nhóm (>1 phần tử), replay KHÔNG được dùng mốc neo after_stock (chỉ
+// đúng trên timeline 1 địa chỉ) — luôn cộng dồn qty thuần, khớp anchor_cte trong
+// get_ingredient_stocks_v2. RLS tự giới hạn kết quả theo quyền của người gọi (xem ghi chú ở
+// fetchIngredientRestockHistory).
+export async function fetchIngredientWithdrawals(addressIds: UUID[] | UUID | null, ingredient: string, fromDate: string | Date, toDate: string | Date) {
+    const ids = (Array.isArray(addressIds) ? addressIds : [addressIds]).filter(Boolean) as UUID[]
+    const isGrouped = ids.length > 1
     const replay = (refills: Row[], closings: Row[]) => {
         const events = []
         for (const e of refills || []) {
@@ -491,8 +508,8 @@ export async function fetchIngredientWithdrawals(addressId: UUID | null, ingredi
                 t: new Date(e.created_at).getTime(),
                 kind: 'refill',
                 qty: Number(e.metadata?.qty) || 0,
-                // Có snapshot → mốc neo tuyệt đối; null (phiếu cũ) → cộng dồn qty.
-                anchor: Number.isFinite(after) ? after : null,
+                // Có snapshot → mốc neo tuyệt đối; null (phiếu cũ) hoặc đang ở nhóm → cộng dồn qty.
+                anchor: (!isGrouped && Number.isFinite(after)) ? after : null,
             })
         }
         for (const c of closings || []) {
@@ -507,6 +524,7 @@ export async function fetchIngredientWithdrawals(addressId: UUID | null, ingredi
                 id: c.id || c.created_at,
                 created_at: c.created_at,
                 staff_name: c.closer?.name || null,
+                address_id: c.address_id,
             })
         }
         // Cùng timestamp (hiếm): cho refill chạy trước để kho không âm giả.
@@ -520,7 +538,7 @@ export async function fetchIngredientWithdrawals(addressId: UUID | null, ingredi
         let started = false
         for (const ev of events) {
             if (ev.kind === 'refill') {
-                // Snapshot có sẵn → neo kho về after_stock (chốt số). Không có → cộng dồn.
+                // Snapshot có sẵn (chỉ khi KHÔNG grouped) → neo kho về after_stock. Còn lại cộng dồn.
                 if (ev.anchor != null) warehouse = ev.anchor
                 else warehouse += ev.qty
                 started = true
@@ -536,7 +554,7 @@ export async function fetchIngredientWithdrawals(addressId: UUID | null, ingredi
                 out.push({
                     id: ev.id, created_at: ev.created_at, qty: ev.qty,
                     before_stock: before, after_stock: after,
-                    staff_name: ev.staff_name,
+                    staff_name: ev.staff_name, address_id: ev.address_id,
                 })
             }
         }
@@ -544,24 +562,25 @@ export async function fetchIngredientWithdrawals(addressId: UUID | null, ingredi
     }
 
     if (localRepo.isGuest()) {
+        const addressId = ids[0] // guest không hỗ trợ nhóm kho tổng
         return replay(
             localRepo.fetchAllLocalExpenses(addressId).filter((e: Row) => e.is_refill),
             localRepo.fetchAllLocalShiftClosings(addressId),
         )
     }
-    if (!supabase || !addressId) return []
+    if (!supabase || !ids.length) return []
     const sb = supabase
     const closingsQuery = async (sel: string) => await sb
         .from('shift_closings')
         .select(sel)
-        .eq('address_id', addressId) as unknown as { data: Row[] | null; error: SupabaseError }
+        .in('address_id', ids) as unknown as { data: Row[] | null; error: SupabaseError }
     const [refillsRes, closingsRes] = await Promise.all([
         sb
             .from('expenses')
             .select('created_at, metadata')
-            .eq('address_id', addressId)
+            .in('address_id', ids)
             .eq('is_refill', true),
-        closingsQuery('id, created_at, inventory_report, closer:users!closed_by(name)'),
+        closingsQuery('id, address_id, created_at, inventory_report, closer:users!closed_by(name)'),
     ])
     if (refillsRes.error) {
         console.error('fetchIngredientWithdrawals refills error:', refillsRes.error)
@@ -570,7 +589,7 @@ export async function fetchIngredientWithdrawals(addressId: UUID | null, ingredi
     let closings = closingsRes.data
     if (closingsRes.error) {
         // Join users thất bại (RLS/FK đổi tên) → fallback không có tên người chốt.
-        const retry = await closingsQuery('id, created_at, inventory_report')
+        const retry = await closingsQuery('id, address_id, created_at, inventory_report')
         if (retry.error) {
             console.error('fetchIngredientWithdrawals closings error:', retry.error)
             return []
@@ -584,15 +603,17 @@ export async function fetchIngredientWithdrawals(addressId: UUID | null, ingredi
 // Without the `max(0, ...)` clamp that fetchIngredientStocks applies. Negative values mean
 // staff over-reported restock OR bought outside the system — `/ingredients` surfaces these
 // as a "kho lệch sổ sách" banner so manager can reconcile via the Kiểm kê & reset flow.
-export async function fetchIngredientDeficits(addressId: UUID | null) {
+export async function fetchIngredientDeficits(addressIds: UUID[] | UUID | null) {
+    const ids = Array.isArray(addressIds) ? addressIds : [addressIds]
     if (localRepo.isGuest()) {
+        const addressId = ids[0] // guest không hỗ trợ nhóm kho tổng
         const expenses = localRepo.fetchAllLocalExpenses(addressId).filter((e: Row) => e.is_refill && e.metadata?.ingredient)
         const closings = localRepo.fetchAllLocalShiftClosings(addressId)
         return computeDeficits(expenses, closings)
     }
     if (!supabase) return []
-    const isDefault = !addressId
-    const applyAddrFilter = (q: any) => isDefault ? q.is('address_id', null) : q.eq('address_id', addressId)
+    const isDefault = ids.length === 1 && !ids[0]
+    const applyAddrFilter = (q: any) => isDefault ? q.is('address_id', null) : q.in('address_id', ids)
     const [refillsRes, closingsRes] = await Promise.all([
         applyAddrFilter(supabase.from('expenses').select('created_at, metadata')).eq('is_refill', true),
         applyAddrFilter(supabase.from('shift_closings').select('created_at, inventory_report'))

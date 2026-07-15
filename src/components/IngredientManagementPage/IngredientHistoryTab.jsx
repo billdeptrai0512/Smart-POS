@@ -15,6 +15,7 @@ export default function IngredientHistoryTab({
     packSize, packUnit,
     monthLabel, monthOffset, onMonthChange,
     onOpenPayment, onCancelRestock, onEditRestock,
+    addressNameById, // {id: name} — chỉ truyền khi địa chỉ thuộc 1 warehouse group (kho tổng chung)
 }) {
     const hasOwing = summary.totalOwing > 0
     return (
@@ -51,6 +52,7 @@ export default function IngredientHistoryTab({
                             onOpenPayment={onOpenPayment}
                             onCancelRestock={onCancelRestock}
                             onEditRestock={onEditRestock}
+                            addressName={addressNameById?.[entry.address_id]}
                         />
                     ))}
                 </div>
@@ -129,7 +131,7 @@ function Stat({ label, value, tone, align = 'center' }) {
 //
 // Layout: ĐÃ HỦY badge (if cancelled) · type tag + Hủy (corner) · hero qty + money ·
 // Tồn X→Y · context pills (restock only) · staff + datetime above a hairline divider.
-function HistoryCard({ entry, unit, packSize, packUnit, onOpenPayment, onCancelRestock, onEditRestock }) {
+function HistoryCard({ entry, unit, packSize, packUnit, onOpenPayment, onCancelRestock, onEditRestock, addressName }) {
     const d = new Date(entry.created_at)
     // Hardcode dd/mm — Chromium's vi-VN renders "27 - 05" with literal spaces.
     const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -175,6 +177,10 @@ function HistoryCard({ entry, unit, packSize, packUnit, onOpenPayment, onCancelR
     // Chỉ hiện nút Sửa cho restock thật (không phải adjustment/withdrawal/cancelled).
     const editable = !!onEditRestock && isRestock && !cancelled
 
+    // Kho tổng dùng chung nhiều địa chỉ — withdrawal ghi rõ ĐIỂM ĐẾN (rút vào quầy nào), còn
+    // lại (nhập/hiệu chỉnh) ghi NƠI ghi nhận. addressName chỉ có giá trị khi có nhóm (xem cha).
+    const addressCaption = addressName ? (isWithdrawal ? `vào ${addressName}` : `tại ${addressName}`) : null
+
     const typeLabel = isWithdrawal ? 'Rút ra quầy' : isAdjust ? 'Hiệu chỉnh tồn' : 'Nhập kho'
     const typeTone = cancelled ? 'text-text-dim'
         : isWithdrawal ? 'text-text-secondary'
@@ -200,8 +206,13 @@ function HistoryCard({ entry, unit, packSize, packUnit, onOpenPayment, onCancelR
             {/* Row 0 — type tag (left) + cancel (corner). Pushed down a touch when the
                 ĐÃ HỦY badge occupies the top-left. */}
             <div className={`flex items-center justify-between gap-2 -mt-0.5 ${cancelled ? 'mt-4' : ''}`}>
-                <span className={`text-[11px] font-black uppercase tracking-wider ${typeTone}`}>
-                    {typeLabel}
+                <span className="flex items-baseline gap-1.5 min-w-0">
+                    <span className={`text-[11px] font-black uppercase tracking-wider ${typeTone}`}>
+                        {typeLabel}
+                    </span>
+                    {addressCaption && (
+                        <span className="text-[11px] font-medium text-text-dim truncate">{addressCaption}</span>
+                    )}
                 </span>
                 {(editable || cancellable) && (
                     <div className="flex items-center gap-0.5 -mr-1 -mt-1">

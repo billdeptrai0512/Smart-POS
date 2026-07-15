@@ -20,7 +20,10 @@ import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 const SUBSCRIPTION_RANK = { trial: 0, paid: 1, none: 2 }
 
 export default function AddressSelectPage() {
-    const { addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading, fetchError } = useAddress()
+    const {
+        addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading, fetchError,
+        warehouseGroups, createWarehouseGroup, renameWarehouseGroup, removeWarehouseGroup, setAddressGroup,
+    } = useAddress()
     const { cupsMap, revenueMap, prevCupsMap, sessionsMap, subscriptionStatusMap, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
     const { signOut, profile, refreshProfile, isStaff, isManager, isAdmin, isGuest } = useAuth()
     const { enabled: monetizationEnabled } = useMonetizationEnabled()
@@ -300,6 +303,11 @@ export default function AddressSelectPage() {
                         onSelectRecipes={handleSelectRecipes}
                         onRename={renameAddress}
                         onRemove={removeAddress}
+                        warehouseGroups={warehouseGroups}
+                        onCreateWarehouseGroup={createWarehouseGroup}
+                        onRenameWarehouseGroup={renameWarehouseGroup}
+                        onRemoveWarehouseGroup={removeWarehouseGroup}
+                        onSetAddressGroup={setAddressGroup}
                         onSupportClick={() => setShowSupportModal(true)}
                         onDefaultTemplate={async () => {
                             // Load persisted ingredient sort so /ingredients respects admin's saved order.

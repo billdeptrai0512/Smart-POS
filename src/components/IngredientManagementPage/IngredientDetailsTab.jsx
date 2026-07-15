@@ -13,7 +13,7 @@ import { INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 // (we just close the edit affordance optimistically before awaiting).
 export default function IngredientDetailsTab({
     nameLabel, unit, cost, category, packSize, packUnit, minStock, tareWeight,
-    warehouseStock, counterStock, currentStock,
+    warehouseStock, warehouseGroupNote, counterStock, currentStock,
     countInAudit = true,
     canEdit, saving,
     onSaveName,         // (newDisplayName: string) => Promise
@@ -75,6 +75,7 @@ export default function IngredientDetailsTab({
                     label="Tồn kho" value={warehouseStock} unit={unit}
                     hasPack={hasPack} packSize={packSize} packUnit={packUnit}
                     canEdit={canEdit} editable onSave={onSaveWarehouse}
+                    groupNote={warehouseGroupNote}
                 />
                 <QtyRow
                     label="Tồn quầy" value={counterStock} unit={unit}
@@ -106,11 +107,16 @@ function Panel({ title, children }) {
 }
 
 // ── Row container ───────────────────────────────────────────────────────────
-function Row({ label, children }) {
+// `sub` = caption spanning the FULL row width (dùng cho note dài, không đoán trước được độ dài —
+// vd danh sách địa chỉ cùng nhóm kho tổng). Khác với `note` bên trong QtyRow (ngắn, nằm cạnh số).
+function Row({ label, children, sub }) {
     return (
-        <div className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
-            <span className="text-[12px] font-bold text-text-secondary">{label}</span>
-            <div>{children}</div>
+        <div className="py-2.5 first:pt-0 last:pb-0">
+            <div className="flex items-center justify-between gap-3">
+                <span className="text-[12px] font-bold text-text-secondary">{label}</span>
+                <div>{children}</div>
+            </div>
+            {sub && <div className="mt-1 text-[11px] font-medium text-text-dim/80">{sub}</div>}
         </div>
     )
 }
@@ -151,7 +157,7 @@ function NameRow({ value, canEdit, onSave }) {
 // ── Stock qty row (Kho sau / Tồn quầy / Tổng tồn) ───────────────────────────
 // editable=false → chỉ đọc (dùng cho "Tổng tồn"). editable + canEdit → tap để nhập
 // SỐ TUYỆT ĐỐI (đếm được bao nhiêu nhập bấy nhiêu); parent tự quy ra delta/ghi.
-function QtyRow({ label, value, unit, hasPack, packSize, packUnit, canEdit, editable = true, onSave, valueClass = 'text-text', note = null }) {
+function QtyRow({ label, value, unit, hasPack, packSize, packUnit, canEdit, editable = true, onSave, valueClass = 'text-text', note = null, groupNote = null }) {
     const [editing, setEditing] = useState(false)
     const [input, setInput] = useState('')
     const tappable = editable && canEdit
@@ -165,7 +171,7 @@ function QtyRow({ label, value, unit, hasPack, packSize, packUnit, canEdit, edit
         if (Number.isFinite(num) && num >= 0) onSave?.(num)
     }
     return (
-        <Row label={label}>
+        <Row label={label} sub={groupNote}>
             {editing && tappable ? (
                 <div className="flex items-center gap-1">
                     <input

@@ -8,7 +8,7 @@
         "run",
         "dev"
       ],
-      "autoPort": false,
+      "autoPort": true,
       "port": 5173,
       "envFile": ".env"
     },
