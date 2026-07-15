@@ -34,7 +34,7 @@ export default function HistoryPage() {
     const confirm = useConfirm()
     const { products, recipes, ingredientCosts, extraIngredients, refreshProducts } = useProducts()
     const {
-        todayOrders, todayExpenses, isLoadingHistory,
+        todayOrders, todayExpenses, isLoadingHistory, justArrivedIds,
         handleDeleteOrder, handleUpdateOrderDiscount, handleAddExpense, handleUpdateExpense, handleDeleteExpense, handleLoadHistory,
     } = useHistory()
     const { retrySync } = useStats()
@@ -397,6 +397,7 @@ export default function HistoryPage() {
                     runningTotals={runningTotals}
                     isLoading={isTodayScope ? isLoadingHistory : isLoadingRangeOrders}
                     isTodayScope={isTodayScope}
+                    justArrivedIds={isTodayScope ? justArrivedIds : null}
                     pendingOrders={pendingOrders}
                     isSyncing={isSyncing}
                     onRetrySync={handleRetrySync}

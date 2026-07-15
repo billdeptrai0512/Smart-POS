@@ -32,6 +32,9 @@ export function POSProvider() {
 
     const localOrderIds = useRef(new Set())
     const cartRef = useRef([])
+    // Holds the currently-subscribed orders channel so doSubmit can broadcast a
+    // nudge on it right after a successful insert — see the realtime effect below.
+    const ordersChannelRef = useRef(null)
 
     // ---- Persisted State ----
     const loadLocalJSON = (key, fallback) => {
@@ -59,6 +62,10 @@ export function POSProvider() {
     const historyFetchedRef = useRef({ addressId: null, at: 0 }) // last successful handleLoadHistory fetch
     const [todayExpenses, setTodayExpenses] = useState([])
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+    // Order ids that just arrived from ANOTHER device (set in scheduleOrdersRefresh
+    // below), so /history can glow those rows briefly — otherwise a realtime-merged
+    // row looks identical to one that's been sitting there all along.
+    const [justArrivedIds, setJustArrivedIds] = useState(() => new Set())
     // Last few orders, newest first (max 3) — shown in the header "Nhật ký" card.
     const [recentOrders, setRecentOrders] = useState([])
     // createdAt of the row that should play the slide-in. Set only on a local
@@ -155,6 +162,7 @@ export function POSProvider() {
         let statsTimer = null
         let recentTimer = null
         let ordersTimer = null
+        let arrivedTimer = null
 
         const scheduleStatsRefresh = () => {
             clearTimeout(statsTimer)
@@ -169,14 +177,16 @@ export function POSProvider() {
         // no id so localOrderIds can't dedup our own echoes — without this, a burst
         // of N orders fires N refetches that each replace the whole list and remount
         // the rows (the "laggy + loạn" under rapid entry). Coalesce to one trailing
-        // reconcile; the optimistic rows already show each order instantly.
+        // reconcile; the optimistic rows already show each order instantly. Kept short
+        // (300ms) since the counter-staff use case (order-taker outside, counter inside
+        // watching Nhật ký) needs the other screen to update within a beat, not seconds.
         const scheduleRecentRefresh = () => {
             clearTimeout(recentTimer)
             recentTimer = setTimeout(() => {
                 fetchRecentOrders(addressId, 3).then(recent => {
                     setRecentOrders(recent.map(buildLastOrderFromDB))
                 })
-            }, 1500)
+            }, 300)
         }
 
         // Reconcile the /history list (todayOrders) after an edit/soft-delete on
@@ -186,9 +196,25 @@ export function POSProvider() {
             clearTimeout(ordersTimer)
             ordersTimer = setTimeout(() => {
                 fetchTodayOrders(addressId)
-                    .then(orders => setTodayOrders(prev => mergeFetchedOrders(prev, orders)))
+                    .then(orders => setTodayOrders(prev => {
+                        // Rows in the fetch that weren't in our own list yet came from
+                        // another device (our own submissions are already there via the
+                        // optimistic row) — glow those in /history for a few seconds so
+                        // the counter staff notices without staring at the list.
+                        const prevIds = new Set(prev.map(o => o.id))
+                        const newIds = orders.filter(o => !prevIds.has(o.id)).map(o => o.id)
+                        if (newIds.length) {
+                            // Merge into the existing glow set (not replace) — two refresh
+                            // cycles landing within 3s of each other must not cut the first
+                            // batch's glow short.
+                            setJustArrivedIds(prev => new Set([...prev, ...newIds]))
+                            clearTimeout(arrivedTimer)
+                            arrivedTimer = setTimeout(() => setJustArrivedIds(new Set()), 3000)
+                        }
+                        return mergeFetchedOrders(prev, orders)
+                    }))
                     .catch(() => { })
-            }, 1500)
+            }, 300)
         }
 
         const subscribe = () => {
@@ -212,13 +238,25 @@ export function POSProvider() {
                     scheduleRecentRefresh()
                     scheduleOrdersRefresh()
                 })
+                // Fires the instant another device's doSubmit succeeds — skips the
+                // postgres_changes WAL-decode hop entirely, so the other screen updates
+                // near network-RTT speed instead of waiting on replication. No payload
+                // needed; postgres_changes above stays subscribed as the fallback if this
+                // broadcast is dropped (tab backgrounded, blip), so a miss just falls back
+                // to the same refresh a beat later — never a lost/desynced order.
+                .on('broadcast', { event: 'order_added' }, () => {
+                    scheduleRecentRefresh()
+                    scheduleOrdersRefresh()
+                })
                 .subscribe()
+            ordersChannelRef.current = ordersChannel
         }
 
         const unsubscribe = () => {
             if (ordersChannel) {
                 supabase.removeChannel(ordersChannel)
                 ordersChannel = null
+                ordersChannelRef.current = null
             }
         }
 
@@ -250,6 +288,7 @@ export function POSProvider() {
             clearTimeout(statsTimer)
             clearTimeout(recentTimer)
             clearTimeout(ordersTimer)
+            clearTimeout(arrivedTimer)
             document.removeEventListener('visibilitychange', handleVisibility)
             unsubscribe()
         }
@@ -262,9 +301,9 @@ export function POSProvider() {
 
         // Re-check the orders-realtime gate: the device count can change mid-shift
         // (another staff member opens/closes the app), so re-run this on the same
-        // 5-minute cadence as the session heartbeat instead of a separate interval.
-        // Also run once immediately so the channel can open right away on mount
-        // (not only after the first heartbeat tick) if 2+ devices are already active.
+        // interval as the heartbeat below (see its comment for why 30s). Also run
+        // once immediately so the channel can open right away on mount (not only
+        // after the first tick) if 2+ devices are already active.
         const checkMultiDevice = () => {
             countActiveSessions(addressId).then(count => {
                 if (!cancelled) setHasMultiDevice(count >= 2)
@@ -274,16 +313,26 @@ export function POSProvider() {
 
         // Get profile from auth context via import would create circular dep,
         // so we read userId from localStorage or let AddressContext handle initial upsert
+        //
+        // checkMultiDevice runs every 30s (cheap read) so the counter-staff device
+        // notices a second device joining shift-start within tens of seconds instead
+        // of up to 5 minutes — that gap used to mean missed realtime updates for
+        // however long the gate stayed closed. upsertSession itself (a write) still
+        // only fires every 10th tick (~5 min), unchanged — last_seen only needs to
+        // stay inside the 10-minute cutoff in countActiveSessions/fetchActiveSessions.
+        let tick = 0
         const interval = setInterval(() => {
-            // Re-upsert session to keep last_seen fresh
-            const savedId = localStorage.getItem(STORAGE_KEYS.SELECTED_ADDRESS)
-            if (savedId === addressId) {
-                // We need the userId — stored when AddressContext calls upsertSession
-                const userId = localStorage.getItem(STORAGE_KEYS.ACTIVE_USER_ID)
-                if (userId) upsertSession(userId, addressId)
+            tick += 1
+            if (tick % 10 === 0) {
+                const savedId = localStorage.getItem(STORAGE_KEYS.SELECTED_ADDRESS)
+                if (savedId === addressId) {
+                    // We need the userId — stored when AddressContext calls upsertSession
+                    const userId = localStorage.getItem(STORAGE_KEYS.ACTIVE_USER_ID)
+                    if (userId) upsertSession(userId, addressId)
+                }
             }
             checkMultiDevice()
-        }, 5 * 60 * 1000) // every 5 minutes
+        }, 30 * 1000) // every 30s (upsertSession still every ~5min via the tick guard above)
 
         return () => {
             cancelled = true
@@ -445,6 +494,12 @@ export function POSProvider() {
             }
             setTodayOrders(prev => [optimisticOrder, ...prev])
             submitOrder(cartItems, itemTotal, null, addressId, cartCost, costPerItem, profile?.name, 0, orderId)
+                .then(() => {
+                    // Nudge any other device on this address to refetch now instead of
+                    // waiting on postgres_changes' WAL-decode hop — see the channel's
+                    // 'broadcast' listener above for the fallback if this is dropped.
+                    ordersChannelRef.current?.send({ type: 'broadcast', event: 'order_added', payload: {} })
+                })
                 .catch(err => {
                     if (!navigator.onLine || /fetch|network|NetworkError/i.test(err?.message || '')) {
                         // Reuse orderId already sent to the RPC above — if the server actually
@@ -702,12 +757,12 @@ export function POSProvider() {
     }), [revenue, totalCost, cupsSold, isOnline, retrySync])
 
     const historyValue = useMemo(() => ({
-        todayOrders, todayExpenses, isLoadingHistory,
+        todayOrders, todayExpenses, isLoadingHistory, justArrivedIds,
         handleLoadHistory, handleDeleteOrder, handleUpdateOrderDiscount, handleAddExpense, handleUpdateExpense, handleDeleteExpense, refreshTodayExpenses,
         userRole,
         // deliberately partial deps, see comment above
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [todayOrders, todayExpenses, isLoadingHistory, userRole])
+    }), [todayOrders, todayExpenses, isLoadingHistory, justArrivedIds, userRole])
 
     return (
         <CartContext.Provider value={cartValue}>

@@ -10,7 +10,6 @@ import {
     adjustIngredientStock, setCounterStock, hasCounterShiftClosing, recordInvoicePayment, cancelRestock,
     editIngredientRestock,
 } from '../services/orderService'
-import { supabase } from '../lib/supabaseClient'
 import {
     ingredientLabel, getIngredientUnit,
     normalizeIngredientCategory, normalizeIngredientKey,
@@ -157,44 +156,6 @@ export default function IngredientDetailPage() {
             .then(setHistory)
             .finally(() => setLoading(false))
     }, [loadHistory, selectedAddress?.id, ingredientKey])
-
-    // Realtime subscription
-    useEffect(() => {
-        if (!supabase || !selectedAddress?.id || !ingredientKey) return
-
-        const channel = supabase
-            .channel(`ingredient-detail-${ingredientKey}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'expenses',
-                    filter: `address_id=eq.${selectedAddress.id}`
-                },
-                () => {
-                    reloadHistory()
-                    reloadStock()
-                }
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'expense_payments',
-                    filter: `address_id=eq.${selectedAddress.id}`
-                },
-                () => {
-                    reloadHistory()
-                }
-            )
-            .subscribe()
-
-        return () => {
-            supabase.removeChannel(channel)
-        }
-    }, [selectedAddress?.id, ingredientKey, reloadHistory, reloadStock])
 
     const summary = useMemo(() => {
         let totalSpent = 0, totalQty = 0, totalOwing = 0, totalPaidInMonth = 0

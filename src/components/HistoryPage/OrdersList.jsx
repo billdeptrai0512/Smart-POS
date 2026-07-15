@@ -8,6 +8,7 @@ export default function OrdersList({
     orders, runningTotals, isLoading, isTodayScope,
     pendingOrders, isSyncing, onRetrySync, onDeleteOffline,
     onDeleteOrder, onUpdateDiscount, deletingId, setDeletingId,
+    justArrivedIds,
 }) {
     return (
         <main className="flex-1 overflow-y-auto px-4 py-5 pb-4 space-y-3 bg-bg">
@@ -49,6 +50,7 @@ export default function OrdersList({
                         onDeleteOrder={onDeleteOrder}
                         onUpdateDiscount={onUpdateDiscount}
                         onDeleteOffline={onDeleteOffline}
+                        isNew={justArrivedIds?.has(order.id) || false}
                     />
                 ))
             )}
@@ -56,7 +58,7 @@ export default function OrdersList({
     )
 }
 
-function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrder, onUpdateDiscount, onDeleteOffline }) {
+function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrder, onUpdateDiscount, onDeleteOffline, isNew }) {
     const confirm = useConfirm()
     const [showDiscount, setShowDiscount] = useState(false)
     const date = new Date(order.createdAt)
@@ -84,7 +86,8 @@ function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrd
     }
 
     return (
-        <div className="bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden">
+        <div className={`bg-surface border rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden transition-shadow duration-[1500ms] ${isNew ? 'border-primary shadow-[0_0_16px_rgba(255,107,53,0.45)]' : 'border-border/60'}`}>
+            {/* Đơn vừa nhận realtime từ máy khác — glow cam vài giây rồi tự tắt (justArrivedIds ở POSContext) để nhân viên quầy nhận ra ngay, không phải nhìn chằm chằm danh sách */}
             {order.deletedAt && (
                 <div className="absolute top-0 left-0 bg-danger/10 text-danger text-[10px] font-bold px-3 py-1.5 rounded-br-[14px] border-r border-b border-danger/10 flex items-center gap-1.5 uppercase tracking-wider z-10">
                     <span className="w-1.5 h-1.5 rounded-full bg-danger animate-pulse" />
