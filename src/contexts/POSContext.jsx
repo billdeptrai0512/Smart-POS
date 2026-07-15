@@ -240,11 +240,17 @@ export function POSProvider() {
                 })
                 // Fires the instant another device's doSubmit succeeds — skips the
                 // postgres_changes WAL-decode hop entirely, so the other screen updates
-                // near network-RTT speed instead of waiting on replication. No payload
-                // needed; postgres_changes above stays subscribed as the fallback if this
-                // broadcast is dropped (tab backgrounded, blip), so a miss just falls back
-                // to the same refresh a beat later — never a lost/desynced order.
-                .on('broadcast', { event: 'order_added' }, () => {
+                // near network-RTT speed instead of waiting on replication. postgres_changes
+                // above stays subscribed as the fallback if this broadcast is dropped (tab
+                // backgrounded, blip), so a miss just falls back to the same refresh a beat
+                // later — never a lost/desynced order.
+                //
+                // A channel hears its OWN broadcasts too (it's not sender-scoped), so the
+                // same localOrderIds check as postgres_changes above is required here —
+                // without it, submitting an order on THIS device re-triggers its own
+                // refetch a beat later (visible as "loads, then re-loads again ~1s after").
+                .on('broadcast', { event: 'order_added' }, ({ payload }) => {
+                    if (localOrderIds.current.has(payload?.orderId)) return
                     scheduleRecentRefresh()
                     scheduleOrdersRefresh()
                 })
@@ -498,7 +504,8 @@ export function POSProvider() {
                     // Nudge any other device on this address to refetch now instead of
                     // waiting on postgres_changes' WAL-decode hop — see the channel's
                     // 'broadcast' listener above for the fallback if this is dropped.
-                    ordersChannelRef.current?.send({ type: 'broadcast', event: 'order_added', payload: {} })
+                    // orderId lets that listener recognize (and skip) its own echo.
+                    ordersChannelRef.current?.send({ type: 'broadcast', event: 'order_added', payload: { orderId } })
                 })
                 .catch(err => {
                     if (!navigator.onLine || /fetch|network|NetworkError/i.test(err?.message || '')) {
