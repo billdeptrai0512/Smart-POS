@@ -146,7 +146,11 @@ export async function fetchIngredientCostsWithUnits(addressId: UUID | null) {
 
 // Upsert an ingredient cost
 export async function upsertIngredientCost(ingredient: string, unitCost: number, addressId: UUID | null = null, unit: string | null = null, opts: Row = {}) {
-    if (localRepo.isGuest()) return localRepo.upsertLocalIngredientCost({ ingredient, unit_cost: unitCost, address_id: addressId, unit, ...opts })
+    // unit defaults to null when the caller only wants to touch unit_cost (e.g.
+    // processIngredientRestock never passes it) — must stay OUT of the guest payload
+    // entirely (like the Supabase branch below already does via `if (unit) ...`), or
+    // upsertLocalIngredientCost's merge will wipe the ingredient's already-stored unit.
+    if (localRepo.isGuest()) return localRepo.upsertLocalIngredientCost({ ingredient, unit_cost: unitCost, address_id: addressId, ...(unit ? { unit } : {}), ...opts })
     if (!supabase) throw new Error('No Supabase connection')
     const sb = supabase
 

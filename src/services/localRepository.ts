@@ -179,9 +179,12 @@ export const upsertLocalIngredientCost = (payload: Row) => {
         ingredient: payload.ingredient,
         unit_cost: payload.unit_cost !== undefined ? payload.unit_cost : payload.unitCost,
         address_id: payload.address_id,
-        unit: payload.unit,
     };
-    
+    // unit: chỉ ghi khi caller thực sự truyền (vd processIngredientRestock chỉ đổi unit_cost,
+    // không truyền unit) — nếu không, key `unit: undefined` tường minh sẽ ghi đè mất unit đã
+    // lưu qua spread {...items[idx], ...mapped} bên dưới, rơi về mặc định 'đv'.
+    if (payload.unit !== undefined) mapped.unit = payload.unit;
+
     const packSize = payload.pack_size !== undefined ? payload.pack_size : payload.packSize;
     if (packSize !== undefined) mapped.pack_size = packSize;
     
