@@ -5,7 +5,7 @@ export default function CreateProductForm({
     name, price, saving,
     onNameChange, onPriceChange, onSubmit,
 }) {
-    const canSubmit = name.trim() && parseVNDInput(price) > 0 && !saving
+    const canSubmit = name.trim() && parseVNDInput(price) >= 0 && !saving
 
     return (
         <div className="flex flex-col gap-3">

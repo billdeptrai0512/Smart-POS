@@ -61,7 +61,9 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
     const isTodayScope = scope === 'day' && offset === 0
 
     useEffect(() => {
-        if (!addressId) return
+        // addressId === null (not undefined) means "Mẫu mặc định" (admin default
+        // template) — a valid target, not "no address selected yet".
+        if (addressId === undefined) return
 
         setIsAsyncReady(false)
         if (isTodayScope) {

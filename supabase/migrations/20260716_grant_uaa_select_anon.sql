@@ -1,0 +1,24 @@
+-- =============================================
+-- Fix anon guest playground: permission denied for table user_address_access
+-- =============================================
+-- 20260710_fix_menu_read_rls_leak.sql added `owner_address_id/address_id IS NULL
+-- OR ... OR address_id IN (SELECT address_id FROM user_address_access WHERE auth_id
+-- = auth.uid())` to products_read/recipes_read/costs_read/extras_read/extra_ings_read,
+-- explicitly to let anon (guest "Dùng thử") read the shared default template
+-- (address_id IS NULL). But user_address_access was only ever granted to
+-- `authenticated` (20260501_rls_denorm_step1_setup.sql) — Postgres requires the
+-- querying role to have SELECT on every table referenced in a policy's USING
+-- clause to even plan the query, regardless of which OR branch actually matches.
+-- Result: anon hits "permission denied for table user_address_access" on every
+-- read of products/recipes/ingredient_costs/product_extras/extra_ingredients,
+-- even for address_id IS NULL rows — guest mode has been fetching an empty menu
+-- since 20260710.
+--
+-- Fix: grant anon SELECT on the table too. Safe — user_address_access has its
+-- own RLS policy `uaa_self_read` (auth_id = auth.uid()), and auth.uid() is NULL
+-- for anon, so this grant lets the policy *plan*, but the table itself still
+-- returns 0 rows to anon. No data exposed.
+--
+-- Safe to run multiple times.
+
+GRANT SELECT ON user_address_access TO anon;

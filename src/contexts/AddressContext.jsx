@@ -99,6 +99,14 @@ export function AddressProvider() {
                 fetchWarehouseGroups(addressOwnerId).then(({ data: groups }) => setWarehouseGroups(groups || []))
             }
 
+            // "Mẫu mặc định" (id: null, admin-only) isn't a row in `addrs` — it can't be
+            // looked up by id, so the reconcile-with-server-list logic below would always
+            // "miss" and wrongly treat it as a deleted address. Keep it as-is instead.
+            if (cachedAddress?.id === null) {
+                setLoading(false)
+                return
+            }
+
             // Restore previously selected address from localStorage
             const savedId = localStorage.getItem(STORAGE_KEYS.SELECTED_ADDRESS)
             const saved = addrs.find(a => a.id === savedId)
@@ -133,9 +141,12 @@ export function AddressProvider() {
     const setSelectedAddress = useCallback((addr) => {
         setSelectedAddressState(addr)
         if (addr) {
-            localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS, addr.id)
+            // addr.id is null for "Mẫu mặc định" (admin-only default template) — it isn't a
+            // real address, so skip the id-lookup cache key and session tracking for it.
+            if (addr.id) localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS, addr.id)
+            else localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS)
             localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, JSON.stringify(addr))
-            if (profile?.id) {
+            if (profile?.id && addr.id) {
                 upsertSession(profile.id, addr.id)
                 localStorage.setItem(STORAGE_KEYS.ACTIVE_USER_ID, profile.id)
             }

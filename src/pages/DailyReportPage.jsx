@@ -207,9 +207,9 @@ export default function DailyReportPage() {
     // reportCache invalidation.
     const [expenseCategories, setExpenseCategories] = useState([])
     useEffect(() => {
-        if (!selectedAddress?.id) return
+        if (!selectedAddress) return
         fetchExpenseCategories(selectedAddress.id).then(setExpenseCategories)
-    }, [selectedAddress?.id])
+    }, [selectedAddress])
 
     useEffect(() => {
         if (!isLoadingHistory) handleLoadHistory()
@@ -556,7 +556,7 @@ export default function DailyReportPage() {
     // today−7 (cùng thứ HÔM NAY → dự báo Soạn) và today−6 (cùng thứ NGÀY MAI → dự báo Chuẩn bị).
     // Service cache theo address+offset+day nên rẻ khi re-mount.
     useEffect(() => {
-        if (!isTodayScope || !selectedAddress?.id) { setLastWeekItems([]); setNextDowLastWeekItems([]); return }
+        if (!isTodayScope || !selectedAddress) { setLastWeekItems([]); setNextDowLastWeekItems([]); return }
         let alive = true
         fetchLastWeekSameDayOrderItems(selectedAddress.id, 7)
             .then(items => { if (alive) setLastWeekItems(items || []) })
@@ -565,7 +565,7 @@ export default function DailyReportPage() {
             .then(items => { if (alive) setNextDowLastWeekItems(items || []) })
             .catch(() => { if (alive) setNextDowLastWeekItems([]) })
         return () => { alive = false }
-    }, [isTodayScope, selectedAddress?.id])
+    }, [isTodayScope, selectedAddress])
 
     const toUsedMap = useCallback((items) => calculateEstimatedConsumption(
         items.map(i => ({ productId: i.product_id, qty: i.quantity, extras: (i.extra_ids || []).map(id => ({ id })) })),
@@ -765,7 +765,7 @@ export default function DailyReportPage() {
 
     // Sync cờ chốt ca tiền → localStorage để HistoryPage nhận diện đã chốt két.
     useEffect(() => {
-        if (!isTodayScope || !selectedAddress?.id) return
+        if (!isTodayScope || !selectedAddress) return
         const key = cashClosedKey(selectedAddress.id, todayISO)
         const isCashClosed = isTodaysClosing && shiftClosing?.cash_closed_at != null
         if (isCashClosed) {
@@ -773,7 +773,7 @@ export default function DailyReportPage() {
         } else {
             localStorage.removeItem(key)
         }
-    }, [isTodaysClosing, shiftClosing?.cash_closed_at, isTodayScope, selectedAddress?.id, todayISO])
+    }, [isTodaysClosing, shiftClosing?.cash_closed_at, isTodayScope, selectedAddress, todayISO])
 
     const consumptionBreakdown = useMemo(
         () => calculateConsumptionBreakdown(todayOrderItems, recipes, extraIngredients, products, productExtras),
@@ -858,7 +858,7 @@ export default function DailyReportPage() {
     }
 
     const handleSaveInventory = async ({ silent = false } = {}) => {
-        if (!selectedAddress?.id) return
+        if (!selectedAddress) return
         if (silent && !inventory.isDirty) return // auto-lưu: không có gì đổi thì thôi
         if (inventory.restockOverflowIngredients.length > 0) {
             // Auto-lưu không bật alert (để FAB hiện cho user tự lưu & thấy cảnh báo).
@@ -896,7 +896,7 @@ export default function DailyReportPage() {
     // lúc đọc nên setShiftClosing là audit + lossValue + lợi nhuận tự tính lại; đầu kỳ ngày
     // kế cascade theo openingMap. Không đụng kho tổng (chỉ sửa remaining, không sửa restock).
     const handleSavePastInventory = async (newReport) => {
-        if (!selectedAddress?.id || !shiftClosing?.id) return false
+        if (!selectedAddress || !shiftClosing?.id) return false
         if (!await confirm({ title: 'Cập nhật tồn cuối ca của ngày này?', detail: 'Hao hụt và lợi nhuận của ngày sẽ được tính lại.' })) return false
         try {
             const saved = await saveShiftClosing(
@@ -917,7 +917,7 @@ export default function DailyReportPage() {
     // refetch. Cờ riêng này giữ nút disabled suốt cả refetch → không có khe double-click.
     const [savingCashflow, setSavingCashflow] = useState(false)
     const handleSaveCashflow = async () => {
-        if (!selectedAddress?.id || savingCashflow) return
+        if (!selectedAddress || savingCashflow) return
         setSavingCashflow(true)
         const payload = {
             address_id: selectedAddress.id,

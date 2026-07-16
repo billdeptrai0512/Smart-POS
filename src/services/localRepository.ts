@@ -56,7 +56,7 @@ export const setGuestIngredientSortOrder = (arr: string[]) => {
 
 export const getDemoAddress = () => ({
     id: DEMO_ADDRESS_ID,
-    name: 'Quán Demo của tôi',
+    name: 'Sử dụng thử',
     manager_id: 'guest',
     ingredient_sort_order: getGuestIngredientSortOrder() || [],
     created_at: new Date().toISOString()
@@ -85,11 +85,14 @@ export const initializeGuestFromGlobal = (data: Row) => {
     set(KEYS.ORDERS, []);
 
     // Seed expenses with synthetic refill rows so the playground inherits the default's
-    // on-hand stock — fetchLocalIngredientStocks reads Σ refill_qty to compute warehouse.
-    // Each seeded refill has amount=0 (no fake cash impact on P&L) and metadata.seeded=true
-    // so it can be filtered out of the Đi chợ tab if we want to hide them later.
+    // warehouse stock — fetchLocalIngredientStocks reads Σ refill_qty to compute warehouse.
+    // Only the warehouse portion goes here; the counter portion is seeded below as a shift
+    // closing, so the kho/quầy split matches the template instead of dumping everything
+    // into kho tổng. Each seeded refill has amount=0 (no fake cash impact on P&L) and
+    // metadata.seeded=true so it can be filtered out of the Đi chợ tab if we want later.
+    const seedTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const seededExpenses = (data.stocks || [])
-        .filter((s: Row) => s && s.ingredient && Number(s.current_stock) > 0)
+        .filter((s: Row) => s && s.ingredient && Number(s.warehouse_stock) > 0)
         .map((s: Row) => ({
             id: generateId(),
             name: `Tồn ban đầu: ${s.ingredient}`,
@@ -99,12 +102,28 @@ export const initializeGuestFromGlobal = (data: Row) => {
             is_refill: true,
             payment_method: 'cash',
             staff_name: null,
-            metadata: { ingredient: s.ingredient, qty: Number(s.current_stock), totalCost: 0, seeded: true },
-            created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+            metadata: { ingredient: s.ingredient, qty: Number(s.warehouse_stock), totalCost: 0, seeded: true },
+            created_at: seedTime
         }));
     set(KEYS.EXPENSES, seededExpenses);
 
-    set(KEYS.SHIFT_CLOSINGS, []);
+    // Seed a "yesterday" shift closing carrying the counter portion, so counter_stock
+    // (quầy) shows up split from warehouse_stock instead of everything landing in kho
+    // tổng, and Daily Report / Nhật ký have a real closing to carry forward as opening.
+    // restock=0 (no transfer flow to fake); opening=remaining (no sales to fake for a
+    // shift that never happened) keeps hao hụt math at 0 instead of a fake negative.
+    const seededReport = (data.stocks || [])
+        .filter((s: Row) => s && s.ingredient && Number(s.counter_stock) > 0)
+        .map((s: Row) => ({ ingredient: s.ingredient, opening: Number(s.counter_stock), restock: 0, remaining: Number(s.counter_stock) }));
+    set(KEYS.SHIFT_CLOSINGS, seededReport.length ? [{
+        id: generateId(),
+        address_id: addressId,
+        inventory_report: seededReport,
+        actual_cash: 0,
+        actual_transfer: 0,
+        closed_at: seedTime,
+        created_at: seedTime
+    }] : []);
     // fixed_costs seed removed — "thực chi" model no longer uses templates.
 };
 
@@ -546,12 +565,23 @@ export const deleteLocalExpenseCategory = (id: string) => {
 
 export const upsertLocalShiftClosing = (payload: Row) => {
     const list = get(KEYS.SHIFT_CLOSINGS);
+    // payload.id (when the caller — e.g. editing a PAST day's closing, or
+    // setCounterStock patching the latest closing — already knows which row)
+    // targets that exact row. Otherwise fall back to "today's row for this
+    // address", the create-or-merge-into-today heuristic the save/merge flows use.
     const dateStr = dateStringVN();
-    const idx = list.findIndex(s => s.address_id === payload.address_id && dateStringVN(new Date(s.created_at)) === dateStr);
+    const idx = payload.id
+        ? list.findIndex(s => s.id === payload.id)
+        : list.findIndex(s => s.address_id === payload.address_id && dateStringVN(new Date(s.created_at)) === dateStr);
     if (idx >= 0) {
-        list[idx] = { ...list[idx], ...payload };
+        // closed_at mirrors the real DB column — useShiftInventoryState's "is this
+        // row really today" guard reads shift_closing.closed_at, not created_at.
+        // Backfill it on rows saved before this field existed so they aren't
+        // silently treated as stale on next load.
+        list[idx] = { ...list[idx], ...payload, closed_at: list[idx].closed_at || new Date().toISOString() };
     } else {
-        list.push({ ...payload, id: generateId(), created_at: new Date().toISOString() });
+        const now = new Date().toISOString();
+        list.push({ ...payload, id: payload.id || generateId(), created_at: now, closed_at: now });
     }
     set(KEYS.SHIFT_CLOSINGS, list);
 };

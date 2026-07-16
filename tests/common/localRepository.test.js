@@ -97,6 +97,36 @@ describe('renameLocalIngredient (guest sync_ingredient_key parity)', () => {
     })
 })
 
+describe('initializeGuestFromGlobal (kho/quầy split seeding)', () => {
+    it('seeds warehouse portion as a refill expense and counter portion as a shift closing', () => {
+        repo.initializeGuestFromGlobal({
+            stocks: [{ ingredient: 'ca-phe', current_stock: 928, warehouse_stock: 610, counter_stock: 318 }]
+        })
+
+        const addr = repo.getDemoAddress().id
+        const stocks = repo.fetchLocalIngredientStocks(addr)
+        const row = stocks.find(s => s.ingredient === 'ca-phe')
+        expect(row.warehouse_stock).toBe(610)
+        expect(row.counter_stock).toBe(318)
+        expect(row.current_stock).toBe(928)
+
+        const closing = repo.fetchAllLocalShiftClosings(addr)[0]
+        const report = closing.inventory_report.find(r => r.ingredient === 'ca-phe')
+        expect(report.restock).toBe(0)
+        expect(report.opening).toBe(318)
+        expect(report.remaining).toBe(318)
+    })
+
+    it('produces no shift closing when every ingredient has zero counter_stock', () => {
+        repo.initializeGuestFromGlobal({
+            stocks: [{ ingredient: 'duong', current_stock: 500, warehouse_stock: 500, counter_stock: 0 }]
+        })
+        const addr = repo.getDemoAddress().id
+        expect(repo.fetchAllLocalShiftClosings(addr)).toHaveLength(0)
+        expect(repo.fetchLocalIngredientStocks(addr).find(s => s.ingredient === 'duong').warehouse_stock).toBe(500)
+    })
+})
+
 describe('clearGuestData', () => {
     it('clears KEYS and the out-of-KEYS ingredient sort order', () => {
         repo.upsertLocalIngredientCost({ ingredient: 'x', unit_cost: 1, address_id: ADDR })

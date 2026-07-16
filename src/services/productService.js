@@ -40,11 +40,16 @@ export async function fetchProducts(addressId) {
 export async function upsertProductPrice(productId, addressId, price) {
     if (localRepo.isGuest()) return localRepo.updateLocalProductPrice(productId, price)
     if (!supabase) return
-    const { error } = await supabase
+    // .select() forces PostgREST to return affected rows — without it, an UPDATE
+    // silently blocked by RLS (0 rows matched) returns no error at all, and the
+    // caller wrongly thinks the save succeeded.
+    const { data, error } = await supabase
         .from('products')
         .update({ price })
         .eq('id', productId)
+        .select('id')
     if (error) throw error
+    if (!data || data.length === 0) throw new Error('Không có quyền sửa giá món này (bị chặn bởi RLS hoặc món không tồn tại)')
 }
 
 // Rename a product

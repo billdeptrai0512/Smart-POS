@@ -103,17 +103,17 @@ export default function IngredientDetailPage() {
     // Stocks only depend on address+key — refetching on month-arrow taps would
     // burn one extra round-trip per nav.
     useEffect(() => {
-        if (!selectedAddress?.id || !ingredientKey) return
+        if (!selectedAddress || !ingredientKey) return
         fetchIngredientStocks(selectedAddress.id)
             .then(stocks => setStockData(stocks.find(s => s.ingredient === ingredientKey)))
-    }, [selectedAddress?.id, ingredientKey])
+    }, [selectedAddress, ingredientKey])
 
     // Address-level (không phải per-ingredient) — có phiếu chốt ca nào để ghi "Tồn
     // quầy" chưa. Khoá ô sửa nếu chưa, thay vì để user sửa rồi mới báo lỗi.
     useEffect(() => {
-        if (!selectedAddress?.id) return
+        if (!selectedAddress) return
         hasCounterShiftClosing(selectedAddress.id).then(setHasShiftClosing)
-    }, [selectedAddress?.id])
+    }, [selectedAddress])
 
     // History is scoped to the displayed month. Gồm 2 nguồn xen kẽ theo thời gian:
     // phiếu nhập/hiệu chỉnh (expenses) + lượt "Rút ra quầy" (restock trong phiếu
@@ -139,23 +139,23 @@ export default function IngredientDetailPage() {
     }, [groupAddressIds, ingredientKey, fromDate, toDate])
 
     const reloadStock = useCallback(async () => {
-        if (!selectedAddress?.id) return
+        if (!selectedAddress) return
         const stocks = await fetchIngredientStocks(selectedAddress.id)
         setStockData(stocks.find(s => s.ingredient === ingredientKey))
-    }, [selectedAddress?.id, ingredientKey])
+    }, [selectedAddress, ingredientKey])
 
     const reloadHistory = useCallback(async () => {
-        if (!selectedAddress?.id) return
+        if (!selectedAddress) return
         setHistory(await loadHistory())
-    }, [selectedAddress?.id, loadHistory])
+    }, [selectedAddress, loadHistory])
 
     useEffect(() => {
-        if (!selectedAddress?.id || !ingredientKey) return
+        if (!selectedAddress || !ingredientKey) return
         setLoading(true)
         loadHistory()
             .then(setHistory)
             .finally(() => setLoading(false))
-    }, [loadHistory, selectedAddress?.id, ingredientKey])
+    }, [loadHistory, selectedAddress, ingredientKey])
 
     const summary = useMemo(() => {
         let totalSpent = 0, totalQty = 0, totalOwing = 0, totalPaidInMonth = 0

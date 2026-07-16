@@ -692,17 +692,17 @@ function roundStock(x: number) {
 // ẩn/khoá ô "Tồn quầy" ở IngredientDetailPage trước khi cho sửa — setCounterStock
 // ghi vào phiếu gần nhất nên chưa có phiếu nào thì không có gì để ghi.
 export async function hasCounterShiftClosing(addressId: UUID | null) {
-    if (!addressId) return false
+    // Mẫu mặc định (admin-only playground, addressId === null) — không phải địa chỉ
+    // vận hành thật nên không có khái niệm "ca làm việc" bắt buộc trước.
+    // setCounterStock() tự tạo phiếu chốt ca khi cần, nên luôn cho sửa "Tồn quầy" trực tiếp.
+    if (addressId === null) return true
     if (localRepo.isGuest()) {
         return localRepo.fetchAllLocalShiftClosings(addressId).some((c: Row) => c.inventory_report != null)
     }
     if (!supabase) return false
-    const { data, error } = await supabase
-        .from('shift_closings')
-        .select('id')
+    const { data, error } = await supabase.from('shift_closings').select('id')
         .eq('address_id', addressId)
-        .not('inventory_report', 'is', null)
-        .limit(1)
+        .not('inventory_report', 'is', null).limit(1)
     if (error) throw error
     return (data?.length ?? 0) > 0
 }
@@ -711,7 +711,7 @@ export async function hasCounterShiftClosing(addressId: UUID | null) {
 // phiếu chốt ca MỚI NHẤT — cùng nguồn dữ liệu mà card Hao hụt đọc/ghi, nên số ở
 // /ingredients và số chốt ca luôn khớp nhau. Trả null nếu chưa có phiếu chốt nào.
 export async function setCounterStock(addressId: UUID | null, ingredient: string, newRemaining: number) {
-    if (!addressId || !ingredient) return null
+    if (!ingredient) return null
     if (!Number.isFinite(newRemaining) || newRemaining < 0) return null
     const remaining = roundStock(newRemaining)
     const applyToReport = (report: Row[] | null) => {
@@ -735,16 +735,28 @@ export async function setCounterStock(addressId: UUID | null, ingredient: string
     }
     if (!supabase) throw new Error('No Supabase connection')
 
-    const { data: latest, error } = await supabase
-        .from('shift_closings')
-        .select('id, inventory_report')
-        .eq('address_id', addressId)
+    let latestQ = supabase.from('shift_closings').select('id, inventory_report')
+    latestQ = addressId ? latestQ.eq('address_id', addressId) : latestQ.is('address_id', null)
+    const { data: latest, error } = await latestQ
         .not('inventory_report', 'is', null)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
     if (error) throw error
-    if (!latest) return null
+
+    if (!latest) {
+        // Mẫu mặc định chưa từng chốt ca — không bắt admin đi qua /daily-report trước,
+        // tự tạo phiếu chốt ca đầu tiên để làm "Đầu kỳ" cho template.
+        if (addressId !== null) return null
+        const { data: created, error: insErr } = await supabase
+            .from('shift_closings')
+            .insert({ address_id: null, inventory_report: applyToReport(null) })
+            .select()
+            .single()
+        if (insErr) throw insErr
+        invalidateReportCache(addressId)
+        return created
+    }
 
     const { data: row, error: upErr } = await supabase
         .from('shift_closings')

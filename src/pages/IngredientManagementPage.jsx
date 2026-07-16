@@ -144,15 +144,15 @@ export default function IngredientManagementPage() {
     // so the banner clears and the modal stops listing them.
     const [ignoredOrphans, setIgnoredOrphans] = useState(() => new Set())
     useEffect(() => {
-        if (!selectedAddress?.id) { setIgnoredOrphans(new Set()); return }
+        if (!selectedAddress) { setIgnoredOrphans(new Set()); return }
         try {
             const raw = localStorage.getItem(orphanIgnoredKey(selectedAddress.id))
             setIgnoredOrphans(new Set(raw ? JSON.parse(raw) : []))
         } catch { setIgnoredOrphans(new Set()) }
-    }, [selectedAddress?.id])
+    }, [selectedAddress])
 
     const handleIgnoreOrphan = (key) => {
-        if (!selectedAddress?.id) return
+        if (!selectedAddress) return
         setIgnoredOrphans(prev => {
             const next = new Set(prev)
             next.add(key)
@@ -163,7 +163,7 @@ export default function IngredientManagementPage() {
     }
 
     const handleAssignOrphan = async (oldKey, newKey) => {
-        if (!selectedAddress?.id || !oldKey || !newKey || oldKey === newKey) return
+        if (!selectedAddress || !oldKey || !newKey || oldKey === newKey) return
         await syncIngredientKey(selectedAddress.id, oldKey, newKey)
         await Promise.all([loadStocks(), refreshProducts?.()])
     }
@@ -192,16 +192,16 @@ export default function IngredientManagementPage() {
     }, [keyMismatches])
 
     useEffect(() => {
-        if (!selectedAddress?.id) { setDismissedSig(''); return }
+        if (!selectedAddress) { setDismissedSig(''); return }
         try { setDismissedSig(localStorage.getItem(keySyncDismissedKey(selectedAddress.id)) || '') }
         catch { setDismissedSig('') }
-    }, [selectedAddress?.id])
+    }, [selectedAddress])
 
     const isDismissed = mismatchSig !== '' && dismissedSig === mismatchSig
 
     const handleDismissBanner = (e) => {
         e.stopPropagation()
-        if (!selectedAddress?.id || !mismatchSig) return
+        if (!selectedAddress || !mismatchSig) return
         try {
             localStorage.setItem(keySyncDismissedKey(selectedAddress.id), mismatchSig)
             setDismissedSig(mismatchSig)

@@ -64,7 +64,9 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
     // ── Load existing shift closing → seed input maps ─────────────────────────
     // Re-runs when dateKey changes (midnight rollover) to drop stale yesterday inputs.
     useEffect(() => {
-        if (!addressId) { setIsLoadingExisting(false); return }
+        // addressId === null (not undefined) means "Mẫu mặc định" (admin default
+        // template) — a valid target, not "no address selected yet".
+        if (addressId === undefined) { setIsLoadingExisting(false); return }
         setIsLoadingExisting(true)
         // Clear pre-existing input state so a new day starts blank if no closing exists yet.
         setExistingClosing(null)
@@ -119,7 +121,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
     // Exposed so callers can refresh after writing stock (e.g. Nhập kho từ /daily-report)
     // — the warehouse balances then reflect the new purchase without a tab switch.
     const reloadStocks = useCallback(() => {
-        if (!addressId) return Promise.resolve()
+        if (addressId === undefined) return Promise.resolve()
         return Promise.all([
             fetchIngredientStocks(addressId),
             fetchYesterdayShiftClosing(addressId),
@@ -164,7 +166,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
     }, [addressId])
 
     useEffect(() => {
-        if (!addressId) return
+        if (addressId === undefined) return
         reloadStocks()
         const onVis = () => { if (document.visibilityState === 'visible') reloadStocks() }
         document.addEventListener('visibilitychange', onVis)
@@ -175,7 +177,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
     // Exposed (như reloadStocks) để refresh sau khi Nhập kho làm đổi giá vốn bình quân —
     // cột "Giá trị" hao hụt (= lượng × unit_cost) mới tươi mà không cần vào lại trang.
     const reloadIngredients = useCallback(() => {
-        if (!addressId) { setIsLoadingIngredients(false); return Promise.resolve() }
+        if (addressId === undefined) { setIsLoadingIngredients(false); return Promise.resolve() }
         setIsLoadingIngredients(true)
         return fetchIngredientCostsWithUnits(addressId).then(list => {
             // Loại nguyên liệu được tắt "kiểm kê hao hụt" (count_in_audit === false).

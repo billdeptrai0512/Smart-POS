@@ -72,7 +72,9 @@ export function useMonetizationEnabled() {
  *
  * Bypass (trả đủ module, không query entitlement) khi:
  *   - monetization OFF (client build OFF hoặc server app_config OFF), HOẶC
- *   - đang ở guest mode (Khách ghé thăm xem full tính năng)
+ *   - đang ở guest mode (Khách ghé thăm xem full tính năng), HOẶC
+ *   - đang ở "Mẫu mặc định" (id: null, admin-only playground) — không phải địa
+ *     chỉ trả phí thật nên không có (và không cần) hàng entitlement nào cho nó.
  *
  * Khi ON + không guest:
  *   → query RPC get_address_entitlement
@@ -89,7 +91,11 @@ export function useEntitlement() {
     const { isGuest } = useAuth()
     const { enabled, loading: configLoading } = useMonetizationEnabled()
 
-    const bypass = !enabled || isGuest
+    // selectedAddress?.id === null (not undefined) ⇒ "Mẫu mặc định" đang được chọn
+    // (object có id, id=null) — phân biệt với "chưa chọn địa chỉ" (selectedAddress
+    // chính nó null/undefined ⇒ ?.id trả undefined).
+    const isDefaultTemplate = selectedAddress?.id === null
+    const bypass = !enabled || isGuest || isDefaultTemplate
 
     const [state, setState] = useState({ activeModules: [], validToByModule: {}, loading: true })
 

@@ -85,7 +85,9 @@ export async function insertShiftClosing(data: Row) {
 // Update an existing shift closing record
 export async function updateShiftClosing(id: UUID, data: Row) {
     invalidateReportCache(data?.address_id || null)
-    if (localRepo.isGuest()) return localRepo.upsertLocalShiftClosing(data)
+    // Guest: thread `id` through so upsertLocalShiftClosing targets THIS row (e.g.
+    // editing a past day's closing) instead of falling back to its "today" heuristic.
+    if (localRepo.isGuest()) return localRepo.upsertLocalShiftClosing({ ...data, id })
     if (!supabase) throw new Error('No Supabase connection')
     let { data: row, error } = await supabase
         .from('shift_closings')
@@ -197,10 +199,11 @@ export async function fetchTodayShiftClosing(addressId: UUID) {
     if (!supabase) return null
     const startOfDay = startOfDayVN()
 
-    const { data, error } = await supabase
-        .from('shift_closings')
+    // address_id IS NULL (Mẫu mặc định) — `.eq()` never matches NULL rows in Postgres.
+    let q = supabase.from('shift_closings')
         .select('id, closed_at, address_id, inventory_report, actual_cash, actual_transfer, system_total_revenue')
-        .eq('address_id', addressId)
+    q = addressId ? q.eq('address_id', addressId) : q.is('address_id', null)
+    const { data, error } = await q
         .gte('closed_at', startOfDay.toISOString())
         .order('closed_at', { ascending: false })
         .limit(1)
@@ -241,10 +244,9 @@ export async function fetchYesterdayShiftClosing(addressId: UUID) {
     if (!supabase) return null
     const startOfDay = startOfDayVN()
 
-    const { data, error } = await supabase
-        .from('shift_closings')
-        .select('id, closed_at, address_id, inventory_report')
-        .eq('address_id', addressId)
+    let q = supabase.from('shift_closings').select('id, closed_at, address_id, inventory_report')
+    q = addressId ? q.eq('address_id', addressId) : q.is('address_id', null)
+    const { data, error } = await q
         .lt('closed_at', startOfDay.toISOString())
         .order('closed_at', { ascending: false })
         .limit(1)
@@ -304,7 +306,6 @@ export async function fetchPastDaysOrderItems(addressId: UUID | null, days = 7) 
 //   daysAgo = 6 → same weekday as TOMORROW → dự báo "Chuẩn bị ngày mai".
 export async function fetchLastWeekSameDayOrderItems(addressId: UUID, daysAgo = 6) {
     return historicalCache.through([addressId, 'lastWeekSameDay', daysAgo, dateStringVN()], async () => {
-        if (!supabase) return []
         const today = startOfDayVN()
 
         const targetDate = new Date(today)
@@ -312,6 +313,21 @@ export async function fetchLastWeekSameDayOrderItems(addressId: UUID, daysAgo = 
 
         const nextDate = new Date(targetDate)
         nextDate.setDate(nextDate.getDate() + 1)
+
+        if (localRepo.isGuest()) {
+            const targetMs = targetDate.getTime()
+            const nextMs = nextDate.getTime()
+            const allItems: Row[] = []
+            for (const o of localRepo.fetchAllLocalOrders(addressId)) {
+                if (o.deleted_at) continue
+                const t = new Date(o.created_at).getTime()
+                if (t < targetMs || t >= nextMs) continue
+                for (const i of o.order_items || []) allItems.push(i)
+            }
+            return allItems
+        }
+
+        if (!supabase) return []
 
         let query = supabase
             .from('orders')
