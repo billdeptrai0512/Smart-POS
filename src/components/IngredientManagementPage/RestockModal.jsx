@@ -101,7 +101,14 @@ export default function RestockModal({
     const showPhaseToggle = paymentMethod === 'cash'
 
     const handleSubmit = async () => {
-        if (!isValid || submitting) return
+        if (submitting) return
+        if (!isValid) {
+            // Nút không disabled cứng nữa (bấm vào lúc thiếu field mà không có phản hồi gì
+            // dễ trông như app treo) — focus field còn thiếu để user thấy ngay cần sửa gì.
+            if (!qty || Number(qty) <= 0) qtyInputRef.current?.focus()
+            else subtotalInputRef.current?.focus()
+            return
+        }
         setSubmitting(true)
         try {
             await onConfirm({
@@ -377,8 +384,10 @@ export default function RestockModal({
                 {/* Submit */}
                 <button
                     onClick={handleSubmit}
-                    disabled={!isValid || submitting}
-                    className="w-full py-3.5 rounded-[14px] bg-primary text-white text-[15px] font-black uppercase tracking-wide hover:bg-primary/90 active:bg-primary/80 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-primary/20"
+                    disabled={submitting}
+                    className={`w-full py-3.5 rounded-[14px] text-white text-[15px] font-black uppercase tracking-wide active:scale-[0.98] transition-all disabled:cursor-not-allowed shadow-lg shadow-primary/20 ${
+                        isValid ? 'bg-primary hover:bg-primary/90 active:bg-primary/80' : 'bg-primary/40 disabled:opacity-100'
+                    }`}
                 >
                     {submitting ? 'Đang xử lý...' : mode === 'edit' ? 'Lưu thay đổi' : 'Xác nhận nhập kho'}
                 </button>
