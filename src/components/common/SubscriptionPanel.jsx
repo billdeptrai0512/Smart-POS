@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Loader2, CheckCircle2, Copy, Check } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
@@ -7,7 +7,7 @@ import { supabase } from '../../lib/supabaseClient'
 import { usePaymentPoll } from '../../hooks/usePaymentPoll'
 import { formatVND } from '../../utils'
 import { PLAN, ALL_TIER, BANK_INFO, TRIAL_DAYS } from '../../constants/monetization'
-import { invalidateEntitlementCache } from '../AddressSelectPage/SubscriptionBadge'
+import { computeSubscriptionStatus } from '../../utils/subscriptionStatus'
 
 // Gradient vàng thương hiệu (đồng bộ badge "developed by").
 const GOLD = 'linear-gradient(135deg, #f8c577, #f59e0b, #d4882f, #b8732a)'
@@ -22,7 +22,7 @@ const GOLD = 'linear-gradient(135deg, #f8c577, #f59e0b, #d4882f, #b8732a)'
 export default function SubscriptionPanel({ preselectAddressId, onDone }) {
     const { isAdmin } = useAuth()
     const { addresses, selectedAddress } = useAddress()
-    const { refreshSubscriptionStatuses } = useAddressStats()
+    const { subscriptionRowsMap, subscriptionLoading, refreshSubscriptionStatuses } = useAddressStats()
 
     const [selectedAddressIds, setSelectedAddressIds] = useState([])
 
@@ -51,35 +51,17 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
 
     // valid_to (hạn) hiện tại của TỪNG chi nhánh → vừa hiện chip Đã mở/Chưa mở,
     // vừa tính "hiệu lực đến" sau khi trả (gia hạn nối tiếp). null = chưa có sub active.
-    // Dùng cùng RPC với badge (get_address_entitlement) để khớp CURRENT_DATE của DB.
-    const [validToByAddr, setValidToByAddr] = useState({})
-    const [accessLoaded, setAccessLoaded] = useState(false)
-    useEffect(() => {
-        let cancelled = false
-        if (!addresses.length) { setValidToByAddr({}); setAccessLoaded(true); return }
-        setAccessLoaded(false)
-        Promise.all(addresses.map(a =>
-            supabase
-                .rpc('get_address_entitlement', { p_address_id: a.id })
-                .then(({ data }) => {
-                    const rows = Array.isArray(data) ? data : (data ? [data] : [])
-                    const vt = rows.reduce((mx, r) => (r.valid_to && (!mx || r.valid_to > mx) ? r.valid_to : mx), null)
-                    return [a.id, vt]
-                })
-                .catch(() => [a.id, null])
-        )).then(entries => {
-            if (cancelled) return
-            setValidToByAddr(Object.fromEntries(entries))
-            setAccessLoaded(true)
-        })
-        return () => { cancelled = true }
-    }, [addresses])
+    // Derived từ subscriptionRowsMap (AddressStatsContext) — 1 query dùng chung cho
+    // cả badge danh sách lẫn panel này, thay vì mỗi nơi tự RPC riêng cho từng chi nhánh.
+    const validToByAddr = useMemo(() => Object.fromEntries(
+        addresses.map(a => [a.id, computeSubscriptionStatus(subscriptionRowsMap[a.id]).validTo])
+    ), [addresses, subscriptionRowsMap])
+    const accessLoaded = !subscriptionLoading
 
     // Xác nhận thanh toán: hiện panel thành công, user tự bấm "Xong" (không auto-redirect).
-    // Làm tươi cả badge từng card (entitlementCache) lẫn thứ tự sort (subscriptionStatusMap) —
-    // dùng chung cho mock trial và poll-while-pending (usePaymentPoll).
+    // Làm tươi rows/status dùng chung (badge từng card + thứ tự sort + panel này) —
+    // dùng cho cả mock trial và poll-while-pending (usePaymentPoll).
     const handleConfirmed = () => {
-        invalidateEntitlementCache(addresses.map(a => a.id))
         refreshSubscriptionStatuses()
         setConfirmed(true)
     }
@@ -226,7 +208,6 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                 p_modules: null,   // null = xoá hết
             })
             if (error) throw error
-            invalidateEntitlementCache(selectedAddressIds)
             refreshSubscriptionStatuses()
             if (onDone) onDone()
             else window.location.reload()

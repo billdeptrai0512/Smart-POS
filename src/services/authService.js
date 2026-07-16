@@ -247,24 +247,24 @@ export async function fetchAddresses(managerId) {
     return { data, error: null }
 }
 
-// Trạng thái gói ('trial'|'paid'|'none') cho từng address, dùng để sắp xếp
-// BranchGrid (dùng thử → đã đăng ký → chưa đăng ký). 1 query duy nhất, không
-// per-card như SubscriptionBadge (badge cache riêng cho hiển thị khi mở card).
+// Trạng thái gói ('trial'|'paid'|'none') + rows thô cho từng address — 1 query
+// duy nhất dùng chung cho sort BranchGrid, SubscriptionBadge (badge từng card) và
+// SubscriptionPanel (chip Đã mở/Chưa mở) — trước đây 3 nơi tự fetch riêng (N+1).
 export async function fetchSubscriptionStatuses(addressIds) {
-    if (isGuest() || !supabase || !addressIds.length) return {}
+    if (isGuest() || !supabase || !addressIds.length) return { statusMap: {}, rowsMap: {} }
     const { data, error } = await supabase
         .from('address_subscriptions')
         .select('address_id, valid_from, valid_to, note')
         .in('address_id', addressIds)
     if (error) {
         console.error('fetchSubscriptionStatuses error:', error)
-        return {}
+        return { statusMap: {}, rowsMap: {} }
     }
-    const byAddress = {}
-    ;(data || []).forEach(r => { (byAddress[r.address_id] ??= []).push(r) })
+    const rowsMap = {}
+    ;(data || []).forEach(r => { (rowsMap[r.address_id] ??= []).push(r) })
     const statusMap = {}
-    addressIds.forEach(id => { statusMap[id] = computeSubscriptionStatus(byAddress[id]).status })
-    return statusMap
+    addressIds.forEach(id => { statusMap[id] = computeSubscriptionStatus(rowsMap[id]).status })
+    return { statusMap, rowsMap }
 }
 
 // Translate Postgres unique-violation (23505) into a user-facing message.

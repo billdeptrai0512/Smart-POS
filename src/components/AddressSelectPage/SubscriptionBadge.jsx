@@ -1,5 +1,3 @@
-import { useState, useEffect } from 'react'
-import { supabase } from '../../lib/supabaseClient'
 import { useMonetizationEnabled } from '../../hooks/useEntitlement'
 import { computeSubscriptionStatus } from '../../utils/subscriptionStatus'
 
@@ -14,59 +12,28 @@ import { computeSubscriptionStatus } from '../../utils/subscriptionStatus'
  *   - chưa có gói → ● Chưa đăng ký   (click → /subscription)
  * Chấm đổi màu theo độ gấp: ≤3 đỏ, ≤14 vàng, còn lại xanh.
  *
- * Trial = dòng note='trial'. Đọc trực tiếp address_subscriptions (RLS addr_sub_select
- * cho phép) vì RPC get_address_entitlement không trả `note`. Lấy dòng valid_to muộn
- * nhất làm gói hiệu lực → paid nối tiếp trial thì hiện "Đã đăng ký".
+ * Trial = dòng note='trial'. Lấy dòng valid_to muộn nhất làm gói hiệu lực → paid
+ * nối tiếp trial thì hiện "Đã đăng ký".
  *
  * ⚠️ Render bằng <span> (không phải <button>) vì badge nằm BÊN TRONG button card
  *    của BranchGrid — button lồng button gây hydration error. span + onClick hợp lệ.
  *
  * Props:
  *   addressId: UUID
+ *   rows: [{valid_from, valid_to, note}] — address_subscriptions rows của address này,
+ *     fetch 1 lần cho TẤT CẢ địa chỉ ở AddressStatsContext (không tự fetch per-card,
+ *     tránh N+1 request khi danh sách có nhiều chi nhánh).
+ *   loading: bool — chưa có kết quả fetch thật → không render (rows lúc này luôn
+ *     rỗng/undefined nên nếu vẫn render sẽ sai thành "Chưa đăng ký"). Ẩn hẳn thay vì
+ *     skeleton để nút "Thao tác khác" đứng một mình trong hàng flex justify-between
+ *     → tự dạt về sát trái, không nhảy vị trí khi badge xuất hiện.
  *   onRenewClick: () => void   — điều hướng tới /subscription (passed from parent)
  */
-// Cache entitlement rows theo addressId (module-level). Badge bị unmount/mount lại
-// mỗi lần mở/đóng menu "thao tác khác" của card → không cache thì mỗi lần mount lại
-// phải fetch, nháy trống chờ load. Gói cước gần như không đổi trong 1 phiên.
-const entitlementCache = new Map()
-
-// Gọi sau khi Mock/Reset gói (admin) đổi address_subscriptions trực tiếp trong DB —
-// điều hướng dùng navigate() (SPA, không reload) nên cache cũ không tự rớt.
-// eslint-disable-next-line react-refresh/only-export-components -- cache helper dùng chung với SubscriptionPanel
-export function invalidateEntitlementCache(addressIds) {
-    (Array.isArray(addressIds) ? addressIds : [addressIds]).forEach(id => entitlementCache.delete(id))
-}
-
-export default function SubscriptionBadge({ addressId, onRenewClick }) {
+export default function SubscriptionBadge({ addressId, rows, loading, onRenewClick }) {
     const { enabled } = useMonetizationEnabled()
-    const [rows, setRows] = useState(() => entitlementCache.get(addressId) ?? [])
-    const [loaded, setLoaded] = useState(() => entitlementCache.has(addressId))
 
-    // Không fetch gì khi monetization OFF (client build hoặc server app_config)
-    useEffect(() => {
-        if (!enabled || !addressId) {
-            // Intentional: nothing to fetch, mark loaded so render resolves.
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            setLoaded(true)
-            return
-        }
-        // Đã có cache (vd vừa đóng menu thao tác) → initializer đã seed sẵn, khỏi fetch lại.
-        if (entitlementCache.has(addressId)) return
-
-        supabase
-            .from('address_subscriptions')
-            .select('valid_from, valid_to, note')
-            .eq('address_id', addressId)
-            .then(({ data }) => {
-                const r = Array.isArray(data) ? data : []
-                entitlementCache.set(addressId, r)
-                setRows(r)
-            })
-            .finally(() => setLoaded(true))
-    }, [addressId, enabled])
-
-    // Monetization OFF hoặc chưa load xong → không render
-    if (!enabled || !loaded) return null
+    // Monetization OFF, hoặc chưa có addressId, hoặc rows thật chưa về → không render
+    if (!enabled || !addressId || loading) return null
 
     const handleClick = (e) => { e.stopPropagation(); onRenewClick?.() }
     const { status, daysLeft } = computeSubscriptionStatus(rows)

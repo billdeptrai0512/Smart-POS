@@ -29,6 +29,10 @@ export function AddressStatsProvider() {
     const [prevCupsMap, setPrevCupsMap] = useState({})
     const [sessionsMap, setSessionsMap] = useState({})
     const [subscriptionStatusMap, setSubscriptionStatusMap] = useState({})
+    const [subscriptionRowsMap, setSubscriptionRowsMap] = useState({})
+    // true ngay từ đầu (giả định đang tải) — tránh badge render "Chưa đăng ký" sai
+    // trong 1 frame trước khi effect bên dưới kịp chạy và set lại giá trị thật.
+    const [subscriptionLoading, setSubscriptionLoading] = useState(true)
     const [staffList, setStaffList] = useState([])
     const [statsLoading, setStatsLoading] = useState(false)
     const [staffLoading, setStaffLoading] = useState(false)
@@ -63,14 +67,20 @@ export function AddressStatsProvider() {
     const loadSubscriptionStatuses = useCallback(async () => {
         if (!monetizationEnabled || !addresses.length) {
             setSubscriptionStatusMap({})
+            setSubscriptionRowsMap({})
+            setSubscriptionLoading(false)
             return
         }
-        const map = await fetchSubscriptionStatuses(addresses.map(a => a.id))
-        if (!cancelRef.current) setSubscriptionStatusMap(map)
+        setSubscriptionLoading(true)
+        const { statusMap, rowsMap } = await fetchSubscriptionStatuses(addresses.map(a => a.id))
+        if (cancelRef.current) return
+        setSubscriptionStatusMap(statusMap)
+        setSubscriptionRowsMap(rowsMap)
+        setSubscriptionLoading(false)
     }, [addresses, monetizationEnabled])
 
-    // Expose để SubscriptionPanel gọi lại sau Mock/Reset gói (admin) — invalidateEntitlementCache
-    // chỉ làm tươi badge từng card, không tự đụng tới thứ tự sort ở đây.
+    // Expose để SubscriptionPanel gọi lại sau Mock/Reset gói (admin) — làm tươi cả
+    // rows (badge từng card + panel) lẫn status (thứ tự sort) trong 1 lần refetch.
     useEffect(() => {
         loadSubscriptionStatuses()
     }, [addressIdsKey, monetizationEnabled, loadSubscriptionStatuses])
@@ -123,6 +133,8 @@ export function AddressStatsProvider() {
             prevCupsMap,
             sessionsMap,
             subscriptionStatusMap,
+            subscriptionRowsMap,
+            subscriptionLoading,
             staffList,
             statsLoading,
             staffLoading,

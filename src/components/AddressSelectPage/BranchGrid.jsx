@@ -15,7 +15,7 @@ import BackupModal from './BackupModal'
 const isManagerRole = (role) => (role === 'manager' || role === 'co-manager') ? 1 : 0
 
 export default function BranchGrid({
-    addresses, fetchError, cupsMap, revenueMap, prevCupsMap = {}, sessionsMap, statsLoading,
+    addresses, fetchError, cupsMap, revenueMap, prevCupsMap = {}, sessionsMap, subscriptionRowsMap = {}, subscriptionLoading, statsLoading,
     isStaff, isAdmin, error, setError,
     onSelect, onSelectReport, onSelectHistory, onSelectIngredients, onSelectRecipes,
     onRename, onRemove, onDefaultTemplate, onSupportClick,
@@ -251,6 +251,8 @@ export default function BranchGrid({
                                         {/* Trạng thái gói — tự ẩn khi monetization OFF (badge return null) */}
                                         <SubscriptionBadge
                                             addressId={addr.id}
+                                            rows={subscriptionRowsMap[addr.id]}
+                                            loading={subscriptionLoading}
                                             onRenewClick={() => navigate('/subscription', {
                                                 state: { preselectAddressId: addr.id, from: '/addresses' },
                                             })}

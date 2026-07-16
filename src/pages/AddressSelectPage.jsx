@@ -24,7 +24,7 @@ export default function AddressSelectPage() {
         addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading, fetchError,
         warehouseGroups, createWarehouseGroup, renameWarehouseGroup, removeWarehouseGroup, setAddressGroup,
     } = useAddress()
-    const { cupsMap, revenueMap, prevCupsMap, sessionsMap, subscriptionStatusMap, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
+    const { cupsMap, revenueMap, prevCupsMap, sessionsMap, subscriptionStatusMap, subscriptionRowsMap, subscriptionLoading, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
     const { signOut, profile, refreshProfile, isStaff, isManager, isAdmin, isGuest } = useAuth()
     const { enabled: monetizationEnabled } = useMonetizationEnabled()
     const navigate = useNavigate()
@@ -291,6 +291,8 @@ export default function AddressSelectPage() {
                         revenueMap={revenueMap}
                         prevCupsMap={prevCupsMap}
                         sessionsMap={sessionsMap}
+                        subscriptionRowsMap={subscriptionRowsMap}
+                        subscriptionLoading={subscriptionLoading}
                         statsLoading={statsLoading}
                         isStaff={isStaff}
                         isAdmin={isAdmin}

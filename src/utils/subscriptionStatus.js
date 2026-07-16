@@ -10,10 +10,11 @@ export function computeSubscriptionStatus(rows) {
         const to = startOfDayVN(new Date(r.valid_to))
         return from <= today && today <= to
     })
-    if (active.length === 0) return { status: 'none' }
+    if (active.length === 0) return { status: 'none', validTo: null }
     const dominant = active.reduce((a, b) => (b.valid_to > a.valid_to ? b : a))
     return {
         status: dominant.note === 'trial' ? 'trial' : 'paid',
         daysLeft: Math.round((startOfDayVN(new Date(dominant.valid_to)) - today) / 86400000),
+        validTo: dominant.valid_to,
     }
 }

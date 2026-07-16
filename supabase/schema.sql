@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE TABLE IF NOT EXISTS order_items (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
-  product_id UUID REFERENCES products(id),
+  product_id UUID REFERENCES products(id) ON DELETE CASCADE,
   quantity INTEGER NOT NULL
 );
 
