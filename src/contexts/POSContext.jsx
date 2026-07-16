@@ -692,10 +692,13 @@ export function POSProvider() {
                 if (!isFixed) setTotalCost(prev => prev + amount)
             }
             invalidateDailyContext(addressId)
-            showToast(isFixed ? 'Đã ghi nhận thực chi cố định' : isRefill ? 'Đã thêm khoản mua nguyên vật liệu' : 'Đã thêm chi phí', 'success')
+            // handleAddExpense chỉ được gọi từ modal "Thêm chi phí" — isRefill ở đây thực ra
+            // là cờ "Sau ca" (xem HistoryPage.submitExpense), KHÔNG phải mua NVL thật (NVL đi
+            // qua processIngredientRestock riêng). Toast không nên phân theo isRefill.
+            showToast(isFixed ? 'Đã ghi nhận thực chi cố định' : 'Đã thêm chi phí', 'success')
             return expense
         } catch (err) {
-            showError(err, isFixed ? 'Ghi nhận thực chi cố định' : isRefill ? 'Thêm mua nguyên vật liệu' : 'Thêm chi phí')
+            showError(err, isFixed ? 'Ghi nhận thực chi cố định' : 'Thêm chi phí')
             throw err
         }
     }
