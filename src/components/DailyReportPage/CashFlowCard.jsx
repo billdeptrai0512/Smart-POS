@@ -52,6 +52,9 @@ export default function CashFlowCard({
     // live before saving. Read-only mode falls back to the persisted (actualCash/Transfer) props.
     const liveCash = editable ? (parseVNDInput(cashInput) || 0) : actualCash
     const liveTransfer = editable ? (parseVNDInput(transferInput) || 0) : actualTransfer
+    // Chưa gõ cả 2 ô Tiền mặt/Chuyển khoản (không phải "đã đếm và bằng 0") — Thực nhận
+    // tính ra vẫn chỉ là placeholder, hiện "—" thay vì "0đ" để khỏi trông như đã đối soát xong.
+    const cashNotEntered = editable && !cashInput && !transferInput
 
     // Payments của ngày (đã filter theo paid_at bởi report RPC). Tách nhóm để HIỂN THỊ:
     //   nvlPayments      = đi chợ NVL (loại free_form)
@@ -289,14 +292,14 @@ export default function CashFlowCard({
                 <div className="flex flex-col gap-2.5 pl-2">
                     <div className="flex justify-between items-center">
                         <span className="text-[12px] font-bold text-text-secondary">Tiền mặt</span>
-                        <span className={`text-[13px] font-bold tabular-nums ${takeHomeCash < 0 ? 'text-danger' : 'text-text'}`}>
-                            {formatVND(takeHomeCash)}
+                        <span className={`text-[13px] font-bold tabular-nums ${cashNotEntered ? 'text-text-dim' : takeHomeCash < 0 ? 'text-danger' : 'text-text'}`}>
+                            {cashNotEntered ? '—' : formatVND(takeHomeCash)}
                         </span>
                     </div>
                     <div className="flex justify-between items-center">
                         <span className="text-[12px] font-bold text-text-secondary">Chuyển khoản</span>
-                        <span className={`text-[13px] font-bold tabular-nums ${takeHomeTransfer < 0 ? 'text-danger' : 'text-text'}`}>
-                            {formatVND(takeHomeTransfer)}
+                        <span className={`text-[13px] font-bold tabular-nums ${cashNotEntered ? 'text-text-dim' : takeHomeTransfer < 0 ? 'text-danger' : 'text-text'}`}>
+                            {cashNotEntered ? '—' : formatVND(takeHomeTransfer)}
                         </span>
                     </div>
                 </div>
@@ -305,8 +308,8 @@ export default function CashFlowCard({
 
                 <div className="flex justify-between items-center mt-1 pl-1">
                     <span className="text-[13px] font-black text-text uppercase tracking-wide leading-none">Tổng thực nhận</span>
-                    <span className={`text-[14px] font-black tabular-nums leading-none ${takeHome < 0 ? 'text-danger' : 'text-success'}`}>
-                        {formatVND(takeHome)}
+                    <span className={`text-[14px] font-black tabular-nums leading-none ${cashNotEntered ? 'text-text-dim' : takeHome < 0 ? 'text-danger' : 'text-success'}`}>
+                        {cashNotEntered ? '—' : formatVND(takeHome)}
                     </span>
                 </div>
             </div>
