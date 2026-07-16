@@ -48,7 +48,14 @@ export async function fetchTodayExpenses(addressId) {
  */
 export async function insertExpense(name, amount, addressId = null, isFixed = false, staffName = null, isRefill = false, paymentMethod = 'cash', metadata = {}, categoryId = null, createdAt = null, extraCols = null) {
     invalidateReportCache(addressId)
-    if (localRepo.isGuest()) return localRepo.insertLocalExpense({ name, amount, address_id: addressId, is_fixed: isFixed, staff_name: staffName, is_refill: isRefill, payment_method: paymentMethod, metadata, category_id: categoryId, created_at: createdAt || undefined, ...(extraCols || {}) })
+    if (localRepo.isGuest()) {
+        // Only set created_at when explicitly backdating — an explicit `created_at:
+        // undefined` key would override insertLocalExpense's own now() default via
+        // object spread, producing an Invalid Date that fails every "today" filter.
+        const guestPayload = { name, amount, address_id: addressId, is_fixed: isFixed, staff_name: staffName, is_refill: isRefill, payment_method: paymentMethod, metadata, category_id: categoryId, ...(extraCols || {}) }
+        if (createdAt) guestPayload.created_at = createdAt
+        return localRepo.insertLocalExpense(guestPayload)
+    }
     if (!supabase) throw new Error('No Supabase connection')
     const payload = { name, amount, is_fixed: isFixed, is_refill: isRefill, payment_method: paymentMethod, metadata }
     if (addressId) payload.address_id = addressId

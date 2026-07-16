@@ -573,17 +573,25 @@ export const upsertLocalShiftClosing = (payload: Row) => {
     const idx = payload.id
         ? list.findIndex(s => s.id === payload.id)
         : list.findIndex(s => s.address_id === payload.address_id && dateStringVN(new Date(s.created_at)) === dateStr);
+    let saved: Row;
     if (idx >= 0) {
         // closed_at mirrors the real DB column — useShiftInventoryState's "is this
         // row really today" guard reads shift_closing.closed_at, not created_at.
         // Backfill it on rows saved before this field existed so they aren't
         // silently treated as stale on next load.
-        list[idx] = { ...list[idx], ...payload, closed_at: list[idx].closed_at || new Date().toISOString() };
+        saved = { ...list[idx], ...payload, closed_at: list[idx].closed_at || new Date().toISOString() };
+        list[idx] = saved;
     } else {
         const now = new Date().toISOString();
-        list.push({ ...payload, id: payload.id || generateId(), created_at: now, closed_at: now });
+        saved = { ...payload, id: payload.id || generateId(), created_at: now, closed_at: now };
+        list.push(saved);
     }
     set(KEYS.SHIFT_CLOSINGS, list);
+    // Callers (insertShiftClosing/updateShiftClosing/setCounterStock) mirror the
+    // Supabase path's `.select().single()` — they need the saved row back, e.g.
+    // handleSaveCashflow's `if (!saved) return` treats a missing return as
+    // "save was skipped" and silently no-ops (no toast, no error, FAB stays stuck).
+    return saved;
 };
 
 // --- Sync Helper ---
