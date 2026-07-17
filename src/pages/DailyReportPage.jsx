@@ -3,16 +3,16 @@ import { useHistory } from '../contexts/HistoryContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { calculateProductCost, formatVNDInput, parseVNDInput } from '../utils'
-import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses } from '../utils/reportStats'
+import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses, dedupeShiftClosingsByDay } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
-import { fetchDailyReportContext, fetchLastWeekSameDayOrderItems, processIngredientRestock } from '../services/orderService'
+import { fetchDailyReportContext, fetchLastWeekSameDayOrderItems, fetchReportByRange, processIngredientRestock } from '../services/orderService'
 import { fetchCashClosedToday } from '../services/reportService'
 import { useShiftClosingSave } from '../hooks/useShiftClosingSave'
 import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
 import { useDailyReportData } from '../hooks/useDailyReportData'
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet } from '../utils/inventory'
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, computeHaoHut, findMissingCupCandidates, buildDailyHaoHutMap, attachRepeatHistory, computeIngredientNoise } from '../utils/inventory'
 import { ingredientLabel, getIngredientUnit, lookupByLabel } from '../utils/ingredients'
-import { dateStringVN, isSameDayVN } from '../utils/dateVN'
+import { dateStringVN, isSameDayVN, startOfDayVN } from '../utils/dateVN'
 import { useDateScope } from '../hooks/useDateScope'
 import { goToMenuStep } from '../utils/menuSequence'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
@@ -24,6 +24,7 @@ import { fetchExpenseCategories } from '../services/expenseService'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
 import PastInventoryEditor from '../components/DailyReportPage/PastInventoryEditor'
 import InventoryReportCard from '../components/DailyReportPage/InventoryReportCard'
+import MissingCupSuspicionCard from '../components/DailyReportPage/MissingCupSuspicionCard'
 import ShiftPrepCard from '../components/DailyReportPage/ShiftPrepCard'
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import RangeLossCard from '../components/DailyReportPage/RangeLossCard'
@@ -567,6 +568,33 @@ export default function DailyReportPage() {
         return () => { alive = false }
     }, [isTodayScope, selectedAddress])
 
+    // PROTOTYPE — 14 ngày gần đây (KHÔNG gồm hôm nay) chỉ để dò "lặp lại nhiều ngày"
+    // cho MissingCupSuspicionCard (xem attachRepeatHistory, src/utils/inventory.js).
+    // Tách riêng khỏi useDailyReportData vì hook đó chỉ fetch range khi user đang XEM
+    // scope tuần/tháng — card nghi vấn cần dữ liệu này ngay cả khi đang xem "Hôm nay".
+    // Gate theo `view` (card chỉ render ở VIEW_ALL/VIEW_INVENTORY, dòng ~1139) VÀ theo
+    // `!isStaff` — card này soi nghi vấn CHÍNH nhân viên, để staff tự thấy kết quả soi
+    // mình vừa vô nghĩa (biết bị phát hiện thì né) vừa tạo cảm giác bị theo dõi cho
+    // người trong sạch. Cùng nguyên tắc với tab "Lợi nhuận" đã ẩn khỏi staff.
+    const showsInventoryTab = view === VIEW_ALL || view === VIEW_INVENTORY
+    const [historicalRangeData, setHistoricalRangeData] = useState({ shiftClosings: [], orders: [] })
+    useEffect(() => {
+        if (!isTodayScope || !selectedAddress || !showsInventoryTab || isStaff) { setHistoricalRangeData({ shiftClosings: [], orders: [] }); return }
+        let alive = true
+        const end = startOfDayVN(new Date()) // đầu ngày hôm nay = mốc kết thúc window (loại hôm nay)
+        const start = new Date(end.getTime() - 14 * 86_400_000)
+        fetchReportByRange(selectedAddress.id, start.toISOString(), end.toISOString(), start.toISOString(), start.toISOString())
+            .then(data => {
+                if (!alive) return
+                setHistoricalRangeData({
+                    shiftClosings: dedupeShiftClosingsByDay(data?.target_shift_closings || []),
+                    orders: data?.target_orders || [],
+                })
+            })
+            .catch(() => { if (alive) setHistoricalRangeData({ shiftClosings: [], orders: [] }) })
+        return () => { alive = false }
+    }, [isTodayScope, selectedAddress, showsInventoryTab, isStaff])
+
     const toUsedMap = useCallback((items) => calculateEstimatedConsumption(
         items.map(i => ({ productId: i.product_id, qty: i.quantity, extras: (i.extra_ids || []).map(id => ({ id })) })),
         recipes, extraIngredients,
@@ -803,6 +831,46 @@ export default function DailyReportPage() {
         }
         return map
     }, [recipes, products, todayOrderItems])
+
+    // PROTOTYPE — hao hụt hôm nay theo từng nguyên liệu (cùng công thức computeHaoHut
+    // dùng trong InventoryReportCard), làm input cho findMissingCupCandidates bên dưới.
+    const haoHutByIngredient = useMemo(() => {
+        const map = {}
+        for (const ing of inventory.ingredientsList || []) {
+            map[ing.ingredient] = computeHaoHut({
+                inventoryValue: inventory.inventoryInputs[ing.ingredient],
+                restockValue: inventory.restockInputs[ing.ingredient],
+                openingValue: inventory.openingInputs[ing.ingredient],
+                openingFallback: inventory.openingStock[ing.ingredient],
+                used: lookupByLabel(ing.ingredient, usedMap),
+            })
+        }
+        return map
+    }, [inventory.ingredientsList, inventory.inventoryInputs, inventory.restockInputs, inventory.openingInputs, inventory.openingStock, usedMap])
+
+    // PROTOTYPE — chuỗi hao hụt 14 ngày gần đây (không gồm hôm nay), làm baseline để
+    // đánh giá "lặp lại mấy ngày" cho từng candidate — xem buildDailyHaoHutMap.
+    const historicalDailyHaoHut = useMemo(
+        () => buildDailyHaoHutMap({
+            shiftClosings: historicalRangeData.shiftClosings,
+            orders: historicalRangeData.orders,
+            recipes, extraIngredients,
+        }),
+        [historicalRangeData, recipes, extraIngredients]
+    )
+
+    // PROTOTYPE — độ nhiễu tự nhiên/nguyên liệu suy ra từ lịch sử 14 ngày, thay cho
+    // dung sai % cứng dùng chung mọi nguyên liệu (xem computeIngredientNoise).
+    const ingredientNoise = useMemo(() => computeIngredientNoise(historicalDailyHaoHut), [historicalDailyHaoHut])
+
+    // PROTOTYPE — nghi vấn "pha bán nhưng chưa bấm bill": xem findMissingCupCandidates
+    // (src/utils/inventory.js) để biết thuật toán cross-check nhiều nguyên liệu/công thức.
+    // attachRepeatHistory gắn thêm "lặp lại mấy ngày gần đây" — tín hiệu quan trọng nhất
+    // để phân biệt trùng hợp ngẫu nhiên 1 ngày với dấu hiệu lặp lại thật.
+    const missingCupCandidates = useMemo(() => {
+        const today = findMissingCupCandidates({ ingredientsList: inventory.ingredientsList, haoHutByIngredient, recipes, products, noiseByIngredient: ingredientNoise })
+        return attachRepeatHistory(today, { ingredientsList: inventory.ingredientsList, historicalDailyHaoHut, recipes, products, noiseByIngredient: ingredientNoise })
+    }, [inventory.ingredientsList, haoHutByIngredient, historicalDailyHaoHut, recipes, products, ingredientNoise])
 
     // Stable ingredient→unit map so InventoryReportCard's memoized rows don't all
     // re-render on every keystroke (was rebuilt inline each render).
@@ -1138,6 +1206,8 @@ export default function DailyReportPage() {
                                             open={!!openCards.audit}
                                             onToggleOpen={() => toggleCard('audit')}
                                         />
+
+                                        {!isStaff && <MissingCupSuspicionCard candidates={missingCupCandidates} />}
 
                                         <ShiftPrepCard
                                             title="Chuẩn bị ngày mai"

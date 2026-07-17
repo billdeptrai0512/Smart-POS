@@ -1,3 +1,5 @@
+import { lookupByLabel } from './ingredients'
+
 /**
  * Tính toán giá vốn của một sản phẩm, bao gồm cả tuỳ chọn thêm (extras).
  * 
@@ -277,6 +279,64 @@ export function buildRecipeIngredientSet(recipes = [], extraIngredients = {}) {
     return set
 }
 
+/**
+ * CORE — công thức audit DUY NHẤT cho "opening = tồn cuối phiên trước / restock =
+ * item.restock / used = tiêu thụ ước tính / theoretical = opening+restock-used /
+ * diff = actual-theoretical". Trước đây bị chép tay 3 lần (calculateLossValue,
+ * RangeLossCard, buildDailyHaoHutMap) — sửa công thức mà quên sửa hết 1 chỗ thì 3 nơi
+ * lệch nhau âm thầm, nguy hiểm vì đây là số tiền thật (feed FinanceCards "Hao hụt/hủy").
+ *
+ * @param {Array} shiftClosings - không cần sort/dedupe sẵn, hàm tự sort theo closed_at
+ * @param {Object} dailyConsumption - { dayStr: {ingredient: usedAmount} }
+ * @param {Array} [prevShiftClosings] - nguồn opening cho closing ĐẦU TIÊN trong window
+ *   (không có openingOverrideMap thì dùng prevShiftClosings[0], mới nhất, DESC)
+ * @param {Object} [openingOverrideMap] - ingredient→remaining, override opening của
+ *   closing đầu tiên thay vì suy ra từ prevShiftClosings
+ * @returns {Array<{dayStr, ingredient, diff, idx}>} — 1 dòng / (ngày, nguyên liệu đã
+ *   nhập Cuối kỳ). idx=0 là closing đầu tiên trong window (opening có thể chỉ là suy
+ *   đoán ?? 0 nếu caller không truyền prevShiftClosings/openingOverrideMap — caller tự
+ *   quyết định có tin idx=0 hay lọc bỏ).
+ */
+export function walkDailyIngredientDiff({ shiftClosings = [], dailyConsumption = {}, prevShiftClosings = [], openingOverrideMap = null }) {
+    if (!shiftClosings.length) return []
+    const sorted = [...shiftClosings].sort((a, b) =>
+        new Date(a.closed_at || a.created_at) - new Date(b.closed_at || b.created_at)
+    )
+
+    let firstOpeningMap = openingOverrideMap
+    if (!firstOpeningMap) {
+        firstOpeningMap = {}
+        for (const it of prevShiftClosings?.[0]?.inventory_report || []) {
+            firstOpeningMap[it.ingredient] = it.remaining ?? 0
+        }
+    }
+
+    const out = []
+    sorted.forEach((closing, idx) => {
+        if (!closing.inventory_report) return
+        const dayStr = new Date(closing.closed_at || closing.created_at).toLocaleDateString('sv-SE')
+        const used = dailyConsumption[dayStr] || {}
+        for (const item of closing.inventory_report) {
+            if (item.remaining == null) continue
+            let opening
+            if (item.opening != null) {
+                opening = item.opening
+            } else if (idx === 0) {
+                opening = firstOpeningMap[item.ingredient] ?? 0
+            } else {
+                const prevItem = (sorted[idx - 1]?.inventory_report || []).find(i => i.ingredient === item.ingredient)
+                opening = prevItem?.remaining ?? 0
+            }
+            const restock = item.restock || 0
+            const usedNum = Math.round((used[item.ingredient] || 0) * 10) / 10
+            const theoretical = Math.round((opening + restock - usedNum) * 10) / 10
+            const diff = Math.round((item.remaining - theoretical) * 10) / 10
+            out.push({ dayStr, ingredient: item.ingredient, diff, idx })
+        }
+    })
+    return out
+}
+
 export function calculateLossValue({
     shiftClosings,
     prevShiftClosings = [],
@@ -286,58 +346,24 @@ export function calculateLossValue({
     recipeIngredients = null,
 }) {
     if (!shiftClosings || shiftClosings.length === 0) return { loss: 0, consumption: {} }
-    const sorted = [...shiftClosings].sort((a, b) =>
-        new Date(a.closed_at || a.created_at) - new Date(b.closed_at || b.created_at)
-    )
     const costByIngredient = new Map()
     for (const c of ingredientConfigs || []) costByIngredient.set(c.ingredient, c.unit_cost || 0)
 
-    let prevPeriodMap = null
-    if (openingOverrideMap) {
-        prevPeriodMap = openingOverrideMap
-    } else if (prevShiftClosings?.[0]?.inventory_report) {
-        prevPeriodMap = {}
-        for (const it of prevShiftClosings[0].inventory_report) {
-            prevPeriodMap[it.ingredient] = it.remaining ?? 0
-        }
-    } else {
-        prevPeriodMap = {}
-    }
+    const diffs = walkDailyIngredientDiff({ shiftClosings, dailyConsumption, prevShiftClosings, openingOverrideMap })
 
     let totalLoss = 0
     const consumption = {}
-    sorted.forEach((closing, idx) => {
-        if (!closing.inventory_report) return
-        const dayStr = new Date(closing.closed_at || closing.created_at).toLocaleDateString('sv-SE')
-        const usedMap = dailyConsumption[dayStr] || {}
-
-        for (const item of closing.inventory_report) {
-            if (item.remaining == null) continue
-            let opening
-            if (item.opening != null) {
-                opening = item.opening
-            } else if (idx === 0) {
-                opening = prevPeriodMap[item.ingredient] ?? 0
+    for (const { ingredient, diff } of diffs) {
+        const diffValue = diff * (costByIngredient.get(ingredient) || 0)
+        if (diffValue < 0) {
+            // Không có trong công thức nào → tiêu hao thật, không phải thất thoát.
+            if (recipeIngredients && !recipeIngredients.has(ingredient)) {
+                consumption[ingredient] = (consumption[ingredient] || 0) + Math.abs(diffValue)
             } else {
-                const prev = sorted[idx - 1]
-                const prevItem = (prev?.inventory_report || []).find(i => i.ingredient === item.ingredient)
-                opening = prevItem?.remaining ?? 0
-            }
-            const restock = item.restock || 0
-            const used = Math.round((usedMap[item.ingredient] || 0) * 10) / 10
-            const theoretical = Math.round((opening + restock - used) * 10) / 10
-            const diff = Math.round((item.remaining - theoretical) * 10) / 10
-            const diffValue = diff * (costByIngredient.get(item.ingredient) || 0)
-            if (diffValue < 0) {
-                // Không có trong công thức nào → tiêu hao thật, không phải thất thoát.
-                if (recipeIngredients && !recipeIngredients.has(item.ingredient)) {
-                    consumption[item.ingredient] = (consumption[item.ingredient] || 0) + Math.abs(diffValue)
-                } else {
-                    totalLoss += Math.abs(diffValue)
-                }
+                totalLoss += Math.abs(diffValue)
             }
         }
-    })
+    }
     return { loss: totalLoss, consumption }
 }
 
@@ -362,4 +388,221 @@ export function formatPackedQty(qty, packSize, packUnit, baseUnit, opts = {}) {
     if (packs > 0) parts.push(`${sign < 0 ? '-' : ''}${packs} ${packUnit}`)
     if (rem > 0 || packs === 0 || !opts.compact) parts.push(`${(sign * rem).toLocaleString('vi-VN')} ${unit}`)
     return parts.filter(Boolean).join(' + ')
+}
+
+const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
+
+// Hao hụt = Thực tế − Lý thuyết cho 1 nguyên liệu. null = chưa nhập Cuối kỳ (pending),
+// caller phải tự phân biệt null với 0 (đã kiểm và khớp). Nguồn dùng chung giữa
+// InventoryReportCard (audit UI) và findMissingCupCandidates bên dưới — tránh 2 nơi
+// tính hao hụt lệch công thức nhau.
+export function computeHaoHut({ inventoryValue, restockValue, openingValue, openingFallback, used }) {
+    const hasActual = inventoryValue !== undefined && inventoryValue !== ''
+    if (!hasActual) return null
+    const restockNum = r1(restockValue)
+    const openingDisplay = openingValue ?? (openingFallback !== undefined && openingFallback !== null ? String(openingFallback) : '')
+    const openingNum = r1(openingDisplay)
+    const usedNum = r1(used)
+    const thucTe = r1(inventoryValue)
+    const lyThuyet = r1(openingNum + restockNum - usedNum)
+    return r1(thucTe - lyThuyet)
+}
+
+/**
+ * PROTOTYPE — dò nghi vấn "pha bán nhưng không bấm bill".
+ *
+ * Ý tưởng: hao hụt của MỘT nguyên liệu đơn lẻ hầu như luôn chỉ là nhiễu (rơi vãi,
+ * cân/đong tay không chính xác) — không đủ để kết luận gì. Nhưng nếu hao hụt của
+ * NHIỀU nguyên liệu trong CÙNG 1 công thức đều quy đổi ra cùng một số ly N (trong
+ * dung sai), khả năng trùng hợp ngẫu nhiên giảm mạnh theo số nguyên liệu đồng thuận
+ * → tín hiệu mạnh hơn nhiều so với label "Tương đương N ly" hiện có (vốn chỉ nhìn
+ * 1 nguyên liệu "dominant" mỗi dòng, không cross-check).
+ *
+ * ⚠️ Đây là gợi ý nghi vấn (heuristic), KHÔNG phải kết luận chắc chắn — nhiều
+ * nguyên liệu trùng tỉ lệ vẫn có thể do nguyên nhân khác (công thức sai định lượng
+ * chung, đổ nguyên liệu lẫn giữa các món). Dùng để soi lại chỗ đáng ngờ, không dùng
+ * để quy kết nhân viên.
+ *
+ * @param {Array} ingredientsList - inventory.ingredientsList ({ ingredient, unit_cost })
+ * @param {Object} haoHutByIngredient - ingredient → hao hụt hôm nay (từ computeHaoHut; âm = hụt)
+ * @param {Array} recipes - toàn bộ recipes ({ product_id, ingredient, amount })
+ * @param {Array} products - toàn bộ products ({ id, name, price, is_active })
+ * @param {Object} [noiseByIngredient] - ingredient → độ lệch chuẩn hao hụt lịch sử (từ
+ *   computeIngredientNoise). Có thì dùng dung sai THÍCH NGHI theo độ ồn thật của từng
+ *   nguyên liệu; không có (hoặc chưa đủ ngày dữ liệu) thì fallback về ±30%/±0.5 cứng.
+ * @returns {Array<{ productId, productName, estimatedCups, confidence, estimatedRevenue, ingredientValue, matches }>}
+ *   sorted theo (số nguyên liệu khớp desc, confidence desc). estimatedRevenue = N ×
+ *   giá bán; ingredientValue = giá trị nguyên liệu hụt tương ứng (Σ|haoHut|×unit_cost
+ *   trên các nguyên liệu đã đồng thuận). matches = các dòng nguyên liệu đã đồng thuận
+ *   N ly ({ ingredient, haoHut, amount, ratio }).
+ */
+export function findMissingCupCandidates({ ingredientsList = [], haoHutByIngredient = {}, recipes = [], products = [], noiseByIngredient = {} }) {
+    const unitCostByIngredient = {}
+    for (const ing of ingredientsList) unitCostByIngredient[ing.ingredient] = Number(ing.unit_cost) || 0
+
+    const recipeByProduct = {}
+    for (const r of recipes) {
+        if (!r.amount || r.amount <= 0) continue
+        ;(recipeByProduct[r.product_id] ??= []).push({ ingredient: r.ingredient, amount: r.amount })
+    }
+
+    const candidates = []
+    for (const [productId, recipeRows] of Object.entries(recipeByProduct)) {
+        const product = products.find(p => p.id === productId)
+        // Giá 0đ (món test/chưa cấu hình giá, vd "Trà đá"/"Kem muối" mặc định) → không
+        // có chuyện "bán thiếu ghi nhận" vì không tốn tiền để bán — loại khỏi nghi vấn.
+        if (!product?.is_active || !(Number(product.price) > 0)) continue
+
+        // Quy đổi mỗi nguyên liệu trong công thức ra "số ly ngụ ý" nếu nó đang hụt.
+        // Nguyên liệu Khớp/Dư → ratio 0 (phá vỡ đồng thuận, kéo confidence xuống).
+        const ratios = []
+        for (const { ingredient, amount } of recipeRows) {
+            const haoHut = lookupByLabel(ingredient, haoHutByIngredient, null)
+            if (haoHut == null) continue // chưa nhập Cuối kỳ cho nguyên liệu này hôm nay
+            const ratio = haoHut < 0 ? Math.abs(haoHut) / amount : 0
+            ratios.push({ ingredient, amount, haoHut, ratio })
+        }
+        if (ratios.length < 2) continue // 1 nguyên liệu không cross-check được — bỏ qua
+
+        // Nhóm theo số ly làm tròn gần nhất, lấy nhóm đông nhất làm ứng viên N.
+        // Dung sai THÍCH NGHI theo độ ồn thật của từng nguyên liệu (2× độ lệch chuẩn
+        // hao hụt lịch sử, quy đổi ra ly — ~95% dao động bình thường nằm trong khoảng
+        // này) — matcha 1.5g/ly cần chặt hơn nhiều so với sữa tươi 80ml/ly, dùng chung
+        // 1 con số % là sai. Chưa đủ ngày dữ liệu (ingredient mới, ít lịch sử) → fallback
+        // ±30% (tối thiểu ±0.5 ly).
+        const groups = {}
+        for (const r of ratios) {
+            const n = Math.round(r.ratio)
+            if (n < 1) continue
+            const noise = lookupByLabel(r.ingredient, noiseByIngredient, null)
+            const tol = noise != null ? Math.max(0.15, (noise / r.amount) * 2) : Math.max(0.5, n * 0.3)
+            if (Math.abs(r.ratio - n) > tol) continue
+            ;(groups[n] ??= []).push(r)
+        }
+        const best = Object.entries(groups).sort((a, b) => b[1].length - a[1].length)[0]
+        if (!best || best[1].length < 2) continue
+
+        const [bestN, bestMatches] = best
+        const confidence = bestMatches.length / ratios.length
+        if (confidence < 0.6) continue // đa số nguyên liệu công thức phải đồng thuận
+
+        const ingredientValue = bestMatches.reduce(
+            (sum, m) => sum + Math.abs(m.haoHut) * (unitCostByIngredient[m.ingredient] || 0), 0
+        )
+
+        candidates.push({
+            productId,
+            productName: product.name,
+            estimatedCups: Number(bestN),
+            confidence,
+            estimatedRevenue: Number(bestN) * (Number(product.price) || 0),
+            ingredientValue,
+            matches: bestMatches,
+        })
+    }
+
+    return candidates.sort((a, b) => b.matches.length - a.matches.length || b.confidence - a.confidence)
+}
+
+// Dựng chuỗi hao hụt THEO TỪNG NGÀY từ lịch sử shift_closings (cùng công thức audit
+// dùng trong RangeLossCard: opening = tồn cuối phiên trước đó, restock = item.restock,
+// used = tiêu thụ ước tính của ngày đó, diff = thực tế − lý thuyết).
+//
+// Bỏ qua ngày ĐẦU TIÊN trong window vì không biết chắc "opening" của nó (không có
+// phiên trước đó trong tập dữ liệu truyền vào) — đơn giản hơn là phải fetch thêm 1
+// ngày đệm chỉ để lấy opening, và không đáng vì mục đích ở đây là dò lặp lại nhiều
+// ngày, không phải tính tổng tiền chính xác tuyệt đối.
+//
+// @returns { [dayStr]: { [ingredient]: diff } } — âm = hụt, chỉ gồm nguyên liệu có
+//   trong công thức nào đó (bao bì không công thức bị loại, giống RangeLossCard).
+export function buildDailyHaoHutMap({ shiftClosings = [], orders = [], recipes = [], extraIngredients = {} }) {
+    if (!shiftClosings.length) return {}
+    const recipeSet = buildRecipeIngredientSet(recipes, extraIngredients)
+
+    const dailyOrderItems = {}
+    for (const o of orders) {
+        if (o.deleted_at) continue
+        const dayStr = new Date(o.created_at).toLocaleDateString('sv-SE')
+        ;(dailyOrderItems[dayStr] ??= []).push(...(o.order_items || []).map(i => ({
+            productId: i.product_id || i.productId,
+            qty: i.quantity || i.qty || 1,
+            extras: i.extra_ids ? i.extra_ids.map(id => ({ id })) : (i.extras || []),
+        })))
+    }
+    const dailyConsumption = {}
+    for (const [dayStr, items] of Object.entries(dailyOrderItems)) {
+        dailyConsumption[dayStr] = calculateEstimatedConsumption(items, recipes, extraIngredients)
+    }
+
+    const lastClosingPerDay = {}
+    for (const c of shiftClosings) {
+        const dayStr = new Date(c.closed_at).toLocaleDateString('sv-SE')
+        const prev = lastClosingPerDay[dayStr]
+        if (!prev || new Date(c.closed_at) > new Date(prev.closed_at)) lastClosingPerDay[dayStr] = c
+    }
+
+    const result = {}
+    // idx === 0 bỏ qua: ngày đầu window không có phiên trước đó trong tập dữ liệu
+    // truyền vào nên opening chỉ là suy đoán (mặc định 0) — không đủ tin để tính diff.
+    for (const { dayStr, ingredient, diff, idx } of walkDailyIngredientDiff({
+        shiftClosings: Object.values(lastClosingPerDay), dailyConsumption,
+    })) {
+        if (idx === 0 || !recipeSet.has(ingredient)) continue
+        ;(result[dayStr] ??= {})[ingredient] = diff
+    }
+    return result
+}
+
+// Độ nhiễu tự nhiên (đo lường + cân đong) của TỪNG nguyên liệu, suy ra từ độ lệch
+// chuẩn hao hụt trong lịch sử gần đây — thay cho tolerance % cứng dùng chung cho mọi
+// nguyên liệu. Cần ≥3 ngày có dữ liệu mới tin — ít hơn thì để findMissingCupCandidates
+// tự fallback về ±30%/±0.5.
+// @returns { [ingredient]: độ lệch chuẩn (đơn vị gốc của nguyên liệu, vd g/ml) }
+export function computeIngredientNoise(historicalDailyHaoHut = {}) {
+    const valuesByIngredient = {}
+    for (const dayMap of Object.values(historicalDailyHaoHut)) {
+        for (const [ingredient, diff] of Object.entries(dayMap)) {
+            ;(valuesByIngredient[ingredient] ??= []).push(diff)
+        }
+    }
+    const noise = {}
+    for (const [ingredient, values] of Object.entries(valuesByIngredient)) {
+        if (values.length < 3) continue
+        const mean = values.reduce((a, b) => a + b, 0) / values.length
+        const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length
+        noise[ingredient] = Math.sqrt(variance)
+    }
+    return noise
+}
+
+/**
+ * Gắn "lặp lại mấy ngày gần đây" vào các candidate của hôm nay — tín hiệu quan
+ * trọng nhất để phân biệt trùng hợp ngẫu nhiên (1 ngày) với dấu hiệu thật (lặp lại
+ * nhiều ngày). Chạy lại findMissingCupCandidates trên TỪNG ngày lịch sử, đếm xem
+ * cùng 1 món có tái xuất hiện không.
+ *
+ * @param {Array} todayCandidates - kết quả findMissingCupCandidates() của hôm nay
+ * @param {Object} historicalDailyHaoHut - { [dayStr]: {ingredient: diff} } từ buildDailyHaoHutMap
+ * @param {Object} [noiseByIngredient] - từ computeIngredientNoise, dùng CHUNG dung sai
+ *   thích nghi cho cả ngày hôm nay lẫn từng ngày lịch sử — nhất quán 1 tiêu chuẩn.
+ * @returns candidates hôm nay, thêm field `repeatDays` (số ngày gần đây món này CŨNG
+ *   là candidate) + `repeatWindowDays` (tổng số ngày có dữ liệu để so), sort theo
+ *   repeatDays trước tiên — lặp lại nhiều ngày mới đáng tin, không phải trùng hợp 1 lần.
+ */
+export function attachRepeatHistory(todayCandidates, { ingredientsList, historicalDailyHaoHut = {}, recipes, products, noiseByIngredient = {} }) {
+    if (!todayCandidates.length) return []
+    const days = Object.keys(historicalDailyHaoHut)
+    const dayCandidateSets = days.map(dayStr =>
+        new Set(findMissingCupCandidates({
+            ingredientsList, recipes, products, haoHutByIngredient: historicalDailyHaoHut[dayStr], noiseByIngredient,
+        }).map(c => c.productId))
+    )
+
+    return todayCandidates
+        .map(c => ({
+            ...c,
+            repeatDays: dayCandidateSets.filter(set => set.has(c.productId)).length,
+            repeatWindowDays: days.length,
+        }))
+        .sort((a, b) => b.repeatDays - a.repeatDays || b.matches.length - a.matches.length || b.confidence - a.confidence)
 }

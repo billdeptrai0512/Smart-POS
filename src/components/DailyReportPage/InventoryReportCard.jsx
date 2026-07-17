@@ -1,29 +1,13 @@
 import { memo, useMemo, useState } from 'react'
 import { AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Info } from 'lucide-react'
-import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
-import { formatPackedQty } from '../../utils/inventory'
+import { ingredientLabel, getIngredientUnit, lookupByLabel } from '../../utils/ingredients'
+import { formatPackedQty, computeHaoHut } from '../../utils/inventory'
 import { formatVND } from '../../utils'
 import CollapsibleCard from './CollapsibleCard'
 
 // Status priority for sorting collapsed list. Lower = render earlier.
 // Chưa nhập first (needs action), then anomalies (Hụt/Dư), then Khớp (done).
 const STATUS_PRIORITY = { pending: 0, loss: 1, excess: 2, match: 3 }
-
-const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
-
-// Hao hụt = Thực tế − Lý thuyết. Returns null when staff hasn't counted Cuối kỳ yet
-// (inventoryValue empty/undefined) — caller treats null as "pending", not 0.
-function computeHaoHut({ inventoryValue, restockValue, openingValue, openingFallback, used }) {
-    const hasActual = inventoryValue !== undefined && inventoryValue !== ''
-    if (!hasActual) return null
-    const restockNum = r1(restockValue)
-    const openingDisplay = openingValue ?? (openingFallback !== undefined && openingFallback !== null ? String(openingFallback) : '')
-    const openingNum = r1(openingDisplay)
-    const usedNum = r1(used)
-    const thucTe = r1(inventoryValue)
-    const lyThuyet = r1(openingNum + restockNum - usedNum)
-    return r1(thucTe - lyThuyet)
-}
 
 function computeRowStatus(args) {
     const haoHut = computeHaoHut(args)
@@ -180,18 +164,7 @@ export default function InventoryReportCard({
     )
 }
 
-// Fallback when exact ingredient key has no consumption — match by display label.
-// Same pattern as InventoryRefillCard: recipes might use 'condensed_milk_ml' while inventory
-// tracks 'sữa_đặc'; both label to "Sữa đặc" so lookup by display avoids a 0 false-negative.
-function lookupByLabel(ingredient, map) {
-    if (!map) return 0
-    if (map[ingredient] != null) return map[ingredient]
-    const label = ingredientLabel(ingredient).toLowerCase()
-    for (const [key, val] of Object.entries(map)) {
-        if (key !== ingredient && ingredientLabel(key).toLowerCase() === label) return val
-    }
-    return 0
-}
+const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
 
 // memo: parent re-renders on every keystroke (input state lives in the page/hook),
 // but each row gets indexed primitives + stable callbacks — so only the row being

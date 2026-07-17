@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { calculateEstimatedConsumption, buildRecipeIngredientSet } from '../../utils/inventory';
+import { calculateEstimatedConsumption, buildRecipeIngredientSet, walkDailyIngredientDiff } from '../../utils/inventory';
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients';
 import { ChevronDown, Lock } from 'lucide-react';
 import { useProducts } from '../../contexts/ProductContext';
@@ -113,87 +113,32 @@ export default function RangeLossCard({
                 lastClosingPerDay[dayStr] = c;
             }
         }
-        const sortedClosings = Object.values(lastClosingPerDay).sort(
-            (a, b) => new Date(a.closed_at) - new Date(b.closed_at)
-        );
 
-        // --- Step 3: Determine opening stock for the FIRST closing ---
-        // This comes from the newest prevShiftClosing's remaining (= yesterday's tồn cuối).
-        // If not available, fall back to the first closing's `opening` field.
-        const prevClosingReport = (() => {
-            if (!prevShiftClosings || prevShiftClosings.length === 0) return {};
-            // prevShiftClosings is sorted DESC from RPC, so [0] is the newest
-            const latest = prevShiftClosings[0];
-            if (!latest?.inventory_report) return {};
-            const map = {};
-            latest.inventory_report.forEach(item => {
-                map[item.ingredient] = item.remaining ?? 0;
-            });
-            return map;
-        })();
-
-        // --- Step 4: Walk through each closing day-by-day, same logic as daily audit ---
+        // --- Step 3+4: Đi từng ngày, tính diff (opening/restock/used/theoretical) —
+        // công thức dùng CHUNG với calculateLossValue/buildDailyHaoHutMap (walkDailyIngredientDiff),
+        // tránh 3 nơi chép tay cùng 1 công thức rồi lệch nhau khi sửa.
         const totalLossPerIngredient = {};
         let totalLossValue = 0;
 
-        sortedClosings.forEach((closing, idx) => {
-            if (!closing.inventory_report) return;
+        for (const { dayStr, ingredient, diff } of walkDailyIngredientDiff({
+            shiftClosings: Object.values(lastClosingPerDay), dailyConsumption, prevShiftClosings,
+        })) {
+            // Không trong công thức nào → tiêu hao thật, không phải thất thoát.
+            if (!recipeSet.has(ingredient)) continue;
 
-            // Map closing to its business day
-            const cDate = new Date(closing.closed_at);
-            const dayStr = cDate.toLocaleDateString('sv-SE');
+            const config = ingredientConfigs.find(c => c.ingredient === ingredient) || {};
+            const unitCost = config.unit_cost || 0;
+            const diffValue = diff * unitCost;
 
-            const todayEstimatedConsumption = dailyConsumption[dayStr] || {};
+            if (!totalLossPerIngredient[ingredient]) {
+                totalLossPerIngredient[ingredient] = { diff: 0, diffValue: 0, daily: [] };
+            }
+            totalLossPerIngredient[ingredient].diff += diff;
+            totalLossPerIngredient[ingredient].diffValue += diffValue;
+            totalLossPerIngredient[ingredient].daily.push({ dayStr, diff, diffValue });
 
-            closing.inventory_report.forEach(item => {
-                // Skip ingredients where staff didn't count actual remaining at end of shift —
-                // treating null as 0 would surface a fake hao hụt = −theoretical (the whole stock).
-                if (item.remaining == null) return;
-                // Không trong công thức nào → tiêu hao thật, không phải thất thoát.
-                if (!recipeSet.has(item.ingredient)) return;
-
-                const config = ingredientConfigs.find(c => c.ingredient === item.ingredient) || {};
-                const unitCost = config.unit_cost || 0;
-
-                // Opening: for the first closing, use prevClosing remaining.
-                // For subsequent closings, use the previous closing's remaining.
-                // If the closing has a manual `opening` override, prefer that.
-                let opening;
-                if (item.opening != null) {
-                    // Manual override set during shift close
-                    opening = item.opening;
-                } else if (idx === 0) {
-                    // First closing in the range: use previous period's remaining
-                    opening = prevClosingReport[item.ingredient] ?? 0;
-                } else {
-                    // Use previous closing's remaining
-                    const prevClosing = sortedClosings[idx - 1];
-                    const prevItem = (prevClosing?.inventory_report || []).find(
-                        i => i.ingredient === item.ingredient
-                    );
-                    opening = prevItem?.remaining ?? 0;
-                }
-
-                const restock = item.restock || 0;
-                const used = Math.round((todayEstimatedConsumption[item.ingredient] || 0) * 10) / 10;
-
-                const theoretical = Math.round((opening + restock - used) * 10) / 10;
-                const actual = item.remaining;
-                const diff = Math.round((actual - theoretical) * 10) / 10;
-
-                const diffValue = diff * unitCost;
-
-                if (!totalLossPerIngredient[item.ingredient]) {
-                    totalLossPerIngredient[item.ingredient] = { diff: 0, diffValue: 0, daily: [] };
-                }
-
-                totalLossPerIngredient[item.ingredient].diff += diff;
-                totalLossPerIngredient[item.ingredient].diffValue += diffValue;
-                totalLossPerIngredient[item.ingredient].daily.push({ dayStr, diff, diffValue });
-
-                if (diffValue < 0) totalLossValue += Math.abs(diffValue);
-            });
-        });
+            if (diffValue < 0) totalLossValue += Math.abs(diffValue);
+        }
 
         // --- Step 5: Build display rows ---
         // Card này chỉ quan tâm thất thoát (hụt). Bỏ row có net dư.
