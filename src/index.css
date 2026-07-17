@@ -177,6 +177,30 @@ body {
   animation: order-enter 260ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* ====== Checkmark vẽ từng nét khi xuất hiện (POS header: đơn nháp sẵn sàng chốt) ====== */
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.check-draw path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: check-draw 350ms 80ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .check-draw path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
 /* ====== Modal slide-up ====== */
 @keyframes slide-up {
   0% {

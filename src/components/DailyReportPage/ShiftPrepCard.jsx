@@ -118,32 +118,46 @@ export default function ShiftPrepCard({
                             </div>
                         )
 
-                        // Card Soạn (skipMode): nút bỏ qua (✕/↩) ở đầu dòng; ô tick dời sang
-                        // cuối dòng, cạnh CTA "Lấy N …" — tick nằm ngay chỗ mắt vừa đọc xong CTA.
-                        // Dùng div bọc (không lồng button trong button).
+                        // Card Soạn (skipMode): nút bỏ qua (✕/↩) nằm ngay cạnh tên nguyên liệu;
+                        // ô tick ở cuối dòng, cạnh CTA "Lấy N …" — tick nằm ngay chỗ mắt vừa đọc
+                        // xong CTA. Span (không phải button) để tránh lồng button trong button.
                         if (skipMode) {
                             return (
-                                <div key={it.ingredient} className="flex items-center border-b border-border/20 last:border-0">
-                                    <button
-                                        type="button"
-                                        onClick={() => onSkip(it.ingredient)}
-                                        title={isSkipped ? 'Hoàn tác bỏ qua' : 'Bỏ qua — không cần lấy'}
-                                        className={`shrink-0 mr-1 w-8 h-8 flex items-center justify-center rounded-lg active:scale-95 transition ${isSkipped ? 'text-primary hover:bg-primary/10' : 'text-text-dim hover:text-text hover:bg-border/40'}`}
-                                    >
-                                        {isSkipped ? <RotateCcw size={14} /> : <X size={14} />}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => onToggle?.(it.ingredient)}
-                                        className={`flex items-start gap-3 py-2.5 flex-1 min-w-0 text-left active:scale-[0.99] transition ${isSkipped ? 'opacity-60' : ''}`}
-                                    >
-                                        {nameDesc}
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            {ctaText}
-                                            {leadIcon}
+                                <button
+                                    key={it.ingredient}
+                                    type="button"
+                                    onClick={() => onToggle?.(it.ingredient)}
+                                    className={`flex items-start gap-3 py-2.5 border-b border-border/20 last:border-0 text-left active:scale-[0.99] transition ${isSkipped ? 'opacity-60' : ''}`}
+                                >
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1">
+                                            <span className={`text-[14px] font-bold leading-tight ${muted ? 'text-text-dim line-through' : 'text-text'}`}>
+                                                {ingredientLabel(it.ingredient)}
+                                            </span>
+                                            <span
+                                                onClick={(e) => { e.stopPropagation(); onSkip(it.ingredient) }}
+                                                title={isSkipped ? 'Hoàn tác bỏ qua' : 'Bỏ qua — không cần lấy'}
+                                                className={`shrink-0 w-6 h-6 flex items-center justify-center rounded-lg active:scale-95 transition ${isSkipped ? 'text-primary hover:bg-primary/10' : 'text-text-dim hover:text-text hover:bg-border/40'}`}
+                                            >
+                                                {isSkipped ? <RotateCcw size={13} /> : <X size={13} />}
+                                            </span>
                                         </div>
-                                    </button>
-                                </div>
+                                        <div className="text-[11px] text-text-dim mt-0.5">
+                                            {it.warehouse != null && (
+                                                <span className={`block ${shortfall ? 'text-danger font-bold' : ''}`}>
+                                                    Tồn kho: {it.warehouse} {it.unit}
+                                                </span>
+                                            )}
+                                            <span className="block">
+                                                {haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{it.have} {it.unit}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col items-center gap-1.5 shrink-0">
+                                        {ctaText}
+                                        {leadIcon}
+                                    </div>
+                                </button>
                             )
                         }
 
