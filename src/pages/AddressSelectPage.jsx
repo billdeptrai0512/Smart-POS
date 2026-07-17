@@ -15,9 +15,19 @@ import StaffTab from '../components/AddressSelectPage/StaffTab'
 import CreateStaffModal from '../components/AddressSelectPage/CreateStaffModal'
 import SupportModal from '../components/common/SupportModal'
 import { cacheKey as buildCacheKey } from '../constants/storageKeys'
+import { computeSubscriptionStatus } from '../utils/subscriptionStatus'
 
-// Dùng thử → đã đăng ký → chưa đăng ký.
-const SUBSCRIPTION_RANK = { trial: 0, paid: 1, none: 2 }
+// Sắp theo mức độ CẦN CHÚ Ý, không phải theo trạng thái gói suông — gate chỉ có
+// 2 trạng thái thực (mở/khoá); "trial"/"pending"/"paid" chỉ là LÝ DO đang mở, còn
+// "có hoạt động hôm nay" (bán hàng — POS luôn free bất kể gói) mới là tín hiệu
+// quan trọng hơn. Ưu tiên (0 = đầu danh sách):
+//   0. Có hoạt động + ĐÃ KHOÁ (hết hạn thật) — đang mất tiền rõ nhất: vẫn bán
+//      đều mà chưa trả phí, cần chủ quán thấy ngay để gia hạn/liên hệ.
+//   1. Có hoạt động + trial thật đang đếm ngược — sắp cần quyết định trả phí.
+//   2. Có hoạt động + đang free tạm (chưa full-close lần nào, chưa đếm ngược).
+//   3. Có hoạt động + đã đăng ký (paid) — ổn, không cần chú ý.
+//   4. Không hoạt động hôm nay — bất kể trạng thái gói (có thể đã nghỉ/rời bỏ).
+const ACTIVE_STATUS_RANK = { none: 0, trial: 1, pending: 2, paid: 3 }
 
 export default function AddressSelectPage() {
     const {
@@ -55,13 +65,28 @@ export default function AddressSelectPage() {
         return addresses.filter(a => a.manager_id === teamOwnerId)
     }, [addresses, teamOwnerId])
 
-    // Trong cùng nhóm giữ nguyên thứ tự created_at có sẵn từ query (Array.sort ổn định) làm tie-break phụ.
+    // rank 4 = "không hoạt động hôm nay" luôn xuống cuối, bất kể trạng thái gói.
+    // Trong nhóm rank 1 (trial đang đếm ngược), sort phụ theo daysLeft tăng dần —
+    // trial sắp hết trước lên trước (khớp màu cảnh báo ở SubscriptionBadge).
+    // Trong cùng nhóm/daysLeft giữ nguyên thứ tự created_at có sẵn từ query
+    // (Array.sort ổn định) làm tie-break phụ.
     const sortedAddresses = useMemo(() => {
         if (!monetizationEnabled) return addresses
-        return [...addresses].sort((a, b) =>
-            (SUBSCRIPTION_RANK[subscriptionStatusMap[a.id]] ?? 2) - (SUBSCRIPTION_RANK[subscriptionStatusMap[b.id]] ?? 2)
-        )
-    }, [addresses, subscriptionStatusMap, monetizationEnabled])
+        const rankOf = (addr) => {
+            const hasActivity = (cupsMap[addr.id] || 0) > 0 || (revenueMap[addr.id] || 0) > 0
+            if (!hasActivity) return { group: 4, daysLeft: Infinity }
+            const status = subscriptionStatusMap[addr.id]
+            const group = ACTIVE_STATUS_RANK[status] ?? 4
+            const daysLeft = status === 'trial'
+                ? (computeSubscriptionStatus(subscriptionRowsMap[addr.id]).daysLeft ?? Infinity)
+                : Infinity
+            return { group, daysLeft }
+        }
+        return [...addresses].sort((a, b) => {
+            const ra = rankOf(a), rb = rankOf(b)
+            return ra.group - rb.group || ra.daysLeft - rb.daysLeft
+        })
+    }, [addresses, subscriptionStatusMap, subscriptionRowsMap, cupsMap, revenueMap, monetizationEnabled])
 
     // PERF: count by role in a single pass instead of two .filter() walks per render.
     const { staffCount, managerCount } = useMemo(() => {

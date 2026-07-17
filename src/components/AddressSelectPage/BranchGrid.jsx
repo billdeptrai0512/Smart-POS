@@ -253,7 +253,8 @@ export default function BranchGrid({
                                             addressId={addr.id}
                                             rows={subscriptionRowsMap[addr.id]}
                                             pending={subscriptionStatusMap[addr.id] === 'pending'}
-                                            loading={subscriptionLoading}
+                                            hasActivity={cups > 0 || revenue > 0}
+                                            loading={subscriptionLoading || !hasStats}
                                             onRenewClick={() => navigate('/subscription', {
                                                 state: { preselectAddressId: addr.id, from: '/addresses' },
                                             })}
