@@ -292,6 +292,7 @@ export default function AddressSelectPage() {
                         prevCupsMap={prevCupsMap}
                         sessionsMap={sessionsMap}
                         subscriptionRowsMap={subscriptionRowsMap}
+                        subscriptionStatusMap={subscriptionStatusMap}
                         subscriptionLoading={subscriptionLoading}
                         statsLoading={statsLoading}
                         isStaff={isStaff}

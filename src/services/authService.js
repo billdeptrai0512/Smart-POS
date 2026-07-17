@@ -263,7 +263,13 @@ export async function fetchSubscriptionStatuses(addressIds) {
     const rowsMap = {}
     ;(data || []).forEach(r => { (rowsMap[r.address_id] ??= []).push(r) })
     const statusMap = {}
-    addressIds.forEach(id => { statusMap[id] = computeSubscriptionStatus(rowsMap[id]).status })
+    addressIds.forEach(id => {
+        // 0 row = địa chỉ chưa từng full-close lần nào → đang free tạm chờ ca full
+        // đầu tiên (trial không còn giới hạn theo SĐT, xem 20260717_trial_4_
+        // per_address_not_per_phone.sql) → luôn là 'pending', không có case nào
+        // khác nữa nên không cần RPC riêng để phân biệt.
+        statusMap[id] = rowsMap[id]?.length ? computeSubscriptionStatus(rowsMap[id]).status : 'pending'
+    })
     return { statusMap, rowsMap }
 }
 

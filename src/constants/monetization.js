@@ -17,7 +17,7 @@ export const PLAN = {
     periodLabel: '6 tháng',
 }
 
-/** Số ngày trial mặc định (khớp trigger grant_trial_on_address_creation). */
+/** Số ngày trial mặc định (khớp trigger grant_trial_on_first_full_shift_close). */
 export const TRIAL_DAYS = 7
 
 /** Các view được mở khoá — hiển thị "gồm gì" trong checkout. */
