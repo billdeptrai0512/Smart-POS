@@ -1192,7 +1192,7 @@ export default function DailyReportPage() {
                                             title="Soạn cho hôm nay"
                                             icon={<Truck size={15} className="text-primary shrink-0" />}
                                             packVerb="Lấy"
-                                            haveLabel="Tồn quầy"
+                                            haveLabel="Tồn quầy đầu ca"
                                             emptyTitle="Đủ hàng cho hôm nay!"
                                             emptyHint="Tồn quầy đầu ca đã đủ cho dự báo bán hôm nay."
                                             items={prepTodayList}
@@ -1235,7 +1235,7 @@ export default function DailyReportPage() {
                                             title="Chuẩn bị ngày mai"
                                             icon={<Package size={15} className="text-primary shrink-0" />}
                                             packVerb="Mua"
-                                            haveLabel="Tồn quầy"
+                                            haveLabel="Tồn quầy cuối ca"
                                             emptyTitle="Kho tổng đủ cho mai!"
                                             emptyHint="Không cần đi chợ đắp thêm cho ngày mai."
                                             items={warehousePrepList}
