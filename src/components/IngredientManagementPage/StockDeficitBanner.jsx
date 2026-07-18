@@ -34,8 +34,8 @@ export default function StockDeficitBanner({ deficits, ingredientUnits, configBy
                     <div className="flex-1 min-w-0">
                         <p className="text-[13px] font-black text-danger leading-tight">Kho tổng đang lệch sổ sách</p>
                         <p className="text-[11px] text-text-secondary mt-0.5 leading-snug">
-                            {deficits.length} nguyên liệu có Σ rút (chốt ca) vượt Σ nhập kho.
-                            Có thể do mua ngoài app hoặc kê khai restock quá tay.
+                            {deficits.length} nguyên liệu bị rút (chốt ca) nhiều hơn số đã nhập kho.
+                            Có thể do mua ngoài app hoặc kê khai nhập kho quá tay.
                         </p>
                     </div>
                 </div>

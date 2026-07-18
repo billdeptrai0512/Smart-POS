@@ -5,6 +5,7 @@ import facebookImg from '../../assets/facebook.webp'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../hooks/useToast'
 import { insertRating } from '../../services/ratingService'
+import Toast from '../POSPage/Toast'
 
 const SUPPORT_LINKS = {
     zalo: 'https://zalo.me/g/yvsgvae1kejljidlxyih',
@@ -13,7 +14,7 @@ const SUPPORT_LINKS = {
 
 export default function SupportModal({ open, onClose }) {
     const { profile } = useAuth()
-    const { showError } = useToast()
+    const { toast, showError } = useToast()
     const [rating, setRating] = useState(0)
     const [hoverRating, setHoverRating] = useState(0)
     const [comment, setComment] = useState('')
@@ -127,6 +128,7 @@ export default function SupportModal({ open, onClose }) {
                     )}
                 </div>
             </div>
+            <Toast toast={toast} />
         </div>
     )
 }
