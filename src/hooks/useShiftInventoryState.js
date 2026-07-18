@@ -24,12 +24,22 @@ import { dateStringVN } from '../utils/dateVN'
 // `dateKey` (e.g. todayISO from caller) is part of the effect deps so an overnight
 // session detecting a date change clears stale inputs and refetches the new day's
 // shift_closing instead of editing yesterday's row.
-export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) {
+//
+// `onFieldConflict(ingredient)` (optional) fires when reconcileFromRemote adopts a remote
+// restock/skipped value for an ingredient THIS device pushed within the last few seconds —
+// i.e. another device's concurrent edit just overwrote ours (last-write-wins at the
+// per-ingredient patch level). Caller can surface a toast; purely informational, doesn't
+// change merge behavior.
+export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, onFieldConflict) {
     // ── Inputs (staff-typed) ──────────────────────────────────────────────────
     const [openingInputs, setOpeningInputs] = useState({})
     const [openingLocked, setOpeningLocked] = useState({})
     const [restockInputs, setRestockInputs] = useState({})
     const [inventoryInputs, setInventoryInputs] = useState({})
+    // "Bỏ qua" từng món "Soạn cho hôm nay" — đánh dấu "đã xem, không cần lấy" để vẫn hoàn
+    // tất ca mà không phải nhập hàng thừa. Đồng bộ qua cùng cơ chế restock (patch vào
+    // inventory_report, merge RPC, Realtime) thay vì localStorage → đa thiết bị thấy chung.
+    const [skipped, setSkipped] = useState({})
 
     // ── Derived / fetched ─────────────────────────────────────────────────────
     const [ingredientsList, setIngredientsList] = useState([])
@@ -42,14 +52,15 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
     // Dirty is DERIVED from a baseline snapshot (last loaded / last saved values).
     // The old boolean flag stuck at true after a revert because nothing knew
     // current state had returned to baseline; comparing maps each render fixes that.
-    const baselineRef = useRef({ opening: {}, openingLocked: {}, restock: {}, inventory: {} })
+    const baselineRef = useRef({ opening: {}, openingLocked: {}, restock: {}, inventory: {}, skipped: {} })
     const [baselineVersion, setBaselineVersion] = useState(0)
-    const commitBaseline = useCallback((opening, openingLocked, restock, inventory) => {
+    const commitBaseline = useCallback((opening, openingLocked, restock, inventory, skipped) => {
         baselineRef.current = {
             opening: { ...opening },
             openingLocked: { ...openingLocked },
             restock: { ...restock },
             inventory: { ...inventory },
+            skipped: { ...skipped },
         }
         setBaselineVersion(v => v + 1)
     }, [])
@@ -60,6 +71,12 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
     const openingLockedRef = useRef(openingLocked); openingLockedRef.current = openingLocked
     const restockInputsRef = useRef(restockInputs); restockInputsRef.current = restockInputs
     const inventoryInputsRef = useRef(inventoryInputs); inventoryInputsRef.current = inventoryInputs
+    const skippedRef = useRef(skipped); skippedRef.current = skipped
+
+    // Timestamps of this device's own recent pushes, per ingredient — used only to tell
+    // "remote just overwrote MY edit" (→ conflict toast) apart from a normal one-way
+    // converge where we weren't editing that ingredient at all.
+    const recentPushRef = useRef({})
 
     // ── Load existing shift closing → seed input maps ─────────────────────────
     // Re-runs when dateKey changes (midnight rollover) to drop stale yesterday inputs.
@@ -74,7 +91,8 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         setRestockInputs({})
         setOpeningInputs({})
         setOpeningLocked({})
-        commitBaseline({}, {}, {}, {})
+        setSkipped({})
+        commitBaseline({}, {}, {}, {}, {})
         fetchTodayShiftClosing(addressId).then(data => {
             if (!data) return
             // Guard against server returning yesterday's row as "today's" (tz / RPC
@@ -91,24 +109,26 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
             }
             if (!Array.isArray(parsed)) return
 
-            const inputs = {}, restocks = {}, openings = {}, locked = {}
+            const inputs = {}, restocks = {}, openings = {}, locked = {}, skips = {}
             parsed.forEach(item => {
                 if (typeof item.remaining === 'number') inputs[item.ingredient] = String(item.remaining)
                 if (typeof item.restock === 'number') restocks[item.ingredient] = String(item.restock)
                 if (typeof item.opening === 'number') openings[item.ingredient] = String(item.opening)
                 if (item.opening_locked) locked[item.ingredient] = true
+                if (item.skipped) skips[item.ingredient] = true
             })
             setInventoryInputs(inputs)
             setRestockInputs(restocks)
             if (Object.keys(openings).length) setOpeningInputs(openings)
             if (Object.keys(locked).length) setOpeningLocked(locked)
+            setSkipped(skips)
             // Snapshot baseline = whatever just got hydrated from the existing closing.
             // Đầu kỳ: nếu phiếu KHÔNG lưu opening (vd chỉ nhập Cuối kỳ), đừng reset baseline.opening
             // về {} — reloadStocks có thể đã seed openingInputs từ hôm qua. Reset sẽ khiến
             // input(seed) ≠ baseline({}) ⇒ phantom-dirty (FAB Lưu + chặn thoát) dù chưa gõ gì.
             // Giữ seed đang có trong baseline để 2 thứ khớp ở cả 2 thứ tự resolve của race.
             const openBase = Object.keys(openings).length ? openings : baselineRef.current.opening
-            commitBaseline(openBase, locked, restocks, inputs)
+            commitBaseline(openBase, locked, restocks, inputs, skips)
         }).finally(() => setIsLoadingExisting(false))
     }, [addressId, dateKey, commitBaseline])
 
@@ -201,17 +221,24 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         let parsed = remoteReport
         if (typeof parsed === 'string') { try { parsed = JSON.parse(parsed) } catch { return } }
         if (!Array.isArray(parsed)) return
-        const rOpening = {}, rLocked = {}, rRestock = {}, rInventory = {}
+        const rOpening = {}, rLocked = {}, rRestock = {}, rInventory = {}, rSkipped = {}
         parsed.forEach(item => {
             if (!item || !item.ingredient) return
             if (typeof item.opening === 'number') rOpening[item.ingredient] = String(item.opening)
             if (item.opening_locked) rLocked[item.ingredient] = true
             if (typeof item.restock === 'number') rRestock[item.ingredient] = String(item.restock)
             if (typeof item.remaining === 'number') rInventory[item.ingredient] = String(item.remaining)
+            if (item.skipped) rSkipped[item.ingredient] = true
         })
         const norm = (v) => (v === undefined || v === null || v === '' ? null : String(v))
+        // Ingredients where a remote value just overwrote OUR own recent push (restock/skipped
+        // only — the 2 fields "Soạn" tick touches) → reported via onFieldConflict below.
+        const conflictIngredients = new Set()
+        const CONFLICT_WINDOW_MS = 8000
         // eq: how to compare a field for "dirty" and "present" — strings for inputs, bool for lock.
-        const mergeField = (prevMap, baseMap, remoteMap, eq, present) => {
+        // watchConflicts: track ingredients whose adopted remote value differs from what we
+        // last pushed ourselves within CONFLICT_WINDOW_MS (another device raced us).
+        const mergeField = (prevMap, baseMap, remoteMap, eq, present, watchConflicts) => {
             const out = {}, nb = {}
             const keys = new Set([...Object.keys(prevMap), ...Object.keys(baseMap), ...Object.keys(remoteMap)])
             for (const k of keys) {
@@ -220,6 +247,10 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
                     if (present(prevMap[k])) out[k] = prevMap[k]
                     if (present(baseMap[k])) nb[k] = baseMap[k]   // keep stale baseline → stays dirty → re-pushed
                 } else if (present(remoteMap[k])) {
+                    if (watchConflicts && eq(remoteMap[k]) !== eq(baseMap[k])) {
+                        const pushedAt = recentPushRef.current[k]
+                        if (pushedAt && Date.now() - pushedAt < CONFLICT_WINDOW_MS) conflictIngredients.add(k)
+                    }
                     out[k] = remoteMap[k]; nb[k] = remoteMap[k]
                 }
             }
@@ -230,12 +261,14 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         const b = baselineRef.current
         const [oOut, oNb] = mergeField(openingInputsRef.current, b.opening, rOpening, strEq, strPresent)
         const [lOut, lNb] = mergeField(openingLockedRef.current, b.openingLocked, rLocked, boolEq, boolPresent)
-        const [rOut, rNb] = mergeField(restockInputsRef.current, b.restock, rRestock, strEq, strPresent)
+        const [rOut, rNb] = mergeField(restockInputsRef.current, b.restock, rRestock, strEq, strPresent, true)
         const [iOut, iNb] = mergeField(inventoryInputsRef.current, b.inventory, rInventory, strEq, strPresent)
-        setOpeningInputs(oOut); setOpeningLocked(lOut); setRestockInputs(rOut); setInventoryInputs(iOut)
-        baselineRef.current = { opening: oNb, openingLocked: lNb, restock: rNb, inventory: iNb }
+        const [sOut, sNb] = mergeField(skippedRef.current, b.skipped, rSkipped, boolEq, boolPresent, true)
+        setOpeningInputs(oOut); setOpeningLocked(lOut); setRestockInputs(rOut); setInventoryInputs(iOut); setSkipped(sOut)
+        baselineRef.current = { opening: oNb, openingLocked: lNb, restock: rNb, inventory: iNb, skipped: sNb }
         setBaselineVersion(v => v + 1)
-    }, [])
+        if (onFieldConflict) conflictIngredients.forEach(ing => onFieldConflict(ing))
+    }, [onFieldConflict])
 
     // ── Gate: only open the realtime channel below when >= 2 devices are active
     // on this address (same pattern as POSContext's orders-realtime). A single
@@ -292,6 +325,13 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         setInventoryInputs(prev => ({ ...prev, [ingredient]: value }))
     }, [])
 
+    const onSkipToggle = useCallback((ingredient, val) => {
+        setSkipped(prev => {
+            if (!val) { const { [ingredient]: _drop, ...rest } = prev; return rest }
+            return { ...prev, [ingredient]: true }
+        })
+    }, [])
+
     // ── Derived: isDirty (compare inputs vs baseline) ────────────────────────
     // Empty string and undefined both mean "no input" — normalize so a load that
     // hydrates "" → never sees a phantom diff against undefined baseline keys.
@@ -308,9 +348,10 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
             && mapEq(openingLocked, b.openingLocked)
             && mapEq(restockInputs, b.restock)
             && mapEq(inventoryInputs, b.inventory)
+            && mapEq(skipped, b.skipped)
         )
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [openingInputs, openingLocked, restockInputs, inventoryInputs, baselineVersion])
+    }, [openingInputs, openingLocked, restockInputs, inventoryInputs, skipped, baselineVersion])
 
     // Danh sách field đã đổi so với baseline, dạng người-đọc-được — để confirm "rời trang"
     // chú thích cụ thể thay đổi nào sắp mất (thay vì câu chung chung gây mơ hồ khi user
@@ -335,9 +376,13 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
             if (!!openingLocked[ing] !== !!b.openingLocked[ing])
                 lines.push(`${ing} · Khoá đầu kỳ: ${openingLocked[ing] ? 'bật' : 'tắt'}`)
         }
+        for (const ing of new Set([...Object.keys(skipped || {}), ...Object.keys(b.skipped || {})])) {
+            if (!!skipped[ing] !== !!b.skipped[ing])
+                lines.push(`${ing} · Bỏ qua: ${skipped[ing] ? 'bật' : 'tắt'}`)
+        }
         return lines
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [openingInputs, inventoryInputs, restockInputs, openingLocked, baselineVersion])
+    }, [openingInputs, inventoryInputs, restockInputs, openingLocked, skipped, baselineVersion])
 
     // Restock có đổi so với baseline không. Lưu có restock thay đổi = chuyển kho ra quầy
     // (trừ kho tổng server-side) → cần confirm; lưu chỉ-đếm (Đầu/Cuối kỳ) thì không.
@@ -405,9 +450,9 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         const b = baselineRef.current
         const keys = new Set([
             ...Object.keys(openingInputs), ...Object.keys(inventoryInputs),
-            ...Object.keys(restockInputs), ...Object.keys(openingLocked),
+            ...Object.keys(restockInputs), ...Object.keys(openingLocked), ...Object.keys(skipped),
             ...Object.keys(b.opening), ...Object.keys(b.inventory),
-            ...Object.keys(b.restock), ...Object.keys(b.openingLocked),
+            ...Object.keys(b.restock), ...Object.keys(b.openingLocked), ...Object.keys(b.skipped),
         ])
         const patches = []
         for (const ing of keys) {
@@ -416,6 +461,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
                 || norm(inventoryInputs[ing]) !== norm(b.inventory[ing])
                 || norm(restockInputs[ing]) !== norm(b.restock[ing])
                 || !!openingLocked[ing] !== !!b.openingLocked[ing]
+                || !!skipped[ing] !== !!b.skipped[ing]
             if (!changed) continue
             patches.push({
                 ingredient: ing,
@@ -424,12 +470,13 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
                 opening_locked: !!openingLocked[ing],
                 remaining: parseOrNull(inventoryInputs[ing]),
                 restock: parseOrNull(restockInputs[ing]),
+                skipped: !!skipped[ing],
             })
         }
         return patches
         // baselineVersion bumps the baselineRef snapshot used above.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ingredientsList, inventoryInputs, restockInputs, openingInputs, openingLocked, baselineVersion])
+    }, [ingredientsList, inventoryInputs, restockInputs, openingInputs, openingLocked, skipped, baselineVersion])
 
     // ── Light autosave push: send this device's delta, merge server-side, converge ──
     // Advances baseline ONLY for the fields we just pushed → they read non-dirty (no re-push
@@ -450,15 +497,18 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
             // Pushed values → baseline (so they read non-dirty); tombstones (all null) drop the key.
             const b = baselineRef.current
             const opening = { ...b.opening }, openingLocked = { ...b.openingLocked }
-            const restock = { ...b.restock }, inventory = { ...b.inventory }
+            const restock = { ...b.restock }, inventory = { ...b.inventory }, skipped = { ...b.skipped }
+            const now = Date.now()
             for (const p of patches) {
                 const k = p.ingredient
                 if (p.opening == null) delete opening[k]; else opening[k] = String(p.opening)
                 if (!p.opening_locked) delete openingLocked[k]; else openingLocked[k] = true
                 if (p.restock == null) delete restock[k]; else restock[k] = String(p.restock)
                 if (p.remaining == null) delete inventory[k]; else inventory[k] = String(p.remaining)
+                if (!p.skipped) delete skipped[k]; else skipped[k] = true
+                recentPushRef.current[k] = now   // mark so a conflicting remote update for this ingredient surfaces a toast
             }
-            baselineRef.current = { opening, openingLocked, restock, inventory }
+            baselineRef.current = { opening, openingLocked, restock, inventory, skipped }
             setBaselineVersion(v => v + 1)   // recompute isDirty against advanced baseline
             setExistingClosing(row)
             return row
@@ -480,7 +530,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
 
     return {
         // raw input maps
-        openingInputs, openingLocked, restockInputs, inventoryInputs,
+        openingInputs, openingLocked, restockInputs, inventoryInputs, skipped,
         // fetched / derived
         ingredientsList, isLoadingIngredients,
         openingStock, warehouseStocks, effectiveWarehouseStocks, reloadStocks, reloadIngredients,
@@ -493,7 +543,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey) 
         // sort and to remount rows so they auto-collapse after a successful save.
         baselineSnapshot, baselineVersion,
         // handlers
-        onOpeningChange, onOpeningLock, onRestockChange, onInventoryChange,
+        onOpeningChange, onOpeningLock, onRestockChange, onInventoryChange, onSkipToggle,
         // save helpers
         pushInventory,
     }

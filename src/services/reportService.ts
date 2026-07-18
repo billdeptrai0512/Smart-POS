@@ -105,7 +105,8 @@ export async function updateShiftClosing(id: UUID, data: Row) {
 // Đường autosave NHẸ cho kiểm kê đa thiết bị: merge các field đã đổi vào inventory_report
 // của phiếu hôm nay (tạo phiếu nếu chưa có) qua RPC merge_shift_closing_inventory — race-free
 // dưới row lock. KHÔNG refetch ở đây (gọi xong tự nhẹ); convergence do postgres_changes lo.
-// `patches`: [{ingredient, unit, opening, opening_locked, remaining, restock}], số = null ⇒ xoá NVL.
+// `patches`: [{ingredient, unit, opening, opening_locked, remaining, restock, skipped}], số = null
+// (và skipped = false) ⇒ xoá NVL khỏi report.
 export async function mergeShiftClosingInventory(addressId: UUID, patches: Row[], closedBy: string | null, systemTotalRevenue = 0) {
     invalidateReportCache(addressId)
     if (localRepo.isGuest()) {
@@ -115,7 +116,7 @@ export async function mergeShiftClosingInventory(addressId: UUID, patches: Row[]
         const restockDeltas: Record<string, number> = {}
         for (const p of patches) {
             const i = report.findIndex(e => e.ingredient === p.ingredient)
-            const tombstone = p.opening == null && p.remaining == null && p.restock == null
+            const tombstone = p.opening == null && p.remaining == null && p.restock == null && !p.skipped
             const oldRestock = i >= 0 ? Number(report[i]?.restock) || 0 : 0
             const newRestock = tombstone ? 0 : Number(p.restock) || 0
             if (newRestock !== oldRestock)
