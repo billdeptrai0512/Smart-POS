@@ -173,26 +173,6 @@ async function attachCashClosedAt(data: Row) {
     return data
 }
 
-// Fetch shift closings within a date range (for summing cash/transfer)
-export async function fetchShiftClosingsByRange(addressId: UUID, start: Date, end: Date) {
-    if (localRepo.isGuest()) {
-        const sMs = start.getTime(), eMs = end.getTime()
-        return localRepo.fetchAllLocalShiftClosings(addressId).filter((s: Row) => {
-            const t = new Date(s.closed_at || s.created_at).getTime()
-            return t >= sMs && t <= eMs
-        })
-    }
-    if (!supabase) return []
-    const { data, error } = await supabase
-        .from('shift_closings')
-        .select('actual_cash, actual_transfer, system_total_revenue, closed_at')
-        .eq('address_id', addressId)
-        .gte('closed_at', start.toISOString())
-        .lte('closed_at', end.toISOString())
-    if (error) { console.error('fetchShiftClosingsByRange error:', error); return [] }
-    return data || []
-}
-
 // Fetch today's shift closing for an address (latest one)
 export async function fetchTodayShiftClosing(addressId: UUID) {
     if (localRepo.isGuest()) return localRepo.fetchLocalShiftClosing(addressId, new Date().toISOString())
@@ -259,47 +239,6 @@ export async function fetchYesterdayShiftClosing(addressId: UUID) {
 }
 
 // ---- Historical reads (immutable past data) ----
-
-// Fetch order items for the past `days` fully completed days (excluding today)
-export async function fetchPastDaysOrderItems(addressId: UUID | null, days = 7) {
-    return historicalCache.through([addressId, 'pastDaysItems', days, dateStringVN()], async () => {
-        if (!supabase) return []
-        const endDate = startOfDayVN()
-
-        const startDate = new Date(endDate)
-        startDate.setDate(startDate.getDate() - days)
-
-        let query = supabase
-            .from('orders')
-            .select(`
-                order_items (
-                    quantity,
-                    product_id,
-                    extra_ids
-                )
-            `)
-            .is('deleted_at', null)
-            .gte('created_at', startDate.toISOString())
-            .lt('created_at', endDate.toISOString())
-
-        if (addressId) query = query.eq('address_id', addressId)
-
-        const { data, error } = await query
-        if (error) {
-            console.error('fetchPastDaysOrderItems error:', error)
-            return []
-        }
-
-        // Flatten order items
-        const allItems: Row[] = []
-        data.forEach((o: Row) => {
-            if (o.order_items) {
-                o.order_items.forEach((i: Row) => allItems.push(i))
-            }
-        })
-        return allItems
-    })
-}
 
 // Fetch order items for the same weekday one week ago, `daysAgo` days back.
 //   daysAgo = 7 → same weekday as TODAY   → dự báo "Soạn cho hôm nay".

@@ -7,6 +7,7 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { DAY_NAMES } from '../constants'
+import { dateFullVN } from '../utils/dateVN'
 
 import Header from '../components/POSPage/Header'
 import MenuGrid from '../components/POSPage/MenuGrid'
@@ -40,7 +41,7 @@ export default function POSPage() {
 
     const today = new Date()
     const dayName = DAY_NAMES[today.getDay()]
-    const dateOnly = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`
+    const dateOnly = dateFullVN(today)
 
     function handleOpenHistory() {
         // Do NOT commit synchronously here: setCart([]) clears draftOrder, which repaints

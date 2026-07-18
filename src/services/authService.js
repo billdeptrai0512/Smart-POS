@@ -197,13 +197,6 @@ export async function signOut() {
     if (error) throw error
 }
 
-// Get the current session
-export async function getSession() {
-    if (!supabase) return null
-    const { data: { session } } = await supabase.auth.getSession()
-    return session
-}
-
 // Lưu SĐT cho tài khoản đang đăng nhập (RPC set_my_phone — chuẩn hoá +84,
 // lần đầu nhập sẽ bind/cấp trial theo quy tắc 1 SĐT = 1 trial).
 // Trả 'trial_granted' khi vừa kích hoạt 7 ngày dùng thử, ngược lại 'ok'.

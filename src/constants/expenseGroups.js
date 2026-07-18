@@ -15,8 +15,5 @@ export const EXPENSE_GROUPS = [
     { key: 'non_operating', label: 'Ngoài kinh doanh', dotCls: 'bg-text-dim', tabCls: 'bg-border/40 text-text-secondary', inProfit: false },
 ]
 
-// Nhãn không gắn nhóm hợp lệ (null / nhóm đã xoá) coi như Vận hành.
-export const DEFAULT_GROUP = 'operating'
-
 export const groupMeta = (key) =>
     EXPENSE_GROUPS.find(g => g.key === key) || EXPENSE_GROUPS[0]

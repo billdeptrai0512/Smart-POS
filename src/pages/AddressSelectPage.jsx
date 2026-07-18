@@ -16,6 +16,7 @@ import CreateStaffModal from '../components/AddressSelectPage/CreateStaffModal'
 import SupportModal from '../components/common/SupportModal'
 import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 import { computeSubscriptionStatus } from '../utils/subscriptionStatus'
+import { dateFullVN } from '../utils/dateVN'
 
 // Sắp theo mức độ CẦN CHÚ Ý, không phải theo trạng thái gói suông — gate chỉ có
 // 2 trạng thái thực (mở/khoá); "trial"/"pending"/"paid" chỉ là LÝ DO đang mở, còn
@@ -268,7 +269,7 @@ export default function AddressSelectPage() {
     }
 
     const today = new Date()
-    const dateOnly = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`
+    const dateOnly = dateFullVN(today)
 
     if (loading) {
         return (

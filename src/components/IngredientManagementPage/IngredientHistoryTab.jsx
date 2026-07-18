@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, Trash2, Pencil } from 'lucide-react'
 import { formatVND } from '../../utils'
 import { formatPackedQty } from '../../utils/inventory'
+import { dateShortVN, timeStringVN } from '../../utils/dateVN'
 
 // Monthly restock log for one ingredient. Card layout mirrors /history's
 // ExpenseCard so the eye scans the same shape across pages:
@@ -133,9 +134,8 @@ function Stat({ label, value, tone, align = 'center' }) {
 // Tồn X→Y · context pills (restock only) · staff + datetime above a hairline divider.
 function HistoryCard({ entry, unit, packSize, packUnit, onOpenPayment, onCancelRestock, onEditRestock, addressName }) {
     const d = new Date(entry.created_at)
-    // Hardcode dd/mm — Chromium's vi-VN renders "27 - 05" with literal spaces.
-    const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
-    const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    const dateStr = dateShortVN(d)
+    const timeStr = timeStringVN(d)
 
     const cancelled = !!entry.metadata?.cancelled
     const cancelledBy = entry.metadata?.cancelled_by

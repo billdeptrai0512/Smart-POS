@@ -111,34 +111,6 @@ export async function deleteExpense(expenseId) {
     return true
 }
 
-// Fetch yesterday's expenses, scoped by address
-export async function fetchYesterdayExpenses(addressId) {
-    if (localRepo.isGuest()) {
-        const yesterday = new Date()
-        yesterday.setDate(yesterday.getDate() - 1)
-        return localRepo.fetchLocalExpenses(addressId, yesterday.toISOString())
-    }
-    if (!supabase) return []
-    const today = startOfDayVN()
-    const yesterday = new Date(today)
-    yesterday.setDate(yesterday.getDate() - 1)
-
-    let query = supabase
-        .from('expenses')
-        .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, category_id, created_at, address_id')
-        .gte('created_at', yesterday.toISOString())
-        .lt('created_at', today.toISOString())
-
-    if (addressId) query = query.eq('address_id', addressId)
-
-    const { data, error } = await query
-    if (error) {
-        if (error.code !== '42P01') console.error('fetchYesterdayExpenses error:', error)
-        return []
-    }
-    return data || []
-}
-
 // Fetch expenses within a date range
 export async function fetchExpensesByRange(addressId, start, end) {
     return reportCache.through([addressId, 'expensesByRange', start.toISOString(), end.toISOString()], async () => {
@@ -162,26 +134,6 @@ export async function fetchExpensesByRange(addressId, start, end) {
         if (error) { console.error('fetchExpensesByRange error:', error); return [] }
         return data || []
     })
-}
-
-// Fetch all refill expenses (đi chợ) within a date range, all ingredients
-export async function fetchRefillExpensesInRange(addressId, fromDate, toDate) {
-    if (localRepo.isGuest()) return localRepo.fetchLocalExpenses(addressId, fromDate) // Simple mapping for now
-    if (!supabase || !addressId) return []
-    const { data, error } = await supabase
-        .from('expenses')
-        .select('id, name, amount, staff_name, metadata, created_at')
-        .eq('address_id', addressId)
-        .eq('is_refill', true)
-        .gte('created_at', fromDate)
-        .lte('created_at', toDate)
-        .order('created_at', { ascending: false })
-
-    if (error) {
-        console.error('fetchRefillExpensesInRange error:', error)
-        return []
-    }
-    return data || []
 }
 
 // Fetch restock history for a specific ingredient within a date range.

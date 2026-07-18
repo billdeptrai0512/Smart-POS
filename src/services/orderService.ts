@@ -270,46 +270,6 @@ export async function updateOrderDiscount(orderId: UUID, total: number, discount
     return true
 }
 
-// Fetch all orders for yesterday (start of yesterday to start of today), scoped by address
-export async function fetchYesterdayOrders(addressId: UUID | null): Promise<any> {
-    if (localRepo.isGuest()) {
-        const yesterday = new Date()
-        yesterday.setDate(yesterday.getDate() - 1)
-        return (localRepo.fetchLocalOrders as any)(addressId, yesterday.toISOString())
-    }
-    if (!supabase) return []
-    const today = startOfDayVN()
-    const yesterday = new Date(today)
-    yesterday.setDate(yesterday.getDate() - 1)
-
-    let query = supabase
-        .from('orders')
-        .select(`
-            id,
-            total,
-            total_cost,
-            staff_name,
-            deleted_at,
-            order_items (
-                quantity,
-                product_id,
-                unit_cost,
-                extra_ids
-            )
-        `)
-        .gte('created_at', yesterday.toISOString())
-        .lt('created_at', today.toISOString())
-
-    if (addressId) query = query.eq('address_id', addressId)
-
-    const { data, error } = await query
-    if (error) {
-        console.error('fetchYesterdayOrders error:', error)
-        return []
-    }
-    return data || []
-}
-
 // Fetch orders within a date range for an address (same structure as fetchTodayOrders)
 export async function fetchOrdersByRange(addressId: UUID | null, start: Date, end: Date): Promise<any> {
     return reportCache.through([addressId, 'ordersByRange', start.toISOString(), end.toISOString()], async () => {

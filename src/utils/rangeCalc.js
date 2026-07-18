@@ -5,9 +5,7 @@
 // offset: negative for past, 0 = current period, only meaningful for day/week/month
 // customRange?: { startISO, endISO } (YYYY-MM-DD in VN local)
 
-import { startOfDayVN, endOfDayVN, startOfWeekVN, startOfMonthVN, endOfMonthVN, addDaysVN, dateStringVN } from './dateVN'
-
-const fmtDM = (d) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+import { startOfDayVN, endOfDayVN, startOfWeekVN, startOfMonthVN, endOfMonthVN, addDaysVN, dateStringVN, dateShortVN, dateFullVN } from './dateVN'
 
 // Moved from ReportHeader.jsx: pure date math had no business living in a
 // component file, and it was already being imported back into this util
@@ -57,8 +55,8 @@ export function calcRange(scope, offset, customRange) {
 export function calcRangeWithLabel(scope, offset, customRange) {
     const { start, end } = calcRange(scope, offset, customRange)
     const label = scope === 'day'
-        ? `${fmtDM(start)}/${start.getFullYear()}`
-        : `${fmtDM(start)} – ${fmtDM(end)}`
+        ? dateFullVN(start)
+        : `${dateShortVN(start)} – ${dateShortVN(end)}`
     return { start, end, label }
 }
 

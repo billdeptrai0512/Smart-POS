@@ -12,7 +12,7 @@ import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
 import { useDailyReportData } from '../hooks/useDailyReportData'
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, computeHaoHut, findMissingCupCandidates, buildDailyHaoHutMap, attachRepeatHistory, computeIngredientNoise } from '../utils/inventory'
 import { ingredientLabel, getIngredientUnit, lookupByLabel } from '../utils/ingredients'
-import { dateStringVN, isSameDayVN, startOfDayVN } from '../utils/dateVN'
+import { dateStringVN, isSameDayVN, startOfDayVN, dateShortVN, dateFullVN } from '../utils/dateVN'
 import { useDateScope } from '../hooks/useDateScope'
 import { goToMenuStep } from '../utils/menuSequence'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
@@ -265,16 +265,15 @@ export default function DailyReportPage() {
     const displayPayments = isTodayScope ? (todayPayments || []) : (apiPayments || [])
 
     const rangeLabel = useMemo(() => {
-        const fmt = d => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
         if (scope === 'day') {
-            return `${fmt(rangeStart)}/${rangeStart.getFullYear()}`
+            return dateFullVN(rangeStart)
         }
         if (scope === 'custom' && customRange?.startISO && customRange?.endISO) {
             const sStr = customRange.startISO.split('-')
             const eStr = customRange.endISO.split('-')
             return `${sStr[2]}/${sStr[1]} – ${eStr[2]}/${eStr[1]}`
         }
-        return `${fmt(rangeStart)} – ${fmt(rangeEnd)}`
+        return `${dateShortVN(rangeStart)} – ${dateShortVN(rangeEnd)}`
     }, [scope, rangeStart, rangeEnd, customRange])
 
     const isReady = !isLoadingHistory && isAsyncReady

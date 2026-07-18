@@ -143,9 +143,3 @@ export function useEntitlement() {
     return { ...state, enabled }
 }
 
-/**
- * Hằng số build-time client flag (KHÔNG phản ánh server runtime).
- * ⚠️ Ưu tiên dùng useMonetizationEnabled() / useEntitlement().enabled để quyết định
- *    gate — chúng phản ánh đúng cả server kill switch. Giữ export cho tương thích.
- */
-export const MONETIZATION_ENABLED_FLAG = CLIENT_MONETIZATION_ENABLED

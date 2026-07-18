@@ -3,20 +3,14 @@ import { useAuth } from '../../contexts/AuthContext'
 import HistoryTabsBar from '../HistoryPage/HistoryTabsBar'
 import DatePicker from '../common/DatePicker'
 import { formatIsoDisplay } from '../common/datePickerUtils'
-import { dateStringVN } from '../../utils/dateVN'
+import { dateShortVN, dateFullVN } from '../../utils/dateVN'
 import { getDateRange } from '../../utils/rangeCalc'
-
-// Display "dd/mm" using VN-local components.
-const fmt = (d) => {
-    const [, m, day] = dateStringVN(d).split('-')
-    return `${day}/${m}`
-}
 
 function getSubtitle(range, offset) {
     const now = new Date()
-    if (range === 'day') return `${fmt(now)}/${now.getFullYear()}`
+    if (range === 'day') return dateFullVN(now)
     const { start, end } = getDateRange(range, offset)
-    return `${fmt(start)} – ${fmt(end)}`
+    return `${dateShortVN(start)} – ${dateShortVN(end)}`
 }
 
 export default function ReportHeader({ onBack, onForward, selectedRange = 'day', offset = 0, onOffsetChange, customDate, onCustomDateChange, activeTab = 'report', onTabSelect }) {

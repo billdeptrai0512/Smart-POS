@@ -597,17 +597,6 @@ export const upsertLocalShiftClosing = (payload: Row) => {
     return saved;
 };
 
-// --- Sync Helper ---
-export const getGuestDataForSync = () => {
-    return {
-        products: get(KEYS.PRODUCTS),
-        recipes: get(KEYS.RECIPES),
-        ingredients: get(KEYS.INGREDIENT_COSTS),
-        extras: get(KEYS.PRODUCT_EXTRAS),
-        extraIngredients: get(KEYS.EXTRA_INGREDIENTS)
-    };
-};
-
 export const clearGuestData = () => {
     Object.values(KEYS).forEach(k => localStorage.removeItem(k));
     // KEY_GUEST_INGREDIENT_SORT lives outside KEYS, so clear it explicitly — otherwise a

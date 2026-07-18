@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
     getMonthGrid, shiftMonth, monthTitle, formatIsoDisplay, formatIsoShort,
-    isIsoBefore, isIsoAfter, isIsoEqual, presetRanges, parseIsoDay, applyPresetToScope,
+    isIsoBefore, isIsoAfter, isIsoEqual, presetRanges, parseIsoDay,
 } from '../../src/components/common/datePickerUtils'
 
 // NOTE: all date math flows through utils/dateVN, which pins boundaries to
@@ -176,41 +176,6 @@ describe('presetRanges (date-pinned)', () => {
         // 2026-05-13 23:30 VN = 2026-05-13 16:30 UTC. Still the 13th in VN.
         vi.setSystemTime(new Date('2026-05-13T16:30:00.000Z'))
         expect(presetRanges().today.startISO).toBe('2026-05-13')
-    })
-})
-
-describe('applyPresetToScope', () => {
-    const makeCtx = () => ({
-        setScope: vi.fn(), setOffset: vi.fn(),
-        setHasManualPick: vi.fn(), setCustomRange: vi.fn(),
-    })
-
-    it('period preset (week) resets offset + clears custom range', () => {
-        const ctx = makeCtx()
-        applyPresetToScope({ scope: 'week', startISO: '2026-05-11', endISO: '2026-05-17' }, ctx)
-        expect(ctx.setScope).toHaveBeenCalledWith('week')
-        expect(ctx.setOffset).toHaveBeenCalledWith(0)
-        expect(ctx.setCustomRange).toHaveBeenCalledWith(null)
-        expect(ctx.setHasManualPick).toHaveBeenCalledWith(false)
-    })
-
-    it('custom preset routes through customRange, not offset', () => {
-        const ctx = makeCtx()
-        applyPresetToScope({ scope: 'custom', startISO: '2026-05-10', endISO: '2026-05-14' }, ctx)
-        expect(ctx.setScope).toHaveBeenCalledWith('custom')
-        expect(ctx.setCustomRange).toHaveBeenCalledWith({ startISO: '2026-05-10', endISO: '2026-05-14' })
-        expect(ctx.setOffset).not.toHaveBeenCalled()
-    })
-
-    it('is a no-op on null preset', () => {
-        const ctx = makeCtx()
-        applyPresetToScope(null, ctx)
-        expect(ctx.setScope).not.toHaveBeenCalled()
-        expect(ctx.setHasManualPick).not.toHaveBeenCalled()
-    })
-
-    it('tolerates missing setters (optional chaining)', () => {
-        expect(() => applyPresetToScope({ scope: 'day' }, {})).not.toThrow()
     })
 })
 

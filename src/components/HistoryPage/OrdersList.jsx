@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Percent, Trash2 } from 'lucide-react'
 import { formatVND, computeDiscount } from '../../utils'
+import { dateShortVN, timeStringVN } from '../../utils/dateVN'
 import { useConfirm } from '../../contexts/ConfirmContext'
 import DiscountModal from '../POSPage/DiscountModal'
 
@@ -62,7 +63,7 @@ function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrd
     const confirm = useConfirm()
     const [showDiscount, setShowDiscount] = useState(false)
     const date = new Date(order.createdAt)
-    const time = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+    const time = timeStringVN(date)
 
     const discountAmount = order.discountAmount || 0
     const subtotal = order.total + discountAmount   // pre-discount price (for the modal + struck original)
@@ -73,7 +74,7 @@ function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrd
 
     const deletedTimeStr = order.deletedAt ? (() => {
         const d = new Date(order.deletedAt)
-        return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')} ${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`
+        return `${timeStringVN(d)} ${dateShortVN(d)}`
     })() : ''
 
     async function handleDelete() {

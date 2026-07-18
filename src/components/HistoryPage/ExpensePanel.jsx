@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { formatVND } from '../../utils'
 import { groupMeta } from '../../constants/expenseGroups'
+import { dateShortVN } from '../../utils/dateVN'
 
 // "Thực chi" model: chỉ list chi phí thực (operating + overhead). NVL refill
 // KHÔNG hiện ở đây — lịch sử biến động kho cho mỗi nguyên liệu sống ở
@@ -8,8 +9,7 @@ import { groupMeta } from '../../constants/expenseGroups'
 // (CashFlowCard / FinancialFlow) vì chúng là cash-out thật, chỉ không trừ lại
 // trong P&L vì COGS đã đảm nhận.
 function formatTime(iso) {
-    const d = new Date(iso)
-    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+    return dateShortVN(new Date(iso))
 }
 
 export default function ExpensePanel({

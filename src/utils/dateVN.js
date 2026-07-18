@@ -19,6 +19,19 @@ export function timeStringVN(date = new Date()) {
     return date.toLocaleTimeString('en-GB', { timeZone: VN_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 }
 
+// "dd/mm" in Vietnam timezone. Built on dateStringVN instead of Date#getDate()/
+// getMonth() (browser-local) so display stays correct if the runtime TZ isn't VN.
+export function dateShortVN(date = new Date()) {
+    const [, m, d] = dateStringVN(date).split('-')
+    return `${d}/${m}`
+}
+
+// "dd/mm/yyyy" in Vietnam timezone.
+export function dateFullVN(date = new Date()) {
+    const [y] = dateStringVN(date).split('-')
+    return `${dateShortVN(date)}/${y}`
+}
+
 // Start of "today in Vietnam" — i.e. 00:00:00.000 local VN time, as a UTC-aware Date.
 // Equivalent to: midnight in VN expressed in absolute time.
 //   At 02:00 VN on 2026-05-18 (= 19:00 UTC on 2026-05-17):
@@ -36,11 +49,6 @@ export function endOfDayVN(date = new Date()) {
 // (which depends on browser TZ and would compare wrong dates near midnight).
 export function isSameDayVN(d1, d2) {
     return dateStringVN(new Date(d1)) === dateStringVN(new Date(d2))
-}
-
-// Convenience for SQL/REST filters: ISO string of today's VN start.
-export function startOfTodayISO() {
-    return startOfDayVN().toISOString()
 }
 
 // Add (or subtract) days from a date, anchored to VN midnight.

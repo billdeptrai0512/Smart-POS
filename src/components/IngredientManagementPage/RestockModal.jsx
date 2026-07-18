@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
 import MoneyInput from '../common/MoneyInput'
-import { parseVNDInput, formatVND, formatVNDInput } from '../../utils'
+import { parseVNDInput, formatVND, formatVNDInput, computeDiscount } from '../../utils'
 import { dateStringVN, timeStringVN } from '../../utils/dateVN'
 import DatePicker from '../common/DatePicker'
 import TimeInput from '../common/TimeInput'
@@ -67,11 +67,8 @@ export default function RestockModal({
 
     const discountAmount = useMemo(() => {
         if (!discountInput) return 0
-        if (discountMode === 'percent') {
-            const pct = Number(discountInput) || 0
-            return Math.round(subtotalNum * (pct / 100))
-        }
-        return parseVNDInput(discountInput)
+        const value = discountMode === 'percent' ? (Number(discountInput) || 0) : parseVNDInput(discountInput)
+        return computeDiscount(subtotalNum, { type: discountMode, value }).discountAmount
     }, [discountInput, discountMode, subtotalNum])
 
     // Cần trả NCC = subtotal − discount + extra. Clamp ≥ 0 đề phòng user nhập discount > tổng.

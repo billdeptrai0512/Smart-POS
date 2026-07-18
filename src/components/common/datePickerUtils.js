@@ -102,21 +102,4 @@ export function formatIsoShort(iso) {
     return `${d}/${m}`
 }
 
-// Map a DatePicker preset onto a page's scope state. /history and /daily-report
-// share the same scope model (day|week|month|custom + offset), so both call this
-// instead of duplicating the reset dance. Range-style presets (scope==='custom')
-// flow through customRange; period presets reset offset to the current window.
-export function applyPresetToScope(preset, { setScope, setOffset, setHasManualPick, setCustomRange }) {
-    if (!preset) return
-    if (preset.scope === 'custom') {
-        setCustomRange?.({ startISO: preset.startISO, endISO: preset.endISO })
-        setScope?.('custom')
-    } else {
-        setScope?.(preset.scope)
-        setOffset?.(0)
-        setCustomRange?.(null)
-    }
-    setHasManualPick?.(false)
-}
-
 export { parseIsoDay }
