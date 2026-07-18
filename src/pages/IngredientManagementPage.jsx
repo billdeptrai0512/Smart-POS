@@ -19,6 +19,7 @@ import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
 import StockDeficitBanner from '../components/IngredientManagementPage/StockDeficitBanner'
 import KeyMismatchBanner from '../components/IngredientManagementPage/KeyMismatchBanner'
 import IngredientsHeader from '../components/IngredientManagementPage/IngredientsHeader'
+import OnboardingGuide from '../components/common/OnboardingGuide'
 import CreateIngredientForm from '../components/IngredientManagementPage/CreateIngredientForm'
 import SortableList from '../components/common/SortableList'
 import { detectKeyMismatches } from '../utils/ingredientKeySync'
@@ -491,6 +492,8 @@ export default function IngredientManagementPage() {
                             />
                         </div>
                     )}
+                    {/* Guide onboarding dính đáy, FAB đứng ngay trên — cùng một cụm footer nên không đè nhau. */}
+                    {!isSorting && <OnboardingGuide />}
                 </div>
             )}
 

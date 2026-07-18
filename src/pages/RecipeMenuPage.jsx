@@ -12,6 +12,7 @@ import { useToast } from '../hooks/useToast'
 import Toast from '../components/POSPage/Toast'
 import SortableList from '../components/common/SortableList'
 import RecipeMenuHeader from '../components/RecipeMenuPage/RecipeMenuHeader'
+import OnboardingGuide from '../components/common/OnboardingGuide'
 import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
 import { goToMenuStep } from '../utils/menuSequence'
@@ -241,6 +242,8 @@ export default function RecipeMenuPage() {
                             />
                         </div>
                     )}
+                    {/* Guide onboarding dính đáy, FAB đứng ngay trên — cùng một cụm footer nên không đè nhau. */}
+                    {!isSorting && <OnboardingGuide />}
                 </div>
             )}
 
