@@ -2,7 +2,7 @@
 // Nguồn: src/utils/inventory.js
 
 import { describe, it, expect } from 'vitest';
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateRefillTarget, calculateLossValue, buildRecipeIngredientSet } from '../../src/utils/inventory';
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateRefillTarget, calculateLossValue, buildRecipeIngredientSet, averageIngredientMaps } from '../../src/utils/inventory';
 
 const recipes = [
     { product_id: 'cf_den', ingredient: 'coffee_g', amount: 18 },
@@ -108,6 +108,34 @@ describe('calculateEstimatedConsumption', () => {
         const orders = [{ product_id: 'cf_den', quantity: 1, extras: [] }];
         const result = calculateEstimatedConsumption(orders, recipes, extraIngredients);
         expect(result['coffee_g']).toBe(18);
+    });
+});
+
+// ─── averageIngredientMaps ────────────────────────────────────────────────────
+
+describe('averageIngredientMaps', () => {
+    it('trung bình đúng nhiều tuần, làm tròn 1 chữ số', () => {
+        const result = averageIngredientMaps([
+            { coffee_g: 100, cup: 10 },
+            { coffee_g: 80 },
+            { coffee_g: 90, cup: 5 },
+        ]);
+        expect(result['coffee_g']).toBe(90); // (100+80+90)/3
+        expect(result['cup']).toBeCloseTo(5); // (10+0+5)/3 = 5
+    });
+
+    it('tuần không bán ingredient tính là 0 trong mẫu số (không loại trừ)', () => {
+        const result = averageIngredientMaps([{ coffee_g: 30 }, {}]);
+        expect(result['coffee_g']).toBe(15); // 30/2, không phải 30/1
+    });
+
+    it('trả về object rỗng khi không có tuần nào', () => {
+        expect(averageIngredientMaps([])).toEqual({});
+    });
+
+    it('bỏ ingredient có trung bình = 0', () => {
+        const result = averageIngredientMaps([{ x: 0 }, { x: 0 }]);
+        expect(result['x']).toBeUndefined();
     });
 });
 

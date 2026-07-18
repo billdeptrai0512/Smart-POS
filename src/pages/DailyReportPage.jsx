@@ -10,7 +10,7 @@ import { fetchCashClosedToday } from '../services/reportService'
 import { useShiftClosingSave } from '../hooks/useShiftClosingSave'
 import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
 import { useDailyReportData } from '../hooks/useDailyReportData'
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, computeHaoHut, findMissingCupCandidates, buildDailyHaoHutMap, attachRepeatHistory, computeIngredientNoise } from '../utils/inventory'
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, computeHaoHut, findMissingCupCandidates, buildDailyHaoHutMap, attachRepeatHistory, computeIngredientNoise, averageIngredientMaps } from '../utils/inventory'
 import { ingredientLabel, getIngredientUnit, lookupByLabel } from '../utils/ingredients'
 import { dateStringVN, isSameDayVN, startOfDayVN } from '../utils/dateVN'
 import { useDateScope } from '../hooks/useDateScope'
@@ -42,11 +42,10 @@ import { shiftFinalizedKey, cashClosedKey } from '../constants/storageKeys'
 // "Soạn cho hôm nay" coi là đã làm khi Nhập thêm (restock) khác 0 — rỗng/0 = chưa soạn.
 const isPrepFilled = (v) => v !== undefined && v !== null && v !== '' && Number(v) !== 0
 
-// Đọc map cờ từ localStorage (theo address+ngày), bền qua reload.
-function readMap(key) {
-    if (!key) return {}
-    try { return JSON.parse(localStorage.getItem(key)) || {} } catch { return {} }
-}
+// Mốc lịch sử cho dự báo Soạn/Chuẩn bị — 3 tuần gần nhất cùng thứ, trung bình hoá (xem
+// averageIngredientMaps) thay vì chỉ đúng 1 tuần trước để đỡ nhạy với 1 ngày bất thường.
+const HISTORY_OFFSETS_TODAY = [7, 14, 21]     // cùng thứ HÔM NAY
+const HISTORY_OFFSETS_TOMORROW = [6, 13, 20]  // cùng thứ NGÀY MAI
 
 export default function DailyReportPage() {
     const navigate = useNavigate()
@@ -120,15 +119,23 @@ export default function DailyReportPage() {
     const [transferInput, setTransferInput] = useState('')
     const { save: saveShiftClosing, isSaving: isSavingShift } = useShiftClosingSave(selectedAddress?.id)
 
+    // Cảnh báo khi tick/bỏ-qua của MÁY NÀY vừa bị máy khác ghi đè (race giữa 2 lượt merge
+    // gần như đồng thời trên cùng nguyên liệu) — xem onFieldConflict trong useShiftInventoryState.
+    const onInventoryFieldConflict = useCallback((ingredient) => {
+        showToast(`${ingredientLabel(ingredient)}: vừa được cập nhật từ máy khác, kiểm tra lại`, 'warning')
+    }, [showToast])
+
     // Inventory editor (today scope only). All input state + warehouse fetch live in
     // the hook so DailyReportPage stays focused on render orchestration. todayISO
     // drives existingClosing refetch on midnight rollover.
-    const inventory = useShiftInventoryState(selectedAddress?.id, selectedAddress?.ingredient_sort_order, todayISO)
+    const inventory = useShiftInventoryState(selectedAddress?.id, selectedAddress?.ingredient_sort_order, todayISO, onInventoryFieldConflict)
 
     // Same-day-last-week order items — feeds the refill forecast ("Bổ sung mai")
     // inside InventoryReportCard. Today scope only; cached per address+day.
-    const [lastWeekItems, setLastWeekItems] = useState([])        // today−7: dự báo hôm nay (Soạn)
-    const [nextDowLastWeekItems, setNextDowLastWeekItems] = useState([]) // today−6: dự báo mai (Chuẩn bị)
+    // Mỗi phần tử = 1 tuần lịch sử (items thô); trung bình hoá ở averageIngredientMaps bên
+    // dưới để dự báo đỡ nhạy với 1 ngày bất thường (nghỉ lễ, vắng khách đột xuất) của đúng 1 tuần.
+    const [lastWeekItemsWeeks, setLastWeekItemsWeeks] = useState([])        // today−7/14/21: dự báo hôm nay (Soạn)
+    const [nextDowItemsWeeks, setNextDowItemsWeeks] = useState([]) // today−6/13/20: dự báo mai (Chuẩn bị)
 
     // "Soạn cho hôm nay" KHÔNG còn tick state riêng: checkbox suy ra từ Nhập thêm
     // (restock) và tick chỉ là lối tắt set/clear restock. restock đã sync Realtime nên
@@ -152,24 +159,6 @@ export default function DailyReportPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [restockIngredient, selectedAddress?.id])
 
-    // "Bỏ qua" từng món Soạn — trạng thái "đã xem, không cần lấy" để vẫn hoàn tất ca mà
-    // không phải nhập hàng thừa (vd dự báo thừa 1 cái). Luôn hủy bỏ qua được (bấm lại) khi
-    // thật sự cần nhập. Bỏ qua ⇄ nhập thêm loại trừ nhau. Lưu localStorage theo địa chỉ+ngày.
-    const prepSkippedKey = isTodayScope && selectedAddress?.id ? `prepSkipped_${selectedAddress.id}_${todayISO}` : null
-    const [prepSkipped, setPrepSkipped] = useState(() => readMap(prepSkippedKey))
-    const [seenSkippedKey, setSeenSkippedKey] = useState(prepSkippedKey)
-    if (prepSkippedKey !== seenSkippedKey) {
-        setSeenSkippedKey(prepSkippedKey)
-        setPrepSkipped(readMap(prepSkippedKey))
-    }
-    const setSkip = useCallback((ingredient, val) => {
-        setPrepSkipped(prev => {
-            const next = { ...prev }
-            if (val) next[ingredient] = true; else delete next[ingredient]
-            if (prepSkippedKey) { try { localStorage.setItem(prepSkippedKey, JSON.stringify(next)) } catch { /* full */ } }
-            return next
-        })
-    }, [prepSkippedKey])
     // Soạn tick/skip tự lưu (không cần bấm "Lưu báo cáo" riêng). Debounce gom nhiều
     // tick liên tiếp thành 1 lần lưu — tránh đụng guard isSaving (lưu chồng bị bỏ) và
     // tránh remount storm. handleSaveInvRef trỏ bản handleSaveInventory mới nhất nên
@@ -192,16 +181,21 @@ export default function DailyReportPage() {
     // Đầu kỳ bị ghi đè thành Cuối kỳ y chang. Giờ chỉ sync khi bấm "Lưu báo cáo" (FAB) →
     // pushInventory → merge RPC → máy kia hội tụ qua postgres_changes. (Soạn tick/skip vẫn
     // dùng triggerAutoSave bên dưới.)
+    //
+    // "Bỏ qua" từng món Soạn — trạng thái "đã xem, không cần lấy" để vẫn hoàn tất ca mà không
+    // phải nhập hàng thừa (vd dự báo thừa 1 cái). Luôn hủy bỏ qua được (bấm lại) khi thật sự
+    // cần nhập. Bỏ qua ⇄ nhập thêm loại trừ nhau. Đi qua inventory.skipped (đồng bộ Realtime
+    // đa thiết bị qua merge RPC — xem useShiftInventoryState), KHÔNG còn localStorage.
     const toggleSkip = useCallback((ingredient) => {
-        const willSkip = !prepSkipped[ingredient]
-        setSkip(ingredient, willSkip)
-        // Bỏ qua khi đang có restock đã nhập → xóa (loại trừ nhau) rồi tự lưu.
+        const willSkip = !inventory.skipped[ingredient]
+        inventory.onSkipToggle(ingredient, willSkip)
+        // Bỏ qua khi đang có restock đã nhập → xóa (loại trừ nhau).
         if (willSkip && isPrepFilled(inventory.restockInputs[ingredient])) {
             inventory.onRestockChange(ingredient, '')
-            triggerAutoSave()
         }
+        triggerAutoSave()
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [prepSkipped, setSkip, inventory.restockInputs, inventory.onRestockChange, triggerAutoSave])
+    }, [inventory.skipped, inventory.onSkipToggle, inventory.restockInputs, inventory.onRestockChange, triggerAutoSave])
 
     // Expense categories — feed dynamic rows into FinanceCards. Refetched per
     // address; new tags added in /history are picked up on next mount or after
@@ -553,18 +547,20 @@ export default function DailyReportPage() {
         [todayOrderItems, recipes, extraIngredients]
     )
 
-    // Fetch same-weekday-last-week orders once per address (today scope only). Hai mốc:
-    // today−7 (cùng thứ HÔM NAY → dự báo Soạn) và today−6 (cùng thứ NGÀY MAI → dự báo Chuẩn bị).
-    // Service cache theo address+offset+day nên rẻ khi re-mount.
+    // Fetch same-weekday orders của 3 tuần gần nhất (today scope only), 2 chuỗi mốc:
+    // today−{7,14,21} (cùng thứ HÔM NAY → dự báo Soạn) và today−{6,13,20} (cùng thứ NGÀY MAI
+    // → dự báo Chuẩn bị). Trung bình 3 tuần thay vì chỉ 1 tuần trước để đỡ nhạy với 1 ngày
+    // bất thường (nghỉ lễ, vắng khách đột xuất). Service cache theo address+offset+day nên
+    // rẻ khi re-mount.
     useEffect(() => {
-        if (!isTodayScope || !selectedAddress) { setLastWeekItems([]); setNextDowLastWeekItems([]); return }
+        if (!isTodayScope || !selectedAddress) { setLastWeekItemsWeeks([]); setNextDowItemsWeeks([]); return }
         let alive = true
-        fetchLastWeekSameDayOrderItems(selectedAddress.id, 7)
-            .then(items => { if (alive) setLastWeekItems(items || []) })
-            .catch(() => { if (alive) setLastWeekItems([]) })
-        fetchLastWeekSameDayOrderItems(selectedAddress.id, 6)
-            .then(items => { if (alive) setNextDowLastWeekItems(items || []) })
-            .catch(() => { if (alive) setNextDowLastWeekItems([]) })
+        Promise.all(HISTORY_OFFSETS_TODAY.map(d => fetchLastWeekSameDayOrderItems(selectedAddress.id, d)))
+            .then(weeks => { if (alive) setLastWeekItemsWeeks(weeks.map(w => w || [])) })
+            .catch(() => { if (alive) setLastWeekItemsWeeks([]) })
+        Promise.all(HISTORY_OFFSETS_TOMORROW.map(d => fetchLastWeekSameDayOrderItems(selectedAddress.id, d)))
+            .then(weeks => { if (alive) setNextDowItemsWeeks(weeks.map(w => w || [])) })
+            .catch(() => { if (alive) setNextDowItemsWeeks([]) })
         return () => { alive = false }
     }, [isTodayScope, selectedAddress])
 
@@ -599,8 +595,15 @@ export default function DailyReportPage() {
         items.map(i => ({ productId: i.product_id, qty: i.quantity, extras: (i.extra_ids || []).map(id => ({ id })) })),
         recipes, extraIngredients,
     ), [recipes, extraIngredients])
-    const lastWeekUsedMap = useMemo(() => toUsedMap(lastWeekItems), [lastWeekItems, toUsedMap])          // hôm nay (today−7)
-    const nextDowUsedMap = useMemo(() => toUsedMap(nextDowLastWeekItems), [nextDowLastWeekItems, toUsedMap]) // ngày mai (today−6)
+    // Trung bình 3 tuần cùng thứ (xem HISTORY_OFFSETS_TODAY/TOMORROW ở đầu file).
+    const lastWeekUsedMap = useMemo(
+        () => averageIngredientMaps(lastWeekItemsWeeks.map(toUsedMap)),
+        [lastWeekItemsWeeks, toUsedMap],
+    ) // hôm nay
+    const nextDowUsedMap = useMemo(
+        () => averageIngredientMaps(nextDowItemsWeeks.map(toUsedMap)),
+        [nextDowItemsWeeks, toUsedMap],
+    ) // ngày mai
 
     const r1Inv = (n) => Math.round((Number(n) || 0) * 10) / 10
     const byLabelInv = (ingredient, map) => lookupByLabel(ingredient, map, 0)
@@ -684,10 +687,10 @@ export default function DailyReportPage() {
         if (!filled && next === '') return
         inventory.onRestockChange(ingredient, next)
         // nhập thêm ⇄ bỏ qua loại trừ nhau: vừa nhập thì hủy "bỏ qua".
-        if (!filled && fill > 0 && prepSkipped[ingredient]) setSkip(ingredient, false)
+        if (!filled && fill > 0 && inventory.skipped[ingredient]) inventory.onSkipToggle(ingredient, false)
         triggerAutoSave() // soạn tick/untick tự lưu, không cần bấm "Lưu báo cáo"
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [inventory.restockInputs, inventory.onRestockChange, prepFillMap, prepSkipped, setSkip, triggerAutoSave])
+    }, [inventory.restockInputs, inventory.onRestockChange, prepFillMap, inventory.skipped, inventory.onSkipToggle, triggerAutoSave])
 
     // "Chuẩn bị tồn kho" — cho mai: đủ hàng để mai SOẠN RA BÁN không? Liên kết 3 card:
     // mai bán từ TỔNG tồn = kho tổng + tồn quầy cuối ca (số ② Hao hụt vừa đếm). Thiếu thì mua.
@@ -698,6 +701,24 @@ export default function DailyReportPage() {
     //   Lưu ý: effectiveWarehouseStocks là kho TRƯỚC khi trừ restock của ca này (xem
     //   useShiftInventoryState), nên phải trừ restock để khỏi đếm 2 lần phần đã rút ra quầy.
     //   Chưa đếm Cuối kỳ → ước lượng quầy theo Lý thuyết (Đầu kỳ + Nhập thêm − Sử dụng).
+    //
+    // Log minh bạch: tổng đã "Nhập kho" (mua qua RestockModal, is_refill trên expenses) hôm
+    // nay cho từng NVL — hiển thị kèm dòng "Chuẩn bị ngày mai" để thấy đã mua bao nhiêu, dù
+    // số đó đã cộng vào `warehouse`/`total` ở trên rồi (đây chỉ là hiển thị thêm, không đổi
+    // công thức tính need).
+    const todayBoughtMap = useMemo(() => {
+        const m = {}
+        for (const e of todayExpenses || []) {
+            if (!e.is_refill || e.metadata?.cancelled) continue
+            const ing = e.metadata?.ingredient
+            const qty = Number(e.metadata?.qty) || 0
+            if (!ing || !qty) continue
+            m[ing] = (m[ing] || 0) + qty
+        }
+        Object.keys(m).forEach(k => { m[k] = r1Inv(m[k]) })
+        return m
+    }, [todayExpenses])
+
     const warehousePrepList = useMemo(() => {
         const out = []
         for (const ing of inventory.ingredientsList || []) {
@@ -725,17 +746,18 @@ export default function DailyReportPage() {
                 // need vẫn tính từ TỔNG tồn ở toPrepItem; have đổi thành tồn quầy để hiển thị.
                 item.warehouse = Math.max(0, r1Inv(warehouse - restock))
                 item.have = counterReal
+                item.boughtToday = byLabelInv(ing.ingredient, todayBoughtMap)
                 out.push(item)
             }
         }
         return out
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [inventory.ingredientsList, inventory.effectiveWarehouseStocks, inventory.restockInputs, inventory.inventoryInputs, inventory.openingInputs, inventory.openingStock, usedMap, nextDowUsedMap])
+    }, [inventory.ingredientsList, inventory.effectiveWarehouseStocks, inventory.restockInputs, inventory.inventoryInputs, inventory.openingInputs, inventory.openingStock, usedMap, nextDowUsedMap, todayBoughtMap])
 
     // Chốt ca đầy đủ = cash + counted + đã soạn cho hôm nay + đã chuẩn bị tồn kho cho mai.
     // List rỗng (đủ tồn, không cần làm gì) ⇒ coi như đã xong phần đó.
     // Mỗi món coi là xong khi đã nhập thêm HOẶC đã bỏ qua ("đã xem, không cần lấy").
-    const allPrepDone = prepTodayList.length === 0 || prepTodayList.every(it => isPrepFilled(inventory.restockInputs[it.ingredient]) || prepSkipped[it.ingredient])
+    const allPrepDone = prepTodayList.length === 0 || prepTodayList.every(it => isPrepFilled(inventory.restockInputs[it.ingredient]) || inventory.skipped[it.ingredient])
     // "Chuẩn bị tồn kho" tính là xong khi danh sách mua RỖNG — tức đã nhập kho đủ target cho
     // mai (hoặc kho vốn đã đủ). Không còn tick thủ công nên đây là điều kiện trung thực.
     const allWarehousePrepDone = warehousePrepList.length === 0
@@ -1176,7 +1198,7 @@ export default function DailyReportPage() {
                                             items={prepTodayList}
                                             checked={prepCheckedDerived}
                                             onToggle={togglePrepRestock}
-                                            skipped={prepSkipped}
+                                            skipped={inventory.skipped}
                                             onSkip={toggleSkip}
                                             open={!!openCards.prep}
                                             onToggleOpen={() => toggleCard('prep')}

@@ -87,6 +87,11 @@ export default function ShiftPrepCard({
                                     <span className="block">
                                         {haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{it.have} {it.unit}
                                     </span>
+                                    {restockMode && it.boughtToday > 0 && (
+                                        <span className="block text-success">
+                                            Đã mua hôm nay: {it.boughtToday} {it.unit}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                         )

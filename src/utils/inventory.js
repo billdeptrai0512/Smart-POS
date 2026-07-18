@@ -80,6 +80,34 @@ export function calculateEstimatedConsumption(orderItems, recipes, extraIngredie
 }
 
 /**
+ * Trung bình nhiều bản đồ tiêu hao (mỗi bản = 1 tuần lịch sử cùng thứ) thành 1 dự báo mượt
+ * hơn — dùng để tránh forecast "Soạn"/"Chuẩn bị" nhạy cảm với 1 ngày bất thường (nghỉ lễ,
+ * vắng khách đột xuất) của đúng 1 tuần trước. Tuần không bán gì cho 1 nguyên liệu vẫn tính
+ * là 0 trong trung bình (không loại trừ khỏi mẫu số) vì đó là tín hiệu thật (ế ngày đó).
+ *
+ * @param {Array<Object>} maps - mảng usedMap (ingredient -> lượng tiêu hao), 1 map/tuần
+ * @returns {Object} ingredient -> trung bình, làm tròn 1 chữ số thập phân, bỏ nếu = 0
+ */
+export function averageIngredientMaps(maps) {
+    const weeks = (maps || []).filter(Boolean);
+    if (weeks.length === 0) return {};
+
+    const sums = {};
+    weeks.forEach(map => {
+        Object.entries(map).forEach(([ingredient, amount]) => {
+            sums[ingredient] = (sums[ingredient] || 0) + (Number(amount) || 0);
+        });
+    });
+
+    const averaged = {};
+    Object.entries(sums).forEach(([ingredient, sum]) => {
+        const avg = Math.round((sum / weeks.length) * 10) / 10;
+        if (avg !== 0) averaged[ingredient] = avg;
+    });
+    return averaged;
+}
+
+/**
  * Tính breakdown tiêu hao theo từng biến thể (sản phẩm + tổ hợp extras) cho mỗi nguyên liệu.
  * Dùng để drill-down "Tiêu CT" trong inventory audit.
  *
