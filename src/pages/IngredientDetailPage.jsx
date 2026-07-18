@@ -7,8 +7,8 @@ import { useHistory } from '../contexts/HistoryContext'
 import {
     fetchIngredientRestockHistory, fetchIngredientStocks, fetchIngredientWithdrawals,
     deleteIngredientCost, upsertIngredientCost, updateIngredientUnitCost, renameIngredient,
-    adjustIngredientStock, setCounterStock, hasCounterShiftClosing, recordInvoicePayment, cancelRestock,
-    editIngredientRestock,
+    adjustIngredientStock, setCounterStock, recordInvoicePayment, cancelRestock,
+    editIngredientRestock, mergeShiftClosingInventory,
 } from '../services/orderService'
 import {
     ingredientLabel, getIngredientUnit,
@@ -59,8 +59,6 @@ export default function IngredientDetailPage() {
     const [history, setHistory] = useState([])
     const [loading, setLoading] = useState(true)
     const [stockData, setStockData] = useState(null)
-    // Mặc định true để không nháy khoá ô "Tồn quầy" trong lúc chờ fetch xong.
-    const [hasShiftClosing, setHasShiftClosing] = useState(true)
     const [saving, setSaving] = useState(false)
     const [packModalOpen, setPackModalOpen] = useState(false)
     const [paymentInvoice, setPaymentInvoice] = useState(null)
@@ -107,13 +105,6 @@ export default function IngredientDetailPage() {
         fetchIngredientStocks(selectedAddress.id)
             .then(stocks => setStockData(stocks.find(s => s.ingredient === ingredientKey)))
     }, [selectedAddress, ingredientKey])
-
-    // Address-level (không phải per-ingredient) — có phiếu chốt ca nào để ghi "Tồn
-    // quầy" chưa. Khoá ô sửa nếu chưa, thay vì để user sửa rồi mới báo lỗi.
-    useEffect(() => {
-        if (!selectedAddress) return
-        hasCounterShiftClosing(selectedAddress.id).then(setHasShiftClosing)
-    }, [selectedAddress])
 
     // History is scoped to the displayed month. Gồm 2 nguồn xen kẽ theo thời gian:
     // phiếu nhập/hiệu chỉnh (expenses) + lượt "Rút ra quầy" (restock trong phiếu
@@ -243,16 +234,24 @@ export default function IngredientDetailPage() {
 
     // Sửa TỒN QUẦY (counter) = nhập số tuyệt đối. Ghi thẳng `remaining` vào phiếu
     // chốt mới nhất → khớp với số chốt ca ở Hao hụt.
+    // Chưa có phiếu chốt nào (địa chỉ mới) → ghi thành Đầu kỳ (khoá) của phiếu hôm nay
+    // thay vì báo lỗi, để nhập tồn quầy lúc setup ban đầu vẫn hoạt động; chốt ca đầu
+    // tiên sẽ tự tính hao hụt dựa trên Đầu kỳ này.
     async function saveCounter(newCounter) {
         if (newCounter === (stockData?.counter_stock ?? 0)) return
         setSaving(true)
         try {
             const res = await setCounterStock(selectedAddress?.id, ingredientKey, newCounter)
             if (!res) {
-                const err = new Error('Chưa có phiếu chốt ca nào để ghi tồn quầy.')
-                err.expected = true
-                showError(err, 'Sửa tồn quầy')
-                return
+                await mergeShiftClosingInventory(selectedAddress?.id, [{
+                    ingredient: ingredientKey,
+                    unit,
+                    opening: newCounter,
+                    opening_locked: true,
+                    remaining: null,
+                    restock: null,
+                    skipped: false,
+                }], null)
             }
             await reloadStock()
             showToast('Đã sửa tồn quầy', 'success')
@@ -475,7 +474,6 @@ export default function IngredientDetailPage() {
                         warehouseStock={stockData?.warehouse_stock ?? null}
                         warehouseGroupNote={warehouseGroupNote}
                         counterStock={stockData?.counter_stock ?? null}
-                        hasShiftClosing={hasShiftClosing}
                         currentStock={currentStock}
                         countInAudit={countInAudit}
                         canEdit={canEdit}

@@ -14,7 +14,6 @@ import { INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 export default function IngredientDetailsTab({
     nameLabel, unit, cost, category, packSize, packUnit, minStock, tareWeight,
     warehouseStock, warehouseGroupNote, counterStock, currentStock,
-    hasShiftClosing = true,
     countInAudit = true,
     canEdit, saving,
     onSaveName,         // (newDisplayName: string) => Promise
@@ -81,10 +80,8 @@ export default function IngredientDetailsTab({
                 <QtyRow
                     label="Tồn quầy" value={counterStock} unit={unit}
                     hasPack={hasPack} packSize={packSize} packUnit={packUnit}
-                    canEdit={canEdit} editable={hasShiftClosing} onSave={onSaveCounter}
-                    note={!hasShiftClosing
-                        ? 'Cần chốt ca (kèm kiểm kê) trước khi sửa'
-                        : counterReal != null ? `− bì ${tareWeight} → ${counterReal} ${unit} thật` : null}
+                    canEdit={canEdit} editable onSave={onSaveCounter}
+                    note={counterReal != null ? `− bì ${tareWeight} → ${counterReal} ${unit} thật` : null}
                 />
                 <QtyRow
                     label="Tổng cộng" value={currentStock} unit={unit}

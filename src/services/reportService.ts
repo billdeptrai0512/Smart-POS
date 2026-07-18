@@ -219,6 +219,26 @@ export async function fetchCashClosedToday(addressId: UUID) {
     return !!data.cash_closed_at
 }
 
+// Đã từng chốt ca có kiểm kê thật (remaining) chưa? Dùng để tick bước "Chốt ca đầu tiên"
+// trong checklist onboarding "Bắt đầu bán hàng" — chỉ cần biết TỒN TẠI ≥1 phiếu, nên quét
+// giới hạn (30 phiếu gần nhất) thay vì kéo toàn bộ lịch sử.
+export async function hasCompletedShiftClosing(addressId: UUID | null) {
+    const reportHasRemaining = (report: unknown) =>
+        Array.isArray(report) && report.some((item: Row) => item?.remaining != null)
+    if (localRepo.isGuest()) {
+        return localRepo.fetchAllLocalShiftClosings(addressId).some((c: Row) => reportHasRemaining(c.inventory_report))
+    }
+    if (!supabase) return false
+    let q = supabase.from('shift_closings').select('inventory_report')
+    q = addressId ? q.eq('address_id', addressId) : q.is('address_id', null)
+    const { data, error } = await q
+        .not('inventory_report', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(30)
+    if (error || !data) return false
+    return data.some((c: Row) => reportHasRemaining(c.inventory_report))
+}
+
 // Fetch the most recent shift closing BEFORE today (for opening stock)
 export async function fetchYesterdayShiftClosing(addressId: UUID) {
     if (localRepo.isGuest()) return localRepo.fetchLocalYesterdayShiftClosing(addressId)
