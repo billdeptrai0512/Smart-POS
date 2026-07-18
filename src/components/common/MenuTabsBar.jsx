@@ -3,7 +3,7 @@
 // The parent owns active selection: pass 'recipes' on Recipe pages, or the
 // ingredient viewMode ('main' / 'packaging') on the Ingredients page.
 
-const TABS = [
+export const TABS = [
     { key: 'recipes',   label: 'Công thức' },
     { key: 'main',      label: 'Nguyên liệu' },
     { key: 'packaging', label: 'Bao bì' },
