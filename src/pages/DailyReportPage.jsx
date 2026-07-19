@@ -33,6 +33,7 @@ import { Truck, Package, Loader2 } from 'lucide-react'
 import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY } from '../components/DailyReportPage/ReportViewFilter'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
 import { useEntitlement, hasModule } from '../hooks/useEntitlement'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
@@ -65,6 +66,19 @@ export default function DailyReportPage() {
     // Mỗi view là 1 "trang" riêng → đổi view thì cuộn lại đầu (cùng 1 <main> nên scroll bị dính).
     const mainRef = useRef(null)
     useEffect(() => { mainRef.current?.scrollTo(0, 0) }, [view])
+    // Footer (Dòng tiền/Tồn kho/Lợi nhuận) chiếm chỗ thật ở đáy màn hình — báo chiều cao thật
+    // cho onboarding guide (fixed, không tự né layout) để nó tự đẩy lên tránh đè.
+    const footerRef = useRef(null)
+    const { setBottomOffset, requestRefresh: requestOnboardingRefresh } = useOnboardingVisibility()
+    useEffect(() => {
+        const el = footerRef.current
+        if (!el) return
+        const update = () => setBottomOffset(el.getBoundingClientRect().height)
+        update()
+        const ro = new ResizeObserver(update)
+        ro.observe(el)
+        return () => { ro.disconnect(); setBottomOffset(0) }
+    }, [setBottomOffset])
     const [showSupportModal, setShowSupportModal] = useState(false)
     const { selectedAddress } = useAddress()
     const initialDate = location.state?.initialDate || null
@@ -965,6 +979,7 @@ export default function DailyReportPage() {
             if (!row) return // không có gì đổi (hoặc đang có push khác chạy) → isDirty giữ để thử lại
             if (silent) return // auto-lưu: im lặng, không refetch (kho/Giá trị tươi lại ở lần mở/đổi tab)
             showToast('Đã lưu báo cáo tồn kho', 'success')
+            requestOnboardingRefresh()
             // Lưu THỦ CÔNG (thường kèm chuyển kho): refresh kho tổng + context để Giá trị/tồn đầu tươi.
             const [fresh] = await Promise.all([
                 fetchDailyReportContext(selectedAddress.id),
@@ -1032,6 +1047,7 @@ export default function DailyReportPage() {
             // giữ cashDirty để user bấm lại.
             if (!saved) return
             showToast('Đã lưu thực thu', 'success')
+            requestOnboardingRefresh()
             // Refetch shift_closing so display + pre-fill sync. invalidateDailyContext
             // inside the hook already cleared the cache, so the network is hit fresh.
             // Fallback về `saved` (row vừa ghi, có id) để giữ id phòng refetch trễ/null →
@@ -1349,7 +1365,7 @@ export default function DailyReportPage() {
             {/* Footer = report view switcher (Dòng tiền / Tồn kho / Lợi nhuận).
                 Replaces the old scope bar; scope is now driven entirely by the
                 header date control + its presets. */}
-            <div className="shrink-0 bg-surface/80 backdrop-blur-md border-t border-border/40 px-4 py-2.5 pb-[max(env(safe-area-inset-bottom),10px)]">
+            <div ref={footerRef} className="shrink-0 bg-surface/80 backdrop-blur-md border-t border-border/40 px-4 py-2.5 pb-[max(env(safe-area-inset-bottom),10px)]">
                 <ReportViewFilter value={view} onChange={setView} isStaff={isStaff} />
             </div>
             <Toast toast={toast} />

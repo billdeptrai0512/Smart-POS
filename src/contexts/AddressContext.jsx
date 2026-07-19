@@ -2,11 +2,11 @@ import { createContext, useContext, useState, useEffect, useCallback, useMemo } 
 import { useAuth } from './AuthContext'
 import {
     fetchAddresses, createAddress as apiCreateAddress, updateAddress as apiUpdateAddress, deleteAddress as apiDeleteAddress,
-    upsertSession, updateAddressIngredientSort as apiUpdateAddressIngredientSort,
+    upsertSession,
     fetchWarehouseGroups, upsertWarehouseGroup as apiUpsertWarehouseGroup,
     deleteWarehouseGroup as apiDeleteWarehouseGroup, setAddressWarehouseGroup as apiSetAddressWarehouseGroup
 } from '../services/authService'
-import { getDemoAddress, setGuestIngredientSortOrder } from '../services/localRepository'
+import { getDemoAddress } from '../services/localRepository'
 import { STORAGE_KEYS } from '../constants/storageKeys'
 import { Outlet } from 'react-router-dom'
 
@@ -247,23 +247,6 @@ export function AddressProvider() {
         return map
     }, [addresses])
 
-    const updateSortOrder = useCallback(async (addressId, sortOrderArray) => {
-        if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có quyền')
-        if (isGuest) {
-            // Persist in localStorage so the order survives reloads — getDemoAddress() reads it back.
-            setGuestIngredientSortOrder(sortOrderArray)
-        } else {
-            // addressId=null routes to app_settings (default template); else updates the address row.
-            await apiUpdateAddressIngredientSort(addressId, sortOrderArray)
-        }
-        if (addressId) {
-            setAddresses(prev => prev.map(a => a.id === addressId ? { ...a, ingredient_sort_order: sortOrderArray } : a))
-        }
-        if (selectedAddress?.id === addressId) {
-            setSelectedAddressState(prev => ({ ...prev, ingredient_sort_order: sortOrderArray }))
-        }
-    }, [profile, selectedAddress, isGuest])
-
     return (
         <AddressContext.Provider value={{
             addresses,
@@ -272,7 +255,6 @@ export function AddressProvider() {
             createNewAddress,
             renameAddress,
             removeAddress,
-            updateSortOrder,
             warehouseGroups,
             siblingsByAddress,
             createWarehouseGroup,

@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Plus, X, ArrowUpDown } from 'lucide-react'
-import FabActionMenu from '../components/common/FabActionMenu'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useHistory } from '../contexts/HistoryContext'
+import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
 import {
     upsertIngredientCost, deleteIngredientCost, updateIngredientUnitCost,
     syncIngredientKey,
@@ -19,9 +19,7 @@ import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
 import StockDeficitBanner from '../components/IngredientManagementPage/StockDeficitBanner'
 import KeyMismatchBanner from '../components/IngredientManagementPage/KeyMismatchBanner'
 import IngredientsHeader from '../components/IngredientManagementPage/IngredientsHeader'
-import OnboardingGuide from '../components/common/OnboardingGuide'
 import CreateIngredientForm from '../components/IngredientManagementPage/CreateIngredientForm'
-import SortableList from '../components/common/SortableList'
 import { detectKeyMismatches } from '../utils/ingredientKeySync'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../contexts/ConfirmContext'
@@ -49,7 +47,7 @@ export default function IngredientManagementPage() {
         productExtras: contextProductExtras, extraIngredients: contextExtraIngs,
         refreshProducts,
     } = useProducts()
-    const { selectedAddress, updateSortOrder, siblingsByAddress } = useAddress()
+    const { selectedAddress, siblingsByAddress } = useAddress()
     const warehouseSiblings = selectedAddress ? siblingsByAddress[selectedAddress.id] : null
     const groupAddressIds = useMemo(
         () => selectedAddress ? [selectedAddress.id, ...(warehouseSiblings || []).map(a => a.id)] : [selectedAddress?.id ?? null],
@@ -57,6 +55,7 @@ export default function IngredientManagementPage() {
     )
     const { isManager, isAdmin, profile } = useAuth()
     const { refreshTodayExpenses } = useHistory()
+    const { requestRefresh: requestOnboardingRefresh } = useOnboardingVisibility()
     const { toast, showToast, showError } = useToast()
     const confirm = useConfirm()
     const canEdit = isManager || isAdmin
@@ -65,10 +64,6 @@ export default function IngredientManagementPage() {
     const [ingredientUnits, setIngredientUnits] = useState(contextUnits || {})
     const [editingCost, setEditingCost] = useState(null)
     const [saving, setSaving] = useState(false)
-
-    // Sort mode
-    const [isSorting, setIsSorting] = useState(false)
-    const [sortedIngredients, setSortedIngredients] = useState([])
 
     // Create form
     const [newName, setNewName] = useState('')
@@ -117,6 +112,8 @@ export default function IngredientManagementPage() {
     const [dismissedSig, setDismissedSig] = useState('')
     const [stockDeficits, setStockDeficits] = useState([])
     const [dailyContext, setDailyContext] = useState({})
+    // Tồn quầy riêng của từng địa chỉ khác trong nhóm kho dùng chung (kho thì gộp, quầy thì không).
+    const [siblingStocks, setSiblingStocks] = useState({})
 
     // Filter recipes to only those referencing currently active products.
     // Without this, dead recipes for soft-deleted products show as false-positive orphans.
@@ -219,14 +216,19 @@ export default function IngredientManagementPage() {
         // handles that (queries rows with address_id IS NULL) so admins can manage stock on
         // the playground template too.
         if (!selectedAddress) return
-        const [stocks, deficits, daily] = await Promise.all([
+        const siblingIds = groupAddressIds.filter(id => id !== (selectedAddress.id ?? null))
+        const [stocks, deficits, daily, ...siblingResults] = await Promise.all([
             fetchIngredientStocks(selectedAddress.id ?? null),
             fetchIngredientDeficits(groupAddressIds),
             fetchIngredientDailyContext(selectedAddress.id ?? null),
+            ...siblingIds.map(id => fetchIngredientStocks(id)),
         ])
         setIngredientStocks(stocks)
         setStockDeficits(deficits)
         setDailyContext(daily)
+        const siblingMap = {}
+        siblingIds.forEach((id, i) => { siblingMap[id] = siblingResults[i] })
+        setSiblingStocks(siblingMap)
         // ponytail: deliberately keyed on id+name, not the whole object — selectedAddress
         // gets a new reference on every context refetch even when nothing relevant changed
         // (e.g. ingredient_sort_order edits), which would refire this on every such update.
@@ -249,6 +251,32 @@ export default function IngredientManagementPage() {
         for (const s of ingredientStocks) map.set(s.ingredient, s)
         return map
     }, [ingredientStocks])
+
+    // Tồn quầy theo từng địa chỉ trong nhóm kho dùng chung — null nếu kho không thuộc nhóm nào
+    // (card list rơi về hiển thị tồn quầy của riêng địa chỉ đang chọn).
+    const counterStocksByIngredient = useMemo(() => {
+        if (!warehouseSiblings || warehouseSiblings.length === 0) return null
+        const siblingByIngredient = new Map()
+        for (const [addrId, stocks] of Object.entries(siblingStocks)) {
+            const inner = new Map()
+            for (const s of stocks) inner.set(s.ingredient, s)
+            siblingByIngredient.set(addrId, inner)
+        }
+        const addrs = [
+            { id: selectedAddress?.id ?? null, name: selectedAddress?.name || 'Kho này' },
+            ...warehouseSiblings.map(a => ({ id: a.id, name: a.name })),
+        ]
+        const map = new Map()
+        for (const ing of allIngredients) {
+            map.set(ing, addrs.map(addr => {
+                const row = addr.id === (selectedAddress?.id ?? null)
+                    ? stockByIngredient.get(ing)
+                    : siblingByIngredient.get(addr.id)?.get(ing)
+                return { addressId: addr.id, addressName: addr.name, counterStock: row?.counter_stock ?? 0 }
+            }))
+        }
+        return map
+    }, [warehouseSiblings, selectedAddress, allIngredients, stockByIngredient, siblingStocks])
 
     // PERF: index configs by ingredient ONCE.
     // Was: ingredientConfigs.find() called THREE times per ingredient (packSize, packUnit, minStock).
@@ -342,41 +370,12 @@ export default function IngredientManagementPage() {
         }
     }
 
-    // Sort mode
-    const enterSortMode = () => { setSortedIngredients([...allIngredients]); setIsSorting(true) }
-    const cancelSortMode = () => { setIsSorting(false); setSortedIngredients([]) }
-    const moveIngredient = (from, to) => {
-        if (to < 0 || to >= sortedIngredients.length) return
-        const updated = [...sortedIngredients]
-        const [moved] = updated.splice(from, 1)
-        updated.splice(to, 0, moved)
-        setSortedIngredients(updated)
-    }
-    const saveSortOrderHandler = async () => {
-        if (!selectedAddress) return
-        setSaving(true)
-        try {
-            // selectedAddress.id may be null for the default template — AddressContext.updateSortOrder
-            // routes to app_settings in that case so the order persists for the playground.
-            await updateSortOrder(selectedAddress.id ?? null, sortedIngredients)
-            setIsSorting(false)
-        } catch (err) {
-            showError(err, 'Lưu thứ tự nguyên liệu')
-        } finally {
-            setSaving(false)
-        }
-    }
-
-    const showFooterCreate = !isSorting && canEdit
-    const showFooterSort = isSorting
-
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
 
             <IngredientsHeader
-                count={isSorting ? sortedIngredients.length : visibleIngredients.length}
-                isSorting={isSorting}
+                count={visibleIngredients.length}
                 onBack={() => goToMenuStep(viewMode, -1, { navigate, backTo: location.state?.from || '/history', setViewMode, wizard: location.state?.wizard })}
                 onForward={() => goToMenuStep(viewMode, +1, { navigate, backTo: location.state?.from || '/history', setViewMode, wizard: location.state?.wizard })}
                 activeTab={viewMode}
@@ -387,18 +386,16 @@ export default function IngredientManagementPage() {
             />
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-48 bg-bg">
-                {!isSorting && (
-                    <div className="mb-3">
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                            placeholder={viewMode === 'packaging' ? 'Tìm bao bì…' : 'Tìm nguyên liệu…'}
-                            className="w-full px-3 py-2.5 rounded-[12px] bg-surface border border-border/60 text-text text-[14px] placeholder:text-text-dim focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
-                        />
-                    </div>
-                )}
-                {canEdit && !isSorting && stockDeficits.length > 0 && (
+                <div className="mb-3">
+                    <input
+                        type="text"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        placeholder={viewMode === 'packaging' ? 'Tìm bao bì…' : 'Tìm nguyên liệu…'}
+                        className="w-full px-3 py-2.5 rounded-[12px] bg-surface border border-border/60 text-text text-[14px] placeholder:text-text-dim focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
+                    />
+                </div>
+                {canEdit && stockDeficits.length > 0 && (
                     <StockDeficitBanner
                         deficits={stockDeficits}
                         ingredientUnits={ingredientUnits}
@@ -408,7 +405,7 @@ export default function IngredientManagementPage() {
                         onResolved={() => loadStocks()}
                     />
                 )}
-                {canEdit && !isSorting && keyMismatches.hasIssues && !isDismissed && (
+                {canEdit && keyMismatches.hasIssues && !isDismissed && (
                     <KeyMismatchBanner
                         mismatches={keyMismatches}
                         onView={() => setShowKeySync(true)}
@@ -416,84 +413,55 @@ export default function IngredientManagementPage() {
                     />
                 )}
 
-                {isSorting ? (
-                    <SortableList
-                        items={sortedIngredients}
-                        getKey={i => i}
-                        getLabel={i => ingredientLabel(i)}
-                        onMove={moveIngredient}
-                    />
-                ) : (
-                    <div className="flex flex-col gap-2.5">
-                        {visibleIngredients.map(ingredient => {
-                            const cfg = configByIngredient.get(ingredient)
-                            return (
-                                <IngredientCostItem
-                                    key={ingredient}
-                                    ingredient={ingredient}
-                                    cost={ingredientCosts[ingredient] || 0}
-                                    isEditing={editingCost?.ingredient === ingredient}
-                                    editingCost={editingCost}
-                                    setEditingCost={setEditingCost}
-                                    saveCost={saveCost}
-                                    ingredientLabel={ingredientLabel}
-                                    getIngredientUnit={getIngredientUnit}
-                                    storedUnit={ingredientUnits[ingredient]}
-                                    onDelete={canEdit ? handleDeleteIngredient : null}
-                                    canEdit={canEdit}
-                                    packSize={cfg?.pack_size}
-                                    packUnit={cfg?.pack_unit}
-                                    minStock={cfg?.min_stock}
-                                    stockData={stockByIngredient.get(ingredient)}
-                                    onRestock={() => setRestockIngredient(ingredient)}
-                                    dailyContext={dailyContext[ingredient]}
-                                    onOpen={openIngredient}
-                                />
-                            )
-                        })}
-                        {visibleIngredients.length === 0 && (
-                            <p className="text-text-secondary text-[13px] text-center py-6">
-                                {search.trim()
-                                    ? 'Không tìm thấy nguyên liệu nào.'
-                                    : allIngredients.length === 0 ? 'Chưa có nguyên liệu nào.' : 'Chưa có nguyên liệu trong nhóm này.'}
-                            </p>
-                        )}
-                    </div>
-                )}
+                <div className="flex flex-col gap-2.5">
+                    {visibleIngredients.map(ingredient => {
+                        const cfg = configByIngredient.get(ingredient)
+                        return (
+                            <IngredientCostItem
+                                key={ingredient}
+                                ingredient={ingredient}
+                                cost={ingredientCosts[ingredient] || 0}
+                                isEditing={editingCost?.ingredient === ingredient}
+                                editingCost={editingCost}
+                                setEditingCost={setEditingCost}
+                                saveCost={saveCost}
+                                ingredientLabel={ingredientLabel}
+                                getIngredientUnit={getIngredientUnit}
+                                storedUnit={ingredientUnits[ingredient]}
+                                onDelete={canEdit ? handleDeleteIngredient : null}
+                                canEdit={canEdit}
+                                packSize={cfg?.pack_size}
+                                packUnit={cfg?.pack_unit}
+                                minStock={cfg?.min_stock}
+                                stockData={stockByIngredient.get(ingredient)}
+                                siblingCounterStocks={counterStocksByIngredient?.get(ingredient)}
+                                onRestock={() => setRestockIngredient(ingredient)}
+                                dailyContext={dailyContext[ingredient]}
+                                onOpen={openIngredient}
+                            />
+                        )
+                    })}
+                    {visibleIngredients.length === 0 && (
+                        <p className="text-text-secondary text-[13px] text-center py-6">
+                            {search.trim()
+                                ? 'Không tìm thấy nguyên liệu nào.'
+                                : allIngredients.length === 0 ? 'Chưa có nguyên liệu nào.' : 'Chưa có nguyên liệu trong nhóm này.'}
+                        </p>
+                    )}
+                </div>
             </main>
 
-            {(showFooterCreate || showFooterSort) && (
+            {canEdit && (
                 <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-50">
-                    {showFooterSort ? (
-                        <div className="p-4 bg-surface border-t border-border/60 pointer-events-auto">
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={cancelSortMode}
-                                    className="flex-1 py-3 rounded-[12px] bg-surface-light border border-border/60 text-text-secondary font-black hover:bg-border/40 active:scale-95 transition-all text-[14px]"
-                                >
-                                    Hủy
-                                </button>
-                                <button
-                                    onClick={saveSortOrderHandler}
-                                    disabled={saving}
-                                    className="flex-1 py-3 rounded-[12px] bg-primary text-bg font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 text-[14px]"
-                                >
-                                    {saving ? '⏳ Đang lưu...' : 'Lưu sắp xếp'}
-                                </button>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="flex justify-end px-4 pb-[max(env(safe-area-inset-bottom),16px)] pointer-events-auto">
-                            <FabActionMenu
-                                items={[
-                                    { key: 'create', label: viewMode === 'packaging' ? 'Tạo bao bì' : 'Tạo nguyên liệu', onClick: () => { setNewCategory(viewMode); setShowCreateModal(true) } },
-                                    { key: 'sort', label: 'Sắp xếp', onClick: enterSortMode },
-                                ]}
-                            />
-                        </div>
-                    )}
-                    {/* Guide onboarding dính đáy, FAB đứng ngay trên — cùng một cụm footer nên không đè nhau. */}
-                    {!isSorting && <OnboardingGuide />}
+                    <div className="flex justify-end px-4 pb-[max(env(safe-area-inset-bottom),16px)] pointer-events-auto">
+                        <button
+                            onClick={() => { setNewCategory(viewMode); setShowCreateModal(true) }}
+                            aria-label={viewMode === 'packaging' ? 'Tạo bao bì' : 'Tạo nguyên liệu'}
+                            className="rounded-[12px] px-4 py-2.5 flex items-center justify-center text-[13px] font-bold active:scale-95 transition-all border bg-primary border-primary text-bg shadow-lg shadow-primary/30 hover:bg-primary/90"
+                        >
+                            <Plus size={18} />
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -555,6 +523,7 @@ export default function IngredientManagementPage() {
                         })
                         await Promise.all([loadStocks(), refreshProducts?.(), refreshTodayExpenses?.()])
                         showToast('Đã nhập kho', 'success')
+                        requestOnboardingRefresh()
                         return result
                     }}
                 />

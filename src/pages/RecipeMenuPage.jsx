@@ -6,13 +6,13 @@ import MenuDivider from '../components/common/MenuDivider'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
 import { upsertProductPrice, insertProduct, updateProductSortOrder, updateProductName, removeProductFromAddress } from '../services/orderService'
 import { parseVNDInput } from '../utils'
 import { useToast } from '../hooks/useToast'
 import Toast from '../components/POSPage/Toast'
 import SortableList from '../components/common/SortableList'
 import RecipeMenuHeader from '../components/RecipeMenuPage/RecipeMenuHeader'
-import OnboardingGuide from '../components/common/OnboardingGuide'
 import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
 import { goToMenuStep } from '../utils/menuSequence'
@@ -36,6 +36,11 @@ export default function RecipeMenuPage() {
     const [newProductPrice, setNewProductPrice] = useState('')
     const [saving, setSaving] = useState(false)
     const [isSorting, setIsSorting] = useState(false)
+    const { setHidden: setOnboardingHidden } = useOnboardingVisibility()
+    useEffect(() => {
+        setOnboardingHidden(isSorting)
+        return () => setOnboardingHidden(false)
+    }, [isSorting, setOnboardingHidden])
     const [sortedProducts, setSortedProducts] = useState([])
     const [showCreateModal, setShowCreateModal] = useState(false)
     // {mode:'create'} | {mode:'edit', id} — modal tạo/sửa mục (divider phân nhóm menu)
@@ -242,8 +247,6 @@ export default function RecipeMenuPage() {
                             />
                         </div>
                     )}
-                    {/* Guide onboarding dính đáy, FAB đứng ngay trên — cùng một cụm footer nên không đè nhau. */}
-                    {!isSorting && <OnboardingGuide />}
                 </div>
             )}
 

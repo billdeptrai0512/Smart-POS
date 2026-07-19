@@ -12,7 +12,6 @@ import { dateFullVN } from '../utils/dateVN'
 import Header from '../components/POSPage/Header'
 import MenuGrid from '../components/POSPage/MenuGrid'
 import Toast from '../components/POSPage/Toast'
-import OnboardingGuide from '../components/common/OnboardingGuide'
 
 export default function POSPage() {
     const navigate = useNavigate()
@@ -82,9 +81,6 @@ export default function POSPage() {
             />
 
             <Toast toast={toast} />
-            <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
-                <OnboardingGuide />
-            </div>
         </div>
     )
 }

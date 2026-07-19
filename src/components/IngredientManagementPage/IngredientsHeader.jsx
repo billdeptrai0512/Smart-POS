@@ -2,12 +2,10 @@ import { ArrowLeft, ArrowRight } from 'lucide-react'
 import MenuTabsBar, { TABS } from '../common/MenuTabsBar'
 
 export default function IngredientsHeader({
-    count, isSorting, onBack, onForward,
+    count, onBack, onForward,
     activeTab = 'main', onTabSelect,
 }) {
-    // While sorting, swap the title to "Sắp xếp" and hide the tabs so the dedicated
-    // sort UI (footer "Hủy / Lưu") owns the screen — matches pre-merge behavior.
-    const title = isSorting ? 'Sắp xếp' : (TABS.find(t => t.key === activeTab)?.label || 'Kho hàng')
+    const title = TABS.find(t => t.key === activeTab)?.label || 'Kho hàng'
 
     return (
         <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
@@ -25,7 +23,7 @@ export default function IngredientsHeader({
                     <span className="text-[12px] font-bold text-text/80 leading-none mt-1 tabular-nums">{count} loại</span>
                 </div>
 
-                {onForward && !isSorting && (
+                {onForward && (
                     <button
                         onClick={onForward}
                         className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none shrink-0"
@@ -36,7 +34,7 @@ export default function IngredientsHeader({
                 )}
             </div>
 
-            {!isSorting && <MenuTabsBar activeTab={activeTab} onSelect={onTabSelect} />}
+            <MenuTabsBar activeTab={activeTab} onSelect={onTabSelect} />
         </header>
     )
 }

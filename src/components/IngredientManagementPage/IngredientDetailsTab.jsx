@@ -322,7 +322,7 @@ function PackRow({ hasPack, packSize, packUnit, unit, canEdit, onConfigure }) {
                     onClick={onConfigure}
                     className="text-[13px] font-bold text-primary hover:underline"
                 >
-                    + Thêm quy cách
+                    +
                 </button>
             ) : (
                 <span className="text-[13px] text-text-dim italic">Chưa thiết lập</span>
@@ -371,7 +371,7 @@ function MinStockRow({ minStock, unit, hasPack, packSize, packUnit, canEdit, onS
         onSave?.(raw ? Number(raw) : 0)
     }
     return (
-        <Row label="Tồn tối thiểu">
+        <Row label="Tồn kho tối thiểu">
             {editing && canEdit ? (
                 <div className="flex items-center gap-1">
                     <input
@@ -408,7 +408,7 @@ function MinStockRow({ minStock, unit, hasPack, packSize, packUnit, canEdit, onS
                     onClick={start}
                     className="text-[13px] font-bold text-primary hover:underline"
                 >
-                    + Thêm mức tối thiểu
+                    +
                 </button>
             )}
         </Row>
@@ -462,7 +462,7 @@ function TareRow({ tareWeight, unit, canEdit, onSave }) {
                     onClick={start}
                     className="text-[13px] font-bold text-primary hover:underline"
                 >
-                    + Khai báo bì hộp
+                    +
                 </button>
             )}
         </Row>

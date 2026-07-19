@@ -4,6 +4,7 @@ import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useHistory } from '../contexts/HistoryContext'
+import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
 import {
     fetchIngredientRestockHistory, fetchIngredientStocks, fetchIngredientWithdrawals,
     deleteIngredientCost, upsertIngredientCost, updateIngredientUnitCost, renameIngredient,
@@ -34,6 +35,7 @@ export default function IngredientDetailPage() {
     const { ingredientKey } = useParams()
     const { ingredientCosts, ingredientUnits, ingredientConfigs, refreshProducts } = useProducts()
     const { selectedAddress, siblingsByAddress } = useAddress()
+    const { requestRefresh: requestOnboardingRefresh } = useOnboardingVisibility()
     const warehouseSiblings = selectedAddress ? siblingsByAddress[selectedAddress.id] : null
     const warehouseGroupNote = warehouseSiblings?.length
         ? `Dùng chung với: ${warehouseSiblings.map(a => a.name).join(', ')}`
@@ -228,6 +230,7 @@ export default function IngredientDetailPage() {
             await adjustIngredientStock(selectedAddress?.id, ingredientKey, delta, profile?.name, snapshotOpts)
             await Promise.all([reloadStock(), refreshTodayExpenses?.()])
             showToast('Đã hiệu chỉnh kho sau', 'success')
+            requestOnboardingRefresh()
         } catch (err) { showError(err, 'Hiệu chỉnh kho sau') }
         finally { setSaving(false) }
     }
@@ -255,6 +258,7 @@ export default function IngredientDetailPage() {
             }
             await reloadStock()
             showToast('Đã sửa tồn quầy', 'success')
+            requestOnboardingRefresh()
         } catch (err) { showError(err, 'Sửa tồn quầy') }
         finally { setSaving(false) }
     }
