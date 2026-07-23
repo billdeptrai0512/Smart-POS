@@ -42,11 +42,10 @@ function writeLocalState(addressId, next) {
 // không phải điều kiện qua bước.
 export default function OnboardingGuide() {
     const navigate = useNavigate()
-    const { isManager, isAdmin } = useAuth()
+    const { isGuest } = useAuth()
     const { selectedAddress } = useAddress()
     const { ingredientConfigs } = useProducts()
     const { bottomOffset, refreshToken } = useOnboardingVisibility()
-    const canEdit = isManager || isAdmin
     const addressId = selectedAddress?.id
 
     const [local, setLocal] = useState(DEFAULT_STATE)
@@ -100,7 +99,7 @@ export default function OnboardingGuide() {
         return () => document.removeEventListener('visibilitychange', onVis)
     }, [reload, refreshToken])
 
-    if (!canEdit || !addressId || !loaded) return null
+    if (!isGuest || !addressId || !loaded) return null
 
     const save = (patch) => {
         const next = { ...local, ...patch }
