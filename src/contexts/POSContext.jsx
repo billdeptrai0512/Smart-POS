@@ -31,10 +31,16 @@ export function POSProvider() {
     const addressId = selectedAddress?.id
 
     const localOrderIds = useRef(new Set())
-    const cartRef = useRef([])
     // Holds the currently-subscribed orders channel so doSubmit can broadcast a
     // nudge on it right after a successful insert — see the realtime effect below.
     const ordersChannelRef = useRef(null)
+    // Mirrors for the cart handlers below (useCallback'd with empty/near-empty deps
+    // so ProductCard's React.memo actually bails out on untouched cards — otherwise
+    // MenuGrid re-renders EVERY product card on every single tap). Same "ref mirror"
+    // idiom as cartRef/revenueRef above, just for state these handlers need to read
+    // without becoming unstable every render.
+    const activeCartItemIdRef = useRef(null)
+    const enabledStickyExtraIdsRef = useRef([])
 
     // ---- Persisted State ----
     const loadLocalJSON = (key, fallback) => {
@@ -43,6 +49,11 @@ export function POSProvider() {
     }
 
     const [cart, setCart] = useState(() => loadLocalJSON(STORAGE_KEYS.CART, []))
+    // Initialized to cart (not []) so a held item restored from localStorage on
+    // mount is visible to handleAddItem/commitHeld immediately — otherwise there's
+    // a window before the [cart] sync effect below runs where a fast tap reads a
+    // stale empty ref and silently drops the restored held item.
+    const cartRef = useRef(cart)
     const [activeCartItemId, setActiveCartItemId] = useState(null)
     // Per-order discount, ephemeral (resets after each confirm). type: 'percent' | 'amount'
     const [discount, setDiscount] = useState({ type: 'percent', value: 0 })
@@ -353,6 +364,12 @@ export function POSProvider() {
     useEffect(() => { revenueRef.current = revenue }, [revenue])
     useEffect(() => { totalCostRef.current = totalCost }, [totalCost])
     useEffect(() => { cupsSoldRef.current = cupsSold }, [cupsSold])
+    // activeCartItemIdRef/enabledStickyExtraIdsRef are NOT synced via effect (unlike
+    // the 3 above) — deliberately. A post-paint effect leaves a window where a 2nd
+    // fast tap (extras bar) reads a stale ref before the 1st tap's effect has run,
+    // silently dropping the 1st tap's toggle. Mutated synchronously at each setState
+    // call site instead (see handleAddItem/cancelHeld/commitHeld/handleToggleStickyExtra
+    // below) — same zero-gap idiom as cartRef above.
 
     // ---- Autosave Daemon ----
     // PERF: debounce 5 synchronous localStorage writes that were firing on every
@@ -431,9 +448,6 @@ export function POSProvider() {
     // line of the header journal so it appears the instant you tap, and extras
     // overwrite it in place (stable 'draft' key in Header → no remount/flash).
     const draftOrder = useMemo(() => cart.length ? { ...buildLastOrderFromCart(cart, total), cartItemId: cart[cart.length - 1].cartItemId } : null, [cart, total])
-
-    // Cart composition / total changed → clear any applied discount so it must be re-entered.
-    const clearDiscount = () => setDiscount(d => ({ ...d, value: 0 }))
 
     // ---- Handlers ----
 
@@ -536,52 +550,70 @@ export function POSProvider() {
         }
     }
 
+    // Always-current ref to doSubmit (itself unstable — recreated every render,
+    // closing over products/recipes/profile/addressId/etc) so the cart handlers
+    // below can call it without depending on its identity. Assigned synchronously
+    // during render — a browser event only fires after render+commit, so by the
+    // time any handler runs, this already points at the latest doSubmit. No
+    // behavior change from calling doSubmit directly; only decouples identity.
+    const doSubmitRef = useRef(doSubmit)
+    doSubmitRef.current = doSubmit
+
     // 1-tap model: each tap submits the previously-held item, then holds the
     // new one. Extras toggle on the held item until the next tap.
-    function handleAddItem(product) {
-        if (cartRef.current.length > 0) doSubmit(cartRef.current)
+    // useCallback'd with a near-empty dep list (reads activeCartItemId/
+    // enabledStickyExtraIds via their ref mirrors, doSubmit via doSubmitRef) so
+    // the identity stays stable across taps — otherwise ProductCard's React.memo
+    // never bails out, since onAdd/onCancel would be new every single tap.
+    const handleAddItem = useCallback((product) => {
+        if (cartRef.current.length > 0) doSubmitRef.current(cartRef.current)
 
         const cartItemId = crypto.randomUUID()
-        const stickyExtras = (productExtras[product.id] || []).filter(e => e.is_sticky && enabledStickyExtraIds.includes(e.id))
+        const stickyExtras = (productExtras[product.id] || []).filter(e => e.is_sticky && enabledStickyExtraIdsRef.current.includes(e.id))
         const newItem = { cartItemId, productId: product.id, name: product.name, basePrice: product.price, quantity: 1, extras: [...stickyExtras] }
         // Update cartRef SYNCHRONOUSLY (not just via the [cart] effect) so a very
         // fast next tap reads this held item and submits it — otherwise the effect
         // lags one frame and the item can be overwritten unsubmitted (lost order).
         cartRef.current = [newItem]
         setCart([newItem])
+        activeCartItemIdRef.current = cartItemId // sync, same reason as cartRef above
         setActiveCartItemId(cartItemId)
-        clearDiscount()
-    }
+        setDiscount(d => ({ ...d, value: 0 }))
+    }, [productExtras])
 
     // Cancel the currently-held item without submitting (undo a mis-tap).
-    function cancelHeld() {
+    const cancelHeld = useCallback(() => {
         cartRef.current = []
         setCart([])
+        activeCartItemIdRef.current = null
         setActiveCartItemId(null)
         localStorage.setItem(STORAGE_KEYS.CART, '[]')
-    }
+    }, [])
 
     // Submit the held item and clear — used by the ✓ button (confirm the LAST order
     // without holding a new one) and by the unmount flush when leaving the POS
     // screen. Without it the last held order would never reach the DB.
-    function commitHeld() {
+    const commitHeld = useCallback(() => {
         if (cartRef.current.length === 0) return
-        doSubmit(cartRef.current)
+        doSubmitRef.current(cartRef.current)
         cartRef.current = [] // sync guard: a fast double-press must not re-submit
         setCart([])
+        activeCartItemIdRef.current = null
         setActiveCartItemId(null)
         localStorage.setItem(STORAGE_KEYS.CART, '[]')
-    }
+    }, [])
 
     // Extras read/write cartRef.current synchronously (not setCart's prev) so the
     // held item's extras are never stale when the next tap submits it.
-    function handleToggleStickyExtra(extra) {
-        const isEnabledNow = enabledStickyExtraIds.includes(extra.id)
-        setEnabledStickyExtraIds(isEnabledNow ? enabledStickyExtraIds.filter(id => id !== extra.id) : [...enabledStickyExtraIds, extra.id])
+    const handleToggleStickyExtra = useCallback((extra) => {
+        const isEnabledNow = enabledStickyExtraIdsRef.current.includes(extra.id)
+        const nextStickyIds = isEnabledNow ? enabledStickyExtraIdsRef.current.filter(id => id !== extra.id) : [...enabledStickyExtraIdsRef.current, extra.id]
+        enabledStickyExtraIdsRef.current = nextStickyIds // sync, same reason as cartRef above
+        setEnabledStickyExtraIds(nextStickyIds)
 
         const prev = cartRef.current
         if (prev.length > 0) {
-            let idx = prev.findIndex(item => item.cartItemId === activeCartItemId)
+            let idx = prev.findIndex(item => item.cartItemId === activeCartItemIdRef.current)
             if (idx === -1) idx = prev.length - 1
             const target = prev[idx]
             let newExtras = [...target.extras]
@@ -594,14 +626,14 @@ export function POSProvider() {
             next[idx] = { ...target, extras: newExtras }
             cartRef.current = next
             setCart(next)
-            clearDiscount()
+            setDiscount(d => ({ ...d, value: 0 }))
         }
-    }
+    }, [])
 
-    function handleToggleExtra(extra) {
+    const handleToggleExtra = useCallback((extra) => {
         const prev = cartRef.current
         if (prev.length === 0) return
-        let idx = prev.findIndex(item => item.cartItemId === activeCartItemId)
+        let idx = prev.findIndex(item => item.cartItemId === activeCartItemIdRef.current)
         if (idx === -1) idx = prev.length - 1
         const target = prev[idx]
         const hasExtra = target.extras.some(e => e.id === extra.id)
@@ -610,8 +642,8 @@ export function POSProvider() {
         next[idx] = { ...target, extras: newExtras }
         cartRef.current = next
         setCart(next)
-        clearDiscount()
-    }
+        setDiscount(d => ({ ...d, value: 0 }))
+    }, [])
 
     async function handleLoadHistory() {
         if (!addressId) return
@@ -752,7 +784,7 @@ export function POSProvider() {
     const cartValue = useMemo(() => ({
         cart, activeCartItemId,
         handleAddItem, cancelHeld, handleToggleExtra, handleToggleStickyExtra, commitHeld,
-        enabledStickyExtraIds, setEnabledStickyExtraIds,
+        enabledStickyExtraIds,
         total, orderCount, hasOrder,
         discount, setDiscount, discountAmount, finalTotal,
         recentOrders, draftOrder, enterKey,

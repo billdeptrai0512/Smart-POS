@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import { Percent, Trash2 } from 'lucide-react'
 import { formatVND, computeDiscount } from '../../utils'
 import { dateShortVN, timeStringVN } from '../../utils/dateVN'
@@ -46,7 +46,7 @@ export default function OrdersList({
                         key={order.id}
                         order={order}
                         runningTotal={runningTotals.get(order.id) || 0}
-                        deletingId={deletingId}
+                        isDeleting={deletingId === order.id}
                         setDeletingId={setDeletingId}
                         onDeleteOrder={onDeleteOrder}
                         onUpdateDiscount={onUpdateDiscount}
@@ -59,7 +59,10 @@ export default function OrdersList({
     )
 }
 
-function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrder, onUpdateDiscount, onDeleteOffline, isNew }) {
+// memo + per-card isDeleting (not the raw shared deletingId, which would change
+// for every card whenever ANY order starts/stops deleting) — otherwise deleting
+// one order re-renders the entire day's order list.
+const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, setDeletingId, onDeleteOrder, onUpdateDiscount, onDeleteOffline, isNew }) {
     const confirm = useConfirm()
     const [showDiscount, setShowDiscount] = useState(false)
     const date = new Date(order.createdAt)
@@ -78,7 +81,7 @@ function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrd
     })() : ''
 
     async function handleDelete() {
-        if (deletingId === order.id) return
+        if (isDeleting) return
         const text = order.items?.map(i => i.text).join(', ') || ''
         if (await confirm({ title: `Xóa đơn ${text} (${formatVND(order.total)})?`, detail: 'Hành động này không thể hoàn tác!', danger: true, confirmLabel: 'Xóa' })) {
             setDeletingId(order.id)
@@ -143,7 +146,7 @@ function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrd
                                 </button>
                                 <button
                                     onClick={handleDelete}
-                                    disabled={deletingId === order.id}
+                                    disabled={isDeleting}
                                     aria-label="Xóa đơn"
                                     className="text-text-secondary hover:text-danger transition-colors disabled:opacity-50"
                                 >
@@ -177,4 +180,4 @@ function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrd
             )}
         </div>
     )
-}
+})

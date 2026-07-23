@@ -6,6 +6,7 @@ import { parseVNDInput, formatVND, formatVNDInput, computeDiscount } from '../..
 import { dateStringVN, timeStringVN } from '../../utils/dateVN'
 import DatePicker from '../common/DatePicker'
 import TimeInput from '../common/TimeInput'
+import { BottomSheet } from '../common/ModalShell'
 
 export default function RestockModal({
     ingredient,
@@ -135,13 +136,10 @@ export default function RestockModal({
     }
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={onClose}>
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-
-            <div
-                className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-5 animate-slide-up max-h-[92vh] overflow-y-auto"
-                onClick={e => e.stopPropagation()}
-            >
+        <BottomSheet
+            onClose={onClose}
+            panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-5 animate-slide-up max-h-[92vh] overflow-y-auto"
+        >
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div className="flex flex-col">
@@ -388,7 +386,6 @@ export default function RestockModal({
                 >
                     {submitting ? 'Đang xử lý...' : mode === 'edit' ? 'Lưu thay đổi' : 'Xác nhận nhập kho'}
                 </button>
-            </div>
-        </div>
+        </BottomSheet>
     )
 }

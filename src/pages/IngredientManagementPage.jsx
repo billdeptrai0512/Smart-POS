@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Plus, X, ArrowUpDown } from 'lucide-react'
+import FabActionMenu from '../components/common/FabActionMenu'
+import { BottomSheet } from '../components/common/ModalShell'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -466,12 +468,10 @@ export default function IngredientManagementPage() {
             )}
 
             {showCreateModal && (
-                <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={() => !saving && setShowCreateModal(false)}>
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-                    <div
-                        className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
-                        onClick={e => e.stopPropagation()}
-                    >
+                <BottomSheet
+                    onClose={() => !saving && setShowCreateModal(false)}
+                    panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
+                >
                         <div className="flex items-center justify-between">
                             <span className="text-[16px] font-black text-text">{newCategory === 'packaging' ? 'Tạo bao bì mới' : 'Tạo nguyên liệu mới'}</span>
                             <button
@@ -490,8 +490,7 @@ export default function IngredientManagementPage() {
                             onUnitChange={setNewUnit}
                             onSubmit={handleCreateIngredient}
                         />
-                    </div>
-                </div>
+                </BottomSheet>
             )}
 
             {saving && (

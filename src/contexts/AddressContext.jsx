@@ -247,23 +247,43 @@ export function AddressProvider() {
         return map
     }, [addresses])
 
+    const updateSortOrder = useCallback(async (addressId, sortOrderArray) => {
+        if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có quyền')
+        if (isGuest) {
+            // Persist in localStorage so the order survives reloads — getDemoAddress() reads it back.
+            setGuestIngredientSortOrder(sortOrderArray)
+        } else {
+            // addressId=null routes to app_settings (default template); else updates the address row.
+            await apiUpdateAddressIngredientSort(addressId, sortOrderArray)
+        }
+        if (addressId) {
+            setAddresses(prev => prev.map(a => a.id === addressId ? { ...a, ingredient_sort_order: sortOrderArray } : a))
+        }
+        if (selectedAddress?.id === addressId) {
+            setSelectedAddressState(prev => ({ ...prev, ingredient_sort_order: sortOrderArray }))
+        }
+    }, [profile, selectedAddress, isGuest])
+
+    const value = useMemo(() => ({
+        addresses,
+        selectedAddress,
+        setSelectedAddress,
+        createNewAddress,
+        renameAddress,
+        removeAddress,
+        updateSortOrder,
+        warehouseGroups,
+        siblingsByAddress,
+        createWarehouseGroup,
+        renameWarehouseGroup,
+        removeWarehouseGroup,
+        setAddressGroup,
+        loading,
+        fetchError
+    }), [addresses, selectedAddress, setSelectedAddress, createNewAddress, renameAddress, removeAddress, updateSortOrder, warehouseGroups, siblingsByAddress, createWarehouseGroup, renameWarehouseGroup, removeWarehouseGroup, setAddressGroup, loading, fetchError])
+
     return (
-        <AddressContext.Provider value={{
-            addresses,
-            selectedAddress,
-            setSelectedAddress,
-            createNewAddress,
-            renameAddress,
-            removeAddress,
-            warehouseGroups,
-            siblingsByAddress,
-            createWarehouseGroup,
-            renameWarehouseGroup,
-            removeWarehouseGroup,
-            setAddressGroup,
-            loading,
-            fetchError
-        }}>
+        <AddressContext.Provider value={value}>
             <Outlet />
         </AddressContext.Provider>
     )

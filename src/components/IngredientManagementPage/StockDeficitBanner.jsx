@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AlertTriangle, X, Loader, Check } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
 import { adjustIngredientStock } from '../../services/orderService'
+import { BottomSheet } from '../common/ModalShell'
 
 /**
  * Surface raw-balance deficits (Σ refill < Σ restock) caused by:
@@ -138,12 +139,10 @@ function KiemKeModal({ deficits, ingredientUnits, configByIngredient, addressId,
     }
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={onClose}>
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-            <div
-                onClick={e => e.stopPropagation()}
-                className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up max-h-[88dvh] overflow-hidden"
-            >
+        <BottomSheet
+            onClose={onClose}
+            panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up max-h-[88dvh] overflow-hidden"
+        >
                 <div className="flex items-center justify-between shrink-0">
                     <div>
                         <span className="text-[11px] font-black text-text-secondary uppercase tracking-wider">Kiểm kê & reset</span>
@@ -238,8 +237,7 @@ function KiemKeModal({ deficits, ingredientUnits, configByIngredient, addressId,
                         </button>
                     </>
                 )}
-            </div>
-        </div>
+        </BottomSheet>
     )
 }
 

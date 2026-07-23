@@ -37,9 +37,6 @@ export function menuStep(currentKey, dir) {
     return MENU_SEQUENCE[n]
 }
 
-export const menuNext = (key) => menuStep(key, +1)
-export const menuPrev = (key) => menuStep(key, -1)
-
 // Apply a sequence step from the page identified by `currentKey`. Same-route
 // stops switch local tab/view state (no navigation); cross-route stops navigate,
 // carrying viewMode / report-tab intent via location state. Stepping off either

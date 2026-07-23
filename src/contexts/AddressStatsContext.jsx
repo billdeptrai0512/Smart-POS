@@ -126,22 +126,27 @@ export function AddressStatsProvider() {
         loadStaff()
     }, [loadStaff])
 
+    // 10 independent state slices set on separate schedules (polling, staff load,
+    // subscription load) — without useMemo here, every consumer (AddressSelectPage,
+    // SubscriptionPanel) re-renders whenever ANY one field updates.
+    const value = useMemo(() => ({
+        cupsMap,
+        revenueMap,
+        prevCupsMap,
+        sessionsMap,
+        subscriptionStatusMap,
+        subscriptionRowsMap,
+        subscriptionLoading,
+        staffList,
+        statsLoading,
+        staffLoading,
+        refreshStats: loadStats,
+        refreshStaff: loadStaff,
+        refreshSubscriptionStatuses: loadSubscriptionStatuses,
+    }), [cupsMap, revenueMap, prevCupsMap, sessionsMap, subscriptionStatusMap, subscriptionRowsMap, subscriptionLoading, staffList, statsLoading, staffLoading, loadStats, loadStaff, loadSubscriptionStatuses])
+
     return (
-        <AddressStatsContext.Provider value={{
-            cupsMap,
-            revenueMap,
-            prevCupsMap,
-            sessionsMap,
-            subscriptionStatusMap,
-            subscriptionRowsMap,
-            subscriptionLoading,
-            staffList,
-            statsLoading,
-            staffLoading,
-            refreshStats: loadStats,
-            refreshStaff: loadStaff,
-            refreshSubscriptionStatuses: loadSubscriptionStatuses,
-        }}>
+        <AddressStatsContext.Provider value={value}>
             <Outlet />
         </AddressStatsContext.Provider>
     )

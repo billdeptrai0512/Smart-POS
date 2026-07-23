@@ -14,6 +14,7 @@ import BranchGrid from '../components/AddressSelectPage/BranchGrid'
 import StaffTab from '../components/AddressSelectPage/StaffTab'
 import CreateStaffModal from '../components/AddressSelectPage/CreateStaffModal'
 import SupportModal from '../components/common/SupportModal'
+import { BottomSheet } from '../components/common/ModalShell'
 import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 import { computeSubscriptionStatus } from '../utils/subscriptionStatus'
 import { dateFullVN } from '../utils/dateVN'
@@ -109,35 +110,52 @@ export default function AddressSelectPage() {
         if (!addresses.length) return
         const newAddrs = addresses.filter(a => !prefetchedIdsRef.current.has(a.id))
         if (!newAddrs.length) return
-        const timer = setTimeout(() => {
-            newAddrs.forEach(async addr => {
-                prefetchedIdsRef.current.add(addr.id)
+
+        async function prefetchOne(addr) {
+            prefetchedIdsRef.current.add(addr.id)
+            try {
+                const [prods, recs, costsResult, extras] = await Promise.all([
+                    fetchProducts(addr.id),
+                    fetchAllRecipes(addr.id),
+                    fetchIngredientCostsAndUnits(addr.id),
+                    fetchProductExtras(addr.id),
+                ])
+                const extraIds = Object.values(extras).flat().map(e => e.id)
+                const extraIngs = await fetchExtraIngredients(extraIds)
+                const { costs, units } = costsResult
+                const key = name => buildCacheKey(addr.id, name)
                 try {
-                    const [prods, recs, costsResult, extras] = await Promise.all([
-                        fetchProducts(addr.id),
-                        fetchAllRecipes(addr.id),
-                        fetchIngredientCostsAndUnits(addr.id),
-                        fetchProductExtras(addr.id),
-                    ])
-                    const extraIds = Object.values(extras).flat().map(e => e.id)
-                    const extraIngs = await fetchExtraIngredients(extraIds)
-                    const { costs, units } = costsResult
-                    const key = name => buildCacheKey(addr.id, name)
-                    try {
-                        localStorage.setItem(key('products'), JSON.stringify(prods))
-                        localStorage.setItem(key('recipes'), JSON.stringify(recs))
-                        localStorage.setItem(key('costs'), JSON.stringify(costs))
-                        localStorage.setItem(key('units'), JSON.stringify(units))
-                        localStorage.setItem(key('extras'), JSON.stringify(extras))
-                        localStorage.setItem(key('extra_ingredients'), JSON.stringify(extraIngs))
-                    } catch { /* ignore quota */ }
-                } catch {
-                    // Allow retry on next render if prefetch failed
-                    prefetchedIdsRef.current.delete(addr.id)
-                }
-            })
+                    localStorage.setItem(key('products'), JSON.stringify(prods))
+                    localStorage.setItem(key('recipes'), JSON.stringify(recs))
+                    localStorage.setItem(key('costs'), JSON.stringify(costs))
+                    localStorage.setItem(key('units'), JSON.stringify(units))
+                    localStorage.setItem(key('extras'), JSON.stringify(extras))
+                    localStorage.setItem(key('extra_ingredients'), JSON.stringify(extraIngs))
+                } catch { /* ignore quota */ }
+            } catch {
+                // Allow retry on next render if prefetch failed
+                prefetchedIdsRef.current.delete(addr.id)
+            }
+        }
+
+        // A manager with many branches used to fire 5 queries × N branches all at
+        // once — a burst that could saturate a flaky connection right when the
+        // stats query the user IS looking at also needs bandwidth. 2 branches'
+        // worth in flight at a time keeps this a background trickle instead.
+        let cancelled = false
+        let cursor = 0
+        async function worker() {
+            while (cursor < newAddrs.length) {
+                if (cancelled) return
+                const addr = newAddrs[cursor++]
+                await prefetchOne(addr)
+            }
+        }
+
+        const timer = setTimeout(() => {
+            for (let i = 0; i < Math.min(2, newAddrs.length); i++) worker()
         }, 2500)
-        return () => clearTimeout(timer)
+        return () => { cancelled = true; clearTimeout(timer) }
         // ponytail: keyed on addressIdsKey (ids only), not `addresses` — the array gets a
         // new reference on every refetch even when the id set is unchanged, which would
         // restart this 2.5s prefetch timer on every such refresh.
@@ -363,7 +381,7 @@ export default function AddressSelectPage() {
 
             {/* Bottom action bar */}
             {activeTab === 'branches' && (
-                <div className="shrink-0 flex items-stretch gap-3 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),16px)] bg-surface border-t border-border/60">
+                <div className="shrink-0 flex items-stretch gap-3 px-4 py-2.5 pb-[max(env(safe-area-inset-bottom),10px)] bg-surface border-t border-border/60">
                     <button
                         onClick={handleSignOut}
                         className="flex-1 min-w-0 flex items-center justify-center rounded-[12px] border border-border/60 bg-bg px-4 py-3 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light hover:text-danger active:scale-95 transition-all"
@@ -381,7 +399,7 @@ export default function AddressSelectPage() {
                 </div>
             )}
             {showInvite && (
-                <div className="shrink-0 flex items-stretch px-4 pt-3 pb-[max(env(safe-area-inset-bottom),16px)] bg-surface border-t border-border/60">
+                <div className="shrink-0 flex items-stretch px-4 py-2.5 pb-[max(env(safe-area-inset-bottom),10px)] bg-surface border-t border-border/60">
                     <button
                         onClick={() => {
                             setError('')
@@ -403,12 +421,10 @@ export default function AddressSelectPage() {
 
             {/* Slide-up Tạo địa chỉ mới modal */}
             {showCreateModal && (
-                <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={() => !creating && setShowCreateModal(false)}>
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-                    <div
-                        className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
-                        onClick={e => e.stopPropagation()}
-                    >
+                <BottomSheet
+                    onClose={() => !creating && setShowCreateModal(false)}
+                    panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
+                >
                         <div className="flex items-center justify-between">
                             <span className="text-[16px] font-black text-text">Tạo địa chỉ mới</span>
                             <button
@@ -480,8 +496,7 @@ export default function AddressSelectPage() {
                                 {creating ? <><Loader size={13} className="animate-spin" /> {newShareCode.trim() ? 'Đang chép cấu hình...' : 'Đang tạo...'}</> : 'Tạo địa chỉ'}
                             </button>
                         </div>
-                    </div>
-                </div>
+                </BottomSheet>
             )}
 
             {/* Support Modal */}
