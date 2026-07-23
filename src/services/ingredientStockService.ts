@@ -30,13 +30,23 @@ export async function fetchIngredientStocks(addressId: UUID | null) {
     // read expenses/shift_closings directly (RLS), so use a SECURITY DEFINER RPC that
     // returns aggregated stock for address_id IS NULL.
     const isDefault = !addressId
-    const mapRow = (row: Row) => ({
-        ingredient: row.ingredient,
-        current_stock: Number(row.current_stock) || 0,
-        restocked_qty: Number(row.restocked_qty) || 0,
-        warehouse_stock: Number(row.warehouse_stock) || 0,
-        counter_stock: Number(row.counter_stock) || 0
-    })
+    // *_set: true/false phân biệt "chưa nhập" với "đã nhập = 0". get_ingredient_stocks_v2 trả
+    // cờ thật; các path khác (get_default_ingredient_stocks, fallback JS) không có cờ nên suy
+    // luận lại từ số lượng (> 0) ngay tại đây — caller luôn nhận boolean thật, khỏi cần biết
+    // RPC nào đang phục vụ request.
+    const mapRow = (row: Row) => {
+        const warehouse_stock = Number(row.warehouse_stock) || 0
+        const counter_stock = Number(row.counter_stock) || 0
+        return {
+            ingredient: row.ingredient,
+            current_stock: Number(row.current_stock) || 0,
+            restocked_qty: Number(row.restocked_qty) || 0,
+            warehouse_stock,
+            counter_stock,
+            warehouse_stock_set: row.warehouse_stock_set ?? (warehouse_stock > 0),
+            counter_stock_set: row.counter_stock_set ?? (counter_stock > 0)
+        }
+    }
 
     if (isDefault) {
         const { data: rpcData, error: rpcError } = await supabase.rpc('get_default_ingredient_stocks')
@@ -184,7 +194,9 @@ export async function fetchIngredientStocks(addressId: UUID | null) {
             current_stock: warehouse + counterStock,
             restocked_qty: todayRestock[ingredient] || 0,
             warehouse_stock: warehouse,
-            counter_stock: counterStock
+            counter_stock: counterStock,
+            warehouse_stock_set: warehouse > 0,
+            counter_stock_set: counterStock > 0
         }
     })
 }

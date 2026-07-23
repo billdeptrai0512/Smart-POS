@@ -219,14 +219,22 @@ export async function fetchCashClosedToday(addressId: UUID) {
     return !!data.cash_closed_at
 }
 
-// Đã từng chốt ca có kiểm kê thật (remaining) chưa? Dùng để tick bước "Chốt ca đầu tiên"
-// trong checklist onboarding "Bắt đầu bán hàng" — chỉ cần biết TỒN TẠI ≥1 phiếu, nên quét
-// giới hạn (30 phiếu gần nhất) thay vì kéo toàn bộ lịch sử.
-export async function hasCompletedShiftClosing(addressId: UUID | null) {
-    const reportHasRemaining = (report: unknown) =>
-        Array.isArray(report) && report.some((item: Row) => item?.remaining != null)
+// Đã từng chốt ca kiểm kê ĐỦ toàn bộ nguyên liệu đang có (cùng 1 phiếu) chưa? Dùng để tick
+// bước "Kiểm kê tồn kho" trong checklist onboarding — đòi đủ 100% (không phải chỉ 1 NVL nào
+// đó có remaining) để nhất quán với bước nguyên liệu/bao bì. Vẫn "ever" (30 phiếu gần nhất,
+// không phải "hôm nay") để tránh guide tái xuất hiện khi hôm sau chưa kiểm kê lại.
+// ingredientKeys rỗng (chưa có NVL nào) → vacuously true, khỏi cần quét.
+export async function hasCompletedShiftClosing(addressId: UUID | null, ingredientKeys: string[]) {
+    if (ingredientKeys.length === 0) return true
+    const reportCoversAll = (report: unknown) => {
+        if (!Array.isArray(report)) return false
+        const counted = new Set(
+            report.filter((item: Row) => item?.remaining != null).map((item: Row) => item.ingredient)
+        )
+        return ingredientKeys.every(k => counted.has(k))
+    }
     if (localRepo.isGuest()) {
-        return localRepo.fetchAllLocalShiftClosings(addressId).some((c: Row) => reportHasRemaining(c.inventory_report))
+        return localRepo.fetchAllLocalShiftClosings(addressId).some((c: Row) => reportCoversAll(c.inventory_report))
     }
     if (!supabase) return false
     let q = supabase.from('shift_closings').select('inventory_report')
@@ -236,7 +244,33 @@ export async function hasCompletedShiftClosing(addressId: UUID | null) {
         .order('created_at', { ascending: false })
         .limit(30)
     if (error || !data) return false
-    return data.some((c: Row) => reportHasRemaining(c.inventory_report))
+    return data.some((c: Row) => reportCoversAll(c.inventory_report))
+}
+
+// Đã từng "Lưu thực thu" tiền mặt VÀ chuyển khoản chưa (mỗi cái tính riêng, không cần cùng
+// 1 phiếu)? Dùng để tick bước "Báo cáo thực thu" — ever-done như trên, tránh guide tái xuất
+// hiện khi hôm nay chưa lưu. Trả object thay vì 1 boolean để bước gate được ĐỦ CẢ HAI, không
+// phải chỉ 1 trong 2 (bug cũ: lưu mỗi tiền mặt là qua bước, bỏ quên chuyển khoản).
+export async function hasCompletedCashReport(addressId: UUID | null) {
+    if (localRepo.isGuest()) {
+        const rows = localRepo.fetchAllLocalShiftClosings(addressId)
+        return {
+            cash: rows.some((c: Row) => c.actual_cash != null),
+            transfer: rows.some((c: Row) => c.actual_transfer != null),
+        }
+    }
+    if (!supabase) return { cash: false, transfer: false }
+    let q = supabase.from('shift_closings').select('actual_cash, actual_transfer')
+    q = addressId ? q.eq('address_id', addressId) : q.is('address_id', null)
+    const { data, error } = await q
+        .or('actual_cash.not.is.null,actual_transfer.not.is.null')
+        .order('created_at', { ascending: false })
+        .limit(30)
+    if (error || !data) return { cash: false, transfer: false }
+    return {
+        cash: data.some((r: Row) => r.actual_cash != null),
+        transfer: data.some((r: Row) => r.actual_transfer != null),
+    }
 }
 
 // Fetch the most recent shift closing BEFORE today (for opening stock)

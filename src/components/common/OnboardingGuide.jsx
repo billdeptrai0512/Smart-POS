@@ -5,15 +5,17 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { useProducts } from '../../contexts/ProductContext'
 import { useOnboardingVisibility } from '../../contexts/OnboardingVisibilityContext'
-import { fetchIngredientStocks, hasCompletedShiftClosing, fetchTodayShiftClosing } from '../../services/orderService'
+import { fetchIngredientStocks, hasCompletedShiftClosing, hasCompletedCashReport, fetchTodayShiftClosing } from '../../services/orderService'
 import { normalizeIngredientCategory } from '../../utils/ingredients'
+import { VIEW_INVENTORY } from '../DailyReportPage/ReportViewFilter'
 
 // v3: bước 1 đổi từ 1 nút "Đánh dấu xong" duy nhất sang checklist tick từng việc — state cũ (menuDone) coi như bỏ.
 const STORAGE_PREFIX = 'onboarding_v3_'
 const DEFAULT_STATE = { menuChecklist: {}, collapsed: false }
 const MENU_CHECKLIST = [
     { key: 'create', label: 'Tạo món mới' },
-    { key: 'adjust', label: 'Tùy chỉnh định lượng' },
+    { key: 'adjust', label: 'Cài định lượng' },
+    { key: 'category', label: 'Tạo mục mới' },
     { key: 'sort', label: 'Sắp xếp menu' },
 ]
 
@@ -31,12 +33,13 @@ function writeLocalState(addressId, next) {
 //   - Mở rộng: thẻ IN-FLOW dính đáy (trang tự đặt trong khung fixed bottom của nó — trang
 //     có FAB thì xếp FAB đứng ngay trên thẻ, khỏi chừa khoảng trống né nhau).
 //   - Thu gọn: pill nhỏ tự fixed nép góc trái (FAB chiếm góc phải); bấm bung lại.
-// Chỉ biến mất hẳn khi đủ 3 bước. Trạng thái thu/mở + tick bước 1 lưu localStorage theo address.
+// Chỉ biến mất hẳn khi đủ 5 bước. Trạng thái thu/mở + tick bước 1 lưu localStorage theo address.
 //
 // Hoàn thành: bước 1 bằng tay, user tự tick từng việc trong checklist (menu "đúng thực tế"
-// chỉ user biết); bước 2/3 tick "lỏng" (chỉ cần chạm feature, không cần 100%) — checklist con
-// hiện tiến độ thật (data) nhưng KHÔNG phải điều kiện qua bước, để tránh guide bị kẹt/tái xuất
-// hiện khi dữ liệu hôm sau reset (vd chốt ca chỉ tính "đã từng làm", không phải "hôm nay").
+// chỉ user biết); bước 2-3 (nguyên liệu/bao bì) đòi đủ 100% checklist con. Bước 4-5 (báo cáo
+// thực thu/kiểm kê) tick "lỏng" theo kiểu "đã từng làm" (không phải "hôm nay") để tránh guide
+// tái xuất hiện khi dữ liệu hôm sau reset — checklist con của 2 bước này chỉ hiện tiến độ,
+// không phải điều kiện qua bước.
 export default function OnboardingGuide() {
     const navigate = useNavigate()
     const { isManager, isAdmin } = useAuth()
@@ -49,6 +52,7 @@ export default function OnboardingGuide() {
     const [local, setLocal] = useState(DEFAULT_STATE)
     const [stockProgress, setStockProgress] = useState({ mainWarehouse: 0, mainCounter: 0, packagingWarehouse: 0, packagingCounter: 0 })
     const [closingDone, setClosingDone] = useState(false)
+    const [cashReportDone, setCashReportDone] = useState({ cash: false, transfer: false })
     const [todayClosing, setTodayClosing] = useState(null)
     const [loaded, setLoaded] = useState(false)
 
@@ -58,18 +62,21 @@ export default function OnboardingGuide() {
 
     const reload = useCallback(() => {
         if (!addressId) return
+        const ingredientKeys = (ingredientConfigs || []).map(c => c.ingredient)
         Promise.all([
             fetchIngredientStocks(addressId),
-            hasCompletedShiftClosing(addressId),
+            hasCompletedShiftClosing(addressId, ingredientKeys),
+            hasCompletedCashReport(addressId),
             fetchTodayShiftClosing(addressId),
-        ]).then(([stocks, closed, today]) => {
+        ]).then(([stocks, closed, cashDone, today]) => {
             const byKey = {}
             for (const s of stocks) byKey[s.ingredient] = s
             let mainWarehouse = 0, mainCounter = 0, packagingWarehouse = 0, packagingCounter = 0
             for (const c of ingredientConfigs || []) {
                 const isPackaging = normalizeIngredientCategory(c.category) === 'packaging'
-                const hasWarehouse = (byKey[c.ingredient]?.warehouse_stock || 0) > 0
-                const hasCounter = (byKey[c.ingredient]?.counter_stock || 0) > 0
+                const row = byKey[c.ingredient]
+                const hasWarehouse = row?.warehouse_stock_set ?? false
+                const hasCounter = row?.counter_stock_set ?? false
                 if (isPackaging) {
                     if (hasWarehouse) packagingWarehouse++
                     if (hasCounter) packagingCounter++
@@ -80,9 +87,10 @@ export default function OnboardingGuide() {
             }
             setStockProgress({ mainWarehouse, mainCounter, packagingWarehouse, packagingCounter })
             setClosingDone(closed)
+            setCashReportDone(cashDone)
             setTodayClosing(today)
             setLoaded(true)
-        })
+        }).catch(err => console.error('OnboardingGuide reload error:', err))
     }, [addressId, ingredientConfigs])
 
     useEffect(() => {
@@ -112,17 +120,18 @@ export default function OnboardingGuide() {
         ? todayClosing.inventory_report.filter(item => item?.remaining != null).length
         : 0
 
-    const stockChecklist = [
-        totalMain > 0 && { key: 'mainWarehouse', label: `Nhập tồn kho ${stockProgress.mainWarehouse}/${totalMain} nguyên liệu`, done: stockProgress.mainWarehouse >= totalMain },
-        totalMain > 0 && { key: 'mainCounter', label: `Nhập tồn quầy ${stockProgress.mainCounter}/${totalMain} nguyên liệu`, done: stockProgress.mainCounter >= totalMain },
-        totalPackaging > 0 && { key: 'packagingWarehouse', label: `Nhập tồn kho ${stockProgress.packagingWarehouse}/${totalPackaging} bao bì`, done: stockProgress.packagingWarehouse >= totalPackaging },
-        totalPackaging > 0 && { key: 'packagingCounter', label: `Nhập tồn quầy ${stockProgress.packagingCounter}/${totalPackaging} bao bì`, done: stockProgress.packagingCounter >= totalPackaging },
-    ].filter(Boolean)
-
-    const shiftChecklist = [
-        { key: 'cash', label: 'Nhập thực thu tiền mặt', done: todayClosing?.actual_cash != null },
-        { key: 'transfer', label: 'Nhập thực thu tiền chuyển khoản', done: todayClosing?.actual_transfer != null },
-        { key: 'inventory', label: `Kiểm kê tồn kho ${countedToday}/${totalStock}`, done: totalStock > 0 && countedToday >= totalStock },
+    const makeStockChecklist = (prefix, total, warehouse, counter) => total > 0 ? [
+        { key: `${prefix}Warehouse`, label: `Nhập tồn kho ${warehouse}/${total}`, done: warehouse >= total },
+        { key: `${prefix}Counter`, label: `Nhập tồn quầy ${counter}/${total}`, done: counter >= total },
+    ] : []
+    const mainStockChecklist = makeStockChecklist('main', totalMain, stockProgress.mainWarehouse, stockProgress.mainCounter)
+    const packagingStockChecklist = makeStockChecklist('packaging', totalPackaging, stockProgress.packagingWarehouse, stockProgress.packagingCounter)
+    const cashChecklist = [
+        { key: 'cash', label: 'Nhập tiền mặt', done: todayClosing?.actual_cash != null },
+        { key: 'transfer', label: 'Nhập chuyển khoản', done: todayClosing?.actual_transfer != null },
+    ]
+    const inventoryChecklist = [
+        { key: 'inventory', label: `Nhập tồn cuối ${countedToday}/${totalStock}`, done: countedToday >= totalStock },
     ]
 
     const steps = [
@@ -135,19 +144,27 @@ export default function OnboardingGuide() {
             })),
         },
         {
-            done: (stockProgress.mainWarehouse > 0 || stockProgress.packagingWarehouse > 0) && (stockProgress.mainCounter > 0 || stockProgress.packagingCounter > 0),
-            to: '/ingredients', navLabel: 'Đi tới nguyên liệu',
-            checklist: stockChecklist,
+            done: mainStockChecklist.every(item => item.done),
+            to: '/ingredients', state: { viewMode: 'main' }, navLabel: 'Đi tới nguyên liệu',
+            checklist: mainStockChecklist,
         },
         {
-            done: closingDone, to: '/daily-report', navLabel: 'Đi tới báo cáo',
-            checklist: shiftChecklist,
+            done: packagingStockChecklist.every(item => item.done),
+            to: '/ingredients', state: { viewMode: 'packaging' }, navLabel: 'Đi tới bao bì',
+            checklist: packagingStockChecklist,
+        },
+        {
+            done: cashReportDone.cash && cashReportDone.transfer, to: '/daily-report', navLabel: 'Đi tới báo cáo dòng tiền',
+            checklist: cashChecklist,
+        },
+        {
+            done: closingDone, to: '/daily-report', state: { initialView: VIEW_INVENTORY }, navLabel: 'Đi tới báo cáo tồn kho',
+            checklist: inventoryChecklist,
         },
     ]
     const idx = steps.findIndex(s => !s.done)
     if (idx === -1) return null
     const step = steps[idx]
-    const doneCount = steps.filter(s => s.done).length
 
     // Pill luôn hiện, làm cả 2 việc: bấm để mở khi đang thu gọn, bấm lại để thu gọn khi
     // thẻ đang mở (thẻ nổi ngay phía trên, có khoảng cách — không cần nút "thu gọn" riêng).
@@ -159,7 +176,7 @@ export default function OnboardingGuide() {
                     style={{ bottom: 56 + bottomOffset }}
                 >
                     <button
-                        onClick={() => navigate(step.to)}
+                        onClick={() => navigate(step.to, step.state ? { state: step.state } : undefined)}
                         className="flex items-center gap-1 bg-primary text-bg font-black text-[11px] uppercase rounded-[8px] px-2.5 py-1.5 mb-1.5 hover:bg-primary/90 active:bg-primary/80 transition-colors"
                     >
                         {step.navLabel} <ArrowRight size={11} strokeWidth={3} />
@@ -171,12 +188,12 @@ export default function OnboardingGuide() {
                                 <Row
                                     key={item.key}
                                     onClick={item.onClick}
-                                    className="flex items-center gap-1.5 text-[11px] w-full text-left"
+                                    className="flex items-center justify-between gap-1.5 text-[11px] w-full text-left"
                                 >
+                                    <span className={item.done ? 'text-text-dim line-through' : 'text-text-secondary'}>{item.label}</span>
                                     <span className={`flex items-center justify-center w-3.5 h-3.5 rounded-[4px] border shrink-0 ${item.done ? 'bg-primary border-primary' : 'border-text-dim'}`}>
                                         {item.done && <Check size={10} strokeWidth={3} className="text-bg" />}
                                     </span>
-                                    <span className={item.done ? 'text-text-dim line-through' : 'text-text-secondary'}>{item.label}</span>
                                 </Row>
                             )
                         })}
@@ -190,7 +207,7 @@ export default function OnboardingGuide() {
                 title={local.collapsed ? 'Mở hướng dẫn bắt đầu bán hàng' : 'Thu gọn'}
             >
                 <ListChecks size={15} className="text-primary" />
-                <span className="text-text font-black text-[12px] tabular-nums">{doneCount}/3</span>
+                <span className="text-text font-black text-[12px] tabular-nums">{idx + 1}/{steps.length}</span>
             </button>
         </>
     )
