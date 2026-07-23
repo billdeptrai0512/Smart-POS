@@ -23,7 +23,7 @@ import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../contexts/ConfirmContext'
-import { dateStringVN, timeStringVN } from '../utils/dateVN'
+import { dateStringVN, timeStringVN, startOfMonthVN, endOfMonthVN } from '../utils/dateVN'
 
 // Page-level orchestrator: fetches data, owns the canonical state (stock, history,
 // config), and exposes per-field save callbacks. All edit-mode UI state lives
@@ -68,17 +68,12 @@ export default function IngredientDetailPage() {
 
     // Month navigation (Nhật ký tab)
     const [monthOffset, setMonthOffset] = useState(0)
-    const targetMonth = useMemo(() => {
-        const d = new Date()
-        d.setMonth(d.getMonth() + monthOffset)
-        return d
+    const { targetMonth, fromDate, toDate } = useMemo(() => {
+        const from = startOfMonthVN(new Date(), monthOffset)
+        const to = endOfMonthVN(new Date(), monthOffset)
+        return { targetMonth: from, fromDate: from.toISOString(), toDate: to.toISOString() }
     }, [monthOffset])
-    const monthLabel = targetMonth.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })
-    const { fromDate, toDate } = useMemo(() => {
-        const from = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 1)
-        const to = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0, 23, 59, 59)
-        return { fromDate: from.toISOString(), toDate: to.toISOString() }
-    }, [targetMonth])
+    const monthLabel = targetMonth.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' })
 
     // Derived view from context — single source of truth, never a local copy.
     const config = useMemo(

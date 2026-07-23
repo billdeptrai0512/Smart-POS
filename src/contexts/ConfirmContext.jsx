@@ -1,4 +1,5 @@
 import { createContext, useContext, useRef, useState, useCallback, useEffect } from 'react'
+import { BottomSheet } from '../components/common/ModalShell'
 
 // Promise-based confirm thay cho window.confirm — vốn bị chặn/treo trong webview
 // & preview panel. `await confirm(...)` trả boolean.
@@ -37,12 +38,11 @@ export function ConfirmProvider({ children }) {
         <ConfirmContext.Provider value={confirm}>
             {children}
             {opts && (
-                <div className="fixed inset-0 z-[200] flex items-end justify-center" onClick={() => close(false)}>
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-                    <div
-                        className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-5 animate-slide-up"
-                        onClick={e => e.stopPropagation()}
-                    >
+                <BottomSheet
+                    onClose={() => close(false)}
+                    zIndexClass="z-[200]"
+                    panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-5 animate-slide-up"
+                >
                         <div className="flex flex-col gap-1.5">
                             <span className="text-[17px] font-black text-text leading-snug">{opts.title}</span>
                             {opts.detail && (
@@ -64,8 +64,7 @@ export function ConfirmProvider({ children }) {
                                 {opts.confirmLabel || 'Xác nhận'}
                             </button>
                         </div>
-                    </div>
-                </div>
+                </BottomSheet>
             )}
         </ConfirmContext.Provider>
     )

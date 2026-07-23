@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { X, Package, Loader } from 'lucide-react'
+import { Dialog } from '../common/ModalShell'
 
 /**
  * Modal cấu hình "quy cách đóng gói" cho 1 nguyên liệu.
@@ -70,10 +71,10 @@ export default function PackConfigModal({
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={!saving ? onClose : undefined} />
-
-            <div className="relative w-full max-w-md mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
+        <Dialog
+            onClose={!saving ? onClose : undefined}
+            panelClassName="w-full max-w-md mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden"
+        >
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
                     <div className="flex items-center gap-2.5">
@@ -152,7 +153,6 @@ export default function PackConfigModal({
                         {saving ? <><Loader size={14} className="animate-spin" /> Đang lưu…</> : 'Lưu'}
                     </button>
                 </div>
-            </div>
-        </div>
+        </Dialog>
     )
 }

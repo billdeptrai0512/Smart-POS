@@ -5,6 +5,7 @@ import facebookImg from '../../assets/facebook.webp'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../hooks/useToast'
 import { insertRating } from '../../services/ratingService'
+import { Dialog } from './ModalShell'
 
 const SUPPORT_LINKS = {
     zalo: 'https://zalo.me/g/yvsgvae1kejljidlxyih',
@@ -36,15 +37,12 @@ export default function SupportModal({ open, onClose }) {
     }
 
     return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center px-4" onClick={onClose}>
-            {/* Backdrop blur overlay */}
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" />
-
-            {/* Modal Box */}
-            <div
-                className="relative w-full max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto bg-surface border border-border/60 rounded-[24px] shadow-2xl p-6 flex flex-col gap-5 animate-scale-up z-10"
-                onClick={e => e.stopPropagation()}
-            >
+        <Dialog
+            onClose={onClose}
+            zIndexClass="z-[200]"
+            className="px-4"
+            panelClassName="w-full max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto bg-surface border border-border/60 rounded-[24px] shadow-2xl p-6 flex flex-col gap-5 animate-scale-up z-10"
+        >
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <span className="text-[16px] font-black text-text">Bạn cần hỗ trợ?</span>
@@ -126,7 +124,6 @@ export default function SupportModal({ open, onClose }) {
                         </>
                     )}
                 </div>
-            </div>
-        </div>
+        </Dialog>
     )
 }

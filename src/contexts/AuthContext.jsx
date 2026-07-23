@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, fetchProfileByAuthId, removeSession, fetchDefaultIngredientSort } from '../services/authService'
 import { isGuest as getLocalIsGuest, setIsGuest as setLocalIsGuest, initializeGuestFromGlobal, clearGuestData, setGuestIngredientSortOrder } from '../services/localRepository'
@@ -262,8 +262,15 @@ export function AuthProvider({ children }) {
     const isStaff = profile?.role === 'staff'
     const isAdmin = profile?.role === 'admin'
 
+    // Every function here is already useCallback'd — memoizing the value itself
+    // stops every consumer (MenuGrid, HistoryPage, IngredientManagementPage, ...)
+    // from re-rendering whenever AuthProvider re-renders for an unrelated reason.
+    const value = useMemo(() => ({
+        user, profile, loading, isGuest, setIsGuest, initGuestMode, signIn, signUp, signOut, refreshProfile, isManager, isStaff, isAdmin
+    }), [user, profile, loading, isGuest, setIsGuest, initGuestMode, signIn, signUp, signOut, refreshProfile, isManager, isStaff, isAdmin])
+
     return (
-        <AuthContext.Provider value={{ user, profile, loading, isGuest, setIsGuest, initGuestMode, signIn, signUp, signOut, refreshProfile, isManager, isStaff, isAdmin }}>
+        <AuthContext.Provider value={value}>
             {children}
         </AuthContext.Provider>
     )

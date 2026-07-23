@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback } from 'react'
-import * as Sentry from '@sentry/react'
 
 // navigator.clipboard fails in non-secure contexts and inside iframes without
 // `allow="clipboard-write"`. Falls back to the legacy execCommand path which
@@ -56,8 +55,13 @@ export function useToast(duration = 3500) {
         // err.expected = validation/guard-rail message, không phải lỗi thật (đã biết
         // trước có thể xảy ra) — không đáng báo Sentry, chỉ cần console + toast.
         if (!err?.expected) {
-            // No-op khi Sentry chưa init (dev) — tag `action` để lọc lỗi theo thao tác.
-            Sentry.captureException(err, { tags: { action: actionLabel } })
+            // Dynamic import (thay vì static) — useToast được import ở gần như mọi
+            // context/page, nên import tĩnh @sentry/react ở đây từng kéo cả SDK vào
+            // bundle đầu tiên y hệt vấn đề bên main.jsx. No-op khi Sentry chưa init
+            // (dev) — tag `action` để lọc lỗi theo thao tác.
+            import('@sentry/react')
+                .then(Sentry => Sentry.captureException(err, { tags: { action: actionLabel } }))
+                .catch(() => { })
         }
         showToast('Có lỗi xảy ra', 'error', {
             label: 'Sao chép lỗi',

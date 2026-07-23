@@ -4,6 +4,7 @@ import { formatVND, formatVNDInput, parseVNDInput } from '../../utils'
 import { dateStringVN } from '../../utils/dateVN'
 import DatePicker from '../common/DatePicker'
 import TimeInput from '../common/TimeInput'
+import { BottomSheet } from '../common/ModalShell'
 
 // Bottom-sheet form to record a payment against an existing refill invoice.
 // Caller provides the invoice row (already includes nested `payments`).
@@ -35,12 +36,10 @@ export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfir
     }
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={onClose}>
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-            <div
-                className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-5 animate-slide-up"
-                onClick={e => e.stopPropagation()}
-            >
+        <BottomSheet
+            onClose={onClose}
+            panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-5 animate-slide-up"
+        >
                 <div className="flex items-center justify-between">
                     <div className="flex flex-col">
                         <span className="text-[11px] font-black text-text-secondary uppercase tracking-wider">Ghi nhận thanh toán</span>
@@ -161,8 +160,7 @@ export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfir
                 >
                     {saving ? 'Đang lưu...' : 'Xác nhận thanh toán'}
                 </button>
-            </div>
-        </div>
+        </BottomSheet>
     )
 }
 

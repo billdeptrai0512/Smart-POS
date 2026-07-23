@@ -929,12 +929,11 @@ export default function DailyReportPage() {
     // Liệt kê cụ thể field nào sắp mất (tối đa 5 dòng) để confirm rõ nghĩa, không mơ hồ.
     const guardLeave = async (proceed) => {
         if (hasUnsaved) {
-            const fmtVND = (n) => n.toLocaleString('vi-VN')
             const cashLines = []
             if ((parseVNDInput(cashInput) || 0) !== persistedCash)
-                cashLines.push(`Thực thu · Tiền mặt: ${fmtVND(persistedCash)} → ${fmtVND(parseVNDInput(cashInput) || 0)}`)
+                cashLines.push(`Thực thu · Tiền mặt: ${formatVNDInput(persistedCash)} → ${formatVNDInput(parseVNDInput(cashInput) || 0)}`)
             if ((parseVNDInput(transferInput) || 0) !== persistedTransfer)
-                cashLines.push(`Thực thu · Chuyển khoản: ${fmtVND(persistedTransfer)} → ${fmtVND(parseVNDInput(transferInput) || 0)}`)
+                cashLines.push(`Thực thu · Chuyển khoản: ${formatVNDInput(persistedTransfer)} → ${formatVNDInput(parseVNDInput(transferInput) || 0)}`)
             const lines = isTodayScope ? [...inventory.dirtySummary, ...cashLines] : pastInvDirty.lines
             const list = lines.slice(0, 5).map(l => `• ${l}`).join('\n')
             const more = lines.length > 5 ? `\nvà ${lines.length - 5} mục khác…` : ''

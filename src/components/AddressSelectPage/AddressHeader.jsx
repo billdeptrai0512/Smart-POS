@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Building2, Users, Phone, Loader2, Check, X } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { setMyPhone } from '../../services/authService'
+import { Dialog } from '../common/ModalShell'
 
 // Hiển thị SĐT dạng nội địa: +84902822193 → 0902 822 193 (DB vẫn giữ E.164).
 function formatPhoneVN(p) {
@@ -140,9 +141,10 @@ function PhoneModal({ phone, onClose }) {
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { if (!busy) onClose() }} />
-            <div className="relative w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
+        <Dialog
+            onClose={() => { if (!busy) onClose() }}
+            panelClassName="w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden"
+        >
                 <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
                     <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-[10px] bg-primary/10 flex items-center justify-center">
@@ -192,7 +194,6 @@ function PhoneModal({ phone, onClose }) {
                         </button>
                     </div>
                 </div>
-            </div>
-        </div>
+        </Dialog>
     )
 }

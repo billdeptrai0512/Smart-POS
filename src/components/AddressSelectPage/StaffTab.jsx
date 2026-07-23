@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Users, Loader, MoreVertical, ArrowUp, ArrowDown, Trash2, X, Check, KeyRound, Store, LayoutDashboard, ChevronRight } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
+import { BottomSheet } from '../common/ModalShell'
 import { useAuth } from '../../contexts/AuthContext'
 import { capitalizeWords } from '../../utils'
 import { fetchStaffRevokedAddresses, fetchTeamRevokedAddresses, fetchStaffLastLogins, setStaffAddressAccess, setStaffPassword } from '../../services/authService'
@@ -143,12 +144,10 @@ function MemberPanel({ member, addresses, initialRevoked, onRevokedChange, onRen
     }
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={() => !busy && onClose()}>
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-            <div
-                className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-5 animate-slide-up max-h-[88vh] overflow-y-auto overscroll-contain hide-scrollbar"
-                onClick={e => e.stopPropagation()}
-            >
+        <BottomSheet
+            onClose={() => !busy && onClose()}
+            panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-5 animate-slide-up max-h-[88vh] overflow-y-auto overscroll-contain hide-scrollbar"
+        >
                 <div className="flex items-center justify-between">
                     <span className="text-[16px] font-black text-text truncate">Quản lý nhân sự</span>
                     <button
@@ -323,8 +322,7 @@ function MemberPanel({ member, addresses, initialRevoked, onRevokedChange, onRen
                     )}
                     <ErrorBanner message={removeErr} small />
                 </div>
-            </div>
-        </div>
+        </BottomSheet>
     )
 }
 

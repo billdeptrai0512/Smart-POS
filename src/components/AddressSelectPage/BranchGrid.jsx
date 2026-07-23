@@ -11,6 +11,7 @@ import { formatVND } from '../../utils'
 import { supabase } from '../../lib/supabaseClient'
 import SubscriptionBadge from './SubscriptionBadge'
 import BackupModal from './BackupModal'
+import { Dialog } from '../common/ModalShell'
 
 const isManagerRole = (role) => (role === 'manager' || role === 'co-manager') ? 1 : 0
 
@@ -275,12 +276,10 @@ export default function BranchGrid({
 
                             {/* Modal thao tác — Lối tắt (pill grid, điều hướng) tách riêng khỏi Quản lý (list, sửa/xoá địa chỉ). */}
                             {expandedActionsId === addr.id && (
-                                <div className="fixed inset-0 z-50 flex items-center justify-center">
-                                    <div
-                                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                                        onClick={() => setExpandedActionsId(null)}
-                                    />
-                                    <div className="relative w-full max-w-sm mx-4 my-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden max-h-[calc(100dvh-2rem)] flex flex-col">
+                                <Dialog
+                                    onClose={() => setExpandedActionsId(null)}
+                                    panelClassName="w-full max-w-sm mx-4 my-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden max-h-[calc(100dvh-2rem)] flex flex-col"
+                                >
                                         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40 shrink-0">
                                             <p className="text-text font-black text-sm leading-none truncate pr-2">{addr.name}</p>
                                             <button
@@ -413,22 +412,17 @@ export default function BranchGrid({
                                         {actionsScrollFade && (
                                             <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-surface to-transparent" />
                                         )}
-                                    </div>
-                                </div>
+                                </Dialog>
                             )}
 
                             {/* Modal đổi tên — "Hủy" quay lại modal thao tác (expandedActionsId giữ nguyên), X/tap-outside mới thoát hẳn.
                                 Render SAU modal thao tác trong DOM để đè lên (2 modal cùng z-50, phần tử sau luôn nổi lên trên). */}
                             {isEditing && (
-                                <div className="fixed inset-0 z-50 flex items-center justify-center">
-                                    <div
-                                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                                        onClick={() => { if (!renaming) { setEditingAddressId(null); setExpandedActionsId(null); setError('') } }}
-                                    />
-                                    <form
-                                        onSubmit={(e) => handleRename(e, addr.id)}
-                                        className="relative w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden"
-                                    >
+                                <Dialog
+                                    onClose={() => { if (!renaming) { setEditingAddressId(null); setExpandedActionsId(null); setError('') } }}
+                                    panelClassName="w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden"
+                                >
+                                    <form onSubmit={(e) => handleRename(e, addr.id)}>
                                         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
                                             <div className="flex items-center gap-2.5">
                                                 <div className="w-8 h-8 rounded-[10px] bg-primary/10 flex items-center justify-center">
@@ -474,19 +468,17 @@ export default function BranchGrid({
                                             </div>
                                         </div>
                                     </form>
-                                </div>
+                                </Dialog>
                             )}
 
                             {/* Modal kho tổng chung — chọn/tạo nhóm để dùng chung kho tổng với địa chỉ khác.
                                 Không phải thao tác phá dữ liệu (ON DELETE SET NULL khi xoá nhóm) nên không cần
                                 gõ lại tên xác nhận như xoá địa chỉ — chỉ 1 lần tap xác nhận cho việc xoá nhóm. */}
                             {groupModalAddressId === addr.id && (
-                                <div className="fixed inset-0 z-50 flex items-center justify-center">
-                                    <div
-                                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                                        onClick={() => { if (!groupSaving && !creatingGroup) { setGroupModalAddressId(null); setExpandedActionsId(null); setGroupError('') } }}
-                                    />
-                                    <div className="relative w-full max-w-sm mx-4 my-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden max-h-[calc(100dvh-2rem)] flex flex-col">
+                                <Dialog
+                                    onClose={() => { if (!groupSaving && !creatingGroup) { setGroupModalAddressId(null); setExpandedActionsId(null); setGroupError('') } }}
+                                    panelClassName="w-full max-w-sm mx-4 my-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden max-h-[calc(100dvh-2rem)] flex flex-col"
+                                >
                                         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40 shrink-0">
                                             <div className="flex items-center gap-2.5">
                                                 <div className="w-8 h-8 rounded-[10px] bg-warning/10 flex items-center justify-center">
@@ -622,8 +614,7 @@ export default function BranchGrid({
 
                                             {groupError && <p className="text-danger text-xs font-medium">{groupError}</p>}
                                         </div>
-                                    </div>
-                                </div>
+                                </Dialog>
                             )}
 
                             {/* Modal sao lưu — "Hủy" quay lại modal thao tác (expandedActionsId giữ nguyên), X mới thoát hẳn. */}
@@ -639,12 +630,10 @@ export default function BranchGrid({
                                 không thể hoàn tác (orders/expenses/shift_closings), không đụng config/menu.
                                 "Hủy" quay lại modal thao tác, X/tap-outside mới thoát hẳn. */}
                             {wipingAddressId === addr.id && (
-                                <div className="fixed inset-0 z-50 flex items-center justify-center">
-                                    <div
-                                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                                        onClick={() => { if (!wiping) { setWipingAddressId(null); setExpandedActionsId(null); setError('') } }}
-                                    />
-                                    <div className="relative w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
+                                <Dialog
+                                    onClose={() => { if (!wiping) { setWipingAddressId(null); setExpandedActionsId(null); setError('') } }}
+                                    panelClassName="w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden"
+                                >
                                         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
                                             <div className="flex items-center gap-2.5">
                                                 <div className="w-8 h-8 rounded-[10px] bg-danger/10 flex items-center justify-center">
@@ -702,19 +691,16 @@ export default function BranchGrid({
                                                 </button>
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
+                                </Dialog>
                             )}
 
                             {/* Modal xoá địa chỉ — bắt gõ lại tên như modal xoá dữ liệu bán hàng, vì đây cũng là hard-delete
                                 không thể hoàn tác. "Hủy" quay lại modal thao tác, X/tap-outside mới thoát hẳn. */}
                             {deletingAddressId === addr.id && (
-                                <div className="fixed inset-0 z-50 flex items-center justify-center">
-                                    <div
-                                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                                        onClick={() => { if (!deleting) { setDeletingAddressId(null); setExpandedActionsId(null); setError('') } }}
-                                    />
-                                    <div className="relative w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
+                                <Dialog
+                                    onClose={() => { if (!deleting) { setDeletingAddressId(null); setExpandedActionsId(null); setError('') } }}
+                                    panelClassName="w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden"
+                                >
                                         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
                                             <div className="flex items-center gap-2.5">
                                                 <div className="w-8 h-8 rounded-[10px] bg-danger/10 flex items-center justify-center">
@@ -775,8 +761,7 @@ export default function BranchGrid({
                                                 </button>
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
+                                </Dialog>
                             )}
                         </div>
                     )

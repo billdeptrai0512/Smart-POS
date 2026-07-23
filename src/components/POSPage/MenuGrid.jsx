@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useEffect } from 'react'
+import { useMemo, useState, useRef, useEffect, memo } from 'react'
 import { X } from 'lucide-react'
 import { formatVND } from '../../utils'
 import { useNavigate } from 'react-router-dom'
@@ -13,7 +13,10 @@ import { computeExtrasAfterIdx } from '../../utils/menuGridLayout'
 // Committing happens elsewhere: tap another card's order (auto-commit) or the
 // journal card in the header.
 
-function ProductCard({ product, qty, onAdd, onCancel }) {
+// memo: onAdd/onCancel are now stable across taps (see POSContext's useCallback
+// wiring) and product/qty are cheap-to-compare — lets untouched cards skip
+// re-rendering when MenuGrid re-renders on every single tap.
+const ProductCard = memo(function ProductCard({ product, qty, onAdd, onCancel }) {
     const held = qty > 0
     const [pulseKey, setPulseKey] = useState(0)        // bump per tap-add → replays the confirm pulse
     const suppressClick = useRef(false)               // swallow the click that trails a pointerup add
@@ -95,7 +98,7 @@ function ProductCard({ product, qty, onAdd, onCancel }) {
             </div>
         </div>
     )
-}
+})
 
 // Extras for the active (held) item. Inserted as a full-width grid item right
 // after the active card's row (see MenuGrid) so it pushes the cards below down

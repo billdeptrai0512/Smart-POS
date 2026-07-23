@@ -264,24 +264,26 @@ export function AddressProvider() {
         }
     }, [profile, selectedAddress, isGuest])
 
+    const value = useMemo(() => ({
+        addresses,
+        selectedAddress,
+        setSelectedAddress,
+        createNewAddress,
+        renameAddress,
+        removeAddress,
+        updateSortOrder,
+        warehouseGroups,
+        siblingsByAddress,
+        createWarehouseGroup,
+        renameWarehouseGroup,
+        removeWarehouseGroup,
+        setAddressGroup,
+        loading,
+        fetchError
+    }), [addresses, selectedAddress, setSelectedAddress, createNewAddress, renameAddress, removeAddress, updateSortOrder, warehouseGroups, siblingsByAddress, createWarehouseGroup, renameWarehouseGroup, removeWarehouseGroup, setAddressGroup, loading, fetchError])
+
     return (
-        <AddressContext.Provider value={{
-            addresses,
-            selectedAddress,
-            setSelectedAddress,
-            createNewAddress,
-            renameAddress,
-            removeAddress,
-            updateSortOrder,
-            warehouseGroups,
-            siblingsByAddress,
-            createWarehouseGroup,
-            renameWarehouseGroup,
-            removeWarehouseGroup,
-            setAddressGroup,
-            loading,
-            fetchError
-        }}>
+        <AddressContext.Provider value={value}>
             <Outlet />
         </AddressContext.Provider>
     )
