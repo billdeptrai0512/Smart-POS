@@ -391,7 +391,9 @@ export const fetchLocalIngredientStocks = (addressId: string | null) => {
             current_stock: warehouse + counter,
             restocked_qty: Number(item?.restock) || 0,
             warehouse_stock: warehouse,
-            counter_stock: counter
+            counter_stock: counter,
+            warehouse_stock_set: warehouse > 0,
+            counter_stock_set: counter > 0
         };
     });
 };
