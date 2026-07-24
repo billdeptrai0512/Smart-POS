@@ -1,7 +1,12 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Plus, X, ArrowUpDown, Minus } from 'lucide-react'
-import FabActionMenu from '../components/common/FabActionMenu'
+import { Plus, X, Minus } from 'lucide-react'
+import {
+    DndContext, DragOverlay, PointerSensor, KeyboardSensor,
+    closestCenter, useSensor, useSensors,
+} from '@dnd-kit/core'
+import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
+import { restrictToFirstScrollableAncestor } from '@dnd-kit/modifiers'
 import { BottomSheet } from '../components/common/ModalShell'
 import MenuDivider from '../components/common/MenuDivider'
 import { useProducts } from '../contexts/ProductContext'
@@ -12,7 +17,7 @@ import { upsertProductPrice, insertProduct, updateProductSortOrder, updateProduc
 import { parseVNDInput } from '../utils'
 import { useToast } from '../hooks/useToast'
 import Toast from '../components/POSPage/Toast'
-import SortableList from '../components/common/SortableList'
+import SortableItem from '../components/RecipeMenuPage/SortableItem'
 import RecipeMenuHeader from '../components/RecipeMenuPage/RecipeMenuHeader'
 import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
@@ -23,6 +28,19 @@ import { goToMenuStep } from '../utils/menuSequence'
 // Cleared after restore so a fresh visit from another route starts at top.
 let savedScroll = null
 
+// Mục (divider) render riêng 1 hàng ngang full-width, KHÔNG chung lưới 2 cột với
+// card đứng trước/sau nó — tránh CSS grid để lại 1 ô trống khi divider rơi vào vị
+// trí lẻ (col-span-2 không đủ chỗ ở hàng đang dở). Gom sản phẩm thành từng nhóm:
+// { divider: product | null, items: [...] } theo đúng thứ tự trong mảng gốc.
+function groupBySections(products) {
+    const sections = [{ divider: null, items: [] }]
+    for (const p of products) {
+        if (p.is_divider) sections.push({ divider: p, items: [] })
+        else sections[sections.length - 1].items.push(p)
+    }
+    return sections
+}
+
 export default function RecipeMenuPage() {
     const navigate = useNavigate()
     const location = useLocation()
@@ -31,18 +49,25 @@ export default function RecipeMenuPage() {
     const { selectedAddress } = useAddress()
     const { isManager, isAdmin } = useAuth()
     const canEdit = isManager || isAdmin
+    // Chỉ Admin được sắp xếp menu mặc định (chưa chọn địa chỉ) — giống rule cũ của saveSortOrder.
+    const canSort = canEdit && !!(selectedAddress?.id || isAdmin)
     const { toast, showToast, showError } = useToast()
 
     const [newProductName, setNewProductName] = useState('')
     const [newProductPrice, setNewProductPrice] = useState('')
     const [saving, setSaving] = useState(false)
-    const [isSorting, setIsSorting] = useState(false)
+    // Kéo-thả trực tiếp trên lưới chính — không có "chế độ sắp xếp" riêng, chỉ ẩn
+    // onboarding trong lúc đang thực sự kéo (tránh che tay/gesture).
+    const [isDragging, setIsDragging] = useState(false)
+    const [activeId, setActiveId] = useState(null)
     const { setHidden: setOnboardingHidden } = useOnboardingVisibility()
     useEffect(() => {
-        setOnboardingHidden(isSorting)
+        setOnboardingHidden(isDragging)
         return () => setOnboardingHidden(false)
-    }, [isSorting, setOnboardingHidden])
-    const [sortedProducts, setSortedProducts] = useState([])
+    }, [isDragging, setOnboardingHidden])
+    // Bản sao local để phản hồi ngay khi thả tay, trước khi round-trip lưu server xong.
+    const [orderedProducts, setOrderedProducts] = useState(products)
+    useEffect(() => { setOrderedProducts(products) }, [products])
     const [showCreateModal, setShowCreateModal] = useState(false)
     // {mode:'create'} | {mode:'edit', id} — modal tạo/sửa mục (divider phân nhóm menu)
     const [dividerModal, setDividerModal] = useState(null)
@@ -140,32 +165,41 @@ export default function RecipeMenuPage() {
         }
     }
 
-    const enterSortMode = () => { setSortedProducts([...products]); setIsSorting(true) }
-    const cancelSortMode = () => { setIsSorting(false); setSortedProducts([]) }
-
-    const moveProduct = (from, to) => {
-        if (to < 0 || to >= sortedProducts.length) return
-        const updated = [...sortedProducts]
+    // Thả tay = commit luôn (không có bước "Lưu sắp xếp" riêng). Optimistic update
+    // trước, rollback về thứ tự cũ nếu lưu server lỗi.
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    )
+    async function handleDragEnd({ active, over }) {
+        setIsDragging(false)
+        setActiveId(null)
+        if (!over || active.id === over.id) return
+        const keys = orderedProducts.map(p => p.id)
+        const from = keys.indexOf(active.id)
+        const to = keys.indexOf(over.id)
+        const updated = [...orderedProducts]
         const [moved] = updated.splice(from, 1)
         updated.splice(to, 0, moved)
-        setSortedProducts(updated)
-    }
-
-    async function saveSortOrder() {
-        const addrId = selectedAddress?.id || null
-        if (!addrId && !isAdmin) return // Only Admin can sort default menu
-        setSaving(true)
+        const previous = orderedProducts
+        setOrderedProducts(updated)
         try {
-            await updateProductSortOrder(addrId, sortedProducts.map(p => p.id))
+            await updateProductSortOrder(selectedAddress?.id || null, updated.map(p => p.id))
             refreshProducts?.()
-            setIsSorting(false)
-            setSortedProducts([])
         } catch (err) {
+            setOrderedProducts(previous)
             showError(err, 'Lưu thứ tự món')
-        } finally {
-            setSaving(false)
         }
     }
+
+    const activeProduct = activeId ? orderedProducts.find(p => p.id === activeId) : null
+    const sections = useMemo(() => groupBySections(orderedProducts), [orderedProducts])
+    // Card và mục kéo trong 2 SortableContext riêng — mỗi context chỉ chứa item
+    // cùng cỡ nên animate "nhường chỗ" không còn phải né kích thước lẫn nhau.
+    // handleDragEnd vẫn tính từ danh sách phẳng orderedProducts nên món vẫn đổi
+    // được qua mục khác bình thường (over có thể là id của mục hoặc card khác).
+    const cardIds = useMemo(() => orderedProducts.filter(p => !p.is_divider).map(p => p.id), [orderedProducts])
+    const dividerIds = useMemo(() => orderedProducts.filter(p => p.is_divider).map(p => p.id), [orderedProducts])
 
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
@@ -184,34 +218,113 @@ export default function RecipeMenuPage() {
             />
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-48 space-y-3 bg-bg">
-                {isSorting ? (
-                    <SortableList
-                        items={sortedProducts}
-                        getKey={p => p.id}
-                        getLabel={p => p.name}
-                        isDivider={p => p.is_divider}
-                        onMove={moveProduct}
-                    />
+                {canEdit && (
+                    <button
+                        onClick={() => { setDividerName(''); setDividerModal({ mode: 'create' }) }}
+                        className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-[12px] bg-surface border border-dashed border-border text-text-secondary text-[12px] font-black uppercase tracking-widest hover:bg-surface-light active:scale-[0.98] transition-all"
+                    >
+                        <Minus size={14} /> Tạo mục mới <Minus size={14} />
+                    </button>
+                )}
+
+                {canSort ? (
+                    <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        modifiers={[restrictToFirstScrollableAncestor]}
+                        onDragStart={({ active }) => { setIsDragging(true); setActiveId(active.id) }}
+                        onDragCancel={() => { setIsDragging(false); setActiveId(null) }}
+                        onDragEnd={handleDragEnd}
+                    >
+                        <div className="flex flex-col gap-3">
+                            {sections.map((section, si) => (
+                                <Fragment key={section.divider?.id ?? `_first_${si}`}>
+                                    {section.divider && (
+                                        <SortableContext items={dividerIds} strategy={rectSortingStrategy}>
+                                            <SortableItem id={section.divider.id} noAnimate>
+                                                {({ dragHandleProps }) => (
+                                                    <MenuDivider
+                                                        name={section.divider.name}
+                                                        onClick={() => { setDividerName(section.divider.name); setDividerModal({ mode: 'edit', id: section.divider.id }) }}
+                                                        dragHandleProps={dragHandleProps}
+                                                    />
+                                                )}
+                                            </SortableItem>
+                                        </SortableContext>
+                                    )}
+                                    {section.items.length > 0 && (
+                                        <SortableContext items={cardIds} strategy={rectSortingStrategy}>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                {section.items.map(product => (
+                                                    <SortableItem key={product.id} id={product.id}>
+                                                        {({ handle, isDragging: itemDragging }) => (
+                                                            <ProductCard
+                                                                product={product}
+                                                                prodRecipes={recipesByProduct.get(product.id) || []}
+                                                                cost={costByProduct.get(product.id) || 0}
+                                                                ingredientUnits={ingredientUnits}
+                                                                onClick={itemDragging ? undefined : () => {
+                                                                    savedScroll = mainRef.current?.scrollTop ?? 0
+                                                                    navigate(`/recipes/${product.id}`, { state: location.state })
+                                                                }}
+                                                                dragHandle={handle}
+                                                            />
+                                                        )}
+                                                    </SortableItem>
+                                                ))}
+                                            </div>
+                                        </SortableContext>
+                                    )}
+                                </Fragment>
+                            ))}
+                        </div>
+                        {/* Ảnh kéo nổi theo con trỏ khi kéo mục — mục không tự nhường chỗ
+                            (xem SortableItem's noAnimate). */}
+                        <DragOverlay>
+                            {activeProduct && (activeProduct.is_divider ? (
+                                <div className="opacity-90 rotate-1 w-[calc(50vw-1.25rem)] max-w-[280px]">
+                                    <MenuDivider name={activeProduct.name} />
+                                </div>
+                            ) : (
+                                <div className="opacity-90 rotate-2 shadow-2xl shadow-black/40 rounded-[1.5rem]">
+                                    <ProductCard
+                                        product={activeProduct}
+                                        prodRecipes={recipesByProduct.get(activeProduct.id) || []}
+                                        cost={costByProduct.get(activeProduct.id) || 0}
+                                        ingredientUnits={ingredientUnits}
+                                    />
+                                </div>
+                            ))}
+                        </DragOverlay>
+                    </DndContext>
                 ) : (
-                    <div className="grid grid-cols-2 gap-3">
-                        {products.map(product => product.is_divider ? (
-                            <MenuDivider
-                                key={product.id}
-                                name={product.name}
-                                onClick={canEdit ? () => { setDividerName(product.name); setDividerModal({ mode: 'edit', id: product.id }) } : undefined}
-                            />
-                        ) : (
-                            <ProductCard
-                                key={product.id}
-                                product={product}
-                                prodRecipes={recipesByProduct.get(product.id) || []}
-                                cost={costByProduct.get(product.id) || 0}
-                                ingredientUnits={ingredientUnits}
-                                onClick={() => {
-                                    savedScroll = mainRef.current?.scrollTop ?? 0
-                                    navigate(`/recipes/${product.id}`, { state: location.state })
-                                }}
-                            />
+                    <div className="flex flex-col gap-3">
+                        {sections.map((section, si) => (
+                            <Fragment key={section.divider?.id ?? `_first_${si}`}>
+                                {section.divider && (
+                                    <MenuDivider
+                                        name={section.divider.name}
+                                        onClick={canEdit ? () => { setDividerName(section.divider.name); setDividerModal({ mode: 'edit', id: section.divider.id }) } : undefined}
+                                    />
+                                )}
+                                {section.items.length > 0 && (
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {section.items.map(product => (
+                                            <ProductCard
+                                                key={product.id}
+                                                product={product}
+                                                prodRecipes={recipesByProduct.get(product.id) || []}
+                                                cost={costByProduct.get(product.id) || 0}
+                                                ingredientUnits={ingredientUnits}
+                                                onClick={() => {
+                                                    savedScroll = mainRef.current?.scrollTop ?? 0
+                                                    navigate(`/recipes/${product.id}`, { state: location.state })
+                                                }}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                            </Fragment>
                         ))}
                     </div>
                 )}
@@ -219,35 +332,14 @@ export default function RecipeMenuPage() {
 
             {canEdit && (
                 <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-50">
-                    {isSorting ? (
-                        <div className="p-4 bg-surface border-t border-border/60 pointer-events-auto">
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={cancelSortMode}
-                                    className="flex-1 py-3 rounded-[12px] bg-surface-light border border-border/60 text-text-secondary font-black hover:bg-border/40 active:scale-95 transition-all text-[14px]"
-                                >
-                                    Hủy
-                                </button>
-                                <button
-                                    onClick={saveSortOrder}
-                                    disabled={saving}
-                                    className="flex-1 py-3 rounded-[12px] bg-primary text-bg font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 text-[14px]"
-                                >
-                                    {saving ? '⏳ Đang lưu...' : 'Lưu sắp xếp'}
-                                </button>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="flex justify-end px-4 pb-[max(env(safe-area-inset-bottom),16px)] pointer-events-auto">
-                            <FabActionMenu
-                                items={[
-                                    { key: 'sort', icon: <ArrowUpDown size={14} />, label: 'Sắp xếp', onClick: enterSortMode },
-                                    { key: 'divider', icon: <Minus size={14} />, label: 'Tạo mục', onClick: () => { setDividerName(''); setDividerModal({ mode: 'create' }) } },
-                                    { key: 'create', icon: <Plus size={14} />, label: 'Tạo món', onClick: () => setShowCreateModal(true) },
-                                ]}
-                            />
-                        </div>
-                    )}
+                    <div className="flex justify-end px-4 pb-[max(env(safe-area-inset-bottom),16px)] pointer-events-auto">
+                        <button
+                            onClick={() => setShowCreateModal(true)}
+                            className="rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold bg-primary text-bg shadow-lg shadow-primary/30 hover:bg-primary/90 active:scale-95 transition-all"
+                        >
+                            <Plus size={18} /> Tạo món
+                        </button>
+                    </div>
                 </div>
             )}
 

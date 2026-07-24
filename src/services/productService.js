@@ -77,8 +77,16 @@ export async function updateProductCountAsCup(productId, countAsCup) {
 // Create a new product and link to the current address.
 // isDivider: dòng tiêu đề phân nhóm menu (không phải món bán) — chỉ gửi cột
 // is_divider khi true để insert món thường vẫn chạy trước khi migration apply.
+// Mục mới lên đầu (sort_order thấp hơn hết) vì user tạo mục để nhóm lại — đặt
+// cuối danh sách thì lẫn vào món cũ, phải kéo lên. Món thường vẫn xuống cuối như cũ.
 export async function insertProduct(name, price, addressId = null, isDivider = false) {
-    if (localRepo.isGuest()) return localRepo.insertLocalProduct({ name, price, owner_address_id: addressId, is_divider: isDivider })
+    if (localRepo.isGuest()) {
+        const existing = localRepo.fetchLocalProducts(addressId)
+        const sortOrder = isDivider
+            ? Math.min(0, ...existing.map(p => p.sort_order ?? 0)) - 1
+            : Math.max(-1, ...existing.map(p => p.sort_order ?? -1)) + 1
+        return localRepo.insertLocalProduct({ name, price, owner_address_id: addressId, is_divider: isDivider, sort_order: sortOrder })
+    }
     if (!supabase) throw new Error('No Supabase connection')
 
     const payload = { name, price }
@@ -89,8 +97,13 @@ export async function insertProduct(name, price, addressId = null, isDivider = f
     if (addressId) query = query.eq('owner_address_id', addressId)
     else query = query.is('owner_address_id', null)
 
-    const { data: maxRow } = await query.order('sort_order', { ascending: false }).limit(1).maybeSingle()
-    payload.sort_order = (maxRow?.sort_order ?? -1) + 1
+    if (isDivider) {
+        const { data: minRow } = await query.order('sort_order', { ascending: true }).limit(1).maybeSingle()
+        payload.sort_order = Math.min(0, minRow?.sort_order ?? 0) - 1
+    } else {
+        const { data: maxRow } = await query.order('sort_order', { ascending: false }).limit(1).maybeSingle()
+        payload.sort_order = (maxRow?.sort_order ?? -1) + 1
+    }
 
     const { data, error } = await supabase
         .from('products')
