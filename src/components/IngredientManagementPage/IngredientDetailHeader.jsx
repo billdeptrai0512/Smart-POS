@@ -1,4 +1,4 @@
-import { ArrowLeft, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check } from 'lucide-react'
 
 const VIEW_TABS = [
     { key: 'details', label: 'Chi tiết' },
@@ -7,12 +7,16 @@ const VIEW_TABS = [
 
 // Mirrors IngredientsHeader layout but drops MenuTabsBar (the user is already
 // drilled into a specific NVL — switching to Công thức from here is noise).
-// The right-side affordance becomes Delete instead of Forward.
+// The right-side affordance becomes toggle "Kiểm kê tồn kho" thay vì Forward
+// (xóa nguyên liệu chuyển xuống cuối tab Thông tin, giống nút xoá món khỏi menu).
 export default function IngredientDetailHeader({
     title,
     subtitle,
     onBack,
-    onDelete,
+    countInAudit,
+    onToggleAudit,
+    canEdit,
+    saving,
     viewMode = 'details',
     onViewModeChange,
 }) {
@@ -34,13 +38,19 @@ export default function IngredientDetailHeader({
                     )}
                 </div>
 
-                {onDelete && (
+                {onToggleAudit && (
                     <button
-                        onClick={onDelete}
-                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-danger/80 hover:text-danger hover:bg-danger/10 active:bg-danger/15 transition-colors shadow-sm focus:outline-none shrink-0"
-                        title="Xóa nguyên liệu"
+                        type="button"
+                        role="checkbox"
+                        aria-checked={countInAudit}
+                        title={countInAudit ? 'Đang kiểm kê tồn kho — bấm để tắt' : 'Đang TẮT kiểm kê tồn kho — bấm để bật'}
+                        disabled={!canEdit || saving}
+                        onClick={() => canEdit && onToggleAudit(!countInAudit)}
+                        className={`w-10 h-10 flex items-center justify-center rounded-[14px] border shadow-sm transition-colors focus:outline-none shrink-0 ${
+                            countInAudit ? 'bg-primary border-primary' : 'bg-surface-light border-border/60'
+                        } ${canEdit ? 'cursor-pointer' : 'cursor-default opacity-60'}`}
                     >
-                        <Trash2 size={18} strokeWidth={2.5} />
+                        {countInAudit && <Check size={20} strokeWidth={3} className="text-black" />}
                     </button>
                 )}
             </div>
