@@ -1,0 +1,23 @@
+-- =============================================
+-- Fix anon guest playground (part 3): permission denied for function is_manager_auth
+-- =============================================
+-- Same root cause as 20260716_grant_is_admin_auth_anon.sql, one function missed:
+-- extras_write / extra_ings_write (FOR ALL policies) call `public.is_manager_auth(auth.uid())`
+-- in their USING clause. Postgres evaluates FOR ALL policies' USING for SELECT too (combined
+-- via OR with the FOR SELECT policy), so anon hits "permission denied for function
+-- is_manager_auth" and the whole extra_ingredients query fails — even though the
+-- address_id IS NULL branch of extra_ings_read alone would have allowed it.
+--
+-- Effect on guests: fetchExtraIngredients(...) throws, is caught and swallowed
+-- (console.error only), so initGuestMode() seeds product_extras (names/prices) fine but
+-- extra_ingredients ends up empty — any recipe extra option an admin adds to "Mẫu mặc định"
+-- never carries its ingredient consumption into the guest sandbox.
+--
+-- Safe to grant to anon: is_manager_auth is SECURITY DEFINER but only exposes a boolean
+-- (public.users lookup by auth_id), and `users` RLS already requires auth.uid() IS NOT NULL
+-- (20260711_fix_users_invite_rls_leak.sql) — for anon (auth.uid() IS NULL) it always
+-- resolves to false. No privilege-check bypass possible.
+--
+-- Safe to run multiple times.
+
+GRANT EXECUTE ON FUNCTION public.is_manager_auth(UUID) TO anon;
