@@ -133,6 +133,26 @@ body {
   animation: tap-pulse 350ms ease-out forwards;
 }
 
+/* Onboarding hint: blinks an inward ring + glow around an existing element to suggest an
+   action (vd. "chọn topping ở đây") — reusable across onboarding steps via
+   onboardingHintClass(). outline (inset offset) + INSET box-shadow so neither is clipped by
+   the target's own overflow-hidden/auto. Loops forever on purpose — the CALLER (MenuGrid's
+   hintStage) is what stops it, by removing the class the instant the user does the hinted
+   action, not a fixed timer. Don't add an iteration-count here without also re-adding a
+   caller-side "seen it" cutoff, or a target the user ignores blinks indefinitely.
+   Primary-colored ring — pick a target with a neutral/dark background, or it won't contrast
+   (Header's Nhật ký card is itself primary-colored, so the hint sits on its white icon badge
+   instead, not the card). */
+@keyframes onboarding-hint {
+  0%, 100% { outline-color: transparent; box-shadow: inset 0 0 0 0 transparent; }
+  50% { outline-color: var(--color-primary); box-shadow: inset 0 0 28px 2px var(--color-primary-glow); }
+}
+.onboarding-hint {
+  outline: 3px solid transparent;
+  outline-offset: -3px;
+  animation: onboarding-hint 0.9s ease-in-out infinite;
+}
+
 .order-item-btn {
   transition: transform 50ms ease, background-color 50ms ease;
 }

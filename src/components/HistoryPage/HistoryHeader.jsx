@@ -8,7 +8,7 @@ export default function HistoryHeader({
     rangeLabel, totalCups, scope, isReadOnly,
     onBack, onForward,
     // Tabs row (moved from footer)
-    activeTab, onTabSelect,
+    activeTab, onTabSelect, hintTab,
     // Week/month mode — chevrons step by one period; the calendar still renders
     // with the active period highlighted + its preset chip selected.
     canGoForward, onOffsetPrev, onOffsetNext,
@@ -72,7 +72,7 @@ export default function HistoryHeader({
                 </button>
             </div>
 
-            <HistoryTabsBar activeTab={activeTab} onSelect={onTabSelect} />
+            <HistoryTabsBar activeTab={activeTab} onSelect={onTabSelect} hintTab={hintTab} />
             {belowTabs}
         </header>
     )

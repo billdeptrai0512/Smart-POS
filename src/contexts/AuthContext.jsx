@@ -78,7 +78,12 @@ export function AuthProvider({ children }) {
             // Step 2 — only fetch extra_ingredients for the default extras we just got.
             // (Previously this called fetchExtraIngredients(null) which scans the whole
             // table — gets slower as more addresses/extras are added.)
-            const extras = Object.values(extrasMap).flat()
+            // extrasMap is keyed by product_id (fetchProductExtras groups by it for direct
+            // POS lookup use, so each item omits the now-redundant field) — re-attach it here
+            // before flattening, or every seeded guest extra loses its product association.
+            const extras = Object.entries(extrasMap).flatMap(([productId, list]) =>
+                list.map(e => ({ ...e, product_id: productId }))
+            )
             const extraIds = extras.map(e => e.id)
             const extraIngsMap = extraIds.length ? await fetchExtraIngredients(extraIds) : {}
             const extraIngredients = Object.values(extraIngsMap).flat()
