@@ -52,25 +52,6 @@ export default function LoginPage() {
                 <div className="bg-surface border border-border/60 rounded-[24px] p-6 shadow-[0_8px_30px_rgba(0,0,0,0.35)] space-y-5">
                     <ErrorBanner message={error} />
 
-                    {/* Sử dụng thử (Guest Mode) */}
-                    <div>
-                        <button
-                            id="guest-mode-btn"
-                            type="button"
-                            onClick={handleGuest}
-                            disabled={guestLoading}
-                            className="w-full py-3.5 rounded-[14px] bg-primary uppercase border border-border/60 text-bg font-black text-sm hover:bg-primary-hover active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_4px_12px_rgba(244,119,75,0.15)]"
-                        >
-                            {guestLoading ? 'Đang tải...' : 'Sử dụng thử'}
-                        </button>
-                    </div>
-
-                    <div className="relative flex items-center py-1">
-                        <div className="flex-grow border-t border-border/40" />
-                        <span className="mx-3 text-[10px] text-text-secondary tracking-widest uppercase font-bold">hoặc</span>
-                        <div className="flex-grow border-t border-border/40" />
-                    </div>
-
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <FloatingLabelInput
                             id="login-username"
@@ -100,9 +81,21 @@ export default function LoginPage() {
                     </form>
 
                     <p className="text-center text-text-secondary text-xs">
-                        Chưa có tài khoản?{' '}
-                        <Link to="/signup" className="text-primary font-bold hover:underline">Đăng ký</Link>
+                        Chưa có tài khoản? <Link to="/signup" className="text-primary font-bold hover:underline">Đăng ký</Link>
                     </p>
+
+                    {/* Sử dụng thử (Guest Mode) */}
+                    <div>
+                        <button
+                            id="guest-mode-btn"
+                            type="button"
+                            onClick={handleGuest}
+                            disabled={guestLoading}
+                            className="w-full py-3.5 rounded-[14px] bg-primary uppercase border border-border/60 text-bg font-black text-sm hover:bg-primary-hover active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_4px_12px_rgba(244,119,75,0.15)]"
+                        >
+                            {guestLoading ? 'Đang tải...' : 'Sử dụng thử'}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
