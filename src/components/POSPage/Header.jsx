@@ -16,7 +16,7 @@ function Typewriter({ text }) {
 }
 
 export default function Header({ dayName, dateOnly, onOpenHistory, addressName, onAddressClick, recentOrders = [], draftOrder, enterKey, showOnboardingHint = false }) {
-    const hintClass = onboardingHintClass(showOnboardingHint)
+    const hintClass = onboardingHintClass(showOnboardingHint, 'light')
     // Draft (held, unsaved) line on top, then saved orders. Cap at 3 rows.
     // key 'draft' is stable so extras overwrite it in place; typeKey = the held
     // item's id so the typewriter restarts only on a new tap. isNew matches only the
@@ -62,7 +62,7 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                     onClick={onOpenHistory}
                     role="button"
                     tabIndex={0}
-                    className="cursor-pointer bg-linear-to-b from-primary to-primary-dark rounded-[20px] p-3 sm:p-3.5 border border-primary shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full hover:brightness-105 active:brightness-95 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    className={`cursor-pointer bg-linear-to-b from-primary to-primary-dark rounded-[20px] p-3 sm:p-3.5 border border-primary shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full hover:brightness-105 active:brightness-95 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${hintClass}`}
                 >
                     {/* <div className="flex flex-col justify-between relative z-10">
                         <span className="text-[12px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider">{dayName}</span>
@@ -74,12 +74,8 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                     <div className="flex flex-col justify-between items-start relative z-10 w-full">
                         <div className="flex items-center justify-between w-full">
                             <span className="text-[12px] sm:text-[13px] text-white font-black uppercase tracking-wider">Nhật ký</span>
-                            {/* Draft pending → check: "tap to commit". Otherwise arrow: "go to history".
-                                Hint goes on this icon (not the whole card): the card's own bg is
-                                already primary, so the shared hint's default primary outline would
-                                be invisible on it — but this circle's bg is white, so the same
-                                default outline contrasts fine here with no color override needed. */}
-                            <span className={`shrink-0 w-7 h-7 rounded-full bg-white border-2 border-white/50 flex items-center justify-center ${hintClass}`}>
+                            {/* Draft pending → check: "tap to commit". Otherwise arrow: "go to history". */}
+                            <span className="shrink-0 w-7 h-7 rounded-full bg-white border-2 border-white/50 flex items-center justify-center">
                                 {draftOrder
                                     ? (
                                         <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.125} strokeLinecap="round" strokeLinejoin="round" className="text-bg check-draw">

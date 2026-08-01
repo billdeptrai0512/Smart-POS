@@ -4,6 +4,7 @@ import { formatVND, parseVNDInput } from '../../utils'
 import { ingredientLabel, normalizeIngredientCategory, INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 import { computeCashFlowTotals } from '../../utils/reportStats'
 import { useProducts } from '../../contexts/ProductContext'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 
 // Viết hoa chữ cái đầu ('đ' → 'Đ' được toUpperCase xử lý đúng cho tiếng Việt).
 const capFirst = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
@@ -42,6 +43,8 @@ export default function CashFlowCard({
     isSaving = false,
     onCashChange,
     onTransferChange,
+    hintCash = false,
+    hintTransfer = false,
 }) {
     // Category (Nguyên liệu chính / Bao bì) của từng nguyên liệu — để phân loại
     // mục "Mua nguyên liệu / bao bì" bên dưới. Mặc định collapse từng nhóm.
@@ -176,7 +179,7 @@ export default function CashFlowCard({
             {salesCard && <div className="w-full">{salesCard}</div>}
 
             {/* PANEL 1: THỰC THU */}
-            <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
+            <div className={`w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group ${onboardingHintClass(hintCash || hintTransfer)}`}>
                 <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Thực thu</h3>
                 <div className="flex flex-col gap-2.5 pl-2">
                     {editable ? (
@@ -474,7 +477,7 @@ function ItemRow({ date, name, amount, count, phase = 'in_shift', method = 'cash
 
 function MoneyInputRow({ label, value, disabled, onChange }) {
     return (
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3 rounded-lg">
             <span className="text-[12px] font-bold text-text-secondary shrink-0">{label}</span>
             <div className="flex items-center gap-0.5 max-w-[180px] flex-1 justify-end">
                 <input

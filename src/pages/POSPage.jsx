@@ -50,7 +50,7 @@ export default function POSPage() {
     // real submit, not on the initial recentOrders fetch.
     useEffect(() => { if (enterKey) requestOnboardingRefresh() }, [enterKey, requestOnboardingRefresh])
 
-    const { hintStage, showHistoryHint, cafeSuaProductId, matchaProductId } = useOrderOnboardingProgress({
+    const { hintProductId, hintExtraName, showHistoryHint } = useOrderOnboardingProgress({
         isGuest, addressId, products, activeItem, requestOnboardingRefresh,
     })
 
@@ -98,9 +98,8 @@ export default function POSPage() {
                 onToggleExtra={handleToggleExtra}
                 enabledStickyExtraIds={enabledStickyExtraIds}
                 onToggleStickyExtra={handleToggleStickyExtra}
-                hintStage={hintStage}
-                cafeSuaProductId={cafeSuaProductId}
-                matchaProductId={matchaProductId}
+                hintProductId={hintProductId}
+                hintExtraName={hintExtraName}
             />
 
             <Toast toast={toast} />

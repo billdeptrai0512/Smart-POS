@@ -22,6 +22,10 @@ import RecipeMenuHeader from '../components/RecipeMenuPage/RecipeMenuHeader'
 import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
 import { goToMenuStep } from '../utils/menuSequence'
+import { norm } from '../utils/onboardingHint'
+import { isRecipeProgressDone } from '../utils/onboardingStorage'
+import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
+import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps/recipeStep'
 
 // Module-level scroll cache. Set when user clicks a product card to drill into
 // /recipes/:productId; consumed once on next mount of /recipes (back nav).
@@ -47,8 +51,20 @@ export default function RecipeMenuPage() {
     const backTo = location.state?.from || '/history'
     const { products, recipes, ingredientCosts, ingredientUnits, refreshProducts } = useProducts()
     const { selectedAddress } = useAddress()
-    const { isManager, isAdmin } = useAuth()
+    const { isManager, isAdmin, isGuest } = useAuth()
     const canEdit = isManager || isAdmin
+
+    // Onboarding phase 5 (Công thức) — hint thẻ "Cà phê đen" cho tới khi đã điền định lượng
+    // + tạo tùy chọn thêm.
+    const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId: selectedAddress?.id })
+    const cafeDenProduct = useMemo(
+        () => (isGuest ? products.find(p => norm(p.name) === RECIPE_TARGET_PRODUCT) : null),
+        [isGuest, products]
+    )
+    const hintCafeDen = isGuest && !!cafeDenProduct && !isRecipeProgressDone(recipeProgress)
+    // 1 id duy nhất để so ở cả 2 nhánh render (kéo-thả/list) thay vì lặp lại
+    // `hintCafeDen && product.id === cafeDenProduct?.id` ở từng chỗ.
+    const hintCafeDenId = hintCafeDen ? cafeDenProduct.id : null
     // Chỉ Admin được sắp xếp menu mặc định (chưa chọn địa chỉ) — giống rule cũ của saveSortOrder.
     const canSort = canEdit && !!(selectedAddress?.id || isAdmin)
     const { toast, showToast, showError } = useToast()
@@ -268,6 +284,7 @@ export default function RecipeMenuPage() {
                                                                     navigate(`/recipes/${product.id}`, { state: location.state })
                                                                 }}
                                                                 dragHandle={handle}
+                                                                hint={product.id === hintCafeDenId}
                                                             />
                                                         )}
                                                     </SortableItem>
@@ -320,6 +337,7 @@ export default function RecipeMenuPage() {
                                                     savedScroll = mainRef.current?.scrollTop ?? 0
                                                     navigate(`/recipes/${product.id}`, { state: location.state })
                                                 }}
+                                                hint={product.id === hintCafeDenId}
                                             />
                                         ))}
                                     </div>

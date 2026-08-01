@@ -1,13 +1,13 @@
 import ChecklistRow from '../ChecklistRow'
-import { VIEW_INVENTORY } from '../../../DailyReportPage/ReportViewFilter'
+import { isInventoryProgressDone } from '../../../../utils/onboardingStorage'
 
 export default {
-    to: '/daily-report',
-    state: { initialView: VIEW_INVENTORY },
-    navLabel: 'Đi tới báo cáo tồn kho',
     name: 'Kiểm kê tồn kho',
-    done: (ctx) => ctx.closingDone,
+    done: (ctx) => isInventoryProgressDone(ctx.inventoryProgress),
     Body: ({ ctx }) => (
-        <ChecklistRow label={`Nhập tồn cuối ${ctx.countedToday}/${ctx.totalStock}`} done={ctx.countedToday >= ctx.totalStock} />
+        <>
+            <ChecklistRow label="Nhập tồn cuối kỳ cà phê" done={ctx.inventoryProgress.coffee} />
+            <ChecklistRow label="Nhập tồn cuối kỳ cacao" done={ctx.inventoryProgress.cacao} />
+        </>
     ),
 }

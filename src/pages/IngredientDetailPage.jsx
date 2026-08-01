@@ -25,6 +25,9 @@ import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { dateStringVN, timeStringVN, startOfMonthVN, endOfMonthVN } from '../utils/dateVN'
+import { findCoffeeIngredient } from '../utils/onboardingHint'
+import { isRecipeProgressDone } from '../utils/onboardingStorage'
+import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 
 // Page-level orchestrator: fetches data, owns the canonical state (stock, history,
 // config), and exposes per-field save callbacks. All edit-mode UI state lives
@@ -51,7 +54,7 @@ export default function IngredientDetailPage() {
         for (const a of warehouseSiblings || []) map[a.id] = a.name
         return map
     }, [selectedAddress, warehouseSiblings])
-    const { isManager, isAdmin, profile } = useAuth()
+    const { isManager, isAdmin, profile, isGuest } = useAuth()
     const { refreshTodayExpenses } = useHistory()
     const canEdit = isManager || isAdmin
     const { toast, showToast, showError } = useToast()
@@ -467,6 +470,12 @@ export default function IngredientDetailPage() {
     const titleLabel = ingredientLabel(ingredientKey)
     const stockSubtitle = currentStock !== null ? `${Math.round(currentStock * 10) / 10} ${unit}` : '—'
 
+    // Onboarding phase 7 — hint field "Tồn kho cuối ngày" chỉ trên đúng ingredient "Cà phê",
+    // sau khi phase 5 (công thức) đã xong, cho tới khi warehouse_stock của nó được set.
+    const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId: selectedAddress?.id })
+    const hintWarehouse = isGuest && isRecipeProgressDone(recipeProgress)
+        && findCoffeeIngredient(ingredientConfigs)?.ingredient === ingredientKey && !stockData?.warehouse_stock_set
+
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
@@ -496,6 +505,7 @@ export default function IngredientDetailPage() {
                         tareWeight={tareWeight}
                         warehouseStock={stockData?.warehouse_stock ?? null}
                         warehouseGroupNote={warehouseGroupNote}
+                        hintWarehouse={hintWarehouse}
                         counterStock={stockData?.counter_stock ?? null}
                         currentStock={currentStock}
                         dailyContext={dailyContext}

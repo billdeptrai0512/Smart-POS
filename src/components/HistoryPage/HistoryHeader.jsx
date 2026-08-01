@@ -3,10 +3,11 @@ import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import HistoryTabsBar from './HistoryTabsBar'
 import DatePicker from '../common/DatePicker'
 import { formatIsoShort, formatIsoDisplay } from '../common/datePickerUtils'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 
 export default function HistoryHeader({
     rangeLabel, totalCups, scope, isReadOnly,
-    onBack, onForward,
+    onBack, onForward, hintForward = false,
     // Tabs row (moved from footer)
     activeTab, onTabSelect, hintTab,
     // Week/month mode — chevrons step by one period; the calendar still renders
@@ -66,7 +67,7 @@ export default function HistoryHeader({
 
                 <button
                     onClick={onForward}
-                    className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
+                    className={`w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none ${onboardingHintClass(hintForward)}`}
                 >
                     <ArrowRight size={20} strokeWidth={2.5} />
                 </button>

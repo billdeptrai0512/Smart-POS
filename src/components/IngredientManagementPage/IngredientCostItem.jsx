@@ -1,4 +1,5 @@
 import { formatPackedQty } from '../../utils/inventory'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 import { Plus } from 'lucide-react'
 
 /**
@@ -31,6 +32,7 @@ export default function IngredientCostItem({
     siblingCounterStocks,
     // Navigation — parent owns scroll-cache save before navigating to detail
     onOpen,
+    hint = false,
 }) {
     const displayUnit = getIngredientUnit(ingredient, storedUnit)
 
@@ -43,7 +45,7 @@ export default function IngredientCostItem({
 
     return (
         <div
-            className={`bg-surface border rounded-[14px] p-3 flex flex-col gap-2 min-w-0 cursor-pointer hover:bg-surface-light/40 transition-colors ${borderClass}`}
+            className={`bg-surface border rounded-[14px] p-3 flex flex-col gap-2 min-w-0 cursor-pointer hover:bg-surface-light/40 transition-colors ${borderClass} ${onboardingHintClass(hint)}`}
             onClick={() => onOpen?.(ingredient)}
         >
             {/* Row 1: name + restock button */}

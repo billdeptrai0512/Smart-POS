@@ -1,17 +1,18 @@
 import { formatVND } from '../../utils'
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 import { useAuth } from '../../contexts/AuthContext'
 
 const SYMBOL_UNITS = new Set(['g', 'ml', 'l', 'kg', 'oz', 'mg'])
 
-export default function ProductCard({ product, prodRecipes, cost, ingredientUnits, onClick, dragHandle }) {
+export default function ProductCard({ product, prodRecipes, cost, ingredientUnits, onClick, dragHandle, hint = false }) {
     const { isStaff } = useAuth()
     const isOrphan = prodRecipes.length === 0
 
     return (
         <div
             onClick={onClick}
-            className={`bg-surface border ${isOrphan ? 'border-danger/30 bg-danger/5' : 'border-border/60'} rounded-[1.5rem] p-4 flex flex-col justify-between gap-2 cursor-pointer transition-all shadow-sm hover:border-text/30 hover:shadow-md active:scale-[0.98]`}
+            className={`bg-surface border ${isOrphan ? 'border-danger/30 bg-danger/5' : 'border-border/60'} rounded-[1.5rem] p-4 flex flex-col justify-between gap-2 cursor-pointer transition-all shadow-sm hover:border-text/30 hover:shadow-md active:scale-[0.98] ${onboardingHintClass(hint)}`}
         >
             <div className="flex flex-col gap-1.5">
                 <div className="flex items-start justify-between gap-1.5">

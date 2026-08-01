@@ -16,8 +16,10 @@ import { useHistory } from '../contexts/HistoryContext'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
-import { readOnboardingState, writeOnboardingState, DEFAULT_ONBOARDING_STATE } from '../utils/onboardingStorage'
+import { readOnboardingState, writeOnboardingState, DEFAULT_ONBOARDING_STATE, isInventoryProgressDone } from '../utils/onboardingStorage'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
+import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
+import { isRecipeStepActive } from '../components/common/onboarding/steps/recipeStep'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import OrdersList from '../components/HistoryPage/OrdersList'
 import ExpensePanel from '../components/HistoryPage/ExpensePanel'
@@ -57,7 +59,7 @@ export default function HistoryPage() {
     useEffect(() => {
         if (!isGuest || !selectedAddress?.id) return
         const { orderProgress } = readOnboardingState(selectedAddress.id)
-        if (orderProgress.cafeSuaLon && orderProgress.matcha && !orderProgress.viewedHistory) {
+        if (orderProgress.cafeSua && orderProgress.cacaoCaPheLon && orderProgress.matcha && !orderProgress.viewedHistory) {
             writeOnboardingState(selectedAddress.id, { orderProgress: { ...orderProgress, viewedHistory: true } })
             requestOnboardingRefresh()
         }
@@ -92,6 +94,14 @@ export default function HistoryPage() {
         : !journalProgress.viewedExpense ? 'expense'
             : !journalProgress.viewedReport ? 'report'
                 : null
+
+    // Phase 5 "Điều chỉnh công thức" không còn nút riêng trong guide — hint thẳng vào mũi tên
+    // "tiến" ở header (như DailyReportPage.jsx), cho user quay lại /history rồi đi tiếp tới
+    // /recipes qua menuSequence.js. inventoryProgress/recipeProgress không thuộc trang này —
+    // đọc read-only qua useOnboardingProgress (xem recipeStep.jsx).
+    const inventoryProgress = useOnboardingProgress('inventoryProgress', { isGuest, addressId: selectedAddress?.id })
+    const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId: selectedAddress?.id })
+    const hintGoToRecipes = isGuest && isRecipeStepActive(isInventoryProgressDone(inventoryProgress), recipeProgress)
 
     // Date selection (scope/offset/customRange + handlers) lives in the shared
     // hook so /history and /daily-report stay in lock-step. Seeded from nav state
@@ -415,6 +425,7 @@ export default function HistoryPage() {
                 canGoForward={canGoForwardPeriod}
                 onBack={() => goToMenuStep(activeTab, -1, { navigate, backTo, setActiveTab, goReport: handleReportNav, wizard: location.state?.wizard })}
                 onForward={() => goToMenuStep(activeTab, +1, { navigate, backTo, setActiveTab, goReport: handleReportNav, wizard: location.state?.wizard })}
+                hintForward={hintGoToRecipes}
                 activeTab={activeTab}
                 hintTab={journalHintTab}
                 onTabSelect={(tab) => {

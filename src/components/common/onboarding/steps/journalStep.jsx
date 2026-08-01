@@ -5,8 +5,6 @@ import ChecklistRow from '../ChecklistRow'
 // khi vào /history; "Xem chi phí"/"Xem báo cáo" tick khi user tự bấm tab tương ứng —
 // ghi từ HistoryPage.jsx (xem onboardingStorage.js).
 export default {
-    to: '/history',
-    navLabel: 'Đi tới nhật ký',
     name: 'Nhật ký',
     done: (ctx) => ctx.journalProgress.viewedIncome && ctx.journalProgress.viewedExpense && ctx.journalProgress.viewedReport,
     Body: ({ ctx }) => (

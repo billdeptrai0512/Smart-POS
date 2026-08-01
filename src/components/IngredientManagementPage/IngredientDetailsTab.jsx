@@ -4,6 +4,7 @@ import MoneyInput from '../common/MoneyInput'
 import { formatVND, formatVNDInput, parseVNDInput } from '../../utils'
 import { formatPackedQty } from '../../utils/inventory'
 import { INGREDIENT_CATEGORIES } from '../../utils/ingredients'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 
 // All "tap-to-edit" state lives inside this component. The page only hands in
 // current values + one save callback per field — keeps the page's state
@@ -13,7 +14,7 @@ import { INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 // (we just close the edit affordance optimistically before awaiting).
 export default function IngredientDetailsTab({
     nameLabel, unit, cost, category, packSize, packUnit, minStock, tareWeight,
-    warehouseStock, warehouseGroupNote, counterStock, currentStock,
+    warehouseStock, warehouseGroupNote, hintWarehouse = false, counterStock, currentStock,
     dailyContext,           // { today_refill, today_restock } | null — Đầu ngày/Lấy ra/Nhập mới
     siblingCounterStocks,   // [{ addressId, addressName, counterStock }] | null — tồn quầy các địa chỉ khác dùng chung kho
     canEdit, saving,
@@ -75,7 +76,7 @@ export default function IngredientDetailsTab({
                             label="Tồn kho cuối ngày" value={warehouseStock} unit={unit}
                             hasPack={hasPack} packSize={packSize} packUnit={packUnit}
                             canEdit={canEdit} editable onSave={onSaveWarehouse}
-                            groupNote={warehouseGroupNote}
+                            groupNote={warehouseGroupNote} hint={hintWarehouse}
                         />
                     </div>
 
@@ -212,7 +213,7 @@ function NameRow({ value, canEdit, onSave }) {
 // ── Stock qty row (Kho sau / Tồn quầy / Tổng tồn) ───────────────────────────
 // editable=false → chỉ đọc (dùng cho "Tổng tồn"). editable + canEdit → tap để nhập
 // SỐ TUYỆT ĐỐI (đếm được bao nhiêu nhập bấy nhiêu); parent tự quy ra delta/ghi.
-function QtyRow({ label, value, unit, hasPack, packSize, packUnit, canEdit, editable = true, onSave, valueClass = 'text-text', note = null, groupNote = null }) {
+function QtyRow({ label, value, unit, hasPack, packSize, packUnit, canEdit, editable = true, onSave, valueClass = 'text-text', note = null, groupNote = null, hint = false }) {
     const [editing, setEditing] = useState(false)
     const [input, setInput] = useState('')
     const tappable = editable && canEdit
@@ -240,7 +241,7 @@ function QtyRow({ label, value, unit, hasPack, packSize, packUnit, canEdit, edit
                             if (e.key === 'Enter') commit()
                             if (e.key === 'Escape') setEditing(false)
                         }}
-                        className="w-24 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[14px] font-black text-text text-right tabular-nums focus:outline-none focus:border-primary/50"
+                        className={`w-24 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[14px] font-black text-text text-right tabular-nums focus:outline-none focus:border-primary/50 ${onboardingHintClass(hint)}`}
                     />
                     <span className="text-[12px] text-text-dim font-medium">{unit}</span>
                 </div>
@@ -248,7 +249,7 @@ function QtyRow({ label, value, unit, hasPack, packSize, packUnit, canEdit, edit
                 <div className="flex flex-col items-end gap-0.5 leading-tight">
                     <button
                         onClick={tappable ? start : undefined}
-                        className={`inline-flex items-baseline gap-1 text-[14px] font-black tabular-nums ${tappable ? 'text-primary cursor-pointer hover:brightness-110' : `${valueClass} cursor-default`}`}
+                        className={`inline-flex items-baseline gap-1 text-[14px] font-black tabular-nums rounded-md px-2 -mx-2 py-1 -my-1 ${tappable ? 'text-primary cursor-pointer hover:brightness-110' : `${valueClass} cursor-default`} ${onboardingHintClass(hint)}`}
                     >
                         {value != null ? Math.round(value * 10) / 10 : '—'}
                         <span className="text-text-dim font-medium">{unit}</span>

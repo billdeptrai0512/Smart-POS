@@ -28,6 +28,9 @@ import { useConfirm } from '../contexts/ConfirmContext'
 import Toast from '../components/POSPage/Toast'
 import { keySyncDismissedKey, orphanIgnoredKey } from '../constants/storageKeys'
 import { goToMenuStep } from '../utils/menuSequence'
+import { findCoffeeIngredient } from '../utils/onboardingHint'
+import { isRecipeProgressDone } from '../utils/onboardingStorage'
+import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 
 // Chuẩn hoá để search không phân biệt hoa/thường & dấu tiếng Việt.
 function normalizeText(s = '') {
@@ -55,7 +58,7 @@ export default function IngredientManagementPage() {
         () => selectedAddress ? [selectedAddress.id, ...(warehouseSiblings || []).map(a => a.id)] : [selectedAddress?.id ?? null],
         [selectedAddress, warehouseSiblings]
     )
-    const { isManager, isAdmin, profile } = useAuth()
+    const { isManager, isAdmin, profile, isGuest } = useAuth()
     const { refreshTodayExpenses } = useHistory()
     const { requestRefresh: requestOnboardingRefresh } = useOnboardingVisibility()
     const { toast, showToast, showError } = useToast()
@@ -254,6 +257,17 @@ export default function IngredientManagementPage() {
         return map
     }, [ingredientStocks])
 
+    // Onboarding phase 7 — hint thẻ "Cà phê" sau khi phase 5 (công thức) đã xong, cho tới khi
+    // warehouse_stock của riêng cà phê được set (field NÀY phase 5 đã track cho mọi nguyên
+    // liệu — có thể đã done sẵn, guide lướt qua nhanh chứ không chặn).
+    const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId: selectedAddress?.id })
+    const recipeDone = isRecipeProgressDone(recipeProgress)
+    const coffeeKey = useMemo(
+        () => findCoffeeIngredient(ingredientConfigs)?.ingredient ?? null,
+        [ingredientConfigs]
+    )
+    const hintCoffee = isGuest && recipeDone && !!coffeeKey && !stockByIngredient.get(coffeeKey)?.warehouse_stock_set
+
     // Tồn quầy theo từng địa chỉ trong nhóm kho dùng chung — null nếu kho không thuộc nhóm nào
     // (card list rơi về hiển thị tồn quầy của riêng địa chỉ đang chọn).
     const counterStocksByIngredient = useMemo(() => {
@@ -440,6 +454,7 @@ export default function IngredientManagementPage() {
                                 onRestock={() => setRestockIngredient(ingredient)}
                                 dailyContext={dailyContext[ingredient]}
                                 onOpen={openIngredient}
+                                hint={hintCoffee && ingredient === coffeeKey}
                             />
                         )
                     })}

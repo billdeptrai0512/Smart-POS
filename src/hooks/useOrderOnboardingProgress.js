@@ -12,13 +12,15 @@ export function useOrderOnboardingProgress({ isGuest, addressId, products, activ
     // products is a stable ProductContext reference that rarely changes, but POSPage
     // re-renders on every tap (cart state) — memoized so guest sessions don't re-scan the
     // product list on each tap just to find the same two tutorial products.
-    const { cafeSuaProduct, matchaProduct } = useMemo(() => ({
+    const { cafeSuaProduct, cacaoCaPheProduct, matchaProduct } = useMemo(() => ({
         cafeSuaProduct: isGuest ? products.find(p => norm(p.name) === 'cà phê sữa') : undefined,
+        cacaoCaPheProduct: isGuest ? products.find(p => norm(p.name) === 'cacao cà phê') : undefined,
         matchaProduct: isGuest ? products.find(p => norm(p.name) === 'matcha cà phê') : undefined,
     }), [isGuest, products])
     const activeProductId = activeItem?.productId
     const isHoldingCafeSua = isGuest && !!cafeSuaProduct && activeProductId === cafeSuaProduct.id
-    const cafeSuaHasLon = isHoldingCafeSua && (activeItem.extras || []).some(e => norm(e.name) === 'lớn')
+    const isHoldingCacaoCaPhe = isGuest && !!cacaoCaPheProduct && activeProductId === cacaoCaPheProduct.id
+    const cacaoCaPheHasLon = isHoldingCacaoCaPhe && (activeItem.extras || []).some(e => norm(e.name) === 'lớn')
     const isHoldingMatcha = isGuest && !!matchaProduct && activeProductId === matchaProduct.id
 
     // Each leg is "reached" the moment the action itself happens — holding the card, or
@@ -32,20 +34,29 @@ export function useOrderOnboardingProgress({ isGuest, addressId, products, activ
     const [orderProgress, setOrderProgress] = useState(() =>
         isGuest && addressId ? readOnboardingState(addressId).orderProgress : DEFAULT_ONBOARDING_STATE.orderProgress
     )
-    if (cafeSuaHasLon && !orderProgress.cafeSuaLon) setOrderProgress(prev => ({ ...prev, cafeSuaLon: true }))
-    if (isHoldingMatcha && !orderProgress.matcha) setOrderProgress(prev => ({ ...prev, matcha: true }))
+    const patch = {}
+    if (isHoldingCafeSua && !orderProgress.cafeSua) patch.cafeSua = true
+    if (cacaoCaPheHasLon && !orderProgress.cacaoCaPheLon) patch.cacaoCaPheLon = true
+    if (isHoldingMatcha && !orderProgress.matcha) patch.matcha = true
+    if (Object.keys(patch).length) setOrderProgress(prev => ({ ...prev, ...patch }))
 
     useOnboardingProgressPersist('orderProgress', orderProgress, { isGuest, addressId, requestOnboardingRefresh })
 
-    const showOnboardingHint = isGuest && !!addressId && !(orderProgress.cafeSuaLon && orderProgress.matcha && orderProgress.viewedHistory)
-    // Spotlight sequence: card Cà phê sữa → nút extra "Lớn" → card Matcha Cà Phê (MenuGrid).
-    const hintStage = !showOnboardingHint || (orderProgress.cafeSuaLon && orderProgress.matcha) ? null
-        : orderProgress.cafeSuaLon ? 'matcha'
-            : isHoldingCafeSua ? 'lon'
-                : 'cafe'
-    // 4th leg of the same sequence, but the target (Nhật ký) lives in Header, not MenuGrid —
-    // picks up right where hintStage leaves off (both drink legs done, still missing the visit).
-    const showHistoryHint = showOnboardingHint && orderProgress.cafeSuaLon && orderProgress.matcha && !orderProgress.viewedHistory
+    const allDrinksDone = orderProgress.cafeSua && orderProgress.cacaoCaPheLon && orderProgress.matcha
+    const showOnboardingHint = isGuest && !!addressId && !(allDrinksDone && orderProgress.viewedHistory)
+    // Spotlight sequence: card Cà phê sữa → card Cacao Cà Phê → nút extra "Lớn" → card Matcha Cà Phê.
+    const hintStage = !showOnboardingHint || allDrinksDone ? null
+        : !orderProgress.cafeSua ? 'cafe'
+            : !orderProgress.cacaoCaPheLon ? (isHoldingCacaoCaPhe ? 'lon' : 'cacao')
+                : 'matcha'
+    // Last leg of the same sequence, but the target (Nhật ký) lives in Header, not MenuGrid —
+    // picks up right where hintStage leaves off (all 3 drink legs done, still missing the visit).
+    const showHistoryHint = showOnboardingHint && allDrinksDone && !orderProgress.viewedHistory
+    // Single spotlight target id for MenuGrid — one lookup instead of a per-stage OR-chain at
+    // the call site; 'lon' (extras stage) has no card entry, so no card lights up during it.
+    const hintProductId = { cafe: cafeSuaProduct?.id, cacao: cacaoCaPheProduct?.id, matcha: matchaProduct?.id }[hintStage]
+    // Same idea for the extras bar — MenuGrid gets a name to match, not the stage enum itself.
+    const hintExtraName = hintStage === 'lon' ? 'lớn' : null
 
-    return { hintStage, showHistoryHint, cafeSuaProductId: cafeSuaProduct?.id, matchaProductId: matchaProduct?.id }
+    return { hintProductId, hintExtraName, showHistoryHint }
 }

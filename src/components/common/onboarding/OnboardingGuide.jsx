@@ -5,34 +5,49 @@ import { useAuth } from '../../../contexts/AuthContext'
 import { useAddress } from '../../../contexts/AddressContext'
 import { useProducts } from '../../../contexts/ProductContext'
 import { useOnboardingVisibility } from '../../../contexts/OnboardingVisibilityContext'
-import { fetchIngredientStocks, hasCompletedShiftClosing, hasCompletedCashReport, fetchTodayShiftClosing } from '../../../services/orderService'
-import { normalizeIngredientCategory } from '../../../utils/ingredients'
+import { fetchIngredientStocks } from '../../../services/orderService'
+import { findCoffeeIngredient } from '../../../utils/onboardingHint'
 import { readOnboardingState, writeOnboardingState, DEFAULT_ONBOARDING_STATE } from '../../../utils/onboardingStorage'
 import orderStep from './steps/orderStep'
 import journalStep from './steps/journalStep'
-import reportOverviewStep from './steps/reportOverviewStep'
-import mainStockStep from './steps/mainStockStep'
-import packagingStockStep from './steps/packagingStockStep'
 import cashReportStep from './steps/cashReportStep'
 import inventoryStep from './steps/inventoryStep'
+import mainStockStep from './steps/mainStockStep'
+import recipeStep from './steps/recipeStep'
+import ingredientCoffeeStep from './steps/ingredientCoffeeStep'
 
 // 7 bước, mỗi bước 1 file trong ./steps — mỗi file tự định nghĩa done(ctx), to/state/navLabel,
 // và Body (checklist UI riêng). Shell dưới đây chỉ lo fetch data dùng chung + chọn bước active.
-// reportOverviewStep (phase 3) hiện là placeholder done()=false — xem file đó.
-const STEPS = [orderStep, journalStep, reportOverviewStep, mainStockStep, packagingStockStep, cashReportStep, inventoryStep]
+const STEPS = [orderStep, journalStep, cashReportStep, inventoryStep, recipeStep, mainStockStep, ingredientCoffeeStep]
+
+// Hiện khi user đã xong cả 7 bước — guide không biến mất nữa, chuyển sang hướng dẫn đăng ký
+// tài khoản thật để lưu lại dữ liệu (guest data chỉ sống trong localStorage).
+const FINISHED_STEP = {
+    to: '/signup',
+    navLabel: 'Đăng ký tài khoản',
+    name: 'Đăng ký để lưu dữ liệu',
+    Body: () => (
+        <p className="text-[11px] text-text-secondary">
+            Bạn đã hoàn thành hướng dẫn! Đăng ký tài khoản để lưu lại toàn bộ dữ liệu.
+        </p>
+    ),
+}
 
 // Hướng dẫn "Bắt đầu bán hàng" — 2 trạng thái chuyển qua lại, không có nút tắt vĩnh viễn:
 //   - Mở rộng: thẻ IN-FLOW dính đáy (trang tự đặt trong khung fixed bottom của nó — trang
 //     có FAB thì xếp FAB đứng ngay trên thẻ, khỏi chừa khoảng trống né nhau).
 //   - Thu gọn: pill nhỏ tự fixed nép góc trái (FAB chiếm góc phải); bấm bung lại.
-// Chỉ biến mất hẳn khi đủ 5 bước. Trạng thái thu/mở + tick bước 1 lưu localStorage theo address.
+// Không còn biến mất khi xong hết — hết 7 bước thì chuyển sang FINISHED_STEP (CTA đăng ký tài
+// khoản thật). Trạng thái thu/mở + tick từng bước lưu localStorage theo address.
 //
 // Hoàn thành: bước 1 tự detect qua orderProgress trong localStorage (xem onboardingStorage.js
 // + orderStep.jsx) — 3 việc user làm thật ở /pos + /history, không phải "đơn đã submit" (POS
-// 1-tap model khiến "submit" lag 1 tap sau hành động thật). Bước 2-3 (nguyên liệu/bao bì) đòi
-// đủ 100% checklist con. Bước 4-5 (báo cáo thực thu/kiểm kê) tick "lỏng" theo kiểu "đã từng
-// làm" (không phải "hôm nay") để tránh guide tái xuất hiện khi dữ liệu hôm sau reset —
-// checklist con của 2 bước này chỉ hiện tiến độ, không phải điều kiện qua bước.
+// 1-tap model khiến "submit" lag 1 tap sau hành động thật). Bước 6 (Tồn kho nguyên liệu) đòi
+// đủ 100% checklist con — không còn tách riêng bao bì, gộp chung 1 lượt quét ingredientConfigs.
+// Bước 3-4 (báo cáo thực thu/kiểm kê) tick "lỏng" theo kiểu "đã từng làm" (không phải "hôm
+// nay") để tránh guide tái xuất hiện khi dữ liệu hôm sau reset. Bước 7 (Nguyên liệu) dùng lại
+// đúng field warehouse_stock của bước 6 (chỉ lọc riêng "Cà phê") nên có thể đã done sẵn khi
+// user chạm tới — chấp nhận được, guide chỉ lướt qua nhanh chứ không chặn.
 export default function OnboardingGuide() {
     const navigate = useNavigate()
     const { isGuest } = useAuth()
@@ -42,10 +57,9 @@ export default function OnboardingGuide() {
     const addressId = selectedAddress?.id
 
     const [local, setLocal] = useState(DEFAULT_ONBOARDING_STATE)
-    const [stockProgress, setStockProgress] = useState({ mainWarehouse: 0, mainCounter: 0, packagingWarehouse: 0, packagingCounter: 0 })
-    const [closingDone, setClosingDone] = useState(false)
-    const [cashReportDone, setCashReportDone] = useState({ cash: false, transfer: false })
-    const [todayClosing, setTodayClosing] = useState(null)
+    const [stockProgress, setStockProgress] = useState({
+        allWarehouse: 0, allCounter: 0, totalAll: 0, coffeeWarehouseSet: false,
+    })
     const [loaded, setLoaded] = useState(false)
 
     // refreshToken cũng re-read local (không chỉ addressId) — MenuGrid/HistoryPage ghi
@@ -57,33 +71,19 @@ export default function OnboardingGuide() {
 
     const reload = useCallback(() => {
         if (!addressId) return
-        const ingredientKeys = (ingredientConfigs || []).map(c => c.ingredient)
-        Promise.all([
-            fetchIngredientStocks(addressId),
-            hasCompletedShiftClosing(addressId, ingredientKeys),
-            hasCompletedCashReport(addressId),
-            fetchTodayShiftClosing(addressId),
-        ]).then(([stocks, closed, cashDone, today]) => {
+        fetchIngredientStocks(addressId).then((stocks) => {
             const byKey = {}
             for (const s of stocks) byKey[s.ingredient] = s
-            let mainWarehouse = 0, mainCounter = 0, packagingWarehouse = 0, packagingCounter = 0
+            const totalAll = (ingredientConfigs || []).length
+            let allWarehouse = 0, allCounter = 0
             for (const c of ingredientConfigs || []) {
-                const isPackaging = normalizeIngredientCategory(c.category) === 'packaging'
                 const row = byKey[c.ingredient]
-                const hasWarehouse = row?.warehouse_stock_set ?? false
-                const hasCounter = row?.counter_stock_set ?? false
-                if (isPackaging) {
-                    if (hasWarehouse) packagingWarehouse++
-                    if (hasCounter) packagingCounter++
-                } else {
-                    if (hasWarehouse) mainWarehouse++
-                    if (hasCounter) mainCounter++
-                }
+                if (row?.warehouse_stock_set) allWarehouse++
+                if (row?.counter_stock_set) allCounter++
             }
-            setStockProgress({ mainWarehouse, mainCounter, packagingWarehouse, packagingCounter })
-            setClosingDone(closed)
-            setCashReportDone(cashDone)
-            setTodayClosing(today)
+            const coffeeConfig = findCoffeeIngredient(ingredientConfigs)
+            const coffeeWarehouseSet = coffeeConfig ? (byKey[coffeeConfig.ingredient]?.warehouse_stock_set ?? false) : false
+            setStockProgress({ allWarehouse, allCounter, totalAll, coffeeWarehouseSet })
             setLoaded(true)
         }).catch(err => console.error('OnboardingGuide reload error:', err))
     }, [addressId, ingredientConfigs])
@@ -102,37 +102,29 @@ export default function OnboardingGuide() {
         setLocal(next); writeOnboardingState(addressId, patch)
     }
 
-    let totalMain = 0, totalPackaging = 0
-    for (const c of ingredientConfigs || []) {
-        if (normalizeIngredientCategory(c.category) === 'packaging') totalPackaging++
-        else totalMain++
-    }
-    const totalStock = totalMain + totalPackaging
-    const countedToday = Array.isArray(todayClosing?.inventory_report)
-        ? todayClosing.inventory_report.filter(item => item?.remaining != null).length
-        : 0
-
-    const ctx = {
-        orderProgress: local.orderProgress,
-        journalProgress: local.journalProgress,
-        stockProgress, totalMain, totalPackaging, totalStock,
-        todayClosing, countedToday, cashReportDone, closingDone,
-    }
+    const ctx = { ...local, stockProgress }
 
     const idx = STEPS.findIndex(s => !s.done(ctx))
-    if (idx === -1) return null
-    const step = STEPS[idx]
+    const step = idx === -1 ? FINISHED_STEP : STEPS[idx]
     const Body = step.Body
 
-    // Pill luôn hiện, làm cả 2 việc: bấm để mở khi đang thu gọn, bấm lại để thu gọn khi
-    // thẻ đang mở (thẻ nổi ngay phía trên, có khoảng cách — không cần nút "thu gọn" riêng).
+    // 1 khối duy nhất: header (bấm để mở/thu gọn) + nội dung khi mở, thay vì pill + thẻ
+    // nổi tách rời trước đây.
     return (
-        <>
+        <div
+            className="fixed left-3 z-[60] pointer-events-auto bg-surface border border-primary/30 rounded-[14px] shadow-lg max-w-[280px]"
+            style={{ bottom: 16 + bottomOffset }}
+        >
+            <button
+                onClick={() => save({ collapsed: !local.collapsed })}
+                className="flex items-center justify-between gap-1.5 px-3 py-2 w-full text-left hover:bg-surface-light rounded-[14px] transition-colors"
+                title={local.collapsed ? 'Mở hướng dẫn bắt đầu bán hàng' : 'Thu gọn'}
+            >
+                <span className="text-text font-black text-[12px] uppercase">{step.name}</span>
+                <CircleHelp size={15} className="text-primary shrink-0" />
+            </button>
             {!local.collapsed && (
-                <div
-                    className="fixed left-3 z-[60] pointer-events-auto bg-surface border border-primary/30 rounded-[14px] shadow-lg p-3 max-w-[280px]"
-                    style={{ bottom: 56 + bottomOffset }}
-                >
+                <div className="px-3 pb-3">
                     {step.navLabel && (
                         <button
                             onClick={() => navigate(step.to, step.state ? { state: step.state } : undefined)}
@@ -146,15 +138,6 @@ export default function OnboardingGuide() {
                     </div>
                 </div>
             )}
-            <button
-                onClick={() => save({ collapsed: !local.collapsed })}
-                className="fixed left-4 z-[60] pointer-events-auto flex items-center gap-1.5 bg-surface border border-primary/50 rounded-[10px] px-3 py-2 shadow-lg hover:bg-surface-light transition-colors"
-                style={{ bottom: 16 + bottomOffset }}
-                title={local.collapsed ? 'Mở hướng dẫn bắt đầu bán hàng' : 'Thu gọn'}
-            >
-                <CircleHelp size={15} className="text-primary" />
-                <span className="text-text font-black text-[12px]">{step.name}</span>
-            </button>
-        </>
+        </div>
     )
 }

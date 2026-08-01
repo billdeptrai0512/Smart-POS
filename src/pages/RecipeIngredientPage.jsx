@@ -3,6 +3,11 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useAddress } from '../contexts/AddressContext'
+import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
+import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
+import { readOnboardingState, DEFAULT_ONBOARDING_STATE } from '../utils/onboardingStorage'
+import { norm } from '../utils/onboardingHint'
+import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps/recipeStep'
 import {
     upsertRecipe,
     upsertProductPrice,
@@ -42,10 +47,11 @@ export default function RecipeIngredientPage() {
         ingredientConfigs, refreshProducts,
     } = useProducts()
     const { selectedAddress } = useAddress()
-    const { isManager, isAdmin } = useAuth()
+    const { isManager, isAdmin, isGuest } = useAuth()
     const { toast, showError, showToast } = useToast()
     const confirm = useConfirm()
     const canEdit = isManager || isAdmin
+    const { requestRefresh: requestOnboardingRefresh } = useOnboardingVisibility()
 
     const [ingredientCosts, setIngredientCosts] = useState(contextCosts || {})
     const [ingredientUnits, setIngredientUnits] = useState(contextUnits || {})
@@ -54,8 +60,15 @@ export default function RecipeIngredientPage() {
     const [extraIngs, setExtraIngs] = useState(contextExtraIngs || {})
     const [saving, setSaving] = useState(false)
     const [showCopyFrom, setShowCopyFrom] = useState(false)
+    const [recipeProgress, setRecipeProgress] = useState(() =>
+        (selectedAddress?.id ? readOnboardingState(selectedAddress.id) : DEFAULT_ONBOARDING_STATE).recipeProgress
+    )
+    useOnboardingProgressPersist('recipeProgress', recipeProgress, { isGuest, addressId: selectedAddress?.id, requestOnboardingRefresh })
 
     const product = useMemo(() => products.find(p => p.id === productId), [products, productId])
+
+    // Onboarding phase 5 — chỉ hint/track trên đúng công thức "Cà phê đen".
+    const isCafeDen = isGuest && norm(product?.name) === RECIPE_TARGET_PRODUCT
 
     // Index recipes by product — used by the "copy from" picker and to count rows.
     const recipesByProduct = useMemo(() => {
@@ -94,6 +107,15 @@ export default function RecipeIngredientPage() {
             .sort((a, b) => sortIngredients(a.ingredient, b.ingredient, selectedAddress?.ingredient_sort_order)),
         [recipes, productId, selectedAddress?.ingredient_sort_order]
     )
+
+    // Render-time-adjust (cùng pattern DailyReportPage.jsx) — track hành động thật, không cần
+    // nút Lưu riêng vì FastIngredientFill/ExtrasSection đã ghi DB ngay khi user nhập.
+    if (isCafeDen && prodRecipes.some(r => r.amount > 0) && !recipeProgress.filledAmount) {
+        setRecipeProgress(prev => ({ ...prev, filledAmount: true }))
+    }
+    if (isCafeDen && extras.length > 0 && !recipeProgress.addedExtra) {
+        setRecipeProgress(prev => ({ ...prev, addedExtra: true }))
+    }
 
     const dbIngredients = useMemo(
         () => Object.keys(ingredientCosts)
@@ -396,6 +418,21 @@ export default function RecipeIngredientPage() {
                     onSetAmount={setBaseAmount}
                     onRemove={removeBaseIngredient}
                     onAddCustom={handleAddBaseIngredients}
+                    hint={isCafeDen && !recipeProgress.filledAmount}
+                />
+
+                <ExtrasSection
+                    extras={extras}
+                    extraIngs={extraIngs}
+                    ingredientUnits={ingredientUnits}
+                    dbIngredients={dbIngredients}
+                    canEdit={canEdit}
+                    saving={saving}
+                    onAddExtra={handleAddExtra}
+                    onSaveSortOrder={saveExtrasSortOrder}
+                    extraHandlers={extraHandlers}
+                    categoryOf={categoryOf}
+                    hint={isCafeDen && recipeProgress.filledAmount && !recipeProgress.addedExtra}
                 />
 
                 {canEdit && (
@@ -421,19 +458,6 @@ export default function RecipeIngredientPage() {
                         </button>
                     </div>
                 )}
-
-                <ExtrasSection
-                    extras={extras}
-                    extraIngs={extraIngs}
-                    ingredientUnits={ingredientUnits}
-                    dbIngredients={dbIngredients}
-                    canEdit={canEdit}
-                    saving={saving}
-                    onAddExtra={handleAddExtra}
-                    onSaveSortOrder={saveExtrasSortOrder}
-                    extraHandlers={extraHandlers}
-                    categoryOf={categoryOf}
-                />
             </main>
 
             {showCopyFrom && (

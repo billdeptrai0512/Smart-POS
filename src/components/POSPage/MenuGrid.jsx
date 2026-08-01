@@ -159,7 +159,7 @@ function ExtrasPopover({ activeProductId, extras, activeItem, enabledStickyExtra
     )
 }
 
-export default function MenuGrid({ products, cart, activeItem, onAddItem, onCancelHeld, productExtras, onToggleExtra, enabledStickyExtraIds = [], onToggleStickyExtra, hintStage = null, cafeSuaProductId, matchaProductId }) {
+export default function MenuGrid({ products, cart, activeItem, onAddItem, onCancelHeld, productExtras, onToggleExtra, enabledStickyExtraIds = [], onToggleStickyExtra, hintProductId, hintExtraName = null }) {
     const navigate = useNavigate()
     const { isManager, isAdmin } = useAuth()
     const { loading, loadError } = useProducts()
@@ -241,7 +241,7 @@ export default function MenuGrid({ products, cart, activeItem, onAddItem, onCanc
                 qty={cartQtyMap.get(product.id) || 0}
                 onAdd={onAddItem}
                 onCancel={onCancelHeld}
-                hint={(hintStage === 'cafe' && product.id === cafeSuaProductId) || (hintStage === 'matcha' && product.id === matchaProductId)}
+                hint={product.id === hintProductId}
             />
         ))
         if (idx === extrasAfterIdx) {
@@ -254,7 +254,7 @@ export default function MenuGrid({ products, cart, activeItem, onAddItem, onCanc
                     enabledStickyExtraIds={enabledStickyExtraIds}
                     onToggleExtra={onToggleExtra}
                     onToggleStickyExtra={onToggleStickyExtra}
-                    hintExtraName={hintStage === 'lon' ? 'lớn' : null}
+                    hintExtraName={hintExtraName}
                 />
             )
         }

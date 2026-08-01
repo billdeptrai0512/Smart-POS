@@ -1,22 +1,21 @@
 import ChecklistRow from '../ChecklistRow'
 
-function items(ctx) {
-    const { totalMain, stockProgress } = ctx
-    return totalMain > 0 ? [
-        { key: 'mainWarehouse', label: `Nhập tồn kho ${stockProgress.mainWarehouse}/${totalMain}`, done: stockProgress.mainWarehouse >= totalMain },
-        { key: 'mainCounter', label: `Nhập tồn quầy ${stockProgress.mainCounter}/${totalMain}`, done: stockProgress.mainCounter >= totalMain },
-    ] : []
-}
-
+// Từng có packagingStockStep.jsx song song (checklist giống hệt, khác field prefix) đi qua
+// 1 factory dùng chung — đã gộp lại thành 1 lượt quét ingredientConfigs, nên giờ chỉ còn
+// đúng bước này; inline thẳng thay vì giữ factory cho 1 caller duy nhất.
 export default {
-    to: '/ingredients',
-    state: { viewMode: 'main' },
-    navLabel: 'Đi tới nguyên liệu',
     name: 'Tồn kho nguyên liệu',
-    done: (ctx) => items(ctx).every(item => item.done),
-    Body: ({ ctx }) => (
-        <>
-            {items(ctx).map(item => <ChecklistRow key={item.key} label={item.label} done={item.done} />)}
-        </>
-    ),
+    done: (ctx) => {
+        const { totalAll, allWarehouse, allCounter } = ctx.stockProgress
+        return totalAll <= 0 || (allWarehouse >= totalAll && allCounter >= totalAll)
+    },
+    Body: ({ ctx }) => {
+        const { totalAll, allWarehouse, allCounter } = ctx.stockProgress
+        return totalAll > 0 && (
+            <>
+                <ChecklistRow label={`Nhập tồn kho ${allWarehouse}/${totalAll}`} done={allWarehouse >= totalAll} />
+                <ChecklistRow label={`Nhập tồn quầy ${allCounter}/${totalAll}`} done={allCounter >= totalAll} />
+            </>
+        )
+    },
 }

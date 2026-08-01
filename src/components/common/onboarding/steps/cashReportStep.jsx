@@ -1,14 +1,13 @@
 import ChecklistRow from '../ChecklistRow'
+import { isCashFlowProgressDone } from '../../../../utils/onboardingStorage'
 
 export default {
-    to: '/daily-report',
-    navLabel: 'Đi tới báo cáo dòng tiền',
-    name: 'Báo cáo thực thu',
-    done: (ctx) => ctx.cashReportDone.cash && ctx.cashReportDone.transfer,
+    name: 'Kết ca đếm tiền',
+    done: (ctx) => isCashFlowProgressDone(ctx.cashFlowProgress),
     Body: ({ ctx }) => (
         <>
-            <ChecklistRow label="Nhập tiền mặt" done={ctx.todayClosing?.actual_cash != null} />
-            <ChecklistRow label="Nhập chuyển khoản" done={ctx.todayClosing?.actual_transfer != null} />
+            <ChecklistRow label="Nhập tiền mặt" done={ctx.cashFlowProgress.cash} />
+            <ChecklistRow label="Nhập chuyển khoản" done={ctx.cashFlowProgress.transfer} />
         </>
     ),
 }
