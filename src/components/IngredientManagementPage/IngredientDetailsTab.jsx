@@ -15,6 +15,7 @@ import { onboardingHintClass } from '../../utils/onboardingHint'
 export default function IngredientDetailsTab({
     nameLabel, unit, cost, category, packSize, packUnit, minStock, tareWeight,
     warehouseStock, warehouseGroupNote, hintWarehouse = false, counterStock, currentStock,
+    hintPack = false, hintMinStock = false, hintTare = false,
     dailyContext,           // { today_refill, today_restock } | null — Đầu ngày/Lấy ra/Nhập mới
     siblingCounterStocks,   // [{ addressId, addressName, counterStock }] | null — tồn quầy các địa chỉ khác dùng chung kho
     canEdit, saving,
@@ -120,6 +121,7 @@ export default function IngredientDetailsTab({
                     unit={unit}
                     canEdit={canEdit}
                     onConfigure={onConfigurePack}
+                    hint={hintPack}
                 />
                 {(minStock != null || canEdit) && (
                     <MinStockRow
@@ -130,10 +132,11 @@ export default function IngredientDetailsTab({
                         packUnit={packUnit}
                         canEdit={canEdit}
                         onSave={onSaveMinStock}
+                        hint={hintMinStock}
                     />
                 )}
                 {tareApplies && (tareWeight != null || canEdit) && (
-                    <TareRow tareWeight={tareWeight} unit={unit} canEdit={canEdit} onSave={onSaveTareWeight} />
+                    <TareRow tareWeight={tareWeight} unit={unit} canEdit={canEdit} onSave={onSaveTareWeight} hint={hintTare} />
                 )}
                 <CostRow cost={cost} unit={unit} canEdit={canEdit} onSave={onSaveCost} />
             </Panel>
@@ -362,7 +365,7 @@ function CategoryRow({ value, canEdit, saving, onChange }) {
 }
 
 // ── Pack (opens modal) ──────────────────────────────────────────────────────
-function PackRow({ hasPack, packSize, packUnit, unit, canEdit, onConfigure }) {
+function PackRow({ hasPack, packSize, packUnit, unit, canEdit, onConfigure, hint = false }) {
     return (
         <Row label="Quy đổi">
             {hasPack ? (
@@ -376,7 +379,7 @@ function PackRow({ hasPack, packSize, packUnit, unit, canEdit, onConfigure }) {
             ) : canEdit ? (
                 <button
                     onClick={onConfigure}
-                    className="text-[13px] font-bold text-primary hover:underline"
+                    className={`rounded-md px-2 -mx-2 py-1 -my-1 text-[13px] font-bold text-primary hover:underline ${onboardingHintClass(hint)}`}
                 >
                     +
                 </button>
@@ -388,7 +391,7 @@ function PackRow({ hasPack, packSize, packUnit, unit, canEdit, onConfigure }) {
 }
 
 // ── Min stock ───────────────────────────────────────────────────────────────
-function MinStockRow({ minStock, unit, hasPack, packSize, packUnit, canEdit, onSave }) {
+function MinStockRow({ minStock, unit, hasPack, packSize, packUnit, canEdit, onSave, hint = false }) {
     const [editing, setEditing] = useState(false)
     const [input, setInput] = useState('')
     const start = () => {
@@ -421,7 +424,7 @@ function MinStockRow({ minStock, unit, hasPack, packSize, packUnit, canEdit, onS
                             if (e.key === 'Enter') commit()
                             if (e.key === 'Escape') setEditing(false)
                         }}
-                        className="w-20 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50"
+                        className={`w-20 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50 ${onboardingHintClass(hint)}`}
                     />
                     <span className="text-[12px] text-text-dim font-medium">{unit}</span>
                 </div>
@@ -442,7 +445,7 @@ function MinStockRow({ minStock, unit, hasPack, packSize, packUnit, canEdit, onS
             ) : (
                 <button
                     onClick={start}
-                    className="text-[13px] font-bold text-primary hover:underline"
+                    className={`rounded-md px-2 -mx-2 py-1 -my-1 text-[13px] font-bold text-primary hover:underline ${onboardingHintClass(hint)}`}
                 >
                     +
                 </button>
@@ -455,7 +458,7 @@ function MinStockRow({ minStock, unit, hasPack, packSize, packUnit, canEdit, onS
 // Hộp/chai đựng NVL tại quầy — cân kiểm kê cuối ca gộp cả bì (không tare được).
 // Số cân GIỮ nguyên (bì tự khử trong hao hụt); bì chỉ được TRỪ khi DỰ BÁO để ra
 // lượng thật. Hiệu ứng "còn bao nhiêu thật" hiện ở dòng Tồn quầy — không lặp ở đây.
-function TareRow({ tareWeight, unit, canEdit, onSave }) {
+function TareRow({ tareWeight, unit, canEdit, onSave, hint = false }) {
     const [editing, setEditing] = useState(false)
     const [input, setInput] = useState('')
     const start = () => {
@@ -482,7 +485,7 @@ function TareRow({ tareWeight, unit, canEdit, onSave }) {
                             if (e.key === 'Enter') commit()
                             if (e.key === 'Escape') setEditing(false)
                         }}
-                        className="w-20 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50"
+                        className={`w-20 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50 ${onboardingHintClass(hint)}`}
                     />
                     <span className="text-[12px] text-text-dim font-medium">{unit}</span>
                 </div>
@@ -496,7 +499,7 @@ function TareRow({ tareWeight, unit, canEdit, onSave }) {
             ) : (
                 <button
                     onClick={start}
-                    className="text-[13px] font-bold text-primary hover:underline"
+                    className={`rounded-md px-2 -mx-2 py-1 -my-1 text-[13px] font-bold text-primary hover:underline ${onboardingHintClass(hint)}`}
                 >
                     +
                 </button>

@@ -25,7 +25,7 @@ import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { dateStringVN, timeStringVN, startOfMonthVN, endOfMonthVN } from '../utils/dateVN'
-import { findCoffeeIngredient } from '../utils/onboardingHint'
+import { findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
 import { isRecipeProgressDone } from '../utils/onboardingStorage'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 
@@ -470,11 +470,18 @@ export default function IngredientDetailPage() {
     const titleLabel = ingredientLabel(ingredientKey)
     const stockSubtitle = currentStock !== null ? `${Math.round(currentStock * 10) / 10} ${unit}` : '—'
 
-    // Onboarding phase 7 — hint field "Tồn kho cuối ngày" chỉ trên đúng ingredient "Cà phê",
-    // sau khi phase 5 (công thức) đã xong, cho tới khi warehouse_stock của nó được set.
+    // Onboarding phase 6 (CUỐI CÙNG, "Cài đặt nguyên liệu") — hint lần lượt 4 field trên đúng
+    // ingredient "Cà phê", sau khi phase 5 (công thức) đã xong. nextIngredientSetupField trả về
+    // field ĐẦU TIÊN chưa xong theo đúng thứ tự hiện trên UI — xem onboardingHint.js.
     const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId: selectedAddress?.id })
-    const hintWarehouse = isGuest && isRecipeProgressDone(recipeProgress)
-        && findCoffeeIngredient(ingredientConfigs)?.ingredient === ingredientKey && !stockData?.warehouse_stock_set
+    const isCoffee = isGuest && findCoffeeIngredient(ingredientConfigs)?.ingredient === ingredientKey
+    const setupField = isCoffee && isRecipeProgressDone(recipeProgress)
+        ? nextIngredientSetupField(config, stockData?.warehouse_stock_set)
+        : null
+    const hintWarehouse = setupField === 'warehouse'
+    const hintPack = setupField === 'pack'
+    const hintMinStock = setupField === 'minStock'
+    const hintTare = setupField === 'tare'
 
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
@@ -506,6 +513,9 @@ export default function IngredientDetailPage() {
                         warehouseStock={stockData?.warehouse_stock ?? null}
                         warehouseGroupNote={warehouseGroupNote}
                         hintWarehouse={hintWarehouse}
+                        hintPack={hintPack}
+                        hintMinStock={hintMinStock}
+                        hintTare={hintTare}
                         counterStock={stockData?.counter_stock ?? null}
                         currentStock={currentStock}
                         dailyContext={dailyContext}

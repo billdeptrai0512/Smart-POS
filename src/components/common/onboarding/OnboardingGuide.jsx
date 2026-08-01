@@ -6,21 +6,24 @@ import { useAddress } from '../../../contexts/AddressContext'
 import { useProducts } from '../../../contexts/ProductContext'
 import { useOnboardingVisibility } from '../../../contexts/OnboardingVisibilityContext'
 import { fetchIngredientStocks } from '../../../services/orderService'
+import { trackGuestOnboardingStage } from '../../../services/onboardingFunnelService'
 import { findCoffeeIngredient } from '../../../utils/onboardingHint'
 import { readOnboardingState, writeOnboardingState, DEFAULT_ONBOARDING_STATE } from '../../../utils/onboardingStorage'
 import orderStep from './steps/orderStep'
 import journalStep from './steps/journalStep'
 import cashReportStep from './steps/cashReportStep'
 import inventoryStep from './steps/inventoryStep'
-import mainStockStep from './steps/mainStockStep'
 import recipeStep from './steps/recipeStep'
-import ingredientCoffeeStep from './steps/ingredientCoffeeStep'
+import ingredientSetupStep from './steps/ingredientSetupStep'
 
-// 7 bước, mỗi bước 1 file trong ./steps — mỗi file tự định nghĩa done(ctx), to/state/navLabel,
+// 6 bước, mỗi bước 1 file trong ./steps — mỗi file tự định nghĩa done(ctx), to/state/navLabel,
 // và Body (checklist UI riêng). Shell dưới đây chỉ lo fetch data dùng chung + chọn bước active.
-const STEPS = [orderStep, journalStep, cashReportStep, inventoryStep, recipeStep, mainStockStep, ingredientCoffeeStep]
+// ⚠ Thêm/bớt bước ở đây → phải sửa 20260801_guest_onboarding_funnel.sql (CHECK 0..6,
+// generate_series(0,6), CASE nhãn) rồi chạy lại. Không sửa thì stage vượt 6 bị RPC bỏ qua
+// IM LẶNG — phễu chết mà không báo lỗi gì.
+const STEPS = [orderStep, journalStep, cashReportStep, inventoryStep, recipeStep, ingredientSetupStep]
 
-// Hiện khi user đã xong cả 7 bước — guide không biến mất nữa, chuyển sang hướng dẫn đăng ký
+// Hiện khi user đã xong cả 6 bước — guide không biến mất nữa, chuyển sang hướng dẫn đăng ký
 // tài khoản thật để lưu lại dữ liệu (guest data chỉ sống trong localStorage).
 const FINISHED_STEP = {
     to: '/signup',
@@ -37,17 +40,16 @@ const FINISHED_STEP = {
 //   - Mở rộng: thẻ IN-FLOW dính đáy (trang tự đặt trong khung fixed bottom của nó — trang
 //     có FAB thì xếp FAB đứng ngay trên thẻ, khỏi chừa khoảng trống né nhau).
 //   - Thu gọn: pill nhỏ tự fixed nép góc trái (FAB chiếm góc phải); bấm bung lại.
-// Không còn biến mất khi xong hết — hết 7 bước thì chuyển sang FINISHED_STEP (CTA đăng ký tài
+// Không còn biến mất khi xong hết — hết 6 bước thì chuyển sang FINISHED_STEP (CTA đăng ký tài
 // khoản thật). Trạng thái thu/mở + tick từng bước lưu localStorage theo address.
 //
 // Hoàn thành: bước 1 tự detect qua orderProgress trong localStorage (xem onboardingStorage.js
 // + orderStep.jsx) — 3 việc user làm thật ở /pos + /history, không phải "đơn đã submit" (POS
-// 1-tap model khiến "submit" lag 1 tap sau hành động thật). Bước 6 (Tồn kho nguyên liệu) đòi
-// đủ 100% checklist con — không còn tách riêng bao bì, gộp chung 1 lượt quét ingredientConfigs.
-// Bước 3-4 (báo cáo thực thu/kiểm kê) tick "lỏng" theo kiểu "đã từng làm" (không phải "hôm
-// nay") để tránh guide tái xuất hiện khi dữ liệu hôm sau reset. Bước 7 (Nguyên liệu) dùng lại
-// đúng field warehouse_stock của bước 6 (chỉ lọc riêng "Cà phê") nên có thể đã done sẵn khi
-// user chạm tới — chấp nhận được, guide chỉ lướt qua nhanh chứ không chặn.
+// 1-tap model khiến "submit" lag 1 tap sau hành động thật). Bước 3-4 (báo cáo thực thu/kiểm kê)
+// tick "lỏng" theo kiểu "đã từng làm" (không phải "hôm nay") để tránh guide tái xuất hiện khi
+// dữ liệu hôm sau reset. Bước 6 (Cài đặt nguyên liệu, CUỐI CÙNG) không còn đòi nhập kho toàn bộ
+// nguyên liệu — chỉ đi sâu 1 ingredient mẫu (Cà phê): tồn kho cuối ngày + quy đổi + tồn kho tối
+// thiểu + khối lượng bì (xem ingredientSetupStep.jsx).
 export default function OnboardingGuide() {
     const navigate = useNavigate()
     const { isGuest } = useAuth()
@@ -57,10 +59,11 @@ export default function OnboardingGuide() {
     const addressId = selectedAddress?.id
 
     const [local, setLocal] = useState(DEFAULT_ONBOARDING_STATE)
-    const [stockProgress, setStockProgress] = useState({
-        allWarehouse: 0, allCounter: 0, totalAll: 0, coffeeWarehouseSet: false,
-    })
+    const [stockProgress, setStockProgress] = useState({ coffeeWarehouseSet: false })
     const [loaded, setLoaded] = useState(false)
+    // Cấu hình (pack/min_stock/tare_weight) đã có sẵn trong ingredientConfigs (ProductContext),
+    // không cần fetch riêng như warehouse_stock_set — chỉ warehouse_stock_set mới cần RPC.
+    const coffeeConfig = findCoffeeIngredient(ingredientConfigs)
 
     // refreshToken cũng re-read local (không chỉ addressId) — MenuGrid/HistoryPage ghi
     // orderProgress qua writeOnboardingState rồi tự gọi requestRefresh(), đây là cách guide
@@ -72,21 +75,11 @@ export default function OnboardingGuide() {
     const reload = useCallback(() => {
         if (!addressId) return
         fetchIngredientStocks(addressId).then((stocks) => {
-            const byKey = {}
-            for (const s of stocks) byKey[s.ingredient] = s
-            const totalAll = (ingredientConfigs || []).length
-            let allWarehouse = 0, allCounter = 0
-            for (const c of ingredientConfigs || []) {
-                const row = byKey[c.ingredient]
-                if (row?.warehouse_stock_set) allWarehouse++
-                if (row?.counter_stock_set) allCounter++
-            }
-            const coffeeConfig = findCoffeeIngredient(ingredientConfigs)
-            const coffeeWarehouseSet = coffeeConfig ? (byKey[coffeeConfig.ingredient]?.warehouse_stock_set ?? false) : false
-            setStockProgress({ allWarehouse, allCounter, totalAll, coffeeWarehouseSet })
+            const coffeeStock = coffeeConfig ? stocks.find(s => s.ingredient === coffeeConfig.ingredient) : null
+            setStockProgress({ coffeeWarehouseSet: coffeeStock?.warehouse_stock_set ?? false })
             setLoaded(true)
         }).catch(err => console.error('OnboardingGuide reload error:', err))
-    }, [addressId, ingredientConfigs])
+    }, [addressId, coffeeConfig])
 
     useEffect(() => {
         reload()
@@ -95,6 +88,22 @@ export default function OnboardingGuide() {
         return () => document.removeEventListener('visibilitychange', onVis)
     }, [reload, refreshToken])
 
+    // ctx/idx tính TRƯỚC guard bên dưới vì useEffect phễu cần idx — hook không được nằm sau
+    // early-return (Rules of Hooks). Cả 2 đều thuần tính toán, không side effect.
+    const ctx = { ...local, stockProgress, coffeeConfig }
+    const idx = STEPS.findIndex(s => !s.done(ctx))
+    // 0 = vào dùng thử nhưng chưa xong phase nào; 1-5 = xong bấy nhiêu phase; 6 = xong hết.
+    const stageReached = idx === -1 ? STEPS.length : idx
+
+    // Phễu onboarding cho /admin/dashboard — chỉ gửi khi stageReached ĐỔI (component này
+    // re-render liên tục: refreshToken, reload(), local state). Không cần watermark
+    // localStorage: RPC đã idempotent bằng GREATEST, gửi lại sau khi refresh trang chỉ làm
+    // tươi last_seen_at. Xem onboardingFunnelService.js.
+    useEffect(() => {
+        if (!isGuest || !addressId || !loaded) return
+        trackGuestOnboardingStage(stageReached)
+    }, [stageReached, isGuest, addressId, loaded])
+
     if (!isGuest || !addressId || !loaded) return null
 
     const save = (patch) => {
@@ -102,9 +111,6 @@ export default function OnboardingGuide() {
         setLocal(next); writeOnboardingState(addressId, patch)
     }
 
-    const ctx = { ...local, stockProgress }
-
-    const idx = STEPS.findIndex(s => !s.done(ctx))
     const step = idx === -1 ? FINISHED_STEP : STEPS[idx]
     const Body = step.Body
 

@@ -102,7 +102,7 @@ export default function AdminDashboardPage() {
 }
 
 function DashboardBody({ data, navigate }) {
-    const { subscription, attention, activity, attention_total_count, payment_issue_total_count } = data
+    const { subscription, attention, activity, attention_total_count, payment_issue_total_count, onboarding_funnel } = data
     // total_count = đếm không giới hạn (đã dedupe theo chi nhánh) từ RPC; attention
     // (mảng) chỉ là top-20 hiển thị nên KHÔNG dùng .length làm KPI — sẽ undercount
     // khi thực tế > 20 chi nhánh cần chú ý.
@@ -117,6 +117,7 @@ function DashboardBody({ data, navigate }) {
             <KpiRow subscription={subscription} attentionCount={attentionCount} paymentIssueCount={paymentIssueCount} navigate={navigate} />
             <div className="flex flex-col gap-4">
                 <SubscriptionHealthCard subscription={subscription} />
+                <OnboardingFunnelCard funnel={onboarding_funnel} />
                 <ActivityCard items={activity} />
             </div>
         </>
@@ -210,6 +211,46 @@ function SubscriptionHealthCard({ subscription }) {
                 <StatRow dotClass="bg-warning" label="Dùng thử" value={trial_count} />
                 <StatRow dotClass="bg-border-light" label="Hết hạn / đã rời bỏ" value={churned_count} />
                 <StatRow label="Mới trả phí trong tháng" value={`+${new_paid_this_month}`} />
+            </div>
+        </div>
+    )
+}
+
+// Phễu onboarding khách dùng thử — bao nhiêu người vào dùng thử và rơi rụng ở mốc nào
+// (xem 20260801_guest_onboarding_funnel.sql + OnboardingGuide.jsx). Đếm theo visitor_id ẩn
+// danh do client sinh, KHÔNG phải theo địa chỉ (mọi khách dùng chung 1 demo address id).
+// funnel = null khi RPC chưa apply → ẩn hẳn card, không làm hỏng phần còn lại của dashboard.
+function OnboardingFunnelCard({ funnel }) {
+    if (!funnel?.stages?.length) return null
+    const { stages, signup } = funnel
+    const entered = stages[0].count
+    const completed = stages[stages.length - 1].count
+    const totalSignup = signup.after_complete + signup.early
+
+    return (
+        <div className="bg-surface border border-border/60 rounded-[20px] p-4">
+            <h3 className="text-[12px] font-black uppercase tracking-wide text-text-secondary">Phễu onboarding dùng thử</h3>
+            <p className="text-[11px] text-text-dim mb-3">
+                {entered > 0
+                    ? `${entered} khách vào dùng thử → ${totalSignup} đăng ký (${Math.round((totalSignup / entered) * 100)}%)`
+                    : 'Chưa có khách nào vào dùng thử'}
+            </p>
+            <div className="flex flex-col gap-2">
+                {stages.map((f) => (
+                    <StatRow
+                        key={f.stage}
+                        dotClass={f.stage === 0 ? 'bg-primary' : 'bg-warning'}
+                        label={f.label}
+                        value={entered > 0 ? `${f.count} (${Math.round((f.count / entered) * 100)}%)` : f.count}
+                    />
+                ))}
+                {/* Đăng ký tách khỏi chuỗi stage: after_complete nối tiếp được vào phễu (mẫu số là
+                    nhóm xong hết → hiển thị n/m cho khỏi nhầm với % trên tổng khách), còn early nằm
+                    NGOÀI phễu nên không gắn % vào đâu cả. */}
+                <div className="border-t border-border/60 mt-1 pt-2 flex flex-col gap-2">
+                    <StatRow dotClass="bg-success" label="Xong hết rồi đăng ký" value={`${signup.after_complete}/${completed}`} />
+                    <StatRow dotClass="bg-success" label="Đăng ký sớm (bỏ guide giữa chừng)" value={signup.early} />
+                </div>
             </div>
         </div>
     )

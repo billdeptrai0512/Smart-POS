@@ -27,7 +27,21 @@ export function findIngredientByLabel(list, label) {
     return (list || []).find(item => norm(ingredientLabel(item.ingredient)) === target)
 }
 
-// "Cà phê" specifically — used by phase 4 (daily report) and phase 7 (stock).
+// "Cà phê" specifically — used by phase 4 (daily report) và phase 6 (cài đặt nguyên liệu).
 export function findCoffeeIngredient(list) {
     return findIngredientByLabel(list, 'cà phê')
+}
+
+// Phase 6 "Cài đặt nguyên liệu" — 4 việc cần làm cho đúng 1 ingredient mẫu (Cà phê): tồn kho
+// cuối ngày (warehouse_stock_set, đến từ fetchIngredientStocks() — bảng riêng) + 3 field cấu
+// hình (pack/min_stock/tare_weight, đọc thẳng từ ingredientConfigs — khỏi fetch thêm). Trả về
+// field ĐẦU TIÊN chưa xong theo đúng thứ tự hiện trên UI, hoặc null nếu xong cả 4 — dùng chung
+// bởi ingredientSetupStep.jsx (done gate), IngredientManagementPage.jsx (hint thẻ trong list),
+// IngredientDetailPage.jsx (hint từng field trên trang chi tiết).
+export function nextIngredientSetupField(config, warehouseStockSet) {
+    if (!warehouseStockSet) return 'warehouse'
+    if (!(config?.pack_size && config?.pack_unit)) return 'pack'
+    if (config?.min_stock == null) return 'minStock'
+    if (!(config?.tare_weight != null && config.tare_weight > 0)) return 'tare'
+    return null
 }
