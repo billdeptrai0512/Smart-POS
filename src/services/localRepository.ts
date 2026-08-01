@@ -4,6 +4,7 @@
  * Mimics Supabase CRUD operations for products, recipes, orders, etc.
  */
 import { dateStringVN, startOfDayVN } from '../utils/dateVN'
+import { ONBOARDING_STORAGE_PREFIX } from '../utils/onboardingStorage'
 import type { Row } from '../types/domain'
 
 const generateId = () => crypto.randomUUID();
@@ -125,6 +126,13 @@ export const initializeGuestFromGlobal = (data: Row) => {
         created_at: seedTime
     }] : []);
     // fixed_costs seed removed — "thực chi" model no longer uses templates.
+
+    // Onboarding widget UI state (collapsed/expanded) is scoped by addressId but lives outside
+    // KEYS.* — every other piece of this address's guest data resets fresh above, so a
+    // leftover "collapsed" from a previous trial session would hide the guide with nothing
+    // in this function's own output explaining why. Clear it so each "Sử dụng thử" starts
+    // the guide fresh too.
+    localStorage.removeItem(ONBOARDING_STORAGE_PREFIX + addressId);
 };
 
 // --- CRUD Helpers ---

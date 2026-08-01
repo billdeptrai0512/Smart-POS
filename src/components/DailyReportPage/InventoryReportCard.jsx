@@ -3,6 +3,7 @@ import { AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Info } from 'luci
 import { ingredientLabel, getIngredientUnit, lookupByLabel } from '../../utils/ingredients'
 import { formatPackedQty, computeHaoHut } from '../../utils/inventory'
 import { formatVND } from '../../utils'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 import CollapsibleCard from './CollapsibleCard'
 
 // Status priority for sorting collapsed list. Lower = render earlier.
@@ -46,6 +47,9 @@ export default function InventoryReportCard({
     baselineInputs, baselineVersion = 0,
     open = true, onToggleOpen,
     onOpeningChange, onOpeningLock, onRestockChange, onInventoryChange,
+    // Nguyên liệu đang được onboarding phase 4 gợi ý bấm vào — xem DailyReportPage.jsx
+    // (hintCoffeeIngredient) + inventoryStep.jsx.
+    hintIngredient = null,
 }) {
     // Sort by status priority so staff sees "Chưa nhập" first, then anomalies,
     // then matched rows at the bottom. Tie-break by display name for stability.
@@ -147,6 +151,7 @@ export default function InventoryReportCard({
                     onOpeningLock={onOpeningLock}
                     onRestockChange={onRestockChange}
                     onInventoryChange={onInventoryChange}
+                    hint={ing.ingredient === hintIngredient}
                 />
             ))}
             </div>
@@ -175,6 +180,7 @@ const IngredientRow = memo(function IngredientRow({
     warehouseAvailable, used, breakdown, productRef,
     isSubmitting, lockWarehouseInputs,
     onOpeningChange, onRestockChange, onInventoryChange,
+    hint,
 }) {
     // Whole-row collapse: default closed so staff can scroll the list of NVL fast and
     // open just the ones they're counting. Status badge in the header tells them
@@ -274,11 +280,11 @@ const IngredientRow = memo(function IngredientRow({
             <button
                 type="button"
                 onClick={() => setOpen(o => !o)}
-                className="w-full flex items-center justify-between gap-2 py-2.5 group"
+                className="w-full flex items-center justify-between gap-2 py-2.5 group rounded-lg"
             >
                 <span className="text-[14px] font-bold text-text text-left">{ingredientLabel(ing.ingredient)}</span>
                 <div className="flex items-center gap-2 shrink-0">
-                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border tabular-nums ${badgeToneCls}`}>
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border tabular-nums ${badgeToneCls} ${onboardingHintClass(hint && !open)}`}>
                         {badge.text}
                     </span>
                     {open
@@ -314,6 +320,7 @@ const IngredientRow = memo(function IngredientRow({
                         unit={unit}
                         disabled={isSubmitting}
                         onChange={(v) => onInventoryChange(ing.ingredient, v)}
+                        hint={hint && open}
                     />
                 </div>
 
@@ -412,7 +419,7 @@ const IngredientRow = memo(function IngredientRow({
     )
 })
 
-function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRight, overflow, tone = 'neutral', onLabelClick, labelTrailing }) {
+function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRight, overflow, tone = 'neutral', onLabelClick, labelTrailing, hint = false }) {
     // tone overrides the default disabled coloring for read-only diff cells.
     const toneMap = {
         good: { wrap: 'bg-success/8 border border-success/30', input: 'text-success', unit: 'text-success/70' },
@@ -443,7 +450,7 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRig
                 <span className={`text-[9px] font-black uppercase ${onLabelClick ? 'text-text' : 'text-text-dim'}`}>{label}</span>
                 {labelTrailing || headerRight}
             </button>
-            <div className={`flex items-center rounded-[10px] overflow-hidden transition-all gap-1 ${wrapCls}`}>
+            <div className={`flex items-center rounded-[10px] overflow-hidden transition-all gap-1 ${wrapCls} ${onboardingHintClass(hint)}`}>
                 <input
                     type="number"
                     placeholder="-"

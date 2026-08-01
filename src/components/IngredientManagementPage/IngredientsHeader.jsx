@@ -3,7 +3,7 @@ import MenuTabsBar, { TABS } from '../common/MenuTabsBar'
 
 export default function IngredientsHeader({
     count, onBack, onForward,
-    activeTab = 'main', onTabSelect,
+    activeTab = 'main', onTabSelect, hintTab,
 }) {
     const title = TABS.find(t => t.key === activeTab)?.label || 'Kho hàng'
 
@@ -34,7 +34,7 @@ export default function IngredientsHeader({
                 )}
             </div>
 
-            <MenuTabsBar activeTab={activeTab} onSelect={onTabSelect} />
+            <MenuTabsBar activeTab={activeTab} onSelect={onTabSelect} hintTab={hintTab} />
         </header>
     )
 }

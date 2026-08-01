@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { formatVND } from '../../utils'
 import { ingredientLabel } from '../../utils/ingredients'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 import IngredientPicker from './IngredientPicker'
 
 const CATS = [
@@ -15,7 +16,7 @@ const CATS = [
 export default function FastIngredientFill({
     entries, dbIngredients, getUnit, categoryOf = () => 'main',
     ingredientCosts, canEdit, showCost = false, allowNegative = false,
-    onSetAmount, onRemove, onAddCustom,
+    onSetAmount, onRemove, onAddCustom, hint = false,
 }) {
     const [revealed, setRevealed] = useState(() => new Set()) // chip-tapped, not yet saved
     const [creatingCat, setCreatingCat] = useState(null) // 'main' | 'packaging' while typing a new name
@@ -57,6 +58,7 @@ export default function FastIngredientFill({
                         autoFocus={revealed.has(k) && !(amountByKey[k] != null)}
                         onCommit={onSetAmount}
                         onRemove={() => { onRemove(k); drop(k) }}
+                        hint={hint}
                     />
                 ))}
             </div>
@@ -111,7 +113,7 @@ export default function FastIngredientFill({
     )
 }
 
-function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowNegative, autoFocus, onCommit, onRemove }) {
+function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowNegative, autoFocus, onCommit, onRemove, hint = false }) {
     const [draft, setDraft] = useState(amount != null ? String(amount) : '')
     // Re-sync when the saved amount changes elsewhere (copy-from, context refresh).
     // Intentional prop→state sync, not a cascade: only fires when `amount` itself changes.
@@ -152,7 +154,7 @@ function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowN
                 onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }}
                 onBlur={commit}
                 placeholder="—"
-                className="w-[60px] bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[13px] text-text text-right focus:outline-none focus:border-primary disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className={`w-[60px] bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[13px] text-text text-right focus:outline-none focus:border-primary disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${onboardingHintClass(hint)}`}
             />
             <span className="text-[11px] text-text-secondary w-6 shrink-0">{unit}</span>
             {showCost && (

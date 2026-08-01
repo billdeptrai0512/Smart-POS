@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useMemo } 
 import { supabase } from '../lib/supabaseClient'
 import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, fetchProfileByAuthId, removeSession, fetchDefaultIngredientSort } from '../services/authService'
 import { isGuest as getLocalIsGuest, setIsGuest as setLocalIsGuest, initializeGuestFromGlobal, clearGuestData, setGuestIngredientSortOrder } from '../services/localRepository'
+import { trackGuestOnboardingStage, markGuestFunnelSignup } from '../services/onboardingFunnelService'
 import { STORAGE_KEYS } from '../constants/storageKeys'
 
 const AuthContext = createContext(null)
@@ -78,7 +79,12 @@ export function AuthProvider({ children }) {
             // Step 2 — only fetch extra_ingredients for the default extras we just got.
             // (Previously this called fetchExtraIngredients(null) which scans the whole
             // table — gets slower as more addresses/extras are added.)
-            const extras = Object.values(extrasMap).flat()
+            // extrasMap is keyed by product_id (fetchProductExtras groups by it for direct
+            // POS lookup use, so each item omits the now-redundant field) — re-attach it here
+            // before flattening, or every seeded guest extra loses its product association.
+            const extras = Object.entries(extrasMap).flatMap(([productId, list]) =>
+                list.map(e => ({ ...e, product_id: productId }))
+            )
             const extraIds = extras.map(e => e.id)
             const extraIngsMap = extraIds.length ? await fetchExtraIngredients(extraIds) : {}
             const extraIngredients = Object.values(extraIngsMap).flat()
@@ -103,6 +109,10 @@ export function AuthProvider({ children }) {
             setLocalIsGuest(true)
             setIsGuestState(true)
             setProfile({ id: 'guest', name: 'Khách Ghé Thăm', role: 'manager', email: 'guest@demo.local' })
+            // Phễu onboarding: mốc 0 "Vào dùng thử". Chỉ chạy khi user thật sự bấm "Dùng thử
+            // miễn phí" (initGuestMode), không chạy ở nhánh khôi phục sau khi refresh trang —
+            // đúng ngữ nghĩa "có bao nhiêu người vào dùng thử". Fire-and-forget, không chặn.
+            trackGuestOnboardingStage(0)
             setLoading(false)
         }
     }, [])
@@ -248,6 +258,9 @@ export function AuthProvider({ children }) {
         setProfile(data.profile)
         cacheAuth(STORAGE_KEYS.AUTH_USER, data.user)
         cacheAuth(STORAGE_KEYS.AUTH_PROFILE, data.profile)
+        // Phễu onboarding: mốc cuối "Đăng ký tài khoản". No-op nếu máy này chưa từng dùng thử.
+        // Gọi trước clearGuestData() để không phụ thuộc việc hàm đó có xoá visitor id hay không.
+        markGuestFunnelSignup()
         // Transition from guest to real user — clear sandbox
         clearGuestData()
         setIsGuest(false)

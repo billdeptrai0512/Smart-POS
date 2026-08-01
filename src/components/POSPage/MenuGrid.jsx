@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useProducts } from '../../contexts/ProductContext'
 import MenuDivider from '../common/MenuDivider'
 import { computeExtrasAfterIdx } from '../../utils/menuGridLayout'
+import { onboardingHintClass, norm } from '../../utils/onboardingHint'
 
 // The WHOLE card is the tap surface.
 //   tap (any card)  → activate/order that item (onAdd); extras bar opens
@@ -16,8 +17,9 @@ import { computeExtrasAfterIdx } from '../../utils/menuGridLayout'
 // memo: onAdd/onCancel are now stable across taps (see POSContext's useCallback
 // wiring) and product/qty are cheap-to-compare — lets untouched cards skip
 // re-rendering when MenuGrid re-renders on every single tap.
-const ProductCard = memo(function ProductCard({ product, qty, onAdd, onCancel }) {
+const ProductCard = memo(function ProductCard({ product, qty, onAdd, onCancel, hint }) {
     const held = qty > 0
+    const hintClass = onboardingHintClass(hint)
     const [pulseKey, setPulseKey] = useState(0)        // bump per tap-add → replays the confirm pulse
     const suppressClick = useRef(false)               // swallow the click that trails a pointerup add
 
@@ -56,7 +58,7 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onCancel })
             className={`menu-btn relative rounded-[1.5rem] p-3 sm:p-4 text-left min-h-[100px] flex flex-col justify-between cursor-pointer transition-all duration-300 focus:outline-none focus-visible:ring-4 focus-visible:ring-primary/30 ${held
                 ? 'bg-surface border-2 border-primary shadow-[0_8px_24px_var(--color-primary-glow)]'
                 : 'bg-surface border border-border/60 shadow-sm hover:border-text/30 hover:shadow-md hover:bg-surface-hover'
-                }`}
+                } ${hintClass}`}
         >
             {/* Glow Effect */}
             {held && <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />}
@@ -103,12 +105,13 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onCancel })
 // Extras for the active (held) item. Inserted as a full-width grid item right
 // after the active card's row (see MenuGrid) so it pushes the cards below down
 // instead of covering them — no reflow holes regardless of column/row.
-function ExtrasPopover({ activeProductId, extras, activeItem, enabledStickyExtraIds, onToggleExtra, onToggleStickyExtra }) {
+function ExtrasPopover({ activeProductId, extras, activeItem, enabledStickyExtraIds, onToggleExtra, onToggleStickyExtra, hintExtraName }) {
     const { sticky, normal } = useMemo(() => {
         const s = [], n = []
         for (const e of extras) (e.is_sticky ? s : n).push(e)
         return { sticky: s, normal: n }
     }, [extras])
+    const hintClassFor = (ex) => onboardingHintClass(hintExtraName && norm(ex.name) === hintExtraName)
 
     // Tapping the bottom card drops the bar below the fold. Pull it into view when
     // the active item changes — `nearest` stays put if it's already visible.
@@ -120,11 +123,12 @@ function ExtrasPopover({ activeProductId, extras, activeItem, enabledStickyExtra
             <div className="w-full overflow-x-auto py-2.5 px-3 flex gap-2 items-center hide-scrollbar">
                 {sticky.map(ex => {
                     const on = enabledStickyExtraIds.includes(ex.id)
+                    const hintClass = hintClassFor(ex)
                     return (
                         <button
                             key={ex.id}
                             onClick={() => onToggleStickyExtra(ex)}
-                            className={`shrink-0 h-[34px] px-3 rounded-[10px] border font-bold text-[12px] whitespace-nowrap focus:outline-none transition-all shadow-sm uppercase flex items-center gap-1.5 ${on ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/80 text-text-secondary hover:text-text'}`}
+                            className={`shrink-0 h-[34px] px-3 rounded-[10px] border font-bold text-[12px] whitespace-nowrap focus:outline-none transition-all shadow-sm uppercase flex items-center gap-1.5 ${on ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/80 text-text-secondary hover:text-text'} ${hintClass}`}
                         >
                             {on && <span className="w-1.5 h-1.5 rounded-full bg-warning mb-[1px]" />}
                             {ex.name}
@@ -138,11 +142,12 @@ function ExtrasPopover({ activeProductId, extras, activeItem, enabledStickyExtra
 
                 {normal.map(ex => {
                     const on = activeItem?.extras.some(e => e.id === ex.id) || false
+                    const hintClass = hintClassFor(ex)
                     return (
                         <button
                             key={ex.id}
                             onClick={() => onToggleExtra(ex)}
-                            className={`shrink-0 h-[34px] px-3 rounded-[10px] border font-bold text-[12px] whitespace-nowrap focus:outline-none transition-all shadow-sm uppercase flex items-center gap-1.5 ${on ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/80 text-text-secondary hover:text-text'}`}
+                            className={`shrink-0 h-[34px] px-3 rounded-[10px] border font-bold text-[12px] whitespace-nowrap focus:outline-none transition-all shadow-sm uppercase flex items-center gap-1.5 ${on ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/80 text-text-secondary hover:text-text'} ${hintClass}`}
                         >
                             {on && <span className="w-1.5 h-1.5 rounded-full bg-warning mb-[1px]" />}
                             {ex.name}
@@ -154,7 +159,7 @@ function ExtrasPopover({ activeProductId, extras, activeItem, enabledStickyExtra
     )
 }
 
-export default function MenuGrid({ products, cart, onAddItem, onCancelHeld, productExtras, activeCartItemId, onToggleExtra, enabledStickyExtraIds = [], onToggleStickyExtra }) {
+export default function MenuGrid({ products, cart, activeItem, onAddItem, onCancelHeld, productExtras, onToggleExtra, enabledStickyExtraIds = [], onToggleStickyExtra, hintProductId, hintExtraName = null }) {
     const navigate = useNavigate()
     const { isManager, isAdmin } = useAuth()
     const { loading, loadError } = useProducts()
@@ -170,9 +175,8 @@ export default function MenuGrid({ products, cart, onAddItem, onCancelHeld, prod
         return map
     }, [cart])
 
-    // Active (held) item whose extras show. Mirrors the old footer's pick:
-    // explicit active id, else the last held item.
-    const activeItem = cart.find(i => i.cartItemId === activeCartItemId) || cart[cart.length - 1]
+    // Active (held) item whose extras show — computed once by POSPage (its parent) and
+    // passed down, since POSPage needs the same value for onboarding progress tracking.
     const activeProductId = activeItem?.productId
     const activeExtras = productExtras?.[activeProductId] || []
     const activeIdx = activeExtras.length > 0 ? products.findIndex(p => p.id === activeProductId) : -1
@@ -237,6 +241,7 @@ export default function MenuGrid({ products, cart, onAddItem, onCancelHeld, prod
                 qty={cartQtyMap.get(product.id) || 0}
                 onAdd={onAddItem}
                 onCancel={onCancelHeld}
+                hint={product.id === hintProductId}
             />
         ))
         if (idx === extrasAfterIdx) {
@@ -249,6 +254,7 @@ export default function MenuGrid({ products, cart, onAddItem, onCancelHeld, prod
                     enabledStickyExtraIds={enabledStickyExtraIds}
                     onToggleExtra={onToggleExtra}
                     onToggleStickyExtra={onToggleStickyExtra}
+                    hintExtraName={hintExtraName}
                 />
             )
         }

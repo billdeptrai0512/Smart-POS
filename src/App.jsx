@@ -8,7 +8,7 @@ import { POSProvider } from './contexts/POSContext'
 import { ConfirmProvider } from './contexts/ConfirmContext'
 import { OnboardingVisibilityProvider, useOnboardingVisibility } from './contexts/OnboardingVisibilityContext'
 import ErrorBoundary from './components/common/ErrorBoundary'
-import OnboardingGuide from './components/common/OnboardingGuide'
+import OnboardingGuide from './components/common/onboarding/OnboardingGuide'
 import './index.css'
 
 // Pages — lazy-loaded for route-level code splitting

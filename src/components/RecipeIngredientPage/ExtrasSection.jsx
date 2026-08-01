@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import ExtraCard from './ExtraCard'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 
 export default function ExtrasSection({
     extras, extraIngs, ingredientUnits, dbIngredients, canEdit, saving,
     onAddExtra, onSaveSortOrder,
     extraHandlers, categoryOf,
+    hint = false,
 }) {
     const [addingExtra, setAddingExtra] = useState(false)
     const [newExtraName, setNewExtraName] = useState('')
@@ -128,7 +130,7 @@ export default function ExtrasSection({
             ) : (
                 <button
                     onClick={() => setAddingExtra(true)}
-                    className="w-full text-[12px] text-primary/70 hover:text-primary font-medium mt-2 transition-colors bg-surface border border-border/60 rounded-[14px] px-4 py-3 text-center"
+                    className={`w-full text-[12px] text-primary/70 hover:text-primary font-medium mt-2 transition-colors bg-surface border border-border/60 rounded-[14px] px-4 py-3 text-center ${onboardingHintClass(hint)}`}
                 >
                     + Thêm tùy chọn
                 </button>

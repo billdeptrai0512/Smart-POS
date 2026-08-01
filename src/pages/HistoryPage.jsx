@@ -14,6 +14,12 @@ import { useCart } from '../contexts/CartContext'
 import { useStats } from '../contexts/StatsContext'
 import { useHistory } from '../contexts/HistoryContext'
 import { useConfirm } from '../contexts/ConfirmContext'
+import { useAuth } from '../contexts/AuthContext'
+import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
+import { readOnboardingState, writeOnboardingState, DEFAULT_ONBOARDING_STATE, isInventoryProgressDone } from '../utils/onboardingStorage'
+import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
+import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
+import { isRecipeStepActive } from '../components/common/onboarding/steps/recipeStep'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import OrdersList from '../components/HistoryPage/OrdersList'
 import ExpensePanel from '../components/HistoryPage/ExpensePanel'
@@ -39,11 +45,25 @@ export default function HistoryPage() {
     } = useHistory()
     const { retrySync } = useStats()
     const { toast, showToast } = useCart()
+    const { isGuest } = useAuth()
+    const { requestRefresh: requestOnboardingRefresh } = useOnboardingVisibility()
 
     useEffect(() => {
         if (!isLoadingHistory) handleLoadHistory()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
+
+    // Onboarding "Tạo đơn" step's 3rd requirement — "Xem nhật ký" — only counts once both
+    // drinks are already done (see orderStep.jsx); visiting /history before that doesn't
+    // tick it, so the order matters, not just "has this page ever been opened".
+    useEffect(() => {
+        if (!isGuest || !selectedAddress?.id) return
+        const { orderProgress } = readOnboardingState(selectedAddress.id)
+        if (orderProgress.cafeSua && orderProgress.cacaoCaPheLon && orderProgress.matcha && !orderProgress.viewedHistory) {
+            writeOnboardingState(selectedAddress.id, { orderProgress: { ...orderProgress, viewedHistory: true } })
+            requestOnboardingRefresh()
+        }
+    }, [isGuest, selectedAddress?.id, requestOnboardingRefresh])
 
     // ─── Navigation state ─────────────────────────────────────────────
     const initialTab = location.state?.tab === 'expense' ? 'expense' : 'orders'
@@ -54,6 +74,34 @@ export default function HistoryPage() {
     // ─── UI state ─────────────────────────────────────────────────────
     const [activeTab, setActiveTab] = useState(initialTab)
     const [showAddModal, setShowAddModal] = useState(false)
+
+    // Onboarding phase 2 "Nhật ký" — tick theo tab /history user tự bấm qua (Thu nhập/Chi
+    // phí/Báo cáo, xem HistoryTabsBar.jsx + journalStep.jsx). "Xem thu nhập" chỉ cần tick 1
+    // lần lúc khởi tạo state (là tab mặc định, không đổi lại sau đó); "Xem chi phí" theo dõi
+    // lại mỗi render vì user có thể bấm qua tab đó bất cứ lúc nào (render-time-adjust, cùng
+    // pattern với useOrderOnboardingProgress.js). Persist dùng chung
+    // useOnboardingProgressPersist với orderProgress.
+    const [journalProgress, setJournalProgress] = useState(() => {
+        const stored = isGuest && selectedAddress?.id ? readOnboardingState(selectedAddress.id).journalProgress : DEFAULT_ONBOARDING_STATE.journalProgress
+        return initialTab === 'orders' && !stored.viewedIncome ? { ...stored, viewedIncome: true } : stored
+    })
+    if (isGuest && activeTab === 'expense' && !journalProgress.viewedExpense) {
+        setJournalProgress(prev => ({ ...prev, viewedExpense: true }))
+    }
+    useOnboardingProgressPersist('journalProgress', journalProgress, { isGuest, addressId: selectedAddress?.id, requestOnboardingRefresh })
+    // Hint tuần tự: Chi phí trước, Báo cáo sau khi Chi phí đã xong.
+    const journalHintTab = !isGuest ? null
+        : !journalProgress.viewedExpense ? 'expense'
+            : !journalProgress.viewedReport ? 'report'
+                : null
+
+    // Phase 5 "Điều chỉnh công thức" không còn nút riêng trong guide — hint thẳng vào mũi tên
+    // "tiến" ở header (như DailyReportPage.jsx), cho user quay lại /history rồi đi tiếp tới
+    // /recipes qua menuSequence.js. inventoryProgress/recipeProgress không thuộc trang này —
+    // đọc read-only qua useOnboardingProgress (xem recipeStep.jsx).
+    const inventoryProgress = useOnboardingProgress('inventoryProgress', { isGuest, addressId: selectedAddress?.id })
+    const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId: selectedAddress?.id })
+    const hintGoToRecipes = isGuest && isRecipeStepActive(isInventoryProgressDone(inventoryProgress), recipeProgress)
 
     // Date selection (scope/offset/customRange + handlers) lives in the shared
     // hook so /history and /daily-report stay in lock-step. Seeded from nav state
@@ -352,6 +400,13 @@ export default function HistoryPage() {
     }
 
     const handleReportNav = () => {
+        // Phase 2 "Nhật ký" hoàn tất khi user tự bấm sang tab Báo cáo (điều hướng đi luôn nên
+        // không có activeTab==='report' để bắt qua effect như 2 tab kia — ghi thẳng ở đây).
+        if (isGuest && selectedAddress?.id && !journalProgress.viewedReport) {
+            const next = { ...journalProgress, viewedReport: true }
+            writeOnboardingState(selectedAddress.id, { journalProgress: next })
+            requestOnboardingRefresh()
+        }
         // Tab-switch within the Nhật-ký/Báo-cáo dashboard: use replace so the back button
         // returns to the entry point (e.g. /addresses) instead of cycling through tab toggles.
         // dateNavState ({ scope, offset, customRange }) carries the full window so
@@ -370,7 +425,9 @@ export default function HistoryPage() {
                 canGoForward={canGoForwardPeriod}
                 onBack={() => goToMenuStep(activeTab, -1, { navigate, backTo, setActiveTab, goReport: handleReportNav, wizard: location.state?.wizard })}
                 onForward={() => goToMenuStep(activeTab, +1, { navigate, backTo, setActiveTab, goReport: handleReportNav, wizard: location.state?.wizard })}
+                hintForward={hintGoToRecipes}
                 activeTab={activeTab}
+                hintTab={journalHintTab}
                 onTabSelect={(tab) => {
                     if (tab === 'report') handleReportNav()
                     else setActiveTab(tab)

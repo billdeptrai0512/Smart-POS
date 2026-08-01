@@ -5,6 +5,8 @@ import { useHistory } from '../contexts/HistoryContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
+import { useOrderOnboardingProgress } from '../hooks/useOrderOnboardingProgress'
 import { useNavigate } from 'react-router-dom'
 import { DAY_NAMES } from '../constants'
 import { dateFullVN } from '../utils/dateVN'
@@ -28,12 +30,29 @@ export default function POSPage() {
     } = useCart()
     const { isOnline } = useStats()
     const { handleLoadHistory } = useHistory()
+    const { requestRefresh: requestOnboardingRefresh } = useOnboardingVisibility()
+    const addressId = selectedAddress?.id
+
+    // Active (held) item whose extras show. Mirrors the old footer's pick: explicit active
+    // id, else the last held item. Computed once here (not also in MenuGrid) and passed down,
+    // since both MenuGrid and useOrderOnboardingProgress below need it.
+    const activeItem = cart.find(i => i.cartItemId === activeCartItemId) || cart[cart.length - 1]
 
     // Commit the last held item to DB when leaving the POS screen.
     // Ref keeps the unmount cleanup pointed at the latest commitHeld.
     const flushRef = useRef(commitHeld)
     flushRef.current = commitHeld
     useEffect(() => () => flushRef.current(), [])
+
+    // OnboardingGuide is mounted once at the layout level (not per-page), so it doesn't
+    // know a new order landed on its own — nudge it to re-check the "Tạo đơn" step.
+    // enterKey (a submit timestamp, null until the first doSubmit) only changes on a
+    // real submit, not on the initial recentOrders fetch.
+    useEffect(() => { if (enterKey) requestOnboardingRefresh() }, [enterKey, requestOnboardingRefresh])
+
+    const { hintProductId, hintExtraName, showHistoryHint } = useOrderOnboardingProgress({
+        isGuest, addressId, products, activeItem, requestOnboardingRefresh,
+    })
 
     // Prefetch the lazy History chunk on mount so "go next" doesn't flash the Suspense
     // fallback while it loads. Same module App.jsx lazy-imports → warms the same chunk.
@@ -66,18 +85,21 @@ export default function POSPage() {
                 recentOrders={recentOrders}
                 draftOrder={draftOrder}
                 enterKey={enterKey}
+                showOnboardingHint={showHistoryHint}
             />
 
             <MenuGrid
                 products={products}
                 cart={cart}
+                activeItem={activeItem}
                 onAddItem={handleAddItem}
                 onCancelHeld={cancelHeld}
                 productExtras={productExtras}
-                activeCartItemId={activeCartItemId}
                 onToggleExtra={handleToggleExtra}
                 enabledStickyExtraIds={enabledStickyExtraIds}
                 onToggleStickyExtra={handleToggleStickyExtra}
+                hintProductId={hintProductId}
+                hintExtraName={hintExtraName}
             />
 
             <Toast toast={toast} />
