@@ -15,7 +15,7 @@ import StaffTab from '../components/AddressSelectPage/StaffTab'
 import CreateStaffModal from '../components/AddressSelectPage/CreateStaffModal'
 import SupportModal from '../components/common/SupportModal'
 import { BottomSheet } from '../components/common/ModalShell'
-import { cacheKey as buildCacheKey } from '../constants/storageKeys'
+import { cacheKey as buildCacheKey, STORAGE_KEYS } from '../constants/storageKeys'
 import { computeSubscriptionStatus } from '../utils/subscriptionStatus'
 import { dateFullVN } from '../utils/dateVN'
 
@@ -30,6 +30,10 @@ import { dateFullVN } from '../utils/dateVN'
 //   3. Có hoạt động + đã đăng ký (paid) — ổn, không cần chú ý.
 //   4. Không hoạt động hôm nay — bất kể trạng thái gói (có thể đã nghỉ/rời bỏ).
 const ACTIVE_STATUS_RANK = { none: 0, trial: 1, pending: 2, paid: 3 }
+
+// Module scope, KHÔNG phải useRef: page này unmount mỗi lần sang /pos, nên ref sẽ
+// reset và prefetch chạy lại từ đầu mỗi lần quay về danh sách địa chỉ.
+const prefetchedIds = new Set()
 
 export default function AddressSelectPage() {
     const {
@@ -100,19 +104,19 @@ export default function AddressSelectPage() {
         return { staffCount: s, managerCount: m }
     }, [staffList])
 
-    // Track which IDs we've already prefetched so renames/new addresses don't refetch all.
-    const prefetchedIdsRef = useRef(new Set())
-
-    // Background prefetch ProductContext data into cache (only for new addresses).
-    // Hoãn 2.5s để ~5 query/địa chỉ không tranh băng thông với query stats lúc login
-    // (stats là thứ user đang nhìn skeleton chờ; prefetch chỉ là warm cache).
+    // Background prefetch ProductContext data into cache — CHỈ cho chi nhánh dùng gần
+    // nhất, tức cái gần như chắc chắn user mở tiếp. Trước đây prefetch mọi địa chỉ:
+    // 5 query × N (14 chi nhánh = 70 request) + 6 lần JSON.stringify/setItem đồng bộ
+    // cho mỗi địa chỉ (giật lúc cuộn, đụng quota), trong khi user chỉ mở 1 → tỉ lệ
+    // dùng ~1/N. Chi nhánh khác vẫn chạy được, ProductContext tự fetch lúc mở.
+    // Hoãn 2.5s để không tranh băng thông với query stats user đang nhìn skeleton chờ.
     useEffect(() => {
-        if (!addresses.length) return
-        const newAddrs = addresses.filter(a => !prefetchedIdsRef.current.has(a.id))
-        if (!newAddrs.length) return
+        const lastId = localStorage.getItem(STORAGE_KEYS.SELECTED_ADDRESS)
+        const addr = addresses.find(a => a.id === lastId)
+        if (!addr || prefetchedIds.has(addr.id)) return
 
-        async function prefetchOne(addr) {
-            prefetchedIdsRef.current.add(addr.id)
+        const timer = setTimeout(async () => {
+            prefetchedIds.add(addr.id)
             try {
                 const [prods, recs, costsResult, extras] = await Promise.all([
                     fetchProducts(addr.id),
@@ -133,29 +137,10 @@ export default function AddressSelectPage() {
                     localStorage.setItem(key('extra_ingredients'), JSON.stringify(extraIngs))
                 } catch { /* ignore quota */ }
             } catch {
-                // Allow retry on next render if prefetch failed
-                prefetchedIdsRef.current.delete(addr.id)
+                prefetchedIds.delete(addr.id) // cho phép thử lại lần vào sau
             }
-        }
-
-        // A manager with many branches used to fire 5 queries × N branches all at
-        // once — a burst that could saturate a flaky connection right when the
-        // stats query the user IS looking at also needs bandwidth. 2 branches'
-        // worth in flight at a time keeps this a background trickle instead.
-        let cancelled = false
-        let cursor = 0
-        async function worker() {
-            while (cursor < newAddrs.length) {
-                if (cancelled) return
-                const addr = newAddrs[cursor++]
-                await prefetchOne(addr)
-            }
-        }
-
-        const timer = setTimeout(() => {
-            for (let i = 0; i < Math.min(2, newAddrs.length); i++) worker()
         }, 2500)
-        return () => { cancelled = true; clearTimeout(timer) }
+        return () => clearTimeout(timer)
         // ponytail: keyed on addressIdsKey (ids only), not `addresses` — the array gets a
         // new reference on every refetch even when the id set is unchanged, which would
         // restart this 2.5s prefetch timer on every such refresh.
