@@ -60,7 +60,11 @@ export function AddressStatsProvider() {
         } finally {
             if (!cancelRef.current) setStatsLoading(false)
         }
-    }, [addresses])
+        // ponytail: keyed on addressIdsKey — `addresses` chỉ được dùng để lấy ids, mà mảng
+        // đổi reference mỗi lần AddressContext refetch dù ids y hệt. Giữ deps là object thì
+        // RPC ~1.9s này chạy lại vài lần mỗi lần khởi động.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [addressIdsKey])
 
     // Trạng thái gói dùng để sort BranchGrid (dùng thử → đã đăng ký → chưa đăng ký).
     // Không gọi khi monetization tắt — cột address_subscriptions vô nghĩa lúc đó.
@@ -77,7 +81,9 @@ export function AddressStatsProvider() {
         setSubscriptionStatusMap(statusMap)
         setSubscriptionRowsMap(rowsMap)
         setSubscriptionLoading(false)
-    }, [addresses, monetizationEnabled])
+        // ponytail: keyed on addressIdsKey như loadStats ở trên, cùng lý do.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [addressIdsKey, monetizationEnabled])
 
     // Expose để SubscriptionPanel gọi lại sau Mock/Reset gói (admin) — làm tươi cả
     // rows (badge từng card + panel) lẫn status (thứ tự sort) trong 1 lần refetch.

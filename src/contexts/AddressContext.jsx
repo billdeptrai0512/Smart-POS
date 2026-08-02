@@ -142,8 +142,13 @@ export function AddressProvider() {
         // snapshots (gating UI / one-time stale-cache cleanup), not live reactive state —
         // every path that flips isGuest also updates `profile` (sync or one async hop via
         // loadProfile), which already re-triggers this effect.
+        //
+        // Deps là 3 field nguyên thuỷ, KHÔNG phải object `profile`: loadProfile chạy vài lần
+        // lúc khởi động (finish + onAuthStateChange) và mỗi lần setProfile ra object mới dù
+        // dữ liệu y hệt → refetch addresses 4 lần, kéo theo stats RPC (~1.9s) + subscription
+        // chạy 4 lần. Chỉ 3 field này ảnh hưởng query bên dưới.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [profile, hasSession])
+    }, [profile?.id, profile?.role, profile?.manager_id, hasSession])
 
     const setSelectedAddress = useCallback((addr) => {
         setSelectedAddressState(addr)
