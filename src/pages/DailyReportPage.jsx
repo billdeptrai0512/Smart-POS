@@ -1272,7 +1272,7 @@ export default function DailyReportPage() {
                                         )}
                                         {/* Flow trong ngày: ① Soạn cho hôm nay → ② Hao hụt (cuối ca) → ③ Chuẩn bị tồn kho (cho mai) */}
                                         <ShiftPrepCard
-                                            title="Soạn cho hôm nay"
+                                            title="Chuẩn bị hôm nay"
                                             icon={<Truck size={15} className="text-primary shrink-0" />}
                                             packVerb="Lấy"
                                             haveLabel="Tồn quầy đầu ca"
@@ -1316,7 +1316,7 @@ export default function DailyReportPage() {
                                         {!isStaff && <MissingCupSuspicionCard candidates={missingCupCandidates} />}
 
                                         <ShiftPrepCard
-                                            title="Chuẩn bị ngày mai"
+                                            title="Soạn cho ngày mai"
                                             icon={<Package size={15} className="text-primary shrink-0" />}
                                             packVerb="Mua"
                                             haveLabel="Tồn quầy cuối ca"

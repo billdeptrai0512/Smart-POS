@@ -19,9 +19,9 @@ function computeRowStatus(args) {
 }
 
 // Per-ingredient layout (counter-side only — Tồn kho tách ra ngoài):
-//   row 1 (inputs):  Đầu kỳ    |  Nhập thêm   |  Cuối kỳ
-//   row 2:           Sử dụng   |  Tổng cộng (col-span 2)
-//   row 3 (audit):   Chênh lệch|  Lý thuyết   |  Thực tế
+//   row 1 (inputs):  Đầu kỳ    |  Nhập thêm (col-span 2)
+//   row 2:           Đã bán    |  Sử dụng (col-span 2)
+//   row 3 (audit):   Chênh lệch|  Lý thuyết   |  Cuối kỳ (input, = Thực tế)
 //
 // Staff inputs: Đầu kỳ, Nhập thêm, Cuối kỳ. Everything else is computed and disabled.
 // Audit math:
@@ -124,7 +124,7 @@ export default function InventoryReportCard({
     return (
         <CollapsibleCard
             icon={<ClipboardList size={15} className="text-primary shrink-0" />}
-            title="Kiểm kê tồn kho"
+            title="Kiểm kê tồn quầy"
             count={`${countedCount}/${sortedList.length}`}
             open={open}
             onToggle={onToggleOpen}
@@ -305,37 +305,26 @@ const IngredientRow = memo(function IngredientRow({
                         onChange={(v) => onOpeningChange(ing.ingredient, v)}
                         locked={isLocked || lockWarehouseInputs}
                     />
-                    <ColumnInput
-                        label="Nhập thêm"
-                        value={restockValue || ''}
-                        unit={unit}
-                        disabled={isSubmitting || lockWarehouseInputs}
-                        onChange={(v) => onRestockChange(ing.ingredient, v)}
-                        overflow={restockOverflow}
-                        locked={lockWarehouseInputs}
-                    />
-                    <ColumnInput
-                        label="Cuối kỳ"
-                        value={inventoryValue ?? ''}
-                        unit={unit}
-                        disabled={isSubmitting}
-                        onChange={(v) => onInventoryChange(ing.ingredient, v)}
-                        hint={hint && open}
-                    />
+                    <div className="col-span-2">
+                        <ColumnInput
+                            label="Nhập thêm"
+                            value={restockValue || ''}
+                            unit={unit}
+                            disabled={isSubmitting || lockWarehouseInputs}
+                            onChange={(v) => onRestockChange(ing.ingredient, v)}
+                            overflow={restockOverflow}
+                            locked={lockWarehouseInputs}
+                        />
+                    </div>
                 </div>
 
                 {/* Row 2 — counter level */}
                 <div className="grid grid-cols-3 gap-2 mt-2">
-                    <ColumnInput
-                        label="Sử dụng"
-                        value={usedNum}
-                        unit={unit}
-                        disabled
-                    />
+                    <TextCell label="Đã bán" text={totalCupsText} />
                     <div className="col-span-2">
                         <TextCell
-                            label="Tổng cộng"
-                            text={totalCupsText}
+                            label="Sử dụng"
+                            text={`${usedNum} ${unit}`}
                             onClick={hasBreakdown ? toggleExpanded : undefined}
                             expanded={expanded}
                         />
@@ -352,7 +341,7 @@ const IngredientRow = memo(function IngredientRow({
                                 <div key={i} className="flex items-center justify-between">
                                     <span className="text-[11px] text-text-secondary truncate flex-1">{entry.name}</span>
                                     <span className="text-[11px] font-bold text-text-dim tabular-nums shrink-0 ml-2">
-                                        {entry.qty} ly × {Math.round(entry.totalAmount / entry.qty * 10) / 10} = <span className="text-text font-black">{entry.totalAmount}</span>
+                                        {entry.qty} ly × {Math.round(entry.totalAmount / entry.qty * 10) / 10} {unit} = <span className="text-text font-black">{entry.totalAmount} {unit}</span>
                                     </span>
                                 </div>
                             ))
@@ -360,7 +349,7 @@ const IngredientRow = memo(function IngredientRow({
                     </div>
                 )}
 
-                {/* Row 3 — audit: Hao hụt | Lý thuyết | Thực tế */}
+                {/* Row 3 — audit: Hao hụt | Lý thuyết | Cuối kỳ (= Thực tế, gộp 1 input) */}
                 <div className="grid grid-cols-3 gap-2 mt-2">
                     <ColumnInput
                         label="Chênh lệch"
@@ -378,10 +367,12 @@ const IngredientRow = memo(function IngredientRow({
                         labelTrailing={<Info size={10} className="text-text-dim shrink-0" />}
                     />
                     <ColumnInput
-                        label="Thực tế"
-                        value={thucTe != null ? thucTe : ''}
+                        label="Cuối kỳ"
+                        value={inventoryValue ?? ''}
                         unit={unit}
-                        disabled
+                        disabled={isSubmitting}
+                        onChange={(v) => onInventoryChange(ing.ingredient, v)}
+                        hint={hint && open}
                     />
                 </div>
                 {showLyThuyetInfo && (
@@ -450,17 +441,20 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRig
                 <span className={`text-[9px] font-black uppercase ${onLabelClick ? 'text-text' : 'text-text-dim'}`}>{label}</span>
                 {labelTrailing || headerRight}
             </button>
-            <div className={`flex items-center rounded-[10px] overflow-hidden transition-all gap-1 ${wrapCls} ${onboardingHintClass(hint)}`}>
+            {/* <label> để bấm chỗ nào trong ô cũng focus vào input — input tự co theo số
+                (width tính bằng ch) nên đơn vị luôn nằm sát ngay sau số, cả cụm canh giữa. */}
+            <label className={`flex items-center justify-center rounded-[10px] overflow-hidden transition-all gap-1 px-1.5 py-1.5 ${wrapCls} ${onboardingHintClass(hint)}`}>
                 <input
                     type="number"
                     placeholder="-"
                     value={value}
                     onChange={e => onChange?.(e.target.value)}
                     disabled={disabled}
-                    className={`flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-bold text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${tone === 'neutral' ? 'disabled:opacity-50' : ''} ${inputCls}`}
+                    style={{ width: `${Math.max(String(value ?? '').length, 1)}ch` }}
+                    className={`min-w-0 bg-transparent text-[13px] font-bold text-center placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${tone === 'neutral' ? 'disabled:opacity-50' : ''} ${inputCls}`}
                 />
-                <span className={`pr-1.5 text-[10px] font-medium shrink-0 ${unitCls}`}>{unit}</span>
-            </div>
+                <span className={`text-[10px] font-medium shrink-0 ${unitCls}`}>{unit}</span>
+            </label>
         </div>
     )
 }
@@ -476,7 +470,7 @@ function TextCell({ label, text, tone = 'neutral', onClick, expanded = false }) 
     }
     const t = toneMap[tone] || toneMap.neutral
     const interactive = typeof onClick === 'function'
-    const boxClasses = `w-full rounded-[10px] py-1.5 px-2 text-[13px] text-center font-bold border ${t.wrap} ${t.text}${interactive ? ' flex items-center justify-end gap-1 hover:brightness-110 active:scale-[0.99] transition' : ''}`
+    const boxClasses = `w-full rounded-[10px] py-1.5 px-2 text-[13px] text-center font-bold border ${t.wrap} ${t.text}${interactive ? ' relative flex items-center justify-center hover:brightness-110 active:scale-[0.99] transition' : ''}`
     return (
         <div className="flex flex-col">
             <div className="flex items-center justify-center gap-1 mb-1">
@@ -484,8 +478,8 @@ function TextCell({ label, text, tone = 'neutral', onClick, expanded = false }) 
             </div>
             {interactive ? (
                 <button type="button" onClick={onClick} className={boxClasses}>
-                    <span className="flex-1 truncate">≈ {text}</span>
-                    <ChevronDown size={11} className={`shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                    <span className="truncate">{text}</span>
+                    <ChevronDown size={11} className={`absolute right-2 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
                 </button>
             ) : (
                 <div className={boxClasses}>{text}</div>

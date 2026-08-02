@@ -320,6 +320,7 @@ export default function BranchGrid({
                                                                 icon={<Wallet size={16} />}
                                                                 label="Dòng tiền"
                                                                 tone="success"
+                                                                className="col-span-2"
                                                                 onClick={() => { onSelectReport?.(addr, 'cashflow'); setExpandedActionsId(null) }}
                                                             />
                                                             <ActionPill
@@ -339,6 +340,17 @@ export default function BranchGrid({
                                                     <div>
                                                         <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Kho hàng</p>
                                                         <div className="grid grid-cols-2 gap-2">
+                                                            <ActionPill
+                                                                icon={<Warehouse size={16} />}
+                                                                label="Kho chung"
+                                                                tone="warning"
+                                                                onClick={() => {
+                                                                    setGroupModalAddressId(addr.id)
+                                                                    setGroupError('')
+                                                                    setNewGroupName('')
+                                                                    setConfirmDeleteGroupId(null)
+                                                                }}
+                                                            />
                                                             <ActionPill
                                                                 icon={<ChefHat size={16} />}
                                                                 label="Công thức"
@@ -379,17 +391,6 @@ export default function BranchGrid({
                                                             setEditingAddressId(addr.id)
                                                             setEditName(addr.name)
                                                             setError('')
-                                                        }}
-                                                    />
-                                                    <ActionPill
-                                                        icon={<Warehouse size={16} />}
-                                                        label="Kho tổng chung"
-                                                        tone="warning"
-                                                        onClick={() => {
-                                                            setGroupModalAddressId(addr.id)
-                                                            setGroupError('')
-                                                            setNewGroupName('')
-                                                            setConfirmDeleteGroupId(null)
                                                         }}
                                                     />
                                                     {isAdmin && (
@@ -803,11 +804,11 @@ const PILL_TONES = {
     warning: 'bg-warning/10 text-warning',
     danger: 'bg-danger/10 text-danger',
 }
-function ActionPill({ icon, label, tone = 'primary', onClick }) {
+function ActionPill({ icon, label, tone = 'primary', onClick, className = '' }) {
     return (
         <button
             onClick={onClick}
-            className="flex flex-col items-center gap-1.5 px-2 py-3 rounded-[14px] bg-surface-light border border-border/50 hover:border-primary/40 hover:bg-border/20 active:scale-95 transition-all text-center min-w-0"
+            className={`flex flex-col items-center gap-1.5 px-2 py-3 rounded-[14px] bg-surface-light border border-border/50 hover:border-primary/40 hover:bg-border/20 active:scale-95 transition-all text-center min-w-0 ${className}`}
         >
             <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${PILL_TONES[tone]}`}>
                 {icon}
