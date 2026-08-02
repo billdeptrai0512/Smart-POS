@@ -142,7 +142,9 @@ export async function fetchExpensesByRange(addressId, start, end) {
 // vì tất cả cùng cộng vào 1 kho tổng). RLS tự giới hạn: manager thấy đủ cả nhóm (sở hữu mọi địa
 // chỉ), staff chỉ thấy các địa chỉ mình được cấp quyền — chấp nhận cho v1 (không cần RPC riêng).
 export async function fetchIngredientRestockHistory(addressIds, ingredient, fromDate, toDate) {
-    const ids = Array.isArray(addressIds) ? addressIds : [addressIds]
+    // filter(Boolean): "Mẫu mặc định" (admin) có id null — không lọc thì .in() gửi "null"
+    // và Postgres trả 22P02. Cùng cách xử lý với fetchIngredientWithdrawals.
+    const ids = (Array.isArray(addressIds) ? addressIds : [addressIds]).filter(Boolean)
     if (localRepo.isGuest()) {
         const addressId = ids[0] // guest không hỗ trợ nhóm kho tổng
         const expenses = localRepo.fetchAllLocalExpenses(addressId).filter(e =>
