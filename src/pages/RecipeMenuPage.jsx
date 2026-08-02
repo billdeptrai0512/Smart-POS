@@ -73,8 +73,11 @@ export default function RecipeMenuPage() {
     // nextIngredientSetupField, tới lúc cả 3 field còn lại xong thì warehouse chắc chắn cũng đã
     // xong theo hint sequence, nên xấp xỉ này khớp trong mọi trường hợp đi đúng theo hint.
     const coffeeConfig = useMemo(() => findCoffeeIngredient(ingredientConfigs), [ingredientConfigs])
+    // !!coffeeConfig: shop xoá/đổi tên NVL "Cà phê" thì phase 6 vacuously done (xem
+    // ingredientSetupStep.done) — thiếu guard này tab sẽ nhấp nháy hoài vì
+    // nextIngredientSetupField(undefined) luôn trả 'pack'.
     const hintIngredientsTab = isGuest && isRecipeProgressDone(recipeProgress)
-        && nextIngredientSetupField(coffeeConfig, true) !== null
+        && !!coffeeConfig && nextIngredientSetupField(coffeeConfig, true) !== null
     // Chỉ Admin được sắp xếp menu mặc định (chưa chọn địa chỉ) — giống rule cũ của saveSortOrder.
     const canSort = canEdit && !!(selectedAddress?.id || isAdmin)
     const { toast, showToast, showError } = useToast()

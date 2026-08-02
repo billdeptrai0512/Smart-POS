@@ -65,7 +65,7 @@ export default function IngredientDetailsTab({
                         title={countInAudit ? 'Đang báo cáo tồn quầy — bấm để tắt' : 'Đang TẮT báo cáo tồn quầy — bấm để bật'}
                         disabled={!canEdit || saving}
                         onClick={() => canEdit && onToggleAudit(!countInAudit)}
-                        className={`w-5 h-5 flex items-center justify-center rounded-[6px] border transition-colors focus:outline-none shrink-0 ${
+                        className={`relative w-5 h-5 flex items-center justify-center rounded-[6px] border transition-colors focus:outline-none shrink-0 before:absolute before:-inset-2.5 before:content-[''] ${
                             countInAudit ? 'bg-primary border-primary' : 'bg-surface-light border-border/60'
                         } ${canEdit ? 'cursor-pointer' : 'cursor-default opacity-60'}`}
                     >

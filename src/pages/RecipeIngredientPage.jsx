@@ -72,9 +72,12 @@ export default function RecipeIngredientPage() {
 
     // Phase 5 xong nhưng user vẫn đứng ở trang chi tiết công thức — tab "Nguyên liệu" của
     // phase 6 chỉ có ở /recipes (trang này không render MenuTabsBar), nên hint nút trở về
-    // trước, rồi RecipeMenuPage.jsx (hintIngredientsTab) tiếp quản. Cùng điều kiện với nó.
+    // trước, rồi RecipeMenuPage.jsx (hintIngredientsTab) tiếp quản. Cùng điều kiện với nó,
+    // kể cả guard coffeeConfig: không còn NVL "Cà phê" thì phase 6 tự done (ingredientSetupStep)
+    // → không được hint nữa, nếu không nút trở về nhấp nháy vĩnh viễn.
+    const coffeeConfig = useMemo(() => findCoffeeIngredient(ingredientConfigs), [ingredientConfigs])
     const hintBack = isGuest && isRecipeProgressDone(recipeProgress)
-        && nextIngredientSetupField(findCoffeeIngredient(ingredientConfigs), true) !== null
+        && !!coffeeConfig && nextIngredientSetupField(coffeeConfig, true) !== null
 
     // Index recipes by product — used by the "copy from" picker and to count rows.
     const recipesByProduct = useMemo(() => {
