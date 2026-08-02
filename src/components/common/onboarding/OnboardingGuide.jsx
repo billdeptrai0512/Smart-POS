@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, CircleHelp } from 'lucide-react'
+import { ArrowRight, ListChecks } from 'lucide-react'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useAddress } from '../../../contexts/AddressContext'
 import { useProducts } from '../../../contexts/ProductContext'
@@ -25,11 +25,10 @@ const STEPS = [orderStep, journalStep, cashReportStep, inventoryStep, recipeStep
 
 // Hiện khi user đã xong cả 6 bước — guide không biến mất nữa, chuyển sang hướng dẫn đăng ký
 // tài khoản thật để lưu lại dữ liệu (guest data chỉ sống trong localStorage).
-// Không có Body: chỉ còn đúng nút CTA, khỏi mô tả thừa.
+// Không có name/Body: chỉ còn đúng nút CTA, khỏi header + mô tả thừa.
 const FINISHED_STEP = {
     to: '/signup',
     navLabel: 'Đăng ký tài khoản',
-    name: 'Hoàn thành sử dụng thử',
 }
 
 // Hướng dẫn "Bắt đầu bán hàng" — 2 trạng thái chuyển qua lại, không có nút tắt vĩnh viễn:
@@ -109,6 +108,9 @@ export default function OnboardingGuide() {
 
     const step = idx === -1 ? FINISHED_STEP : STEPS[idx]
     const Body = step.Body
+    // Phase cuối không có name → không render header, nên cũng không thu gọn được (nếu không
+    // ép mở, thẻ đang thu gọn sẽ thành rỗng hoàn toàn). Còn đúng 1 nút CTA đăng ký.
+    const collapsed = !!step.name && local.collapsed
 
     // 1 khối duy nhất: header (bấm để mở/thu gọn) + nội dung khi mở, thay vì pill + thẻ
     // nổi tách rời trước đây.
@@ -117,22 +119,24 @@ export default function OnboardingGuide() {
             className="fixed left-3 z-[60] pointer-events-auto bg-surface border border-primary/30 rounded-[14px] shadow-lg max-w-[280px]"
             style={{ bottom: 16 + bottomOffset }}
         >
-            <button
-                onClick={() => save({ collapsed: !local.collapsed })}
-                className="flex items-center justify-between gap-1.5 px-3 py-2 w-full text-left hover:bg-surface-light rounded-[14px] transition-colors"
-                title={local.collapsed ? 'Mở hướng dẫn bắt đầu bán hàng' : 'Thu gọn'}
-            >
-                <span className="text-text font-black text-[12px] uppercase">{step.name}</span>
-                <CircleHelp size={15} className="text-primary shrink-0" />
-            </button>
-            {!local.collapsed && (
-                <div className="px-3 pb-3">
+            {step.name && (
+                <button
+                    onClick={() => save({ collapsed: !local.collapsed })}
+                    className="flex items-center justify-between gap-1.5 px-3 py-2 w-full text-left hover:bg-surface-light rounded-[14px] transition-colors"
+                    title={local.collapsed ? 'Mở hướng dẫn bắt đầu bán hàng' : 'Thu gọn'}
+                >
+                    <span className="text-text font-black text-[12px] uppercase">{step.name}</span>
+                    <ListChecks size={15} className="text-primary shrink-0" />
+                </button>
+            )}
+            {!collapsed && (
+                <div className={step.name ? 'px-3 pb-3' : 'p-3'}>
                     {step.navLabel && (
                         <button
                             onClick={() => navigate(step.to, step.state ? { state: step.state } : undefined)}
                             className={`flex items-center gap-1 bg-primary text-bg font-black text-[11px] uppercase rounded-[8px] px-2.5 py-1.5 hover:bg-primary/90 active:bg-primary/80 transition-colors ${Body ? 'mb-1.5' : ''}`}
                         >
-                            {step.navLabel} <ArrowRight size={11} strokeWidth={3} />
+                            {step.navLabel}
                         </button>
                     )}
                     {Body && (

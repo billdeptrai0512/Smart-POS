@@ -2,7 +2,7 @@ import ChecklistRow from '../ChecklistRow'
 import { isInventoryProgressDone } from '../../../../utils/onboardingStorage'
 
 export default {
-    name: 'Kiểm kê tồn kho',
+    name: 'Kết ca tồn quầy',
     done: (ctx) => isInventoryProgressDone(ctx.inventoryProgress),
     Body: ({ ctx }) => (
         <>

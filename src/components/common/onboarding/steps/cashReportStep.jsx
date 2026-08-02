@@ -2,7 +2,7 @@ import ChecklistRow from '../ChecklistRow'
 import { isCashFlowProgressDone } from '../../../../utils/onboardingStorage'
 
 export default {
-    name: 'Kết ca đếm tiền',
+    name: 'Kết ca thực thu',
     done: (ctx) => isCashFlowProgressDone(ctx.cashFlowProgress),
     Body: ({ ctx }) => (
         <>
