@@ -22,7 +22,7 @@ export default {
     done: (ctx) => isRecipeProgressDone(ctx.recipeProgress),
     Body: ({ ctx }) => (
         <>
-            <ChecklistRow label="Thêm định lượng nguyên liệu" done={ctx.recipeProgress.filledAmount} />
+            <ChecklistRow label="Thêm định lượng" done={ctx.recipeProgress.filledAmount} />
             <ChecklistRow label="Tạo tùy chọn thêm" done={ctx.recipeProgress.addedExtra} />
         </>
     ),

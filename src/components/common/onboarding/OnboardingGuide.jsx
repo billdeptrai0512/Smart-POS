@@ -25,15 +25,11 @@ const STEPS = [orderStep, journalStep, cashReportStep, inventoryStep, recipeStep
 
 // Hiện khi user đã xong cả 6 bước — guide không biến mất nữa, chuyển sang hướng dẫn đăng ký
 // tài khoản thật để lưu lại dữ liệu (guest data chỉ sống trong localStorage).
+// Không có Body: chỉ còn đúng nút CTA, khỏi mô tả thừa.
 const FINISHED_STEP = {
     to: '/signup',
     navLabel: 'Đăng ký tài khoản',
-    name: 'Đăng ký để lưu dữ liệu',
-    Body: () => (
-        <p className="text-[11px] text-text-secondary">
-            Bạn đã hoàn thành hướng dẫn! Đăng ký tài khoản để lưu lại toàn bộ dữ liệu.
-        </p>
-    ),
+    name: 'Hoàn thành sử dụng thử',
 }
 
 // Hướng dẫn "Bắt đầu bán hàng" — 2 trạng thái chuyển qua lại, không có nút tắt vĩnh viễn:
@@ -134,14 +130,16 @@ export default function OnboardingGuide() {
                     {step.navLabel && (
                         <button
                             onClick={() => navigate(step.to, step.state ? { state: step.state } : undefined)}
-                            className="flex items-center gap-1 bg-primary text-bg font-black text-[11px] uppercase rounded-[8px] px-2.5 py-1.5 mb-1.5 hover:bg-primary/90 active:bg-primary/80 transition-colors"
+                            className={`flex items-center gap-1 bg-primary text-bg font-black text-[11px] uppercase rounded-[8px] px-2.5 py-1.5 hover:bg-primary/90 active:bg-primary/80 transition-colors ${Body ? 'mb-1.5' : ''}`}
                         >
                             {step.navLabel} <ArrowRight size={11} strokeWidth={3} />
                         </button>
                     )}
-                    <div className="space-y-1">
-                        <Body ctx={ctx} />
-                    </div>
+                    {Body && (
+                        <div className="space-y-1">
+                            <Body ctx={ctx} />
+                        </div>
+                    )}
                 </div>
             )}
         </div>

@@ -5,8 +5,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
-import { readOnboardingState, DEFAULT_ONBOARDING_STATE } from '../utils/onboardingStorage'
-import { norm } from '../utils/onboardingHint'
+import { readOnboardingState, DEFAULT_ONBOARDING_STATE, isRecipeProgressDone } from '../utils/onboardingStorage'
+import { norm, findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
 import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps/recipeStep'
 import {
     upsertRecipe,
@@ -69,6 +69,12 @@ export default function RecipeIngredientPage() {
 
     // Onboarding phase 5 — chỉ hint/track trên đúng công thức "Cà phê đen".
     const isCafeDen = isGuest && norm(product?.name) === RECIPE_TARGET_PRODUCT
+
+    // Phase 5 xong nhưng user vẫn đứng ở trang chi tiết công thức — tab "Nguyên liệu" của
+    // phase 6 chỉ có ở /recipes (trang này không render MenuTabsBar), nên hint nút trở về
+    // trước, rồi RecipeMenuPage.jsx (hintIngredientsTab) tiếp quản. Cùng điều kiện với nó.
+    const hintBack = isGuest && isRecipeProgressDone(recipeProgress)
+        && nextIngredientSetupField(findCoffeeIngredient(ingredientConfigs), true) !== null
 
     // Index recipes by product — used by the "copy from" picker and to count rows.
     const recipesByProduct = useMemo(() => {
@@ -401,6 +407,7 @@ export default function RecipeIngredientPage() {
                 product={product}
                 canEdit={canEdit}
                 onBack={() => navigate('/recipes', { state: location.state })}
+                hintBack={hintBack}
                 onSavePrice={saveProductPrice}
                 onSaveName={saveProductName}
                 onCopyFrom={() => setShowCopyFrom(true)}
