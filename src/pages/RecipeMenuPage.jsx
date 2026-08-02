@@ -244,14 +244,23 @@ export default function RecipeMenuPage() {
                 }}
             />
 
-            <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-48 space-y-3 bg-bg">
+            <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-8 space-y-3 bg-bg">
                 {canEdit && (
-                    <button
-                        onClick={() => { setDividerName(''); setDividerModal({ mode: 'create' }) }}
-                        className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-[12px] bg-surface border border-dashed border-border text-text-secondary text-[12px] font-black uppercase tracking-widest hover:bg-surface-light active:scale-[0.98] transition-all"
-                    >
-                        <Minus size={14} /> Tạo mục mới <Minus size={14} />
-                    </button>
+                    <div className="flex items-stretch gap-2">
+                        <button
+                            onClick={() => { setDividerName(''); setDividerModal({ mode: 'create' }) }}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-[12px] bg-surface border border-dashed border-border text-text-secondary text-[12px] font-black uppercase tracking-widest hover:bg-surface-light active:scale-[0.98] transition-all"
+                        >
+                            <Minus size={14} /> Tạo mục mới <Minus size={14} />
+                        </button>
+                        <button
+                            onClick={() => setShowCreateModal(true)}
+                            aria-label="Tạo công thức"
+                            className="shrink-0 px-3 rounded-[12px] flex items-center justify-center bg-primary text-bg hover:bg-primary/90 active:scale-95 transition-all"
+                        >
+                            <Plus size={18} />
+                        </button>
+                    </div>
                 )}
 
                 {canSort ? (
@@ -359,26 +368,13 @@ export default function RecipeMenuPage() {
                 )}
             </main>
 
-            {canEdit && (
-                <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-50">
-                    <div className="flex justify-end px-4 pb-[max(env(safe-area-inset-bottom),16px)] pointer-events-auto">
-                        <button
-                            onClick={() => setShowCreateModal(true)}
-                            className="rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold bg-primary text-bg shadow-lg shadow-primary/30 hover:bg-primary/90 active:scale-95 transition-all"
-                        >
-                            <Plus size={18} /> Tạo món
-                        </button>
-                    </div>
-                </div>
-            )}
-
             {showCreateModal && (
                 <BottomSheet
                     onClose={() => !saving && setShowCreateModal(false)}
                     panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
                 >
                         <div className="flex items-center justify-between">
-                            <span className="text-[16px] font-black text-text">Tạo món mới</span>
+                            <span className="text-[16px] font-black text-text">Tạo công thức mới</span>
                             <button
                                 onClick={() => setShowCreateModal(false)}
                                 disabled={saving}

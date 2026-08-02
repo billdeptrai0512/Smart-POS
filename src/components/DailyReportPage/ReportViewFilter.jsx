@@ -7,7 +7,7 @@ export const VIEW_INVENTORY = 'inventory'
 
 const MENU = [
     { key: VIEW_CASHFLOW, label: 'Dòng tiền' },
-    { key: VIEW_INVENTORY, label: 'Tồn kho' },
+    { key: VIEW_INVENTORY, label: 'Tồn quầy' },
     { key: VIEW_PROFIT, label: 'Lợi nhuận' },
 ]
 

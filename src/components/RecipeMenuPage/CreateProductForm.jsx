@@ -13,7 +13,7 @@ export default function CreateProductForm({
                 <input
                     type="text"
                     autoCapitalize="words"
-                    placeholder="Tên món mới..."
+                    placeholder="Tên công thức"
                     value={name}
                     onChange={e => onNameChange(capitalizeWords(e.target.value))}
                     className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
