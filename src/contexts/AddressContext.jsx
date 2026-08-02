@@ -35,7 +35,7 @@ function readCachedAddress() {
 }
 
 export function AddressProvider() {
-    const { profile, isGuest } = useAuth()
+    const { profile, isGuest, hasSession } = useAuth()
     const cachedAddress = readCachedAddress()
     const [addresses, setAddresses] = useState([])
     const [warehouseGroups, setWarehouseGroups] = useState([])
@@ -60,6 +60,13 @@ export function AddressProvider() {
         if (!profile?.id) {
             setAddresses([])
             setWarehouseGroups([])
+            setLoading(false)
+            return
+        }
+
+        // profile có thể đến từ cache trong khi chưa có session — xem hasSession trong
+        // AuthContext. Giữ nguyên cache, effect chạy lại khi session về (hasSession ở deps).
+        if (!hasSession) {
             setLoading(false)
             return
         }
@@ -136,7 +143,7 @@ export function AddressProvider() {
         // every path that flips isGuest also updates `profile` (sync or one async hop via
         // loadProfile), which already re-triggers this effect.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [profile])
+    }, [profile, hasSession])
 
     const setSelectedAddress = useCallback((addr) => {
         setSelectedAddressState(addr)

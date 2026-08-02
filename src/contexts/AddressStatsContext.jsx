@@ -20,7 +20,7 @@ export function useAddressStats() {
 // route level so navigating /addresses ↔ /pos doesn't unmount + refetch. The
 // AddressSelectPage reads from cache instantly and revalidates in background.
 export function AddressStatsProvider() {
-    const { profile, isStaff } = useAuth()
+    const { profile, isStaff, hasSession } = useAuth()
     const { addresses } = useAddress()
     const { enabled: monetizationEnabled } = useMonetizationEnabled()
 
@@ -86,7 +86,8 @@ export function AddressStatsProvider() {
     }, [addressIdsKey, monetizationEnabled, loadSubscriptionStatuses])
 
     const loadStaff = useCallback(async () => {
-        if (!profile?.id || isStaff) return
+        // !hasSession: profile từ cache nhưng chưa có token — xem hasSession trong AuthContext.
+        if (!profile?.id || isStaff || !hasSession) return
         setStaffLoading(true)
         try {
             const list = await fetchStaffByManager(profile.id)
@@ -94,7 +95,7 @@ export function AddressStatsProvider() {
         } finally {
             if (!cancelRef.current) setStaffLoading(false)
         }
-    }, [profile?.id, isStaff])
+    }, [profile?.id, isStaff, hasSession])
 
     useEffect(() => {
         cancelRef.current = false

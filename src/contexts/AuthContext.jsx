@@ -39,6 +39,10 @@ export function AuthProvider({ children }) {
     const [profile, setProfile] = useState(() => getLocalIsGuest() ? null : readCachedAuth(STORAGE_KEYS.AUTH_PROFILE))  // User profile row (from 'users' table)
     const [loading, setLoading] = useState(true)
     const [isGuest, setIsGuestState] = useState(() => getLocalIsGuest())
+    // Chỉ true khi supabase-js THỰC SỰ có session. user/profile hydrate từ cache nên vẫn
+    // truthy khi launch token refresh hỏng/chậm (safety valve bên dưới) — lúc đó mọi query
+    // bảng bay đi bằng anon key và RLS gọi auth_owner_id() mà anon không có EXECUTE → 42501.
+    const [hasSession, setHasSession] = useState(false)
 
     // initGuestMode: called from LoginPage when user clicks "Dùng thử miễn phí"
     // Fetches the global default setup from Supabase (address_id IS NULL) and seeds localStorage
@@ -166,6 +170,7 @@ export function AuthProvider({ children }) {
             const authUser = session?.user ?? null
             if (authUser) {
                 setUser(authUser)
+                setHasSession(true)
                 cacheAuth(STORAGE_KEYS.AUTH_USER, authUser)
                 setIsGuest(false)
                 // Profile is already hydrated from cache (see useState init), so the UI
@@ -212,14 +217,20 @@ export function AuthProvider({ children }) {
                 // and the cached credentials (a flaky refresh never reaches here).
                 setUser(null)
                 setProfile(null)
+                setHasSession(false)
                 clearCachedAuth()
                 return
             }
             const authUser = session?.user ?? null
             if (authUser) {
                 setUser(authUser)
+                setHasSession(true)
                 cacheAuth(STORAGE_KEYS.AUTH_USER, authUser)
                 setIsGuest(false)
+                // Có session thật → profile sentinel {id:'guest'} hết đúng, mà setIsGuest(false)
+                // vừa tắt guard isGuest() trong authService. Giữ lại dù chỉ 1 nhịp là đủ để các
+                // context bắn query với managerId='guest' → 22P02. Bỏ ngay; loadProfile điền thật.
+                setProfile(p => (p?.id === 'guest' ? null : p))
                 loadProfile(authUser)
             }
         })
@@ -279,8 +290,8 @@ export function AuthProvider({ children }) {
     // stops every consumer (MenuGrid, HistoryPage, IngredientManagementPage, ...)
     // from re-rendering whenever AuthProvider re-renders for an unrelated reason.
     const value = useMemo(() => ({
-        user, profile, loading, isGuest, setIsGuest, initGuestMode, signIn, signUp, signOut, refreshProfile, isManager, isStaff, isAdmin
-    }), [user, profile, loading, isGuest, setIsGuest, initGuestMode, signIn, signUp, signOut, refreshProfile, isManager, isStaff, isAdmin])
+        user, profile, loading, isGuest, hasSession, setIsGuest, initGuestMode, signIn, signUp, signOut, refreshProfile, isManager, isStaff, isAdmin
+    }), [user, profile, loading, isGuest, hasSession, setIsGuest, initGuestMode, signIn, signUp, signOut, refreshProfile, isManager, isStaff, isAdmin])
 
     return (
         <AuthContext.Provider value={value}>

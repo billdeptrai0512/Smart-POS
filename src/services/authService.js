@@ -92,7 +92,7 @@ export async function fetchStaffByManager(managerId) {
         .eq('manager_id', managerId)
         .order('name')
     if (error) {
-        console.error('fetchStaffByManager error:', error)
+        console.error('fetchStaffByManager error:', error.code, error.message)
         return []
     }
     return data
@@ -234,7 +234,7 @@ export async function fetchAddresses(managerId) {
 
     const { data, error } = await query
     if (error) {
-        console.error('fetchAddresses error:', error)
+        console.error('fetchAddresses error:', error.code, error.message)
         return { data: [], error }
     }
     return { data, error: null }

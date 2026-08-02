@@ -27,7 +27,7 @@ function mergeFetchedOrders(prev, fetchedOrders) {
 export function POSProvider() {
     const { products, recipes, ingredientCosts, extraIngredients, productExtras } = useProducts()
     const { selectedAddress } = useAddress()
-    const { profile, isGuest } = useAuth()
+    const { profile, isGuest, hasSession } = useAuth()
     const addressId = selectedAddress?.id
 
     const localOrderIds = useRef(new Set())
@@ -313,7 +313,9 @@ export function POSProvider() {
 
     // ---- Heartbeat for active_sessions ----
     useEffect(() => {
-        if (!addressId) return
+        // !hasSession: addressId đến từ cache nên effect này chạy được trước khi có token —
+        // policy active_sessions cũng gọi auth_owner_id như addresses/users, xem AuthContext.
+        if (!addressId || !hasSession) return
         let cancelled = false
 
         // Re-check the orders-realtime gate: the device count can change mid-shift
@@ -355,7 +357,7 @@ export function POSProvider() {
             cancelled = true
             clearInterval(interval)
         }
-    }, [addressId])
+    }, [addressId, hasSession])
 
     const revenueRef = useRef(revenue)
     const totalCostRef = useRef(totalCost)
