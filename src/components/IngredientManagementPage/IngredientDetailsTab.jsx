@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Pencil, Trash2 } from 'lucide-react'
+import { Check, Info, Pencil, Trash2 } from 'lucide-react'
 import MoneyInput from '../common/MoneyInput'
 import { formatVND, formatVNDInput, parseVNDInput } from '../../utils'
 import { formatPackedQty } from '../../utils/inventory'
@@ -18,6 +18,7 @@ export default function IngredientDetailsTab({
     hintPack = false, hintMinStock = false, hintTare = false,
     dailyContext,           // { today_refill, today_restock } | null — Đầu ngày/Lấy ra/Nhập mới
     siblingCounterStocks,   // [{ addressId, addressName, counterStock }] | null — tồn quầy các địa chỉ khác dùng chung kho
+    countInAudit, onToggleAudit,
     canEdit, saving,
     onSaveName,         // (newDisplayName: string) => Promise
     onSaveWarehouse,    // (newWarehouse: number)  => Promise  (Kho sau)
@@ -53,13 +54,35 @@ export default function IngredientDetailsTab({
             {/* Panel 1 — Kiểm kê: cùng bố cục với card ngoài /ingredients (đầu ngày → lấy ra
                 → nhập mới → cuối ngày → tồn quầy từng địa chỉ → tổng cộng), nhưng Tồn kho cuối
                 ngày + Tồn quầy của địa chỉ đang xem vẫn sửa được (nhập số tuyệt đối). */}
-            <Panel title="Kiểm kê">
+            <Panel
+                title="Kiểm kê tồn kho / tồn quầy"
+                action={onToggleAudit && (
+                    <button
+                        type="button"
+                        role="checkbox"
+                        aria-checked={countInAudit}
+                        aria-label="Báo cáo tồn quầy"
+                        title={countInAudit ? 'Đang báo cáo tồn quầy — bấm để tắt' : 'Đang TẮT báo cáo tồn quầy — bấm để bật'}
+                        disabled={!canEdit || saving}
+                        onClick={() => canEdit && onToggleAudit(!countInAudit)}
+                        className={`w-5 h-5 flex items-center justify-center rounded-[6px] border transition-colors focus:outline-none shrink-0 ${
+                            countInAudit ? 'bg-primary border-primary' : 'bg-surface-light border-border/60'
+                        } ${canEdit ? 'cursor-pointer' : 'cursor-default opacity-60'}`}
+                    >
+                        {countInAudit && <Check size={13} strokeWidth={3} className="text-black" />}
+                    </button>
+                )}
+            >
                 {/* Bọc cả 2 nhóm trong 1 div duy nhất — section của Panel tự thêm divide-y cho
                     children trực tiếp, để 2 div nhóm làm children trực tiếp sẽ bị chèn thêm 1
                     viền tự động chồng lên viền group-break tự khai báo bên dưới. */}
                 <div className="flex flex-col">
+                    {/* Ranh giới giữa 2 nhóm = KHOẢNG CÁCH y hệt giữa 2 dòng thường (10px mỗi
+                        bên, bù lại phần first:pt-0/last:pb-0 của Row), chỉ khác ở viền sáng hơn
+                        (border-border vs border-border/40) — đủ để mắt tách nhóm mà không tạo
+                        khoảng hở như 2 thẻ rời. */}
                     {/* Nhóm 1 — chuỗi kho hôm nay: đầu ngày − lấy ra + nhập mới = cuối ngày (1 phép tính). */}
-                    <div className="flex flex-col divide-y divide-border/40">
+                    <div className="flex flex-col divide-y divide-border/40 pb-2.5">
                         <Row label="Tồn kho đầu ngày">
                             <span className="text-[13px] font-bold text-text-secondary tabular-nums">{fmtDaily(warehouseStart)}</span>
                         </Row>
@@ -81,10 +104,8 @@ export default function IngredientDetailsTab({
                         />
                     </div>
 
-                    {/* Nhóm 2 — kho cuối ngày (trên) + quầy = tổng đang có thật ngay lúc này.
-                        Gap rõ + viền đậm hơn hẳn khoảng cách giữa các dòng thường, để mắt nhận ra
-                        đây là 2 nhóm khác nhau chứ không phải thêm 1 dòng nữa. */}
-                    <div className="mt-4 pt-4 border-t border-border flex flex-col divide-y divide-border/40">
+                    {/* Nhóm 2 — kho cuối ngày (trên) + quầy = tổng đang có thật ngay lúc này. */}
+                    <div className="border-t border-border pt-2.5 flex flex-col divide-y divide-border/40">
                         <QtyRow
                             label={siblingCounterStocks?.length ? 'Tồn quầy hiện có · đây' : 'Tồn quầy hiện có'}
                             value={counterStock} unit={unit}
@@ -154,10 +175,15 @@ export default function IngredientDetailsTab({
 }
 
 // ── Panel (titled section card) ─────────────────────────────────────────────
-function Panel({ title, children }) {
+// `action` = control cấp panel (vd toggle "báo cáo tồn quầy"), nằm cuối hàng title cho khỏi
+// chiếm 1 dòng trong thẻ — panel nào không truyền thì hàng title y như cũ.
+function Panel({ title, children, action }) {
     return (
         <div className="flex flex-col gap-1.5">
-            <span className="text-[11px] font-black uppercase tracking-widest text-text-secondary px-1">{title}</span>
+            <div className="flex items-center justify-between gap-2 px-1">
+                <span className="text-[11px] font-black uppercase tracking-widest text-text-secondary">{title}</span>
+                {action}
+            </div>
             <section className="bg-surface rounded-[18px] border border-border/60 p-4 flex flex-col divide-y divide-border/40">
                 {children}
             </section>
@@ -168,13 +194,30 @@ function Panel({ title, children }) {
 // ── Row container ───────────────────────────────────────────────────────────
 // `sub` = caption spanning the FULL row width (dùng cho note dài, không đoán trước được độ dài —
 // vd danh sách địa chỉ cùng nhóm kho tổng). Khác với `note` bên trong QtyRow (ngắn, nằm cạnh số).
-function Row({ label, children, sub }) {
+// `info` = chú thích ẩn, bấm icon (i) cạnh label mới bung ra — cùng kiểu với "Lý thuyết" ở
+// InventoryReportCard.jsx.
+function Row({ label, children, sub, info }) {
+    const [showInfo, setShowInfo] = useState(false)
     return (
         <div className="py-2.5 first:pt-0 last:pb-0">
             <div className="flex items-center justify-between gap-3">
-                <span className="text-[12px] font-bold text-text-secondary">{label}</span>
+                {info ? (
+                    <button
+                        onClick={() => setShowInfo(s => !s)}
+                        className="flex items-center gap-1 text-[12px] font-bold text-text-secondary hover:text-text transition-colors"
+                    >
+                        {label} <Info size={10} className="text-text-dim shrink-0" />
+                    </button>
+                ) : (
+                    <span className="text-[12px] font-bold text-text-secondary">{label}</span>
+                )}
                 <div>{children}</div>
             </div>
+            {showInfo && (
+                <div className="mt-1.5 px-3 py-2 bg-surface-light rounded-[10px] border border-border/40 text-[11px] text-text-secondary leading-snug">
+                    {info}
+                </div>
+            )}
             {sub && <div className="mt-1 text-[11px] font-medium text-text-dim/80">{sub}</div>}
         </div>
     )
@@ -471,7 +514,10 @@ function TareRow({ tareWeight, unit, canEdit, onSave, hint = false }) {
         onSave?.(raw ? Number(raw) : 0)
     }
     return (
-        <Row label="Khối lượng bì">
+        <Row
+            label="Khối lượng bì"
+            info="Khối lượng hộp/chai rỗng đựng nguyên liệu tại quầy. Kiểm kê cuối ca cân cả bì — số cân giữ nguyên, bì chỉ được trừ khi dự báo còn dùng được bao lâu."
+        >
             {editing && canEdit ? (
                 <div className="flex items-center gap-1">
                     <input

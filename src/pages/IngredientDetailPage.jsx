@@ -491,10 +491,6 @@ export default function IngredientDetailPage() {
                 title={titleLabel}
                 subtitle={`Tồn: ${stockSubtitle}`}
                 onBack={() => navigate('/ingredients', { state: location.state })}
-                countInAudit={countInAudit}
-                onToggleAudit={saveCountInAudit}
-                canEdit={canEdit}
-                saving={saving}
                 viewMode={viewMode}
                 onViewModeChange={setViewMode}
             />
@@ -520,6 +516,8 @@ export default function IngredientDetailPage() {
                         currentStock={currentStock}
                         dailyContext={dailyContext}
                         siblingCounterStocks={siblingCounterStocks}
+                        countInAudit={countInAudit}
+                        onToggleAudit={saveCountInAudit}
                         canEdit={canEdit}
                         saving={saving}
                         onSaveName={saveName}
