@@ -246,10 +246,10 @@ export default function RecipeMenuPage() {
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-8 space-y-3 bg-bg">
                 {canEdit && (
-                    <div className="flex items-stretch gap-2">
+                    <div className="flex items-stretch gap-2 h-11">
                         <button
                             onClick={() => { setDividerName(''); setDividerModal({ mode: 'create' }) }}
-                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-[12px] bg-surface border border-dashed border-border text-text-secondary text-[12px] font-black uppercase tracking-widest hover:bg-surface-light active:scale-[0.98] transition-all"
+                            className="flex-1 flex items-center justify-center gap-1.5 rounded-[12px] bg-surface border border-dashed border-border text-text-secondary text-[12px] font-black uppercase tracking-widest hover:bg-surface-light active:scale-[0.98] transition-all"
                         >
                             <Minus size={14} /> Tạo mục mới <Minus size={14} />
                         </button>

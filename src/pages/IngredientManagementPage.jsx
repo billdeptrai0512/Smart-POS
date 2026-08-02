@@ -402,19 +402,19 @@ export default function IngredientManagementPage() {
             />
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-8 bg-bg">
-                <div className="mb-3 flex items-center gap-2">
+                <div className="mb-3 flex items-stretch gap-2 h-11">
                     <input
                         type="text"
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         placeholder={viewMode === 'packaging' ? 'Tìm bao bì…' : 'Tìm nguyên liệu…'}
-                        className="flex-1 min-w-0 px-3 py-2.5 rounded-[12px] bg-surface border border-border/60 text-text text-[14px] placeholder:text-text-dim focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
+                        className="flex-1 min-w-0 px-3 rounded-[12px] bg-surface border border-border/60 text-text text-[14px] placeholder:text-text-dim focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
                     />
                     {canEdit && (
                         <button
                             onClick={() => { setNewCategory(viewMode); setShowCreateModal(true) }}
                             aria-label={viewMode === 'packaging' ? 'Tạo bao bì' : 'Tạo nguyên liệu'}
-                            className="shrink-0 self-stretch px-3 rounded-[12px] flex items-center justify-center text-[13px] font-bold active:scale-95 transition-all border bg-primary border-primary text-bg hover:bg-primary/90"
+                            className="shrink-0 px-3 rounded-[12px] flex items-center justify-center text-[13px] font-bold active:scale-95 transition-all border bg-primary border-primary text-bg hover:bg-primary/90"
                         >
                             <Plus size={18} />
                         </button>
