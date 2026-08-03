@@ -37,7 +37,7 @@ Mọi feature mới phải follow doc này thay vì nghĩ lại từ đầu.
 
 ### Trial
 
-**✅ AS-BUILT 2026-07-17 — trial KHÔNG cấp lúc tạo địa chỉ nữa, và KHÔNG còn giới hạn theo SĐT.** Chỉ cấp (và bắt đầu đếm 7 ngày) ở **lần chốt ca FULL đầu tiên** — mỗi ĐỊA CHỈ (không phải account/SĐT) có 1 vòng đời trial độc lập: free tới ca full đầu tiên → 7 ngày → paywall. Trước ca full đầu tiên, địa chỉ dùng **full tính năng báo cáo, không đếm ngược gì cả** — dù setup mất bao lâu.
+**✅ AS-BUILT 2026-07-17, sửa 2026-08-02 (7 → 14 ngày) — trial KHÔNG cấp lúc tạo địa chỉ nữa, và KHÔNG còn giới hạn theo SĐT.** Chỉ cấp (và bắt đầu đếm 14 ngày) ở **lần chốt ca FULL đầu tiên** — mỗi ĐỊA CHỈ (không phải account/SĐT) có 1 vòng đời trial độc lập: free tới ca full đầu tiên → 14 ngày → paywall. Trước ca full đầu tiên, địa chỉ dùng **full tính năng báo cáo, không đếm ngược gì cả** — dù setup mất bao lâu.
 Lý do: mục tiêu là owner phải THỰC SỰ vận hành đủ (nhập thực thu + kiểm kho) trước khi tính phí; chưa vận hành đủ thì không có cơ sở gì để bắt đầu đếm ngược. Không giới hạn theo SĐT vì billing vốn đã tính theo TỪNG `address_id` (§1 "mỗi xe 1 gói riêng") — không có lý do trial lại siết chặt hơn billing.
 
 - **Lịch sử (KHÔNG còn hiệu lực)**: trước đó có ràng buộc `trial_grants(phone PK)` "1 SĐT = 1 trial trọn đời" — chỉ 1 địa chỉ/SĐT được hưởng free-tới-full-close, các chi nhánh sau bị khoá ngay từ đầu. Bỏ ở migration `20260717_trial_4_per_address_not_per_phone.sql` theo yêu cầu: đơn giản hoá setup nhiều chi nhánh, để mỗi chi nhánh mới đều có đủ thời gian trải nghiệm trước khi trả phí.
@@ -46,7 +46,7 @@ Lý do: mục tiêu là owner phải THỰC SỰ vận hành đủ (nhập thự
 - **Cơ chế cấp trial** (tiến hoá qua nhiều migration cùng ngày — `20260717_trial_1_reanchor_requires_full_close.sql` → `20260717_trial_2_deferred_until_first_full_close.sql` → `20260717_trial_4_per_address_not_per_phone.sql`, bản có hiệu lực CUỐI CÙNG là file `_4_`; 1 file trung gian từng thêm RPC `list_pending_trial_addresses` cho UI rồi bị chính file `_4_` DROP luôn vì hết cần thiết sau khi bỏ check SĐT — xem §6):
   - "Full" = đã bấm "Lưu thực thu" (`cash_closed_at IS NOT NULL`) **và** kiểm kho phủ hết mọi nguyên liệu active (`ingredient_costs`) trong `inventory_report`. Địa chỉ chưa cấu hình nguyên liệu nào → coi như đủ.
   - **Trước ca full đầu tiên**: địa chỉ **chưa có row `address_subscriptions` nào** → `get_address_entitlement()` bypass trả `'all'` (free, không hạn). Không check SĐT.
-  - **Ca full đầu tiên xảy ra**: trigger `grant_trial_on_first_full_shift_close` INSERT row `note='trial', valid_from=ngày_chốt, valid_to=ngày_chốt+7` — từ đây trial mới thật sự bắt đầu đếm 7 ngày. Chỉ cần owner đã nhập SĐT (không check "SĐT đã dùng ở đâu chưa").
+  - **Ca full đầu tiên xảy ra**: trigger `grant_trial_on_first_full_shift_close` INSERT row `note='trial', valid_from=ngày_chốt, valid_to=ngày_chốt+14` — từ đây trial mới thật sự bắt đầu đếm 14 ngày. **KHÔNG còn điều kiện nào về SĐT** (bỏ 2026-08-02 cùng lúc form đăng ký đổi SĐT → email, xem `20260802_trial_no_phone_requirement.sql`). Sub `'trial'` cấp TRƯỚC 2026-08-02 vẫn giữ mốc 7 ngày cũ.
   - Data lịch sử (địa chỉ đã có sub từ cơ chế cũ trước 2026-07-17) vẫn dùng đường reanchor cũ (`GREATEST(valid_to, ngày_chốt+7)`, chỉ 1 lần qua cờ `trial_reanchored_at`) — không bị rút ngắn.
 - Hết trial (sau khi ĐÃ cấp): cả 3 view báo cáo rớt về khoá cho tới khi thanh toán.
 
@@ -95,7 +95,7 @@ CREATE TABLE trial_grants (
     phone        TEXT PRIMARY KEY,           -- E.164 normalized: +84xxxxxxxxx
     address_id   UUID NOT NULL REFERENCES addresses(id),
     granted_at   TIMESTAMPTZ DEFAULT now(),
-    expires_at   TIMESTAMPTZ NOT NULL        -- granted_at + 7 days
+    expires_at   TIMESTAMPTZ NOT NULL        -- granted_at + 14 days (7 trước 2026-08-02)
 );
 
 -- Mở rộng addresses: cần biết owner để check trial khi tạo address mới
@@ -441,7 +441,7 @@ Bù lại phần "còn thiếu" ghi ở §7.2 gốc (viết lúc 2026-06-10, tr�
 | # | Quyết định | Note |
 |---|---|---|
 | 1 | **2 module** (`cashflow`/`inventory`), không còn tier basic/pro. Gộp 2026-06-06: Báo cáo/Lợi nhuận vào `cashflow` | Hao hụt ở `inventory`; `cashflow` mở cả view Dòng tiền + Lợi nhuận |
-| 2 | **Trial 7 ngày, 1 gói `all`, theo TỪNG ĐỊA CHỈ** (không còn giới hạn theo SĐT/account); **cấp + bắt đầu đếm** ở **ca chốt FULL đầu tiên** (thực thu + kiểm kho đủ) — trước đó free không giới hạn thời gian, không tạo sub row nào | Chi tiết §1 Trial. Đánh đổi có chủ đích: không trần thời gian nếu không bao giờ full-close; xoá-tạo-lại địa chỉ được trial mới (chấp nhận). SĐT vẫn cần nhập (mồi UX) nhưng chỉ thu, chưa OTP xác thực thật (`docs/phoneAuth.md`) |
+| 2 | **Trial 14 ngày, 1 gói `all`, theo TỪNG ĐỊA CHỈ** (không còn giới hạn theo SĐT/account); **cấp + bắt đầu đếm** ở **ca chốt FULL đầu tiên** (thực thu + kiểm kho đủ) — trước đó free không giới hạn thời gian, không tạo sub row nào | Chi tiết §1 Trial. Đánh đổi có chủ đích: không trần thời gian nếu không bao giờ full-close; xoá-tạo-lại địa chỉ được trial mới (chấp nhận). Từ 2026-08-02: 7 → 14 ngày, và SĐT hết vai trò (đăng ký thu email thay SĐT) |
 | 3 | **Năm = 888,888đ/module (~10 tháng)**; **Trọn bộ 2** = 166,888đ/th · 1,666,888đ/năm | Chiết khấu trọn bộ; năm tặng ~2 tháng |
 | 4 | **All-branches = nhân theo số chi nhánh**, không giảm theo số lượng | Tạo row cho mọi address trong 1 lần trả |
 | 5 | **Không refund, không prorating** | Đơn giản v1 |

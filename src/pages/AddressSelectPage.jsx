@@ -441,7 +441,7 @@ export default function AddressSelectPage() {
                                         className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
                                     />
                                     <p className="text-text-secondary text-[11px] px-1">
-                                        Nhập SĐT để nhận <span className="font-bold text-text">7 ngày dùng thử báo cáo</span> (1 SĐT = 1 lần). Bỏ trống nếu không cần.
+                                        SĐT liên hệ, không bắt buộc — chỉ dùng khi cần hỗ trợ hoặc đối soát thanh toán.
                                     </p>
                                 </div>
                             )}
