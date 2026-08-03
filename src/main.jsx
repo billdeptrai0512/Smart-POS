@@ -33,9 +33,12 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <App />
+      {/* Trong Router vì banner chỉ được phép hiện ở /login (xem PWAInstallPrompt) —
+          nhưng vẫn mount toàn cục để không bỏ lỡ event beforeinstallprompt, thứ chỉ
+          bắn 1 lần ngay sau khi tải trang. */}
+      <PWAInstallPrompt />
     </BrowserRouter>
     <PWAUpdatePrompt />
-    <PWAInstallPrompt />
     <Analytics />
   </StrictMode>,
 )

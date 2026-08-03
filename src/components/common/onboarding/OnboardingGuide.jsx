@@ -116,8 +116,13 @@ export default function OnboardingGuide() {
     // nổi tách rời trước đây.
     return (
         <div
-            className="fixed left-3 z-[60] pointer-events-auto bg-surface border border-primary/30 rounded-[14px] shadow-lg max-w-[280px]"
-            style={{ bottom: 16 + bottomOffset }}
+            // ponytail: phóng to 25% bằng 1 transform thay vì nhân tay ~20 giá trị
+            // px/text-size rải khắp thẻ và các Body con. transform-origin bottom-left
+            // giữ nguyên điểm neo góc dưới-trái nên không phải tính lại bottomOffset.
+            // Trần: transform không nong layout box, nên bề ngang phải tự chặn —
+            // max-w theo vw để 1.25× vẫn lọt màn 360px.
+            className="fixed left-3 z-[60] pointer-events-auto bg-surface border border-primary/30 rounded-[14px] shadow-lg max-w-[min(280px,72vw)]"
+            style={{ bottom: 16 + bottomOffset, transform: 'scale(1.25)', transformOrigin: 'bottom left' }}
         >
             {step.name && (
                 <button
@@ -125,7 +130,9 @@ export default function OnboardingGuide() {
                     className="flex items-center justify-between gap-1.5 px-3 py-2 w-full text-left hover:bg-surface-light rounded-[14px] transition-colors"
                     title={local.collapsed ? 'Mở hướng dẫn bắt đầu bán hàng' : 'Thu gọn'}
                 >
-                    <span className="text-text font-black text-[12px] uppercase">{step.name}</span>
+                    {/* 11px × 1.25 = 13.75px — vẫn to hơn trước (12px) nhưng không vượt
+                        chữ ngày 14px trên header POS. */}
+                    <span className="text-text font-black text-[11px] uppercase">{step.name}</span>
                     <ListChecks size={15} className="text-primary shrink-0" />
                 </button>
             )}
