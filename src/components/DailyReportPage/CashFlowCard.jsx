@@ -32,7 +32,6 @@ export default function CashFlowCard({
     expenses = [],
     payments = [],   // NEW: expense_payments của ngày này (cash-out thực, theo paid_at)
     expenseCategories = [],  // nhãn chi phí — nhóm section Vận hành theo tên nhãn
-    onDailyExpenseClick,
     salesCard,
     // Inline-edit props (today scope on /daily-report). When `editable` is true the
     // Tiền mặt / Chuyển khoản rows become text inputs. The Lưu thực thu CTA itself
@@ -213,11 +212,8 @@ export default function CashFlowCard({
                             </div>
                         </>
                     )}
-                    <div
-                        onClick={onDailyExpenseClick}
-                        className="flex justify-between items-center cursor-pointer hover:opacity-85 active:scale-[0.99] transition-all"
-                    >
-                        <span className="text-[12px] font-bold text-text-secondary decoration-text-secondary/50 underline-offset-2">
+                    <div className="flex justify-between items-center">
+                        <span className="text-[12px] font-bold text-text-secondary">
                             Chi phí trong ca
                         </span>
                         <span className="text-[13px] font-bold text-warning tabular-nums">
@@ -476,10 +472,15 @@ function ItemRow({ date, name, amount, count, phase = 'in_shift', method = 'cash
 }
 
 function MoneyInputRow({ label, value, disabled, onChange }) {
+    // Chưa gõ gì → ô trông y hệt dòng chỉ-đọc bên dưới, chủ quán không biết là
+    // bấm được. Viền đứt + icon bút chỉ hiện lúc rỗng, gõ vào là biến mất.
+    const empty = !value
     return (
         <div className="flex items-center justify-between gap-3 rounded-lg">
             <span className="text-[12px] font-bold text-text-secondary shrink-0">{label}</span>
-            <div className="flex items-center gap-0.5 max-w-[180px] flex-1 justify-end">
+            {/* pr-0: khung viền đứt chỉ chừa lề bên trái, để mép phải của "đ" thẳng
+                hàng với số của các dòng chỉ-đọc bên dưới (Chi phí trong ca, Tổng thực thu). */}
+            <div className={`flex items-center max-w-[180px] flex-1 justify-end rounded-[8px] pl-1.5 pr-0 py-0.5 transition-colors ${empty ? 'border border-dashed border-primary/50 bg-primary/5' : 'border border-transparent'}`}>
                 <input
                     type="text"
                     inputMode="numeric"
@@ -489,9 +490,9 @@ function MoneyInputRow({ label, value, disabled, onChange }) {
                     disabled={disabled}
                     className="flex-1 w-0 min-w-0 bg-transparent text-right text-[13px] font-bold text-text tabular-nums placeholder:text-text-secondary/40 focus:outline-none disabled:opacity-50"
                 />
-                {value && (
-                    <span className="text-[12px] font-bold text-text-secondary shrink-0 pointer-events-none">đ</span>
-                )}
+                {/* "đ" đi theo màu của con số: mờ như placeholder khi chưa ai nhập,
+                    đậm bằng chữ khi đã có số — để "0đ" đọc ra như một cụm. */}
+                <span className={`text-[13px] font-bold shrink-0 pointer-events-none ${empty ? 'text-text-secondary/40' : 'text-text'}`}>đ</span>
             </div>
         </div>
     )

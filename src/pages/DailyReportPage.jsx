@@ -1075,6 +1075,24 @@ export default function DailyReportPage() {
     // nút chỉ ẩn khi cashDirty=false, mà cashDirty phụ thuộc shiftClosing chỉ cập nhật SAU
     // refetch. Cờ riêng này giữ nút disabled suốt cả refetch → không có khe double-click.
     const [savingCashflow, setSavingCashflow] = useState(false)
+
+    // Bàn phím ảo trên điện thoại KHÔNG đẩy `position: fixed` lên — nó chỉ co
+    // visualViewport, nên FAB "Lưu thực thu" nằm lọt dưới bàn phím ngay sau khi
+    // chủ quán gõ xong số. Nhấc FAB lên đúng phần bị che.
+    // Trần: trình duyệt không có visualViewport (rất cũ) thì giữ nguyên hành vi cũ.
+    const [kbInset, setKbInset] = useState(0)
+    useEffect(() => {
+        const vv = window.visualViewport
+        if (!vv) return
+        const update = () => setKbInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop))
+        vv.addEventListener('resize', update)
+        vv.addEventListener('scroll', update)
+        return () => {
+            vv.removeEventListener('resize', update)
+            vv.removeEventListener('scroll', update)
+        }
+    }, [])
+
     const handleSaveCashflow = async () => {
         if (!selectedAddress || savingCashflow) return
         setSavingCashflow(true)
@@ -1221,7 +1239,6 @@ export default function DailyReportPage() {
                                 isSaving={isSavingShift}
                                 hintCash={hintCash}
                                 hintTransfer={hintTransfer}
-                                onDailyExpenseClick={() => guardLeave(() => navigate('/history', { state: { from: '/daily-report', tab: 'expense', expensesToView: scope !== 'day' || offset !== 0 ? apiExpenses : undefined, isReadOnly: scope !== 'day' || offset !== 0 } }))}
                                 salesCard={
                                     <div className="flex flex-col gap-4">
                                         <SalesCard
@@ -1406,8 +1423,12 @@ export default function DailyReportPage() {
             {isTodayScope && (
                 (((view === VIEW_ALL || view === VIEW_CASHFLOW) && cashDirty) ||
                     ((view === VIEW_ALL || view === VIEW_INVENTORY) && inventory.isDirty && !autoSavePending)) && (
-                    <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40">
-                        <div className="flex flex-col items-end gap-2 px-4 mb-[72px] pointer-events-auto">
+                    <div
+                        className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40"
+                        style={kbInset ? { transform: `translateY(-${kbInset}px)` } : undefined}
+                    >
+                        {/* Bàn phím mở thì thanh nav dưới cũng bị che luôn → không cần chừa 72px nữa. */}
+                        <div className={`flex flex-col items-end gap-2 px-4 pointer-events-auto ${kbInset ? 'mb-3' : 'mb-[72px]'}`}>
                             {(view === VIEW_ALL || view === VIEW_CASHFLOW) && cashDirty && (
                                 <button
                                     onClick={handleSaveCashflow}
