@@ -255,10 +255,14 @@ export default function DailyReportPage() {
         ? Number(shiftClosing.actual_transfer) : 0
     const cashDirty = (parseVNDInput(cashInput) || 0) !== persistedCash
         || (parseVNDInput(transferInput) || 0) !== persistedTransfer
+    // Prefill: 0 → để TRỐNG chứ không điền "0". Payload luôn gửi cả 2 ô (trống → 0)
+    // nên lưu mỗi Tiền mặt cũng ghi actual_transfer = 0; điền lại "0" làm ô Chuyển
+    // khoản mất viền đứt + ăn màu chữ "đã nhập", trông như đã đếm xong. 0 và trống
+    // tính tiền y hệt nhau nên để trống là an toàn.
     useEffect(() => {
         if (!isTodayScope) return
-        setCashInput(isTodaysClosing && shiftClosing.actual_cash != null ? formatVNDInput(shiftClosing.actual_cash) : '')
-        setTransferInput(isTodaysClosing && shiftClosing.actual_transfer != null ? formatVNDInput(shiftClosing.actual_transfer) : '')
+        setCashInput(isTodaysClosing && shiftClosing.actual_cash ? formatVNDInput(shiftClosing.actual_cash) : '')
+        setTransferInput(isTodaysClosing && shiftClosing.actual_transfer ? formatVNDInput(shiftClosing.actual_transfer) : '')
     }, [isTodayScope, isTodaysClosing, todayISO, shiftClosing?.id, shiftClosing?.actual_cash, shiftClosing?.actual_transfer, shiftClosing?.closed_at])
 
     // Onboarding phase 4 "Kiểm kê tồn kho": trigger khi user bấm Lưu kiểm kê (không phải lúc
