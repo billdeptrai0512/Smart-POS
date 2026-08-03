@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react'
+import { Fragment, memo, useMemo, useState } from 'react'
 import { AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Info } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit, lookupByLabel } from '../../utils/ingredients'
 import { formatPackedQty, computeHaoHut } from '../../utils/inventory'
@@ -363,8 +363,7 @@ const IngredientRow = memo(function IngredientRow({
                         value={lyThuyet}
                         unit={unit}
                         disabled
-                        onLabelClick={() => setShowLyThuyetInfo(s => !s)}
-                        labelTrailing={<Info size={10} className="text-text-dim shrink-0" />}
+                        onBoxClick={() => setShowLyThuyetInfo(s => !s)}
                     />
                     <ColumnInput
                         label="Cuối kỳ"
@@ -376,10 +375,17 @@ const IngredientRow = memo(function IngredientRow({
                     />
                 </div>
                 {showLyThuyetInfo && (
-                    <div className="mt-2 px-3 py-2 bg-surface-light rounded-[10px] text-center border border-border/40 text-[11px] text-text-secondary leading-snug">
-                        Đầu kỳ <span className="text-text-dim">({openingNum})</span>
-                        {' '}+ Nhập thêm <span className="text-text-dim">({restockNum})</span>
-                        {' '}− Sử dụng <span className="text-text-dim">({usedNum})</span>
+                    /* Nhãn trên, số dưới — 1 hàng không wrap kể cả màn 320px */
+                    <div className="mt-2 px-2 py-2 bg-surface-light rounded-[10px] border border-border/40 flex items-center justify-between gap-1 text-[10px] leading-tight whitespace-nowrap">
+                        {[['Đầu kỳ', openingNum], ['Nhập thêm', restockNum], ['Sử dụng', usedNum], ['Lý thuyết', lyThuyet]].map(([label, val], i) => (
+                            <Fragment key={label}>
+                                {i > 0 && <span className="text-text-secondary">{['+', '−', '='][i - 1]}</span>}
+                                <span className="flex flex-col items-center gap-0.5">
+                                    <span className="text-text-secondary">{label}</span>
+                                    <span className="text-text-dim">({val} {unit})</span>
+                                </span>
+                            </Fragment>
+                        ))}
                     </div>
                 )}
                 {/* Row 4 — money + cups-equivalent context for Hao hụt */}
@@ -410,7 +416,7 @@ const IngredientRow = memo(function IngredientRow({
     )
 })
 
-function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRight, overflow, tone = 'neutral', onLabelClick, labelTrailing, hint = false }) {
+function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRight, overflow, tone = 'neutral', onBoxClick, hint = false }) {
     // tone overrides the default disabled coloring for read-only diff cells.
     const toneMap = {
         good: { wrap: 'bg-success/8 border border-success/30', input: 'text-success', unit: 'text-success/70' },
@@ -429,21 +435,22 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRig
                 : 'bg-surface-light border border-border/60 focus-within:border-primary/40'
     const inputCls = overflow ? 'text-danger' : t.input || (locked ? 'text-primary cursor-not-allowed' : 'text-text')
     const unitCls = overflow ? 'text-danger/70' : t.unit || (locked ? 'text-primary/70' : 'text-text-dim')
+    const Box = onBoxClick ? 'div' : 'label'
 
     return (
         <div className="flex flex-col">
-            <button
-                type="button"
-                onClick={onLabelClick}
-                disabled={!onLabelClick}
-                className="flex items-center justify-center gap-1 mb-1 disabled:cursor-default"
-            >
-                <span className={`text-[9px] font-black uppercase ${onLabelClick ? 'text-text' : 'text-text-dim'}`}>{label}</span>
-                {labelTrailing || headerRight}
-            </button>
+            <div className="flex items-center justify-center gap-1 mb-1">
+                <span className="text-[9px] font-black uppercase text-text-dim">{label}</span>
+                {headerRight}
+            </div>
             {/* <label> để bấm chỗ nào trong ô cũng focus vào input — input tự co theo số
-                (width tính bằng ch) nên đơn vị luôn nằm sát ngay sau số, cả cụm canh giữa. */}
-            <label className={`flex items-center justify-center rounded-[10px] overflow-hidden transition-all gap-1 px-1.5 py-1.5 ${wrapCls} ${onboardingHintClass(hint)}`}>
+                (width tính bằng ch) nên đơn vị luôn nằm sát ngay sau số, cả cụm canh giữa.
+                (i) đặt absolute để số + đơn vị vẫn canh giữa như các ô khác.
+                Ô bấm được phải là <div>: Chrome nuốt click trên <label> khi input bên trong disabled. */}
+            <Box
+                onClick={onBoxClick}
+                className={`relative flex items-center justify-center rounded-[10px] overflow-hidden transition-all gap-1 px-1.5 py-1.5 ${wrapCls} ${onBoxClick ? 'pr-3 cursor-pointer' : ''} ${onboardingHintClass(hint)}`}
+            >
                 <input
                     type="number"
                     placeholder="-"
@@ -454,7 +461,8 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRig
                     className={`min-w-0 bg-transparent text-[13px] font-bold text-center placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${tone === 'neutral' ? 'disabled:opacity-50' : ''} ${inputCls}`}
                 />
                 <span className={`text-[10px] font-medium shrink-0 ${unitCls}`}>{unit}</span>
-            </label>
+                {onBoxClick && <Info size={10} className="absolute right-1.5 text-text-dim pointer-events-none" />}
+            </Box>
         </div>
     )
 }

@@ -76,11 +76,16 @@ export function AddressStatsProvider() {
             return
         }
         setSubscriptionLoading(true)
-        const { statusMap, rowsMap } = await fetchSubscriptionStatuses(addresses.map(a => a.id))
-        if (cancelRef.current) return
-        setSubscriptionStatusMap(statusMap)
-        setSubscriptionRowsMap(rowsMap)
-        setSubscriptionLoading(false)
+        // try/finally như loadStats: throw hoặc cancelRef=true mà bỏ qua setLoading(false)
+        // thì badge gói trên mọi card ẩn vĩnh viễn (BranchGrid gate bằng loading).
+        try {
+            const { statusMap, rowsMap } = await fetchSubscriptionStatuses(addresses.map(a => a.id))
+            if (cancelRef.current) return
+            setSubscriptionStatusMap(statusMap)
+            setSubscriptionRowsMap(rowsMap)
+        } finally {
+            setSubscriptionLoading(false)
+        }
         // ponytail: keyed on addressIdsKey như loadStats ở trên, cùng lý do.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [addressIdsKey, monetizationEnabled])

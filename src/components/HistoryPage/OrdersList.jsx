@@ -111,6 +111,15 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                         {discountAmount > 0 && (
                             <span className="text-text-secondary/60 text-[12px] font-bold line-through tabular-nums">{formatVND(subtotal)}</span>
                         )}
+                        {editable && (
+                            <button
+                                onClick={() => setShowDiscount(true)}
+                                aria-label="Giảm giá"
+                                className="self-center text-text-secondary hover:text-primary transition-colors"
+                            >
+                                <Percent size={15} strokeWidth={2.25} />
+                            </button>
+                        )}
                     </div>
                     {!order.deletedAt && (
                         <span className="text-success leading-none text-[14px] mt-1 font-bold tabular-nums">
@@ -136,23 +145,14 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                     </span>
                     {!order.deletedAt && (
                         !order.isOffline ? (
-                            <div className="flex items-center gap-4 shrink-0">
-                                <button
-                                    onClick={() => setShowDiscount(true)}
-                                    aria-label="Giảm giá"
-                                    className="text-text-secondary hover:text-primary transition-colors"
-                                >
-                                    <Percent size={17} strokeWidth={2.25} />
-                                </button>
-                                <button
-                                    onClick={handleDelete}
-                                    disabled={isDeleting}
-                                    aria-label="Xóa đơn"
-                                    className="text-text-secondary hover:text-danger transition-colors disabled:opacity-50"
-                                >
-                                    <Trash2 size={17} strokeWidth={2.25} />
-                                </button>
-                            </div>
+                            <button
+                                onClick={handleDelete}
+                                disabled={isDeleting}
+                                aria-label="Xóa đơn"
+                                className="text-text-secondary hover:text-danger transition-colors disabled:opacity-50 shrink-0"
+                            >
+                                <Trash2 size={17} strokeWidth={2.25} />
+                            </button>
                         ) : (
                             <button
                                 onClick={() => onDeleteOffline(order.createdAt_key)}
