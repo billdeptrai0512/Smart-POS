@@ -128,7 +128,9 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
         yesterdayOrders,
         yesterdayExpensesData,
         apiOrders,
-        apiExpenses,
+        // setApiExpenses: patch tại chỗ sau khi sửa/xoá 1 chi phí ở scope quá khứ
+        // (list này đọc từ RPC báo cáo nên không tự cập nhật theo POSContext).
+        apiExpenses, setApiExpenses,
         apiPayments,
         todayPayments, setTodayPayments,
         apiShiftClosings,

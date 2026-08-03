@@ -23,6 +23,7 @@ import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import SalesCard from '../components/DailyReportPage/SalesCard'
 import DayPerformanceChart from '../components/DailyReportPage/DayPerformanceChart'
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
+import ExpenseEditorModal from '../components/DailyReportPage/ExpenseEditorModal'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import { fetchExpenseCategories } from '../services/expenseService'
 import InventoryRefillCard from '../components/DailyReportPage/InventoryRefillCard'
@@ -118,7 +119,7 @@ export default function DailyReportPage() {
         yesterdayOrders,
         yesterdayExpensesData,
         apiOrders,
-        apiExpenses,
+        apiExpenses, setApiExpenses,
         apiPayments,
         todayPayments, setTodayPayments,
         apiShiftClosings,
@@ -311,6 +312,18 @@ export default function DailyReportPage() {
     // Trước đây bỏ sót custom range nhiều ngày → vẫn hiện line chart sai.
     const isRangeScope = scope === 'week' || scope === 'month'
         || (scope === 'custom' && !isSameDayVN(rangeStart, rangeEnd))
+
+    // Chi phí đang mở modal sửa (bấm 1 dòng trong panel Thực chi) — null = đóng.
+    const [editingExpense, setEditingExpense] = useState(null)
+
+    // Sau khi sửa/xoá: scope hôm nay do POSContext tự patch todayExpenses; scope quá
+    // khứ đọc từ RPC báo cáo nên phải patch tay (updates = null ⇒ đã xoá).
+    const patchReportExpense = (id, updates) => {
+        if (isTodayScope) return
+        setApiExpenses(prev => updates
+            ? prev.map(e => e.id === id ? { ...e, ...updates } : e)
+            : prev.filter(e => e.id !== id))
+    }
 
     // Computed display data
     const displayOrders = isTodayScope ? todayOrders : apiOrders
@@ -1222,6 +1235,8 @@ export default function DailyReportPage() {
                             />
                         )}
 
+                        {/* onEditExpense: bấm 1 dòng chi phí → mở modal sửa ngay tại chỗ,
+                            không rời tab Báo cáo (xem ExpenseEditorModal ở cuối trang). */}
                         {(view === VIEW_ALL || view === VIEW_CASHFLOW) && (
                             <CashFlowCard
                                 actualCash={actualCash}
@@ -1239,6 +1254,7 @@ export default function DailyReportPage() {
                                 isSaving={isSavingShift}
                                 hintCash={hintCash}
                                 hintTransfer={hintTransfer}
+                                onEditExpense={setEditingExpense}
                                 salesCard={
                                     <div className="flex flex-col gap-4">
                                         <SalesCard
@@ -1460,6 +1476,14 @@ export default function DailyReportPage() {
             </div>
             <Toast toast={toast} />
 
+            {editingExpense && (
+                <ExpenseEditorModal
+                    expense={editingExpense}
+                    addressId={selectedAddress?.id}
+                    onSaved={patchReportExpense}
+                    onClose={() => setEditingExpense(null)}
+                />
+            )}
 
             {/* Nhập kho từ card "Chuẩn bị tồn kho" — tái dùng RestockModal của /ingredients. */}
             {restockIngredient && (() => {

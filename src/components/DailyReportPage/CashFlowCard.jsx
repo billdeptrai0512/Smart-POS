@@ -44,6 +44,8 @@ export default function CashFlowCard({
     onTransferChange,
     hintCash = false,
     hintTransfer = false,
+    // Bấm 1 dòng chi phí → mở modal sửa (DailyReportPage điều hướng sang tab Chi phí).
+    onEditExpense,
 }) {
     // Category (Nguyên liệu chính / Bao bì) của từng nguyên liệu — để phân loại
     // mục "Mua nguyên liệu / bao bì" bên dưới. Mặc định collapse từng nhóm.
@@ -168,7 +170,7 @@ export default function CashFlowCard({
         const label = cat?.name || 'Mua nguyên liệu'
         const b = ensureBlock(label, cat?.sort_order ?? 100)
         b.total += e.amount || 0; b.count += 1
-        b.children.push({ key: e.id, date: dayMonth(e.created_at), name: capFirst(e.name || label), amount: e.amount, phase: phase === 'inShift' ? 'in_shift' : 'post_close', method: methodOf(e) })
+        b.children.push({ key: e.id, expense: e, date: dayMonth(e.created_at), name: capFirst(e.name || label), amount: e.amount, phase: phase === 'inShift' ? 'in_shift' : 'post_close', method: methodOf(e) })
     }
     const inventoryBlocks = [...invBlocks.values()].sort((a, b) => a.sortKey - b.sortKey || a.label.localeCompare(b.label, 'vi'))
     const inventoryTotal = inventoryBlocks.reduce((s, b) => s + b.total, 0)
@@ -248,14 +250,14 @@ export default function CashFlowCard({
 
                 {/* SECTION: VẬN HÀNH (luôn hiện) */}
                 <ExpenseSection title="Vận hành" total={operatingTotal} keyPrefix="op" groups={operatingGroups}
-                    expandedCats={expandedCats} toggleCat={toggleCat} emptyText="Không có chi phí vận hành" />
+                    expandedCats={expandedCats} toggleCat={toggleCat} emptyText="Không có chi phí vận hành" onEditExpense={onEditExpense} />
 
                 {/* SECTION: QUẢN LÝ & KHÁC (chỉ khi có chi) */}
                 {overheadGroups.length > 0 && (
                     <>
                         <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
                         <ExpenseSection title="Quản lý & khác" total={overheadTotal} keyPrefix="oh" groups={overheadGroups}
-                            expandedCats={expandedCats} toggleCat={toggleCat} />
+                            expandedCats={expandedCats} toggleCat={toggleCat} onEditExpense={onEditExpense} />
                     </>
                 )}
 
@@ -263,14 +265,14 @@ export default function CashFlowCard({
 
                 {/* SECTION: TỒN KHO (luôn hiện) — refill + chi phí nhãn tồn kho, gộp theo dòng */}
                 <BlockSection title="Tồn kho" total={inventoryTotal} keyPrefix="inv" blocks={inventoryBlocks}
-                    expandedCats={expandedCats} toggleCat={toggleCat} emptyText="Không có chi tồn kho trong kỳ" />
+                    expandedCats={expandedCats} toggleCat={toggleCat} emptyText="Không có chi tồn kho trong kỳ" onEditExpense={onEditExpense} />
 
                 {/* SECTION: NGOÀI KINH DOANH (chỉ khi có chi) — không vào lợi nhuận */}
                 {nonOpGroups.length > 0 && (
                     <>
                         <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
                         <ExpenseSection title="Ngoài kinh doanh" total={nonOpTotal} keyPrefix="nonop" groups={nonOpGroups}
-                            expandedCats={expandedCats} toggleCat={toggleCat} />
+                            expandedCats={expandedCats} toggleCat={toggleCat} onEditExpense={onEditExpense} />
                     </>
                 )}
 
@@ -351,7 +353,7 @@ function SectionHead({ title, total }) {
 
 // Section chi phí kiểu Vận hành/Quản lý/Ngoài KD — groups gom theo nhãn, mỗi nhãn
 // collapse, expand ra list `ngày · tên` (trong ca trước, sau chốt ca sau, chấm phase).
-function ExpenseSection({ title, total, keyPrefix, groups, expandedCats, toggleCat, emptyText }) {
+function ExpenseSection({ title, total, keyPrefix, groups, expandedCats, toggleCat, emptyText, onEditExpense }) {
     return (
         <div className="flex flex-col gap-1 pl-1">
             <SectionHead title={title} total={total} />
@@ -363,10 +365,12 @@ function ExpenseSection({ title, total, keyPrefix, groups, expandedCats, toggleC
                     <CollapseGroup key={k} expanded={!!expandedCats[k]} onToggle={() => toggleCat(k)}
                         label={g.label} count={g.inShift.length + g.postClose.length} total={g.total}>
                         {g.inShift.map((e) => (
-                            <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="in_shift" method={e.payment_method} />
+                            <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="in_shift" method={e.payment_method}
+                                onClick={onEditExpense && (() => onEditExpense(e))} />
                         ))}
                         {g.postClose.map((e) => (
-                            <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="post_close" method={e.payment_method} />
+                            <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="post_close" method={e.payment_method}
+                                onClick={onEditExpense && (() => onEditExpense(e))} />
                         ))}
                     </CollapseGroup>
                 )
@@ -377,7 +381,7 @@ function ExpenseSection({ title, total, keyPrefix, groups, expandedCats, toggleC
 
 // Section Tồn kho — blocks đã gộp sẵn (refill theo nguyên liệu + chi phí nhãn tồn
 // kho + trả nợ), children là ItemRow props dựng sẵn.
-function BlockSection({ title, total, keyPrefix, blocks, expandedCats, toggleCat, emptyText }) {
+function BlockSection({ title, total, keyPrefix, blocks, expandedCats, toggleCat, emptyText, onEditExpense }) {
     return (
         <div className="flex flex-col gap-1 pl-1">
             <SectionHead title={title} total={total} />
@@ -388,8 +392,11 @@ function BlockSection({ title, total, keyPrefix, blocks, expandedCats, toggleCat
                 return (
                     <CollapseGroup key={k} expanded={!!expandedCats[k]} onToggle={() => toggleCat(k)}
                         label={b.label} count={b.count} total={b.total}>
+                        {/* Chỉ dòng dựng từ 1 expense thật mới sửa được; dòng đi chợ NVL là
+                            nhiều payment gộp theo nguyên liệu, không có phiếu chi để mở. */}
                         {b.children.map((c) => (
-                            <ItemRow key={c.key} date={c.date} name={c.name} amount={c.amount} count={c.count} phase={c.phase} method={c.method} />
+                            <ItemRow key={c.key} date={c.date} name={c.name} amount={c.amount} count={c.count} phase={c.phase} method={c.method}
+                                onClick={onEditExpense && c.expense ? () => onEditExpense(c.expense) : undefined} />
                         ))}
                     </CollapseGroup>
                 )
@@ -454,9 +461,12 @@ function MethodTag({ method }) {
 
 // Dòng món bên trong nhóm đã mở — cấp nhỏ nhất, thụt vào + nhạt hơn hàng nhãn.
 // Thứ tự `● [TM|CK] ngày · tên`; chấm + nhãn method đứng riêng, tên truncate độc lập.
-function ItemRow({ date, name, amount, count, phase = 'in_shift', method = 'cash' }) {
+function ItemRow({ date, name, amount, count, phase = 'in_shift', method = 'cash', onClick }) {
     return (
-        <div className="flex justify-between items-center gap-2 pl-4">
+        <div
+            onClick={onClick}
+            className={`flex justify-between items-center gap-2 pl-4 ${onClick ? 'cursor-pointer hover:opacity-75 active:scale-[0.99] transition' : ''}`}
+        >
             <span className="flex items-center gap-1.5 min-w-0">
                 <PhaseDot phase={phase} />
                 <MethodTag method={method} />
