@@ -62,14 +62,23 @@ export default function LoginPage() {
                             autoComplete="username"
                         />
 
-                        <PasswordInput
-                            id="login-password"
-                            label="Mật khẩu"
-                            value={password}
-                            onChange={e => setPassword(e.target.value)}
-                            required
-                            autoComplete="current-password"
-                        />
+                        <div>
+                            <PasswordInput
+                                id="login-password"
+                                label="Mật khẩu"
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                                required
+                                autoComplete="current-password"
+                            />
+                            {/* pl-4 = px-4 của input → link thẳng hàng với chữ trong ô, không tuột ra mép thẻ */}
+                            <div className="mt-2 pl-2
+                              ">
+                                <Link to="/forgot-password" className="text-primary text-xs font-bold hover:underline">
+                                    Quên mật khẩu?
+                                </Link>
+                            </div>
+                        </div>
 
                         <button
                             type="submit"

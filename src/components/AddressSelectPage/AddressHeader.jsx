@@ -1,20 +1,13 @@
 import { useState } from 'react'
-import { Building2, Users, Phone, Loader2, Check, X } from 'lucide-react'
+import { Building2, Users, Mail, Loader2, Check, X } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { setMyPhone } from '../../services/authService'
+import { setMyEmail } from '../../services/authService'
 import { Dialog } from '../common/ModalShell'
-
-// Hiển thị SĐT dạng nội địa: +84902822193 → 0902 822 193 (DB vẫn giữ E.164).
-function formatPhoneVN(p) {
-    let d = (p || '').replace(/\D/g, '')
-    if (d.startsWith('84')) d = '0' + d.slice(2)
-    return d.length === 10 ? `${d.slice(0, 4)} ${d.slice(4, 7)} ${d.slice(7)}` : (p || '')
-}
 
 export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTab, profile, setError, addressCount, staffCount, managerCount }) {
     const showTabs = !isStaff && !isGuest;
-    const [phoneOpen, setPhoneOpen] = useState(false)
-    const phone = profile?.phone
+    const [emailOpen, setEmailOpen] = useState(false)
+    const email = profile?.email
 
     // Card focus = nền primary đặc → chữ trắng theo brand mockup (WCAG chỉ ~2.8:1
     // nhưng font-black + APCA đọc tốt; đây là lựa chọn thương hiệu có chủ đích).
@@ -64,16 +57,16 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
                                 ? 'bg-linear-to-b from-primary to-primary-dark border-primary shadow-[0_4px_20px_rgba(244,119,75,0.3)]'
                                 : 'bg-bg border-border/60 hover:bg-surface-light'}`}
                         >
-                            {/* SĐT — span role=button (tránh button lồng button gây hydration error) */}
+                            {/* Email — span role=button (tránh button lồng button gây hydration error) */}
                             <span
                                 role="button"
                                 tabIndex={0}
-                                onClick={(e) => { e.stopPropagation(); setPhoneOpen(true) }}
+                                onClick={(e) => { e.stopPropagation(); setEmailOpen(true) }}
                                 className="flex flex-col items-start relative z-10 w-full cursor-pointer gap-[3px]"
                             >
-                                <span className={`text-[12px] sm:text-[13px] font-bold uppercase tracking-wider truncate w-full ${lblColor(activeTab === 'staff')}`}>Điện thoại</span>
-                                <span className={`text-[14px] sm:text-[14px] font-black tracking-tight leading-tight truncate w-full ${phone ? valColor(activeTab === 'staff') : (activeTab === 'staff' ? 'text-white/50' : 'text-text-secondary/60')}`}>
-                                    {phone ? formatPhoneVN(phone) : '—'}
+                                <span className={`text-[12px] sm:text-[13px] font-bold uppercase tracking-wider truncate w-full ${lblColor(activeTab === 'staff')}`}>Email</span>
+                                <span className={`text-[14px] sm:text-[14px] font-black tracking-tight leading-tight truncate w-full ${email ? valColor(activeTab === 'staff') : (activeTab === 'staff' ? 'text-white/50' : 'text-text-secondary/60')}`}>
+                                    {email || '—'}
                                 </span>
                             </span>
                             <div className={`w-full h-[1px] rounded-full relative z-10 my-[2px]  ${activeTab === 'staff' ? 'bg-white/25' : 'bg-border/60'}`} />
@@ -107,34 +100,29 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
                 )}
             </div>
 
-            {phoneOpen && <PhoneModal phone={phone} onClose={() => setPhoneOpen(false)} />}
+            {emailOpen && <EmailModal email={email} onClose={() => setEmailOpen(false)} />}
         </header>
     )
 }
 
-// CRUD SĐT tài khoản — lưu qua RPC set_my_phone (1 SĐT = 1 lần được cấp trial).
-function PhoneModal({ phone, onClose }) {
+// CRUD email tài khoản — lưu qua RPC set_my_email. Đây là đường duy nhất để đặt
+// lại mật khẩu, nên tài khoản cũ (email NULL) khai bổ sung ở đây.
+function EmailModal({ email, onClose }) {
     const { refreshProfile } = useAuth()
-    const [value, setValue] = useState(formatPhoneVN(phone))
+    const [value, setValue] = useState(email || '')
     const [busy, setBusy] = useState(false)
-    const [notice, setNotice] = useState('')
     const [err, setErr] = useState('')
 
     async function handleSave() {
         if (!value.trim() || busy) return
         setBusy(true)
         setErr('')
-        setNotice('')
         try {
-            const result = await setMyPhone(value.trim())
+            await setMyEmail(value.trim())
             refreshProfile()
-            if (result === 'trial_granted') {
-                setNotice('Đã kích hoạt 7 ngày dùng thử báo cáo 🎉')
-            } else {
-                onClose()
-            }
+            onClose()
         } catch (e) {
-            setErr(e.message || 'Không thể lưu số điện thoại')
+            setErr(e.message || 'Không lưu được email')
         } finally {
             setBusy(false)
         }
@@ -148,9 +136,9 @@ function PhoneModal({ phone, onClose }) {
                 <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
                     <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-[10px] bg-primary/10 flex items-center justify-center">
-                            <Phone size={15} className="text-primary" />
+                            <Mail size={15} className="text-primary" />
                         </div>
-                        <p className="text-text font-black text-sm leading-none">Số điện thoại</p>
+                        <p className="text-text font-black text-sm leading-none">Email</p>
                     </div>
                     {!busy && (
                         <button
@@ -164,16 +152,15 @@ function PhoneModal({ phone, onClose }) {
                 </div>
                 <div className="p-5 flex flex-col gap-4">
                     <input
-                        type="tel"
+                        type="email"
                         autoFocus
-                        placeholder="Số điện thoại (vd: 0901234567)"
+                        placeholder="Email (dùng để đặt lại mật khẩu)"
                         value={value}
                         onChange={e => setValue(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
                         disabled={busy}
                         className="w-full px-4 py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50"
                     />
-                    {notice && <p className="text-primary text-xs font-bold px-1">{notice}</p>}
                     {err && <p className="text-danger text-xs font-medium px-1">{err}</p>}
                     <div className="flex gap-2">
                         <button
@@ -182,7 +169,7 @@ function PhoneModal({ phone, onClose }) {
                             onClick={onClose}
                             className="flex-1 py-3 rounded-[14px] bg-bg border border-border/60 text-text-secondary font-bold text-sm hover:bg-surface-light transition-colors disabled:opacity-50"
                         >
-                            {notice ? 'Đóng' : 'Hủy'}
+                            Hủy
                         </button>
                         <button
                             type="button"

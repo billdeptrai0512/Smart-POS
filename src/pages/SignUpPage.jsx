@@ -1,36 +1,43 @@
 import { useState } from 'react'
 import { Check } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { setMyPhone } from '../services/authService'
 import { useNavigate, Link } from 'react-router-dom'
 import ErrorBanner from '../components/common/ErrorBanner'
 import FloatingLabelInput from '../components/common/FloatingLabelInput'
 import PasswordInput from '../components/common/PasswordInput'
 import { capitalizeWords } from '../utils'
 
+// ponytail: bảng typo cứng thay vì thư viện (mailcheck) — email chỉ dùng để reset
+// mật khẩu, gõ nhầm domain là mất luôn đường đó. Thêm dòng khi gặp ca mới.
+const DOMAIN_TYPOS = {
+    'gmial.com': 'gmail.com', 'gmai.com': 'gmail.com', 'gnail.com': 'gmail.com',
+    'gmail.con': 'gmail.com', 'gmail.co': 'gmail.com', 'gmail.cm': 'gmail.com',
+    'hotmial.com': 'hotmail.com', 'yaho.com': 'yahoo.com', 'yahoo.con': 'yahoo.com',
+}
+const suggestEmailFix = (value) => {
+    const [user, domain] = value.trim().split('@')
+    const fixed = DOMAIN_TYPOS[domain?.toLowerCase()]
+    return fixed && user ? `${user}@${fixed}` : ''
+}
+
 export default function SignUpPage() {
     const { signUp } = useAuth()
     const navigate = useNavigate()
     const [name, setName] = useState('')
+    const [email, setEmail] = useState('')
     const [username, setUsername] = useState('')
-    const [phone, setPhone] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
-    const [phoneWarning, setPhoneWarning] = useState('')
     const [loading, setLoading] = useState(false)
+    const emailFix = suggestEmailFix(email)
 
     async function handleSubmit(e) {
         e.preventDefault()
         if (!name.trim()) { setError('Vui lòng nhập tên'); return }
+        // ponytail: format email để type="email" + regex trong signUp lo, không lặp lại ở đây.
+        if (!email.trim()) { setError('Vui lòng nhập email'); return }
         if (!username.trim()) { setError('Vui lòng nhập tài khoản'); return }
         if (username.length < 3) { setError('Tài khoản ít nhất 3 ký tự'); return }
-        // SĐT phải hợp lệ TRƯỚC khi tạo tài khoản — set_my_phone (sau signUp) dùng
-        // cùng luật này; chặn ở client để không lỡ tạo account rồi rớt phone → mất trial.
-        const phoneDigits = phone.replace(/\D/g, '').replace(/^84/, '0')
-        if (!/^0[35789]\d{8}$/.test(phoneDigits)) {
-            setError('Số điện thoại không hợp lệ — cần số di động VN 10 số (vd: 0901234567)')
-            return
-        }
         const hasLetter = /[a-zA-Z]/.test(password)
         const hasNumber = /[0-9]/.test(password)
         if (password.length < 8 || !hasLetter || !hasNumber) {
@@ -40,19 +47,7 @@ export default function SignUpPage() {
         setError('')
         setLoading(true)
         try {
-            await signUp(username.trim(), password, name.trim())
-            // Lưu SĐT cho tài khoản vừa tạo → trigger cấp 7 ngày trial khi tạo chi nhánh đầu.
-            // Account đã tạo xong; nếu SĐT trùng tài khoản khác, báo lỗi nhưng vẫn cho vào
-            // (sửa lại SĐT sau trong thẻ tài khoản).
-            try {
-                await setMyPhone(phone.trim())
-            } catch (phoneErr) {
-                // Tài khoản đã tạo nhưng chưa lưu được SĐT (vd trùng số). Đừng nuốt lỗi —
-                // báo để user biết chưa có trial, nhập lại SĐT trong phần Tài khoản.
-                setPhoneWarning(phoneErr.message || 'Không lưu được số điện thoại')
-                setLoading(false)
-                return
-            }
+            await signUp(username.trim(), password, name.trim(), email.trim())
             navigate('/addresses', { replace: true })
         } catch (err) {
             setError(err.message || 'Đăng ký thất bại')
@@ -70,21 +65,6 @@ export default function SignUpPage() {
                 </div>
 
 
-                {phoneWarning ? (
-                    <div className="bg-surface border border-warning/40 rounded-[20px] p-6 shadow-sm space-y-4 text-center">
-                        <p className="text-text font-black text-base">Tài khoản đã tạo!</p>
-                        <p className="text-text-secondary text-sm">
-                            Nhưng chưa lưu được số điện thoại: <span className="text-warning font-bold">{phoneWarning}</span>.
-                            Bạn có thể nhập lại SĐT trong phần Tài khoản để nhận 7 ngày dùng thử.
-                        </p>
-                        <button
-                            onClick={() => navigate('/addresses', { replace: true })}
-                            className="w-full py-3 rounded-[14px] bg-primary text-black/80 uppercase font-bold text-sm hover:bg-primary/90 transition-colors"
-                        >
-                            Tiếp tục
-                        </button>
-                    </div>
-                ) : (
                 <form onSubmit={handleSubmit} className="bg-surface border border-border/60 rounded-[20px] p-6 shadow-sm space-y-4">
                     <ErrorBanner message={error} />
 
@@ -97,6 +77,27 @@ export default function SignUpPage() {
                         required
                     />
 
+                    <div>
+                        <FloatingLabelInput
+                            id="signup-email"
+                            label="Email"
+                            type="email"
+                            value={email}
+                            onChange={e => setEmail(e.target.value)}
+                            required
+                            autoComplete="email"
+                        />
+                        {emailFix && (
+                            <button
+                                type="button"
+                                onClick={() => setEmail(emailFix)}
+                                className="mt-1.5 text-[11px] text-warning hover:underline"
+                            >
+                                Có phải <span className="font-bold">{emailFix}</span>? Bấm để sửa
+                            </button>
+                        )}
+                    </div>
+
                     <FloatingLabelInput
                         id="signup-username"
                         label="Tài khoản"
@@ -104,16 +105,6 @@ export default function SignUpPage() {
                         onChange={e => setUsername(e.target.value)}
                         required
                         autoComplete="username"
-                    />
-
-                    <FloatingLabelInput
-                        id="signup-phone"
-                        label="Số điện thoại"
-                        type="tel"
-                        value={phone}
-                        onChange={e => setPhone(e.target.value)}
-                        required
-                        autoComplete="tel"
                     />
 
                     <div>
@@ -151,9 +142,6 @@ export default function SignUpPage() {
                         <Link to="/login" className="text-primary font-bold hover:underline">Quay lại</Link> trang đăng nhập
                     </p>
                 </form>
-                )}
-
-
             </div>
         </div>
     )

@@ -190,6 +190,54 @@ export async function setStaffPassword(userId, password) {
 }
 
 
+// Gửi mã xác nhận đặt lại mật khẩu về email thật (users.email) — qua Edge Function vì
+// email trong auth.users là email giả `<username>@coffee.local`, resetPasswordForEmail
+// của Supabase gửi vào đó thì không ai nhận được.
+// Luôn trả ok kể cả khi không tìm thấy tài khoản (không để dò username).
+export async function requestPasswordReset(username) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { data, error } = await supabase.functions.invoke('request-password-reset', {
+        body: { username: sanitizeUsername(username) },
+    })
+    if (error) {
+        // Không gọi tới được function (mạng rớt / chưa deploy) → SDK trả message
+        // tiếng Anh, đừng dội thẳng vào mặt chủ quán.
+        if (error.name === 'FunctionsFetchError') throw new Error('Mất kết nối, thử lại')
+        let msg = error.message
+        try { const ctx = await error.context?.json(); if (ctx?.error) msg = ctx.error } catch { /* keep msg */ }
+        throw new Error(msg)
+    }
+    if (data?.error) throw new Error(data.error)
+    return data
+}
+
+// Đổi mã trong mail lấy session recovery (đủ quyền đổi mật khẩu của chính
+// mình). Email truyền vào verifyOtp là email GIẢ của tài khoản — cùng công thức
+// lúc đăng nhập, KHÔNG phải email thật đã nhận mã.
+export async function verifyPasswordResetCode(username, code) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase.auth.verifyOtp({
+        email: formatUsernameToEmail(username),
+        token: code.trim(),
+        type: 'recovery',
+    })
+    if (!error) return
+    // Mọi lý do khác ngoài rớt mạng (sai mã, hết hạn, đã dùng) đều cùng 1 câu —
+    // Supabase trả tiếng Anh, và user cũng chỉ làm được đúng 1 việc: xin mã mới.
+    if (error.name === 'AuthRetryableFetchError') throw new Error('Mất kết nối, thử lại')
+    throw new Error('Mã không đúng hoặc đã hết hạn')
+}
+
+// Đổi mật khẩu của chính user đang có session (dùng ngay sau verifyPasswordResetCode).
+export async function updateOwnPassword(password) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { error } = await supabase.auth.updateUser({ password })
+    if (!error) return
+    if (error.code === 'same_password') throw new Error('Mật khẩu mới phải khác mật khẩu cũ')
+    console.error('updateOwnPassword error:', error)  // giữ nguyên văn cho dev, user thấy câu gọn
+    throw new Error('Không đổi được mật khẩu, thử lại')
+}
+
 // Sign out
 export async function signOut() {
     if (!supabase) return
@@ -202,6 +250,13 @@ export async function signOut() {
 // Trả 'trial_granted' khi vừa kích hoạt 7 ngày dùng thử, ngược lại 'ok'.
 export async function setMyPhone(phone) {
     const { data, error } = await supabase.rpc('set_my_phone', { p_phone: phone })
+    if (error) throw error
+    return data
+}
+
+// Lưu email cho tài khoản đang đăng nhập — đường duy nhất để đặt lại mật khẩu.
+export async function setMyEmail(email) {
+    const { data, error } = await supabase.rpc('set_my_email', { p_email: email })
     if (error) throw error
     return data
 }
