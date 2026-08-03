@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { calculateEstimatedConsumption, buildRecipeIngredientSet, walkDailyIngredientDiff } from '../../utils/inventory';
+import { dateStringVN } from '../../utils/dateVN';
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients';
 import { ChevronDown, Lock } from 'lucide-react';
 import { useProducts } from '../../contexts/ProductContext';
@@ -85,8 +86,7 @@ export default function RangeLossCard({
         const dailyOrderItems = {};
         orders.forEach(o => {
             if (o.deleted_at) return;
-            const d = new Date(o.created_at);
-            const dayStr = d.toLocaleDateString('sv-SE'); // YYYY-MM-DD in local TZ
+            const dayStr = dateStringVN(new Date(o.created_at)); // YYYY-MM-DD theo giờ VN
             if (!dailyOrderItems[dayStr]) dailyOrderItems[dayStr] = [];
 
             (o.order_items || []).forEach(i => dailyOrderItems[dayStr].push({
@@ -107,7 +107,7 @@ export default function RangeLossCard({
         // chỉ dùng ca cuối ngày — range giữ đúng convention đó để tổng = tổng daily.
         const lastClosingPerDay = {};
         for (const c of shiftClosings) {
-            const dayStr = new Date(c.closed_at).toLocaleDateString('sv-SE');
+            const dayStr = dateStringVN(new Date(c.closed_at));
             const prev = lastClosingPerDay[dayStr];
             if (!prev || new Date(c.closed_at) > new Date(prev.closed_at)) {
                 lastClosingPerDay[dayStr] = c;

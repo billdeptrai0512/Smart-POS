@@ -1,4 +1,20 @@
-# Phone Auth — Verify SĐT thật (Giai đoạn B của Phase 2)
+# ❌ Phone Auth — Verify SĐT thật — HUỶ 2026-08-02
+
+> **KHÔNG LÀM. Tài liệu này giữ lại làm hồ sơ nghiên cứu, không phải việc đang chờ.**
+>
+> Toàn bộ mục đích của nó là chặn người bịa SĐT để lấy trial mới. Ràng buộc đó không còn:
+> `20260717_trial_4_per_address_not_per_phone.sql` chuyển trial sang tính theo ĐỊA CHỈ, rồi
+> `20260802_trial_no_phone_requirement.sql` bỏ nốt yêu cầu có SĐT. Form đăng ký cũng đã đổi
+> SĐT → email. SĐT nay chỉ là thông tin liên hệ không bắt buộc.
+>
+> Không có gì để bảo vệ thì không cần bằng chứng sở hữu số — và đỡ được cả nút thắt pháp nhân
+> (xác thực OA Zalo cần GPKD/hộ kinh doanh) lẫn chi phí SMS.
+>
+> Cần danh tính chắc chắn sau này? Google Sign-In rẻ và nhanh hơn OTP SMS nhiều.
+>
+> Phần bên dưới là nội dung nghiên cứu gốc 2026-06-11, để nguyên phòng khi cần đọc lại.
+
+---
 
 > Nguồn chân lý cho việc xác thực số điện thoại. Bối cảnh & tracker tổng: `task.md` (Phase 2).
 > Nghiên cứu 2026-06-11. Hướng chính: **Zalo Mini App** (0đ/lần verify). Fallback: Twilio OTP.

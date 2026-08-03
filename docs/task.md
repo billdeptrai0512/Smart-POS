@@ -162,8 +162,8 @@ Thêm `editIngredientRestock(addressId, expenseId, opts)` mirror `processIngredi
 # Task / Reminder — Monetization
 
 > Payment backend đã LIVE (SePay webhook + `confirm_payment`, xem §7.2 bên dưới) + admin dashboard/
-> đối soát thanh toán đã LIVE (§7.3). Còn lại chủ yếu là Phase 2 — Phone OTP thật (verify SĐT).
-> Nguồn chi tiết: `docs/MONETIZATION.md`.
+> đối soát thanh toán đã LIVE (§7.3). **Phase 2 (verify SĐT) đã HUỶ 2026-08-02** — xem mục Phase 2
+> bên dưới. Nguồn chi tiết: `docs/MONETIZATION.md`.
 
 ## ✅ Migration — đã apply hết (2026-06-08)
 Toàn bộ migration monetization đã chạy lên Supabase. Verify đạt: `address_subscriptions_tier_check`
@@ -205,14 +205,26 @@ Bỏ bán lẻ module, bỏ chu kỳ tháng/năm, bỏ bundle. Trial 7 ngày. Mu
 ## Còn lại (làm sau, không phải bây giờ)
 - [x] **Server-side kill switch** đọc `app_config` runtime (flip không cần redeploy). `useMonetizationEnabled()` trong `useEntitlement.js`; mọi consumer (gate/badge/route/listener) dùng enabled runtime.
 - [x] **Admin reconciliation**: RPC `admin_set_subscription` + `admin_reset_subscription` + nút admin trong SubscriptionPanel. Dashboard đối soát `payment_intents` (`/admin/reconciliation`, resolve có audit log) — LIVE 2026-07-13/14, xem `docs/MONETIZATION.md` §7.3.
-- [ ] **Phase 2**: thêm SĐT vào tài khoản → bind trial vào SĐT. Plan 3 giai đoạn bên dưới.
+- [~] **Phase 2**: thêm SĐT vào tài khoản → bind trial vào SĐT. **HUỶ 2026-08-02** — xem bên dưới.
 - [x] **Phase 3 (c + a)** — xong 2026-06-10: Edge Function `sepay-webhook` (HMAC) + RPC `confirm_payment` + `create_payment_intent` + QR SePay + `usePaymentPoll` (poll-while-pending, chạy kèm realtime listener).
       Còn việc vận hành: deploy function + set secret + đăng ký URL webhook với SePay.
 
-## Phase 2 — Thêm SĐT vào tài khoản (plan 3 giai đoạn, 2026-06-11)
+## ❌ Phase 2 — Thêm SĐT vào tài khoản — HUỶ 2026-08-02
 
-> Mục tiêu: 1 SĐT = 1 trial duy nhất. Vá 2 lỗ hiện tại: tạo tài khoản mới nhận trial lại,
-> và xoá địa chỉ → tạo lại nhận trial lại (trigger hiện chỉ đếm số address của manager).
+> **Không làm tiếp giai đoạn B và C. Giữ mục này làm hồ sơ vì sao.**
+>
+> Mục tiêu ban đầu: 1 SĐT = 1 trial duy nhất, và verify SĐT thật để không ai bịa số lấy trial mới.
+> Cái nền đó đã mất:
+> - `20260717_trial_4_per_address_not_per_phone.sql` bỏ hẳn ràng buộc trial theo SĐT — mỗi ĐỊA CHỈ
+>   có vòng đời trial độc lập, không quan tâm account/SĐT.
+> - `20260802_trial_no_phone_requirement.sql` bỏ nốt điều kiện "phải có SĐT" trong trigger, cùng lúc
+>   form đăng ký đổi field SĐT → Email (email là đường đặt lại mật khẩu, xem `ForgotPasswordPage`).
+>
+> Không còn gì để bảo vệ thì cũng không cần bằng chứng sở hữu số. SĐT nay chỉ là **thông tin liên hệ
+> không bắt buộc** (admin gọi chủ quán khi đối soát thanh toán). Cột `users.phone`, RPC `set_my_phone`
+> và bảng `trial_grants` vẫn còn cho dữ liệu lịch sử, không gate gì nữa.
+>
+> Bật lại khi nào? Chỉ khi trial quay về ràng buộc theo người/SĐT và có kẻ farm trial thật sự.
 
 ### Giai đoạn A — thu SĐT sau khi tạo tài khoản (chưa cần OTP, chi phí 0đ) — ✅ XONG 2026-06-11
 - [x] Migration `20260611_phase2a_users_phone_trial_binding.sql`: cột `users.phone` (E.164 +84) + UNIQUE index partial + RPC `set_my_phone` (chuẩn hoá, validate, xử lý trial) + trigger mới.
@@ -220,19 +232,18 @@ Bỏ bán lẻ module, bỏ chu kỳ tháng/năm, bỏ bundle. Trial 7 ngày. Mu
 - [x] Trigger `grant_trial_on_address_creation`: chỉ cấp khi owner **có phone** VÀ phone **chưa có trong `trial_grants`**; bỏ check "address đầu tiên" (trial_grants = nguồn chân lý 1 SĐT = 1 trial).
 - [x] Backfill: `set_my_phone` lần đầu nhập số → nếu account đã từng nhận trial thì chỉ bind vào `trial_grants` (không cấp lại); nếu có address chưa từng có gói → cấp trial 7 ngày luôn (mồi "nhập SĐT = được trial" đúng cho cả user cũ).
 
-### Giai đoạn B — verify SĐT thật (chống nhập số bừa lấy trial)
+### ❌ Giai đoạn B — verify SĐT thật — HUỶ, không làm
 
-→ **Plan chi tiết: `docs/phoneAuth.md`** (nghiên cứu 2026-06-11). Tóm tắt: hướng chính là
-**Zalo Mini App** `getPhoneNumber` (0đ/lần verify — web OAuth Zalo KHÔNG trả SĐT nên bị loại);
-fallback **Twilio OTP** nếu kẹt pháp nhân (xác thực OA cần hộ KD/GPKD).
-⏳ Chờ owner xác nhận có hộ KD/GPKD chưa → chốt Zalo hay Twilio trước.
+Nghiên cứu giữ ở `docs/phoneAuth.md` (Zalo Mini App `getPhoneNumber` 0đ; fallback Twilio OTP).
+Chưa từng bắt tay code, và cũng không còn lý do: trial không bind theo SĐT nữa.
 
-### Giai đoạn C — SĐT làm phương thức đăng ký (trước khi mở đăng ký tự do)
-- [ ] SignUpPage: nhập SĐT → OTP → tạo tài khoản (`signInWithOtp`). Tài khoản cũ giữ username/password.
-- [ ] Trigger trial đọc phone verified từ `auth.users` (không fake được).
-- [ ] Khi OTP volume >100/tháng: migrate Twilio → eSMS/Stringee qua Edge Function (Phase 4 trong MONETIZATION.md §3).
+### ❌ Giai đoạn C — SĐT làm phương thức đăng ký — HUỶ, không làm
 
-*Cập nhật: 2026-06-11.*
+Đăng ký nay thu **email** thay SĐT (2026-08-02) — email vừa là kênh liên hệ vừa là đường đặt lại
+mật khẩu, không tốn phí mỗi lần như SMS OTP. Muốn danh tính "không fake được" thì hướng rẻ hơn là
+Google Sign-In, không phải OTP SMS.
+
+*Cập nhật: 2026-08-02 (huỷ Phase 2). Nội dung trước đó: 2026-06-11.*
 
 ---
 

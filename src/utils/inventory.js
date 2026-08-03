@@ -1,4 +1,5 @@
 import { lookupByLabel } from './ingredients'
+import { dateStringVN } from './dateVN'
 
 /**
  * Tính toán giá vốn của một sản phẩm, bao gồm cả tuỳ chọn thêm (extras).
@@ -279,7 +280,7 @@ export function walkDailyIngredientDiff({ shiftClosings = [], dailyConsumption =
     const out = []
     sorted.forEach((closing, idx) => {
         if (!closing.inventory_report) return
-        const dayStr = new Date(closing.closed_at || closing.created_at).toLocaleDateString('sv-SE')
+        const dayStr = dateStringVN(new Date(closing.closed_at || closing.created_at))
         const used = dailyConsumption[dayStr] || {}
         for (const item of closing.inventory_report) {
             if (item.remaining == null) continue
@@ -487,7 +488,7 @@ export function buildDailyHaoHutMap({ shiftClosings = [], orders = [], recipes =
     const dailyOrderItems = {}
     for (const o of orders) {
         if (o.deleted_at) continue
-        const dayStr = new Date(o.created_at).toLocaleDateString('sv-SE')
+        const dayStr = dateStringVN(new Date(o.created_at))
         ;(dailyOrderItems[dayStr] ??= []).push(...(o.order_items || []).map(i => ({
             productId: i.product_id || i.productId,
             qty: i.quantity || i.qty || 1,
@@ -501,7 +502,7 @@ export function buildDailyHaoHutMap({ shiftClosings = [], orders = [], recipes =
 
     const lastClosingPerDay = {}
     for (const c of shiftClosings) {
-        const dayStr = new Date(c.closed_at).toLocaleDateString('sv-SE')
+        const dayStr = dateStringVN(new Date(c.closed_at))
         const prev = lastClosingPerDay[dayStr]
         if (!prev || new Date(c.closed_at) > new Date(prev.closed_at)) lastClosingPerDay[dayStr] = c
     }

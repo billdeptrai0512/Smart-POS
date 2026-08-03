@@ -447,7 +447,7 @@ export default function DailyReportPage() {
         const sourceOrders = isDayScope ? [...displayOrders, ...offlineToday] : (apiOrders || [])
         for (const o of sourceOrders) {
             if (o.deleted_at) continue
-            const dayStr = new Date(o.created_at || o.createdAt).toLocaleDateString('sv-SE')
+            const dayStr = dateStringVN(new Date(o.created_at || o.createdAt))
             const items = o.order_items || o.cart || o.orderItems || []
             for (const i of items) {
                 pushItem(
