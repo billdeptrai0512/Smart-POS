@@ -23,8 +23,6 @@ import { dedupeShiftClosingsByDay } from '../utils/reportStats'
 export function useDailyReportData({ addressId, scope, offset, customRange, onError }) {
     const [shiftClosing, setShiftClosing] = useState(null)
     const [yesterdayClosing, setYesterdayClosing] = useState(null)
-    const [yesterdayOrders, setYesterdayOrders] = useState([])
-    const [yesterdayExpensesData, setYesterdayExpensesData] = useState([])
     const [isAsyncReady, setIsAsyncReady] = useState(false)
     const [apiOrders, setApiOrders] = useState([])
     const [apiExpenses, setApiExpenses] = useState([])
@@ -71,8 +69,6 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
                 .then((data) => {
                     setShiftClosing(data?.shift_closing || null)
                     setYesterdayClosing(data?.yesterday_closing || null)
-                    setYesterdayOrders(data?.yesterday_orders || [])
-                    setYesterdayExpensesData(data?.yesterday_expenses || [])
                     setTodayPayments(data?.target_payments || [])
                 })
                 .catch((error) => onError?.(error, 'Tải báo cáo hôm nay'))
@@ -83,8 +79,6 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
                 .then((data) => {
                     setShiftClosing(data?.shift_closing || null)
                     setYesterdayClosing(data?.yesterday_closing || null)
-                    setYesterdayOrders(data?.yesterday_orders || [])
-                    setYesterdayExpensesData(data?.yesterday_expenses || [])
                     setApiOrders(data?.target_orders || [])
                     setApiExpenses(data?.target_expenses || [])
                     setApiPayments(data?.target_payments || [])
@@ -103,8 +97,6 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
                     setApiPayments(data?.target_payments || [])
                     setApiShiftClosings(targetClosings)
                     setPrevShiftClosings(dedupeShiftClosingsByDay(data?.prev_shift_closings || []))
-                    setYesterdayOrders(data?.prev_orders || [])
-                    setYesterdayExpensesData(data?.prev_expenses || [])
 
                     if (targetClosings.length) {
                         setShiftClosing(targetClosings[targetClosings.length - 1])
@@ -125,8 +117,6 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
         rangeStart, rangeEnd, prevStart, prevEnd,
         shiftClosing, setShiftClosing,
         yesterdayClosing,
-        yesterdayOrders,
-        yesterdayExpensesData,
         apiOrders,
         // setApiExpenses: patch tại chỗ sau khi sửa/xoá 1 chi phí ở scope quá khứ
         // (list này đọc từ RPC báo cáo nên không tự cập nhật theo POSContext).

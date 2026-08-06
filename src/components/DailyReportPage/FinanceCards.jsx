@@ -17,10 +17,6 @@ function renderRow(r) {
         : <LineItem key={r.id} label={`· ${r.name}`} amount={r.amount} />
 }
 
-// Hàng so sánh hôm qua tạm tắt — giữ prop + markup cho tương lai. Cờ có tên thay
-// literal `false` để khỏi vướng lint no-constant-binary-expression.
-const SHOW_COMPARE_ROW = false
-
 // Per-period P&L breakdown. Replaces the hardcoded 6+3 row list with category-
 // driven rendering: each expense_categories row is one line in either the
 // Operating ("Chi phí vận hành") or Overhead ("Chi phí quản lý & khác") card.
@@ -29,8 +25,8 @@ const SHOW_COMPARE_ROW = false
 // category. No more template × days projection — what you spent is what you see.
 //
 // Inputs:
-//   - totalRevenue / totalCOGS / netProfit / yesterdayNetProfit: kept as scalar
-//     props since the parent has the full picture (range scaling, prev period).
+//   - totalRevenue / totalCOGS / netProfit: kept as scalar props since the parent
+//     has the full picture (range scaling).
 //   - expenses: raw rows for the period. We filter inside (skip NVL refills).
 //   - expenseCategories: address's tag list. Categories missing from this list
 //     (soft-deleted) fall back to "Chi phí khác" of the same group_section.
@@ -39,8 +35,6 @@ export default function FinanceCards({
     totalDiscount = 0,
     totalCOGS,
     netProfit,
-    yesterdayNetProfit,
-    compareLabel = 'So với hôm trước',
     expenses = [],
     expenseCategories = [],
     // Category split of totalCOGS — caller passes raw bucket; we normalize so lines sum to totalCOGS.
@@ -138,7 +132,7 @@ export default function FinanceCards({
             </SimpleCard>
 
             {/* 7. LỢI NHUẬN RÒNG (NET PROFIT) */}
-            <NetProfitCard netProfit={netProfit} yesterdayNetProfit={yesterdayNetProfit} compareLabel={compareLabel} totalRevenue={totalRevenue} />
+            <NetProfitCard netProfit={netProfit} totalRevenue={totalRevenue} />
         </div>
     )
 }
@@ -216,8 +210,7 @@ function ProfitBanner({ label, amount, onClick, children }) {
     )
 }
 
-function NetProfitCard({ netProfit, yesterdayNetProfit, compareLabel, totalRevenue }) {
-    const hasYesterday = yesterdayNetProfit !== null && yesterdayNetProfit !== undefined
+function NetProfitCard({ netProfit, totalRevenue }) {
     const isPositive = netProfit >= 0
     return (
         <div className={`col-span-2 rounded-[24px] p-5 shadow-sm border flex items-center justify-between relative overflow-hidden
@@ -237,11 +230,6 @@ function NetProfitCard({ netProfit, yesterdayNetProfit, compareLabel, totalReven
                         {totalRevenue > 0 ? (netProfit / totalRevenue * 100).toFixed(2) : '0.00'}%
                     </span>
                 </div>
-                {hasYesterday && SHOW_COMPARE_ROW && (
-                    <div className="flex justify-between items-center pl-1">
-                        <span className="self-end text-[10px] font-black text-text-secondary uppercase mb-1.5 opacity-80">{compareLabel}</span>
-                    </div>
-                )}
             </div>
         </div>
     )

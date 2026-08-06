@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useHistory } from '../contexts/HistoryContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
-import { calculateProductCost, formatVNDInput, parseVNDInput } from '../utils'
+import { formatVNDInput, parseVNDInput } from '../utils'
 import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses, dedupeShiftClosingsByDay } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import { fetchDailyReportContext, fetchLastWeekSameDayOrderItems, fetchReportByRange, processIngredientRestock } from '../services/orderService'
@@ -116,8 +116,6 @@ export default function DailyReportPage() {
         rangeStart, rangeEnd,
         shiftClosing, setShiftClosing,
         yesterdayClosing,
-        yesterdayOrders,
-        yesterdayExpensesData,
         apiOrders,
         apiExpenses, setApiExpenses,
         apiPayments,
@@ -507,30 +505,6 @@ export default function DailyReportPage() {
     // P&L = Revenue - COGS - Hao hụt - Tiêu hao bao bì không-công-thức - chi phí thực chi.
     // NVL refill không trừ ở đây (đã nằm trong COGS/tiêu hao qua kiểm kê).
     const netProfit = totalRevenue - totalCOGS - lossValue - nonRecipeUsageTotal - operationalExpense
-
-    const yesterdayNetProfit = useMemo(() => {
-        let rev = 0, cogs = 0
-        yesterdayOrders.filter(o => !o.deleted_at).forEach(o => {
-            rev += o.total
-            if (o.total_cost > 0) {
-                cogs += o.total_cost
-            } else {
-                ; (o.order_items || []).forEach(i => {
-                    const qty = i.quantity || i.qty || 1
-                    const pid = i.product_id || i.productId
-                    const cost = i.unit_cost > 0 ? i.unit_cost : calculateProductCost(pid, [], recipes, extraIngredients, ingredientCosts)
-                    cogs += cost * qty
-                })
-            }
-        })
-        // Thực chi: tổng mọi expense thực ra. NVL refill bị COGS đã trừ qua
-        // o.total_cost → skip để không double-count.
-        const expenseSum = yesterdayExpensesData.reduce((s, e) => {
-            if (e.is_refill && !e.metadata?.free_form) return s
-            return s + (e.amount || 0)
-        }, 0)
-        return (rev - cogs) - expenseSum
-    }, [yesterdayOrders, yesterdayExpensesData, recipes, extraIngredients, ingredientCosts])
 
     // Sync cash flow calculations for both daily view and range view (handling unclosed shifts by falling back to expected order totals)
     const calculateSyncedCashFlow = (isDay, singleClosing, rangeClosings, rangeOrders, rangeOffline = []) => {
@@ -1235,7 +1209,6 @@ export default function DailyReportPage() {
                                 totalDiscount={totalDiscount}
                                 totalCOGS={totalCOGS}
                                 netProfit={netProfit}
-                                yesterdayNetProfit={yesterdayNetProfit}
                                 expenses={displayExpenses}
                                 expenseCategories={expenseCategories}
                                 cogsByCategory={cogsByCategory}

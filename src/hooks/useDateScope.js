@@ -14,13 +14,24 @@ const isValidISODate = (iso) => ISO_DATE_RE.test(iso) && !isNaN(new Date(`${iso}
 // Read a date selection out of URL search params. Returns null when there's no
 // usable scope param, so callers can fall back to nav-state / defaults.
 //   ?scope=week&offset=-1   ·   ?scope=custom&start=YYYY-MM-DD&end=YYYY-MM-DD
-function readParamsSeed(sp) {
+//
+// Exported for tests: the same-day normalisation below is the kind of thing that
+// silently rots, and the hook itself needs a router to instantiate.
+export function readParamsSeed(sp) {
     const scope = sp.get('scope')
     if (!VALID_SCOPES.includes(scope)) return null
     if (scope === 'custom') {
         const startISO = sp.get('start')
         const endISO = sp.get('end')
         if (!isValidISODate(startISO) || !isValidISODate(endISO) || startISO > endISO) return null
+        // Hai đầu bằng nhau = đúng 1 ngày → chuẩn hoá về day scope, GIỐNG applyRange.
+        // Để nguyên 'custom' thì có 2 công thức trả lời khác nhau cho cùng câu hỏi
+        // "đây có phải 1 ngày không": isRangeScope (dùng isSameDayVN) nói phải, còn
+        // mọi chỗ hỏi `scope === 'day'` nói không. Link ?start=X&end=X là đường duy
+        // nhất đẻ ra trạng thái đó — chặn ngay tại cửa thay vì vá 5 chỗ bên dưới.
+        if (startISO === endISO) {
+            return { scope: 'day', offset: offsetFromISO(startISO, dateStringVN()) }
+        }
         return { scope: 'custom', customRange: { startISO, endISO } }
     }
     const offset = Number(sp.get('offset'))
