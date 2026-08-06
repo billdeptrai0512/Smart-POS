@@ -1421,7 +1421,6 @@ export default function DailyReportPage() {
                                         recipes={recipes}
                                         extraIngredients={extraIngredients}
                                         ingredientUnits={ingredientUnits}
-                                        isLocked={false}
                                     />
                                 )}
                             </>

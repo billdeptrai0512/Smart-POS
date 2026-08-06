@@ -23,7 +23,7 @@ Mỗi file có **header** ghi: test cái gì + file nguồn. Từng case đọc 
 | | expenseCategoryBreakdown | gộp chi phí theo nhóm | `utils/expenseCategoryBreakdown.js` |
 | | reportContract | fetcher guest ↔ Supabase cùng shape | `services/reportService.js` |
 | | reportService.merge | gộp tồn khi nhiều lần chốt ca | `services/reportService.js` |
-| | reportHeaderDateRange | tính khoảng ngày cho header | `components/DailyReportPage/ReportHeader.jsx` |
+| | reportHeaderDateRange | tính khoảng ngày cho header | `utils/rangeCalc.js` |
 | | missingCupRepeatHistory | nghi vấn bán thiếu — đếm ngày lặp lại | `utils/inventory.js` |
 | **inventory** | inventory | tiêu hao & giá trị hao hụt | `utils/inventory.js` |
 | | inventoryRecipeCost | giá vốn từ công thức + extras | `utils/inventory.js` |

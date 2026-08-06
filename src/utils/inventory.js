@@ -202,14 +202,14 @@ export function splitCogsByCategory(orders, recipes, extraIngredients, ingredien
         const cat = (categoryByIngredient?.get?.(key)) ?? categoryByIngredient?.[key] ?? null
         return cat === 'packaging' || cat === 'tools' ? cat : 'main'
     }
+    const recipesByProduct = groupRecipesByProduct(recipes)
     for (const o of orders || []) {
         if (o?.deleted_at) continue
         const items = o.order_items || o.cart || o.orderItems || []
         for (const item of items) {
             const qty = item.quantity || item.qty || 1
             const productId = item.product_id || item.productId
-            for (const r of recipes || []) {
-                if (r.product_id !== productId) continue
+            for (const r of recipesByProduct.get(productId) || []) {
                 bucket[bucketFor(r.ingredient)] += (ingredientCosts[r.ingredient] || 0) * (r.amount || 0) * qty
             }
             const extras = item.extras || (item.extra_ids ? item.extra_ids.map(id => ({ id })) : [])
