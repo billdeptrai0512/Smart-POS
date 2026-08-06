@@ -338,7 +338,7 @@ export default function BranchGrid({
                                                         </div>
                                                     </div>
                                                     <div>
-                                                        <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Kho hàng</p>
+                                                        <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Nguyên vật liệu</p>
                                                         <div className="grid grid-cols-2 gap-2">
                                                             <ActionPill
                                                                 icon={<Warehouse size={16} />}
@@ -813,7 +813,7 @@ function ActionPill({ icon, label, tone = 'primary', onClick, className = '' }) 
             <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${PILL_TONES[tone]}`}>
                 {icon}
             </span>
-            <span className={`text-[12px] font-bold leading-tight ${tone === 'danger' ? 'text-danger' : 'text-text'}`}>{label}</span>
+            <span className={`text-[10px] font-bold uppercase tracking-wider leading-tight ${tone === 'danger' ? 'text-danger' : 'text-text'}`}>{label}</span>
         </button>
     )
 }
