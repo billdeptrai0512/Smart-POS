@@ -20,7 +20,7 @@ if (import.meta.env.PROD) {
     ignoreErrors: [
       'isReCreate is not defined',
       'zaloJSV2 is not defined',
-      'Lock was stolen by another request',
+      "Lock broken by another request with the 'steal' option.",
     ],
   })
 }
