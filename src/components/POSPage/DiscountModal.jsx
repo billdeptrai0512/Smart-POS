@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, BadgePercent } from 'lucide-react'
 import { formatVND, formatVNDInput, parseVNDInput, computeDiscount } from '../../utils'
+import { Dialog } from '../common/ModalShell'
 
 const PERCENT_PRESETS = [25, 50, 100]
 const AMOUNT_PRESETS = [10000, 20000, 50000]
@@ -53,10 +54,7 @@ export default function DiscountModal({ open, onClose, subtotal, discount, onApp
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-
-            <div className="relative w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
+        <Dialog onClose={onClose} panelClassName="w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
                     <div className="flex items-center gap-2.5">
@@ -148,7 +146,6 @@ export default function DiscountModal({ open, onClose, subtotal, discount, onApp
                         Đồng ý
                     </button>
                 </div>
-            </div>
-        </div>
+        </Dialog>
     )
 }

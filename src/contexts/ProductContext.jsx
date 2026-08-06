@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { useAuth } from './AuthContext'
 import { useAddress } from './AddressContext'
@@ -7,6 +7,31 @@ import { Outlet } from 'react-router-dom'
 import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 
 const ProductContext = createContext(null)
+
+// A quán-wifi blip during the one-shot product fetch used to require reopening
+// the app (remounting ProductProvider) to recover — nothing else retried it.
+// Bounded retry (same pattern as AuthContext's profile fetch) absorbs a
+// transient failure without user intervention.
+async function fetchProductDataWithRetry(addressId, attempts = 3, delayMs = 800) {
+    let lastError
+    for (let i = 0; i < attempts; i++) {
+        try {
+            const [prods, recs, costsResult, extras] = await Promise.all([
+                fetchProducts(addressId),
+                fetchAllRecipes(addressId),
+                fetchIngredientCostsAndUnits(addressId),
+                fetchProductExtras(addressId),
+            ])
+            const extraIds = Object.values(extras).flat().map(e => e.id)
+            const extraIngs = await fetchExtraIngredients(extraIds)
+            return { prods, recs, costsResult, extras, extraIngs }
+        } catch (error) {
+            lastError = error
+            if (i < attempts - 1) await new Promise(res => setTimeout(res, delayMs))
+        }
+    }
+    throw lastError
+}
 
 // ponytail: hook co-located with its Provider (standard context pattern) —
 // splitting into its own file isn't worth the diff for a fast-refresh (dev-only HMR) nag.
@@ -40,6 +65,7 @@ export function ProductProvider() {
     const [extraIngredients, setExtraIngredients] = useState(() => readCache('extra_ingredients', {}))
     const [loading, setLoading] = useState(true)
     const [loadError, setLoadError] = useState(null)
+    const loadGenRef = useRef(0) // bumped each effect run so a stale retry can no-op instead of writing over a newer address's data
 
     const applyData = useCallback((prods, recs, costsResult, extras, extraIngs, addressId) => {
         const { costs, units, rows } = costsResult
@@ -64,6 +90,7 @@ export function ProductProvider() {
 
     useEffect(() => {
         const addressId = selectedAddress?.id
+        const gen = ++loadGenRef.current
 
         // Instantly apply address-specific cache while fresh data loads. This is
         // also the offline-fallback path: if the fetch below fails (no network at
@@ -82,14 +109,8 @@ export function ProductProvider() {
             try {
                 setLoading(true)
                 setLoadError(null)
-                const [prods, recs, costsResult, extras] = await Promise.all([
-                    fetchProducts(addressId),
-                    fetchAllRecipes(addressId),
-                    fetchIngredientCostsAndUnits(addressId),
-                    fetchProductExtras(addressId),
-                ])
-                const extraIds = Object.values(extras).flat().map(e => e.id)
-                const extraIngs = await fetchExtraIngredients(extraIds)
+                const { prods, recs, costsResult, extras, extraIngs } = await fetchProductDataWithRetry(addressId)
+                if (loadGenRef.current !== gen) return // a newer address/profile change superseded this fetch
                 applyData(prods, recs, costsResult, extras, extraIngs, addressId)
             } catch (error) {
                 // Offline-at-shift-open fallback: deliberately do NOT clear products/
@@ -108,6 +129,10 @@ export function ProductProvider() {
 
     const refreshProducts = useCallback(async () => {
         const addressId = selectedAddress?.id
+        // Snapshot the generation so a slow refresh (e.g. the online-retry below,
+        // which can be in flight for a while on a bad connection) can't clobber a
+        // newer address's data if the user switches addresses before it resolves.
+        const gen = loadGenRef.current
         const [prods, recs, costsResult, extras] = await Promise.all([
             fetchProducts(addressId),
             fetchAllRecipes(addressId),
@@ -116,8 +141,19 @@ export function ProductProvider() {
         ])
         const extraIds = Object.values(extras).flat().map(e => e.id)
         const extraIngs = await fetchExtraIngredients(extraIds)
+        if (loadGenRef.current !== gen) return
         applyData(prods, recs, costsResult, extras, extraIngs, addressId)
     }, [selectedAddress?.id, applyData])
+
+    // Genuinely-offline case: retries above gave up, then connectivity actually
+    // comes back while the tab stays open (no visibilitychange to trigger the
+    // other effect's refetch below) — reconcile without waiting for a reload.
+    useEffect(() => {
+        if (!loadError) return
+        const onOnline = () => { refreshProducts().then(() => setLoadError(null)).catch(() => { }) }
+        window.addEventListener('online', onOnline)
+        return () => window.removeEventListener('online', onOnline)
+    }, [loadError, refreshProducts])
 
     // Refresh menu/recipe/cost/extras when tab becomes visible again.
     // Replaces a per-address realtime channel that previously held an open
@@ -142,19 +178,21 @@ export function ProductProvider() {
         return () => document.removeEventListener('visibilitychange', handleVisibility)
     }, [selectedAddress?.id, refreshProducts])
 
+    const value = useMemo(() => ({
+        products,
+        recipes,
+        ingredientCosts,
+        ingredientUnits,
+        ingredientConfigs,
+        productExtras,
+        extraIngredients,
+        refreshProducts,
+        loading,
+        loadError
+    }), [products, recipes, ingredientCosts, ingredientUnits, ingredientConfigs, productExtras, extraIngredients, refreshProducts, loading, loadError])
+
     return (
-        <ProductContext.Provider value={{
-            products,
-            recipes,
-            ingredientCosts,
-            ingredientUnits,
-            ingredientConfigs,
-            productExtras,
-            extraIngredients,
-            refreshProducts,
-            loading,
-            loadError
-        }}>
+        <ProductContext.Provider value={value}>
             <Outlet />
         </ProductContext.Provider>
     )

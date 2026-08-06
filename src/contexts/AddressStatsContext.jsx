@@ -20,7 +20,7 @@ export function useAddressStats() {
 // route level so navigating /addresses ↔ /pos doesn't unmount + refetch. The
 // AddressSelectPage reads from cache instantly and revalidates in background.
 export function AddressStatsProvider() {
-    const { profile, isStaff } = useAuth()
+    const { profile, isStaff, hasSession } = useAuth()
     const { addresses } = useAddress()
     const { enabled: monetizationEnabled } = useMonetizationEnabled()
 
@@ -60,7 +60,11 @@ export function AddressStatsProvider() {
         } finally {
             if (!cancelRef.current) setStatsLoading(false)
         }
-    }, [addresses])
+        // ponytail: keyed on addressIdsKey — `addresses` chỉ được dùng để lấy ids, mà mảng
+        // đổi reference mỗi lần AddressContext refetch dù ids y hệt. Giữ deps là object thì
+        // RPC ~1.9s này chạy lại vài lần mỗi lần khởi động.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [addressIdsKey])
 
     // Trạng thái gói dùng để sort BranchGrid (dùng thử → đã đăng ký → chưa đăng ký).
     // Không gọi khi monetization tắt — cột address_subscriptions vô nghĩa lúc đó.
@@ -72,12 +76,19 @@ export function AddressStatsProvider() {
             return
         }
         setSubscriptionLoading(true)
-        const { statusMap, rowsMap } = await fetchSubscriptionStatuses(addresses.map(a => a.id))
-        if (cancelRef.current) return
-        setSubscriptionStatusMap(statusMap)
-        setSubscriptionRowsMap(rowsMap)
-        setSubscriptionLoading(false)
-    }, [addresses, monetizationEnabled])
+        // try/finally như loadStats: throw hoặc cancelRef=true mà bỏ qua setLoading(false)
+        // thì badge gói trên mọi card ẩn vĩnh viễn (BranchGrid gate bằng loading).
+        try {
+            const { statusMap, rowsMap } = await fetchSubscriptionStatuses(addresses.map(a => a.id))
+            if (cancelRef.current) return
+            setSubscriptionStatusMap(statusMap)
+            setSubscriptionRowsMap(rowsMap)
+        } finally {
+            setSubscriptionLoading(false)
+        }
+        // ponytail: keyed on addressIdsKey như loadStats ở trên, cùng lý do.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [addressIdsKey, monetizationEnabled])
 
     // Expose để SubscriptionPanel gọi lại sau Mock/Reset gói (admin) — làm tươi cả
     // rows (badge từng card + panel) lẫn status (thứ tự sort) trong 1 lần refetch.
@@ -86,7 +97,8 @@ export function AddressStatsProvider() {
     }, [addressIdsKey, monetizationEnabled, loadSubscriptionStatuses])
 
     const loadStaff = useCallback(async () => {
-        if (!profile?.id || isStaff) return
+        // !hasSession: profile từ cache nhưng chưa có token — xem hasSession trong AuthContext.
+        if (!profile?.id || isStaff || !hasSession) return
         setStaffLoading(true)
         try {
             const list = await fetchStaffByManager(profile.id)
@@ -94,7 +106,7 @@ export function AddressStatsProvider() {
         } finally {
             if (!cancelRef.current) setStaffLoading(false)
         }
-    }, [profile?.id, isStaff])
+    }, [profile?.id, isStaff, hasSession])
 
     useEffect(() => {
         cancelRef.current = false
@@ -126,22 +138,27 @@ export function AddressStatsProvider() {
         loadStaff()
     }, [loadStaff])
 
+    // 10 independent state slices set on separate schedules (polling, staff load,
+    // subscription load) — without useMemo here, every consumer (AddressSelectPage,
+    // SubscriptionPanel) re-renders whenever ANY one field updates.
+    const value = useMemo(() => ({
+        cupsMap,
+        revenueMap,
+        prevCupsMap,
+        sessionsMap,
+        subscriptionStatusMap,
+        subscriptionRowsMap,
+        subscriptionLoading,
+        staffList,
+        statsLoading,
+        staffLoading,
+        refreshStats: loadStats,
+        refreshStaff: loadStaff,
+        refreshSubscriptionStatuses: loadSubscriptionStatuses,
+    }), [cupsMap, revenueMap, prevCupsMap, sessionsMap, subscriptionStatusMap, subscriptionRowsMap, subscriptionLoading, staffList, statsLoading, staffLoading, loadStats, loadStaff, loadSubscriptionStatuses])
+
     return (
-        <AddressStatsContext.Provider value={{
-            cupsMap,
-            revenueMap,
-            prevCupsMap,
-            sessionsMap,
-            subscriptionStatusMap,
-            subscriptionRowsMap,
-            subscriptionLoading,
-            staffList,
-            statsLoading,
-            staffLoading,
-            refreshStats: loadStats,
-            refreshStaff: loadStaff,
-            refreshSubscriptionStatuses: loadSubscriptionStatuses,
-        }}>
+        <AddressStatsContext.Provider value={value}>
             <Outlet />
         </AddressStatsContext.Provider>
     )

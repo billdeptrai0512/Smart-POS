@@ -2,11 +2,11 @@ import { createContext, useContext, useState, useEffect, useCallback, useMemo } 
 import { useAuth } from './AuthContext'
 import {
     fetchAddresses, createAddress as apiCreateAddress, updateAddress as apiUpdateAddress, deleteAddress as apiDeleteAddress,
-    upsertSession, updateAddressIngredientSort as apiUpdateAddressIngredientSort,
+    upsertSession,
     fetchWarehouseGroups, upsertWarehouseGroup as apiUpsertWarehouseGroup,
     deleteWarehouseGroup as apiDeleteWarehouseGroup, setAddressWarehouseGroup as apiSetAddressWarehouseGroup
 } from '../services/authService'
-import { getDemoAddress, setGuestIngredientSortOrder } from '../services/localRepository'
+import { getDemoAddress } from '../services/localRepository'
 import { STORAGE_KEYS } from '../constants/storageKeys'
 import { Outlet } from 'react-router-dom'
 
@@ -35,7 +35,7 @@ function readCachedAddress() {
 }
 
 export function AddressProvider() {
-    const { profile, isGuest } = useAuth()
+    const { profile, isGuest, hasSession } = useAuth()
     const cachedAddress = readCachedAddress()
     const [addresses, setAddresses] = useState([])
     const [warehouseGroups, setWarehouseGroups] = useState([])
@@ -60,6 +60,13 @@ export function AddressProvider() {
         if (!profile?.id) {
             setAddresses([])
             setWarehouseGroups([])
+            setLoading(false)
+            return
+        }
+
+        // profile có thể đến từ cache trong khi chưa có session — xem hasSession trong
+        // AuthContext. Giữ nguyên cache, effect chạy lại khi session về (hasSession ở deps).
+        if (!hasSession) {
             setLoading(false)
             return
         }
@@ -135,8 +142,13 @@ export function AddressProvider() {
         // snapshots (gating UI / one-time stale-cache cleanup), not live reactive state —
         // every path that flips isGuest also updates `profile` (sync or one async hop via
         // loadProfile), which already re-triggers this effect.
+        //
+        // Deps là 3 field nguyên thuỷ, KHÔNG phải object `profile`: loadProfile chạy vài lần
+        // lúc khởi động (finish + onAuthStateChange) và mỗi lần setProfile ra object mới dù
+        // dữ liệu y hệt → refetch addresses 4 lần, kéo theo stats RPC (~1.9s) + subscription
+        // chạy 4 lần. Chỉ 3 field này ảnh hưởng query bên dưới.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [profile])
+    }, [profile?.id, profile?.role, profile?.manager_id, hasSession])
 
     const setSelectedAddress = useCallback((addr) => {
         setSelectedAddressState(addr)
@@ -264,24 +276,26 @@ export function AddressProvider() {
         }
     }, [profile, selectedAddress, isGuest])
 
+    const value = useMemo(() => ({
+        addresses,
+        selectedAddress,
+        setSelectedAddress,
+        createNewAddress,
+        renameAddress,
+        removeAddress,
+        updateSortOrder,
+        warehouseGroups,
+        siblingsByAddress,
+        createWarehouseGroup,
+        renameWarehouseGroup,
+        removeWarehouseGroup,
+        setAddressGroup,
+        loading,
+        fetchError
+    }), [addresses, selectedAddress, setSelectedAddress, createNewAddress, renameAddress, removeAddress, updateSortOrder, warehouseGroups, siblingsByAddress, createWarehouseGroup, renameWarehouseGroup, removeWarehouseGroup, setAddressGroup, loading, fetchError])
+
     return (
-        <AddressContext.Provider value={{
-            addresses,
-            selectedAddress,
-            setSelectedAddress,
-            createNewAddress,
-            renameAddress,
-            removeAddress,
-            updateSortOrder,
-            warehouseGroups,
-            siblingsByAddress,
-            createWarehouseGroup,
-            renameWarehouseGroup,
-            removeWarehouseGroup,
-            setAddressGroup,
-            loading,
-            fetchError
-        }}>
+        <AddressContext.Provider value={value}>
             <Outlet />
         </AddressContext.Provider>
     )

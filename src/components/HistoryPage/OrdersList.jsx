@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import { Percent, Trash2 } from 'lucide-react'
 import { formatVND, computeDiscount } from '../../utils'
 import { dateShortVN, timeStringVN } from '../../utils/dateVN'
@@ -46,7 +46,7 @@ export default function OrdersList({
                         key={order.id}
                         order={order}
                         runningTotal={runningTotals.get(order.id) || 0}
-                        deletingId={deletingId}
+                        isDeleting={deletingId === order.id}
                         setDeletingId={setDeletingId}
                         onDeleteOrder={onDeleteOrder}
                         onUpdateDiscount={onUpdateDiscount}
@@ -59,7 +59,10 @@ export default function OrdersList({
     )
 }
 
-function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrder, onUpdateDiscount, onDeleteOffline, isNew }) {
+// memo + per-card isDeleting (not the raw shared deletingId, which would change
+// for every card whenever ANY order starts/stops deleting) — otherwise deleting
+// one order re-renders the entire day's order list.
+const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, setDeletingId, onDeleteOrder, onUpdateDiscount, onDeleteOffline, isNew }) {
     const confirm = useConfirm()
     const [showDiscount, setShowDiscount] = useState(false)
     const date = new Date(order.createdAt)
@@ -78,7 +81,7 @@ function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrd
     })() : ''
 
     async function handleDelete() {
-        if (deletingId === order.id) return
+        if (isDeleting) return
         const text = order.items?.map(i => i.text).join(', ') || ''
         if (await confirm({ title: `Xóa đơn ${text} (${formatVND(order.total)})?`, detail: 'Hành động này không thể hoàn tác!', danger: true, confirmLabel: 'Xóa' })) {
             setDeletingId(order.id)
@@ -108,6 +111,15 @@ function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrd
                         {discountAmount > 0 && (
                             <span className="text-text-secondary/60 text-[12px] font-bold line-through tabular-nums">{formatVND(subtotal)}</span>
                         )}
+                        {editable && (
+                            <button
+                                onClick={() => setShowDiscount(true)}
+                                aria-label="Giảm giá"
+                                className="self-center text-text-secondary hover:text-primary transition-colors"
+                            >
+                                <Percent size={15} strokeWidth={2.25} />
+                            </button>
+                        )}
                     </div>
                     {!order.deletedAt && (
                         <span className="text-success leading-none text-[14px] mt-1 font-bold tabular-nums">
@@ -133,23 +145,14 @@ function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrd
                     </span>
                     {!order.deletedAt && (
                         !order.isOffline ? (
-                            <div className="flex items-center gap-4 shrink-0">
-                                <button
-                                    onClick={() => setShowDiscount(true)}
-                                    aria-label="Giảm giá"
-                                    className="text-text-secondary hover:text-primary transition-colors"
-                                >
-                                    <Percent size={17} strokeWidth={2.25} />
-                                </button>
-                                <button
-                                    onClick={handleDelete}
-                                    disabled={deletingId === order.id}
-                                    aria-label="Xóa đơn"
-                                    className="text-text-secondary hover:text-danger transition-colors disabled:opacity-50"
-                                >
-                                    <Trash2 size={17} strokeWidth={2.25} />
-                                </button>
-                            </div>
+                            <button
+                                onClick={handleDelete}
+                                disabled={isDeleting}
+                                aria-label="Xóa đơn"
+                                className="text-text-secondary hover:text-danger transition-colors disabled:opacity-50 shrink-0"
+                            >
+                                <Trash2 size={17} strokeWidth={2.25} />
+                            </button>
                         ) : (
                             <button
                                 onClick={() => onDeleteOffline(order.createdAt_key)}
@@ -177,4 +180,4 @@ function OrderCard({ order, runningTotal, deletingId, setDeletingId, onDeleteOrd
             )}
         </div>
     )
-}
+})

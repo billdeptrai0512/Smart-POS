@@ -1,7 +1,8 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, fetchProfileByAuthId, removeSession, fetchDefaultIngredientSort } from '../services/authService'
 import { isGuest as getLocalIsGuest, setIsGuest as setLocalIsGuest, initializeGuestFromGlobal, clearGuestData, setGuestIngredientSortOrder } from '../services/localRepository'
+import { trackGuestOnboardingStage, markGuestFunnelSignup } from '../services/onboardingFunnelService'
 import { STORAGE_KEYS } from '../constants/storageKeys'
 
 const AuthContext = createContext(null)
@@ -38,6 +39,10 @@ export function AuthProvider({ children }) {
     const [profile, setProfile] = useState(() => getLocalIsGuest() ? null : readCachedAuth(STORAGE_KEYS.AUTH_PROFILE))  // User profile row (from 'users' table)
     const [loading, setLoading] = useState(true)
     const [isGuest, setIsGuestState] = useState(() => getLocalIsGuest())
+    // Chỉ true khi supabase-js THỰC SỰ có session. user/profile hydrate từ cache nên vẫn
+    // truthy khi launch token refresh hỏng/chậm (safety valve bên dưới) — lúc đó mọi query
+    // bảng bay đi bằng anon key và RLS gọi auth_owner_id() mà anon không có EXECUTE → 42501.
+    const [hasSession, setHasSession] = useState(false)
 
     // initGuestMode: called from LoginPage when user clicks "Dùng thử miễn phí"
     // Fetches the global default setup from Supabase (address_id IS NULL) and seeds localStorage
@@ -78,7 +83,12 @@ export function AuthProvider({ children }) {
             // Step 2 — only fetch extra_ingredients for the default extras we just got.
             // (Previously this called fetchExtraIngredients(null) which scans the whole
             // table — gets slower as more addresses/extras are added.)
-            const extras = Object.values(extrasMap).flat()
+            // extrasMap is keyed by product_id (fetchProductExtras groups by it for direct
+            // POS lookup use, so each item omits the now-redundant field) — re-attach it here
+            // before flattening, or every seeded guest extra loses its product association.
+            const extras = Object.entries(extrasMap).flatMap(([productId, list]) =>
+                list.map(e => ({ ...e, product_id: productId }))
+            )
             const extraIds = extras.map(e => e.id)
             const extraIngsMap = extraIds.length ? await fetchExtraIngredients(extraIds) : {}
             const extraIngredients = Object.values(extraIngsMap).flat()
@@ -103,6 +113,10 @@ export function AuthProvider({ children }) {
             setLocalIsGuest(true)
             setIsGuestState(true)
             setProfile({ id: 'guest', name: 'Khách Ghé Thăm', role: 'manager', email: 'guest@demo.local' })
+            // Phễu onboarding: mốc 0 "Vào dùng thử". Chỉ chạy khi user thật sự bấm "Dùng thử
+            // miễn phí" (initGuestMode), không chạy ở nhánh khôi phục sau khi refresh trang —
+            // đúng ngữ nghĩa "có bao nhiêu người vào dùng thử". Fire-and-forget, không chặn.
+            trackGuestOnboardingStage(0)
             setLoading(false)
         }
     }, [])
@@ -156,6 +170,7 @@ export function AuthProvider({ children }) {
             const authUser = session?.user ?? null
             if (authUser) {
                 setUser(authUser)
+                setHasSession(true)
                 cacheAuth(STORAGE_KEYS.AUTH_USER, authUser)
                 setIsGuest(false)
                 // Profile is already hydrated from cache (see useState init), so the UI
@@ -202,14 +217,20 @@ export function AuthProvider({ children }) {
                 // and the cached credentials (a flaky refresh never reaches here).
                 setUser(null)
                 setProfile(null)
+                setHasSession(false)
                 clearCachedAuth()
                 return
             }
             const authUser = session?.user ?? null
             if (authUser) {
                 setUser(authUser)
+                setHasSession(true)
                 cacheAuth(STORAGE_KEYS.AUTH_USER, authUser)
                 setIsGuest(false)
+                // Có session thật → profile sentinel {id:'guest'} hết đúng, mà setIsGuest(false)
+                // vừa tắt guard isGuest() trong authService. Giữ lại dù chỉ 1 nhịp là đủ để các
+                // context bắn query với managerId='guest' → 22P02. Bỏ ngay; loadProfile điền thật.
+                setProfile(p => (p?.id === 'guest' ? null : p))
                 loadProfile(authUser)
             }
         })
@@ -248,6 +269,9 @@ export function AuthProvider({ children }) {
         setProfile(data.profile)
         cacheAuth(STORAGE_KEYS.AUTH_USER, data.user)
         cacheAuth(STORAGE_KEYS.AUTH_PROFILE, data.profile)
+        // Phễu onboarding: mốc cuối "Đăng ký tài khoản". No-op nếu máy này chưa từng dùng thử.
+        // Gọi trước clearGuestData() để không phụ thuộc việc hàm đó có xoá visitor id hay không.
+        markGuestFunnelSignup()
         // Transition from guest to real user — clear sandbox
         clearGuestData()
         setIsGuest(false)
@@ -262,8 +286,15 @@ export function AuthProvider({ children }) {
     const isStaff = profile?.role === 'staff'
     const isAdmin = profile?.role === 'admin'
 
+    // Every function here is already useCallback'd — memoizing the value itself
+    // stops every consumer (MenuGrid, HistoryPage, IngredientManagementPage, ...)
+    // from re-rendering whenever AuthProvider re-renders for an unrelated reason.
+    const value = useMemo(() => ({
+        user, profile, loading, isGuest, hasSession, setIsGuest, initGuestMode, signIn, signUp, signOut, refreshProfile, isManager, isStaff, isAdmin
+    }), [user, profile, loading, isGuest, hasSession, setIsGuest, initGuestMode, signIn, signUp, signOut, refreshProfile, isManager, isStaff, isAdmin])
+
     return (
-        <AuthContext.Provider value={{ user, profile, loading, isGuest, setIsGuest, initGuestMode, signIn, signUp, signOut, refreshProfile, isManager, isStaff, isAdmin }}>
+        <AuthContext.Provider value={value}>
             {children}
         </AuthContext.Provider>
     )

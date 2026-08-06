@@ -3,6 +3,7 @@ import { Shield, UserPlus, Loader, X, Check, Eye, EyeOff } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import { capitalizeWords } from '../../utils'
 import { createTeamMember } from '../../services/authService'
+import { Dialog } from '../common/ModalShell'
 
 const ROLES = [
     { key: 'staff', label: 'Nhân viên', icon: UserPlus, description: 'Đăng nhập bằng mã PIN 6 số' },
@@ -58,9 +59,11 @@ export default function CreateStaffModal({ onClose, onSuccess }) {
     }
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { if (!loading) onClose() }} />
-            <div className="relative w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <Dialog
+            onClose={() => { if (!loading) onClose() }}
+            zIndexClass="z-[100]"
+            panelClassName="w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        >
                 <div className="flex items-center justify-between p-4 border-b border-border/20">
                     <span className="text-[15px] font-black text-text">Thêm nhân sự mới</span>
                     <button
@@ -215,7 +218,6 @@ export default function CreateStaffModal({ onClose, onSuccess }) {
                         {loading ? 'Đang tạo...' : 'Tạo tài khoản'}
                     </button>
                 </form>
-            </div>
-        </div>
+        </Dialog>
     )
 }

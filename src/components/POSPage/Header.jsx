@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ArrowRight } from 'lucide-react'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 
 // Types the draft text out left→right. Keyed by the held item's id (in render)
 // so a NEW tap retypes from scratch; toggling extras only grows the text, so the
@@ -14,7 +15,8 @@ function Typewriter({ text }) {
     return <>{text.slice(0, n)}{n < text.length && <span className="opacity-50">▌</span>}</>
 }
 
-export default function Header({ dayName, dateOnly, onOpenHistory, addressName, onAddressClick, recentOrders = [], draftOrder, enterKey }) {
+export default function Header({ dayName, dateOnly, onOpenHistory, addressName, onAddressClick, recentOrders = [], draftOrder, enterKey, showOnboardingHint = false }) {
+    const hintClass = onboardingHintClass(showOnboardingHint, 'light')
     // Draft (held, unsaved) line on top, then saved orders. Cap at 3 rows.
     // key 'draft' is stable so extras overwrite it in place; typeKey = the held
     // item's id so the typewriter restarts only on a new tap. isNew matches only the
@@ -60,7 +62,7 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                     onClick={onOpenHistory}
                     role="button"
                     tabIndex={0}
-                    className="cursor-pointer bg-linear-to-b from-primary to-primary-dark rounded-[20px] p-3 sm:p-3.5 border border-primary shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full hover:brightness-105 active:brightness-95 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    className={`cursor-pointer bg-linear-to-b from-primary to-primary-dark rounded-[20px] p-3 sm:p-3.5 border border-primary shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full hover:brightness-105 active:brightness-95 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${hintClass}`}
                 >
                     {/* <div className="flex flex-col justify-between relative z-10">
                         <span className="text-[12px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider">{dayName}</span>

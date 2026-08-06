@@ -14,7 +14,9 @@ export function roundStock(x: number) {
 // current_stock = warehouse_stock + counter_stock, trong đó:
 //   warehouse_stock = Σ refill (đi chợ qua /ingredient) − Σ restock chỉ tính từ shift_closings xảy ra
 //                     SAU lần refill đầu tiên của nguyên liệu đó (restock trước đó là tồn pre-system, bỏ qua).
-//   counter_stock   = remaining từ shift_closing gần nhất.
+//   counter_stock   = remaining từ shift_closing gần nhất; nếu nguyên liệu CHƯA từng có remaining
+//                     (chưa qua lần chốt ca nào) thì fallback về opening gần nhất — cho phép nhập
+//                     tồn quầy lúc setup ban đầu (trước khi có phiếu chốt ca nào) vẫn hiện ra ngay.
 // Nếu chưa có refill nào → warehouse=0; chưa có shift_closing → counter=0.
 //
 // Path nhanh: RPC `get_ingredient_stocks_v2` aggregate server-side (1 round-trip).
@@ -28,13 +30,23 @@ export async function fetchIngredientStocks(addressId: UUID | null) {
     // read expenses/shift_closings directly (RLS), so use a SECURITY DEFINER RPC that
     // returns aggregated stock for address_id IS NULL.
     const isDefault = !addressId
-    const mapRow = (row: Row) => ({
-        ingredient: row.ingredient,
-        current_stock: Number(row.current_stock) || 0,
-        restocked_qty: Number(row.restocked_qty) || 0,
-        warehouse_stock: Number(row.warehouse_stock) || 0,
-        counter_stock: Number(row.counter_stock) || 0
-    })
+    // *_set: true/false phân biệt "chưa nhập" với "đã nhập = 0". get_ingredient_stocks_v2 trả
+    // cờ thật; các path khác (get_default_ingredient_stocks, fallback JS) không có cờ nên suy
+    // luận lại từ số lượng (> 0) ngay tại đây — caller luôn nhận boolean thật, khỏi cần biết
+    // RPC nào đang phục vụ request.
+    const mapRow = (row: Row) => {
+        const warehouse_stock = Number(row.warehouse_stock) || 0
+        const counter_stock = Number(row.counter_stock) || 0
+        return {
+            ingredient: row.ingredient,
+            current_stock: Number(row.current_stock) || 0,
+            restocked_qty: Number(row.restocked_qty) || 0,
+            warehouse_stock,
+            counter_stock,
+            warehouse_stock_set: row.warehouse_stock_set ?? (warehouse_stock > 0),
+            counter_stock_set: row.counter_stock_set ?? (counter_stock > 0)
+        }
+    }
 
     if (isDefault) {
         const { data: rpcData, error: rpcError } = await supabase.rpc('get_default_ingredient_stocks')
@@ -91,12 +103,18 @@ export async function fetchIngredientStocks(addressId: UUID | null) {
 
     // counter = most-recent non-null remaining per ingredient. Walking DESC and
     // only writing on first hit means yesterday's count wins when today is null.
+    // openingFallback = most-recent non-null opening — used only when the ingredient
+    // has never had a `remaining` yet (setup-time tồn quầy trước lần chốt ca đầu tiên).
+    const openingFallback: Record<string, number> = {}
     closingsDesc.forEach((closing: Row) => {
         const report = Array.isArray(closing.inventory_report) ? closing.inventory_report : []
         report.forEach((item: Row) => {
             if (!item.ingredient) return
             if (item.remaining != null && counter[item.ingredient] === undefined) {
                 counter[item.ingredient] = Number(item.remaining)
+            }
+            if (item.opening != null && openingFallback[item.ingredient] === undefined) {
+                openingFallback[item.ingredient] = Number(item.opening)
             }
         })
     })
@@ -159,6 +177,7 @@ export async function fetchIngredientStocks(addressId: UUID | null) {
 
     const keys = new Set([
         ...Object.keys(counter),
+        ...Object.keys(openingFallback),
         ...Object.keys(totalRestock),
         ...Object.keys(totalRefill)
     ])
@@ -169,13 +188,15 @@ export async function fetchIngredientStocks(addressId: UUID | null) {
             ? anchorAfter[ingredient] - (restockSinceAnchor[ingredient] || 0)
             : (totalRefill[ingredient] || 0) - (totalRestock[ingredient] || 0)
         const warehouse = Math.max(0, warehouseRaw)
-        const counterStock = counter[ingredient] || 0
+        const counterStock = counter[ingredient] ?? openingFallback[ingredient] ?? 0
         return {
             ingredient,
             current_stock: warehouse + counterStock,
             restocked_qty: todayRestock[ingredient] || 0,
             warehouse_stock: warehouse,
-            counter_stock: counterStock
+            counter_stock: counterStock,
+            warehouse_stock_set: warehouse > 0,
+            counter_stock_set: counterStock > 0
         }
     })
 }

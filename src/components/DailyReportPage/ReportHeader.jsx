@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import HistoryTabsBar from '../HistoryPage/HistoryTabsBar'
 import DatePicker from '../common/DatePicker'
 import { formatIsoDisplay } from '../common/datePickerUtils'
-import { dateShortVN, dateFullVN } from '../../utils/dateVN'
+import { dateShortVN, dateFullVN, dateStringVN, addDaysVN } from '../../utils/dateVN'
 import { getDateRange } from '../../utils/rangeCalc'
 
 function getSubtitle(range, offset) {
@@ -18,32 +18,18 @@ export default function ReportHeader({ onBack, onForward, selectedRange = 'day',
     const subtitle = getSubtitle(selectedRange, offset)
     const canGoForward = offset < 0
 
-    // Format customDate or today for input value
-    const getLocalISO = (date = new Date()) => {
-        const yyyy = date.getFullYear();
-        const mm = String(date.getMonth() + 1).padStart(2, '0');
-        const dd = String(date.getDate()).padStart(2, '0');
-        return `${yyyy}-${mm}-${dd}`;
-    }
-    const todayISO = getLocalISO(new Date())
+    const todayISO = dateStringVN()
     const inputValue = customDate || todayISO
 
     const handlePrevDay = () => {
         if (!onCustomDateChange) return
-        const parts = inputValue.split('-')
-        const d = new Date(parts[0], parts[1] - 1, parts[2])
-        d.setDate(d.getDate() - 1)
-        const prevISO = getLocalISO(d)
-        onCustomDateChange(prevISO)
+        onCustomDateChange(dateStringVN(addDaysVN(new Date(inputValue), -1)))
     }
 
     const handleNextDay = () => {
         if (!onCustomDateChange) return
         if (inputValue >= todayISO) return
-        const parts = inputValue.split('-')
-        const d = new Date(parts[0], parts[1] - 1, parts[2])
-        d.setDate(d.getDate() + 1)
-        const nextISO = getLocalISO(d)
+        const nextISO = dateStringVN(addDaysVN(new Date(inputValue), 1))
         if (nextISO >= todayISO) {
             onCustomDateChange(null)
         } else {

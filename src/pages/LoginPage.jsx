@@ -52,6 +52,47 @@ export default function LoginPage() {
                 <div className="bg-surface border border-border/60 rounded-[24px] p-6 shadow-[0_8px_30px_rgba(0,0,0,0.35)] space-y-5">
                     <ErrorBanner message={error} />
 
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <FloatingLabelInput
+                            id="login-username"
+                            label="Tài khoản"
+                            value={username}
+                            onChange={e => setUsername(e.target.value)}
+                            required
+                            autoComplete="username"
+                        />
+
+                        <div>
+                            <PasswordInput
+                                id="login-password"
+                                label="Mật khẩu"
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                                required
+                                autoComplete="current-password"
+                            />
+                            {/* pl-4 = px-4 của input → link thẳng hàng với chữ trong ô, không tuột ra mép thẻ */}
+                            <div className="mt-2 pl-2
+                              ">
+                                <Link to="/forgot-password" className="text-primary text-xs font-bold hover:underline">
+                                    Quên mật khẩu?
+                                </Link>
+                            </div>
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full py-3.5 rounded-[14px] bg-surface-light border border-border-light text-text uppercase font-black text-sm hover:bg-primary hover:text-bg active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_4px_12px_rgba(0,0,0,0.25)]"
+                        >
+                            {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
+                        </button>
+                    </form>
+
+                    <p className="text-center text-text-secondary text-xs">
+                        Chưa có tài khoản? <Link to="/signup" className="text-primary font-bold hover:underline">Đăng ký</Link>
+                    </p>
+
                     {/* Sử dụng thử (Guest Mode) */}
                     <div>
                         <button
@@ -64,45 +105,6 @@ export default function LoginPage() {
                             {guestLoading ? 'Đang tải...' : 'Sử dụng thử'}
                         </button>
                     </div>
-
-                    <div className="relative flex items-center py-1">
-                        <div className="flex-grow border-t border-border/40" />
-                        <span className="mx-3 text-[10px] text-text-secondary tracking-widest uppercase font-bold">hoặc</span>
-                        <div className="flex-grow border-t border-border/40" />
-                    </div>
-
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <FloatingLabelInput
-                            id="login-username"
-                            label="Tài khoản"
-                            value={username}
-                            onChange={e => setUsername(e.target.value)}
-                            required
-                            autoComplete="username"
-                        />
-
-                        <PasswordInput
-                            id="login-password"
-                            label="Mật khẩu"
-                            value={password}
-                            onChange={e => setPassword(e.target.value)}
-                            required
-                            autoComplete="current-password"
-                        />
-
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full py-3.5 rounded-[14px] bg-surface-light border border-border-light text-text uppercase font-black text-sm hover:bg-primary hover:text-bg active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_4px_12px_rgba(0,0,0,0.25)]"
-                        >
-                            {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
-                        </button>
-                    </form>
-
-                    <p className="text-center text-text-secondary text-xs">
-                        Chưa có tài khoản?{' '}
-                        <Link to="/signup" className="text-primary font-bold hover:underline">Đăng ký</Link>
-                    </p>
                 </div>
             </div>
         </div>

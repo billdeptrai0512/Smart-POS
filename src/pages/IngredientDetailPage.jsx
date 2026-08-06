@@ -4,11 +4,12 @@ import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useHistory } from '../contexts/HistoryContext'
+import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
 import {
     fetchIngredientRestockHistory, fetchIngredientStocks, fetchIngredientWithdrawals,
     deleteIngredientCost, upsertIngredientCost, updateIngredientUnitCost, renameIngredient,
-    adjustIngredientStock, setCounterStock, hasCounterShiftClosing, recordInvoicePayment, cancelRestock,
-    editIngredientRestock,
+    adjustIngredientStock, setCounterStock, recordInvoicePayment, cancelRestock,
+    editIngredientRestock, mergeShiftClosingInventory, fetchIngredientDailyContext,
 } from '../services/orderService'
 import {
     ingredientLabel, getIngredientUnit,
@@ -23,7 +24,10 @@ import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../contexts/ConfirmContext'
-import { dateStringVN, timeStringVN } from '../utils/dateVN'
+import { dateStringVN, timeStringVN, startOfMonthVN, endOfMonthVN } from '../utils/dateVN'
+import { findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
+import { isRecipeProgressDone } from '../utils/onboardingStorage'
+import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 
 // Page-level orchestrator: fetches data, owns the canonical state (stock, history,
 // config), and exposes per-field save callbacks. All edit-mode UI state lives
@@ -34,6 +38,7 @@ export default function IngredientDetailPage() {
     const { ingredientKey } = useParams()
     const { ingredientCosts, ingredientUnits, ingredientConfigs, refreshProducts } = useProducts()
     const { selectedAddress, siblingsByAddress } = useAddress()
+    const { requestRefresh: requestOnboardingRefresh } = useOnboardingVisibility()
     const warehouseSiblings = selectedAddress ? siblingsByAddress[selectedAddress.id] : null
     const warehouseGroupNote = warehouseSiblings?.length
         ? `Dùng chung với: ${warehouseSiblings.map(a => a.name).join(', ')}`
@@ -49,7 +54,7 @@ export default function IngredientDetailPage() {
         for (const a of warehouseSiblings || []) map[a.id] = a.name
         return map
     }, [selectedAddress, warehouseSiblings])
-    const { isManager, isAdmin, profile } = useAuth()
+    const { isManager, isAdmin, profile, isGuest } = useAuth()
     const { refreshTodayExpenses } = useHistory()
     const canEdit = isManager || isAdmin
     const { toast, showToast, showError } = useToast()
@@ -59,8 +64,8 @@ export default function IngredientDetailPage() {
     const [history, setHistory] = useState([])
     const [loading, setLoading] = useState(true)
     const [stockData, setStockData] = useState(null)
-    // Mặc định true để không nháy khoá ô "Tồn quầy" trong lúc chờ fetch xong.
-    const [hasShiftClosing, setHasShiftClosing] = useState(true)
+    const [dailyContext, setDailyContext] = useState(null)
+    const [siblingCounterStocks, setSiblingCounterStocks] = useState(null)
     const [saving, setSaving] = useState(false)
     const [packModalOpen, setPackModalOpen] = useState(false)
     const [paymentInvoice, setPaymentInvoice] = useState(null)
@@ -68,17 +73,12 @@ export default function IngredientDetailPage() {
 
     // Month navigation (Nhật ký tab)
     const [monthOffset, setMonthOffset] = useState(0)
-    const targetMonth = useMemo(() => {
-        const d = new Date()
-        d.setMonth(d.getMonth() + monthOffset)
-        return d
+    const { targetMonth, fromDate, toDate } = useMemo(() => {
+        const from = startOfMonthVN(new Date(), monthOffset)
+        const to = endOfMonthVN(new Date(), monthOffset)
+        return { targetMonth: from, fromDate: from.toISOString(), toDate: to.toISOString() }
     }, [monthOffset])
-    const monthLabel = targetMonth.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })
-    const { fromDate, toDate } = useMemo(() => {
-        const from = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 1)
-        const to = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0, 23, 59, 59)
-        return { fromDate: from.toISOString(), toDate: to.toISOString() }
-    }, [targetMonth])
+    const monthLabel = targetMonth.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' })
 
     // Derived view from context — single source of truth, never a local copy.
     const config = useMemo(
@@ -108,12 +108,23 @@ export default function IngredientDetailPage() {
             .then(stocks => setStockData(stocks.find(s => s.ingredient === ingredientKey)))
     }, [selectedAddress, ingredientKey])
 
-    // Address-level (không phải per-ingredient) — có phiếu chốt ca nào để ghi "Tồn
-    // quầy" chưa. Khoá ô sửa nếu chưa, thay vì để user sửa rồi mới báo lỗi.
+    // Đầu ngày/Lấy ra/Nhập mới cho panel Kiểm kê — cùng nguồn dữ liệu với card ở /ingredients.
     useEffect(() => {
-        if (!selectedAddress) return
-        hasCounterShiftClosing(selectedAddress.id).then(setHasShiftClosing)
-    }, [selectedAddress])
+        if (!selectedAddress || !ingredientKey) return
+        fetchIngredientDailyContext(selectedAddress.id ?? null)
+            .then(map => setDailyContext(map[ingredientKey] || null))
+    }, [selectedAddress, ingredientKey])
+
+    // Tồn quầy của các địa chỉ khác dùng chung kho tổng — chỉ đọc (sửa quầy của họ phải mở đúng địa chỉ đó).
+    useEffect(() => {
+        if (!warehouseSiblings?.length || !ingredientKey) { setSiblingCounterStocks(null); return }
+        Promise.all(warehouseSiblings.map(a => fetchIngredientStocks(a.id)))
+            .then(results => setSiblingCounterStocks(warehouseSiblings.map((a, i) => ({
+                addressId: a.id,
+                addressName: a.name,
+                counterStock: results[i].find(s => s.ingredient === ingredientKey)?.counter_stock ?? 0,
+            }))))
+    }, [selectedAddress, warehouseSiblings, ingredientKey])
 
     // History is scoped to the displayed month. Gồm 2 nguồn xen kẽ theo thời gian:
     // phiếu nhập/hiệu chỉnh (expenses) + lượt "Rút ra quầy" (restock trong phiếu
@@ -198,6 +209,7 @@ export default function IngredientDetailPage() {
         try {
             await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, unit, { countInAudit: next })
             refreshProducts?.()
+            showToast(next ? 'Nguyên liệu này sẽ được kiểm kê trong báo cáo tồn kho' : 'Nguyên liệu này sẽ không phải kiểm kê trong báo cáo tồn kho', 'success')
         } catch (err) { showError(err, 'Lưu thiết lập kiểm kê') }
         finally { setSaving(false) }
     }
@@ -237,25 +249,35 @@ export default function IngredientDetailPage() {
             await adjustIngredientStock(selectedAddress?.id, ingredientKey, delta, profile?.name, snapshotOpts)
             await Promise.all([reloadStock(), refreshTodayExpenses?.()])
             showToast('Đã hiệu chỉnh kho sau', 'success')
+            requestOnboardingRefresh()
         } catch (err) { showError(err, 'Hiệu chỉnh kho sau') }
         finally { setSaving(false) }
     }
 
     // Sửa TỒN QUẦY (counter) = nhập số tuyệt đối. Ghi thẳng `remaining` vào phiếu
     // chốt mới nhất → khớp với số chốt ca ở Hao hụt.
+    // Chưa có phiếu chốt nào (địa chỉ mới) → ghi thành Đầu kỳ (khoá) của phiếu hôm nay
+    // thay vì báo lỗi, để nhập tồn quầy lúc setup ban đầu vẫn hoạt động; chốt ca đầu
+    // tiên sẽ tự tính hao hụt dựa trên Đầu kỳ này.
     async function saveCounter(newCounter) {
         if (newCounter === (stockData?.counter_stock ?? 0)) return
         setSaving(true)
         try {
             const res = await setCounterStock(selectedAddress?.id, ingredientKey, newCounter)
             if (!res) {
-                const err = new Error('Chưa có phiếu chốt ca nào để ghi tồn quầy.')
-                err.expected = true
-                showError(err, 'Sửa tồn quầy')
-                return
+                await mergeShiftClosingInventory(selectedAddress?.id, [{
+                    ingredient: ingredientKey,
+                    unit,
+                    opening: newCounter,
+                    opening_locked: true,
+                    remaining: null,
+                    restock: null,
+                    skipped: false,
+                }], null)
             }
             await reloadStock()
             showToast('Đã sửa tồn quầy', 'success')
+            requestOnboardingRefresh()
         } catch (err) { showError(err, 'Sửa tồn quầy') }
         finally { setSaving(false) }
     }
@@ -448,6 +470,19 @@ export default function IngredientDetailPage() {
     const titleLabel = ingredientLabel(ingredientKey)
     const stockSubtitle = currentStock !== null ? `${Math.round(currentStock * 10) / 10} ${unit}` : '—'
 
+    // Onboarding phase 6 (CUỐI CÙNG, "Cài đặt nguyên liệu") — hint lần lượt 4 field trên đúng
+    // ingredient "Cà phê", sau khi phase 5 (công thức) đã xong. nextIngredientSetupField trả về
+    // field ĐẦU TIÊN chưa xong theo đúng thứ tự hiện trên UI — xem onboardingHint.js.
+    const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId: selectedAddress?.id })
+    const isCoffee = isGuest && findCoffeeIngredient(ingredientConfigs)?.ingredient === ingredientKey
+    const setupField = isCoffee && isRecipeProgressDone(recipeProgress)
+        ? nextIngredientSetupField(config, stockData?.warehouse_stock_set)
+        : null
+    const hintWarehouse = setupField === 'warehouse'
+    const hintPack = setupField === 'pack'
+    const hintMinStock = setupField === 'minStock'
+    const hintTare = setupField === 'tare'
+
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
@@ -456,12 +491,11 @@ export default function IngredientDetailPage() {
                 title={titleLabel}
                 subtitle={`Tồn: ${stockSubtitle}`}
                 onBack={() => navigate('/ingredients', { state: location.state })}
-                onDelete={canEdit ? handleDelete : null}
                 viewMode={viewMode}
                 onViewModeChange={setViewMode}
             />
 
-            <main className="flex-1 overflow-y-auto px-4 py-4 bg-bg space-y-4">
+            <main className="flex-1 overflow-y-auto px-4 py-4 pb-48 bg-bg space-y-4">
                 {viewMode === 'details' ? (
                     <IngredientDetailsTab
                         nameLabel={titleLabel}
@@ -474,10 +508,16 @@ export default function IngredientDetailPage() {
                         tareWeight={tareWeight}
                         warehouseStock={stockData?.warehouse_stock ?? null}
                         warehouseGroupNote={warehouseGroupNote}
+                        hintWarehouse={hintWarehouse}
+                        hintPack={hintPack}
+                        hintMinStock={hintMinStock}
+                        hintTare={hintTare}
                         counterStock={stockData?.counter_stock ?? null}
-                        hasShiftClosing={hasShiftClosing}
                         currentStock={currentStock}
+                        dailyContext={dailyContext}
+                        siblingCounterStocks={siblingCounterStocks}
                         countInAudit={countInAudit}
+                        onToggleAudit={saveCountInAudit}
                         canEdit={canEdit}
                         saving={saving}
                         onSaveName={saveName}
@@ -488,8 +528,8 @@ export default function IngredientDetailPage() {
                         onSaveMinStock={saveMinStock}
                         onSaveTareWeight={saveTareWeight}
                         onChangeCategory={saveCategory}
-                        onToggleAudit={saveCountInAudit}
                         onConfigurePack={() => setPackModalOpen(true)}
+                        onDelete={canEdit ? handleDelete : null}
                     />
                 ) : (
                     <IngredientHistoryTab

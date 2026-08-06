@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AlertTriangle, X, Loader, Check } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
 import { adjustIngredientStock } from '../../services/orderService'
+import { BottomSheet } from '../common/ModalShell'
 
 /**
  * Surface raw-balance deficits (Σ refill < Σ restock) caused by:
@@ -34,8 +35,8 @@ export default function StockDeficitBanner({ deficits, ingredientUnits, configBy
                     <div className="flex-1 min-w-0">
                         <p className="text-[13px] font-black text-danger leading-tight">Kho tổng đang lệch sổ sách</p>
                         <p className="text-[11px] text-text-secondary mt-0.5 leading-snug">
-                            {deficits.length} nguyên liệu có Σ rút (chốt ca) vượt Σ nhập kho.
-                            Có thể do mua ngoài app hoặc kê khai restock quá tay.
+                            {deficits.length} nguyên liệu bị rút (chốt ca) nhiều hơn số đã nhập kho.
+                            Có thể do mua ngoài app hoặc kê khai nhập kho quá tay.
                         </p>
                     </div>
                 </div>
@@ -138,12 +139,10 @@ function KiemKeModal({ deficits, ingredientUnits, configByIngredient, addressId,
     }
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={onClose}>
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-            <div
-                onClick={e => e.stopPropagation()}
-                className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up max-h-[88dvh] overflow-hidden"
-            >
+        <BottomSheet
+            onClose={onClose}
+            panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up max-h-[88dvh] overflow-hidden"
+        >
                 <div className="flex items-center justify-between shrink-0">
                     <div>
                         <span className="text-[11px] font-black text-text-secondary uppercase tracking-wider">Kiểm kê & reset</span>
@@ -238,8 +237,7 @@ function KiemKeModal({ deficits, ingredientUnits, configByIngredient, addressId,
                         </button>
                     </>
                 )}
-            </div>
-        </div>
+        </BottomSheet>
     )
 }
 

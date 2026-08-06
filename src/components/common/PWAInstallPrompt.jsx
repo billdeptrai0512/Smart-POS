@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { STORAGE_KEYS } from '../../constants/storageKeys'
 
 // Synchronous, mount-only environment checks — computed as lazy initial state so
@@ -10,6 +11,7 @@ const detectIOS = () =>
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 
 export default function PWAInstallPrompt() {
+    const { pathname } = useLocation()
     const [promptInstall, setPromptInstall] = useState(null)
     const [isStandalone] = useState(detectStandalone)
     const [isIOS] = useState(detectIOS)
@@ -48,7 +50,10 @@ export default function PWAInstallPrompt() {
         localStorage.setItem(STORAGE_KEYS.PWA_PROMPT_DISMISSED, 'true')
     }
 
-    if (isStandalone || !showPrompt) {
+    // CHỈ hiện ở màn đăng nhập: ở /pos và các màn khác nó nằm đè lên hướng dẫn
+    // onboarding. Vẫn mount ở mọi trang (listener beforeinstallprompt ở trên phải
+    // chạy sớm, event chỉ bắn 1 lần) — chỉ chặn ở khâu render.
+    if (isStandalone || !showPrompt || pathname !== '/login') {
         return null
     }
 
@@ -59,8 +64,8 @@ export default function PWAInstallPrompt() {
                     <div className="flex items-center gap-3">
                         <img src="/icons/icon-192x192.png" alt="App Icon" className="w-10 h-10 rounded-xl" />
                         <div>
-                            <h3 className="text-[14px] font-bold text-text">Tải App Cà Phê Sáng</h3>
-                            <p className="text-[12px] text-text-secondary">Trải nghiệm mượt mà hơn</p>
+                            <h3 className="text-[14px] font-bold text-text">Tải ứng dụng KOPOS</h3>
+                            <p className="text-[12px] text-text-secondary">Vận hành quán nhỏ dễ dàng hơn</p>
                         </div>
                     </div>
                     <button onClick={dismissPrompt} className="text-text-dim hover:text-text p-1" aria-label="Đóng">

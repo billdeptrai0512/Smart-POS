@@ -1,5 +1,5 @@
-import { formatVND } from '../../utils'
 import { formatPackedQty } from '../../utils/inventory'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 import { Plus } from 'lucide-react'
 
 /**
@@ -9,7 +9,7 @@ import { Plus } from 'lucide-react'
  *   │ 9180 g                   │  ← hero stock number
  *   │ = 9 bịch + 180 g         │  ← pack breakdown (if pack configured)
  *   │ Tồn đầu / Lấy ra / …     │  ← daily context
- *   │ Giá vốn 248đ/g           │  ← unit cost (manager only)
+ *   │ Tồn quầy hiện có 8g      │  ← counter stock (manager only); 1 dòng/địa chỉ nếu kho dùng chung nhóm
  *   └──────────────────────────┘
  *
  * All edit affordances (name, stock, unit, pack, category, min-stock, cost)
@@ -17,7 +17,7 @@ import { Plus } from 'lucide-react'
  * click target that navigates there. [+] restock + delete still inline.
  */
 export default function IngredientCostItem({
-    ingredientLabel, getIngredientUnit, ingredient, cost,
+    ingredientLabel, getIngredientUnit, ingredient,
     storedUnit,
     canEdit = true,
     minStock,
@@ -28,8 +28,11 @@ export default function IngredientCostItem({
     stockData, onRestock,
     // Daily context (always inline)
     dailyContext,
+    // Tồn quầy theo từng địa chỉ trong nhóm kho dùng chung (null nếu kho không thuộc nhóm nào)
+    siblingCounterStocks,
     // Navigation — parent owns scroll-cache save before navigating to detail
     onOpen,
+    hint = false,
 }) {
     const displayUnit = getIngredientUnit(ingredient, storedUnit)
 
@@ -42,7 +45,7 @@ export default function IngredientCostItem({
 
     return (
         <div
-            className={`bg-surface border rounded-[14px] p-3 flex flex-col gap-2 min-w-0 cursor-pointer hover:bg-surface-light/40 transition-colors ${borderClass}`}
+            className={`bg-surface border rounded-[14px] p-3 flex flex-col gap-2 min-w-0 cursor-pointer hover:bg-surface-light/40 transition-colors ${borderClass} ${onboardingHintClass(hint)}`}
             onClick={() => onOpen?.(ingredient)}
         >
             {/* Row 1: name + restock button */}
@@ -102,10 +105,10 @@ export default function IngredientCostItem({
                     }
                     return (
                         <>
-                            <Row label="Tồn đầu" value={fmt(warehouseStart)} />
+                            <Row label="Tồn kho đầu ngày" value={fmt(warehouseStart)} />
                             <Row label="Lấy ra" value={fmt(todayRestock)} sign="-" accent={todayRestock > 0 ? 'text-warning' : ''} />
                             <Row label="Nhập mới" value={fmt(todayRefill)} sign="+" accent={todayRefill > 0 ? 'text-success' : ''} />
-                            <Row label="Tồn cuối" value={fmt(warehouseNow)} bold />
+                            <Row label="Tồn kho cuối ngày" value={fmt(warehouseNow)} bold />
                         </>
                     )
                 })()}
@@ -115,17 +118,22 @@ export default function IngredientCostItem({
                  Nhóm + Quy đổi đã chuyển sang trang chi tiết của ingredient. */}
             {canEdit && (
                 <div className="mt-1.5 pt-2 border-t border-border/40 flex flex-col gap-1.5 text-[12px] tabular-nums">
-                    <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-text-dim">Giá vốn</span>
-                        <span className="text-text-secondary font-bold">
-                            {formatVND(cost)}<span className="text-text-dim font-medium">/{displayUnit}</span>
-                        </span>
-                    </div>
+                    {siblingCounterStocks ? (
+                        siblingCounterStocks.map(s => (
+                            <Row key={s.addressId ?? 'default'} label={`Tồn quầy · ${s.addressName}`} value={`${fmtRound(s.counterStock)} ${displayUnit}`} />
+                        ))
+                    ) : (
+                        <Row label="Tồn quầy hiện có" value={`${fmtRound(stockData?.counter_stock)} ${displayUnit}`} />
+                    )}
                 </div>
             )}
 
         </div>
     )
+}
+
+function fmtRound(n) {
+    return Math.round((n || 0) * 10) / 10
 }
 
 function Row({ label, value, sign = '', accent, bold }) {

@@ -6,17 +6,30 @@
 // these helpers so the semantics stay consistent regardless of where the code
 // runs (laptop in HCMC, server in UTC, future client in another TZ).
 
-const VN_TZ = 'Asia/Ho_Chi_Minh'
+// VN là UTC+7 quanh năm, không có DST → dịch đúng 7 giờ rồi đọc phần UTC là
+// chính xác tuyệt đối.
+//
+// KHÔNG dùng toLocaleDateString('en-CA') / ('sv-SE') để lấy chuỗi ISO nữa: mấy
+// locale đó CHỈ tình cờ định dạng yyyy-mm-dd, và WebView / in-app browser bị cắt
+// dữ liệu Intl sẽ lặng lẽ rơi về locale mặc định (vd "03/08/2026"). Lúc đó
+// split('-') bên dưới trả undefined và màn hình hiện "undefined/undefined/undefined".
+// toISOString() thì được spec khoá cứng định dạng, không phụ thuộc Intl hay tz database.
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000
+function vnISO(date) {
+    // Date rác (parse chuỗi null/hỏng) → trả '' thay vì để toISOString ném lỗi
+    // làm trắng cả trang; trước đây nó chỉ in ra "Invalid Date".
+    if (Number.isNaN(date?.getTime?.())) return ''
+    return new Date(date.getTime() + VN_OFFSET_MS).toISOString()
+}
 
 // "YYYY-MM-DD" string in Vietnam timezone for the given Date (defaults to now).
-// Uses 'en-CA' locale which always formats as ISO yyyy-mm-dd regardless of system locale.
 export function dateStringVN(date = new Date()) {
-    return date.toLocaleDateString('en-CA', { timeZone: VN_TZ })
+    return vnISO(date).slice(0, 10)
 }
 
 // "HH:mm" (24h) string in Vietnam timezone for the given Date (defaults to now).
 export function timeStringVN(date = new Date()) {
-    return date.toLocaleTimeString('en-GB', { timeZone: VN_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    return vnISO(date).slice(11, 16)
 }
 
 // "dd/mm" in Vietnam timezone. Built on dateStringVN instead of Date#getDate()/

@@ -28,6 +28,9 @@ export function hasModule(activeModules, module = 'all') {
 //   _serverFlag: undefined = chưa đọc; true/false = đã rõ.
 //   Lỗi đọc config → false (fail-open: KHÔNG gate ai, tránh khoá nhầm khách đã trả
 //   khi mạng/DB chập chờn). Flip ON/OFF = UPDATE app_config, KHÔNG cần redeploy.
+//   Lỗi trả `undefined` (≠ false "đã đọc, đang tắt") và KHÔNG cache promise hỏng:
+//   1 lần đọc lỗi mà cache lại thì cả phiên chạy như monetization tắt — badge gói
+//   biến mất trên mọi card và sort địa chỉ theo gói sai, tới khi user tự reload.
 let _serverFlag
 let _serverFlagPromise = null
 function loadServerFlag() {
@@ -38,10 +41,11 @@ function loadServerFlag() {
         .eq('key', 'monetization_enabled')
         .maybeSingle()
         .then(({ data, error }) => {
-            _serverFlag = !error && data?.value === 'true'
+            if (error) throw error
+            _serverFlag = data?.value === 'true'
             return _serverFlag
         })
-        .catch(() => { _serverFlag = false; return _serverFlag })
+        .catch(() => { _serverFlagPromise = null; return undefined })
     return _serverFlagPromise
 }
 
@@ -58,8 +62,17 @@ export function useMonetizationEnabled() {
         // loadServerFlag() trả promise đã cache → nếu đã đọc xong, .then resolve ngay
         // với giá trị cũ (React bỏ qua nếu không đổi). Không setState đồng bộ trong effect.
         let cancelled = false
-        loadServerFlag().then(v => { if (!cancelled) setFlag(v) })
-        return () => { cancelled = true }
+        let retryId
+        const apply = (retry) => (v) => {
+            if (cancelled) return
+            // undefined = đọc lỗi → thử lại ĐÚNG 1 lần (promise hỏng đã bỏ cache ở trên).
+            // Mạng chết hẳn thì dừng ở đây, không quay vòng gọi DB.
+            if (v === undefined) {
+                if (retry) retryId = setTimeout(() => loadServerFlag().then(apply(false)), 2000)
+            } else setFlag(v)
+        }
+        loadServerFlag().then(apply(true))
+        return () => { cancelled = true; clearTimeout(retryId) }
     }, [])
 
     const loading = CLIENT_MONETIZATION_ENABLED && flag === undefined

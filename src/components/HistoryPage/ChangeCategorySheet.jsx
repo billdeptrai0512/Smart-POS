@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { X, Plus, Check, Pencil, Trash2, ChevronDown } from 'lucide-react'
 import { EXPENSE_GROUPS, groupMeta } from '../../constants/expenseGroups'
 import { formatVND } from '../../utils/money'
+import { BottomSheet } from '../common/ModalShell'
 
 // Nhãn fallback (Vận hành · "Chi phí khác") là nơi dồn chi phí khi chi phí không
 // gắn nhãn — KHÓA xoá VÀ khoá đổi nhóm để không gãy fallback. Nhãn còn lại tự do.
@@ -178,12 +179,10 @@ export default function ChangeCategorySheet({
 
     // ===== Màn QUẢN LÝ NHÃN =====
     return (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={handleClose}>
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-            <div
-                className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up max-h-[85vh] overflow-y-auto"
-                onClick={e => e.stopPropagation()}
-            >
+        <BottomSheet
+            onClose={handleClose}
+            panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up max-h-[85vh] overflow-y-auto"
+        >
                 <div className="flex items-center justify-between">
                     <span className="text-[16px] font-black text-text">Quản lý nhãn</span>
                     <button onClick={handleClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all">
@@ -276,8 +275,7 @@ export default function ChangeCategorySheet({
                 <span className="text-[11px] text-text-dim leading-snug">
                     Số bên cạnh nhãn = số chi phí đang gắn. Xoá nhãn còn chi phí → phải chuyển từng chi phí (hoặc tất cả) sang nhãn khác trước. Riêng "Chi phí khác" (Vận hành) không xoá / đổi nhóm được vì là nơi dồn mặc định.
                 </span>
-            </div>
-        </div>
+        </BottomSheet>
     )
 }
 
@@ -367,12 +365,10 @@ function ReassignView({ category, remaining, moved, total, targets, busy, onMove
     const done = remaining.length === 0
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={onClose}>
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-            <div
-                className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up max-h-[85vh] overflow-y-auto"
-                onClick={e => e.stopPropagation()}
-            >
+        <BottomSheet
+            onClose={onClose}
+            panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up max-h-[85vh] overflow-y-auto"
+        >
                 <div className="flex items-center justify-between">
                     <span className="text-[16px] font-black text-text">Chuyển chi phí trước khi xoá</span>
                     <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all">
@@ -447,8 +443,7 @@ function ReassignView({ category, remaining, moved, total, targets, busy, onMove
                 >
                     Đóng
                 </button>
-            </div>
-        </div>
+        </BottomSheet>
     )
 }
 

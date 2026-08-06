@@ -4,6 +4,7 @@
  * Mimics Supabase CRUD operations for products, recipes, orders, etc.
  */
 import { dateStringVN, startOfDayVN } from '../utils/dateVN'
+import { ONBOARDING_STORAGE_PREFIX } from '../utils/onboardingStorage'
 import type { Row } from '../types/domain'
 
 const generateId = () => crypto.randomUUID();
@@ -125,6 +126,13 @@ export const initializeGuestFromGlobal = (data: Row) => {
         created_at: seedTime
     }] : []);
     // fixed_costs seed removed — "thực chi" model no longer uses templates.
+
+    // Onboarding widget UI state (collapsed/expanded) is scoped by addressId but lives outside
+    // KEYS.* — every other piece of this address's guest data resets fresh above, so a
+    // leftover "collapsed" from a previous trial session would hide the guide with nothing
+    // in this function's own output explaining why. Clear it so each "Sử dụng thử" starts
+    // the guide fresh too.
+    localStorage.removeItem(ONBOARDING_STORAGE_PREFIX + addressId);
 };
 
 // --- CRUD Helpers ---
@@ -334,11 +342,18 @@ export const fetchLocalIngredientStocks = (addressId: string | null) => {
     // Walk closings DESC for the most-recent non-null `remaining` per ingredient.
     // null = staff didn't count this ingredient that shift; we carry the previous
     // count forward instead of resetting counter_stock to 0.
+    // openingByIngredient: fallback khi NVL CHƯA từng có remaining (tồn quầy nhập lúc
+    // setup, trước lần chốt ca đầu tiên) — khớp ingredientStockService + RPC v2.
     const counterByIngredient: Record<string, number> = {};
+    const openingByIngredient: Record<string, number> = {};
     closings.forEach(closing => {
         (closing.inventory_report || []).forEach((item: Row) => {
-            if (item?.ingredient && item.remaining != null && counterByIngredient[item.ingredient] === undefined) {
+            if (!item?.ingredient) return;
+            if (item.remaining != null && counterByIngredient[item.ingredient] === undefined) {
                 counterByIngredient[item.ingredient] = Number(item.remaining);
+            }
+            if (item.opening != null && openingByIngredient[item.ingredient] === undefined) {
+                openingByIngredient[item.ingredient] = Number(item.opening);
             }
         });
     });
@@ -377,14 +392,16 @@ export const fetchLocalIngredientStocks = (addressId: string | null) => {
         }
         const warehouse = Math.max(0, warehouseRaw);
         const item = (latestClosing?.inventory_report || []).find((i: Row) => i.ingredient === ing);
-        const counter = counterByIngredient[ing] ?? 0;
+        const counter = counterByIngredient[ing] ?? openingByIngredient[ing] ?? 0;
 
         return {
             ingredient: ing,
             current_stock: warehouse + counter,
             restocked_qty: Number(item?.restock) || 0,
             warehouse_stock: warehouse,
-            counter_stock: counter
+            counter_stock: counter,
+            warehouse_stock_set: warehouse > 0,
+            counter_stock_set: counter > 0
         };
     });
 };

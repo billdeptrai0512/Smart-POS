@@ -16,7 +16,7 @@ export default function Toast({ toast }) {
 
     return (
         <div className={`toast-in fixed top-5 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-2xl text-[13px] font-semibold shadow-2xl max-w-[90vw] border backdrop-blur-sm flex flex-col items-center gap-1.5 ${colorClass}`}>
-            <span className="text-center">{icon}{toast.message}</span>
+            <span className="text-center text-balance leading-snug">{icon}{toast.message}</span>
             {toast.action && (
                 <button
                     onClick={toast.action.onClick}

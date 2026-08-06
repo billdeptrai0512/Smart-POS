@@ -1,6 +1,13 @@
 import { AlertTriangle, X } from 'lucide-react'
 
 export default function KeyMismatchBanner({ mismatches, onView, onDismiss }) {
+    // Đếm tổng cả 4 loại lệch (trước đây chỉ đếm labelCollisions — bỏ sót orphan keys
+    // khi không có collision, khiến tiêu đề luôn rơi về câu chung chung không có số).
+    const total = mismatches.labelCollisions.length
+        + mismatches.orphanRecipeKeys.length
+        + mismatches.orphanInventoryKeys.length
+        + (mismatches.orphanExtraIngredientKeys?.length || 0)
+
     return (
         <div className="w-full mb-3 bg-warning/5 border border-warning/40 rounded-[14px] flex items-stretch overflow-hidden">
             <button
@@ -10,11 +17,9 @@ export default function KeyMismatchBanner({ mismatches, onView, onDismiss }) {
                 <AlertTriangle size={16} className="text-warning shrink-0" />
                 <div className="flex-1 min-w-0">
                     <p className="text-text font-black text-[12px] leading-tight">
-                        {mismatches.labelCollisions.length > 0
-                            ? `${mismatches.labelCollisions.length} nguyên liệu chưa đồng bộ keys`
-                            : 'Phát hiện keys không khớp giữa công thức, tùy chọn và tồn kho'}
+                        {total} nguyên liệu cần đồng bộ dữ liệu
                     </p>
-                    <p className="text-text-secondary text-[10px] mt-0.5">Có thể gây sai Tiêu CT trong báo cáo hao hụt. Bấm để xem &amp; sửa.</p>
+                    <p className="text-text-secondary text-[10px] mt-0.5">Có thể làm sai chi phí nguyên liệu trong báo cáo hao hụt. Bấm để xem &amp; sửa.</p>
                 </div>
                 <span className="text-warning text-[11px] font-black shrink-0">Xem →</span>
             </button>

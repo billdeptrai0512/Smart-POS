@@ -7,6 +7,7 @@ import { formatIsoDisplay } from '../common/datePickerUtils'
 import { parseVNDInput } from '../../utils'
 import { dateStringVN } from '../../utils/dateVN'
 import { EXPENSE_GROUPS, groupMeta } from '../../constants/expenseGroups'
+import { BottomSheet } from '../common/ModalShell'
 
 const KNOWN_GROUP_KEYS = new Set(EXPENSE_GROUPS.map(g => g.key))
 // Nhãn của 1 nhóm; nhãn legacy không khớp nhóm nào → coi như Vận hành.
@@ -45,7 +46,6 @@ export default function AddExpenseModal({
     const canSubmit = parseVNDInput(costAmount) > 0 && costName.trim() && !isSubmitting
     const submitColor = expenseCategory === 'fixed' ? 'bg-warning' : 'bg-danger'
     const today = dateStringVN()
-    const isBackdated = expenseDate && expenseDate !== today
 
     const nameRef = useRef(null)
     const amountRef = useRef(null)
@@ -95,12 +95,12 @@ export default function AddExpenseModal({
 
     return (
         <>
-        <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={onClose}>
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-            <div
-                className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
-                onClick={e => e.stopPropagation()}
-            >
+        {/* max-h + scroll: sheet neo đáy màn, nội dung cao hơn viewport (thêm dòng
+            cảnh báo backdate / bàn phím mở) thì tràn lên trên, mất luôn nút X. */}
+        <BottomSheet
+            onClose={onClose}
+            panelClassName="w-full max-w-lg max-h-[92dvh] overflow-y-auto [&>*]:shrink-0 bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
+        >
                 <div className="flex items-center justify-between">
                     <span className="text-[16px] font-black text-text">{isEditing ? 'Sửa chi phí' : 'Thêm chi phí'}</span>
                     <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all">
@@ -127,11 +127,6 @@ export default function AddExpenseModal({
                             </button>
                         )}
                     />
-                    {isBackdated && (
-                        <p className="text-[11px] text-warning leading-snug">
-                            Sẽ ghi vào ngày {formatIsoDisplay(expenseDate)}, không phải hôm nay.
-                        </p>
-                    )}
                 </div>
 
                 {/* Thời điểm — toggle full-width dưới nhãn */}
@@ -287,8 +282,7 @@ export default function AddExpenseModal({
                         Xoá chi phí
                     </button>
                 )}
-            </div>
-        </div>
+        </BottomSheet>
 
         {/* Màn Quản lý nhãn — CRUD nhãn theo nhóm + tái phân loại chi phí khi xoá.
             Việc CHỌN nhãn cho chi phí dùng 2 dropdown phía trên; ở đây tạo nhãn mới

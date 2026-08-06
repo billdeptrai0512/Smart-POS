@@ -34,25 +34,6 @@ export async function adjustIngredientStock(addressId: UUID | null, ingredient: 
     return await insertExpense(displayName, 0, addressId, false, staffName, true, 'cash', meta)
 }
 
-// Địa chỉ đã có phiếu chốt ca nào kèm kiểm kê (inventory_report) chưa? Dùng để
-// ẩn/khoá ô "Tồn quầy" ở IngredientDetailPage trước khi cho sửa — setCounterStock
-// ghi vào phiếu gần nhất nên chưa có phiếu nào thì không có gì để ghi.
-export async function hasCounterShiftClosing(addressId: UUID | null) {
-    // Mẫu mặc định (admin-only playground, addressId === null) — không phải địa chỉ
-    // vận hành thật nên không có khái niệm "ca làm việc" bắt buộc trước.
-    // setCounterStock() tự tạo phiếu chốt ca khi cần, nên luôn cho sửa "Tồn quầy" trực tiếp.
-    if (addressId === null) return true
-    if (localRepo.isGuest()) {
-        return localRepo.fetchAllLocalShiftClosings(addressId).some((c: Row) => c.inventory_report != null)
-    }
-    if (!supabase) return false
-    const { data, error } = await supabase.from('shift_closings').select('id')
-        .eq('address_id', addressId)
-        .not('inventory_report', 'is', null).limit(1)
-    if (error) throw error
-    return (data?.length ?? 0) > 0
-}
-
 // Đặt tồn QUẦY (counter) = số đếm tuyệt đối, bằng cách ghi `remaining` của NVL vào
 // phiếu chốt ca MỚI NHẤT — cùng nguồn dữ liệu mà card Hao hụt đọc/ghi, nên số ở
 // /ingredients và số chốt ca luôn khớp nhau. Trả null nếu chưa có phiếu chốt nào.

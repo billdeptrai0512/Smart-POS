@@ -402,7 +402,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                     <button
                         onClick={handleMockPayment}
                         disabled={isMocking || isResetting || !canSubmit}
-                        className="w-full py-2.5 rounded-[12px] bg-red-500/10 text-red-500 text-[12px] font-bold hover:bg-red-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                        className="w-full py-2.5 rounded-[12px] bg-danger/10 text-danger text-[12px] font-bold hover:bg-danger/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                         {isMocking ? <Loader2 size={14} className="animate-spin" /> : `Mock trial ${TRIAL_DAYS} ngày (Admin)`}
                     </button>
@@ -410,13 +410,13 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
                         onClick={handleReset}
                         disabled={isMocking || isResetting || !selectedAddressIds.length}
                         className={`w-full py-2 rounded-[12px] text-[11px] font-bold active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50
-                            ${confirmReset ? 'bg-red-500/15 text-red-500 hover:bg-red-500/25' : 'bg-surface-light text-text-secondary hover:bg-border/40'}`}
+                            ${confirmReset ? 'bg-danger/15 text-danger hover:bg-danger/25' : 'bg-surface-light text-text-secondary hover:bg-border/40'}`}
                     >
                         {isResetting
                             ? <Loader2 size={14} className="animate-spin" />
                             : confirmReset ? 'Bấm lần nữa để xoá gói đã chọn' : 'Reset gói (Admin · dev)'}
                     </button>
-                    {adminError && <p className="text-[10.5px] text-red-500 text-center">{adminError}</p>}
+                    {adminError && <p className="text-[10.5px] text-danger text-center">{adminError}</p>}
                 </div>
             )}
         </div>

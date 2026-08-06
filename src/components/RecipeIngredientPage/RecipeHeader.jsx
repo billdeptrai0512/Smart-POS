@@ -2,16 +2,17 @@ import { ArrowLeft, Copy } from 'lucide-react'
 import { formatVND, capitalizeWords } from '../../utils'
 import InlineEditor from './InlineEditor'
 import MenuTabsBar from '../common/MenuTabsBar'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 
 export default function RecipeHeader({
-    product, canEdit, onBack, onSavePrice, onSaveName, onCopyFrom, onTabSelect,
+    product, canEdit, onBack, onSavePrice, onSaveName, onCopyFrom, onTabSelect, hintBack,
 }) {
     return (
         <header className="shrink-0 pt-6 pb-3 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
             <div className="flex items-center gap-3">
                 <button
                     onClick={onBack}
-                    className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none shrink-0"
+                    className={`w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none shrink-0 ${onboardingHintClass(hintBack)}`}
                     title="Trở về"
                 >
                     <ArrowLeft size={20} strokeWidth={2.5} />

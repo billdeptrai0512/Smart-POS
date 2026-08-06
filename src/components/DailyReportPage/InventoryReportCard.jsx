@@ -1,8 +1,9 @@
-import { memo, useMemo, useState } from 'react'
+import { Fragment, memo, useMemo, useState } from 'react'
 import { AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Info } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit, lookupByLabel } from '../../utils/ingredients'
 import { formatPackedQty, computeHaoHut } from '../../utils/inventory'
 import { formatVND } from '../../utils'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 import CollapsibleCard from './CollapsibleCard'
 
 // Status priority for sorting collapsed list. Lower = render earlier.
@@ -18,9 +19,9 @@ function computeRowStatus(args) {
 }
 
 // Per-ingredient layout (counter-side only — Tồn kho tách ra ngoài):
-//   row 1 (inputs):  Đầu kỳ    |  Nhập thêm   |  Cuối kỳ
-//   row 2:           Sử dụng   |  Tổng cộng (col-span 2)
-//   row 3 (audit):   Chênh lệch|  Lý thuyết   |  Thực tế
+//   row 1 (inputs):  Đầu kỳ    |  Nhập thêm (col-span 2)
+//   row 2:           Đã bán    |  Sử dụng (col-span 2)
+//   row 3 (audit):   Chênh lệch|  Lý thuyết   |  Cuối kỳ (input, = Thực tế)
 //
 // Staff inputs: Đầu kỳ, Nhập thêm, Cuối kỳ. Everything else is computed and disabled.
 // Audit math:
@@ -46,6 +47,9 @@ export default function InventoryReportCard({
     baselineInputs, baselineVersion = 0,
     open = true, onToggleOpen,
     onOpeningChange, onOpeningLock, onRestockChange, onInventoryChange,
+    // Nguyên liệu đang được onboarding phase 4 gợi ý bấm vào — xem DailyReportPage.jsx
+    // (hintCoffeeIngredient) + inventoryStep.jsx.
+    hintIngredient = null,
 }) {
     // Sort by status priority so staff sees "Chưa nhập" first, then anomalies,
     // then matched rows at the bottom. Tie-break by display name for stability.
@@ -120,7 +124,7 @@ export default function InventoryReportCard({
     return (
         <CollapsibleCard
             icon={<ClipboardList size={15} className="text-primary shrink-0" />}
-            title="Kiểm kê tồn kho"
+            title="Kiểm kê tồn quầy"
             count={`${countedCount}/${sortedList.length}`}
             open={open}
             onToggle={onToggleOpen}
@@ -147,6 +151,7 @@ export default function InventoryReportCard({
                     onOpeningLock={onOpeningLock}
                     onRestockChange={onRestockChange}
                     onInventoryChange={onInventoryChange}
+                    hint={ing.ingredient === hintIngredient}
                 />
             ))}
             </div>
@@ -175,6 +180,7 @@ const IngredientRow = memo(function IngredientRow({
     warehouseAvailable, used, breakdown, productRef,
     isSubmitting, lockWarehouseInputs,
     onOpeningChange, onRestockChange, onInventoryChange,
+    hint,
 }) {
     // Whole-row collapse: default closed so staff can scroll the list of NVL fast and
     // open just the ones they're counting. Status badge in the header tells them
@@ -274,11 +280,11 @@ const IngredientRow = memo(function IngredientRow({
             <button
                 type="button"
                 onClick={() => setOpen(o => !o)}
-                className="w-full flex items-center justify-between gap-2 py-2.5 group"
+                className="w-full flex items-center justify-between gap-2 py-2.5 group rounded-lg"
             >
                 <span className="text-[14px] font-bold text-text text-left">{ingredientLabel(ing.ingredient)}</span>
                 <div className="flex items-center gap-2 shrink-0">
-                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border tabular-nums ${badgeToneCls}`}>
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border tabular-nums ${badgeToneCls} ${onboardingHintClass(hint && !open)}`}>
                         {badge.text}
                     </span>
                     {open
@@ -299,36 +305,26 @@ const IngredientRow = memo(function IngredientRow({
                         onChange={(v) => onOpeningChange(ing.ingredient, v)}
                         locked={isLocked || lockWarehouseInputs}
                     />
-                    <ColumnInput
-                        label="Nhập thêm"
-                        value={restockValue || ''}
-                        unit={unit}
-                        disabled={isSubmitting || lockWarehouseInputs}
-                        onChange={(v) => onRestockChange(ing.ingredient, v)}
-                        overflow={restockOverflow}
-                        locked={lockWarehouseInputs}
-                    />
-                    <ColumnInput
-                        label="Cuối kỳ"
-                        value={inventoryValue ?? ''}
-                        unit={unit}
-                        disabled={isSubmitting}
-                        onChange={(v) => onInventoryChange(ing.ingredient, v)}
-                    />
+                    <div className="col-span-2">
+                        <ColumnInput
+                            label="Nhập thêm"
+                            value={restockValue || ''}
+                            unit={unit}
+                            disabled={isSubmitting || lockWarehouseInputs}
+                            onChange={(v) => onRestockChange(ing.ingredient, v)}
+                            overflow={restockOverflow}
+                            locked={lockWarehouseInputs}
+                        />
+                    </div>
                 </div>
 
                 {/* Row 2 — counter level */}
                 <div className="grid grid-cols-3 gap-2 mt-2">
-                    <ColumnInput
-                        label="Sử dụng"
-                        value={usedNum}
-                        unit={unit}
-                        disabled
-                    />
+                    <TextCell label="Đã bán" text={totalCupsText} />
                     <div className="col-span-2">
                         <TextCell
-                            label="Tổng cộng"
-                            text={totalCupsText}
+                            label="Sử dụng"
+                            text={`${usedNum} ${unit}`}
                             onClick={hasBreakdown ? toggleExpanded : undefined}
                             expanded={expanded}
                         />
@@ -345,7 +341,7 @@ const IngredientRow = memo(function IngredientRow({
                                 <div key={i} className="flex items-center justify-between">
                                     <span className="text-[11px] text-text-secondary truncate flex-1">{entry.name}</span>
                                     <span className="text-[11px] font-bold text-text-dim tabular-nums shrink-0 ml-2">
-                                        {entry.qty} ly × {Math.round(entry.totalAmount / entry.qty * 10) / 10} = <span className="text-text font-black">{entry.totalAmount}</span>
+                                        {entry.qty} ly × {Math.round(entry.totalAmount / entry.qty * 10) / 10} {unit} = <span className="text-text font-black">{entry.totalAmount} {unit}</span>
                                     </span>
                                 </div>
                             ))
@@ -353,7 +349,7 @@ const IngredientRow = memo(function IngredientRow({
                     </div>
                 )}
 
-                {/* Row 3 — audit: Hao hụt | Lý thuyết | Thực tế */}
+                {/* Row 3 — audit: Hao hụt | Lý thuyết | Cuối kỳ (= Thực tế, gộp 1 input) */}
                 <div className="grid grid-cols-3 gap-2 mt-2">
                     <ColumnInput
                         label="Chênh lệch"
@@ -367,21 +363,29 @@ const IngredientRow = memo(function IngredientRow({
                         value={lyThuyet}
                         unit={unit}
                         disabled
-                        onLabelClick={() => setShowLyThuyetInfo(s => !s)}
-                        labelTrailing={<Info size={10} className="text-text-dim shrink-0" />}
+                        onBoxClick={() => setShowLyThuyetInfo(s => !s)}
                     />
                     <ColumnInput
-                        label="Thực tế"
-                        value={thucTe != null ? thucTe : ''}
+                        label="Cuối kỳ"
+                        value={inventoryValue ?? ''}
                         unit={unit}
-                        disabled
+                        disabled={isSubmitting}
+                        onChange={(v) => onInventoryChange(ing.ingredient, v)}
+                        hint={hint && open}
                     />
                 </div>
                 {showLyThuyetInfo && (
-                    <div className="mt-2 px-3 py-2 bg-surface-light rounded-[10px] text-center border border-border/40 text-[11px] text-text-secondary leading-snug">
-                        Đầu kỳ <span className="text-text-dim">({openingNum})</span>
-                        {' '}+ Nhập thêm <span className="text-text-dim">({restockNum})</span>
-                        {' '}− Sử dụng <span className="text-text-dim">({usedNum})</span>
+                    /* Nhãn trên, số dưới — 1 hàng không wrap kể cả màn 320px */
+                    <div className="mt-2 px-2 py-2 bg-surface-light rounded-[10px] border border-border/40 flex items-center justify-between gap-1 text-[10px] leading-tight whitespace-nowrap">
+                        {[['Đầu kỳ', openingNum], ['Nhập thêm', restockNum], ['Sử dụng', usedNum], ['Lý thuyết', lyThuyet]].map(([label, val], i) => (
+                            <Fragment key={label}>
+                                {i > 0 && <span className="text-text-secondary">{['+', '−', '='][i - 1]}</span>}
+                                <span className="flex flex-col items-center gap-0.5">
+                                    <span className="text-text-secondary">{label}</span>
+                                    <span className="text-text-dim">({val} {unit})</span>
+                                </span>
+                            </Fragment>
+                        ))}
                     </div>
                 )}
                 {/* Row 4 — money + cups-equivalent context for Hao hụt */}
@@ -412,7 +416,7 @@ const IngredientRow = memo(function IngredientRow({
     )
 })
 
-function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRight, overflow, tone = 'neutral', onLabelClick, labelTrailing }) {
+function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRight, overflow, tone = 'neutral', onBoxClick, hint = false }) {
     // tone overrides the default disabled coloring for read-only diff cells.
     const toneMap = {
         good: { wrap: 'bg-success/8 border border-success/30', input: 'text-success', unit: 'text-success/70' },
@@ -431,29 +435,34 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRig
                 : 'bg-surface-light border border-border/60 focus-within:border-primary/40'
     const inputCls = overflow ? 'text-danger' : t.input || (locked ? 'text-primary cursor-not-allowed' : 'text-text')
     const unitCls = overflow ? 'text-danger/70' : t.unit || (locked ? 'text-primary/70' : 'text-text-dim')
+    const Box = onBoxClick ? 'div' : 'label'
 
     return (
         <div className="flex flex-col">
-            <button
-                type="button"
-                onClick={onLabelClick}
-                disabled={!onLabelClick}
-                className="flex items-center justify-center gap-1 mb-1 disabled:cursor-default"
+            <div className="flex items-center justify-center gap-1 mb-1">
+                <span className="text-[9px] font-black uppercase text-text-dim">{label}</span>
+                {headerRight}
+            </div>
+            {/* <label> để bấm chỗ nào trong ô cũng focus vào input — input tự co theo số
+                (width tính bằng ch) nên đơn vị luôn nằm sát ngay sau số, cả cụm canh giữa.
+                (i) đặt absolute để số + đơn vị vẫn canh giữa như các ô khác.
+                Ô bấm được phải là <div>: Chrome nuốt click trên <label> khi input bên trong disabled. */}
+            <Box
+                onClick={onBoxClick}
+                className={`relative flex items-center justify-center rounded-[10px] overflow-hidden transition-all gap-1 px-1.5 py-1.5 ${wrapCls} ${onBoxClick ? 'pr-3 cursor-pointer' : ''} ${onboardingHintClass(hint)}`}
             >
-                <span className={`text-[9px] font-black uppercase ${onLabelClick ? 'text-text' : 'text-text-dim'}`}>{label}</span>
-                {labelTrailing || headerRight}
-            </button>
-            <div className={`flex items-center rounded-[10px] overflow-hidden transition-all gap-1 ${wrapCls}`}>
                 <input
                     type="number"
                     placeholder="-"
                     value={value}
                     onChange={e => onChange?.(e.target.value)}
                     disabled={disabled}
-                    className={`flex-1 min-w-0 bg-transparent pl-2 py-1.5 text-[13px] font-bold text-right placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${tone === 'neutral' ? 'disabled:opacity-50' : ''} ${inputCls}`}
+                    style={{ width: `${Math.max(String(value ?? '').length, 1)}ch` }}
+                    className={`min-w-0 bg-transparent text-[13px] font-bold text-center placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${tone === 'neutral' ? 'disabled:opacity-50' : ''} ${inputCls}`}
                 />
-                <span className={`pr-1.5 text-[10px] font-medium shrink-0 ${unitCls}`}>{unit}</span>
-            </div>
+                <span className={`text-[10px] font-medium shrink-0 ${unitCls}`}>{unit}</span>
+                {onBoxClick && <Info size={10} className="absolute right-1.5 text-text-dim pointer-events-none" />}
+            </Box>
         </div>
     )
 }
@@ -469,7 +478,7 @@ function TextCell({ label, text, tone = 'neutral', onClick, expanded = false }) 
     }
     const t = toneMap[tone] || toneMap.neutral
     const interactive = typeof onClick === 'function'
-    const boxClasses = `w-full rounded-[10px] py-1.5 px-2 text-[13px] text-center font-bold border ${t.wrap} ${t.text}${interactive ? ' flex items-center justify-end gap-1 hover:brightness-110 active:scale-[0.99] transition' : ''}`
+    const boxClasses = `w-full rounded-[10px] py-1.5 px-2 text-[13px] text-center font-bold border ${t.wrap} ${t.text}${interactive ? ' relative flex items-center justify-center hover:brightness-110 active:scale-[0.99] transition' : ''}`
     return (
         <div className="flex flex-col">
             <div className="flex items-center justify-center gap-1 mb-1">
@@ -477,8 +486,8 @@ function TextCell({ label, text, tone = 'neutral', onClick, expanded = false }) 
             </div>
             {interactive ? (
                 <button type="button" onClick={onClick} className={boxClasses}>
-                    <span className="flex-1 truncate">≈ {text}</span>
-                    <ChevronDown size={11} className={`shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                    <span className="truncate">{text}</span>
+                    <ChevronDown size={11} className={`absolute right-2 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
                 </button>
             ) : (
                 <div className={boxClasses}>{text}</div>

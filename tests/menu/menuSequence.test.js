@@ -4,7 +4,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
     MENU_SEQUENCE, MENU_BOUNDARY_ROUTE,
-    menuStep, menuNext, menuPrev, goToMenuStep,
+    menuStep, goToMenuStep,
 } from '../../src/utils/menuSequence'
 
 describe('MENU_SEQUENCE shape', () => {
@@ -40,10 +40,6 @@ describe('menuStep (bounded line, not a loop)', () => {
         expect(menuStep('main', -1).key).toBe('orders')
         expect(menuStep('packaging', +1)).toBeNull()
         expect(menuStep('packaging', -1).key).toBe('orders')
-    })
-    it('menuNext / menuPrev are thin wrappers', () => {
-        expect(menuNext('orders').key).toBe('recipes')
-        expect(menuPrev('recipes').key).toBe('orders')
     })
 })
 

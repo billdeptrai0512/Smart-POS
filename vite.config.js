@@ -28,6 +28,11 @@ export default defineConfig({
         // Vite 8 / rolldown requires the function form of manualChunks.
         manualChunks(id) {
           if (!id.includes('node_modules')) return
+          // Dynamically imported (see main.jsx/useToast.js) so it can stay out of the
+          // initial bundle — must NOT fall into the '/react/' check below, which
+          // otherwise matches its node_modules/@sentry/react path by substring
+          // accident and drags it into the always-eager vendor-react chunk.
+          if (id.includes('@sentry')) return
           if (id.includes('@supabase')) return 'vendor-supabase'
           if (id.includes('recharts') || id.includes('/d3-') || id.includes('victory-vendor')) return 'vendor-charts'
           if (id.includes('react-router') || id.includes('react-dom') || id.includes('/react/') || id.includes('scheduler')) return 'vendor-react'

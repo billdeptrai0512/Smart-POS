@@ -14,7 +14,8 @@ import BranchGrid from '../components/AddressSelectPage/BranchGrid'
 import StaffTab from '../components/AddressSelectPage/StaffTab'
 import CreateStaffModal from '../components/AddressSelectPage/CreateStaffModal'
 import SupportModal from '../components/common/SupportModal'
-import { cacheKey as buildCacheKey } from '../constants/storageKeys'
+import { BottomSheet } from '../components/common/ModalShell'
+import { cacheKey as buildCacheKey, STORAGE_KEYS } from '../constants/storageKeys'
 import { computeSubscriptionStatus } from '../utils/subscriptionStatus'
 import { dateFullVN } from '../utils/dateVN'
 
@@ -29,6 +30,10 @@ import { dateFullVN } from '../utils/dateVN'
 //   3. Có hoạt động + đã đăng ký (paid) — ổn, không cần chú ý.
 //   4. Không hoạt động hôm nay — bất kể trạng thái gói (có thể đã nghỉ/rời bỏ).
 const ACTIVE_STATUS_RANK = { none: 0, trial: 1, pending: 2, paid: 3 }
+
+// Module scope, KHÔNG phải useRef: page này unmount mỗi lần sang /pos, nên ref sẽ
+// reset và prefetch chạy lại từ đầu mỗi lần quay về danh sách địa chỉ.
+const prefetchedIds = new Set()
 
 export default function AddressSelectPage() {
     const {
@@ -99,43 +104,41 @@ export default function AddressSelectPage() {
         return { staffCount: s, managerCount: m }
     }, [staffList])
 
-    // Track which IDs we've already prefetched so renames/new addresses don't refetch all.
-    const prefetchedIdsRef = useRef(new Set())
-
-    // Background prefetch ProductContext data into cache (only for new addresses).
-    // Hoãn 2.5s để ~5 query/địa chỉ không tranh băng thông với query stats lúc login
-    // (stats là thứ user đang nhìn skeleton chờ; prefetch chỉ là warm cache).
+    // Background prefetch ProductContext data into cache — CHỈ cho chi nhánh dùng gần
+    // nhất, tức cái gần như chắc chắn user mở tiếp. Trước đây prefetch mọi địa chỉ:
+    // 5 query × N (14 chi nhánh = 70 request) + 6 lần JSON.stringify/setItem đồng bộ
+    // cho mỗi địa chỉ (giật lúc cuộn, đụng quota), trong khi user chỉ mở 1 → tỉ lệ
+    // dùng ~1/N. Chi nhánh khác vẫn chạy được, ProductContext tự fetch lúc mở.
+    // Hoãn 2.5s để không tranh băng thông với query stats user đang nhìn skeleton chờ.
     useEffect(() => {
-        if (!addresses.length) return
-        const newAddrs = addresses.filter(a => !prefetchedIdsRef.current.has(a.id))
-        if (!newAddrs.length) return
-        const timer = setTimeout(() => {
-            newAddrs.forEach(async addr => {
-                prefetchedIdsRef.current.add(addr.id)
+        const lastId = localStorage.getItem(STORAGE_KEYS.SELECTED_ADDRESS)
+        const addr = addresses.find(a => a.id === lastId)
+        if (!addr || prefetchedIds.has(addr.id)) return
+
+        const timer = setTimeout(async () => {
+            prefetchedIds.add(addr.id)
+            try {
+                const [prods, recs, costsResult, extras] = await Promise.all([
+                    fetchProducts(addr.id),
+                    fetchAllRecipes(addr.id),
+                    fetchIngredientCostsAndUnits(addr.id),
+                    fetchProductExtras(addr.id),
+                ])
+                const extraIds = Object.values(extras).flat().map(e => e.id)
+                const extraIngs = await fetchExtraIngredients(extraIds)
+                const { costs, units } = costsResult
+                const key = name => buildCacheKey(addr.id, name)
                 try {
-                    const [prods, recs, costsResult, extras] = await Promise.all([
-                        fetchProducts(addr.id),
-                        fetchAllRecipes(addr.id),
-                        fetchIngredientCostsAndUnits(addr.id),
-                        fetchProductExtras(addr.id),
-                    ])
-                    const extraIds = Object.values(extras).flat().map(e => e.id)
-                    const extraIngs = await fetchExtraIngredients(extraIds)
-                    const { costs, units } = costsResult
-                    const key = name => buildCacheKey(addr.id, name)
-                    try {
-                        localStorage.setItem(key('products'), JSON.stringify(prods))
-                        localStorage.setItem(key('recipes'), JSON.stringify(recs))
-                        localStorage.setItem(key('costs'), JSON.stringify(costs))
-                        localStorage.setItem(key('units'), JSON.stringify(units))
-                        localStorage.setItem(key('extras'), JSON.stringify(extras))
-                        localStorage.setItem(key('extra_ingredients'), JSON.stringify(extraIngs))
-                    } catch { /* ignore quota */ }
-                } catch {
-                    // Allow retry on next render if prefetch failed
-                    prefetchedIdsRef.current.delete(addr.id)
-                }
-            })
+                    localStorage.setItem(key('products'), JSON.stringify(prods))
+                    localStorage.setItem(key('recipes'), JSON.stringify(recs))
+                    localStorage.setItem(key('costs'), JSON.stringify(costs))
+                    localStorage.setItem(key('units'), JSON.stringify(units))
+                    localStorage.setItem(key('extras'), JSON.stringify(extras))
+                    localStorage.setItem(key('extra_ingredients'), JSON.stringify(extraIngs))
+                } catch { /* ignore quota */ }
+            } catch {
+                prefetchedIds.delete(addr.id) // cho phép thử lại lần vào sau
+            }
         }, 2500)
         return () => clearTimeout(timer)
         // ponytail: keyed on addressIdsKey (ids only), not `addresses` — the array gets a
@@ -363,7 +366,7 @@ export default function AddressSelectPage() {
 
             {/* Bottom action bar */}
             {activeTab === 'branches' && (
-                <div className="shrink-0 flex items-stretch gap-3 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),16px)] bg-surface border-t border-border/60">
+                <div className="shrink-0 flex items-stretch gap-3 px-4 py-2.5 pb-[max(env(safe-area-inset-bottom),10px)] bg-surface border-t border-border/60">
                     <button
                         onClick={handleSignOut}
                         className="flex-1 min-w-0 flex items-center justify-center rounded-[12px] border border-border/60 bg-bg px-4 py-3 text-[13px] font-bold uppercase tracking-wider text-text-secondary hover:bg-surface-light hover:text-danger active:scale-95 transition-all"
@@ -381,7 +384,7 @@ export default function AddressSelectPage() {
                 </div>
             )}
             {showInvite && (
-                <div className="shrink-0 flex items-stretch px-4 pt-3 pb-[max(env(safe-area-inset-bottom),16px)] bg-surface border-t border-border/60">
+                <div className="shrink-0 flex items-stretch px-4 py-2.5 pb-[max(env(safe-area-inset-bottom),10px)] bg-surface border-t border-border/60">
                     <button
                         onClick={() => {
                             setError('')
@@ -403,12 +406,10 @@ export default function AddressSelectPage() {
 
             {/* Slide-up Tạo địa chỉ mới modal */}
             {showCreateModal && (
-                <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={() => !creating && setShowCreateModal(false)}>
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-                    <div
-                        className="relative w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
-                        onClick={e => e.stopPropagation()}
-                    >
+                <BottomSheet
+                    onClose={() => !creating && setShowCreateModal(false)}
+                    panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
+                >
                         <div className="flex items-center justify-between">
                             <span className="text-[16px] font-black text-text">Tạo địa chỉ mới</span>
                             <button
@@ -440,7 +441,7 @@ export default function AddressSelectPage() {
                                         className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
                                     />
                                     <p className="text-text-secondary text-[11px] px-1">
-                                        Nhập SĐT để nhận <span className="font-bold text-text">7 ngày dùng thử báo cáo</span> (1 SĐT = 1 lần). Bỏ trống nếu không cần.
+                                        SĐT liên hệ, không bắt buộc — chỉ dùng khi cần hỗ trợ hoặc đối soát thanh toán.
                                     </p>
                                 </div>
                             )}
@@ -480,8 +481,7 @@ export default function AddressSelectPage() {
                                 {creating ? <><Loader size={13} className="animate-spin" /> {newShareCode.trim() ? 'Đang chép cấu hình...' : 'Đang tạo...'}</> : 'Tạo địa chỉ'}
                             </button>
                         </div>
-                    </div>
-                </div>
+                </BottomSheet>
             )}
 
             {/* Support Modal */}

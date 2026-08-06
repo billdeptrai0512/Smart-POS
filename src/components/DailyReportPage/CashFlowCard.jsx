@@ -4,6 +4,7 @@ import { formatVND, parseVNDInput } from '../../utils'
 import { ingredientLabel, normalizeIngredientCategory, INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 import { computeCashFlowTotals } from '../../utils/reportStats'
 import { useProducts } from '../../contexts/ProductContext'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 
 // Viết hoa chữ cái đầu ('đ' → 'Đ' được toUpperCase xử lý đúng cho tiếng Việt).
 const capFirst = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
@@ -31,7 +32,6 @@ export default function CashFlowCard({
     expenses = [],
     payments = [],   // NEW: expense_payments của ngày này (cash-out thực, theo paid_at)
     expenseCategories = [],  // nhãn chi phí — nhóm section Vận hành theo tên nhãn
-    onDailyExpenseClick,
     salesCard,
     // Inline-edit props (today scope on /daily-report). When `editable` is true the
     // Tiền mặt / Chuyển khoản rows become text inputs. The Lưu thực thu CTA itself
@@ -42,6 +42,10 @@ export default function CashFlowCard({
     isSaving = false,
     onCashChange,
     onTransferChange,
+    hintCash = false,
+    hintTransfer = false,
+    // Bấm 1 dòng chi phí → mở modal sửa (DailyReportPage điều hướng sang tab Chi phí).
+    onEditExpense,
 }) {
     // Category (Nguyên liệu chính / Bao bì) của từng nguyên liệu — để phân loại
     // mục "Mua nguyên liệu / bao bì" bên dưới. Mặc định collapse từng nhóm.
@@ -166,7 +170,7 @@ export default function CashFlowCard({
         const label = cat?.name || 'Mua nguyên liệu'
         const b = ensureBlock(label, cat?.sort_order ?? 100)
         b.total += e.amount || 0; b.count += 1
-        b.children.push({ key: e.id, date: dayMonth(e.created_at), name: capFirst(e.name || label), amount: e.amount, phase: phase === 'inShift' ? 'in_shift' : 'post_close', method: methodOf(e) })
+        b.children.push({ key: e.id, expense: e, date: dayMonth(e.created_at), name: capFirst(e.name || label), amount: e.amount, phase: phase === 'inShift' ? 'in_shift' : 'post_close', method: methodOf(e) })
     }
     const inventoryBlocks = [...invBlocks.values()].sort((a, b) => a.sortKey - b.sortKey || a.label.localeCompare(b.label, 'vi'))
     const inventoryTotal = inventoryBlocks.reduce((s, b) => s + b.total, 0)
@@ -176,7 +180,7 @@ export default function CashFlowCard({
             {salesCard && <div className="w-full">{salesCard}</div>}
 
             {/* PANEL 1: THỰC THU */}
-            <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
+            <div className={`w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group ${onboardingHintClass(hintCash || hintTransfer)}`}>
                 <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Thực thu</h3>
                 <div className="flex flex-col gap-2.5 pl-2">
                     {editable ? (
@@ -210,11 +214,8 @@ export default function CashFlowCard({
                             </div>
                         </>
                     )}
-                    <div
-                        onClick={onDailyExpenseClick}
-                        className="flex justify-between items-center cursor-pointer hover:opacity-85 active:scale-[0.99] transition-all"
-                    >
-                        <span className="text-[12px] font-bold text-text-secondary decoration-text-secondary/50 underline-offset-2">
+                    <div className="flex justify-between items-center">
+                        <span className="text-[12px] font-bold text-text-secondary">
                             Chi phí trong ca
                         </span>
                         <span className="text-[13px] font-bold text-warning tabular-nums">
@@ -249,14 +250,14 @@ export default function CashFlowCard({
 
                 {/* SECTION: VẬN HÀNH (luôn hiện) */}
                 <ExpenseSection title="Vận hành" total={operatingTotal} keyPrefix="op" groups={operatingGroups}
-                    expandedCats={expandedCats} toggleCat={toggleCat} emptyText="Không có chi phí vận hành" />
+                    expandedCats={expandedCats} toggleCat={toggleCat} emptyText="Không có chi phí vận hành" onEditExpense={onEditExpense} />
 
                 {/* SECTION: QUẢN LÝ & KHÁC (chỉ khi có chi) */}
                 {overheadGroups.length > 0 && (
                     <>
                         <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
                         <ExpenseSection title="Quản lý & khác" total={overheadTotal} keyPrefix="oh" groups={overheadGroups}
-                            expandedCats={expandedCats} toggleCat={toggleCat} />
+                            expandedCats={expandedCats} toggleCat={toggleCat} onEditExpense={onEditExpense} />
                     </>
                 )}
 
@@ -264,14 +265,14 @@ export default function CashFlowCard({
 
                 {/* SECTION: TỒN KHO (luôn hiện) — refill + chi phí nhãn tồn kho, gộp theo dòng */}
                 <BlockSection title="Tồn kho" total={inventoryTotal} keyPrefix="inv" blocks={inventoryBlocks}
-                    expandedCats={expandedCats} toggleCat={toggleCat} emptyText="Không có chi tồn kho trong kỳ" />
+                    expandedCats={expandedCats} toggleCat={toggleCat} emptyText="Không có chi tồn kho trong kỳ" onEditExpense={onEditExpense} />
 
                 {/* SECTION: NGOÀI KINH DOANH (chỉ khi có chi) — không vào lợi nhuận */}
                 {nonOpGroups.length > 0 && (
                     <>
                         <div className="w-full h-[1px] bg-border/40 rounded-full my-3" />
                         <ExpenseSection title="Ngoài kinh doanh" total={nonOpTotal} keyPrefix="nonop" groups={nonOpGroups}
-                            expandedCats={expandedCats} toggleCat={toggleCat} />
+                            expandedCats={expandedCats} toggleCat={toggleCat} onEditExpense={onEditExpense} />
                     </>
                 )}
 
@@ -352,7 +353,7 @@ function SectionHead({ title, total }) {
 
 // Section chi phí kiểu Vận hành/Quản lý/Ngoài KD — groups gom theo nhãn, mỗi nhãn
 // collapse, expand ra list `ngày · tên` (trong ca trước, sau chốt ca sau, chấm phase).
-function ExpenseSection({ title, total, keyPrefix, groups, expandedCats, toggleCat, emptyText }) {
+function ExpenseSection({ title, total, keyPrefix, groups, expandedCats, toggleCat, emptyText, onEditExpense }) {
     return (
         <div className="flex flex-col gap-1 pl-1">
             <SectionHead title={title} total={total} />
@@ -364,10 +365,12 @@ function ExpenseSection({ title, total, keyPrefix, groups, expandedCats, toggleC
                     <CollapseGroup key={k} expanded={!!expandedCats[k]} onToggle={() => toggleCat(k)}
                         label={g.label} count={g.inShift.length + g.postClose.length} total={g.total}>
                         {g.inShift.map((e) => (
-                            <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="in_shift" method={e.payment_method} />
+                            <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="in_shift" method={e.payment_method}
+                                onClick={onEditExpense && (() => onEditExpense(e))} />
                         ))}
                         {g.postClose.map((e) => (
-                            <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="post_close" method={e.payment_method} />
+                            <ItemRow key={e.id} date={dayMonth(e.created_at)} name={capFirst(e.name || 'Chi phí khác')} amount={e.amount} phase="post_close" method={e.payment_method}
+                                onClick={onEditExpense && (() => onEditExpense(e))} />
                         ))}
                     </CollapseGroup>
                 )
@@ -378,7 +381,7 @@ function ExpenseSection({ title, total, keyPrefix, groups, expandedCats, toggleC
 
 // Section Tồn kho — blocks đã gộp sẵn (refill theo nguyên liệu + chi phí nhãn tồn
 // kho + trả nợ), children là ItemRow props dựng sẵn.
-function BlockSection({ title, total, keyPrefix, blocks, expandedCats, toggleCat, emptyText }) {
+function BlockSection({ title, total, keyPrefix, blocks, expandedCats, toggleCat, emptyText, onEditExpense }) {
     return (
         <div className="flex flex-col gap-1 pl-1">
             <SectionHead title={title} total={total} />
@@ -389,8 +392,11 @@ function BlockSection({ title, total, keyPrefix, blocks, expandedCats, toggleCat
                 return (
                     <CollapseGroup key={k} expanded={!!expandedCats[k]} onToggle={() => toggleCat(k)}
                         label={b.label} count={b.count} total={b.total}>
+                        {/* Chỉ dòng dựng từ 1 expense thật mới sửa được; dòng đi chợ NVL là
+                            nhiều payment gộp theo nguyên liệu, không có phiếu chi để mở. */}
                         {b.children.map((c) => (
-                            <ItemRow key={c.key} date={c.date} name={c.name} amount={c.amount} count={c.count} phase={c.phase} method={c.method} />
+                            <ItemRow key={c.key} date={c.date} name={c.name} amount={c.amount} count={c.count} phase={c.phase} method={c.method}
+                                onClick={onEditExpense && c.expense ? () => onEditExpense(c.expense) : undefined} />
                         ))}
                     </CollapseGroup>
                 )
@@ -455,9 +461,12 @@ function MethodTag({ method }) {
 
 // Dòng món bên trong nhóm đã mở — cấp nhỏ nhất, thụt vào + nhạt hơn hàng nhãn.
 // Thứ tự `● [TM|CK] ngày · tên`; chấm + nhãn method đứng riêng, tên truncate độc lập.
-function ItemRow({ date, name, amount, count, phase = 'in_shift', method = 'cash' }) {
+function ItemRow({ date, name, amount, count, phase = 'in_shift', method = 'cash', onClick }) {
     return (
-        <div className="flex justify-between items-center gap-2 pl-4">
+        <div
+            onClick={onClick}
+            className={`flex justify-between items-center gap-2 pl-4 ${onClick ? 'cursor-pointer hover:opacity-75 active:scale-[0.99] transition' : ''}`}
+        >
             <span className="flex items-center gap-1.5 min-w-0">
                 <PhaseDot phase={phase} />
                 <MethodTag method={method} />
@@ -473,10 +482,15 @@ function ItemRow({ date, name, amount, count, phase = 'in_shift', method = 'cash
 }
 
 function MoneyInputRow({ label, value, disabled, onChange }) {
+    // Chưa gõ gì → ô trông y hệt dòng chỉ-đọc bên dưới, chủ quán không biết là
+    // bấm được. Viền đứt + icon bút chỉ hiện lúc rỗng, gõ vào là biến mất.
+    const empty = !value
     return (
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3 rounded-lg">
             <span className="text-[12px] font-bold text-text-secondary shrink-0">{label}</span>
-            <div className="flex items-center gap-0.5 max-w-[180px] flex-1 justify-end">
+            {/* pr-0: khung viền đứt chỉ chừa lề bên trái, để mép phải của "đ" thẳng
+                hàng với số của các dòng chỉ-đọc bên dưới (Chi phí trong ca, Tổng thực thu). */}
+            <div className={`flex items-center max-w-[180px] flex-1 justify-end rounded-[8px] pl-1.5 pr-0 py-0.5 transition-colors ${empty ? 'border border-dashed border-primary/50 bg-primary/5' : 'border border-transparent'}`}>
                 <input
                     type="text"
                     inputMode="numeric"
@@ -486,9 +500,9 @@ function MoneyInputRow({ label, value, disabled, onChange }) {
                     disabled={disabled}
                     className="flex-1 w-0 min-w-0 bg-transparent text-right text-[13px] font-bold text-text tabular-nums placeholder:text-text-secondary/40 focus:outline-none disabled:opacity-50"
                 />
-                {value && (
-                    <span className="text-[12px] font-bold text-text-secondary shrink-0 pointer-events-none">đ</span>
-                )}
+                {/* "đ" đi theo màu của con số: mờ như placeholder khi chưa ai nhập,
+                    đậm bằng chữ khi đã có số — để "0đ" đọc ra như một cụm. */}
+                <span className={`text-[13px] font-bold shrink-0 pointer-events-none ${empty ? 'text-text-secondary/40' : 'text-text'}`}>đ</span>
             </div>
         </div>
     )

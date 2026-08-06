@@ -1,21 +1,18 @@
-import { ArrowLeft, Trash2 } from 'lucide-react'
-
-const VIEW_TABS = [
-    { key: 'details', label: 'Chi tiết' },
-    { key: 'history', label: 'Nhật ký' },
-]
+import { ArrowLeft, NotebookText } from 'lucide-react'
 
 // Mirrors IngredientsHeader layout but drops MenuTabsBar (the user is already
 // drilled into a specific NVL — switching to Công thức from here is noise).
-// The right-side affordance becomes Delete instead of Forward.
+// Chi tiết ↔ Nhật ký chỉ có 2 chế độ nên bỏ hẳn thanh tab, đổi thành 1 nút icon ở
+// ô bên phải (chỗ toggle kiểm kê cũ, giờ nằm trong panel Kiểm kê): sáng = đang xem
+// nhật ký, bấm lần nữa về chi tiết.
 export default function IngredientDetailHeader({
     title,
     subtitle,
     onBack,
-    onDelete,
     viewMode = 'details',
     onViewModeChange,
 }) {
+    const showingHistory = viewMode === 'history'
     return (
         <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
             <div className="flex items-center gap-3">
@@ -34,33 +31,20 @@ export default function IngredientDetailHeader({
                     )}
                 </div>
 
-                {onDelete && (
+                {onViewModeChange && (
                     <button
-                        onClick={onDelete}
-                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-danger/80 hover:text-danger hover:bg-danger/10 active:bg-danger/15 transition-colors shadow-sm focus:outline-none shrink-0"
-                        title="Xóa nguyên liệu"
+                        onClick={() => onViewModeChange(showingHistory ? 'details' : 'history')}
+                        title={showingHistory ? 'Về chi tiết' : 'Xem nhật ký'}
+                        className={`w-10 h-10 flex items-center justify-center rounded-[14px] border shadow-sm transition-colors focus:outline-none shrink-0 ${
+                            showingHistory
+                                ? 'bg-primary border-primary text-black'
+                                : 'bg-surface-light border-border/60 text-text hover:bg-border/40'
+                        }`}
                     >
-                        <Trash2 size={18} strokeWidth={2.5} />
+                        <NotebookText size={20} strokeWidth={2.5} />
                     </button>
                 )}
             </div>
-
-            {onViewModeChange && (
-                <div className="flex gap-1 bg-surface-light border border-border/40 rounded-[12px] p-1">
-                    {VIEW_TABS.map(t => {
-                        const active = viewMode === t.key
-                        return (
-                            <button
-                                key={t.key}
-                                onClick={() => onViewModeChange(t.key)}
-                                className={`flex-1 py-1.5 rounded-[8px] text-[11px] font-black uppercase tracking-wider transition-all ${active ? 'bg-surface text-primary shadow-sm' : 'text-text-secondary hover:text-text'}`}
-                            >
-                                {t.label}
-                            </button>
-                        )
-                    })}
-                </div>
-            )}
         </header>
     )
 }
