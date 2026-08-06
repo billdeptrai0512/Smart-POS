@@ -42,3 +42,13 @@ supabase/.temp/
 
 # Local debug / diagnostic one-offs
 scratch/
+
+# Trình cài đặt / binary: từng lỡ commit TeamViewer_Setup_x64.exe (79MB) vào
+# src/assets rồi phải viết lại lịch sử để gỡ. Git không phải chỗ chứa installer.
+*.exe
+*.msi
+*.dmg
+
+# Thư mục tạm của trình duyệt khi tải file — nguồn của mớ .exe nói trên, và nó
+# còn chứa cả file không đuôi .exe nên chặn theo tên thư mục mới đủ.
+scoped_dir*/
