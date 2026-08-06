@@ -33,6 +33,18 @@ export function calculateItemCost(productId, extras = [], recipes = [], extraIng
     return totalCost;
 }
 
+// recipes gom sẵn theo product_id. Không có nó thì mỗi order item quét lại toàn bộ bảng
+// recipes → cuối ca vài trăm đơn × vài trăm dòng công thức = quadratic ngay trên máy nhân viên.
+function groupRecipesByProduct(recipes) {
+    const byProduct = new Map();
+    (recipes || []).forEach(r => {
+        const list = byProduct.get(r.product_id);
+        if (list) list.push(r);
+        else byProduct.set(r.product_id, [r]);
+    });
+    return byProduct;
+}
+
 /**
  * Tính tổng lượng nguyên liệu tiêu hao dự kiến dựa trên danh sách món đã bán.
  * 
@@ -44,6 +56,7 @@ export function calculateItemCost(productId, extras = [], recipes = [], extraIng
  */
 export function calculateEstimatedConsumption(orderItems, recipes, extraIngredients) {
     const estimated = {};
+    const recipesByProduct = groupRecipesByProduct(recipes);
 
     orderItems.forEach(item => {
         // Hỗ trợ cả 2 naming convention (productId vs product_id)
@@ -52,7 +65,7 @@ export function calculateEstimatedConsumption(orderItems, recipes, extraIngredie
         const extras = item.extras || [];
 
         // 1. Tiêu hao của món chính
-        const productRecipes = recipes.filter(r => r.product_id === id);
+        const productRecipes = recipesByProduct.get(id) || [];
         productRecipes.forEach(r => {
             if (!estimated[r.ingredient]) estimated[r.ingredient] = 0;
             estimated[r.ingredient] += r.amount * qty;
@@ -118,6 +131,8 @@ export function averageIngredientMaps(maps) {
  */
 export function calculateConsumptionBreakdown(orderItems, recipes, extraIngredients, products = [], productExtras = {}) {
     const breakdown = {};
+    const recipesByProduct = groupRecipesByProduct(recipes);
+    const productNames = new Map((products || []).map(p => [p.id, p.name]));
 
     // Build extra-id → extra-name lookup từ productExtras { productId: [{ id, name, ... }] }
     const extraNames = {};
@@ -138,7 +153,7 @@ export function calculateConsumptionBreakdown(orderItems, recipes, extraIngredie
         const id = item.productId || item.product_id;
         const qty = item.quantity || item.qty || 1;
         const extras = item.extras || [];
-        const productName = products.find(p => p.id === id)?.name || id;
+        const productName = productNames.get(id) || id;
 
         const extraIds = extras.map(e => e?.id).filter(Boolean).slice().sort();
         const variantKey = extraIds.length ? `${id}|${extraIds.join(',')}` : id;
@@ -161,7 +176,7 @@ export function calculateConsumptionBreakdown(orderItems, recipes, extraIngredie
                 Math.round((breakdown[ingredient][variantKey].totalAmount + amount * qty) * 10) / 10;
         };
 
-        recipes.filter(r => r.product_id === id).forEach(r => touch(r.ingredient, r.amount));
+        (recipesByProduct.get(id) || []).forEach(r => touch(r.ingredient, r.amount));
         extras.forEach(extra => {
             (extraIngredients[extra.id] || []).forEach(ei => touch(ei.ingredient, ei.amount));
         });
@@ -356,7 +371,9 @@ export function formatPackedQty(qty, packSize, packUnit, baseUnit, opts = {}) {
     return parts.filter(Boolean).join(' + ')
 }
 
-const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
+// Làm tròn 1 chữ số thập phân — dùng chung cho mọi phép tồn/hao hụt để tránh 3 nơi
+// tự định nghĩa lại rồi lệch epsilon nhau.
+export const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
 
 // Hao hụt = Thực tế − Lý thuyết cho 1 nguyên liệu. null = chưa nhập Cuối kỳ (pending),
 // caller phải tự phân biệt null với 0 (đã kiểm và khớp). Nguồn dùng chung giữa
@@ -542,33 +559,43 @@ export function computeIngredientNoise(historicalDailyHaoHut = {}) {
 }
 
 /**
- * Gắn "lặp lại mấy ngày gần đây" vào các candidate của hôm nay — tín hiệu quan
- * trọng nhất để phân biệt trùng hợp ngẫu nhiên (1 ngày) với dấu hiệu thật (lặp lại
- * nhiều ngày). Chạy lại findMissingCupCandidates trên TỪNG ngày lịch sử, đếm xem
- * cùng 1 món có tái xuất hiện không.
+ * Chạy findMissingCupCandidates trên TỪNG ngày lịch sử → 1 Set productId mỗi ngày.
  *
- * @param {Array} todayCandidates - kết quả findMissingCupCandidates() của hôm nay
+ * Tách riêng khỏi attachRepeatHistory vì đây là phần ĐẮT (quét tới 14 ngày) nhưng chỉ
+ * phụ thuộc dữ liệu lịch sử — đứng yên trong lúc nhân viên gõ ô kiểm kê. Gộp chung như
+ * trước thì mỗi phím gõ quét lại cả 14 ngày. Caller memo hoá riêng 2 phần.
+ *
  * @param {Object} historicalDailyHaoHut - { [dayStr]: {ingredient: diff} } từ buildDailyHaoHutMap
  * @param {Object} [noiseByIngredient] - từ computeIngredientNoise, dùng CHUNG dung sai
  *   thích nghi cho cả ngày hôm nay lẫn từng ngày lịch sử — nhất quán 1 tiêu chuẩn.
- * @returns candidates hôm nay, thêm field `repeatDays` (số ngày gần đây món này CŨNG
- *   là candidate) + `repeatWindowDays` (tổng số ngày có dữ liệu để so), sort theo
- *   repeatDays trước tiên — lặp lại nhiều ngày mới đáng tin, không phải trùng hợp 1 lần.
+ * @returns {Array<Set<string>>} mỗi phần tử = productId là candidate của 1 ngày lịch sử
  */
-export function attachRepeatHistory(todayCandidates, { ingredientsList, historicalDailyHaoHut = {}, recipes, products, noiseByIngredient = {} }) {
-    if (!todayCandidates.length) return []
-    const days = Object.keys(historicalDailyHaoHut)
-    const dayCandidateSets = days.map(dayStr =>
+export function buildDayCandidateSets({ ingredientsList, historicalDailyHaoHut = {}, recipes, products, noiseByIngredient = {} }) {
+    return Object.keys(historicalDailyHaoHut).map(dayStr =>
         new Set(findMissingCupCandidates({
             ingredientsList, recipes, products, haoHutByIngredient: historicalDailyHaoHut[dayStr], noiseByIngredient,
         }).map(c => c.productId))
     )
+}
 
+/**
+ * Gắn "lặp lại mấy ngày gần đây" vào các candidate của hôm nay — tín hiệu quan
+ * trọng nhất để phân biệt trùng hợp ngẫu nhiên (1 ngày) với dấu hiệu thật (lặp lại
+ * nhiều ngày).
+ *
+ * @param {Array} todayCandidates - kết quả findMissingCupCandidates() của hôm nay
+ * @param {Array<Set<string>>} dayCandidateSets - từ buildDayCandidateSets()
+ * @returns candidates hôm nay, thêm field `repeatDays` (số ngày gần đây món này CŨNG
+ *   là candidate) + `repeatWindowDays` (tổng số ngày có dữ liệu để so), sort theo
+ *   repeatDays trước tiên — lặp lại nhiều ngày mới đáng tin, không phải trùng hợp 1 lần.
+ */
+export function attachRepeatHistory(todayCandidates, dayCandidateSets = []) {
+    if (!todayCandidates.length) return []
     return todayCandidates
         .map(c => ({
             ...c,
             repeatDays: dayCandidateSets.filter(set => set.has(c.productId)).length,
-            repeatWindowDays: days.length,
+            repeatWindowDays: dayCandidateSets.length,
         }))
         .sort((a, b) => b.repeatDays - a.repeatDays || b.matches.length - a.matches.length || b.confidence - a.confidence)
 }

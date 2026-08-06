@@ -11,6 +11,11 @@ import { countActiveSessions } from '../services/authService'
 import { sortIngredients, lookupByLabel } from '../utils/ingredients'
 import { dateStringVN } from '../utils/dateVN'
 
+// Chuẩn hoá 1 ô input trước khi so với baseline: undefined / null / '' đều là "chưa nhập".
+// Mọi phép so dirty trong file này phải dùng chung hàm này, không thì "" vs undefined
+// sẽ đẻ ra dirty ma sau khi load.
+const norm = (v) => (v === undefined || v === null || v === '' ? null : String(v))
+
 // Owns all the inventory-side state and side-effects that used to live in
 // ShiftClosingPage: input maps for opening / restock / counter, the existing
 // shift_closing row, the canonical warehouse balances, and the Realtime
@@ -230,7 +235,6 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
             if (typeof item.remaining === 'number') rInventory[item.ingredient] = String(item.remaining)
             if (item.skipped) rSkipped[item.ingredient] = true
         })
-        const norm = (v) => (v === undefined || v === null || v === '' ? null : String(v))
         // Ingredients where a remote value just overwrote OUR own recent push (restock/skipped
         // only — the 2 fields "Soạn" tick touches) → reported via onFieldConflict below.
         const conflictIngredients = new Set()
@@ -336,7 +340,6 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     // Empty string and undefined both mean "no input" — normalize so a load that
     // hydrates "" → never sees a phantom diff against undefined baseline keys.
     const isDirty = useMemo(() => {
-        const norm = (v) => (v === undefined || v === null || v === '' ? null : String(v))
         const mapEq = (a, b) => {
             const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})])
             for (const k of keys) if (norm(a?.[k]) !== norm(b?.[k])) return false
@@ -357,7 +360,6 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     // chú thích cụ thể thay đổi nào sắp mất (thay vì câu chung chung gây mơ hồ khi user
     // nghĩ mình chưa đổi gì). Mỗi dòng: "Nguyên liệu · Loại: cũ → mới".
     const dirtySummary = useMemo(() => {
-        const norm = (v) => (v === undefined || v === null || v === '' ? null : String(v))
         const fmt = (v) => (v == null ? '(trống)' : v)
         const b = baselineRef.current
         const lines = []
@@ -387,7 +389,6 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     // Restock có đổi so với baseline không. Lưu có restock thay đổi = chuyển kho ra quầy
     // (trừ kho tổng server-side) → cần confirm; lưu chỉ-đếm (Đầu/Cuối kỳ) thì không.
     const restockDirty = useMemo(() => {
-        const norm = (v) => (v === undefined || v === null || v === '' ? null : String(v))
         const a = restockInputs, b = baselineRef.current.restock || {}
         const keys = new Set([...Object.keys(a || {}), ...Object.keys(b)])
         for (const k of keys) if (norm(a?.[k]) !== norm(b[k])) return true
@@ -444,7 +445,6 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     // tombstone and removes it. Sending only the delta is what makes the merge race-free:
     // two devices editing different ingredients never touch each other's entries.
     const buildInventoryPatches = useCallback(() => {
-        const norm = (v) => (v === undefined || v === null || v === '' ? null : String(v))
         const unitOf = {}
         ingredientsList.forEach(i => { unitOf[i.ingredient] = i.unit || 'đv' })
         const b = baselineRef.current

@@ -1,23 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown } from '../../utils/inventory';
-import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients';
+import { ingredientLabel, getIngredientUnit, lookupByLabel } from '../../utils/ingredients';
 import { fetchLastWeekSameDayOrderItems } from '../../services/orderService';
 import { ChevronDown } from 'lucide-react';
 import { useProducts } from '../../contexts/ProductContext';
 import { formatVND } from '../../utils';
-
-// Fallback: if exact ingredient key has no consumption, try matching by display label.
-// This handles the case where recipes use 'condensed_milk_ml' but inventory tracks 'sữa_đặc'
-// — both display as "Sữa đặc" via ingredientLabel(), causing Tiêu CT = 0 with exact lookup.
-function lookupByLabel(ingredient, estimatedMap) {
-    const exact = estimatedMap[ingredient]
-    if (exact) return exact
-    const label = ingredientLabel(ingredient).toLowerCase()
-    for (const [key, val] of Object.entries(estimatedMap)) {
-        if (key !== ingredient && ingredientLabel(key).toLowerCase() === label) return val
-    }
-    return 0
-}
 
 export default function InventoryRefillCard({
     shiftClosing,

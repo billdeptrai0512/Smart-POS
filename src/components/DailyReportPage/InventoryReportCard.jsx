@@ -1,7 +1,7 @@
 import { Fragment, memo, useMemo, useState } from 'react'
 import { AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Info } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit, lookupByLabel } from '../../utils/ingredients'
-import { formatPackedQty, computeHaoHut } from '../../utils/inventory'
+import { formatPackedQty, computeHaoHut, r1 } from '../../utils/inventory'
 import { formatVND } from '../../utils'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import CollapsibleCard from './CollapsibleCard'
@@ -37,7 +37,7 @@ export default function InventoryReportCard({
     usedMap = {},            // ingredient → todayEstimatedConsumption qty
     consumptionBreakdown = {}, // ingredient → { [variantKey]: { name, qty, totalAmount } } for expand-on-tap
     ingredientToProduct = {}, // ingredient → { amountPerCup, productName } for "Tương đương N ly" label
-    canUnlock, isSubmitting,
+    isSubmitting,
     // Sửa lịch sử (ngày cũ): khóa Đầu kỳ + Nhập thêm read-only, chỉ cho sửa Cuối kỳ —
     // tránh đụng kho tổng (Nhập thêm nằm trong công thức warehouse anchor).
     lockWarehouseInputs = false,
@@ -46,7 +46,7 @@ export default function InventoryReportCard({
     // every row remounts (→ collapses) right after a successful save.
     baselineInputs, baselineVersion = 0,
     open = true, onToggleOpen,
-    onOpeningChange, onOpeningLock, onRestockChange, onInventoryChange,
+    onOpeningChange, onRestockChange, onInventoryChange,
     // Nguyên liệu đang được onboarding phase 4 gợi ý bấm vào — xem DailyReportPage.jsx
     // (hintCoffeeIngredient) + inventoryStep.jsx.
     hintIngredient = null,
@@ -87,6 +87,29 @@ export default function InventoryReportCard({
         return ingredientLabel(a.ingredient).localeCompare(ingredientLabel(b.ingredient))
     }), [ingredientsList, sortOpening, sortRestock, sortInventory, warehouseStocks, openingStock, usedMap])
 
+    // Tổng giá trị hao hụt — sum |Hao hụt × unit_cost| over rows that came up short,
+    // computed against LIVE inputs so the header summary tracks what staff is counting now.
+    // countedCount (số NVL đã nhập Cuối kỳ) đi kèm luôn — cùng vòng lặp, cùng deps.
+    // useMemo vì card này KHÔNG memo: mọi re-render của trang (gõ tiền mặt, tick chi phí…)
+    // vốn chạy lại cả vòng lặp lookupByLabel này dù không có gì đổi.
+    const { totalLossValue, countedCount } = useMemo(() => {
+        let loss = 0
+        let counted = 0
+        for (const ing of sortedList) {
+            const v = inventoryInputs[ing.ingredient]
+            if (v !== undefined && v !== '') counted++
+            const haoHut = computeHaoHut({
+                inventoryValue: v,
+                restockValue: restockInputs[ing.ingredient],
+                openingValue: openingInputs[ing.ingredient],
+                openingFallback: openingStock[ing.ingredient],
+                used: lookupByLabel(ing.ingredient, usedMap),
+            })
+            if (haoHut != null && haoHut < 0) loss += Math.abs(haoHut) * (Number(ing.unit_cost) || 0)
+        }
+        return { totalLossValue: loss, countedCount: counted }
+    }, [sortedList, inventoryInputs, restockInputs, openingInputs, openingStock, usedMap])
+
     if (isLoading) {
         return (
             <div className="flex flex-col gap-3 py-4 animate-pulse">
@@ -96,30 +119,6 @@ export default function InventoryReportCard({
         )
     }
     if (!ingredientsList.length) return null
-
-    // Tổng giá trị hao hụt — sum |Hao hụt × unit_cost| over rows that came up short,
-    // computed against LIVE inputs so the header summary tracks what staff is counting now.
-    let totalLossValue = 0
-    for (const ing of sortedList) {
-        const haoHut = computeHaoHut({
-            inventoryValue: inventoryInputs[ing.ingredient],
-            restockValue: restockInputs[ing.ingredient],
-            openingValue: openingInputs[ing.ingredient],
-            openingFallback: openingStock[ing.ingredient],
-            used: lookupByLabel(ing.ingredient, usedMap),
-        })
-        if (haoHut != null && haoHut < 0) {
-            const rawCost = Math.abs(haoHut) * (Number(ing.unit_cost) || 0)
-            totalLossValue += rawCost
-        }
-    }
-
-    // Số NVL đã kiểm (có nhập Cuối kỳ) — drives header summary, song song với
-    // "X món · Y đã soạn" của ShiftPrepCard.
-    const countedCount = sortedList.reduce((n, ing) => {
-        const v = inventoryInputs[ing.ingredient]
-        return n + (v !== undefined && v !== '' ? 1 : 0)
-    }, 0)
 
     return (
         <CollapsibleCard
@@ -144,11 +143,9 @@ export default function InventoryReportCard({
                     used={lookupByLabel(ing.ingredient, usedMap)}
                     breakdown={lookupByLabel(ing.ingredient, consumptionBreakdown) || null}
                     productRef={ingredientToProduct[ing.ingredient]}
-                    canUnlock={canUnlock}
                     isSubmitting={isSubmitting}
                     lockWarehouseInputs={lockWarehouseInputs}
                     onOpeningChange={onOpeningChange}
-                    onOpeningLock={onOpeningLock}
                     onRestockChange={onRestockChange}
                     onInventoryChange={onInventoryChange}
                     hint={ing.ingredient === hintIngredient}
@@ -168,8 +165,6 @@ export default function InventoryReportCard({
         </CollapsibleCard>
     )
 }
-
-const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
 
 // memo: parent re-renders on every keystroke (input state lives in the page/hook),
 // but each row gets indexed primitives + stable callbacks — so only the row being
@@ -218,9 +213,8 @@ const IngredientRow = memo(function IngredientRow({
     const usedNum = r1(used)
     const hasActual = inventoryValue !== undefined && inventoryValue !== ''
     const cuoiKyNum = hasActual ? r1(inventoryValue) : null
-    const thucTe = cuoiKyNum != null ? r1(cuoiKyNum) : null
     const lyThuyet = r1(openingNum + restockNum - usedNum)
-    const haoHut = thucTe != null ? r1(thucTe - lyThuyet) : null
+    const haoHut = cuoiKyNum != null ? r1(cuoiKyNum - lyThuyet) : null
     const haoHutTone = haoHut == null
         ? 'neutral'
         : haoHut === 0 ? 'good' : haoHut < 0 ? 'bad' : 'warn'

@@ -10,7 +10,7 @@ import { fetchCashClosedToday } from '../services/reportService'
 import { useShiftClosingSave } from '../hooks/useShiftClosingSave'
 import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
 import { useDailyReportData } from '../hooks/useDailyReportData'
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, computeHaoHut, findMissingCupCandidates, buildDailyHaoHutMap, attachRepeatHistory, computeIngredientNoise, averageIngredientMaps } from '../utils/inventory'
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, computeHaoHut, findMissingCupCandidates, buildDailyHaoHutMap, buildDayCandidateSets, attachRepeatHistory, computeIngredientNoise, averageIngredientMaps, r1 } from '../utils/inventory'
 import { ingredientLabel, getIngredientUnit, lookupByLabel } from '../utils/ingredients'
 import { findCoffeeIngredient, findIngredientByLabel } from '../utils/onboardingHint'
 import { readOnboardingState, DEFAULT_ONBOARDING_STATE, isCashFlowProgressDone, isInventoryProgressDone } from '../utils/onboardingStorage'
@@ -681,19 +681,17 @@ export default function DailyReportPage() {
         [nextDowItemsWeeks, toUsedMap],
     ) // ngày mai
 
-    const r1Inv = (n) => Math.round((Number(n) || 0) * 10) / 10
-    const byLabelInv = (ingredient, map) => lookupByLabel(ingredient, map, 0)
     // Dự báo = max(tiêu thụ hôm nay tới giờ, cùng thứ tuần trước). Truyền map tuần-trước theo
     // card: Soạn dùng lastWeekUsedMap (today−7, cùng thứ hôm nay); Chuẩn bị dùng nextDowUsedMap
     // (today−6, cùng thứ ngày mai).
     const forecastFor = (ingredient, lastWeekMap) =>
-        Math.max(r1Inv(byLabelInv(ingredient, usedMap)), r1Inv(byLabelInv(ingredient, lastWeekMap)))
+        Math.max(r1(lookupByLabel(ingredient, usedMap)), r1(lookupByLabel(ingredient, lastWeekMap)))
 
     // Item chung cho 2 card checklist: { ingredient, have, need, needPacks, unit, packUnit }.
     //   have = tồn hiện có ("Còn"); need = target − have ("Cần"); needPacks = quy đổi ra bịch.
     //   target = mức cần đạt: card Soạn = forecast; card Kho = max(forecast, min_stock).
     const toPrepItem = (ing, have, target) => {
-        const need = r1Inv(target - have)
+        const need = r1(target - have)
         if (need <= 0) return null
         const packSize = Number(ing.pack_size) || 0
         const needPacks = packSize > 0 ? Math.ceil(need / packSize) : 0
@@ -706,7 +704,7 @@ export default function DailyReportPage() {
             packUnit: ing.pack_unit,
             // Lượng đổ vào Nhập thêm khi tick "đã soạn" = số quy đổi nguyên bịch
             // (số bịch × quy cách). Không có quy cách bịch thì dùng đúng "Cần".
-            fillQty: needPacks > 0 ? r1Inv(needPacks * packSize) : need,
+            fillQty: needPacks > 0 ? r1(needPacks * packSize) : need,
         }
     }
 
@@ -717,17 +715,17 @@ export default function DailyReportPage() {
         const out = []
         for (const ing of inventory.ingredientsList || []) {
             const oRaw = inventory.openingInputs[ing.ingredient]
-            const openingGross = r1Inv(oRaw !== undefined && oRaw !== '' ? oRaw : (inventory.openingStock[ing.ingredient] ?? 0))
+            const openingGross = r1(oRaw !== undefined && oRaw !== '' ? oRaw : (inventory.openingStock[ing.ingredient] ?? 0))
             // Đầu kỳ = số cân hộp (gồm bì) → matcha THẬT để bán = trừ bì, kẹp 0. Bì tự khử
             // trong Hao hụt (đầu+cuối cùng gross) nên chỉ trừ ở đây — chỗ cần lượng thật.
-            const tare = r1Inv(ing.tare_weight)
-            const opening = Math.max(0, r1Inv(openingGross - tare))
+            const tare = r1(ing.tare_weight)
+            const opening = Math.max(0, r1(openingGross - tare))
             const item = toPrepItem(ing, opening, forecastFor(ing.ingredient, lastWeekUsedMap))
             if (item) {
                 // Kho tổng hiện có (warehouse_stock thực tế, KHÔNG phải số đầu ca) để rút ra
                 // quầy. Lookup theo key trực tiếp; null nếu NVL không theo dõi kho.
                 const wh = (inventory.warehouseStocks || {})[ing.ingredient]
-                item.warehouse = wh != null ? r1Inv(wh) : null
+                item.warehouse = wh != null ? r1(wh) : null
                 item.tare = tare // >0 → card hiện "bì X + <thật>"
                 out.push(item)
             }
@@ -791,38 +789,38 @@ export default function DailyReportPage() {
             if (!ing || !qty) continue
             m[ing] = (m[ing] || 0) + qty
         }
-        Object.keys(m).forEach(k => { m[k] = r1Inv(m[k]) })
+        Object.keys(m).forEach(k => { m[k] = r1(m[k]) })
         return m
     }, [todayExpenses])
 
     const warehousePrepList = useMemo(() => {
         const out = []
         for (const ing of inventory.ingredientsList || []) {
-            const warehouse = Math.max(0, r1Inv(byLabelInv(ing.ingredient, inventory.effectiveWarehouseStocks || {})))
-            const restock = r1Inv(inventory.restockInputs[ing.ingredient])
+            const warehouse = Math.max(0, r1(lookupByLabel(ing.ingredient, inventory.effectiveWarehouseStocks || {})))
+            const restock = r1(inventory.restockInputs[ing.ingredient])
             const counted = inventory.inventoryInputs[ing.ingredient]
             let counter
             if (counted !== undefined && counted !== '') {
-                counter = r1Inv(counted)
+                counter = r1(counted)
             } else {
                 const oRaw = inventory.openingInputs[ing.ingredient]
-                const opening = r1Inv(oRaw !== undefined && oRaw !== '' ? oRaw : (inventory.openingStock[ing.ingredient] ?? 0))
-                const used = r1Inv(byLabelInv(ing.ingredient, usedMap))
-                counter = Math.max(0, r1Inv(opening + restock - used))
+                const opening = r1(oRaw !== undefined && oRaw !== '' ? oRaw : (inventory.openingStock[ing.ingredient] ?? 0))
+                const used = r1(lookupByLabel(ing.ingredient, usedMap))
+                counter = Math.max(0, r1(opening + restock - used))
             }
             // counter là số cân hộp (gồm bì) → lượng THẬT tại quầy = trừ bì, kẹp 0.
             // Kho tổng (bịch, không hộp) không có bì. Tổng tồn thật = kho + quầy thật.
-            const tare = r1Inv(ing.tare_weight)
-            const counterReal = Math.max(0, r1Inv(counter - tare))
-            const total = Math.max(0, r1Inv(warehouse - restock + counterReal))
-            const target = Math.max(forecastFor(ing.ingredient, nextDowUsedMap), r1Inv(ing.min_stock || 0))
+            const tare = r1(ing.tare_weight)
+            const counterReal = Math.max(0, r1(counter - tare))
+            const total = Math.max(0, r1(warehouse - restock + counterReal))
+            const target = Math.max(forecastFor(ing.ingredient, nextDowUsedMap), r1(ing.min_stock || 0))
             const item = toPrepItem(ing, total, target)
             if (item) {
                 // Tách tồn để dễ kiểm kê: kho riêng (đã trừ phần rút ra quầy) + tồn quầy thật.
                 // need vẫn tính từ TỔNG tồn ở toPrepItem; have đổi thành tồn quầy để hiển thị.
-                item.warehouse = Math.max(0, r1Inv(warehouse - restock))
+                item.warehouse = Math.max(0, r1(warehouse - restock))
                 item.have = counterReal
-                item.boughtToday = byLabelInv(ing.ingredient, todayBoughtMap)
+                item.boughtToday = lookupByLabel(ing.ingredient, todayBoughtMap)
                 out.push(item)
             }
         }
@@ -923,12 +921,12 @@ export default function DailyReportPage() {
             })
         for (const ing of Object.keys(map)) {
             const ref = map[ing]
-            const p = products.find(pp => pp.id === ref.productId)
+            const p = productMap.get(ref.productId)
             if (!p?.name || ref.amountPerCup === 1) { delete map[ing]; continue }
             ref.productName = p.name.toLowerCase()
         }
         return map
-    }, [recipes, products, todayOrderItems])
+    }, [recipes, productMap, todayOrderItems])
 
     // PROTOTYPE — hao hụt hôm nay theo từng nguyên liệu (cùng công thức computeHaoHut
     // dùng trong InventoryReportCard), làm input cho findMissingCupCandidates bên dưới.
@@ -965,10 +963,18 @@ export default function DailyReportPage() {
     // (src/utils/inventory.js) để biết thuật toán cross-check nhiều nguyên liệu/công thức.
     // attachRepeatHistory gắn thêm "lặp lại mấy ngày gần đây" — tín hiệu quan trọng nhất
     // để phân biệt trùng hợp ngẫu nhiên 1 ngày với dấu hiệu lặp lại thật.
+    //
+    // 2 memo tách rời có chủ đích: phần quét 14 ngày lịch sử KHÔNG phụ thuộc ô đang gõ,
+    // nên nó đứng yên suốt lúc nhân viên kiểm kê. Gộp 1 memo thì mỗi phím gõ quét lại
+    // cả 14 ngày (haoHutByIngredient đổi theo từng keystroke) — lag thấy rõ trên máy yếu.
+    const dayCandidateSets = useMemo(
+        () => buildDayCandidateSets({ ingredientsList: inventory.ingredientsList, historicalDailyHaoHut, recipes, products, noiseByIngredient: ingredientNoise }),
+        [inventory.ingredientsList, historicalDailyHaoHut, recipes, products, ingredientNoise],
+    )
     const missingCupCandidates = useMemo(() => {
         const today = findMissingCupCandidates({ ingredientsList: inventory.ingredientsList, haoHutByIngredient, recipes, products, noiseByIngredient: ingredientNoise })
-        return attachRepeatHistory(today, { ingredientsList: inventory.ingredientsList, historicalDailyHaoHut, recipes, products, noiseByIngredient: ingredientNoise })
-    }, [inventory.ingredientsList, haoHutByIngredient, historicalDailyHaoHut, recipes, products, ingredientNoise])
+        return attachRepeatHistory(today, dayCandidateSets)
+    }, [inventory.ingredientsList, haoHutByIngredient, recipes, products, ingredientNoise, dayCandidateSets])
 
     // Stable ingredient→unit map so InventoryReportCard's memoized rows don't all
     // re-render on every keystroke (was rebuilt inline each render).
@@ -1337,12 +1343,10 @@ export default function DailyReportPage() {
                                             usedMap={usedMap}
                                             consumptionBreakdown={consumptionBreakdown}
                                             ingredientToProduct={ingredientToProduct}
-                                            canUnlock={!isStaff}
                                             isSubmitting={isSavingShift}
                                             baselineInputs={inventory.baselineSnapshot}
                                             baselineVersion={inventory.baselineVersion}
                                             onOpeningChange={inventory.onOpeningChange}
-                                            onOpeningLock={inventory.onOpeningLock}
                                             onRestockChange={inventory.onRestockChange}
                                             onInventoryChange={inventory.onInventoryChange}
                                             open={!!openCards.audit}
@@ -1353,7 +1357,7 @@ export default function DailyReportPage() {
                                         {!isStaff && <MissingCupSuspicionCard candidates={missingCupCandidates} />}
 
                                         <ShiftPrepCard
-                                            title="Soạn cho ngày mai"
+                                            title="Bổ sung tồn kho"
                                             icon={<Package size={15} className="text-primary shrink-0" />}
                                             packVerb="Mua"
                                             haveLabel="Tồn quầy cuối ca"

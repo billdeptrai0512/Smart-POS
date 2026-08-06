@@ -163,7 +163,6 @@ export default function PastInventoryEditor({
                 usedMap={usedMap}
                 consumptionBreakdown={consumptionBreakdown}
                 ingredientToProduct={ingredientToProduct}
-                canUnlock={false}
                 isSubmitting={isSaving}
                 lockWarehouseInputs={true}
                 baselineInputs={baselineInputs}
@@ -171,7 +170,6 @@ export default function PastInventoryEditor({
                 open={open}
                 onToggleOpen={() => setOpen(o => !o)}
                 onOpeningChange={NOOP}
-                onOpeningLock={NOOP}
                 onRestockChange={NOOP}
                 onInventoryChange={handleInventoryChange}
             />
