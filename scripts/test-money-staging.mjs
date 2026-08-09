@@ -165,6 +165,32 @@ async function main() {
     check('total = 15000 (=25000-10000)', row?.total === 15000, `got ${row?.total}`)
   }
 
+  // ── Case 5b: chiết khấu quá tay / âm → kẹp, total không bao giờ âm hay bị thổi lên ──
+  // Client đã kẹp, nhưng client là thứ sửa được. Xem 20260809_order_discount_clamp.
+  console.log('\nCase 5b — discount_amount vượt tiền hàng / âm đều bị kẹp')
+  await seed()
+  {
+    const orderIdOver = '00000000-0000-4000-8000-0000000000b1'
+    const { error: e1 } = await bulkCreate({
+      id: orderIdOver, address_id: ADDRESS_ID, staff_name: 't', discount_amount: 999000,
+      items: [{ product_id: PRODUCT_ID, quantity: 1, extra_ids: [] }],
+    })
+    if (e1) throw e1
+    const over = await orderRow(orderIdOver)
+    check('giảm 999000 trên đơn 25000 → total = 0 (không âm)', over?.total === 0, `got ${over?.total}`)
+    check('discount_amount ghi lại đúng phần thực giảm = 25000', over?.discount_amount === 25000, `got ${over?.discount_amount}`)
+
+    const orderIdNeg = '00000000-0000-4000-8000-0000000000b2'
+    const { error: e2 } = await bulkCreate({
+      id: orderIdNeg, address_id: ADDRESS_ID, staff_name: 't', discount_amount: -50000,
+      items: [{ product_id: PRODUCT_ID, quantity: 1, extra_ids: [] }],
+    })
+    if (e2) throw e2
+    const neg = await orderRow(orderIdNeg)
+    check('giảm ÂM không cộng thêm tiền: total = 25000', neg?.total === 25000, `got ${neg?.total}`)
+    check('discount_amount về 0', neg?.discount_amount === 0, `got ${neg?.discount_amount}`)
+  }
+
   // ── Case 6: retry cùng id (mất response sau khi server đã commit) → không nhân đôi ──
   console.log('\nCase 6 — gọi RPC 2 lần cùng id → chỉ 1 đơn hàng tồn tại (ON CONFLICT DO NOTHING)')
   await seed()
