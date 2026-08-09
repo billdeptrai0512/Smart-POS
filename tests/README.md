@@ -33,6 +33,7 @@ Mỗi file có **header** ghi: test cái gì + file nguồn. Từng case đọc 
 | **menu** | menuGridLayout | bố cục lưới menu | `utils/menuGridLayout.js` |
 | | menuSequence | thứ tự MENU_SEQUENCE | `utils/menuSequence.js` |
 | **pos** | orderService | flush đơn offline (guest) | `services/orderService.js` |
+| | tableLines | gộp đợt gọi món của bàn thành hoá đơn (dine_in) | `services/orderService.ts` |
 | **common** | money | discount, parse/format VND, COGS | `utils/money.js`, `utils/inventory.js` |
 | | datePickerUtils | parse ngày, tiện ích date-picker | `components/common/datePickerUtils.js` |
 | | text | capitalizeWords | `utils/text.js` |
