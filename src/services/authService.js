@@ -340,7 +340,30 @@ export async function createAddress(managerId, name) {
         .select()
         .single()
     if (error) rethrowAddressError(error, name)
+    await restoreMenuDividers(data.id)
     return data
+}
+
+// Seed menu mặc định (clone_default_menu — hàm tạo tay trên dashboard, không có source
+// trong repo) copy tên/giá nhưng BỎ cờ is_divider, nên 4 dòng mục của menu mẫu (Trà,
+// Cà phê, Cacao, Matcha) rơi xuống địa chỉ mới thành món 0đ bấm được. Trả cờ lại ngay
+// sau khi INSERT trả về, tức chắc chắn sau khi seed chạy xong.
+// Chỉ đụng dòng trùng tên một divider của menu mẫu VÀ giá 0đ — hẹp nhất có thể, vì
+// không phân biệt được divider hỏng với một món 0đ trùng tên y hệt.
+// Đường clone theo mã chia sẻ không cần đoạn này: applySnapshot xoá sạch menu seed rồi
+// insert lại kèm is_divider (xem backupService).
+// CỐ Ý không vá dữ liệu cũ — địa chỉ đã tạo sai thì sửa tay, chỉ chặn từ đây về sau.
+// Best-effort: hỏng ở đây không được làm hỏng việc tạo địa chỉ.
+async function restoreMenuDividers(addressId) {
+    try {
+        const { data: tpl } = await supabase
+            .from('products').select('name').is('owner_address_id', null).eq('is_divider', true)
+        const names = (tpl || []).map(t => t.name)
+        if (names.length === 0) return
+        await supabase
+            .from('products').update({ is_divider: true })
+            .eq('owner_address_id', addressId).eq('is_divider', false).eq('price', 0).in('name', names)
+    } catch { /* menu vẫn dùng được, chỉ là mục hiện như món */ }
 }
 
 // Update an address for a manager
@@ -353,6 +376,34 @@ export async function updateAddress(addressId, name) {
         .select()
         .single()
     if (error) rethrowAddressError(error, name)
+    return data
+}
+
+// Bật/tắt chế độ bàn ngồi lại (giỏ hàng + thanh toán gộp ở POS) cho 1 địa chỉ.
+// Tách khỏi updateAddress vì hàm đó map lỗi unique-name theo `name`.
+export async function setAddressDineIn(addressId, dineIn) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { data, error } = await supabase
+        .from('addresses')
+        .update({ dine_in: dineIn })
+        .eq('id', addressId)
+        .select()
+        .single()
+    if (error) throw error
+    return data
+}
+
+// Danh sách bàn cố định của địa chỉ (mảng tên, giữ nguyên thứ tự). Tách khỏi
+// updateAddress cùng lý do như setAddressDineIn ở trên.
+export async function setAddressTables(addressId, tables) {
+    if (!supabase) throw new Error('No Supabase connection')
+    const { data, error } = await supabase
+        .from('addresses')
+        .update({ tables })
+        .eq('id', addressId)
+        .select()
+        .single()
+    if (error) throw error
     return data
 }
 

@@ -13,6 +13,8 @@ export const STORAGE_KEYS = {
 
     // POS session state
     CART: 'pos_cart',
+    TABLE: 'pos_table', // bàn đang chọn (địa chỉ dine_in) — sống qua reload như CART
+    CART_ADDRESS: 'pos_cart_address', // chi nhánh mà CART/TABLE đang thuộc về, xem POSContext
     REVENUE: 'pos_revenue',
     TOTAL_COST: 'pos_total_cost',
     CUPS: 'pos_cups',
@@ -20,6 +22,7 @@ export const STORAGE_KEYS = {
 
     // Offline sync
     PENDING_ORDERS: 'coffee_pending_orders',
+    PENDING_TABLE_CLOSES: 'coffee_pending_table_closes', // lệnh tính tiền bàn lúc mất mạng
 
     // PWA
     PWA_PROMPT_DISMISSED: 'pwa_prompt_dismissed',

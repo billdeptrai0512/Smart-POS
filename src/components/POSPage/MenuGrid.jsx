@@ -17,7 +17,7 @@ import { onboardingHintClass, norm } from '../../utils/onboardingHint'
 // memo: onAdd/onCancel are now stable across taps (see POSContext's useCallback
 // wiring) and product/qty are cheap-to-compare — lets untouched cards skip
 // re-rendering when MenuGrid re-renders on every single tap.
-const ProductCard = memo(function ProductCard({ product, qty, onAdd, onCancel, hint }) {
+const ProductCard = memo(function ProductCard({ product, qty, onAdd, onCancel, hint, showQty }) {
     const held = qty > 0
     const hintClass = onboardingHintClass(hint)
     const [pulseKey, setPulseKey] = useState(0)        // bump per tap-add → replays the confirm pulse
@@ -37,7 +37,9 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onCancel, h
         onAdd(product)
     }
     const stop = (e) => e.stopPropagation()
-    const cancel = (e) => { e.stopPropagation(); onCancel() }
+    // product đi kèm để chế độ dineIn biết X này thuộc món nào — ở đó MỌI món trong
+    // giỏ đều hiện X, không chỉ món đang giữ. Đường 1-chạm bỏ qua tham số này.
+    const cancel = (e) => { e.stopPropagation(); onCancel(product) }
 
     return (
         <div
@@ -67,6 +69,19 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onCancel, h
                 chained 1-tap flow otherwise lacks (card stays held, no toast). Keyed so it
                 replays every tap. */}
             {pulseKey > 0 && <span key={pulseKey} className="tap-pulse absolute inset-0 rounded-[1.5rem] ring-2 ring-primary pointer-events-none z-30" />}
+
+            {/* Badge số ly, góc dưới-phải — cùng cách neo với nút X ở góc trên-phải
+                (offset -4 + p-2.5) nên hai huy hiệu thò ra khỏi card đúng bằng nhau.
+                Chỉ ở dineIn: đường 1-chạm giỏ luôn ≤1 ly nên badge "1" là nhiễu
+                (đã gỡ ở 49b0f02), viền + nút X đã nói đủ. */}
+            {showQty && qty > 0 && (
+                <span className="absolute -bottom-4 -right-4 z-20 p-2.5
+                  " aria-hidden="true">
+                    <span className="badge-pop w-8 h-8 rounded-full flex items-center justify-center bg-text text-bg text-[14px] font-black shadow-lg border-2 border-primary/10">
+                        {qty}
+                    </span>
+                </span>
+            )}
 
             {/* Corner badge when active: X = cancel. */}
             {held && (
@@ -159,7 +174,7 @@ function ExtrasPopover({ activeProductId, extras, activeItem, enabledStickyExtra
     )
 }
 
-export default function MenuGrid({ products, cart, activeItem, onAddItem, onCancelHeld, productExtras, onToggleExtra, enabledStickyExtraIds = [], onToggleStickyExtra, hintProductId, hintExtraName = null }) {
+export default function MenuGrid({ products, cart, activeItem, onAddItem, onCancelHeld, productExtras, onToggleExtra, enabledStickyExtraIds = [], onToggleStickyExtra, hintProductId, hintExtraName = null, dineIn = false }) {
     const navigate = useNavigate()
     const { isManager, isAdmin } = useAuth()
     const { loading, loadError } = useProducts()
@@ -242,6 +257,7 @@ export default function MenuGrid({ products, cart, activeItem, onAddItem, onCanc
                 onAdd={onAddItem}
                 onCancel={onCancelHeld}
                 hint={product.id === hintProductId}
+                showQty={dineIn}
             />
         ))
         if (idx === extrasAfterIdx) {

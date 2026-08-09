@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS addresses (
   manager_id UUID REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   ingredient_sort_order JSONB DEFAULT '[]',
+  dine_in BOOLEAN NOT NULL DEFAULT false, -- bật giỏ hàng + thanh toán gộp ở POS (quán có bàn ngồi)
+  tables TEXT[] NOT NULL DEFAULT '{}', -- danh sách bàn cố định, giữ thứ tự nhập; xem 20260808_address_tables
   referred_from_address_id UUID REFERENCES addresses(id) ON DELETE SET NULL, -- địa chỉ nguồn đã share-clone (hook referral)
   referral_rewarded_at TIMESTAMPTZ, -- đã thưởng người mời cho địa chỉ này chưa (dedup, §11)
   created_at TIMESTAMPTZ DEFAULT now()
@@ -100,6 +102,8 @@ CREATE TABLE IF NOT EXISTS orders (
   discount_amount INTEGER NOT NULL DEFAULT 0, -- per-order discount applied at POS
   payment_method TEXT,
   staff_name TEXT,
+  table_name TEXT, -- nhãn bàn, chỉ dùng ở địa chỉ dine_in; NULL = đơn mang đi
+  table_closed_at TIMESTAMPTZ, -- NULL = bàn còn mở (chưa tính tiền); xem 20260809
   created_at TIMESTAMPTZ DEFAULT now()
 );
 

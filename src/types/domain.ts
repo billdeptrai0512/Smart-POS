@@ -60,6 +60,8 @@ export interface OrderPayload {
     payment_method: string | null
     address_id: UUID | null
     staff_name: string | null
+    /** Nhãn bàn ở địa chỉ dine_in. NULL/'' = đơn mang đi (RPC tự chuẩn hoá về NULL). */
+    table_name?: string | null
     created_at?: string
     items: OrderItemPayload[]
 }

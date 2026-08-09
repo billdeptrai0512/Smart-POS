@@ -3,7 +3,7 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAddressStats } from '../contexts/AddressStatsContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { fetchDefaultIngredientSort, setTeamMemberRole, removeTeamMember, setTeamMemberName, setMyPhone } from '../services/authService'
+import { fetchDefaultIngredientSort, setTeamMemberRole, removeTeamMember, setTeamMemberName } from '../services/authService'
 import { useMonetizationEnabled } from '../hooks/useEntitlement'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { cloneFromShareCode, getSharedConfig } from '../services/backupService'
@@ -37,11 +37,11 @@ const prefetchedIds = new Set()
 
 export default function AddressSelectPage() {
     const {
-        addresses, setSelectedAddress, createNewAddress, renameAddress, removeAddress, loading, fetchError,
+        addresses, setSelectedAddress, createNewAddress, renameAddress, setDineIn, removeAddress, loading, fetchError,
         warehouseGroups, createWarehouseGroup, renameWarehouseGroup, removeWarehouseGroup, setAddressGroup,
     } = useAddress()
     const { cupsMap, revenueMap, prevCupsMap, sessionsMap, subscriptionStatusMap, subscriptionRowsMap, subscriptionLoading, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
-    const { signOut, profile, refreshProfile, isStaff, isManager, isAdmin, isGuest } = useAuth()
+    const { signOut, profile, isStaff, isManager, isAdmin, isGuest } = useAuth()
     const { enabled: monetizationEnabled } = useMonetizationEnabled()
     const navigate = useNavigate()
 
@@ -49,7 +49,6 @@ export default function AddressSelectPage() {
     const [showCreateStaffModal, setShowCreateStaffModal] = useState(false)
     const [error, setError] = useState('')
     const [newAddressName, setNewAddressName] = useState('')
-    const [newPhone, setNewPhone] = useState('')
     const [newShareCode, setNewShareCode] = useState('')
     const [clonePreview, setClonePreview] = useState(null) // { status: 'loading'|'valid'|'invalid', counts? }
     const [creating, setCreating] = useState(false)
@@ -211,10 +210,6 @@ export default function AddressSelectPage() {
     }
 
 
-    // Mồi nhập SĐT ngay trong modal tạo chi nhánh: trigger trial chỉ cấp khi
-    // owner ĐÃ có phone, nên phải lưu phone TRƯỚC khi insert address.
-    const needPhone = monetizationEnabled && !isGuest && !profile?.phone
-
     async function handleCreate() {
         if (!newAddressName.trim()) return
         if (createGuardRef.current) return
@@ -224,16 +219,11 @@ export default function AddressSelectPage() {
         const code = newShareCode.trim()
         let createdId = null
         try {
-            if (needPhone && newPhone.trim()) {
-                await setMyPhone(newPhone.trim())
-                refreshProfile()
-            }
             const addr = await createNewAddress(newAddressName.trim().toUpperCase())
             createdId = addr.id
             // Nếu có mã hệ thống → chép toàn bộ cấu hình từ địa chỉ nguồn (xuyên tài khoản).
             if (code) await cloneFromShareCode(code, addr.id)
             setNewAddressName('')
-            setNewPhone('')
             setNewShareCode('')
             setShowCreateModal(false)
             handleSelect(addr)
@@ -334,6 +324,7 @@ export default function AddressSelectPage() {
                         onSelectIngredients={handleSelectIngredients}
                         onSelectRecipes={handleSelectRecipes}
                         onRename={renameAddress}
+                        onToggleDineIn={setDineIn}
                         onRemove={removeAddress}
                         warehouseGroups={warehouseGroups}
                         onCreateWarehouseGroup={createWarehouseGroup}
@@ -430,25 +421,10 @@ export default function AddressSelectPage() {
                                 onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
                                 className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
                             />
-                            {needPhone && (
-                                <div className="flex flex-col gap-1.5">
-                                    <input
-                                        type="tel"
-                                        placeholder="Số điện thoại (vd: 0901234567)"
-                                        value={newPhone}
-                                        onChange={e => setNewPhone(e.target.value)}
-                                        onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
-                                        className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
-                                    />
-                                    <p className="text-text-secondary text-[11px] px-1">
-                                        SĐT liên hệ, không bắt buộc — chỉ dùng khi cần hỗ trợ hoặc đối soát thanh toán.
-                                    </p>
-                                </div>
-                            )}
                             <div className="flex flex-col gap-1.5">
                                 <input
                                     type="text"
-                                    placeholder="Mã hệ thống (nếu có)"
+                                    placeholder="Mã giới thiệu (nếu có)"
                                     value={newShareCode}
                                     onChange={e => setNewShareCode(e.target.value)}
                                     onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
@@ -469,7 +445,7 @@ export default function AddressSelectPage() {
                                 )}
                                 {!clonePreview && (
                                     <p className="text-text-secondary text-[11px] px-1">
-                                        Có mã từ chủ hệ thống? Dán vào đây để <span className="font-bold text-text">chép sẵn menu + công thức + định lượng</span>.
+                                        Dán mã giới thiệu để <span className="font-bold text-text">chép sẵn menu + công thức + định lượng</span>.
                                     </p>
                                 )}
                             </div>

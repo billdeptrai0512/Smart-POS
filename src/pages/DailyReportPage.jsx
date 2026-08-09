@@ -5,7 +5,7 @@ import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { formatVNDInput, parseVNDInput } from '../utils'
 import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses, dedupeShiftClosingsByDay } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
-import { fetchDailyReportContext, fetchLastWeekSameDayOrderItems, fetchReportByRange, processIngredientRestock } from '../services/orderService'
+import { fetchDailyReportContext, fetchLastWeekSameDayOrderItems, fetchReportByRange, processIngredientRestock, fetchOpenTables } from '../services/orderService'
 import { fetchCashClosedToday } from '../services/reportService'
 import { useShiftClosingSave } from '../hooks/useShiftClosingSave'
 import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
@@ -1092,6 +1092,21 @@ export default function DailyReportPage() {
 
     const handleSaveCashflow = async () => {
         if (!selectedAddress || savingCashflow) return
+        // Địa chỉ có bàn ngồi: mỗi đợt gọi món ghi 1 đơn ngay, nên bàn chưa tính tiền =
+        // tiền đã nằm trong doanh thu hệ thống mà chưa nằm trong két. Cảnh báo ở lần chốt
+        // đầu (sửa lại số sau đó thì thôi) — không chặn, vì có bàn ngồi thật qua giờ chốt.
+        if (selectedAddress.dine_in && !shiftClosing?.cash_closed_at) {
+            // Cảnh báo là phụ — hỏng ở đây (mạng, cột chưa có) không được chặn chốt ca.
+            const openNow = await fetchOpenTables(selectedAddress.id).catch(() => [])
+            if (openNow.length > 0) {
+                const ok = await confirm({
+                    title: `Còn ${openNow.length} bàn chưa tính tiền`,
+                    detail: `${openNow.map(t => t.name).join(', ')} — ${formatVNDInput(openNow.reduce((s, t) => s + t.total, 0))}đ đã tính vào doanh thu nhưng chưa thu của khách.`,
+                    confirmLabel: 'Vẫn chốt',
+                })
+                if (!ok) return
+            }
+        }
         setSavingCashflow(true)
         const payload = {
             address_id: selectedAddress.id,

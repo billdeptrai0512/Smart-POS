@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
     Pencil, Trash2, ClipboardCopy, MoreHorizontal, X,
     Coffee, Loader, FileText, Package, ChevronRight, Eraser,
-    Banknote, Receipt, Wallet, Boxes, TrendingUp, ChefHat, Box, Warehouse,
+    Banknote, Receipt, Wallet, Boxes, TrendingUp, ChefHat, Box, Warehouse, Armchair,
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
@@ -19,7 +19,7 @@ export default function BranchGrid({
     addresses, fetchError, cupsMap, revenueMap, prevCupsMap = {}, sessionsMap, subscriptionRowsMap = {}, subscriptionStatusMap = {}, subscriptionLoading, statsLoading,
     isStaff, isAdmin, error, setError,
     onSelect, onSelectReport, onSelectHistory, onSelectIngredients, onSelectRecipes,
-    onRename, onRemove, onDefaultTemplate, onSupportClick,
+    onRename, onRemove, onDefaultTemplate, onSupportClick, onToggleDineIn,
     warehouseGroups = [], onCreateWarehouseGroup, onRenameWarehouseGroup, onRemoveWarehouseGroup, onSetAddressGroup,
 }) {
     const [editingAddressId, setEditingAddressId] = useState(null)
@@ -391,6 +391,19 @@ export default function BranchGrid({
                                                             setEditingAddressId(addr.id)
                                                             setEditName(addr.name)
                                                             setError('')
+                                                        }}
+                                                    />
+                                                    {/* POS của địa chỉ này gộp nhiều ly thành 1 đơn + có nút Thanh toán
+                                                        thay vì 1-chạm-1-đơn. Bật/tắt ngay, không cần modal xác nhận:
+                                                        đảo lại chỉ là một cú chạm nữa và không đụng dữ liệu đã ghi. */}
+                                                    <ActionPill
+                                                        icon={<Armchair size={16} />}
+                                                        label={addr.dine_in ? 'Bàn ngồi: Bật' : 'Bàn ngồi: Tắt'}
+                                                        tone={addr.dine_in ? 'success' : 'primary'}
+                                                        onClick={async () => {
+                                                            setError('')
+                                                            try { await onToggleDineIn?.(addr.id, !addr.dine_in) }
+                                                            catch (err) { setError(err.message || 'Không thể đổi chế độ bán') }
                                                         }}
                                                     />
                                                     {isAdmin && (

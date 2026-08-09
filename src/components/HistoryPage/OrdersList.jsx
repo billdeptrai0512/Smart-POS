@@ -141,7 +141,7 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
 
                 <div className="border-t border-border/40 pt-2 flex justify-between items-center gap-3 leading-none">
                     <span className="text-text-secondary/70 text-[12px] font-bold truncate min-w-0 leading-none">
-                        {time}{order.staffName ? ` · ${order.staffName}` : ''}
+                        {time}{order.tableName ? ` · ${order.tableName}` : ''}{order.staffName ? ` · ${order.staffName}` : ''}
                     </span>
                     {!order.deletedAt && (
                         !order.isOffline ? (

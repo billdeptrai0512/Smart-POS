@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { fetchTodayStats, submitOrder, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext } from '../services/orderService'
+import { fetchTodayStats, submitOrder, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext, fetchOpenTables, closeTable, reopenTable, mergeTableLines } from '../services/orderService'
 import { upsertSession, countActiveSessions } from '../services/authService'
-import { useOfflineSync, addPendingOrder } from '../hooks/useOfflineSync'
+import { useOfflineSync, addPendingOrder, addPendingTableClose, removePendingTableClose } from '../hooks/useOfflineSync'
 import { dateStringVN } from '../utils/dateVN'
 import { calculateProductCost, computeDiscount } from '../utils'
 import { useProducts } from './ProductContext'
@@ -14,6 +14,10 @@ import { STORAGE_KEYS } from '../constants/storageKeys'
 import { CartContext } from './CartContext'
 import { StatsContext } from './StatsContext'
 import { HistoryContext } from './HistoryContext'
+
+// Mất mạng vs lỗi thật: chỉ lỗi mạng mới được xếp hàng chờ, lỗi thật phải nổi lên cho
+// người dùng thấy. Supabase-js ném TypeError của fetch nên phải soi message.
+const isNetworkError = (err) => !navigator.onLine || /fetch|network|NetworkError/i.test(err?.message || '')
 
 function mergeFetchedOrders(prev, fetchedOrders) {
     // The optimistic row's id IS the real orders.id (client-generated in
@@ -41,6 +45,11 @@ export function POSProvider() {
     // without becoming unstable every render.
     const activeCartItemIdRef = useRef(null)
     const enabledStickyExtraIdsRef = useRef([])
+    // Chế độ bàn ngồi lại (addresses.dine_in): chạm món = THÊM vào giỏ thay vì chốt
+    // đơn trước đó. Ref vì handleAddItem useCallback deps gần-rỗng (xem comment trên).
+    const dineIn = !!selectedAddress?.dine_in
+    const dineInRef = useRef(dineIn)
+    dineInRef.current = dineIn
 
     // ---- Persisted State ----
     const loadLocalJSON = (key, fallback) => {
@@ -48,7 +57,18 @@ export function POSProvider() {
         catch { return fallback }
     }
 
-    const [cart, setCart] = useState(() => loadLocalJSON(STORAGE_KEYS.CART, []))
+    // Giỏ và nhãn bàn thuộc về ĐÚNG MỘT chi nhánh, nhưng localStorage không ghi điều đó.
+    // Đổi chi nhánh qua màn /addresses làm POSProvider unmount rồi mount lại hẳn, nên
+    // effect "đổi địa chỉ = bỏ giỏ" bên dưới KHÔNG chạy (bản mới sinh ra đã thấy địa chỉ
+    // mới ngay từ đầu) — giỏ/bàn của quán cũ sống sang quán mới và cú gửi tiếp theo ghi
+    // nguyên đợt đó vào SAI address_id. Đường 1-chạm không lộ ra vì unmount flush đã chốt
+    // hết trước khi rời màn; ở dineIn flush cố ý no-op nên nó lộ. Đóng dấu chi nhánh vào
+    // localStorage và chỉ nạp lại khi trùng.
+    // Hàm, không phải const: chỉ hai initializer bên dưới cần nó và chúng chỉ chạy lúc
+    // mount — để thành const là đọc localStorage lại sau mỗi cú chạm món.
+    const persistedForThisAddress = () => !addressId || localStorage.getItem(STORAGE_KEYS.CART_ADDRESS) === addressId
+
+    const [cart, setCart] = useState(() => persistedForThisAddress() ? loadLocalJSON(STORAGE_KEYS.CART, []) : [])
     // Initialized to cart (not []) so a held item restored from localStorage on
     // mount is visible to handleAddItem/commitHeld immediately — otherwise there's
     // a window before the [cart] sync effect below runs where a fast tap reads a
@@ -57,6 +77,14 @@ export function POSProvider() {
     const [activeCartItemId, setActiveCartItemId] = useState(null)
     // Per-order discount, ephemeral (resets after each confirm). type: 'percent' | 'amount'
     const [discount, setDiscount] = useState({ type: 'percent', value: 0 })
+    // Bàn của đợt ĐANG dựng (chỉ dùng khi dineIn). '' = chưa chọn / đơn mang đi.
+    // Persist như giỏ để đi qua /history hay reload rồi quay lại vẫn còn; gửi
+    // xong thì handleConfirm trả về '' (xem ở đó).
+    const [tableName, setTableName] = useState(() => persistedForThisAddress() ? (localStorage.getItem(STORAGE_KEYS.TABLE) || '') : '')
+    useEffect(() => { localStorage.setItem(STORAGE_KEYS.TABLE, tableName) }, [tableName])
+    // Các bàn còn khách, gộp từ DB (fetchOpenTables). Nguồn cho lưới chọn bàn và cho
+    // số tổng cộng của bàn ở CheckoutBar.
+    const [openTables, setOpenTables] = useState([])
     const [enabledStickyExtraIds, setEnabledStickyExtraIds] = useState([])
     const [revenue, setRevenue] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.REVENUE)) || 0)
     const [totalCost, setTotalCost] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.TOTAL_COST)) || 0)
@@ -83,6 +111,97 @@ export function POSProvider() {
     // commit so the realtime DB echo (which refetches with a different server
     // timestamp → different key → remount) can't replay the animation.
     const [enterKey, setEnterKey] = useState(null)
+
+    // Giỏ là state toàn cục, không gắn với địa chỉ nào. Đường 1-chạm không lộ ra vì
+    // unmount flush đã chốt món đang giữ TRƯỚC khi địa chỉ đổi. Ở dineIn thì flush
+    // no-op → cả bàn đang mở sống sót sang chi nhánh mới, và nếu chi nhánh đó tắt
+    // dineIn thì cú chạm đầu tiên ghi nguyên bàn đó sang SAI địa chỉ.
+    // Đổi chi nhánh = bỏ giỏ. Bỏ qua lần đầu (prev null) để giỏ khôi phục từ
+    // localStorage lúc cold-start không bị xoá oan.
+
+    // Dọn sạch giỏ. Ref trước state: cartRef là guard đồng bộ cho double-tap, phải rỗng
+    // ngay trong cùng cú chạm chứ không đợi render sau. Ghi localStorage thẳng vì mấy chỗ
+    // gọi hàm này (rời màn, chốt đơn) có thể unmount trước khi daemon debounce kịp chạy.
+    // Khai ở đây (không phải cạnh các handler giỏ bên dưới) vì effect ngay sau cần nó
+    // trong dep list — dep list chạy lúc render, tham chiếu hàm khai sau là ReferenceError.
+    const clearCart = useCallback(() => {
+        cartRef.current = []
+        setCart([])
+        activeCartItemIdRef.current = null
+        setActiveCartItemId(null)
+        localStorage.setItem(STORAGE_KEYS.CART, '[]')
+    }, [])
+
+    const prevAddressIdRef = useRef(addressId)
+    useEffect(() => {
+        const prev = prevAddressIdRef.current
+        prevAddressIdRef.current = addressId
+        if (!prev || !addressId || prev === addressId) return
+        if (cartRef.current.length > 0) showToast('Đã bỏ giỏ hàng của chi nhánh trước', 'warning')
+        clearCart()
+        setDiscount(d => ({ ...d, value: 0 }))
+        setTableName('')
+        setOpenTables([])
+        // Ghi thẳng, không đợi effect persist: đổi chi nhánh có thể kéo theo unmount nên
+        // effect chưa chắc kịp chạy. Đóng dấu luôn chi nhánh mới để bản mount sau không
+        // nạp lại giỏ/bàn vừa bị bỏ.
+        localStorage.setItem(STORAGE_KEYS.TABLE, '')
+        localStorage.setItem(STORAGE_KEYS.CART_ADDRESS, addressId)
+    }, [addressId, showToast, clearCart])
+
+    // ---- Bàn đang mở ----
+    // Gọi lúc mở lưới bàn và sau khi đóng bàn. Không cắm vào realtime: đợt gửi
+    // từ chính máy này đã cộng lạc quan ngay bên dưới (doSubmit), còn máy khác thì
+    // lần mở lưới kế tiếp là khớp lại — rẻ hơn nhiều so với một kênh nữa.
+    // Trả về luôn danh sách vừa lấy: chỗ tính tiền cần con số MỚI NHẤT ngay trong cùng
+    // lượt bấm, không đợi state của vòng render sau. Lỗi mạng → [] để caller tự lùi về
+    // số đang hiển thị (xem handleBill ở TableModal).
+    const refreshTables = useCallback(() => {
+        if (!addressId) return Promise.resolve([])
+        return fetchOpenTables(addressId)
+            .then(list => { setOpenTables(list); return list })
+            .catch(() => [])
+    }, [addressId])
+
+    useEffect(() => { if (dineIn) refreshTables() }, [dineIn, refreshTables])
+
+    // Tính tiền = đóng bàn. Tiền đã vào doanh thu từng đợt nên ở đây không cộng trừ gì,
+    // chỉ đóng dấu "lượt khách này xong". Nhận cả object bàn (không phải mỗi tên) để
+    // hoàn tác dựng lại được thẻ mà không cần fetch — quan trọng khi đang mất mạng.
+    const handleCloseTable = useCallback(async (table) => {
+        const name = table?.name
+        if (!addressId || !name) return
+        const closedAt = new Date().toISOString()
+        const drop = () => {
+            setOpenTables(prev => prev.filter(t => t.name !== name))
+            setTableName(prev => (prev === name ? '' : prev))
+        }
+        const restore = () => setOpenTables(prev => (prev.some(t => t.name === name) ? prev : [...prev, table]))
+
+        try {
+            await closeTable(addressId, name, closedAt)
+            drop()
+            // Không có hoàn tác thì bấm nhầm là phải vào DB mới cứu được bàn.
+            showToast(`Đã tính tiền ${name}`, 'success', {
+                label: 'Hoàn tác',
+                onClick: () => reopenTable(addressId, name, closedAt)
+                    .then(() => { restore(); refreshTables(); showToast(`Đã mở lại ${name}`, 'info') })
+                    .catch(err => showError(err, 'Mở lại bàn')),
+            })
+        } catch (err) {
+            if (isNetworkError(err)) {
+                // Khách đang đứng trả tiền, mất mạng không được phép chặn. Xếp hàng như đơn.
+                addPendingTableClose(addressId, name, closedAt)
+                drop()
+                showToast(`Đã tính tiền ${name} — chờ mạng để đồng bộ`, 'warning', {
+                    label: 'Hoàn tác',
+                    onClick: () => { removePendingTableClose(closedAt); restore(); showToast(`Đã mở lại ${name}`, 'info') },
+                })
+            } else {
+                showError(err, 'Tính tiền bàn')
+            }
+        }
+    }, [addressId, refreshTables, showToast, showError])
 
     // ---- Offline sync ----
     const handleSyncComplete = useCallback(() => {
@@ -362,6 +481,9 @@ export function POSProvider() {
     const revenueRef = useRef(revenue)
     const totalCostRef = useRef(totalCost)
     const cupsSoldRef = useRef(cupsSold)
+    // Cleanup lúc unmount có dep rỗng nên không đọc được addressId của render cuối.
+    const addressIdRef = useRef(addressId)
+    addressIdRef.current = addressId
 
     useEffect(() => { revenueRef.current = revenue }, [revenue])
     useEffect(() => { totalCostRef.current = totalCost }, [totalCost])
@@ -381,17 +503,19 @@ export function POSProvider() {
     useEffect(() => {
         const t = setTimeout(() => {
             localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(cart))
+            if (addressId) localStorage.setItem(STORAGE_KEYS.CART_ADDRESS, addressId)
             localStorage.setItem(STORAGE_KEYS.REVENUE, revenue.toString())
             localStorage.setItem(STORAGE_KEYS.TOTAL_COST, totalCost.toString())
             localStorage.setItem(STORAGE_KEYS.CUPS, cupsSold.toString())
         }, 400)
         return () => clearTimeout(t)
-    }, [cart, revenue, totalCost, cupsSold])
+    }, [cart, revenue, totalCost, cupsSold, addressId])
 
     // Save absolute latest states synchronously on unmount
     useEffect(() => {
         return () => {
             localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(cartRef.current))
+            if (addressIdRef.current) localStorage.setItem(STORAGE_KEYS.CART_ADDRESS, addressIdRef.current)
             localStorage.setItem(STORAGE_KEYS.REVENUE, revenueRef.current.toString())
             localStorage.setItem(STORAGE_KEYS.TOTAL_COST, totalCostRef.current.toString())
             localStorage.setItem(STORAGE_KEYS.CUPS, cupsSoldRef.current.toString())
@@ -454,7 +578,9 @@ export function POSProvider() {
     // ---- Handlers ----
 
     // ponytail: fire-and-forget single-item submit, no isSubmitting gate
-    function doSubmit(cartItems) {
+    // discountAmountArg/tableNameArg chỉ khác mặc định ở chế độ dineIn (handleConfirm).
+    // Đường 1-chạm gọi doSubmit(cartItems) như cũ — chiết khấu vẫn sửa sau ở /history.
+    function doSubmit(cartItems, discountAmountArg = 0, tableNameArg = null) {
         if (!cartItems || cartItems.length === 0) return
 
         const costPerItem = {}
@@ -471,17 +597,38 @@ export function POSProvider() {
             const prod = products?.find(p => p.id === item.productId)
             return prod?.count_as_cup === false ? sum : sum + item.quantity
         }, 0)
+        // Số tiền thực thu = gộp trừ chiết khấu. Server tính lại y hệt
+        // (bulk_create_orders: total = tổng dòng − discount_amount) nên optimistic
+        // và hàng DB không lệch khi realtime echo về.
+        const discountApplied = Math.min(Math.round(discountAmountArg) || 0, itemTotal)
+        const netTotal = itemTotal - discountApplied
 
         // Optimistic UI
-        setRevenue(prev => prev + itemTotal)
+        setRevenue(prev => prev + netTotal)
         setTotalCost(prev => prev + cartCost)
         setCupsSold(prev => prev + countableQty)
         // The header "Nhật ký" card shows the last 3 orders (newest first, sliding
         // in) — that's the confirmation. No success toast (it conflicts with the
         // card + lags a tap). Keep the added row's identity to undo it on failure.
-        const addedRow = buildLastOrderFromCart(cartItems, itemTotal)
+        const addedRow = buildLastOrderFromCart(cartItems, netTotal)
         setRecentOrders(prev => [addedRow, ...prev].slice(0, 3))
         setEnterKey(addedRow.createdAt)
+        // Bàn cộng dồn ngay, cùng kiểu lạc quan như doanh thu ở trên — nhân viên phải
+        // thấy tổng bàn nhảy lên trong cùng cú chạm, không đợi vòng fetch.
+        if (tableNameArg) setOpenTables(prev => {
+            // Cùng dạng dòng như fetchOpenTables (gộp theo tên món, bỏ topping).
+            const addLines = mergeTableLines([], cartItems.map(it => ({ name: it.name, qty: it.quantity })))
+            const i = prev.findIndex(t => t.name === tableNameArg)
+            if (i === -1) return [...prev, { name: tableNameArg, total: netTotal, rounds: 1, openedAt: addedRow.createdAt, lines: addLines }]
+            const next = [...prev]
+            next[i] = {
+                ...next[i],
+                total: next[i].total + netTotal,
+                rounds: next[i].rounds + 1,
+                lines: mergeTableLines(next[i].lines, addLines),
+            }
+            return next
+        })
 
         if (navigator.onLine && supabase) {
             // id is generated here, client-side, and sent straight to the RPC as the
@@ -497,11 +644,12 @@ export function POSProvider() {
             const optimisticOrder = {
                 _optimistic: true,
                 id: orderId,
-                total: itemTotal,
-                discount_amount: 0,
+                total: netTotal,
+                discount_amount: discountApplied,
                 total_cost: Math.round(cartCost),
                 created_at: addedRow.createdAt,
                 staff_name: profile?.name || null,
+                table_name: tableNameArg || null,
                 deleted_at: null,
                 deleted_by: null,
                 payment_method: null,
@@ -515,7 +663,7 @@ export function POSProvider() {
                 })),
             }
             setTodayOrders(prev => [optimisticOrder, ...prev])
-            submitOrder(cartItems, itemTotal, null, addressId, cartCost, costPerItem, profile?.name, 0, orderId)
+            submitOrder(cartItems, netTotal, null, addressId, cartCost, costPerItem, profile?.name, discountApplied, orderId, tableNameArg)
                 .then(() => {
                     // Nudge any other device on this address to refetch now instead of
                     // waiting on postgres_changes' WAL-decode hop — see the channel's
@@ -524,29 +672,37 @@ export function POSProvider() {
                     ordersChannelRef.current?.send({ type: 'broadcast', event: 'order_added', payload: { orderId } })
                 })
                 .catch(err => {
-                    if (!navigator.onLine || /fetch|network|NetworkError/i.test(err?.message || '')) {
+                    if (isNetworkError(err)) {
                         // Reuse orderId already sent to the RPC above — if the server actually
                         // committed it before the response was lost, the retry is a no-op
                         // (ON CONFLICT) instead of creating a duplicate order.
                         addPendingOrder(
                             cartItems.map(item => ({ ...item, unitCost: costPerItem[item.cartItemId] || 0, extraIds: item.extras.map(e => e.id).filter(Boolean) })),
-                            itemTotal, null, addressId, cartCost, profile?.name, 0, orderId
+                            netTotal, null, addressId, cartCost, profile?.name, discountApplied, orderId, tableNameArg
                         )
                         setTodayOrders(prev => prev.filter(o => o !== optimisticOrder)) // offline pending list shows it instead
                         showToast('Lỗi mạng – lưu offline', 'warning')
                     } else {
-                        setRevenue(prev => prev - itemTotal)
+                        // dineIn: handleConfirm đã dọn giỏ trước khi gửi (guard chống double-tap),
+                        // nên lỗi thật (không phải mạng — nhánh trên đã nuốt) sẽ làm MẤT nguyên
+                        // cả bàn và nhân viên phải bấm lại từ đầu. Trả giỏ về để bấm Thanh toán lại.
+                        if (dineInRef.current && cartRef.current.length === 0) {
+                            cartRef.current = cartItems
+                            setCart(cartItems)
+                        }
+                        setRevenue(prev => prev - netTotal)
                         setTotalCost(prev => Math.max(0, prev - cartCost))
                         setCupsSold(prev => Math.max(0, prev - countableQty))
                         setRecentOrders(prev => prev.filter(o => o !== addedRow)) // genuine failure → don't leave a phantom order in the journal
                         setTodayOrders(prev => prev.filter(o => o !== optimisticOrder))
+                        if (tableNameArg) refreshTables() // gỡ phần đã cộng lạc quan cho bàn
                         showError(err, 'Ghi đơn')
                     }
                 })
         } else {
             addPendingOrder(
                 cartItems.map(item => ({ ...item, unitCost: costPerItem[item.cartItemId] || 0, extraIds: item.extras.map(e => e.id) })),
-                itemTotal, null, addressId, cartCost, profile?.name, 0
+                netTotal, null, addressId, cartCost, profile?.name, discountApplied, null, tableNameArg
             )
             showToast(`Lưu offline (${getPendingCount()} đơn chờ)`, 'warning')
         }
@@ -568,7 +724,8 @@ export function POSProvider() {
     // the identity stays stable across taps — otherwise ProductCard's React.memo
     // never bails out, since onAdd/onCancel would be new every single tap.
     const handleAddItem = useCallback((product) => {
-        if (cartRef.current.length > 0) doSubmitRef.current(cartRef.current)
+        // dineIn: KHÔNG chốt món trước — gom vào giỏ, chỉ handleConfirm mới ghi DB.
+        if (!dineInRef.current && cartRef.current.length > 0) doSubmitRef.current(cartRef.current)
 
         const cartItemId = crypto.randomUUID()
         const stickyExtras = (productExtras[product.id] || []).filter(e => e.is_sticky && enabledStickyExtraIdsRef.current.includes(e.id))
@@ -576,34 +733,74 @@ export function POSProvider() {
         // Update cartRef SYNCHRONOUSLY (not just via the [cart] effect) so a very
         // fast next tap reads this held item and submits it — otherwise the effect
         // lags one frame and the item can be overwritten unsubmitted (lost order).
-        cartRef.current = [newItem]
-        setCart([newItem])
+        // ponytail: chạm lại cùng món = thêm DÒNG mới, không cộng quantity — mỗi dòng
+        // mang extras riêng, gộp lại thì không sửa topping từng ly được nữa.
+        const next = dineInRef.current ? [...cartRef.current, newItem] : [newItem]
+        cartRef.current = next
+        setCart(next)
         activeCartItemIdRef.current = cartItemId // sync, same reason as cartRef above
         setActiveCartItemId(cartItemId)
         setDiscount(d => ({ ...d, value: 0 }))
     }, [productExtras])
 
-    // Cancel the currently-held item without submitting (undo a mis-tap).
-    const cancelHeld = useCallback(() => {
-        cartRef.current = []
-        setCart([])
-        activeCartItemIdRef.current = null
-        setActiveCartItemId(null)
-        localStorage.setItem(STORAGE_KEYS.CART, '[]')
+    // dineIn: xoá 1 dòng khỏi giỏ. Chỉ dùng nội bộ cho cancelHeld (nút X trên card) —
+    // giỏ không có UI danh sách riêng, món đang dựng nhìn ở focus card + dòng draft Nhật ký.
+    const handleRemoveCartItem = useCallback((cartItemId) => {
+        const next = cartRef.current.filter(i => i.cartItemId !== cartItemId)
+        cartRef.current = next
+        setCart(next)
+        if (activeCartItemIdRef.current === cartItemId) {
+            activeCartItemIdRef.current = next[next.length - 1]?.cartItemId ?? null
+            setActiveCartItemId(activeCartItemIdRef.current)
+        }
+        setDiscount(d => ({ ...d, value: 0 }))
     }, [])
+
+    // Cancel the currently-held item without submitting (undo a mis-tap).
+    // dineIn: mọi món có trong giỏ đều hiện X trên card (held = qty > 0), nên X phải
+    // bớt 1 ly CỦA CHÍNH MÓN ĐÓ — xoá theo dòng đang active thì chạm X ở Trà Đá lại
+    // xoá mất ly Cà phê. Xoá dòng mới nhất của món để khớp với thứ tự vừa thêm.
+    const cancelHeld = useCallback((product) => {
+        if (!dineInRef.current) {
+            clearCart()
+            return
+        }
+        const prev = cartRef.current
+        const targetId = product
+            ? [...prev].reverse().find(i => i.productId === product.id)?.cartItemId
+            : activeCartItemIdRef.current ?? prev[prev.length - 1]?.cartItemId
+        if (targetId) handleRemoveCartItem(targetId)
+    }, [handleRemoveCartItem, clearCart])
+
+    // dineIn: gửi giỏ hiện tại thành MỘT đơn (một đợt gọi món), kèm chiết khấu + nhãn bàn.
+    // Gửi xong là xong đợt: bỏ chọn bàn, về trạng thái đơn mới. Bàn vẫn mở trong DB nên
+    // khách gọi thêm thì mở lưới bàn chọn lại đúng bàn đó (thấy luôn tổng đang chạy).
+    // Giữ bàn dính lại sau khi gửi là một mode ẩn — ly của khách bàn sau sẽ lặng lẽ chui
+    // vào hoá đơn của bàn trước.
+    // Guard đồng bộ trên cartRef (không phải state) để double-tap không ghi 2 đơn.
+    const handleConfirm = useCallback((discountAmountArg = 0, tableNameArg = null) => {
+        const items = cartRef.current
+        if (items.length === 0) return
+        clearCart()
+        doSubmitRef.current(items, discountAmountArg, tableNameArg)
+        setDiscount(d => ({ ...d, value: 0 }))
+        setTableName('')
+    }, [clearCart])
 
     // Submit the held item and clear — used by the ✓ button (confirm the LAST order
     // without holding a new one) and by the unmount flush when leaving the POS
     // screen. Without it the last held order would never reach the DB.
     const commitHeld = useCallback(() => {
-        if (cartRef.current.length === 0) return
-        doSubmitRef.current(cartRef.current)
-        cartRef.current = [] // sync guard: a fast double-press must not re-submit
-        setCart([])
-        activeCartItemIdRef.current = null
-        setActiveCartItemId(null)
-        localStorage.setItem(STORAGE_KEYS.CART, '[]')
-    }, [])
+        // dineIn: giỏ là bàn đang dựng — rời màn hình POS (unmount flush) hay bấm ✓
+        // ở Nhật ký đều KHÔNG được tự chốt, nếu không xem /history rồi quay lại là
+        // bàn tự thanh toán non. Chỉ handleConfirm mới ghi đơn. Giỏ đã persist ở
+        // localStorage nên bỏ flush không mất dữ liệu.
+        if (dineInRef.current) return
+        const items = cartRef.current
+        if (items.length === 0) return
+        clearCart() // trước doSubmit: sync guard, double-press không được ghi 2 lần
+        doSubmitRef.current(items)
+    }, [clearCart])
 
     // Extras read/write cartRef.current synchronously (not setCart's prev) so the
     // held item's extras are never stale when the next tap submits it.
@@ -786,14 +983,16 @@ export function POSProvider() {
     const cartValue = useMemo(() => ({
         cart, activeCartItemId,
         handleAddItem, cancelHeld, handleToggleExtra, handleToggleStickyExtra, commitHeld,
+        dineIn, handleConfirm, tableName, setTableName,
+        openTables, refreshTables, handleCloseTable,
         enabledStickyExtraIds,
         total, orderCount, hasOrder,
         discount, setDiscount, discountAmount, finalTotal,
         recentOrders, draftOrder, enterKey,
-        toast, showToast,
+        toast, showToast, showError,
         // deliberately partial deps, see comment above
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [cart, activeCartItemId, enabledStickyExtraIds, total, orderCount, hasOrder, discount, discountAmount, finalTotal, recentOrders, draftOrder, enterKey, toast, showToast])
+    }), [cart, activeCartItemId, dineIn, tableName, openTables, refreshTables, handleCloseTable, enabledStickyExtraIds, total, orderCount, hasOrder, discount, discountAmount, finalTotal, recentOrders, draftOrder, enterKey, toast, showToast, showError])
 
     const statsValue = useMemo(() => ({
         revenue, totalCost, cupsSold, isOnline,

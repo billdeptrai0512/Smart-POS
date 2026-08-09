@@ -103,7 +103,8 @@ export async function fetchTodayOrders(addressId: UUID | null): Promise<any> {
                     name
                 )
             ),
-            staff_name
+            staff_name,
+            table_name
         `)
         .gte('created_at', today.toISOString())
 
@@ -130,7 +131,8 @@ export async function submitOrder(
     costPerItem: CostPerItem = {},
     staffName: string | null = null,
     discountAmount = 0,
-    id: UUID | null = null
+    id: UUID | null = null,
+    tableName: string | null = null
 ): Promise<{ id: string | null }> {
     invalidateReportCache(addressId)
     if (localRepo.isGuest()) {
@@ -161,6 +163,7 @@ export async function submitOrder(
         payment_method: paymentMethod,
         address_id: addressId,
         staff_name: staffName,
+        table_name: tableName,
         items: cart.map(item => ({
             product_id: item.productId,
             quantity: item.quantity,
@@ -219,6 +222,7 @@ export async function bulkSubmitOrders(ordersArray: any[]): Promise<boolean> {
         address_id: o.addressId,
         created_at: o.createdAt,
         staff_name: o.staffName,
+        table_name: o.tableName ?? null,
         items: o.orderItems.map((item: any) => ({
             product_id: item.productId,
             quantity: item.quantity,
@@ -285,7 +289,7 @@ export async function fetchOrdersByRange(addressId: UUID | null, start: Date, en
         if (!supabase) return []
         let query = supabase
             .from('orders')
-            .select(`id, total, total_cost, payment_method, staff_name, created_at, deleted_at, deleted_by,
+            .select(`id, total, total_cost, payment_method, staff_name, table_name, created_at, deleted_at, deleted_by,
                 order_items(quantity, options, product_id, unit_cost, extra_ids, products(name))`)
             .gte('created_at', start.toISOString())
             .lte('created_at', end.toISOString())
@@ -319,6 +323,100 @@ export async function fetchRecentOrders(addressId: UUID | null, limit = 3): Prom
     const { data, error } = await query.order('created_at', { ascending: false }).limit(limit)
     if (error || !data) return []
     return data
+}
+
+// ---- Bàn đang mở (địa chỉ dine_in) ----
+// Một bàn = nhóm đơn cùng table_name, chưa xoá, chưa tính tiền (table_closed_at
+// IS NULL — xem migration 20260808_dine_in_open_tables). Gộp ở client: tập này
+// luôn nhỏ (số bàn đang có khách), không đáng một RPC riêng.
+//
+// KHÔNG lọc theo ngày, cố ý: quán mở qua nửa đêm thì bàn ngồi từ 23g50 sang 0g10
+// vẫn phải là MỘT bàn. Cắt theo ngày sẽ giấu mất các đợt gọi trước nửa đêm và
+// nhân viên tính thiếu tiền của khách. Đổi lại, bàn quên chưa tính tiền sẽ nằm
+// lại lưới sang hôm sau — hiện kèm ngày để không bị đọc nhầm là bàn hôm nay.
+// lines = tờ hoá đơn đang chạy của bàn: gộp mọi đợt lại theo TÊN MÓN ("2 Trà đá"),
+// không phải theo từng đợt. Đó là cái nhân viên đọc to cho khách lúc tính tiền.
+// ponytail: bỏ qua topping/options — hai ly cà phê khác topping vẫn gộp thành "2 Cà
+// phê". Tách ra khi quán thật sự cần đọc topping trong lúc tính tiền.
+export type TableLine = { name: string; qty: number }
+export type OpenTable = { name: string; total: number; rounds: number; openedAt: string; lines: TableLine[] }
+
+// Gộp dòng trùng tên. Dùng cả ở đây và ở POSContext (cộng lạc quan đợt vừa gửi).
+export function mergeTableLines(base: TableLine[], add: TableLine[]): TableLine[] {
+    const out = base.map(l => ({ ...l }))
+    for (const l of add) {
+        const hit = out.find(x => x.name === l.name)
+        if (hit) hit.qty += l.qty
+        else out.push({ ...l })
+    }
+    return out
+}
+
+export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable[]> {
+    // ponytail: chế độ khách demo chạy localRepository và không bật dine_in → không có bàn.
+    if (!supabase || !addressId || localRepo.isGuest()) return []
+
+    const { data, error } = await supabase
+        .from('orders')
+        .select('id, total, created_at, table_name, order_items(quantity, products(name))')
+        .eq('address_id', addressId)
+        .is('deleted_at', null)
+        .is('table_closed_at', null)
+        .not('table_name', 'is', null)
+        .order('created_at', { ascending: true })
+
+    if (error || !data) return []
+
+    const byName = new Map<string, OpenTable>()
+    for (const o of data as any[]) {
+        const t = byName.get(o.table_name) ?? { name: o.table_name, total: 0, rounds: 0, openedAt: o.created_at, lines: [] }
+        t.total += o.total
+        t.rounds += 1
+        t.lines = mergeTableLines(t.lines, (o.order_items || []).map((i: any) => ({
+            // Món bị xoá khỏi menu sau khi đã bán: vẫn phải hiện một dòng, nếu không
+            // thì tổng tiền không khớp với danh sách món.
+            name: i.products?.name || 'Món đã xoá',
+            qty: i.quantity,
+        })))
+        byName.set(o.table_name, t)
+    }
+    return [...byName.values()]
+}
+
+// Tính tiền = đóng cả nhóm bằng một UPDATE. Không đụng total/doanh thu: tiền đã
+// ghi ngay từng đợt, đây chỉ là mốc "bàn này xong rồi, đừng hiện nữa".
+// Cùng lý do như fetchOpenTables: không lọc ngày, nếu không thì đợt gọi trước nửa
+// đêm vẫn mở và bàn "đã tính tiền" lại hiện lên như còn khách.
+// closedAt truyền vào được (không tự sinh) vì 2 chỗ cần biết trước mốc này: hàng chờ
+// offline (đóng bàn lúc mất mạng, mốc phải là lúc thu tiền chứ không phải lúc có mạng
+// lại) và nút Hoàn tác — reopenTable gỡ ĐÚNG những đơn mang mốc đó, không đụng các đợt
+// đã đóng ở lần tính tiền trước.
+export async function closeTable(addressId: UUID, tableName: string, closedAt = new Date().toISOString()): Promise<string> {
+    if (!supabase) throw new Error('No Supabase connection')
+
+    const { error } = await supabase
+        .from('orders')
+        .update({ table_closed_at: closedAt })
+        .eq('address_id', addressId)
+        .eq('table_name', tableName)
+        .is('table_closed_at', null)
+
+    if (error) throw error
+    return closedAt
+}
+
+// Hoàn tác tính tiền: mở lại đúng nhóm đơn mà closeTable vừa đóng.
+export async function reopenTable(addressId: UUID, tableName: string, closedAt: string): Promise<void> {
+    if (!supabase) throw new Error('No Supabase connection')
+
+    const { error } = await supabase
+        .from('orders')
+        .update({ table_closed_at: null })
+        .eq('address_id', addressId)
+        .eq('table_name', tableName)
+        .eq('table_closed_at', closedAt)
+
+    if (error) throw error
 }
 
 // ---- Compat barrel: existing call sites import everything from this file.

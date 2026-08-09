@@ -15,7 +15,7 @@ function Typewriter({ text }) {
     return <>{text.slice(0, n)}{n < text.length && <span className="opacity-50">▌</span>}</>
 }
 
-export default function Header({ dayName, dateOnly, onOpenHistory, addressName, onAddressClick, recentOrders = [], draftOrder, enterKey, showOnboardingHint = false }) {
+export default function Header({ dayName, dateOnly, onOpenHistory, addressName, onAddressClick, recentOrders = [], draftOrder, enterKey, showOnboardingHint = false, dineIn = false }) {
     const hintClass = onboardingHintClass(showOnboardingHint, 'light')
     // Draft (held, unsaved) line on top, then saved orders. Cap at 3 rows.
     // key 'draft' is stable so extras overwrite it in place; typeKey = the held
@@ -74,9 +74,11 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                     <div className="flex flex-col justify-between items-start relative z-10 w-full">
                         <div className="flex items-center justify-between w-full">
                             <span className="text-[12px] sm:text-[13px] text-white font-black uppercase tracking-wider">Nhật ký</span>
-                            {/* Draft pending → check: "tap to commit". Otherwise arrow: "go to history". */}
+                            {/* Draft pending → check: "tap to commit". Otherwise arrow: "go to history".
+                                dineIn: giỏ chỉ chốt qua nút Thanh toán ở CheckoutBar, nên ✓ ở đây sẽ
+                                hứa một hành động không xảy ra — giữ mũi tên. */}
                             <span className="shrink-0 w-7 h-7 rounded-full bg-white border-2 border-white/50 flex items-center justify-center">
-                                {draftOrder
+                                {draftOrder && !dineIn
                                     ? (
                                         <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.125} strokeLinecap="round" strokeLinejoin="round" className="text-bg check-draw">
                                             <path d="M4 12 9 17 20 6" pathLength="1" />

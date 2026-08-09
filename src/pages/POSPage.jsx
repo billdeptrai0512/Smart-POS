@@ -13,6 +13,7 @@ import { dateFullVN } from '../utils/dateVN'
 
 import Header from '../components/POSPage/Header'
 import MenuGrid from '../components/POSPage/MenuGrid'
+import CheckoutBar from '../components/POSPage/CheckoutBar'
 import Toast from '../components/POSPage/Toast'
 
 export default function POSPage() {
@@ -27,6 +28,8 @@ export default function POSPage() {
         enabledStickyExtraIds,
         handleToggleStickyExtra,
         commitHeld,
+        dineIn, handleConfirm, tableName,
+        total, hasOrder, discount, setDiscount, discountAmount, finalTotal,
     } = useCart()
     const { isOnline } = useStats()
     const { handleLoadHistory } = useHistory()
@@ -86,6 +89,7 @@ export default function POSPage() {
                 draftOrder={draftOrder}
                 enterKey={enterKey}
                 showOnboardingHint={showHistoryHint}
+                dineIn={dineIn}
             />
 
             <MenuGrid
@@ -100,7 +104,21 @@ export default function POSPage() {
                 onToggleStickyExtra={handleToggleStickyExtra}
                 hintProductId={hintProductId}
                 hintExtraName={hintExtraName}
+                dineIn={dineIn}
             />
+
+            {dineIn && (
+                <CheckoutBar
+                    total={total}
+                    discount={discount}
+                    discountAmount={discountAmount}
+                    finalTotal={finalTotal}
+                    onApplyDiscount={setDiscount}
+                    tableName={tableName}
+                    onConfirm={handleConfirm}
+                    disabled={!hasOrder}
+                />
+            )}
 
             <Toast toast={toast} />
         </div>
