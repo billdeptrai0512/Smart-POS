@@ -77,6 +77,34 @@ export async function fetchTodayStats(addressId: UUID | null): Promise<TodayStat
 }
 
 // Fetch all orders for today, newest first (optionally scoped by address)
+// Hình dạng một đơn cho /history + thẻ Nhật ký. Tách ra hằng vì fetchTodayOrders và
+// fetchOrdersByIds phải trả về Y HỆT nhau: chúng cùng đổ vào todayOrders, lệch một cột
+// là dòng đơn đồng bộ về từ máy khác thiếu thông tin so với dòng nạp lúc mở trang.
+const ORDER_SELECT = `
+    id,
+    total,
+    total_cost,
+    discount_amount,
+    payment_method,
+    created_at,
+    deleted_at,
+    deleted_by,
+    served_at,
+    table_closed_at,
+    order_items (
+        quantity,
+        options,
+        product_id,
+        unit_cost,
+        extra_ids,
+        products (
+            name
+        )
+    ),
+    staff_name,
+    table_name
+`
+
 export async function fetchTodayOrders(addressId: UUID | null): Promise<any> {
     if (localRepo.isGuest()) return localRepo.fetchLocalOrders(addressId)
     if (!supabase) return []
@@ -84,28 +112,7 @@ export async function fetchTodayOrders(addressId: UUID | null): Promise<any> {
 
     let query = supabase
         .from('orders')
-        .select(`
-            id,
-            total,
-            total_cost,
-            discount_amount,
-            payment_method,
-            created_at,
-            deleted_at,
-            deleted_by,
-            order_items (
-                quantity,
-                options,
-                product_id,
-                unit_cost,
-                extra_ids,
-                products (
-                    name
-                )
-            ),
-            staff_name,
-            table_name
-        `)
+        .select(ORDER_SELECT)
         .gte('created_at', today.toISOString())
 
     if (addressId) query = query.eq('address_id', addressId)
@@ -117,6 +124,48 @@ export async function fetchTodayOrders(addressId: UUID | null): Promise<any> {
         return []
     }
     return data
+}
+
+// ---- Đồng bộ đa thiết bị (poll, xem hooks/useOrdersPoll.js) ----
+// Đây là câu chạy 5 giây một lần trên mỗi máy đang mở /pos hoặc /history, nên nó
+// KHÔNG được join order_items: chỉ mấy cột vô hướng đủ để trả lời "có gì đổi không".
+// Đơn thật sự mới mới đáng một lượt fetchOrdersByIds kèm món.
+//
+// Quét cả ngày chứ không dùng con trỏ `created_at > lần trước`: bulk_create_orders nhận
+// created_at từ client khi replay đơn offline, nên đơn backdate rơi TRƯỚC con trỏ và mất
+// hút vĩnh viễn. Quét cả ngày còn bắt được cả sửa chiết khấu / xoá mềm ở đơn cũ.
+export async function fetchTodayOrderHeads(addressId: UUID | null): Promise<any[]> {
+    // Guest là local-only (một demo address dùng chung) — không có máy thứ hai để đồng bộ.
+    if (localRepo.isGuest() || !supabase || !addressId) return []
+
+    // served_at / table_closed_at cũng nằm đây vì lưới bàn phải theo kịp máy kia: bàn đã
+    // tính tiền ở máy A mà còn nguyên trên máy B là đường thu tiền khách hai lần.
+    const { data, error } = await supabase
+        .from('orders')
+        // deleted_by không dự phần so lệch — nó đi kèm để hàng vá lại đủ tên người xoá,
+        // /history có hiện dòng đó. table_name để biết thay đổi này có động tới lưới bàn
+        // không (xem diffOrderHeads) — rẻ hơn nhiều so với gọi fetchOpenTables mỗi nhịp.
+        // KHÔNG lấy created_at: không ai so nó, mà đây là câu chạy 5 giây một lần cả ngày.
+        .select('id, total, discount_amount, deleted_at, deleted_by, served_at, table_closed_at, table_name')
+        .eq('address_id', addressId)
+        .gte('created_at', startOfDayVN().toISOString())
+
+    // Ném chứ không nuốt: trả [] khi lỗi mạng là báo cho người gọi "hôm nay không có đơn
+    // nào" — cùng cái bẫy đã làm fetchOpenTables xoá trắng lưới bàn.
+    if (error) throw error
+    return data || []
+}
+
+export async function fetchOrdersByIds(ids: UUID[]): Promise<any[]> {
+    if (localRepo.isGuest() || !supabase || !ids.length) return []
+
+    const { data, error } = await supabase
+        .from('orders')
+        .select(ORDER_SELECT)
+        .in('id', ids)
+
+    if (error) throw error
+    return data || []
 }
 
 // Submit a complete order to Supabase using RPC for atomic transaction
@@ -336,12 +385,29 @@ export async function fetchRecentOrders(addressId: UUID | null, limit = 3): Prom
 // lại lưới sang hôm sau — hiện kèm ngày để không bị đọc nhầm là bàn hôm nay.
 // lines = tờ hoá đơn đang chạy của bàn: gộp mọi đợt lại theo TÊN MÓN ("2 Trà đá"),
 // không phải theo từng đợt. Đó là cái nhân viên đọc to cho khách lúc tính tiền.
-// ponytail: bỏ qua topping/options — hai ly cà phê khác topping vẫn gộp thành "2 Cà
-// phê". Tách ra khi quán thật sự cần đọc topping trong lúc tính tiền.
+// Topping nằm TRONG tên dòng: "Cacao Cà Phê (Trân châu)" và "Cacao Cà Phê" là hai
+// dòng khác nhau, vì gộp lại thì đọc thiếu topping lúc tính tiền và pha sai món.
+// rounds = từng đợt gọi, giữ nguyên id + giờ để modal chi tiết bàn xoá/đọc được
+// đúng đợt. lines (gộp) vẫn để nguyên cho thẻ bàn và câu đọc lúc tính tiền.
+// items = nguyên liệu để DỰNG LẠI giỏ khi sửa đợt (product_id + extra_ids), khác lines
+// vốn chỉ là chữ để đọc. Không suy ngược được từ lines: hai topping có thể trùng tên.
 export type TableLine = { name: string; qty: number }
-export type OpenTable = { name: string; total: number; rounds: number; openedAt: string; lines: TableLine[] }
+export type TableRoundItem = { productId: UUID; qty: number; extraIds: UUID[] }
+export type TableRound = { id: UUID; createdAt: string; total: number; discountAmount: number; servedAt: string | null; lines: TableLine[]; items: TableRoundItem[] }
+export type OpenTable = { name: string; total: number; rounds: TableRound[]; openedAt: string; lines: TableLine[] }
 
-// Gộp dòng trùng tên. Dùng cả ở đây và ở POSContext (cộng lạc quan đợt vừa gửi).
+// 'Tiền mặt'/'MoMo' đi chung mảng extras nhưng là cách trả tiền, không phải topping —
+// cùng quy ước với buildLastOrderFrom* ở POSContext.
+const PAYMENT_EXTRAS = new Set(['Tiền mặt', 'MoMo'])
+
+// Nhãn một dòng hoá đơn. Dùng ở fetchOpenTables (extras đã là chuỗi 'a, b' trong
+// order_items.options) và ở POSContext (extras còn là mảng object của giỏ).
+export function tableLineName(name: string, extraNames: (string | undefined)[]): string {
+    const opts = extraNames.filter((n): n is string => !!n && !PAYMENT_EXTRAS.has(n))
+    return opts.length ? `${name} (${opts.join(', ')})` : name
+}
+
+// Gộp dòng trùng nhãn. Dùng cả ở đây và ở POSContext (cộng lạc quan đợt vừa gửi).
 export function mergeTableLines(base: TableLine[], add: TableLine[]): TableLine[] {
     const out = base.map(l => ({ ...l }))
     for (const l of add) {
@@ -352,32 +418,58 @@ export function mergeTableLines(base: TableLine[], add: TableLine[]): TableLine[
     return out
 }
 
+// Đánh dấu một đợt đã pha xong và bưng ra. Chỉ là mốc thời gian trên orders, không
+// đụng tiền — bàn 2 người vừa pha vừa thu tiền nhìn vào đây để biết đợt nào còn nợ khách.
+// servedAt = null để bỏ đánh dấu (bấm nhầm).
+export async function markOrderServed(orderId: UUID, servedAt: string | null): Promise<void> {
+    if (localRepo.isGuest()) return // chế độ khách demo không có bàn (xem fetchOpenTables)
+    if (!supabase) throw new Error('No Supabase connection')
+
+    const { error } = await supabase
+        .from('orders')
+        .update({ served_at: servedAt })
+        .eq('id', orderId)
+
+    if (error) throw error
+}
+
 export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable[]> {
     // ponytail: chế độ khách demo chạy localRepository và không bật dine_in → không có bàn.
     if (!supabase || !addressId || localRepo.isGuest()) return []
 
     const { data, error } = await supabase
         .from('orders')
-        .select('id, total, created_at, table_name, order_items(quantity, products(name))')
+        .select('id, total, discount_amount, created_at, served_at, table_name, order_items(quantity, options, product_id, extra_ids, products(name))')
         .eq('address_id', addressId)
         .is('deleted_at', null)
         .is('table_closed_at', null)
         .not('table_name', 'is', null)
         .order('created_at', { ascending: true })
 
-    if (error || !data) return []
+    // NÉM lỗi thay vì trả [] — mảng rỗng nghĩa là "không bàn nào còn khách", và người
+    // gọi sẽ tin: một lỗi mạng/schema hoá ra xoá trắng cả lưới bàn giữa ca (xem
+    // refreshTables). Không phân biệt được hai thứ này là bug từng làm mất bàn thật.
+    if (error) throw error
+    if (!data) return []
 
     const byName = new Map<string, OpenTable>()
     for (const o of data as any[]) {
-        const t = byName.get(o.table_name) ?? { name: o.table_name, total: 0, rounds: 0, openedAt: o.created_at, lines: [] }
-        t.total += o.total
-        t.rounds += 1
-        t.lines = mergeTableLines(t.lines, (o.order_items || []).map((i: any) => ({
+        const t: OpenTable = byName.get(o.table_name) ?? { name: o.table_name, total: 0, rounds: [], openedAt: o.created_at, lines: [] }
+        const roundLines = mergeTableLines([], (o.order_items || []).map((i: any) => ({
             // Món bị xoá khỏi menu sau khi đã bán: vẫn phải hiện một dòng, nếu không
             // thì tổng tiền không khớp với danh sách món.
-            name: i.products?.name || 'Món đã xoá',
+            name: tableLineName(i.products?.name || 'Món đã xoá', (i.options || '').split(', ')),
             qty: i.quantity,
         })))
+        t.total += o.total
+        t.rounds.push({
+            id: o.id, createdAt: o.created_at, total: o.total, discountAmount: o.discount_amount || 0, servedAt: o.served_at ?? null,
+            lines: roundLines,
+            items: (o.order_items || []).map((i: any) => ({
+                productId: i.product_id, qty: i.quantity, extraIds: i.extra_ids || [],
+            })),
+        })
+        t.lines = mergeTableLines(t.lines, roundLines)
         byName.set(o.table_name, t)
     }
     return [...byName.values()]

@@ -422,3 +422,25 @@ body {
   align-items: flex-start;
   justify-content: space-between;
 }
+
+/* In bill (TableDetailModal). Khối #print-bill nằm ẩn trong DOM lúc bình thường; lúc in
+   thì nó là thứ DUY NHẤT hiện ra. visibility (không phải display) để ẩn phần còn lại:
+   #print-bill nằm sâu trong cây modal, display:none ở tổ tiên là mất luôn cả nó.
+   ponytail: in qua trình duyệt, không SDK máy in nhiệt. Đổi khi quán có máy ESC/POS thật. */
+@media print {
+  body * { visibility: hidden; }
+  #print-bill,
+  #print-bill * { visibility: visible; }
+  #print-bill {
+    display: block !important;
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    padding: 8px 10px;
+    background: #fff;
+    color: #000;
+    font-family: ui-monospace, "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+}

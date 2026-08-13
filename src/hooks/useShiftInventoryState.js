@@ -7,7 +7,6 @@ import {
 import { mergeShiftClosingInventory, fetchYesterdayShiftClosing } from '../services/reportService'
 import { supabase } from '../lib/supabaseClient'
 import { isGuest } from '../services/localRepository'
-import { countActiveSessions } from '../services/authService'
 import { sortIngredients, lookupByLabel } from '../utils/ingredients'
 import { dateStringVN } from '../utils/dateVN'
 
@@ -35,7 +34,12 @@ const norm = (v) => (v === undefined || v === null || v === '' ? null : String(v
 // i.e. another device's concurrent edit just overwrote ours (last-write-wins at the
 // per-ingredient patch level). Caller can surface a toast; purely informational, doesn't
 // change merge behavior.
-export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, onFieldConflict) {
+//
+// `onRemoteCash(row)` (optional) nhận NGUYÊN dòng shift_closings của cùng ngày mỗi lần có
+// event — kênh này vốn đã mang sẵn actual_cash/actual_transfer/cash_closed_at trong
+// payload.new, trước đây bị vứt đi vì handler chỉ đọc inventory_report. Cho caller đồng bộ
+// ô "Thực thu" mà không tốn thêm request nào.
+export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, onFieldConflict, onRemoteCash) {
     // ── Inputs (staff-typed) ──────────────────────────────────────────────────
     const [openingInputs, setOpeningInputs] = useState({})
     const [openingLocked, setOpeningLocked] = useState({})
@@ -274,43 +278,38 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
         if (onFieldConflict) conflictIngredients.forEach(ing => onFieldConflict(ing))
     }, [onFieldConflict])
 
-    // ── Gate: only open the realtime channel below when >= 2 devices are active
-    // on this address (same pattern as POSContext's orders-realtime). A single
-    // device editing its own shift has no one to sync with — opening a channel
-    // for every solo session was needless connection load at scale.
-    const [hasMultiDevice, setHasMultiDevice] = useState(false)
-    useEffect(() => {
-        if (!addressId || isGuest()) return
-        let cancelled = false
-        const check = () => countActiveSessions(addressId).then(count => {
-            if (!cancelled) setHasMultiDevice(count >= 2)
-        })
-        check()
-        const interval = setInterval(check, 5 * 60 * 1000)
-        return () => { cancelled = true; clearInterval(interval) }
-    }, [addressId])
+    // onRemoteCash đọc state đang gõ dở của caller nên identity đổi liên tục — giữ qua ref
+    // để kênh realtime bên dưới không phải resubscribe mỗi keystroke.
+    const onRemoteCashRef = useRef(onRemoteCash); onRemoteCashRef.current = onRemoteCash
 
     // ── Realtime: subscribe to this address's shift_closings rows ─────────────
     // Replaces the old ephemeral broadcast (no replay, dropped packets = permanent
     // desync). Each device autosaves its edits (light merge RPC); postgres_changes pushes
     // the merged row to the other device → reconcileFromRemote converges them.
     // Guests are local-only and share one demo address id → skip Realtime entirely.
+    //
+    // KHÔNG có cổng "đủ 2 máy mới mở kênh": cổng cũ đếm countActiveSessions >= 2, mà
+    // active_sessions upsert onConflict: 'user_id' ⇒ hai điện thoại đăng nhập CÙNG tài khoản
+    // (đúng ca dùng phổ biến nhất) chỉ sinh một dòng → đếm ra 1 → kênh chưa từng mở ngày nào.
+    // Đổi lại là mỗi máy đang ở màn báo cáo giữ một websocket; hook này chỉ sống trong
+    // DailyReportPage nên kênh chỉ mở vài phút/ngày/máy, không phải cả ngày như orders.
     useEffect(() => {
-        if (!addressId || !supabase || isGuest() || !hasMultiDevice) return
+        if (!addressId || !supabase || isGuest()) return
         const channel = supabase
             .channel(`shift-closing-db-${addressId}`)
             .on('postgres_changes',
                 { event: '*', schema: 'public', table: 'shift_closings', filter: `address_id=eq.${addressId}` },
                 (payload) => {
                     const row = payload.new
-                    if (!row || !row.inventory_report) return
+                    if (!row) return
                     // Only today's (VN) row — ignore events for other days' closings.
                     if (dateKey && row.closed_at && dateStringVN(new Date(row.closed_at)) !== dateKey) return
-                    reconcileFromRemote(row.inventory_report)
+                    onRemoteCashRef.current?.(row)
+                    if (row.inventory_report) reconcileFromRemote(row.inventory_report)
                 })
             .subscribe()
         return () => { supabase.removeChannel(channel) }
-    }, [addressId, dateKey, reconcileFromRemote, hasMultiDevice])
+    }, [addressId, dateKey, reconcileFromRemote])
 
     // ── Mutation handlers (plain setState; dirty is derived, autosave pushes) ─
     const onOpeningChange = useCallback((ingredient, value) => {

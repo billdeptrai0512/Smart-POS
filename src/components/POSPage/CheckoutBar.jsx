@@ -54,7 +54,7 @@ export default function CheckoutBar({
                 disabled={disabled}
                 className="w-full py-2.5 rounded-[12px] bg-primary text-bg text-[14px] font-black uppercase tracking-wider hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-                {tableName ? `Tạo ${tableName}` : 'Thanh toán'}
+                Tạo đơn
             </button>
 
             <DiscountModal

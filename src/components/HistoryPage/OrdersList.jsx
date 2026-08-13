@@ -5,6 +5,10 @@ import { dateShortVN, timeStringVN } from '../../utils/dateVN'
 import { useConfirm } from '../../contexts/ConfirmContext'
 import DiscountModal from '../POSPage/DiscountModal'
 
+// Nút icon tròn trên thẻ đơn (giảm giá, xoá) — cùng một khuôn, tách ra để đổi kiểu
+// một lần. Cùng kích thước với hàng nút trong TableDetailModal.
+const ICON_BTN = 'shrink-0 w-[26px] h-[26px] rounded-full border bg-surface-light border-border/60 flex items-center justify-center transition-colors'
+
 export default function OrdersList({
     orders, runningTotals, isLoading, isTodayScope,
     pendingOrders, isSyncing, onRetrySync, onDeleteOffline,
@@ -115,9 +119,9 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                             <button
                                 onClick={() => setShowDiscount(true)}
                                 aria-label="Giảm giá"
-                                className="self-center text-text-secondary hover:text-primary transition-colors"
+                                className={`${ICON_BTN} self-center text-text-secondary hover:text-primary`}
                             >
-                                <Percent size={15} strokeWidth={2.25} />
+                                <Percent size={14} strokeWidth={2.25} />
                             </button>
                         )}
                     </div>
@@ -141,27 +145,19 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
 
                 <div className="border-t border-border/40 pt-2 flex justify-between items-center gap-3 leading-none">
                     <span className="text-text-secondary/70 text-[12px] font-bold truncate min-w-0 leading-none">
-                        {time}{order.tableName ? ` · ${order.tableName}` : ''}{order.staffName ? ` · ${order.staffName}` : ''}
+                        {time}{order.tableName ? <> · <span className="inline-block first-letter:uppercase">{order.tableName}</span></> : ''}{order.staffName ? ` · ${order.staffName}` : ''}
                     </span>
+                    {/* Đơn offline chưa lên DB thì xoá bằng đường khác (hàng chờ), còn lại
+                        y hệt nhau — một nút, hai nguồn dữ liệu. */}
                     {!order.deletedAt && (
-                        !order.isOffline ? (
-                            <button
-                                onClick={handleDelete}
-                                disabled={isDeleting}
-                                aria-label="Xóa đơn"
-                                className="text-text-secondary hover:text-danger transition-colors disabled:opacity-50 shrink-0"
-                            >
-                                <Trash2 size={17} strokeWidth={2.25} />
-                            </button>
-                        ) : (
-                            <button
-                                onClick={() => onDeleteOffline(order.createdAt_key)}
-                                aria-label="Xóa đơn offline"
-                                className="text-warning/70 hover:text-danger transition-colors shrink-0"
-                            >
-                                <Trash2 size={17} strokeWidth={2.25} />
-                            </button>
-                        )
+                        <button
+                            onClick={order.isOffline ? () => onDeleteOffline(order.createdAt_key) : handleDelete}
+                            disabled={!order.isOffline && isDeleting}
+                            aria-label={order.isOffline ? 'Xóa đơn offline' : 'Xóa đơn'}
+                            className={`${ICON_BTN} ${order.isOffline ? 'text-warning/70' : 'text-text-secondary'} hover:text-danger disabled:opacity-50`}
+                        >
+                            <Trash2 size={14} strokeWidth={2.25} />
+                        </button>
                     )}
                 </div>
             </div>

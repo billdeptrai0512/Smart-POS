@@ -400,6 +400,30 @@ Payment là sự kiện **tần suất thấp, thời lượng giới hạn** �
 
 **✅ AS-BUILT (2026-06-10 → 2026-07-13):** ship đầu tiên dùng realtime (`usePaymentListener` nghe INSERT `address_subscriptions`), sau đó thêm `usePaymentPoll` chạy song song làm lưới an toàn. Rà lại kiến trúc realtime toàn hệ thống (2026-07-13) phát hiện phạm vi quota rộng hơn phần payment này — có thêm 2 kênh khác (`orders-realtime`, `shift-closing-db`, xem bên dưới) — nên đã **bỏ hẳn `usePaymentListener`**, chỉ còn `usePaymentPoll` (poll 4s/lần, dừng khi paid/expired) làm cơ chế xác nhận duy nhất. Migration `20260713_drop_payment_realtime.sql` gỡ `address_subscriptions` khỏi `supabase_realtime` publication. Đúng như kế hoạch ban đầu ở đầu §7.1 — không còn realtime cho payment.
 
+**✅ AS-BUILT (2026-08-13) — orders cũng bỏ realtime, chuyển sang poll.** Câu "giữ realtime cho thứ cần tức thì thật (orders)" ở trên **không còn đúng**. Hai lý do:
+
+1. **Cổng chưa từng mở.** `hasMultiDevice = countActiveSessions(addressId) >= 2` dựa vào `active_sessions`, mà bảng đó upsert `onConflict: 'user_id'` → **hai máy đăng nhập cùng một tài khoản chỉ sinh MỘT dòng**. Đếm ra 1, kênh không bao giờ subscribe, không máy nào broadcast. Tức là ca dùng phổ biến nhất — quán nhỏ, một tài khoản, hai điện thoại — chưa từng đồng bộ được ngày nào.
+2. **Không tới được quy mô.** Kể cả khi cổng mở: 1000 quán × 2 máy = 2000 kết nối đồng thời, **vượt trần ~500**. Đúng nút thắt đã mô tả ở §7.1 cho payment. Thêm nữa mỗi sự kiện realtime kéo `fetchTodayOrders` (join lồng `order_items` + `products` của cả ngày) trên MỌI máy — đơn thứ 300 trong ngày kéo 300 dòng về từng máy một.
+
+**Cơ chế mới** (`src/hooks/useOrdersPoll.js`): poll `orders` 5s/lần, **chỉ cột vô hướng** (`id, total, discount_amount, created_at, deleted_at`, không join), diff theo id; chỉ đơn thật sự mới mới tốn thêm một lượt fetch kèm món. Cổng theo màn hình (`/pos` hoặc `/history`) — miễn phí, không bao giờ trả lời sai. Giãn còn 15s sau 2 phút không có thay đổi; poll ngay khi tab hiện lại. Ở 1000 quán × 2 máy ≈ 170 req/s, stateless, scale ngang. Đánh đổi: trễ ≤5s thay vì ~200ms.
+
+Kèm theo: `20260813_drop_orders_realtime.sql` gỡ `orders` khỏi publication; xoá luôn vòng poll `countActiveSessions` 30s/máy (~2880 query/ngày/máy) vốn chỉ để trả lời một câu boolean. Heartbeat `upsertSession` giữ lại (5 phút/lần) cho màn `/addresses`. **Còn lại đúng một kênh realtime toàn hệ thống: `shift-closing-db`** — xem block ngay dưới.
+
+**✅ AS-BUILT (2026-08-13) — `shift-closing-db` GIỮ realtime, chỉ gỡ cổng.** Đoạn "Rà soát mở rộng (2026-07-13)" bên dưới khoe đã thêm gate multi-device cho kênh này *"để nhất quán với `orders-realtime`"*. Chính gate đó làm kênh **không bao giờ mở** — cùng lỗi đếm `countActiveSessions` mô tả ở mục 1 trên. Bộ merge hai chiều của kiểm kê (merge RPC per-field ở server + `reconcileFromRemote` per-ô ở client + toast xung đột) đã xây xong từ 2026-06-19 nhưng gần như chưa chạy ngày nào. Đã xoá gate; `countActiveSessions` giờ không còn ai gọi nên xoá khỏi `authService.js`.
+
+**Vì sao kênh này KHÔNG chuyển sang poll như orders** (hai tải khác nhau, không phải thiếu nhất quán):
+
+| | `orders` → poll | `shift-closing-db` → giữ realtime |
+|---|---|---|
+| Thời lượng kênh | cả ngày, mọi máy | vài phút/ngày/máy — hook chỉ sống trong `DailyReportPage` |
+| Quy mô kết nối | 1000 quán × 2 máy = 2000 (vượt trần ~500) | quán kết ca rải rác ≈ dưới 100 đồng thời |
+| Tính chất dữ liệu | chỉ-thêm-mới, ai thấy trước sau đều như nhau | **hai người cùng soạn một form** — màn duy nhất trong app như vậy |
+| Giá của trễ 5s | không đáng kể | B chưa kịp thấy ô A vừa điền nên gõ đè; `reconcileFromRemote` giữ ô dirty của B ⇒ số của A mất. `CONFLICT_WINDOW_MS = 8000` chỉnh theo giả định echo về trong vài trăm ms |
+
+`shift_closings` **ở lại** trong publication `supabase_realtime` (migration 20260619) — không có migration nào cho đợt này. Bù cho điểm yếu mất-event của realtime: quay lại tab thì `DailyReportPage` kéo lại phiếu chốt một lần và áp qua đúng đường merge per-field.
+
+**Kèm theo — sửa bug mất tiền ở "Lưu thực thu" (độc lập transport).** `handleSaveCashflow` trước đây UPDATE cả `actual_cash` lẫn `actual_transfer` lấy từ state local: A đếm két, B đối chiếu bank, ai bấm Lưu sau đè số người trước bằng bản cũ của mình. `reportService.ts` đã ghi nhận và **chấp nhận** last-write-wins ở đây, nhưng chấp nhận đó dựa trên giả định "một người chốt" — use case hai máy phá đúng giả định đó. Giờ `buildCashPayload()` chỉ gửi ô đã đổi (không đổi gì → `null`, không gửi request); cùng sửa một ô thì vẫn ai lưu sau thắng (hai người đếm cùng một con số). Test: `tests/report/cashPayload.test.js`.
+
 **Rà soát mở rộng (2026-07-13):** ngoài payment còn 2 kênh realtime khác dùng chung quota: `orders-realtime-${addressId}` (`POSContext.jsx`, core order-sync đa thiết bị — **giữ nguyên**, đã gate đúng: chỉ mở khi ≥2 phiên hoạt động cùng địa chỉ + tab foreground) và `shift-closing-db-${addressId}` (`useShiftInventoryState.js`, đồng bộ kiểm kê cuối ca — **trước đó KHÔNG có gate**, mở kênh cho mọi thiết bị vào trang Báo cáo dù chỉ 1 thiết bị/địa chỉ). Đã thêm cùng gate multi-device (`countActiveSessions` ≥2, re-check mỗi 5 phút) cho `shift-closing-db` để nhất quán với `orders-realtime` và cắt phần lớn kênh vô nghĩa ở quy mô lớn.
 
 ### 7.2 — Trạng thái: c ĐÃ LIVE (2026-06-10 → 06-12)

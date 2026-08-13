@@ -6,7 +6,29 @@
 // (cộng lạc quan đợt vừa gửi) — cả hai đều dựa vào việc hàm này KHÔNG sửa mảng cũ.
 
 import { describe, it, expect } from 'vitest'
-import { mergeTableLines } from '../../src/services/orderService'
+import { mergeTableLines, tableLineName } from '../../src/services/orderService'
+
+describe('tableLineName', () => {
+    it('gắn topping vào nhãn để hai ly khác topping không gộp làm một', () => {
+        const a = tableLineName('Cacao Cà Phê', ['Trân châu'])
+        const b = tableLineName('Cacao Cà Phê', [])
+
+        expect(a).toBe('Cacao Cà Phê (Trân châu)')
+        expect(mergeTableLines([{ name: a, qty: 1 }], [{ name: b, qty: 2 }])).toEqual([
+            { name: 'Cacao Cà Phê (Trân châu)', qty: 1 },
+            { name: 'Cacao Cà Phê', qty: 2 },
+        ])
+    })
+
+    it('bỏ cách trả tiền khỏi nhãn — không phải topping', () => {
+        expect(tableLineName('Trà đá', ['Tiền mặt'])).toBe('Trà đá')
+        expect(tableLineName('Trà đá', ['Ít đá', 'MoMo'])).toBe('Trà đá (Ít đá)')
+    })
+
+    it('chuỗi options rỗng từ DB không sinh ngoặc rỗng', () => {
+        expect(tableLineName('Trà đá', ''.split(', '))).toBe('Trà đá')
+    })
+})
 
 describe('mergeTableLines', () => {
     it('cộng dồn dòng trùng tên, giữ thứ tự gặp đầu tiên', () => {

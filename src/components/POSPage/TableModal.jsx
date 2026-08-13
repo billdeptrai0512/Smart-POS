@@ -3,10 +3,10 @@ import { Plus, X } from 'lucide-react'
 import { useCart } from '../../contexts/CartContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAuth } from '../../contexts/AuthContext'
-import { useConfirm } from '../../contexts/ConfirmContext'
 import { formatVND } from '../../utils'
-import { timeStringVN, dateShortVN, isSameDayVN } from '../../utils/dateVN'
+import { dateShortVN, isSameDayVN } from '../../utils/dateVN'
 import { Dialog } from '../common/ModalShell'
+import TableDetailModal from './TableDetailModal'
 
 // Chọn bàn — chỉ mở được từ CheckoutBar, tức chỉ ở địa chỉ dine_in.
 //
@@ -25,12 +25,14 @@ const CARD_H = 'h-[148px]'
 // nữa" — cắt mà không nói là giấu tiền của khách.
 const CARD_LINES = 3
 export default function TableModal({ onClose }) {
-    const confirm = useConfirm()
-    const { tableName, setTableName, openTables, refreshTables, handleCloseTable, orderCount, showError } = useCart()
+    const { tableName, setTableName, openTables, refreshTables, orderCount, showError } = useCart()
     const { selectedAddress, setTables } = useAddress()
     const { isManager, isAdmin } = useAuth()
     const [newName, setNewName] = useState('')
     const [adding, setAdding] = useState(false)
+    // Tên bàn đang mở chi tiết. Giữ TÊN chứ không giữ object bàn: openTables đổi sau
+    // mỗi lần xoá đợt, ôm object cũ là modal hiện số tiền đã chết.
+    const [detail, setDetail] = useState(null)
 
     // Bàn có thể vừa được mở/đóng ở máy khác — đồng bộ lại mỗi lần mở modal thay vì
     // nuôi thêm một kênh realtime. Component chỉ mount khi mở (xem CheckoutBar) nên
@@ -45,17 +47,14 @@ export default function TableModal({ onClose }) {
     // khỏi màn hình dù đơn vẫn còn trong DB.
     const adHoc = [...new Set([...openTables.map(t => t.name), tableName].filter(n => n && !configured.includes(n)))]
     const names = [...configured, ...adHoc]
-    const statsOf = (name) => openTables.find(t => t.name === name) || { name, total: 0, rounds: 0, openedAt: null, lines: [] }
+    const statsOf = (name) => openTables.find(t => t.name === name) || { name, total: 0, rounds: [], openedAt: null, lines: [] }
+    const detailTable = detail ? openTables.find(t => t.name === detail) : null
 
     // Bàn không bị cắt theo ngày (xem fetchOpenTables), nên bàn quên chưa tính tiền có
     // thể là của hôm qua. Giờ mở KHÔNG hiện trên thẻ — cái nhân viên cần đọc là danh
     // sách món; chỉ ngày khác hôm nay mới đáng cảnh báo (thẻ hiện "Từ 08/08"), còn
     // giờ đầy đủ để lại trong hộp xác nhận tính tiền.
     const staleLabel = (iso) => (iso && !isSameDayVN(new Date(iso), new Date())) ? `Từ ${dateShortVN(new Date(iso))}` : null
-    const openedLabel = (iso) => {
-        const d = new Date(iso)
-        return isSameDayVN(d, new Date()) ? timeStringVN(d) : `${timeStringVN(d)} ${dateShortVN(d)}`
-    }
 
     function pick(name) {
         setTableName(name)
@@ -88,19 +87,6 @@ export default function TableModal({ onClose }) {
         catch (err) { showError(err, 'Xoá bàn') }
     }
 
-    async function handleBill(t) {
-        // Máy khác có thể vừa gửi thêm một đợt cho bàn này sau lần fetch lúc mở lưới.
-        // Nhân viên thu tiền theo đúng con số trong hộp này, nên lấy lại số mới nhất
-        // ngay trước khi hỏi. Fetch hỏng → [] → dùng lại số đang hiện, vẫn tính tiền được.
-        const fresh = (await refreshTables()).find(x => x.name === t.name) || t
-        const ok = await confirm({
-            title: `Tính tiền ${fresh.name}?`,
-            detail: `${fresh.lines.map(l => `${l.qty} ${l.name}`).join(', ')} — ${formatVND(fresh.total)} · ${fresh.rounds} đợt từ ${openedLabel(fresh.openedAt)}`,
-            confirmLabel: 'Tính tiền',
-        })
-        if (ok) handleCloseTable(fresh)
-    }
-
     return (
         <Dialog onClose={onClose} panelClassName="w-full max-w-md mx-4 max-h-[85dvh] flex flex-col bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
             {/* Header */}
@@ -131,8 +117,9 @@ export default function TableModal({ onClose }) {
                     {names.map(name => {
                         const t = statsOf(name)
                         const active = name === tableName
-                        const busy = t.rounds > 0
+                        const busy = t.rounds.length > 0
                         const stale = staleLabel(t.openedAt)
+                        const pending = t.rounds.filter(r => !r.servedAt).length
                         const shown = t.lines.length > CARD_LINES ? t.lines.slice(0, CARD_LINES - 1) : t.lines
                         return (
                             <div
@@ -152,8 +139,10 @@ export default function TableModal({ onClose }) {
                                 )}
                                 {/* Thẻ = tờ hoá đơn đang chạy. Tên và tổng cùng một hàng vì đó là
                                     hai thứ hay đọc chung; danh sách món ở dưới, cắt bớt cho vừa
-                                    khung — bản đầy đủ nằm trong hộp xác nhận lúc tính tiền. */}
-                                <button onClick={() => pick(name)} className="flex-1 min-h-0 w-full overflow-hidden text-left flex flex-col gap-1 focus:outline-none">
+                                    khung — bản đầy đủ nằm trong modal chi tiết.
+                                    Bàn có khách: chạm = mở chi tiết (đọc/sửa/thu tiền đều ở đó).
+                                    Bàn trống: không có gì để đọc, chạm = chọn bàn luôn. */}
+                                <button onClick={() => busy ? setDetail(name) : pick(name)} className="flex-1 min-h-0 w-full overflow-hidden text-left flex flex-col gap-1 focus:outline-none">
                                     <span className="w-full flex items-baseline justify-between gap-2">
                                         <span className={`text-[13px] font-black uppercase tracking-wide line-clamp-1 ${busy || active ? 'text-text' : 'text-text-secondary'}`}>{name}</span>
                                         {busy && <span className="shrink-0 text-[14px] font-black tabular-nums text-primary">{formatVND(t.total)}</span>}
@@ -175,15 +164,15 @@ export default function TableModal({ onClose }) {
                                     ) : (
                                         <span className="text-[12px] font-bold text-text-secondary/50">Trống</span>
                                     )}
+                                    {/* Còn đợt chưa bưng ra — thứ duy nhất trên lưới mà nhân
+                                        viên cần thấy trước khi bấm vào bàn. Chi tiết đợt nào
+                                        thì mở thẻ ra xem. */}
+                                    {pending > 0 && (
+                                        <span className="mt-auto text-[11px] font-black uppercase tracking-wide text-warning">
+                                            {pending} đợt chưa ra món
+                                        </span>
+                                    )}
                                 </button>
-                                {busy && (
-                                    <button
-                                        onClick={() => handleBill(t)}
-                                        className="shrink-0 w-full py-1.5 rounded-[12px] bg-surface-light border border-border/60 text-[12px] font-black uppercase tracking-wider text-text-secondary hover:text-text hover:border-primary/40 transition-colors"
-                                    >
-                                        Tính tiền
-                                    </button>
-                                )}
                             </div>
                         )
                     })}
@@ -226,6 +215,17 @@ export default function TableModal({ onClose }) {
                     </p>
                 )}
             </div>
+
+            {/* Tra lại openTables mỗi lần render: xoá một đợt trong modal chi tiết phải
+                thấy tiền bàn tụt xuống ngay tại đó. Bàn không còn (máy khác vừa tính tiền
+                / đợt cuối vừa bị xoá) → không tìm thấy → modal tự đóng. */}
+            {detailTable && (
+                <TableDetailModal
+                    table={detailTable}
+                    onClose={() => setDetail(null)}
+                    onPick={() => pick(detail)}
+                />
+            )}
         </Dialog>
     )
 }

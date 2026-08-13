@@ -23,6 +23,7 @@ Mỗi file có **header** ghi: test cái gì + file nguồn. Từng case đọc 
 | | expenseCategoryBreakdown | gộp chi phí theo nhóm | `utils/expenseCategoryBreakdown.js` |
 | | reportContract | fetcher guest ↔ Supabase cùng shape | `services/reportService.js` |
 | | reportService.merge | gộp tồn khi nhiều lần chốt ca | `services/reportService.js` |
+| | cashPayload | "Lưu thực thu" chỉ gửi ô đã sửa (2 máy không đè nhau) | `services/reportService.ts` |
 | | reportHeaderDateRange | tính khoảng ngày cho header | `utils/rangeCalc.js` |
 | | dateScopeParamsSeed | đọc scope/ngày từ URL, chuẩn hoá custom-1-ngày | `hooks/useDateScope.js` |
 | | missingCupRepeatHistory | nghi vấn bán thiếu — đếm ngày lặp lại | `utils/inventory.js` |
@@ -34,6 +35,7 @@ Mỗi file có **header** ghi: test cái gì + file nguồn. Từng case đọc 
 | | menuSequence | thứ tự MENU_SEQUENCE | `utils/menuSequence.js` |
 | **pos** | orderService | flush đơn offline (guest) | `services/orderService.js` |
 | | tableLines | gộp đợt gọi món của bàn thành hoá đơn (dine_in) | `services/orderService.ts` |
+| | ordersPoll | diff đơn khi đồng bộ hai máy cùng địa chỉ | `hooks/useOrdersPoll.js` |
 | **common** | money | discount, parse/format VND, COGS | `utils/money.js`, `utils/inventory.js` |
 | | datePickerUtils | parse ngày, tiện ích date-picker | `components/common/datePickerUtils.js` |
 | | text | capitalizeWords | `utils/text.js` |

@@ -5,8 +5,8 @@ import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { formatVNDInput, parseVNDInput } from '../utils'
 import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses, dedupeShiftClosingsByDay } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
-import { fetchDailyReportContext, fetchLastWeekSameDayOrderItems, fetchReportByRange, processIngredientRestock, fetchOpenTables } from '../services/orderService'
-import { fetchCashClosedToday } from '../services/reportService'
+import { fetchDailyReportContext, fetchLastWeekSameDayOrderItems, fetchReportByRange, processIngredientRestock, fetchOpenTables, invalidateDailyContext } from '../services/orderService'
+import { fetchCashClosedToday, buildCashPayload } from '../services/reportService'
 import { useShiftClosingSave } from '../hooks/useShiftClosingSave'
 import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
 import { useDailyReportData } from '../hooks/useDailyReportData'
@@ -154,10 +154,28 @@ export default function DailyReportPage() {
         showToast(`${ingredientLabel(ingredient)}: vừa được cập nhật từ máy khác, kiểm tra lại`, 'warning')
     }, [showToast])
 
+    // Số thực thu ĐÃ LƯU của lần render gần nhất — onRemoteCash cần đọc đồng bộ để biết ô nào
+    // người dùng đang gõ dở. Gán ở dưới, ngay chỗ tính persistedCash (sau khi shiftClosing về).
+    const persistedCashRef = useRef({ cash: 0, transfer: 0 })
+
+    // Máy kia vừa lưu thực thu → nhận nguyên dòng qua kênh realtime của kiểm kê (không tốn
+    // request). Nạp lại CHỈ ô người này chưa đụng — cùng luật per-field dirty với kiểm kê, để
+    // số đang gõ dở không bị giật mất.
+    const onRemoteCash = useCallback((row) => {
+        setShiftClosing(prev => ({ ...prev, ...row }))
+        const adopt = (setInput, remote, wasPersisted) => setInput(prev => (
+            (parseVNDInput(prev) || 0) !== wasPersisted ? prev : (remote ? formatVNDInput(remote) : '')
+        ))
+        adopt(setCashInput, row.actual_cash, persistedCashRef.current.cash)
+        adopt(setTransferInput, row.actual_transfer, persistedCashRef.current.transfer)
+    }, [setShiftClosing])
+
     // Inventory editor (today scope only). All input state + warehouse fetch live in
     // the hook so DailyReportPage stays focused on render orchestration. todayISO
     // drives existingClosing refetch on midnight rollover.
-    const inventory = useShiftInventoryState(selectedAddress?.id, selectedAddress?.ingredient_sort_order, todayISO, onInventoryFieldConflict)
+    // onRemoteCash chỉ truyền ở scope Hôm nay: xem ngày cũ mà nuốt event của hôm nay sẽ
+    // ghi đè shiftClosing của ngày đang xem.
+    const inventory = useShiftInventoryState(selectedAddress?.id, selectedAddress?.ingredient_sort_order, todayISO, onInventoryFieldConflict, isTodayScope ? onRemoteCash : undefined)
 
     // Same-day-last-week order items — feeds the refill forecast ("Bổ sung mai")
     // inside InventoryReportCard. Today scope only; cached per address+day.
@@ -251,17 +269,57 @@ export default function DailyReportPage() {
         ? Number(shiftClosing.actual_cash) : 0
     const persistedTransfer = isTodaysClosing && shiftClosing.actual_transfer != null
         ? Number(shiftClosing.actual_transfer) : 0
-    const cashDirty = (parseVNDInput(cashInput) || 0) !== persistedCash
-        || (parseVNDInput(transferInput) || 0) !== persistedTransfer
-    // Prefill: 0 → để TRỐNG chứ không điền "0". Payload luôn gửi cả 2 ô (trống → 0)
-    // nên lưu mỗi Tiền mặt cũng ghi actual_transfer = 0; điền lại "0" làm ô Chuyển
-    // khoản mất viền đứt + ăn màu chữ "đã nhập", trông như đã đếm xong. 0 và trống
-    // tính tiền y hệt nhau nên để trống là an toàn.
+    persistedCashRef.current = { cash: persistedCash, transfer: persistedTransfer }
+    // Ô nào đang lệch bản đã lưu — một chỗ tính cho cả nút "Lưu thực thu" (cashDirty),
+    // confirm rời trang, và payload lúc ghi. hasExistingRow = true ở đây chỉ để lấy phép so
+    // từng ô: nhánh INSERT luôn trả payload đầy đủ nên không suy ra dirty được.
+    const cashChanges = useMemo(() => buildCashPayload(
+        { actual_cash: persistedCash, actual_transfer: persistedTransfer, cash_closed_at: shiftClosing?.cash_closed_at },
+        { actual_cash: parseVNDInput(cashInput) || 0, actual_transfer: parseVNDInput(transferInput) || 0 },
+        true,
+    ), [persistedCash, persistedTransfer, shiftClosing?.cash_closed_at, cashInput, transferInput])
+    const cashDirty = !!cashChanges
+    // Prefill: 0 → để TRỐNG chứ không điền "0". Điền lại "0" làm ô Chuyển khoản mất viền
+    // đứt + ăn màu chữ "đã nhập", trông như đã đếm xong. 0 và trống tính tiền y hệt nhau
+    // nên để trống là an toàn.
+    // Chỉ seed khi ĐỔI PHIẾU (load lần đầu / sang ngày mới / đổi scope) — cố ý KHÔNG nghe
+    // actual_cash/actual_transfer: máy kia lưu thực thu làm 2 cột đó đổi, effect này mà chạy
+    // sẽ xoá trắng số máy này đang gõ dở. Cập nhật từ xa đi qua onRemoteCash (merge từng ô).
     useEffect(() => {
         if (!isTodayScope) return
         setCashInput(isTodaysClosing && shiftClosing.actual_cash ? formatVNDInput(shiftClosing.actual_cash) : '')
         setTransferInput(isTodaysClosing && shiftClosing.actual_transfer ? formatVNDInput(shiftClosing.actual_transfer) : '')
-    }, [isTodayScope, isTodaysClosing, todayISO, shiftClosing?.id, shiftClosing?.actual_cash, shiftClosing?.actual_transfer, shiftClosing?.closed_at])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isTodayScope, isTodaysClosing, todayISO, shiftClosing?.id, shiftClosing?.closed_at])
+
+    // Lưới an toàn cho realtime: rớt gói = mất event vĩnh viễn (điểm yếu cố hữu của kênh).
+    // Quay lại tab thì kéo phiếu chốt một lần rồi áp qua ĐÚNG đường merge per-field ở trên,
+    // rẻ hơn nhiều so với hiển thị sai số thực thu suốt cả ca.
+    //
+    // Chốt "phải từng ẩn, và ẩn đủ lâu" giống hệt useOrdersPoll: hệ điều hành bắn
+    // hidden→visible thành chùm (đo được 7 sự kiện/20 giây), mà mỗi cú ở đây là xoá sạch
+    // reportCache của địa chỉ cộng một RPC báo cáo — chuyển app qua lại 2 giây không đáng.
+    const hiddenAtRef = useRef(0)
+    useEffect(() => {
+        if (!isTodayScope || !selectedAddress?.id) return
+        const onVis = () => {
+            if (document.visibilityState !== 'visible') { hiddenAtRef.current = Date.now(); return }
+            const away = hiddenAtRef.current ? Date.now() - hiddenAtRef.current : 0
+            hiddenAtRef.current = 0
+            if (away < 30000) return
+            invalidateDailyContext(selectedAddress.id)
+            fetchDailyReportContext(selectedAddress.id)
+                .then(d => {
+                    const row = d?.shift_closing
+                    // RPC thỉnh thoảng trả phiếu HÔM QUA (biên tz) — bỏ qua, không thì số hôm
+                    // qua nhảy vào ô thực thu hôm nay.
+                    if (row && (!row.closed_at || dateStringVN(new Date(row.closed_at)) === todayISO)) onRemoteCash(row)
+                })
+                .catch(() => { /* lưới an toàn hỏng thì im lặng — realtime vẫn là đường chính */ })
+        }
+        document.addEventListener('visibilitychange', onVis)
+        return () => document.removeEventListener('visibilitychange', onVis)
+    }, [isTodayScope, selectedAddress?.id, todayISO, onRemoteCash])
 
     // Onboarding phase 4 "Kiểm kê tồn kho": trigger khi user bấm Lưu kiểm kê (không phải lúc
     // gõ Cuối kỳ) — xem handleSaveInventory. Match theo LABEL (không hardcode key) vì shop
@@ -987,10 +1045,10 @@ export default function DailyReportPage() {
     const guardLeave = async (proceed) => {
         if (hasUnsaved) {
             const cashLines = []
-            if ((parseVNDInput(cashInput) || 0) !== persistedCash)
-                cashLines.push(`Thực thu · Tiền mặt: ${formatVNDInput(persistedCash)} → ${formatVNDInput(parseVNDInput(cashInput) || 0)}`)
-            if ((parseVNDInput(transferInput) || 0) !== persistedTransfer)
-                cashLines.push(`Thực thu · Chuyển khoản: ${formatVNDInput(persistedTransfer)} → ${formatVNDInput(parseVNDInput(transferInput) || 0)}`)
+            if (cashChanges?.actual_cash !== undefined)
+                cashLines.push(`Thực thu · Tiền mặt: ${formatVNDInput(persistedCash)} → ${formatVNDInput(cashChanges.actual_cash)}`)
+            if (cashChanges?.actual_transfer !== undefined)
+                cashLines.push(`Thực thu · Chuyển khoản: ${formatVNDInput(persistedTransfer)} → ${formatVNDInput(cashChanges.actual_transfer)}`)
             const lines = isTodayScope ? [...inventory.dirtySummary, ...cashLines] : pastInvDirty.lines
             const list = lines.slice(0, 5).map(l => `• ${l}`).join('\n')
             const more = lines.length > 5 ? `\nvà ${lines.length - 5} mục khác…` : ''
@@ -1107,22 +1165,21 @@ export default function DailyReportPage() {
                 if (!ok) return
             }
         }
+        // CHỈ ô đã sửa (xem buildCashPayload): máy kia đang đếm ô còn lại thì số của họ không
+        // bị bản cũ trong state máy này đè lên. Đường UPDATE dùng lại đúng cashChanges đã
+        // tính cho nút Lưu; chỉ phiếu MỚI mới phải dựng payload đầy đủ.
+        const cashPayload = shiftClosing?.id ? cashChanges : buildCashPayload(
+            null,
+            { actual_cash: parseVNDInput(cashInput) || 0, actual_transfer: parseVNDInput(transferInput) || 0 },
+            false,
+        )
+        if (!cashPayload) return   // không ô nào đổi → không gửi request nào
         setSavingCashflow(true)
         const payload = {
             address_id: selectedAddress.id,
             closed_by: profile?.id || null,
             system_total_revenue: systemTotalRevenue,
-            actual_cash: parseVNDInput(cashInput) || 0,
-            actual_transfer: parseVNDInput(transferInput) || 0,
-            // "Lưu thực thu" = chốt ca tiền. Đặt mốc lần đầu, giữ nguyên các lần sửa số
-            // sau (không dời mốc, để các khoản chi giữa 2 lần lưu không bị đổi phân loại).
-            cash_closed_at: shiftClosing?.cash_closed_at || new Date().toISOString(),
-        }
-        // On insert we also need inventory_report (empty if not provided yet) and a note;
-        // on update we preserve whatever the existing row has — only the cash fields change.
-        if (!shiftClosing?.id) {
-            payload.inventory_report = []
-            payload.note = ''
+            ...cashPayload,
         }
         try {
             const saved = await saveShiftClosing(payload, {
@@ -1134,9 +1191,8 @@ export default function DailyReportPage() {
             showToast('Đã lưu thực thu', 'success')
             requestOnboardingRefresh()
             // Onboarding phase 3: cash/transfer done độc lập theo ô có gõ gì hay không lúc bấm
-            // lưu — "trigger không theo thứ tự" (không phải parse actual_cash/actual_transfer,
-            // vì payload luôn gửi cả 2 field cùng lúc, trống → 0, không phân biệt được "chưa
-            // nhập" vs "nhập 0").
+            // lưu — "trigger không theo thứ tự" (không đọc actual_cash/actual_transfer trong
+            // payload: trống quy về 0 nên không phân biệt được "chưa nhập" vs "nhập 0").
             if (isGuest) {
                 setCashFlowProgress(prev => ({
                     cash: prev.cash || cashInput.trim() !== '',

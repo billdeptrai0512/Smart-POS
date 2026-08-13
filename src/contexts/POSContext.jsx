@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { fetchTodayStats, submitOrder, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext, fetchOpenTables, closeTable, reopenTable, mergeTableLines } from '../services/orderService'
-import { upsertSession, countActiveSessions } from '../services/authService'
+import { fetchTodayStats, submitOrder, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext, fetchOpenTables, closeTable, reopenTable, markOrderServed, mergeTableLines, tableLineName } from '../services/orderService'
+import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder, addPendingTableClose, removePendingTableClose } from '../hooks/useOfflineSync'
+import { useOrdersPoll } from '../hooks/useOrdersPoll'
 import { dateStringVN } from '../utils/dateVN'
 import { calculateProductCost, computeDiscount } from '../utils'
 import { useProducts } from './ProductContext'
@@ -19,6 +20,12 @@ import { HistoryContext } from './HistoryContext'
 // người dùng thấy. Supabase-js ném TypeError của fetch nên phải soi message.
 const isNetworkError = (err) => !navigator.onLine || /fetch|network|NetworkError/i.test(err?.message || '')
 
+// Dòng Nhật ký và dòng hoá đơn bàn cùng một quy ước ("2 Cà phê (Ít đá)"), nên cùng dùng
+// tableLineName + mergeTableLines của orderService — ba bản chép tay của cùng một quy ước
+// là ba chỗ để nó lệch nhau. Ở ngoài component: buildLastOrderFrom* phải "static" thì các
+// hook dùng chúng mới không phải khai thêm dependency.
+const journalLines = (lines) => lines.map(l => `${l.qty > 1 ? l.qty + ' ' : ''}${l.name}`)
+
 function mergeFetchedOrders(prev, fetchedOrders) {
     // The optimistic row's id IS the real orders.id (client-generated in
     // doSubmit, sent straight to the RPC) — a fetched row with the same id
@@ -34,10 +41,6 @@ export function POSProvider() {
     const { profile, isGuest, hasSession } = useAuth()
     const addressId = selectedAddress?.id
 
-    const localOrderIds = useRef(new Set())
-    // Holds the currently-subscribed orders channel so doSubmit can broadcast a
-    // nudge on it right after a successful insert — see the realtime effect below.
-    const ordersChannelRef = useRef(null)
     // Mirrors for the cart handlers below (useCallback'd with empty/near-empty deps
     // so ProductCard's React.memo actually bails out on untouched cards — otherwise
     // MenuGrid re-renders EVERY product card on every single tap). Same "ref mirror"
@@ -85,26 +88,31 @@ export function POSProvider() {
     // Các bàn còn khách, gộp từ DB (fetchOpenTables). Nguồn cho lưới chọn bàn và cho
     // số tổng cộng của bàn ở CheckoutBar.
     const [openTables, setOpenTables] = useState([])
+    // Bản sao đọc-đồng-bộ cho refreshTables: fetch hỏng thì trả lại danh sách ĐANG có
+    // thay vì rỗng, để người gọi không tưởng là bàn đã hết khách.
+    const openTablesRef = useRef([])
+    openTablesRef.current = openTables
     const [enabledStickyExtraIds, setEnabledStickyExtraIds] = useState([])
     const [revenue, setRevenue] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.REVENUE)) || 0)
     const [totalCost, setTotalCost] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.TOTAL_COST)) || 0)
     const [cupsSold, setCupsSold] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.CUPS)) || 0)
     const [isOnline, setIsOnline] = useState(navigator.onLine)
-    // Gate for the orders-realtime channel below: true once >= 2 devices are active
-    // on this address (nothing to sync cross-device with just 1). Kept up to date
-    // by the heartbeat effect further down ("Heartbeat for active_sessions").
-    const [hasMultiDevice, setHasMultiDevice] = useState(false)
     const { toast, showToast, showError } = useToast()
 
     // ---- History State ----
     const [todayOrders, setTodayOrders] = useState([])
+    // Bản sao đọc-đồng-bộ cho vòng poll đồng bộ (nó sống trong effect, đọc state trực
+    // tiếp là đọc mãi bản của lần mount đầu tiên).
+    const todayOrdersRef = useRef([])
+    todayOrdersRef.current = todayOrders
     const historyFetchedRef = useRef({ addressId: null, at: 0 }) // last successful handleLoadHistory fetch
     const [todayExpenses, setTodayExpenses] = useState([])
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
-    // Order ids that just arrived from ANOTHER device (set in scheduleOrdersRefresh
-    // below), so /history can glow those rows briefly — otherwise a realtime-merged
-    // row looks identical to one that's been sitting there all along.
+    // Order ids that just arrived from ANOTHER device (set by the sync poll below),
+    // so /history can glow those rows briefly — otherwise a synced-in row looks
+    // identical to one that's been sitting there all along.
     const [justArrivedIds, setJustArrivedIds] = useState(() => new Set())
+    const justArrivedTimerRef = useRef(null)
     // Last few orders, newest first (max 3) — shown in the header "Nhật ký" card.
     const [recentOrders, setRecentOrders] = useState([])
     // createdAt of the row that should play the slide-in. Set only on a local
@@ -154,16 +162,36 @@ export function POSProvider() {
     // từ chính máy này đã cộng lạc quan ngay bên dưới (doSubmit), còn máy khác thì
     // lần mở lưới kế tiếp là khớp lại — rẻ hơn nhiều so với một kênh nữa.
     // Trả về luôn danh sách vừa lấy: chỗ tính tiền cần con số MỚI NHẤT ngay trong cùng
-    // lượt bấm, không đợi state của vòng render sau. Lỗi mạng → [] để caller tự lùi về
-    // số đang hiển thị (xem handleBill ở TableModal).
+    // lượt bấm, không đợi state của vòng render sau.
     const refreshTables = useCallback(() => {
         if (!addressId) return Promise.resolve([])
         return fetchOpenTables(addressId)
             .then(list => { setOpenTables(list); return list })
-            .catch(() => [])
+            // Lỗi fetch KHÔNG phải là "bàn hết khách" — giữ nguyên lưới đang có. Nuốt
+            // lỗi rồi setOpenTables([]) là xoá trắng bàn của khách đang ngồi.
+            .catch(err => { console.error('refreshTables:', err); return openTablesRef.current })
     }, [addressId])
 
     useEffect(() => { if (dineIn) refreshTables() }, [dineIn, refreshTables])
+
+    // Ra món: lật cờ NGAY trong state rồi mới gọi server, lỗi thì lật lại. Chờ PATCH
+    // xong rồi refreshTables (một lượt join order_items, đo được ~1s) là nhân viên bấm
+    // xong đứng nhìn nút không đổi màu. Không fetch lại sau khi PATCH thành công: thứ
+    // duy nhất đổi là đúng cái cờ vừa lật.
+    const toggleServed = useCallback(async (round) => {
+        const next = round.servedAt ? null : new Date().toISOString()
+        const apply = (v) => setOpenTables(prev => prev.map(t => ({
+            ...t,
+            rounds: t.rounds.map(r => (r.id === round.id ? { ...r, servedAt: v } : r)),
+        })))
+        apply(next)
+        try {
+            await markOrderServed(round.id, next)
+        } catch (err) {
+            apply(round.servedAt)
+            showError(err, 'Đánh dấu ra món')
+        }
+    }, [showError])
 
     // Tính tiền = đóng bàn. Tiền đã vào doanh thu từng đợt nên ở đây không cộng trừ gì,
     // chỉ đóng dấu "lượt khách này xong". Nhận cả object bàn (không phải mỗi tên) để
@@ -279,203 +307,87 @@ export function POSProvider() {
         }
     }, [addressId, showToast])
 
-    // ---- Supabase realtime subscriptions ----
-    // Only subscribe to orders channel; only when tab is visible. Expenses are
-    // refetched on visibilitychange instead of via a dedicated realtime channel.
-    // fetchTodayStats is debounced to coalesce bursty INSERT events.
-    useEffect(() => {
-        // Guests never write orders to the DB (local-only) and all share the demo
-        // address id, so there's nothing to subscribe to — skip the websocket.
-        if (!supabase || !addressId || isGuest) return
-
-        let ordersChannel = null
-        let statsTimer = null
-        let recentTimer = null
-        let ordersTimer = null
-        let arrivedTimer = null
-
-        const scheduleStatsRefresh = () => {
-            clearTimeout(statsTimer)
-            statsTimer = setTimeout(() => {
-                fetchTodayStats(addressId).then(({ revenue, cups }) => {
-                    setRevenue(revenue); setCupsSold(cups)
+    // ---- Đồng bộ đơn giữa các máy ----
+    // Poll thay cho kênh realtime cũ — lý do đầy đủ ở hooks/useOrdersPoll.js. Ở đây chỉ
+    // còn việc áp kết quả vào state; hook lo nhịp, cổng màn hình và chuyện tab ẩn/hiện.
+    useOrdersPoll({
+        addressId,
+        isGuest,
+        localOrdersRef: todayOrdersRef,
+        onChange: ({ newOrders, patched, moneyChanged, tableChanged }) => {
+            if (newOrders.length) {
+                setTodayOrders(prev => {
+                    // Giữa lúc poll bay về, chính máy này có thể vừa chốt một đơn và đã
+                    // chèn hàng lạc quan cùng id — lọc lại tại thời điểm áp, đừng nhân đôi.
+                    // Không sắp xếp: HistoryPage sắp theo createdAt trước khi hiện.
+                    const have = new Set(prev.map(o => o.id))
+                    const add = newOrders.filter(o => !have.has(o.id))
+                    return add.length ? [...add, ...prev] : prev
                 })
-            }, 2000)
-        }
-
-        // Debounce the journal refetch the same way as stats. The bulk RPC returns
-        // no id so localOrderIds can't dedup our own echoes — without this, a burst
-        // of N orders fires N refetches that each replace the whole list and remount
-        // the rows (the "laggy + loạn" under rapid entry). Coalesce to one trailing
-        // reconcile; the optimistic rows already show each order instantly. Kept short
-        // (300ms) since the counter-staff use case (order-taker outside, counter inside
-        // watching Nhật ký) needs the other screen to update within a beat, not seconds.
-        const scheduleRecentRefresh = () => {
-            clearTimeout(recentTimer)
-            recentTimer = setTimeout(() => {
-                fetchRecentOrders(addressId, 3).then(recent => {
-                    setRecentOrders(recent.map(buildLastOrderFromDB))
-                })
-            }, 300)
-        }
-
-        // Reconcile the /history list (todayOrders) after an edit/soft-delete on
-        // ANOTHER device. Low-volume (manual actions, not order bursts) so a plain
-        // debounced refetch is enough — no need for the localOrderIds dance.
-        const scheduleOrdersRefresh = () => {
-            clearTimeout(ordersTimer)
-            ordersTimer = setTimeout(() => {
-                fetchTodayOrders(addressId)
-                    .then(orders => setTodayOrders(prev => {
-                        // Rows in the fetch that weren't in our own list yet came from
-                        // another device (our own submissions are already there via the
-                        // optimistic row) — glow those in /history for a few seconds so
-                        // the counter staff notices without staring at the list.
-                        const prevIds = new Set(prev.map(o => o.id))
-                        const newIds = orders.filter(o => !prevIds.has(o.id)).map(o => o.id)
-                        if (newIds.length) {
-                            // Merge into the existing glow set (not replace) — two refresh
-                            // cycles landing within 3s of each other must not cut the first
-                            // batch's glow short.
-                            setJustArrivedIds(prev => new Set([...prev, ...newIds]))
-                            clearTimeout(arrivedTimer)
-                            arrivedTimer = setTimeout(() => setJustArrivedIds(new Set()), 3000)
-                        }
-                        return mergeFetchedOrders(prev, orders)
-                    }))
-                    .catch(() => { })
-            }, 300)
-        }
-
-        const subscribe = () => {
-            if (ordersChannel) return
-            ordersChannel = supabase
-                .channel(`orders-realtime-${addressId}`)
-                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders', filter: `address_id=eq.${addressId}` }, (payload) => {
-                    scheduleStatsRefresh()
-
-                    // Detect if it's from another device
-                    if (!localOrderIds.current.has(payload.new.id)) {
-                        scheduleRecentRefresh()
-                        scheduleOrdersRefresh()
-                    }
-                })
-                // A discount edit or soft-delete (deleted_at set) lands as an UPDATE.
-                // Reconcile revenue, the POS journal header, and the history list so a
-                // change on one device shows on the others without a reload.
-                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `address_id=eq.${addressId}` }, () => {
-                    scheduleStatsRefresh()
-                    scheduleRecentRefresh()
-                    scheduleOrdersRefresh()
-                })
-                // Fires the instant another device's doSubmit succeeds — skips the
-                // postgres_changes WAL-decode hop entirely, so the other screen updates
-                // near network-RTT speed instead of waiting on replication. postgres_changes
-                // above stays subscribed as the fallback if this broadcast is dropped (tab
-                // backgrounded, blip), so a miss just falls back to the same refresh a beat
-                // later — never a lost/desynced order.
-                //
-                // A channel hears its OWN broadcasts too (it's not sender-scoped), so the
-                // same localOrderIds check as postgres_changes above is required here —
-                // without it, submitting an order on THIS device re-triggers its own
-                // refetch a beat later (visible as "loads, then re-loads again ~1s after").
-                .on('broadcast', { event: 'order_added' }, ({ payload }) => {
-                    if (localOrderIds.current.has(payload?.orderId)) return
-                    scheduleRecentRefresh()
-                    scheduleOrdersRefresh()
-                })
-                .subscribe()
-            ordersChannelRef.current = ordersChannel
-        }
-
-        const unsubscribe = () => {
-            if (ordersChannel) {
-                supabase.removeChannel(ordersChannel)
-                ordersChannel = null
-                ordersChannelRef.current = null
+                // Đơn từ máy khác trông y hệt đơn đã nằm đó từ nãy — cho /history phát sáng
+                // mấy dòng này vài giây để người ở quầy thấy mà không phải dò cả danh sách.
+                setJustArrivedIds(prev => new Set([...prev, ...newOrders.map(o => o.id)]))
+                clearTimeout(justArrivedTimerRef.current)
+                justArrivedTimerRef.current = setTimeout(() => setJustArrivedIds(new Set()), 3000)
+                // Thẻ Nhật ký trên header /pos: dựng thẳng từ hàng vừa có, không tốn query.
+                // Lọc đơn đã xoá cho khớp fetchRecentOrders — máy kia có thể vừa tạo vừa
+                // xoá nhầm trong cùng một nhịp poll, thẻ không được hiện đơn đã bỏ.
+                setRecentOrders(prev => [...newOrders.filter(o => !o.deleted_at).map(buildLastOrderFromDB), ...prev]
+                    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                    .slice(0, 3))
             }
-        }
-
-        let hiddenAt = 0
-        const handleVisibility = () => {
-            if (document.visibilityState === 'visible') {
-                // Gate: only reconnect when >= 2 devices are active on this address —
-                // see hasMultiDevice / the heartbeat effect below.
-                if (hasMultiDevice) subscribe()
-                // Catch-up fetches only after a real absence, so rapid app-switching
-                // doesn't pile reads onto a flaky connection (lag-after-foreground).
-                if (Date.now() - hiddenAt > 30000) {
-                    fetchTodayStats(addressId).then(({ revenue, cups }) => {
-                        setRevenue(revenue); setCupsSold(cups)
-                    })
-                    fetchTodayExpenses(addressId).then(setTodayExpenses).catch(() => { })
-                }
-            } else {
-                hiddenAt = Date.now()
-                unsubscribe()
+            if (patched.length) {
+                const byId = new Map(patched.map(h => [h.id, h]))
+                setTodayOrders(prev => prev.map(o => {
+                    const head = byId.get(o.id)
+                    // Ghi lại ĐỦ các cột đã so trong diffOrderHeads — thiếu cột nào là nhịp
+                    // sau vẫn thấy lệch ở cột đó và lặp vô tận.
+                    return head ? { ...o, ...head } : o
+                }))
+                // Sửa/xoá đơn là thao tác tay, hiếm — chịu một lượt fetch để thẻ Nhật ký kéo
+                // đơn thứ 4 lên đúng chỗ đơn vừa bị xoá (giống hệt handleDeleteOrder tại chỗ).
+                if (moneyChanged) fetchRecentOrders(addressId, 3).then(recent => setRecentOrders(recent.map(buildLastOrderFromDB)))
             }
-        }
-
-        // Initial state
-        if (hasMultiDevice && document.visibilityState === 'visible') subscribe()
-        document.addEventListener('visibilitychange', handleVisibility)
-
-        return () => {
-            clearTimeout(statsTimer)
-            clearTimeout(recentTimer)
-            clearTimeout(ordersTimer)
-            clearTimeout(arrivedTimer)
-            document.removeEventListener('visibilitychange', handleVisibility)
-            unsubscribe()
-        }
-    }, [addressId, isGuest, hasMultiDevice])
+            // Tổng ngày lấy lại từ server chứ không tự cộng ở client: chiết khấu và đơn bị
+            // xoá làm phép cộng tay lệch dần, mà đây là con số tiền. Chỉ khi tiền thật sự
+            // đổi — máy kia lật cờ "Ra món" thì lưới bàn vẽ lại là đủ.
+            if (moneyChanged) fetchTodayStats(addressId).then(({ revenue: rev, cups }) => { setRevenue(rev); setCupsSold(cups) })
+            // Chỉ khi thay đổi thật sự động tới bàn. Sửa chiết khấu một đơn MANG ĐI mà kéo
+            // fetchOpenTables (join order_items + products từng bàn) là trả giá cho không.
+            if (dineIn && tableChanged) refreshTables()
+        },
+        // Rời app lâu rồi quay lại. Vòng poll chỉ giỏi bắt từng đơn lẻ; cả quãng vắng thì
+        // một lượt nạp đầy rẻ hơn (và ngắn hơn) một URL id=in.(...) ôm hết đơn đã lỡ.
+        // Chi phí không nằm trong vòng poll nên cũng kéo ở đây.
+        // handleLoadHistory nạp cả đơn lẫn chi phí trong một lượt Promise.all, nên ở đây
+        // chỉ phải thêm tổng ngày.
+        onResume: () => {
+            handleLoadHistory()
+            fetchTodayStats(addressId).then(({ revenue: rev, cups }) => { setRevenue(rev); setCupsSold(cups) })
+        },
+    })
 
     // ---- Heartbeat for active_sessions ----
     useEffect(() => {
         // !hasSession: addressId đến từ cache nên effect này chạy được trước khi có token —
         // policy active_sessions cũng gọi auth_owner_id như addresses/users, xem AuthContext.
         if (!addressId || !hasSession) return
-        let cancelled = false
 
-        // Re-check the orders-realtime gate: the device count can change mid-shift
-        // (another staff member opens/closes the app), so re-run this on the same
-        // interval as the heartbeat below (see its comment for why 30s). Also run
-        // once immediately so the channel can open right away on mount (not only
-        // after the first tick) if 2+ devices are already active.
-        const checkMultiDevice = () => {
-            countActiveSessions(addressId).then(count => {
-                if (!cancelled) setHasMultiDevice(count >= 2)
-            })
-        }
-        checkMultiDevice()
-
-        // Get profile from auth context via import would create circular dep,
-        // so we read userId from localStorage or let AddressContext handle initial upsert
+        // Chỉ còn nuôi last_seen cho màn /addresses hiện "ai đang trong ca". Trước đây
+        // interval chạy 30s để dò lại số máy cho cổng realtime (cổng đã bỏ, xem
+        // useOrdersPoll.js); giờ 5 phút là đủ — last_seen chỉ cần nằm trong mốc cắt 10
+        // phút của fetchActiveSessions.
         //
-        // checkMultiDevice runs every 30s (cheap read) so the counter-staff device
-        // notices a second device joining shift-start within tens of seconds instead
-        // of up to 5 minutes — that gap used to mean missed realtime updates for
-        // however long the gate stayed closed. upsertSession itself (a write) still
-        // only fires every 10th tick (~5 min), unchanged — last_seen only needs to
-        // stay inside the 10-minute cutoff in countActiveSessions/fetchActiveSessions.
-        let tick = 0
+        // Đọc userId từ localStorage (AddressContext ghi lúc upsert lần đầu) chứ không
+        // import từ AuthContext: import chéo hai chiều giữa hai context là vòng lặp.
         const interval = setInterval(() => {
-            tick += 1
-            if (tick % 10 === 0) {
-                const savedId = localStorage.getItem(STORAGE_KEYS.SELECTED_ADDRESS)
-                if (savedId === addressId) {
-                    // We need the userId — stored when AddressContext calls upsertSession
-                    const userId = localStorage.getItem(STORAGE_KEYS.ACTIVE_USER_ID)
-                    if (userId) upsertSession(userId, addressId)
-                }
-            }
-            checkMultiDevice()
-        }, 30 * 1000) // every 30s (upsertSession still every ~5min via the tick guard above)
+            const savedId = localStorage.getItem(STORAGE_KEYS.SELECTED_ADDRESS)
+            if (savedId !== addressId) return
+            const userId = localStorage.getItem(STORAGE_KEYS.ACTIVE_USER_ID)
+            if (userId) upsertSession(userId, addressId)
+        }, 5 * 60 * 1000)
 
-        return () => {
-            cancelled = true
-            clearInterval(interval)
-        }
+        return () => clearInterval(interval)
     }, [addressId, hasSession])
 
     const revenueRef = useRef(revenue)
@@ -528,35 +440,21 @@ export function POSProvider() {
 
     // ---- Last order helpers ----
     function buildLastOrderFromDB(order) {
-        const map = {}
-        for (const i of (order.order_items || [])) {
-            const name = i.products?.name || '?'
-            const opts = i.options
-                ? i.options.split(', ').filter(o => o !== 'Tiền mặt' && o !== 'MoMo').join(', ')
-                : ''
-            const key = `${name}|${opts}`
-            if (!map[key]) map[key] = { name, opts, qty: 0 }
-            map[key].qty += i.quantity
-        }
-        const items = Object.values(map).map(({ qty, name, opts }) =>
-            `${qty > 1 ? qty + ' ' : ''}${name}${opts ? ` (${opts})` : ''}`)
-        return { id: order.id, total: order.total, createdAt: order.created_at, items }
+        const lines = mergeTableLines([], (order.order_items || []).map(i => ({
+            name: tableLineName(i.products?.name || '?', (i.options || '').split(', ')),
+            qty: i.quantity,
+        })))
+        return { id: order.id, total: order.total, createdAt: order.created_at, items: journalLines(lines) }
     }
 
     function buildLastOrderFromCart(cartItems, total) {
-        const map = {}
-        for (const i of cartItems) {
-            const extras = (i.extras || []).filter(e => e.name !== 'Tiền mặt' && e.name !== 'MoMo')
-            const opts = extras.map(e => e.name).join(', ')
-            const key = `${i.name}|${opts}`
-            if (!map[key]) map[key] = { name: i.name, opts, qty: 0 }
-            map[key].qty += i.quantity
-        }
-        const items = Object.values(map).map(({ qty, name, opts }) =>
-            `${qty > 1 ? qty + ' ' : ''}${name}${opts ? ` (${opts})` : ''}`)
+        const lines = mergeTableLines([], cartItems.map(i => ({
+            name: tableLineName(i.name, (i.extras || []).map(e => e.name)),
+            qty: i.quantity,
+        })))
         // id = stable unique React key. createdAt is ms-resolution, so two orders
         // committed in the same millisecond would collide as keys → dup-key render bug.
-        return { id: crypto.randomUUID(), total, createdAt: new Date().toISOString(), items }
+        return { id: crypto.randomUUID(), total, createdAt: new Date().toISOString(), items: journalLines(lines) }
     }
 
     // ---- Derived values ----
@@ -613,31 +511,43 @@ export function POSProvider() {
         const addedRow = buildLastOrderFromCart(cartItems, netTotal)
         setRecentOrders(prev => [addedRow, ...prev].slice(0, 3))
         setEnterKey(addedRow.createdAt)
+        // id của hàng orders, sinh sẵn ở đây (xem nhánh online bên dưới) để đợt cộng
+        // lạc quan cho bàn mang đúng id — modal chi tiết bàn xoá theo id này. Offline
+        // chưa có id (addPendingOrder tự sinh lúc sync) → đợt đó chưa xoá được, modal
+        // ẩn nút xoá cho tới khi có mạng.
+        const online = navigator.onLine && !!supabase
+        const orderId = online ? crypto.randomUUID() : null
         // Bàn cộng dồn ngay, cùng kiểu lạc quan như doanh thu ở trên — nhân viên phải
         // thấy tổng bàn nhảy lên trong cùng cú chạm, không đợi vòng fetch.
         if (tableNameArg) setOpenTables(prev => {
-            // Cùng dạng dòng như fetchOpenTables (gộp theo tên món, bỏ topping).
-            const addLines = mergeTableLines([], cartItems.map(it => ({ name: it.name, qty: it.quantity })))
+            // Cùng dạng nhãn như fetchOpenTables (tên món kèm topping).
+            const addLines = mergeTableLines([], cartItems.map(it => ({
+                name: tableLineName(it.name, (it.extras || []).map(e => e.name)),
+                qty: it.quantity,
+            })))
+            const addRound = {
+                id: orderId, createdAt: addedRow.createdAt, total: netTotal, servedAt: null, lines: addLines,
+                items: cartItems.map(it => ({
+                    productId: it.productId, qty: it.quantity, extraIds: (it.extras || []).map(e => e.id).filter(Boolean),
+                })),
+            }
             const i = prev.findIndex(t => t.name === tableNameArg)
-            if (i === -1) return [...prev, { name: tableNameArg, total: netTotal, rounds: 1, openedAt: addedRow.createdAt, lines: addLines }]
+            if (i === -1) return [...prev, { name: tableNameArg, total: netTotal, rounds: [addRound], openedAt: addedRow.createdAt, lines: addLines }]
             const next = [...prev]
             next[i] = {
                 ...next[i],
                 total: next[i].total + netTotal,
-                rounds: next[i].rounds + 1,
+                rounds: [...next[i].rounds, addRound],
                 lines: mergeTableLines(next[i].lines, addLines),
             }
             return next
         })
 
-        if (navigator.onLine && supabase) {
-            // id is generated here, client-side, and sent straight to the RPC as the
-            // real orders.id — the optimistic row and its DB row share one identity
-            // from the start, so merging a fetch just needs a Set lookup (see
-            // mergeFetchedOrders), no matching by total/time/items/staff.
-            const orderId = crypto.randomUUID()
-            localOrderIds.current.add(orderId)
-
+        if (online) {
+            // orderId (sinh ở trên) đi thẳng vào RPC làm orders.id thật — hàng lạc quan
+            // và hàng DB dùng chung một danh tính ngay từ đầu, nên vòng poll đồng bộ nhận
+            // ra đây là đơn nó đã có (không nhân đôi) mà không cần Set riêng nào.
+            //
             // Optimistic /history row (raw fetchTodayOrders shape) so a just-submitted
             // order shows there instantly — e.g. to delete a mis-entry. _optimistic lets
             // handleLoadHistory keep it until a fetch confirms it (no extra query, no wait).
@@ -664,13 +574,6 @@ export function POSProvider() {
             }
             setTodayOrders(prev => [optimisticOrder, ...prev])
             submitOrder(cartItems, netTotal, null, addressId, cartCost, costPerItem, profile?.name, discountApplied, orderId, tableNameArg)
-                .then(() => {
-                    // Nudge any other device on this address to refetch now instead of
-                    // waiting on postgres_changes' WAL-decode hop — see the channel's
-                    // 'broadcast' listener above for the fallback if this is dropped.
-                    // orderId lets that listener recognize (and skip) its own echo.
-                    ordersChannelRef.current?.send({ type: 'broadcast', event: 'order_added', payload: { orderId } })
-                })
                 .catch(err => {
                     if (isNetworkError(err)) {
                         // Reuse orderId already sent to the RPC above — if the server actually
@@ -847,8 +750,8 @@ export function POSProvider() {
     async function handleLoadHistory() {
         if (!addressId) return
         // Freshness guard: dedup truly-simultaneous re-invocations (React re-render
-        // churn), not a substitute for a real refetch — realtime INSERT now also
-        // wires into scheduleOrdersRefresh, so this only needs to be a few seconds.
+        // churn), not a substitute for a real refetch — đơn mới của máy khác đã đi
+        // đường vòng poll (useOrdersPoll), nên vài giây là đủ.
         const last = historyFetchedRef.current
         if (last.addressId === addressId && Date.now() - last.at < 4000) return
         setIsLoadingHistory(true)
@@ -876,18 +779,70 @@ export function POSProvider() {
             await deleteOrder(orderId, profile?.name)
             setTodayOrders(prev => prev.map(o => o.id === orderId ? { ...o, deleted_at: new Date().toISOString(), deleted_by: profile?.name } : o))
             if (addressId) {
-                const { revenue: rev, cups } = await fetchTodayStats(addressId)
-                setRevenue(rev)
-                setCupsSold(cups)
+                // Không await: kết quả chỉ chảy vào doanh thu/ly trên header, không ai
+                // đợi nó. Await ở đây là bắt người xoá nhìn màn hình đứng thêm một RTT
+                // (rõ nhất ở nút Sửa đợt — giỏ chỉ hiện món sau khi RPC này về).
+                fetchTodayStats(addressId).then(({ revenue: rev, cups }) => { setRevenue(rev); setCupsSold(cups) })
                 // Keep the POS journal header in sync — without this a delete here
                 // leaves the removed order showing on /pos until the next reload.
                 fetchRecentOrders(addressId, 3).then(recent => setRecentOrders(recent.map(buildLastOrderFromDB)))
                 invalidateDailyContext(addressId)
+                // Tổng bàn cũng lệch sau khi xoá — gom về đây thay vì bắt từng nơi gọi
+                // nhớ tự refresh (xoá đơn dine_in từ Nhật ký trước đây bỏ sót đúng chỗ này).
+                if (dineIn) refreshTables()
             }
             showToast('Đã xóa đơn hàng', 'success')
+            return true
         } catch (err) {
             showError(err, 'Xóa đơn hàng')
+            // Trả kết quả thay vì chỉ toast: sửa đợt (TableDetailModal) phải biết đợt cũ
+            // đã xoá được chưa trước khi nạp giỏ, nếu không là nhân đôi đơn của khách.
+            return false
         }
+    }
+
+    // dineIn: SỬA một đợt đã gọi = xoá đợt cũ rồi đổ nguyên món của nó ngược vào giỏ,
+    // sửa xong bấm Tạo đơn là thành đợt mới. Không có đường sửa tại chỗ: đợt đã ghi là
+    // tiền đã vào doanh thu, sửa từng dòng phải đụng lại order_items + total + giá vốn.
+    //
+    // Cả chuỗi nằm ở đây chứ không ở modal: nó động tới tiền và có thể hỏng giữa chừng,
+    // mà modal thì tự đóng (onPick) ngay sau bước cuối — nửa chuỗi chạy trong một
+    // component đang unmount là cách mất đơn của khách.
+    async function reopenRoundIntoCart(round) {
+        // Món bị xoá khỏi menu sau khi bán thì không dựng lại được (không còn giá) —
+        // dừng trước khi xoá, thà không sửa được còn hơn nạp một giỏ thiếu món.
+        const items = []
+        for (const it of round.items) {
+            const p = products.find(x => x.id === it.productId)
+            if (!p) {
+                showError(new Error('Đợt này có món đã xoá khỏi menu'), 'Sửa đợt')
+                return false
+            }
+            items.push({
+                cartItemId: crypto.randomUUID(),
+                productId: p.id,
+                name: p.name,
+                basePrice: p.price,
+                quantity: it.qty,
+                extras: (productExtras[p.id] || []).filter(e => it.extraIds.includes(e.id)),
+            })
+        }
+        // Xoá hỏng thì DỪNG: nạp giỏ lúc đợt cũ còn nguyên là nhân đôi đơn của khách.
+        if (!await handleDeleteOrder(round.id)) return false
+
+        // CỘNG vào giỏ chứ không thay: nhân viên có thể đang cầm mấy ly chưa gửi.
+        const next = [...cartRef.current, ...items]
+        cartRef.current = next
+        setCart(next)
+        // Không món nào "đang dựng": đợt nạp vào là món đã chốt, extras của nó không
+        // được đổi theo cú chạm topping tiếp theo.
+        activeCartItemIdRef.current = null
+        setActiveCartItemId(null)
+        // Chiết khấu sống ở tầng ĐƠN, không ở từng ly — không mang theo thì gửi lại là
+        // khách trả đắt hơn lần trước. Đặt SAU setCart vì mọi thao tác giỏ đều reset nó.
+        if (round.discountAmount > 0) setDiscount({ type: 'amount', value: round.discountAmount })
+        showToast('Đợt cũ đã vào giỏ — sửa xong bấm Tạo đơn', 'info')
+        return true
     }
 
     // Re-apply / edit a discount on an existing order. `total` is the new charged
@@ -982,9 +937,9 @@ export function POSProvider() {
     // so this is no worse and slices keep change frequencies separated.)
     const cartValue = useMemo(() => ({
         cart, activeCartItemId,
-        handleAddItem, cancelHeld, handleToggleExtra, handleToggleStickyExtra, commitHeld,
+        handleAddItem, cancelHeld, handleToggleExtra, handleToggleStickyExtra, commitHeld, reopenRoundIntoCart,
         dineIn, handleConfirm, tableName, setTableName,
-        openTables, refreshTables, handleCloseTable,
+        openTables, refreshTables, handleCloseTable, toggleServed,
         enabledStickyExtraIds,
         total, orderCount, hasOrder,
         discount, setDiscount, discountAmount, finalTotal,
@@ -992,7 +947,7 @@ export function POSProvider() {
         toast, showToast, showError,
         // deliberately partial deps, see comment above
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [cart, activeCartItemId, dineIn, tableName, openTables, refreshTables, handleCloseTable, enabledStickyExtraIds, total, orderCount, hasOrder, discount, discountAmount, finalTotal, recentOrders, draftOrder, enterKey, toast, showToast, showError])
+    }), [cart, activeCartItemId, dineIn, tableName, openTables, refreshTables, handleCloseTable, toggleServed, enabledStickyExtraIds, total, orderCount, hasOrder, discount, discountAmount, finalTotal, recentOrders, draftOrder, enterKey, toast, showToast, showError])
 
     const statsValue = useMemo(() => ({
         revenue, totalCost, cupsSold, isOnline,

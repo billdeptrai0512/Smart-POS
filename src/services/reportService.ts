@@ -42,6 +42,37 @@ export function stripInsertOnlyDefaults(data: Row) {
     return safe
 }
 
+// Phần payload "Lưu thực thu" phụ thuộc vào Ô NÀO đã đổi — CHỈ gửi ô người dùng thật sự sửa.
+// Trước đây UPDATE luôn mang cả actual_cash lẫn actual_transfer lấy từ state local, nên hai
+// máy kết ca cùng lúc (A đếm két, B đối chiếu bank) thì người bấm Lưu sau đè số của người
+// trước bằng bản cũ của mình — mất tiền thật, không phải chỉ lệch hiển thị. Gửi delta thì hai
+// ô khác nhau cùng sống; cùng một ô thì vẫn ai lưu sau thắng (hai người đếm cùng một con số).
+//
+// Trả null = không có gì đổi ⇒ đừng gửi request nào. Caller cũng dùng chính hàm này (với
+// hasExistingRow = true) để suy ra "còn thay đổi chưa lưu" — một chỗ tính, không ba bản.
+export function buildCashPayload(
+    persisted: { actual_cash?: number | null; actual_transfer?: number | null; cash_closed_at?: string | null } | null,
+    inputs: { actual_cash: number; actual_transfer: number },
+    hasExistingRow: boolean,
+): Row | null {
+    const payload: Row = {}
+    if (hasExistingRow) {
+        if (inputs.actual_cash !== (Number(persisted?.actual_cash) || 0)) payload.actual_cash = inputs.actual_cash
+        if (inputs.actual_transfer !== (Number(persisted?.actual_transfer) || 0)) payload.actual_transfer = inputs.actual_transfer
+        if (!Object.keys(payload).length) return null
+    } else {
+        // INSERT: phải đủ cột, phiếu mới không có gì để merge vào.
+        payload.actual_cash = inputs.actual_cash
+        payload.actual_transfer = inputs.actual_transfer
+        payload.inventory_report = []
+        payload.note = ''
+    }
+    // "Lưu thực thu" = chốt ca tiền. Đặt mốc lần đầu, giữ nguyên các lần sửa số sau (không
+    // dời mốc, để các khoản chi giữa 2 lần lưu không bị đổi phân loại trước/sau chốt).
+    payload.cash_closed_at = persisted?.cash_closed_at || new Date().toISOString()
+    return payload
+}
+
 // Tìm id phiếu chốt cùng NGÀY VN với `refIso` (mặc định now) cho 1 address. Dùng để
 // tự lành khi insert đụng unique index → UPDATE phiếu đã có thay vì vỡ "Lưu".
 async function findSameDayClosingId(addressId: UUID, refIso?: string | Date | null) {
