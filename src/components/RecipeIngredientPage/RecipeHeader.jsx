@@ -48,7 +48,7 @@ export default function RecipeHeader({
                 {canEdit && (
                     <button
                         onClick={onCopyFrom}
-                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 active:scale-95 transition-all shadow-sm focus:outline-none shrink-0"
+                        className="w-10 h-10 flex items-center justify-center rounded-[14px] border border-primary/20 text-primary hover:bg-primary/10 active:scale-95 transition-all shadow-sm focus:outline-none shrink-0"
                         title="Chép công thức từ món khác"
                     >
                         <Copy size={20} strokeWidth={2.5} />
