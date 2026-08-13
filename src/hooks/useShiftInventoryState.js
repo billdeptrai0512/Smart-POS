@@ -7,9 +7,9 @@ import {
 import { mergeShiftClosingInventory, fetchYesterdayShiftClosing } from '../services/reportService'
 import { supabase } from '../lib/supabaseClient'
 import { isGuest } from '../services/localRepository'
-import { useOnForeground } from './useOnForeground'
 import { sortIngredients, lookupByLabel } from '../utils/ingredients'
 import { dateStringVN } from '../utils/dateVN'
+import { onTabReturn } from '../utils/tabVisibility'
 
 // Chuẩn hoá 1 ô input trước khi so với baseline: undefined / null / '' đều là "chưa nhập".
 // Mọi phép so dirty trong file này phải dùng chung hàm này, không thì "" vs undefined
@@ -198,8 +198,9 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     useEffect(() => {
         if (addressId === undefined) return
         reloadStocks()
+        // Chỉ khi tab quay lại sau khi đi vắng — mỗi lần 'visible' là 2 query lặp vô hạn.
+        return onTabReturn(reloadStocks)
     }, [addressId, reloadStocks])
-    useOnForeground(reloadStocks)
 
     // ── Ingredient list with units (for sort + per-row metadata) ─────────────
     // Exposed (như reloadStocks) để refresh sau khi Nhập kho làm đổi giá vốn bình quân —

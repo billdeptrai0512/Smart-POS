@@ -257,7 +257,7 @@ export const submitLocalOrder = (order: Row) => {
     return newOrder;
 };
 
-export const fetchLocalOrders = (addressId: string | null, dateStr: string | null = null) => {
+export const fetchLocalOrders = (addressId: string | null, dateStr: string | null = null): Row[] => {
     let orders = get(KEYS.ORDERS).filter(o => o.address_id === addressId);
     const d = dateStr ? dateStringVN(new Date(dateStr)) : dateStringVN();
     orders = orders.filter(o => dateStringVN(new Date(o.created_at)) === d);
@@ -272,7 +272,10 @@ export const fetchLocalExpenses = (addressId: string | null, dateStr: string | n
     return list;
 };
 
-export const fetchAllLocalOrders = (addressId: string | null) => get(KEYS.ORDERS).filter(o => o.address_id === addressId).map(o => ({ ...o, order_items: o.order_items || o.items }));
+// `: Row[]` bắt buộc, không phải trang trí: object spread làm RƠI index signature của Row,
+// nên kiểu suy ra là `{ order_items: any }` — mọi field khác (deleted_at, created_at...)
+// thành lỗi TS2339 ở phía caller dù runtime vẫn đúng. Cùng lý do cho fetchLocalOrders trên.
+export const fetchAllLocalOrders = (addressId: string | null): Row[] => get(KEYS.ORDERS).filter(o => o.address_id === addressId).map(o => ({ ...o, order_items: o.order_items || o.items }));
 export const fetchAllLocalExpenses = (addressId: string | null) => get(KEYS.EXPENSES).filter(e => e.address_id === addressId);
 export const fetchAllLocalShiftClosings = (addressId: string | null) => get(KEYS.SHIFT_CLOSINGS).filter(s => s.address_id === addressId);
 

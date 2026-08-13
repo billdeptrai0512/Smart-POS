@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
+import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, fetchProfileByAuthId, removeSession, fetchDefaultIngredientSort } from '../services/authService'
 import { isGuest as getLocalIsGuest, setIsGuest as setLocalIsGuest, initializeGuestFromGlobal, clearGuestData, setGuestIngredientSortOrder } from '../services/localRepository'
@@ -43,6 +43,8 @@ export function AuthProvider({ children }) {
     // truthy khi launch token refresh hỏng/chậm (safety valve bên dưới) — lúc đó mọi query
     // bảng bay đi bằng anon key và RLS gọi auth_owner_id() mà anon không có EXECUTE → 42501.
     const [hasSession, setHasSession] = useState(false)
+    // auth_id đã nạp profile rồi — xem loadProfileOnce trong effect khởi tạo bên dưới.
+    const loadedProfileForRef = useRef(null)
 
     // initGuestMode: called from LoginPage when user clicks "Dùng thử miễn phí"
     // Fetches the global default setup from Supabase (address_id IS NULL) and seeds localStorage
@@ -161,6 +163,15 @@ export function AuthProvider({ children }) {
             return
         }
 
+        // supabase-js re-notify 'SIGNED_IN' với ĐÚNG session cũ mỗi lần tab visible
+        // (_onVisibilityChanged → _recoverAndRefresh) → khoá theo auth_id, nếu không là
+        // 1 GET /users mỗi lần. refreshProfile() vẫn gọi thẳng loadProfile, không qua đây.
+        const loadProfileOnce = (authUser) => {
+            if (loadedProfileForRef.current === authUser.id) return Promise.resolve()
+            loadedProfileForRef.current = authUser.id
+            return loadProfile(authUser)
+        }
+
         // Get initial session. Run once via finish(); whichever fires first —
         // getSession resolving or the safety valve — wins.
         let settled = false
@@ -181,9 +192,9 @@ export function AuthProvider({ children }) {
                 // genuine first launch (no cache, role-gating needs the profile) waits.
                 if (readCachedAuth(STORAGE_KEYS.AUTH_PROFILE)) {
                     setLoading(false)
-                    loadProfile(authUser)
+                    loadProfileOnce(authUser)
                 } else {
-                    loadProfile(authUser).finally(() => setLoading(false))
+                    loadProfileOnce(authUser).finally(() => setLoading(false))
                 }
             } else if (getLocalIsGuest()) {
                 // Returning guest (page refresh) — restore guest profile without fetching
@@ -219,6 +230,7 @@ export function AuthProvider({ children }) {
                 setProfile(null)
                 setHasSession(false)
                 clearCachedAuth()
+                loadedProfileForRef.current = null // đăng nhập lại (kể cả cùng tài khoản) phải fetch lại
                 return
             }
             const authUser = session?.user ?? null
@@ -231,7 +243,7 @@ export function AuthProvider({ children }) {
                 // vừa tắt guard isGuest() trong authService. Giữ lại dù chỉ 1 nhịp là đủ để các
                 // context bắn query với managerId='guest' → 22P02. Bỏ ngay; loadProfile điền thật.
                 setProfile(p => (p?.id === 'guest' ? null : p))
-                loadProfile(authUser)
+                loadProfileOnce(authUser)
             }
         })
 

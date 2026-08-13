@@ -1,22 +1,17 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Plus, X, ArrowUpDown } from 'lucide-react'
-import FabActionMenu from '../components/common/FabActionMenu'
+import { Plus, X } from 'lucide-react'
 import { BottomSheet } from '../components/common/ModalShell'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
-import { useHistory } from '../contexts/HistoryContext'
-import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
 import {
     upsertIngredientCost, deleteIngredientCost, updateIngredientUnitCost,
     syncIngredientKey,
-    fetchIngredientStocks, processIngredientRestock, fetchIngredientDeficits, fetchIngredientDailyContext,
+    fetchIngredientStocks, fetchIngredientDeficits, fetchIngredientDailyContext,
 } from '../services/orderService'
-import { fetchCashClosedToday } from '../services/reportService'
 import { sortIngredients, ingredientLabel, getIngredientUnit, normalizeIngredientCategory, normalizeIngredientKey } from '../utils/ingredients'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
-import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
 import StockDeficitBanner from '../components/IngredientManagementPage/StockDeficitBanner'
 import KeyMismatchBanner from '../components/IngredientManagementPage/KeyMismatchBanner'
@@ -59,8 +54,6 @@ export default function IngredientManagementPage() {
         [selectedAddress, warehouseSiblings]
     )
     const { isManager, isAdmin, profile, isGuest } = useAuth()
-    const { refreshTodayExpenses } = useHistory()
-    const { requestRefresh: requestOnboardingRefresh } = useOnboardingVisibility()
     const { toast, showToast, showError } = useToast()
     const confirm = useConfirm()
     const canEdit = isManager || isAdmin
@@ -103,16 +96,6 @@ export default function IngredientManagementPage() {
 
     // Stock & modals
     const [ingredientStocks, setIngredientStocks] = useState([])
-    const [restockIngredient, setRestockIngredient] = useState(null)
-    // Đã chốt ca tiền hôm nay chưa → default phân loại tiền mặt khi nhập kho. Fetch khi
-    // mở modal nhập kho để luôn tươi (user có thể vừa chốt ở /daily-report).
-    const [cashClosedToday, setCashClosedToday] = useState(false)
-    useEffect(() => {
-        if (!restockIngredient) return
-        let alive = true
-        fetchCashClosedToday(selectedAddress?.id).then(v => { if (alive) setCashClosedToday(!!v) })
-        return () => { alive = false }
-    }, [restockIngredient, selectedAddress?.id])
     const [showKeySync, setShowKeySync] = useState(false)
     const [dismissedSig, setDismissedSig] = useState('')
     const [stockDeficits, setStockDeficits] = useState([])
@@ -460,7 +443,6 @@ export default function IngredientManagementPage() {
                                 minStock={cfg?.min_stock}
                                 stockData={stockByIngredient.get(ingredient)}
                                 siblingCounterStocks={counterStocksByIngredient?.get(ingredient)}
-                                onRestock={() => setRestockIngredient(ingredient)}
                                 dailyContext={dailyContext[ingredient]}
                                 onOpen={openIngredient}
                                 hint={hintCoffee && ingredient === coffeeKey}
@@ -507,35 +489,6 @@ export default function IngredientManagementPage() {
                 <div className="fixed bottom-4 right-4 z-50 pointer-events-none">
                     <span className="text-text-secondary text-[11px] animate-pulse">Đang lưu...</span>
                 </div>
-            )}
-
-            {restockIngredient && (
-                <RestockModal
-                    ingredient={restockIngredient}
-                    unit={getIngredientUnit(restockIngredient, ingredientUnits[restockIngredient])}
-                    packSize={configByIngredient.get(restockIngredient)?.pack_size}
-                    packUnit={configByIngredient.get(restockIngredient)?.pack_unit}
-                    cashClosedToday={cashClosedToday}
-                    onClose={() => setRestockIngredient(null)}
-                    onConfirm={async ({ ingredient: ing, qty, subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate }) => {
-                        // beforeStock only used by guest / default-address paths;
-                        // the address RPC computes its own authoritative snapshot.
-                        // Only include when the stocks fetch has actually resolved
-                        // for this ingredient — avoid baking in a fake 0 baseline.
-                        const stockRow = stockByIngredient.get(ing)
-                        const snapshot = stockRow
-                            ? { beforeStock: stockRow.warehouse_stock }
-                            : {}
-                        const result = await processIngredientRestock(selectedAddress?.id, ing, qty, profile?.name, {
-                            subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate,
-                            ...snapshot,
-                        })
-                        await Promise.all([loadStocks(), refreshProducts?.(), refreshTodayExpenses?.()])
-                        showToast('Đã nhập kho', 'success')
-                        requestOnboardingRefresh()
-                        return result
-                    }}
-                />
             )}
 
             <KeySyncModal

@@ -7,17 +7,20 @@ import { useHistory } from '../contexts/HistoryContext'
 import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
 import {
     fetchIngredientRestockHistory, fetchIngredientStocks, fetchIngredientWithdrawals,
-    deleteIngredientCost, upsertIngredientCost, updateIngredientUnitCost, renameIngredient,
+    deleteIngredientCost, upsertIngredientCost, renameIngredient,
     adjustIngredientStock, setCounterStock, recordInvoicePayment, cancelRestock,
     editIngredientRestock, mergeShiftClosingInventory, fetchIngredientDailyContext,
+    processIngredientRestock,
 } from '../services/orderService'
+import { fetchCashClosedToday } from '../services/reportService'
+import { formatVND } from '../utils'
 import {
     ingredientLabel, getIngredientUnit,
     normalizeIngredientCategory, normalizeIngredientKey,
 } from '../utils/ingredients'
 import IngredientDetailHeader from '../components/IngredientManagementPage/IngredientDetailHeader'
 import PackConfigModal from '../components/IngredientManagementPage/PackConfigModal'
-import IngredientDetailsTab from '../components/IngredientManagementPage/IngredientDetailsTab'
+import IngredientDetailsTab, { IngredientStockPanel, IngredientCounterPanel, DeleteIngredientButton } from '../components/IngredientManagementPage/IngredientDetailsTab'
 import IngredientHistoryTab from '../components/IngredientManagementPage/IngredientHistoryTab'
 import InvoicePaymentSheet from '../components/IngredientManagementPage/InvoicePaymentSheet'
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
@@ -70,6 +73,16 @@ export default function IngredientDetailPage() {
     const [packModalOpen, setPackModalOpen] = useState(false)
     const [paymentInvoice, setPaymentInvoice] = useState(null)
     const [editingEntry, setEditingEntry] = useState(null)
+    const [restockOpen, setRestockOpen] = useState(false)
+    // Đã chốt ca tiền hôm nay chưa → default phân loại tiền mặt khi nhập kho. Fetch khi
+    // mở modal nhập kho để luôn tươi (user có thể vừa chốt ở /daily-report).
+    const [cashClosedToday, setCashClosedToday] = useState(false)
+    useEffect(() => {
+        if (!restockOpen) return
+        let alive = true
+        fetchCashClosedToday(selectedAddress?.id).then(v => { if (alive) setCashClosedToday(!!v) })
+        return () => { alive = false }
+    }, [restockOpen, selectedAddress?.id])
 
     // Month navigation (Nhật ký tab)
     const [monthOffset, setMonthOffset] = useState(0)
@@ -225,17 +238,6 @@ export default function IngredientDetailPage() {
         finally { setSaving(false) }
     }
 
-    async function saveCost(newCost) {
-        if (newCost === cost) return
-        setSaving(true)
-        try {
-            // Qua RPC (không upsert thẳng) để fan-out đúng khi địa chỉ dùng chung kho tổng nhóm.
-            await updateIngredientUnitCost(ingredientKey, newCost, selectedAddress?.id)
-            refreshProducts?.()
-        } catch (err) { showError(err, 'Lưu giá vốn') }
-        finally { setSaving(false) }
-    }
-
     // Sửa KHO SAU (warehouse) = nhập số tuyệt đối. delta so với kho sau hiện tại
     // (KHÔNG so với tổng) → chỉ tác động warehouse, không đụng quầy.
     async function saveWarehouse(newWarehouse) {
@@ -334,6 +336,20 @@ export default function IngredientDetailPage() {
             refreshProducts?.()
         } catch (err) { showError(err, 'Lưu khối lượng bì') }
         finally { setSaving(false) }
+    }
+
+    async function handleRestock({ ingredient: ing, qty, subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate }) {
+        // beforeStock only used by guest / default-address paths; the address RPC
+        // computes its own authoritative snapshot. Only include when stocks đã load.
+        const snapshot = stockData ? { beforeStock: stockData.warehouse_stock } : {}
+        const result = await processIngredientRestock(selectedAddress?.id, ing, qty, profile?.name, {
+            subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate,
+            ...snapshot,
+        })
+        await Promise.all([reloadStock(), reloadHistory(), refreshProducts?.(), refreshTodayExpenses?.()])
+        showToast('Đã nhập kho', 'success')
+        requestOnboardingRefresh()
+        return result
     }
 
     async function handleRecordPayment({ amount, paymentMethod, paidAt, cashPhase }) {
@@ -468,7 +484,11 @@ export default function IngredientDetailPage() {
     }
 
     const titleLabel = ingredientLabel(ingredientKey)
-    const stockSubtitle = currentStock !== null ? `${Math.round(currentStock * 10) / 10} ${unit}` : '—'
+    // Có quy đổi → giá theo đơn vị đóng gói (dễ đối chiếu với hóa đơn NCC); không thì
+    // theo đơn vị gốc.
+    const costSubtitle = packSize && packUnit
+        ? `1 ${packUnit} = ${formatVND(cost * packSize)}`
+        : `1 ${unit} = ${formatVND(cost)}`
 
     // Onboarding phase 6 (CUỐI CÙNG, "Cài đặt nguyên liệu") — hint lần lượt 4 field trên đúng
     // ingredient "Cà phê", sau khi phase 5 (công thức) đã xong. nextIngredientSetupField trả về
@@ -489,48 +509,62 @@ export default function IngredientDetailPage() {
 
             <IngredientDetailHeader
                 title={titleLabel}
-                subtitle={`Tồn: ${stockSubtitle}`}
+                subtitle={costSubtitle}
                 onBack={() => navigate('/ingredients', { state: location.state })}
                 viewMode={viewMode}
                 onViewModeChange={setViewMode}
+                onRestock={canEdit ? () => setRestockOpen(true) : null}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-4 pb-48 bg-bg space-y-4">
                 {viewMode === 'details' ? (
-                    <IngredientDetailsTab
-                        nameLabel={titleLabel}
-                        unit={unit}
-                        cost={cost}
-                        category={category}
-                        packSize={packSize}
-                        packUnit={packUnit}
-                        minStock={minStock}
-                        tareWeight={tareWeight}
-                        warehouseStock={stockData?.warehouse_stock ?? null}
-                        warehouseGroupNote={warehouseGroupNote}
-                        hintWarehouse={hintWarehouse}
-                        hintPack={hintPack}
-                        hintMinStock={hintMinStock}
-                        hintTare={hintTare}
-                        counterStock={stockData?.counter_stock ?? null}
-                        currentStock={currentStock}
-                        dailyContext={dailyContext}
-                        siblingCounterStocks={siblingCounterStocks}
-                        countInAudit={countInAudit}
-                        onToggleAudit={saveCountInAudit}
-                        canEdit={canEdit}
-                        saving={saving}
-                        onSaveName={saveName}
-                        onSaveWarehouse={saveWarehouse}
-                        onSaveCounter={saveCounter}
-                        onSaveUnit={saveUnit}
-                        onSaveCost={saveCost}
-                        onSaveMinStock={saveMinStock}
-                        onSaveTareWeight={saveTareWeight}
-                        onChangeCategory={saveCategory}
-                        onConfigurePack={() => setPackModalOpen(true)}
-                        onDelete={canEdit ? handleDelete : null}
-                    />
+                    <>
+                        <IngredientDetailsTab
+                            nameLabel={titleLabel}
+                            unit={unit}
+                            category={category}
+                            packSize={packSize}
+                            packUnit={packUnit}
+                            minStock={minStock}
+                            tareWeight={tareWeight}
+                            countInAudit={countInAudit}
+                            onToggleAudit={saveCountInAudit}
+                            hintPack={hintPack}
+                            hintMinStock={hintMinStock}
+                            hintTare={hintTare}
+                            canEdit={canEdit}
+                            saving={saving}
+                            onSaveName={saveName}
+                            onSaveUnit={saveUnit}
+                            onSaveMinStock={saveMinStock}
+                            onSaveTareWeight={saveTareWeight}
+                            onChangeCategory={saveCategory}
+                            onConfigurePack={() => setPackModalOpen(true)}
+                        />
+                        <IngredientStockPanel
+                            unit={unit}
+                            packSize={packSize}
+                            packUnit={packUnit}
+                            warehouseStock={stockData?.warehouse_stock ?? null}
+                            warehouseGroupNote={warehouseGroupNote}
+                            hintWarehouse={hintWarehouse}
+                            dailyContext={dailyContext}
+                            canEdit={canEdit}
+                            onSaveWarehouse={saveWarehouse}
+                        />
+                        <IngredientCounterPanel
+                            unit={unit}
+                            packSize={packSize}
+                            packUnit={packUnit}
+                            tareWeight={tareWeight}
+                            counterStock={stockData?.counter_stock ?? null}
+                            currentStock={currentStock}
+                            siblingCounterStocks={siblingCounterStocks}
+                            canEdit={canEdit}
+                            onSaveCounter={saveCounter}
+                        />
+                        <DeleteIngredientButton canEdit={canEdit} onDelete={handleDelete} />
+                    </>
                 ) : (
                     <IngredientHistoryTab
                         loading={loading}
@@ -571,6 +605,18 @@ export default function IngredientDetailPage() {
                         await savePackConfig({ packSize: ps, packUnit: pu })
                         setPackModalOpen(false)
                     }}
+                />
+            )}
+
+            {restockOpen && (
+                <RestockModal
+                    ingredient={ingredientKey}
+                    unit={unit}
+                    packSize={packSize}
+                    packUnit={packUnit}
+                    cashClosedToday={cashClosedToday}
+                    onClose={() => setRestockOpen(false)}
+                    onConfirm={handleRestock}
                 />
             )}
 

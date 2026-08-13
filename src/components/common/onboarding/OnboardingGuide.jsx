@@ -8,8 +8,8 @@ import { useOnboardingVisibility } from '../../../contexts/OnboardingVisibilityC
 import { fetchIngredientStocks } from '../../../services/orderService'
 import { trackGuestOnboardingStage } from '../../../services/onboardingFunnelService'
 import { findCoffeeIngredient } from '../../../utils/onboardingHint'
-import { useOnForeground } from '../../../hooks/useOnForeground'
 import { readOnboardingState, writeOnboardingState, DEFAULT_ONBOARDING_STATE } from '../../../utils/onboardingStorage'
+import { onTabReturn } from '../../../utils/tabVisibility'
 import orderStep from './steps/orderStep'
 import journalStep from './steps/journalStep'
 import cashReportStep from './steps/cashReportStep'
@@ -69,18 +69,21 @@ export default function OnboardingGuide() {
     }, [addressId, refreshToken])
 
     const reload = useCallback(() => {
-        if (!addressId) return
+        // !isGuest: guide render null cho tài khoản thật (xem guard dưới) — fetch stocks
+        // cho họ là request thuần lãng phí, lặp lại mỗi lần tab visible.
+        if (!addressId || !isGuest) return
         fetchIngredientStocks(addressId).then((stocks) => {
             const coffeeStock = coffeeConfig ? stocks.find(s => s.ingredient === coffeeConfig.ingredient) : null
             setStockProgress({ coffeeWarehouseSet: coffeeStock?.warehouse_stock_set ?? false })
             setLoaded(true)
         }).catch(err => console.error('OnboardingGuide reload error:', err))
-    }, [addressId, coffeeConfig])
+    }, [addressId, isGuest, coffeeConfig])
 
     useEffect(() => {
         reload()
+        // Chỉ khi tab quay lại sau khi đi vắng, không phải mỗi lần visible — xem onTabReturn.
+        return onTabReturn(reload)
     }, [reload, refreshToken])
-    useOnForeground(reload)
 
     // ctx/idx tính TRƯỚC guard bên dưới vì useEffect phễu cần idx — hook không được nằm sau
     // early-return (Rules of Hooks). Cả 2 đều thuần tính toán, không side effect.

@@ -4,7 +4,7 @@ import { useAuth } from './AuthContext'
 import { useAddress } from './AddressContext'
 import { useMonetizationEnabled } from '../hooks/useEntitlement'
 import { fetchBranchesTodayStats, fetchStaffByManager, fetchSubscriptionStatuses } from '../services/authService'
-import { useOnForeground } from '../hooks/useOnForeground'
+import { onTabReturn } from '../utils/tabVisibility'
 
 const AddressStatsContext = createContext(null)
 
@@ -125,17 +125,17 @@ export function AddressStatsProvider() {
             if (document.visibilityState === 'visible') loadStats()
         }, 30_000)
 
+        // Chỉ bắt "quay lại sau khi đi vắng", không phải mỗi lần visible — xem onTabReturn.
+        const offTabReturn = onTabReturn(loadStats)
         return () => {
             cancelRef.current = true
             clearInterval(intervalId)
+            offTabReturn()
         }
         // ponytail: keyed on addressIdsKey (ids only) — addresses.length is only an
         // early-bail snapshot, not something that should restart the poll interval.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [addressIdsKey, loadStats])
-
-    // Quay lại app thì số liệu chi nhánh phải tươi ngay, không đợi hết nhịp 30s ở trên.
-    useOnForeground(loadStats)
 
     useEffect(() => {
         loadStaff()

@@ -1,20 +1,23 @@
-import { ArrowLeft, NotebookText } from 'lucide-react'
+import { ArrowLeft, Plus } from 'lucide-react'
 
-// Mirrors IngredientsHeader layout but drops MenuTabsBar (the user is already
-// drilled into a specific NVL — switching to Công thức from here is noise).
-// Chi tiết ↔ Nhật ký chỉ có 2 chế độ nên bỏ hẳn thanh tab, đổi thành 1 nút icon ở
-// ô bên phải (chỗ toggle kiểm kê cũ, giờ nằm trong panel Kiểm kê): sáng = đang xem
-// nhật ký, bấm lần nữa về chi tiết.
+const TABS = [
+    { key: 'details', label: 'Thông tin' },
+    { key: 'history', label: 'Nhật ký' },
+]
+
+// Mirrors IngredientsHeader layout but swaps the 3-way MenuTabsBar (Công thức/
+// Nguyên liệu/Bao bì — the user is already drilled into a specific NVL, that
+// switch is noise here) for a 2-way Thông tin/Nhật ký tab bar in the same style.
 export default function IngredientDetailHeader({
     title,
     subtitle,
     onBack,
     viewMode = 'details',
     onViewModeChange,
+    onRestock,
 }) {
-    const showingHistory = viewMode === 'history'
     return (
-        <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
+        <header className="shrink-0 pt-6 pb-3 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
             <div className="flex items-center gap-3">
                 <button
                     onClick={onBack}
@@ -31,20 +34,35 @@ export default function IngredientDetailHeader({
                     )}
                 </div>
 
-                {onViewModeChange && (
+                {onRestock && (
                     <button
-                        onClick={() => onViewModeChange(showingHistory ? 'details' : 'history')}
-                        title={showingHistory ? 'Về chi tiết' : 'Xem nhật ký'}
-                        className={`w-10 h-10 flex items-center justify-center rounded-[14px] border shadow-sm transition-colors focus:outline-none shrink-0 ${
-                            showingHistory
-                                ? 'bg-primary border-primary text-black'
-                                : 'bg-surface-light border-border/60 text-text hover:bg-border/40'
-                        }`}
+                        onClick={onRestock}
+                        className="w-10 h-10 flex items-center justify-center rounded-[14px] border border-primary/20 text-primary hover:bg-primary/10 active:scale-95 transition-all shadow-sm focus:outline-none shrink-0"
+                        title="Nhập kho"
                     >
-                        <NotebookText size={20} strokeWidth={2.5} />
+                        <Plus size={20} strokeWidth={2.5} />
                     </button>
                 )}
             </div>
+
+            {onViewModeChange && (
+                <div className="bg-surface-light border border-border/50 rounded-[14px] flex p-1 gap-1 shadow-sm">
+                    {TABS.map(tab => {
+                        const active = viewMode === tab.key
+                        return (
+                            <button
+                                key={tab.key}
+                                onClick={() => onViewModeChange(tab.key)}
+                                className={`flex-1 flex items-center justify-center py-2 rounded-[10px] transition-all duration-200 ${active ? 'bg-primary shadow-sm' : 'hover:bg-border/30'}`}
+                            >
+                                <span className={`text-[11px] font-black uppercase tracking-wider transition-colors ${active ? 'text-bg' : 'text-text-secondary'}`}>
+                                    {tab.label}
+                                </span>
+                            </button>
+                        )
+                    })}
+                </div>
+            )}
         </header>
     )
 }

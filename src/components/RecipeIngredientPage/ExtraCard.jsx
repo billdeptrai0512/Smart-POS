@@ -8,7 +8,7 @@ export default function ExtraCard({
     extra, extraIngs, ingredientUnits, dbIngredients, canEdit,
     onSaveName, onSavePrice, onToggleSticky, onDelete,
     onSaveExtraAmount, onDeleteExtraIngredient, onAddExtraIngredients, onDuplicate,
-    categoryOf,
+    categoryOf, baseAmounts,
 }) {
     const [duplicating, setDuplicating] = useState(false)
     const [duplicateName, setDuplicateName] = useState('')
@@ -27,7 +27,7 @@ export default function ExtraCard({
     }
 
     return (
-        <div className="bg-surface border border-border/60 rounded-[14px] px-4 py-3 flex flex-col gap-2 group">
+        <div className="bg-surface border border-border/60 rounded-[14px] px-4 max-[329px]:px-2 py-3 flex flex-col gap-2 group">
             <div className="flex items-center gap-2">
                 <div className="flex-1 flex items-center gap-1 min-w-0">
                     {canEdit && (
@@ -69,11 +69,11 @@ export default function ExtraCard({
 
                 {canEdit && (
                     <button
-                        onClick={onDelete}
-                        className="text-danger hover:text-danger text-[14px] shrink-0 w-6 h-6 flex items-center justify-center"
-                        title="Xóa tùy chọn"
+                        onClick={() => setDuplicating(true)}
+                        className="text-primary hover:bg-primary/10 text-[14px] shrink-0 w-6 h-6 flex items-center justify-center rounded-[8px] transition-colors"
+                        title="Tạo một tùy chọn giống hệt cái này để chỉnh"
                     >
-                        ✕
+                        ⧉
                     </button>
                 )}
             </div>
@@ -86,6 +86,7 @@ export default function ExtraCard({
                     categoryOf={categoryOf}
                     canEdit={canEdit}
                     allowNegative
+                    baseAmounts={baseAmounts}
                     onSetAmount={(ing, v) => onSaveExtraAmount(ing, v)}
                     onRemove={(ing) => onDeleteExtraIngredient(ing)}
                     onAddCustom={onAddExtraIngredients}
@@ -110,11 +111,11 @@ export default function ExtraCard({
                     </div>
                 ) : (
                     <button
-                        onClick={() => setDuplicating(true)}
-                        className="text-text-dim hover:text-primary text-[11px] font-medium self-end"
-                        title="Tạo một tùy chọn giống hệt cái này để chỉnh"
+                        onClick={onDelete}
+                        className="text-danger hover:bg-danger/10 rounded-full px-3 py-1 text-[11px] font-medium self-end transition-colors"
+                        title="Xóa tùy chọn"
                     >
-                        ⧉ Tạo bản giống
+                        Xóa tùy chọn
                     </button>
                 ))}
             </div>
