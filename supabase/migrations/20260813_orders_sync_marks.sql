@@ -10,8 +10,8 @@
 --
 -- CÁCH LÀM. Một số đếm sửa đổi cho mỗi địa chỉ, do trigger trên orders nuôi. Client gửi kèm
 -- số nó đang giữ; khớp thì RPC trả về đúng con số đó (~80 byte), lệch mới trả mảng đầu đơn.
--- Chi phí lúc quán vắng thành O(1) VÀ không tăng theo số đơn trong ngày ⇒ nhịp 1.5s tốn
--- ~9 MB/máy/ngày, RẺ HƠN nhịp 5s hiện tại mà nhanh hơn 3 lần.
+-- Chi phí lúc quán vắng thành O(1) VÀ không tăng theo số đơn trong ngày ⇒ nhịp 888ms tốn
+-- ~17 MB/máy/ngày, VẪN RẺ HƠN nhịp 5s cũ (28 MB) mà nhanh hơn 5 lần.
 --
 -- Vì sao không quay lại Realtime: chi phí của nó tính theo SỐ KẾT NỐI ĐỒNG THỜI (trần cứng
 -- ~500), tăng tuyến tính theo số máy. Watermark tính theo SỐ SỰ KIỆN THẬT và tầng chờ vẫn

@@ -16,11 +16,20 @@ import { dateStringVN } from '../utils/dateVN'
 // Đánh đổi đã biết: trễ tối đa một nhịp poll thay vì ~200ms. Bù lại bằng cú poll ngay khi
 // tab hiện lại — thao tác "mở app lên xem" thấy dữ liệu mới tức thì, không phải chờ nhịp.
 //
-// 1.5s (không phải 5s) vì nhịp KHÔNG ĐỔI giờ gần như miễn phí: RPC orders_sync so watermark
+// 888ms (không phải 5s) vì nhịp KHÔNG ĐỔI giờ gần như miễn phí: RPC orders_sync so watermark
 // bằng một PK lookup và trả ~80 byte khi không có gì mới (xem 20260813_orders_sync_marks).
 // Đo thật (gzip, 12h, 200 đơn/ngày/máy): kiểu cũ — tải đầu đơn cả ngày MỖI nhịp — tốn 28 MB
-// ở 5s và 137 MB ở 1s; kiểu watermark tốn ~9 MB ở 1.5s. Nhanh hơn 3 lần mà rẻ hơn.
-const FAST_MS = 1500
+// ở 5s và 137 MB ở 1s; kiểu watermark tốn ~17 MB ở 888ms. Nhanh hơn 5 lần mà vẫn rẻ hơn.
+//
+// Timer hẹn SAU khi phản hồi về, nên chu kỳ thật = 888 + RTT. Đo trên máy thật: RTT 175ms →
+// nhịp 1.06s, trễ điển hình ~0.5s (mốc cũ 1500 cho nhịp 2.0s). Giá phải trả không nằm ở băng
+// thông (thân phản hồi 9 byte, tốn kém là header HTTP + JWT) mà ở lần đánh thức radio trên
+// máy chạy 3G/4G — RTT ở đó cao hơn nên nhịp cũng tự giãn ra theo.
+//
+// SÀN: phải luôn > MIN_GAP_MS, nếu không sàn ăn cả nhịp bình thường chứ không chỉ cắt chùm
+// sự kiện. Hở hiện tại 88ms — muốn xuống dưới ~850 thì phải hạ MIN_GAP_MS theo, và lúc đó
+// nó hết chặn nổi chùm hidden→visible (đo được cặp cách nhau 13ms).
+const FAST_MS = 888
 // KHÔNG còn giãn nhịp lúc quán vắng (trước: 15s sau 2 phút không đổi). Nó sinh ra để né chi
 // phí của nhịp nhanh, mà chi phí đó không còn; đổi lại nó bắt đơn ĐẦU TIÊN sau quãng vắng
 // chờ tới 15s — đúng lúc nhân viên đang rảnh và nhìn màn hình.
@@ -188,7 +197,7 @@ export function useOrdersPoll({ addressId, isGuest, localOrdersRef, onChange, on
                 if (newIds.length > MAX_HYDRATE) {
                     // onResume nạp đầy bằng đường khác nên knownIds CHỐT ở đây — không chốt là
                     // nhịp sau lại thấy ngần ấy "đơn mới" và gọi onResume tiếp, thành vòng lặp
-                    // nạp cả ngày mỗi 1.5s trong lúc handleLoadHistory còn đang chạy.
+                    // nạp cả ngày mỗi nhịp trong lúc handleLoadHistory còn đang chạy.
                     knownIdsRef.current = nextKnown
                     revRef.current = null
                     if (!stopped) onResumeRef.current?.()
