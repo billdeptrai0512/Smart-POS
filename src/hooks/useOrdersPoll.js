@@ -131,6 +131,12 @@ export function useOrdersPoll({ addressId, isGuest, localOrdersRef, onChange, on
     const lastPollRef = useRef(0)
     // Watermark của server (xem fetchOrdersSync). null = chưa có ⇒ RPC trả đầu đơn.
     const revRef = useRef(null)
+    // Ngày VN của mốc đang giữ. PHẢI là ref như hai cái trên: rev đếm mọi sửa đổi của địa
+    // chỉ chứ không theo ngày, nên qua nửa đêm mà quán không ghi thêm đơn thì rev đứng im —
+    // RPC trả "không đổi" trong khi đầu đơn đúng phải rỗng. Để biến này sống trong effect
+    // thì chỉ cần một lần đổi route sau nửa đêm là nó nhận lại ngày mới và cú reset không
+    // bao giờ chạy, đúng cái bẫy "mốc chết theo effect" đã dính ở knownIds.
+    const markDateRef = useRef(dateStringVN())
 
     // Đổi chi nhánh = tập đơn khác hẳn, mốc cũ vô nghĩa.
     const addressRef = useRef(addressId)
@@ -146,10 +152,6 @@ export function useOrdersPoll({ addressId, isGuest, localOrdersRef, onChange, on
         let timer = null
         let inFlight = false
         let hiddenAt = 0
-        // Ngày VN của mốc watermark đang giữ. rev đếm mọi sửa đổi của địa chỉ (không theo
-        // ngày) còn đầu đơn chỉ lấy trong ngày, nên qua nửa đêm mà quán không ghi thêm đơn
-        // nào thì rev đứng im — RPC trả "không đổi" trong khi danh sách đúng phải rỗng.
-        let markDate = dateStringVN()
         // clearTimeout lúc dọn dẹp KHÔNG đủ: một tick đang chờ mạng sẽ chạy tiếp tới
         // schedule() sau khi effect đã tháo, hẹn một timer mồ côi rồi tự nuôi mình mãi mãi.
         // Rời khỏi /pos vài lần là có vài vòng poll chạy ngầm cho một màn không ai xem.
@@ -164,19 +166,30 @@ export function useOrdersPoll({ addressId, isGuest, localOrdersRef, onChange, on
             try {
                 // Sang ngày mới thì mốc cũ vô nghĩa — bỏ để nhịp này nhận lại đầu đơn.
                 const today = dateStringVN()
-                if (today !== markDate) { markDate = today; revRef.current = null; knownIdsRef.current = null }
+                if (today !== markDateRef.current) {
+                    markDateRef.current = today
+                    revRef.current = null
+                    knownIdsRef.current = null
+                }
 
                 const { rev, heads } = await fetchOrdersSync(addressId, revRef.current)
                 // heads === null là "không có gì đổi" — KHÁC [] là "hôm nay chưa có đơn nào".
                 // Đây là đường chạy của gần như mọi nhịp.
                 if (!heads) { revRef.current = rev; return }
 
+                const nextKnown = new Set(heads.map(h => h.id))
                 const { newIds, patched, moneyChanged, tableChanged } = diffOrderHeads(localOrdersRef.current, heads, knownIdsRef.current)
-                // Dựng mốc TRƯỚC khi thoát sớm: nhịp sau phải biết đám này không còn mới.
-                knownIdsRef.current = new Set(heads.map(h => h.id))
-                if (!newIds.length && !patched.length) { revRef.current = rev; return }
+
+                // HAI mốc (rev của server + knownIds của máy) phải chốt CÙNG LÚC, và chỉ khi
+                // đã áp xong. Chốt knownIds sớm là vô hiệu hoá luôn chốt rev: nhịp sau server
+                // vẫn trả lại đầu đơn, nhưng đám id đó đã nằm trong knownIds nên diff coi là
+                // "không mới" — đơn mất y hệt. Mạng quán rớt giữa lượt hydrate là chuyện thường.
+                if (!newIds.length && !patched.length) { knownIdsRef.current = nextKnown; revRef.current = rev; return }
                 if (newIds.length > MAX_HYDRATE) {
-                    // onResume nạp đầy bằng đường khác; để mốc null cho nhịp tới dựng lại.
+                    // onResume nạp đầy bằng đường khác nên knownIds CHỐT ở đây — không chốt là
+                    // nhịp sau lại thấy ngần ấy "đơn mới" và gọi onResume tiếp, thành vòng lặp
+                    // nạp cả ngày mỗi 1.5s trong lúc handleLoadHistory còn đang chạy.
+                    knownIdsRef.current = nextKnown
                     revRef.current = null
                     if (!stopped) onResumeRef.current?.()
                     return
@@ -185,9 +198,7 @@ export function useOrdersPoll({ addressId, isGuest, localOrdersRef, onChange, on
                 // Đổi màn trong lúc chờ mạng → đừng setState vào một provider đã tháo.
                 if (stopped) return
                 onChangeRef.current({ newOrders, patched, moneyChanged, tableChanged })
-                // Ghi mốc SAU CÙNG, chỉ khi đã áp xong. Ghi sớm rồi hydrate hỏng giữa chừng
-                // là nhịp sau thấy "không có gì đổi" và đám đơn đó mất vĩnh viễn — bản quét
-                // cả ngày cũ tự lành được chuyện này, bản watermark thì không.
+                knownIdsRef.current = nextKnown
                 revRef.current = rev
             } catch (err) {
                 // Rớt mạng giữa ca là chuyện thường — lần poll sau tự bắt kịp vì mốc chưa
