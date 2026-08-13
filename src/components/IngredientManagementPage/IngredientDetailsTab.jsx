@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Info, Pencil, Trash2 } from 'lucide-react'
+import { Check, Info, Trash2 } from 'lucide-react'
 import { formatPackedQty } from '../../utils/inventory'
 import { INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 import { onboardingHintClass } from '../../utils/onboardingHint'

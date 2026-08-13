@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Plus, X, ArrowUpDown } from 'lucide-react'
-import FabActionMenu from '../components/common/FabActionMenu'
+import { Plus, X } from 'lucide-react'
 import { BottomSheet } from '../components/common/ModalShell'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
