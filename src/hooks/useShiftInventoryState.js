@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabaseClient'
 import { isGuest } from '../services/localRepository'
 import { sortIngredients, lookupByLabel } from '../utils/ingredients'
 import { dateStringVN } from '../utils/dateVN'
+import { onTabReturn } from '../utils/tabVisibility'
 
 // Chuẩn hoá 1 ô input trước khi so với baseline: undefined / null / '' đều là "chưa nhập".
 // Mọi phép so dirty trong file này phải dùng chung hàm này, không thì "" vs undefined
@@ -197,9 +198,8 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     useEffect(() => {
         if (addressId === undefined) return
         reloadStocks()
-        const onVis = () => { if (document.visibilityState === 'visible') reloadStocks() }
-        document.addEventListener('visibilitychange', onVis)
-        return () => document.removeEventListener('visibilitychange', onVis)
+        // Chỉ khi tab quay lại sau khi đi vắng — mỗi lần 'visible' là 2 query lặp vô hạn.
+        return onTabReturn(reloadStocks)
     }, [addressId, reloadStocks])
 
     // ── Ingredient list with units (for sort + per-row metadata) ─────────────

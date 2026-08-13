@@ -40,6 +40,7 @@ Mỗi file có **header** ghi: test cái gì + file nguồn. Từng case đọc 
 | | datePickerUtils | parse ngày, tiện ích date-picker | `components/common/datePickerUtils.js` |
 | | text | capitalizeWords | `utils/text.js` |
 | | localRepository | guest data layer, parity sync key | `services/localRepository.js` |
+| | tabVisibility | gate "tab quay lại sau khi đi vắng" — chặn vòng lặp refetch | `utils/tabVisibility.js` |
 
 `TINH_TOAN_TON_KHO.md` (trong `inventory/`) giải thích công thức giá vốn/tiêu hao mà bộ
 test inventory kiểm chứng.

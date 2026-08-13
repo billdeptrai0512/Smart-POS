@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext'
 import { useAddress } from './AddressContext'
 import { useMonetizationEnabled } from '../hooks/useEntitlement'
 import { fetchBranchesTodayStats, fetchStaffByManager, fetchSubscriptionStatuses } from '../services/authService'
+import { onTabReturn } from '../utils/tabVisibility'
 
 const AddressStatsContext = createContext(null)
 
@@ -120,14 +121,12 @@ export function AddressStatsProvider() {
             if (document.visibilityState === 'visible') loadStats()
         }, 30_000)
 
-        const handleVisibility = () => {
-            if (document.visibilityState === 'visible') loadStats()
-        }
-        document.addEventListener('visibilitychange', handleVisibility)
+        // Chỉ bắt "quay lại sau khi đi vắng", không phải mỗi lần visible — xem onTabReturn.
+        const offTabReturn = onTabReturn(loadStats)
         return () => {
             cancelRef.current = true
             clearInterval(intervalId)
-            document.removeEventListener('visibilitychange', handleVisibility)
+            offTabReturn()
         }
         // ponytail: keyed on addressIdsKey (ids only) — addresses.length is only an
         // early-bail snapshot, not something that should restart the poll interval.

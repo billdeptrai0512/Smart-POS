@@ -5,6 +5,7 @@ import { useAddress } from './AddressContext'
 import { supabase } from '../lib/supabaseClient'
 import { Outlet } from 'react-router-dom'
 import { cacheKey as buildCacheKey } from '../constants/storageKeys'
+import { onTabReturn } from '../utils/tabVisibility'
 
 const ProductContext = createContext(null)
 
@@ -166,16 +167,7 @@ export function ProductProvider() {
         // while. Without this, every quick app-switch / lock-screen fires a herd
         // of reads that saturates a flaky connection (a key "lag after foreground"
         // aggravator). Product data changes infrequently → 30s is plenty.
-        let hiddenAt = 0
-        const handleVisibility = () => {
-            if (document.visibilityState === 'hidden') {
-                hiddenAt = Date.now()
-            } else if (Date.now() - hiddenAt > 30000) {
-                refreshProducts().catch(() => { })
-            }
-        }
-        document.addEventListener('visibilitychange', handleVisibility)
-        return () => document.removeEventListener('visibilitychange', handleVisibility)
+        return onTabReturn(() => refreshProducts().catch(() => { }))
     }, [selectedAddress?.id, refreshProducts])
 
     const value = useMemo(() => ({
