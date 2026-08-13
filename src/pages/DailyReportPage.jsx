@@ -1176,7 +1176,12 @@ export default function DailyReportPage() {
         }
         try {
             const saved = await saveShiftClosing(payload, {
-                existingId: shiftClosing?.id,
+                // isTodaysClosing, KHÔNG phải chỉ có id: get_daily_report_context thỉnh
+                // thoảng trả phiếu HÔM QUA (biên tz — xem chỗ tính persistedCash). Lúc đó ô
+                // Thực thu hiện trống (đúng), nhưng ghi theo id này là UPDATE tiền hôm nay
+                // đè lên phiếu hôm qua: hôm qua sai số, hôm nay vẫn trống. Bỏ id ⇒ đi đường
+                // INSERT, và insertShiftClosing đã tự lành khi đụng unique index cùng ngày.
+                existingId: isTodaysClosing ? shiftClosing?.id : undefined,
             })
             // save() trả null khi bị bỏ qua do đang lưu việc khác → không báo thành công giả,
             // giữ cashDirty để user bấm lại.
