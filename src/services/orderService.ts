@@ -127,33 +127,29 @@ export async function fetchTodayOrders(addressId: UUID | null): Promise<any> {
 }
 
 // ---- Đồng bộ đa thiết bị (poll, xem hooks/useOrdersPoll.js) ----
-// Đây là câu chạy 5 giây một lần trên mỗi máy đang mở /pos hoặc /history, nên nó
-// KHÔNG được join order_items: chỉ mấy cột vô hướng đủ để trả lời "có gì đổi không".
-// Đơn thật sự mới mới đáng một lượt fetchOrdersByIds kèm món.
+// Câu chạy 1.5 giây một lần trên mỗi máy đang mở /pos hoặc /history, nên nó phải rẻ ở
+// TRẠNG THÁI KHÔNG ĐỔI — tức gần như mọi nhịp.
 //
-// Quét cả ngày chứ không dùng con trỏ `created_at > lần trước`: bulk_create_orders nhận
-// created_at từ client khi replay đơn offline, nên đơn backdate rơi TRƯỚC con trỏ và mất
-// hút vĩnh viễn. Quét cả ngày còn bắt được cả sửa chiết khấu / xoá mềm ở đơn cũ.
-export async function fetchTodayOrderHeads(addressId: UUID | null): Promise<any[]> {
+// `rev` là watermark do trigger trên orders nuôi (20260813_orders_sync_marks). Gửi kèm số
+// đang giữ: khớp thì RPC trả đúng con số đó và KHÔNG đọc orders dòng nào (~80 byte); lệch
+// mới trả mảng đầu đơn. Trước đây mỗi nhịp kéo về đầu đơn cả ngày chỉ để so — chi phí
+// bằng (số nhịp × số đơn), nên không thể mua độ trễ bằng cách hạ khoảng nhịp.
+//
+// rev = null (mới mở màn / đổi chi nhánh / sang ngày mới) ⇒ luôn nhận đầu đơn.
+//
+// Đầu đơn quét CẢ NGÀY chứ không dùng con trỏ `created_at > lần trước`: bulk_create_orders
+// nhận created_at từ client khi replay đơn offline, nên đơn backdate rơi TRƯỚC con trỏ và
+// mất hút vĩnh viễn. Quét cả ngày còn bắt được sửa chiết khấu / xoá mềm ở đơn cũ.
+//
+// heads = null nghĩa là "không đổi", KHÁC HẲN [] nghĩa là "hôm nay chưa có đơn nào" —
+// người gọi phải phân biệt, nhầm là xoá trắng danh sách (cùng bẫy đã làm mất lưới bàn).
+export async function fetchOrdersSync(addressId: UUID | null, rev: number | null): Promise<{ rev: number; heads: any[] | null }> {
     // Guest là local-only (một demo address dùng chung) — không có máy thứ hai để đồng bộ.
-    if (localRepo.isGuest() || !supabase || !addressId) return []
+    if (localRepo.isGuest() || !supabase || !addressId) return { rev: 0, heads: [] }
 
-    // served_at / table_closed_at cũng nằm đây vì lưới bàn phải theo kịp máy kia: bàn đã
-    // tính tiền ở máy A mà còn nguyên trên máy B là đường thu tiền khách hai lần.
-    const { data, error } = await supabase
-        .from('orders')
-        // deleted_by không dự phần so lệch — nó đi kèm để hàng vá lại đủ tên người xoá,
-        // /history có hiện dòng đó. table_name để biết thay đổi này có động tới lưới bàn
-        // không (xem diffOrderHeads) — rẻ hơn nhiều so với gọi fetchOpenTables mỗi nhịp.
-        // KHÔNG lấy created_at: không ai so nó, mà đây là câu chạy 5 giây một lần cả ngày.
-        .select('id, total, discount_amount, deleted_at, deleted_by, served_at, table_closed_at, table_name')
-        .eq('address_id', addressId)
-        .gte('created_at', startOfDayVN().toISOString())
-
-    // Ném chứ không nuốt: trả [] khi lỗi mạng là báo cho người gọi "hôm nay không có đơn
-    // nào" — cùng cái bẫy đã làm fetchOpenTables xoá trắng lưới bàn.
-    if (error) throw error
-    return data || []
+    const { data, error } = await supabase.rpc('orders_sync', { p_address_id: addressId, p_rev: rev })
+    if (error) throw error   // ném chứ không nuốt: lỗi mạng không phải là "không có đơn nào"
+    return { rev: data?.rev ?? 0, heads: data?.heads ?? null }
 }
 
 export async function fetchOrdersByIds(ids: UUID[]): Promise<any[]> {

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
-import { fetchTodayOrderHeads, fetchOrdersByIds } from '../services/orderService'
+import { fetchOrdersSync, fetchOrdersByIds } from '../services/orderService'
+import { dateStringVN } from '../utils/dateVN'
 
 // Đồng bộ đơn giữa các máy cùng một địa chỉ (máy ghi món ngoài sân + máy pha trong quầy).
 //
@@ -14,20 +15,25 @@ import { fetchTodayOrderHeads, fetchOrdersByIds } from '../services/orderService
 //
 // Đánh đổi đã biết: trễ tối đa một nhịp poll thay vì ~200ms. Bù lại bằng cú poll ngay khi
 // tab hiện lại — thao tác "mở app lên xem" thấy dữ liệu mới tức thì, không phải chờ nhịp.
-const FAST_MS = 5000
-// Quán vắng thì giãn nhịp. Mốc tính từ lần CUỐI thấy có thay đổi, không phải từ lần poll
-// cuối: đang có đơn liên tục là giữ nhịp nhanh.
-const IDLE_AFTER_MS = 2 * 60 * 1000
-const SLOW_MS = 15000
+//
+// 1.5s (không phải 5s) vì nhịp KHÔNG ĐỔI giờ gần như miễn phí: RPC orders_sync so watermark
+// bằng một PK lookup và trả ~80 byte khi không có gì mới (xem 20260813_orders_sync_marks).
+// Đo thật (gzip, 12h, 200 đơn/ngày/máy): kiểu cũ — tải đầu đơn cả ngày MỖI nhịp — tốn 28 MB
+// ở 5s và 137 MB ở 1s; kiểu watermark tốn ~9 MB ở 1.5s. Nhanh hơn 3 lần mà rẻ hơn.
+const FAST_MS = 1500
+// KHÔNG còn giãn nhịp lúc quán vắng (trước: 15s sau 2 phút không đổi). Nó sinh ra để né chi
+// phí của nhịp nhanh, mà chi phí đó không còn; đổi lại nó bắt đơn ĐẦU TIÊN sau quãng vắng
+// chờ tới 15s — đúng lúc nhân viên đang rảnh và nhìn màn hình.
+//
 // Rời app lâu hơn mốc này thì lúc quay lại kéo thêm mấy thứ KHÔNG nằm trong poll (chi phí,
 // tổng tiền). Chuyển app qua lại vài giây thì thôi, đừng dồn đọc lên đường mạng yếu.
 const RESUME_CATCHUP_MS = 30000
 // Sàn tần suất, áp cho MỌI đường gọi tick. Hai nguồn gọi ngoài nhịp đều đo được thật:
 // hệ điều hành bắn hidden→visible thành chùm (7 sự kiện/20 giây, có cặp cách nhau 13ms),
 // và effect này bị dựng lại liên tục lúc khởi động — mỗi lần dựng là một cú poll ngay.
-// Không có sàn thì nhịp tụt từ 5s xuống dưới 1s. Đặt dưới FAST_MS nên nhịp thường không
-// bị đụng tới, mà "mở app lên thấy liền" vẫn còn (vắng vài giây trở lên là qua sàn).
-const MIN_GAP_MS = 3000
+// 800ms (trước 3000) — sàn chỉ cần cắt chùm sự kiện, và một nhịp thừa giờ tốn ~80 byte
+// chứ không phải cả ngày đầu đơn, nên không cần chặn tay nặng như trước nữa.
+const MIN_GAP_MS = 800
 // Nhiều hơn ngần này "đơn mới" trong một nhịp thì không phải quán vừa bận: là mốc đã cũ
 // (mới mở màn, vừa ở màn khác về, vừa hết quãng mất mạng). Hydrate từng id qua
 // id=in.(...) lúc đó là dựng một URL vài KB — gateway trả 414 và cả vòng đồng bộ chết.
@@ -123,12 +129,15 @@ export function useOrdersPoll({ addressId, isGuest, localOrdersRef, onChange, on
     const knownIdsRef = useRef(null)
     // Cùng lý do: sàn tần suất phải là sàn thật, không phải sàn của riêng một lần effect.
     const lastPollRef = useRef(0)
+    // Watermark của server (xem fetchOrdersSync). null = chưa có ⇒ RPC trả đầu đơn.
+    const revRef = useRef(null)
 
     // Đổi chi nhánh = tập đơn khác hẳn, mốc cũ vô nghĩa.
     const addressRef = useRef(addressId)
     if (addressRef.current !== addressId) {
         addressRef.current = addressId
         knownIdsRef.current = null
+        revRef.current = null
     }
 
     useEffect(() => {
@@ -136,8 +145,11 @@ export function useOrdersPoll({ addressId, isGuest, localOrdersRef, onChange, on
 
         let timer = null
         let inFlight = false
-        let lastChangeAt = Date.now()
         let hiddenAt = 0
+        // Ngày VN của mốc watermark đang giữ. rev đếm mọi sửa đổi của địa chỉ (không theo
+        // ngày) còn đầu đơn chỉ lấy trong ngày, nên qua nửa đêm mà quán không ghi thêm đơn
+        // nào thì rev đứng im — RPC trả "không đổi" trong khi danh sách đúng phải rỗng.
+        let markDate = dateStringVN()
         // clearTimeout lúc dọn dẹp KHÔNG đủ: một tick đang chờ mạng sẽ chạy tiếp tới
         // schedule() sau khi effect đã tháo, hẹn một timer mồ côi rồi tự nuôi mình mãi mãi.
         // Rời khỏi /pos vài lần là có vài vòng poll chạy ngầm cho một màn không ai xem.
@@ -150,23 +162,37 @@ export function useOrdersPoll({ addressId, isGuest, localOrdersRef, onChange, on
             inFlight = true
             lastPollRef.current = Date.now()
             try {
-                const heads = await fetchTodayOrderHeads(addressId)
+                // Sang ngày mới thì mốc cũ vô nghĩa — bỏ để nhịp này nhận lại đầu đơn.
+                const today = dateStringVN()
+                if (today !== markDate) { markDate = today; revRef.current = null; knownIdsRef.current = null }
+
+                const { rev, heads } = await fetchOrdersSync(addressId, revRef.current)
+                // heads === null là "không có gì đổi" — KHÁC [] là "hôm nay chưa có đơn nào".
+                // Đây là đường chạy của gần như mọi nhịp.
+                if (!heads) { revRef.current = rev; return }
+
                 const { newIds, patched, moneyChanged, tableChanged } = diffOrderHeads(localOrdersRef.current, heads, knownIdsRef.current)
                 // Dựng mốc TRƯỚC khi thoát sớm: nhịp sau phải biết đám này không còn mới.
                 knownIdsRef.current = new Set(heads.map(h => h.id))
-                if (!newIds.length && !patched.length) return
-                lastChangeAt = Date.now()
+                if (!newIds.length && !patched.length) { revRef.current = rev; return }
                 if (newIds.length > MAX_HYDRATE) {
+                    // onResume nạp đầy bằng đường khác; để mốc null cho nhịp tới dựng lại.
+                    revRef.current = null
                     if (!stopped) onResumeRef.current?.()
                     return
                 }
                 const newOrders = newIds.length ? await fetchOrdersByIds(newIds) : []
                 // Đổi màn trong lúc chờ mạng → đừng setState vào một provider đã tháo.
-                if (!stopped) onChangeRef.current({ newOrders, patched, moneyChanged, tableChanged })
+                if (stopped) return
+                onChangeRef.current({ newOrders, patched, moneyChanged, tableChanged })
+                // Ghi mốc SAU CÙNG, chỉ khi đã áp xong. Ghi sớm rồi hydrate hỏng giữa chừng
+                // là nhịp sau thấy "không có gì đổi" và đám đơn đó mất vĩnh viễn — bản quét
+                // cả ngày cũ tự lành được chuyện này, bản watermark thì không.
+                revRef.current = rev
             } catch (err) {
-                // Rớt mạng giữa ca là chuyện thường — lần poll sau tự bắt kịp vì mỗi lượt
-                // đều quét lại cả ngày. Không toast: người dùng không làm gì được, và cái
-                // họ đang bấm không hỏng.
+                // Rớt mạng giữa ca là chuyện thường — lần poll sau tự bắt kịp vì mốc chưa
+                // được ghi, server vẫn thấy lệch và trả lại đầu đơn. Không toast: người dùng
+                // không làm gì được, và cái họ đang bấm không hỏng.
                 console.error('useOrdersPoll:', err)
             } finally {
                 inFlight = false
@@ -179,7 +205,7 @@ export function useOrdersPoll({ addressId, isGuest, localOrdersRef, onChange, on
             // một chuỗi timer quay không tải trên máy đang khoá màn. handleVisibility khởi
             // động lại khi quay về.
             if (stopped || !polling || document.visibilityState !== 'visible') return
-            timer = setTimeout(run, Date.now() - lastChangeAt > IDLE_AFTER_MS ? SLOW_MS : FAST_MS)
+            timer = setTimeout(run, FAST_MS)
         }
         // clearTimeout ở đầu: một timer cũ có thể nổ trong lúc tick còn đang chờ mạng.
         // Dọn trước rồi mới hẹn lại → luôn đúng một timer đang chạy.
@@ -202,14 +228,13 @@ export function useOrdersPoll({ addressId, isGuest, localOrdersRef, onChange, on
             const away = Date.now() - hiddenAt
             hiddenAt = 0
             if (away > RESUME_CATCHUP_MS) {
-                // Vắng lâu thì nạp đầy một lượt rẻ hơn hydrate từng đơn đã lỡ. Bỏ mốc để
-                // nhịp tới dựng lại từ đầu (MAX_HYDRATE ở tick cũng bắt được ca này, đây
+                // Vắng lâu thì nạp đầy một lượt rẻ hơn hydrate từng đơn đã lỡ. Bỏ cả hai mốc
+                // để nhịp tới dựng lại từ đầu (MAX_HYDRATE ở tick cũng bắt được ca này, đây
                 // là đường ngắn hơn cho ca đã biết chắc).
                 knownIdsRef.current = null
+                revRef.current = null
                 onResumeRef.current?.()
             }
-            // Quay lại app = có người đang nhìn: kéo nhịp về nhanh rồi poll ngay.
-            lastChangeAt = Date.now()
             if (polling) run()
         }
 

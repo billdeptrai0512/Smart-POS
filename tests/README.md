@@ -36,6 +36,7 @@ Mỗi file có **header** ghi: test cái gì + file nguồn. Từng case đọc 
 | **pos** | orderService | flush đơn offline (guest) | `services/orderService.js` |
 | | tableLines | gộp đợt gọi món của bàn thành hoá đơn (dine_in) | `services/orderService.ts` |
 | | ordersPoll | diff đơn khi đồng bộ hai máy cùng địa chỉ | `hooks/useOrdersPoll.js` |
+| | ordersSync | watermark: "không đổi" (null) khác "chưa có đơn" ([]) | `services/orderService.ts` |
 | **common** | money | discount, parse/format VND, COGS | `utils/money.js`, `utils/inventory.js` |
 | | datePickerUtils | parse ngày, tiện ích date-picker | `components/common/datePickerUtils.js` |
 | | text | capitalizeWords | `utils/text.js` |
