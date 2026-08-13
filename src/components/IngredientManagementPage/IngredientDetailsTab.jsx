@@ -1,7 +1,5 @@
 import { useState } from 'react'
 import { Check, Info, Pencil, Trash2 } from 'lucide-react'
-import MoneyInput from '../common/MoneyInput'
-import { formatVND, formatVNDInput, parseVNDInput } from '../../utils'
 import { formatPackedQty } from '../../utils/inventory'
 import { INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 import { onboardingHintClass } from '../../utils/onboardingHint'
@@ -13,128 +11,55 @@ import { onboardingHintClass } from '../../utils/onboardingHint'
 // Save callbacks are async-friendly: parent decides what to do on success/failure
 // (we just close the edit affordance optimistically before awaiting).
 export default function IngredientDetailsTab({
-    nameLabel, unit, cost, category, packSize, packUnit, minStock, tareWeight,
-    warehouseStock, warehouseGroupNote, hintWarehouse = false, counterStock, currentStock,
+    nameLabel, unit, category, packSize, packUnit, minStock, tareWeight,
+    countInAudit, onToggleAudit,   // toggle "báo cáo tồn quầy" — rút gọn từ panel Kiểm kê cũ thành 1 row
     hintPack = false, hintMinStock = false, hintTare = false,
-    dailyContext,           // { today_refill, today_restock } | null — Đầu ngày/Lấy ra/Nhập mới
-    siblingCounterStocks,   // [{ addressId, addressName, counterStock }] | null — tồn quầy các địa chỉ khác dùng chung kho
-    countInAudit, onToggleAudit,
     canEdit, saving,
     onSaveName,         // (newDisplayName: string) => Promise
-    onSaveWarehouse,    // (newWarehouse: number)  => Promise  (Kho sau)
-    onSaveCounter,      // (newCounter: number)    => Promise  (Tồn quầy → ghi remaining ca mới nhất)
     onSaveUnit,         // (newUnit: string)       => Promise
-    onSaveCost,         // (newCost: number)       => Promise
     onSaveMinStock,     // (newMin: number)        => Promise
     onSaveTareWeight,   // (newTare: number)       => Promise  (0 = xoá bì)
     onChangeCategory,   // (newCat: string)        => Promise (still controlled — single tap)
     onConfigurePack,    // ()                      => void   (opens modal)
-    onDelete,           // ()                      => void   (xóa nguyên liệu)
 }) {
     const hasPack = !!(packSize && packUnit)
     // Bì chỉ có nghĩa với NVL cân/đong (hộp thiếc matcha, chai nhựa sữa đặc).
     // NVL đếm cái (ly/nắp/gói) → ẩn hàng.
     const tareApplies = ['g', 'ml', 'kg', 'l'].includes(unit)
-    const hasTare = tareApplies && tareWeight > 0
-    // Tồn quầy đang lưu = số cân (gồm bì) → lượng thật = trừ bì (chỉ để hiển thị).
-    const counterReal = hasTare && counterStock != null
-        ? Math.max(0, Math.round((counterStock - tareWeight) * 10) / 10)
-        : null
-    // Đầu ngày/Lấy ra/Nhập mới — cùng công thức với card ngoài /ingredients.
-    const todayRefill = Number(dailyContext?.today_refill || 0)
-    const todayRestock = Number(dailyContext?.today_restock || 0)
-    const warehouseNow = warehouseStock ?? 0
-    const warehouseStart = warehouseNow + todayRestock - todayRefill
-    const fmtDaily = (n) => {
-        if (n < 0) return `${Math.round(n * 10) / 10} ${unit}`
-        return formatPackedQty(n, packSize, packUnit, unit, { compact: true })
-    }
     return (
         <div className="flex flex-col gap-4">
-            {/* Panel 1 — Kiểm kê: cùng bố cục với card ngoài /ingredients (đầu ngày → lấy ra
-                → nhập mới → cuối ngày → tồn quầy từng địa chỉ → tổng cộng), nhưng Tồn kho cuối
-                ngày + Tồn quầy của địa chỉ đang xem vẫn sửa được (nhập số tuyệt đối). */}
-            <Panel
-                title="Kiểm kê tồn kho / tồn quầy"
-                action={onToggleAudit && (
-                    <button
-                        type="button"
-                        role="checkbox"
-                        aria-checked={countInAudit}
-                        aria-label="Báo cáo tồn quầy"
-                        title={countInAudit ? 'Đang báo cáo tồn quầy — bấm để tắt' : 'Đang TẮT báo cáo tồn quầy — bấm để bật'}
-                        disabled={!canEdit || saving}
-                        onClick={() => canEdit && onToggleAudit(!countInAudit)}
-                        className={`relative w-5 h-5 flex items-center justify-center rounded-[6px] border transition-colors focus:outline-none shrink-0 before:absolute before:-inset-2.5 before:content-[''] ${
-                            countInAudit ? 'bg-primary border-primary' : 'bg-surface-light border-border/60'
-                        } ${canEdit ? 'cursor-pointer' : 'cursor-default opacity-60'}`}
-                    >
-                        {countInAudit && <Check size={13} strokeWidth={3} className="text-black" />}
-                    </button>
-                )}
-            >
-                {/* Bọc cả 2 nhóm trong 1 div duy nhất — section của Panel tự thêm divide-y cho
-                    children trực tiếp, để 2 div nhóm làm children trực tiếp sẽ bị chèn thêm 1
-                    viền tự động chồng lên viền group-break tự khai báo bên dưới. */}
-                <div className="flex flex-col">
-                    {/* Ranh giới giữa 2 nhóm = KHOẢNG CÁCH y hệt giữa 2 dòng thường (10px mỗi
-                        bên, bù lại phần first:pt-0/last:pb-0 của Row), chỉ khác ở viền sáng hơn
-                        (border-border vs border-border/40) — đủ để mắt tách nhóm mà không tạo
-                        khoảng hở như 2 thẻ rời. */}
-                    {/* Nhóm 1 — chuỗi kho hôm nay: đầu ngày − lấy ra + nhập mới = cuối ngày (1 phép tính). */}
-                    <div className="flex flex-col divide-y divide-border/40 pb-2.5">
-                        <Row label="Tồn kho đầu ngày">
-                            <span className="text-[13px] font-bold text-text-secondary tabular-nums">{fmtDaily(warehouseStart)}</span>
-                        </Row>
-                        <Row label="Lấy ra">
-                            <span className={`text-[13px] font-bold tabular-nums ${todayRestock > 0 ? 'text-warning' : 'text-text-secondary'}`}>
-                                − {fmtDaily(todayRestock)}
-                            </span>
-                        </Row>
-                        <Row label="Nhập mới">
-                            <span className={`text-[13px] font-bold tabular-nums ${todayRefill > 0 ? 'text-success' : 'text-text-secondary'}`}>
-                                + {fmtDaily(todayRefill)}
-                            </span>
-                        </Row>
-                        <QtyRow
-                            label="Tồn kho cuối ngày" value={warehouseStock} unit={unit}
-                            hasPack={hasPack} packSize={packSize} packUnit={packUnit}
-                            canEdit={canEdit} editable onSave={onSaveWarehouse}
-                            groupNote={warehouseGroupNote} hint={hintWarehouse}
-                        />
-                    </div>
-
-                    {/* Nhóm 2 — kho cuối ngày (trên) + quầy = tổng đang có thật ngay lúc này. */}
-                    <div className="border-t border-border pt-2.5 flex flex-col divide-y divide-border/40">
-                        <QtyRow
-                            label={siblingCounterStocks?.length ? 'Tồn quầy hiện có · đây' : 'Tồn quầy hiện có'}
-                            value={counterStock} unit={unit}
-                            hasPack={hasPack} packSize={packSize} packUnit={packUnit}
-                            canEdit={canEdit} editable onSave={onSaveCounter}
-                            note={counterReal != null ? `− bì ${tareWeight} → ${counterReal} ${unit} thật` : null}
-                        />
-                        {siblingCounterStocks?.map(s => (
-                            <QtyRow
-                                key={s.addressId}
-                                label={`Tồn quầy hiện có · ${s.addressName}`} value={s.counterStock} unit={unit}
-                                hasPack={hasPack} packSize={packSize} packUnit={packUnit}
-                                canEdit={false} editable={false}
-                            />
-                        ))}
-                        <QtyRow
-                            label="Tổng cộng" value={currentStock} unit={unit}
-                            hasPack={hasPack} packSize={packSize} packUnit={packUnit}
-                            canEdit={canEdit} editable={false}
-                        />
-                    </div>
-                </div>
-            </Panel>
-
-            {/* Panel 2 — Thông tin: thuộc tính NVL/bao bì (không phải số tồn). */}
-            <Panel title="Thông tin">
+            {/* Thuộc tính NVL/bao bì (không phải số tồn) — số tồn/kiểm kê nằm ở tab Nhật ký. */}
+            <Panel >
                 <CategoryRow value={category} canEdit={canEdit} saving={saving} onChange={onChangeCategory} />
                 <NameRow value={nameLabel} canEdit={canEdit} onSave={onSaveName} />
                 <UnitRow value={unit} canEdit={canEdit} onSave={onSaveUnit} />
+                {tareApplies && (tareWeight != null || canEdit) && (
+                    <TareRow tareWeight={tareWeight} unit={unit} canEdit={canEdit} onSave={onSaveTareWeight} hint={hintTare} />
+                )}
+                {onToggleAudit && (
+                    <Row
+                        label="Báo cáo"
+                        info="Bật để nguyên liệu này được tính vào báo cáo tồn kho/tồn quầy khi kiểm kê cuối ca. Tắt nếu không cần theo dõi (VD: nước, đá, gia vị lặt vặt)."
+                    >
+                        <button
+                            type="button"
+                            role="checkbox"
+                            aria-checked={countInAudit}
+                            aria-label="Báo cáo tồn quầy"
+                            title={countInAudit ? 'Đang báo cáo tồn quầy — bấm để tắt' : 'Đang TẮT báo cáo tồn quầy — bấm để bật'}
+                            disabled={!canEdit || saving}
+                            onClick={() => canEdit && onToggleAudit(!countInAudit)}
+                            className={`relative w-5 h-5 flex items-center justify-center rounded-[6px] border transition-colors focus:outline-none shrink-0 before:absolute before:-inset-2.5 before:content-[''] ${
+                                countInAudit ? 'bg-primary border-primary' : 'bg-surface-light border-border/60'
+                            } ${canEdit ? 'cursor-pointer' : 'cursor-default opacity-60'}`}
+                        >
+                            {countInAudit && <Check size={13} strokeWidth={3} className="text-black" />}
+                        </button>
+                    </Row>
+                )}
+            </Panel>
+          <Panel >
+                
                 <PackRow
                     hasPack={hasPack}
                     packSize={packSize}
@@ -156,21 +81,97 @@ export default function IngredientDetailsTab({
                         hint={hintMinStock}
                     />
                 )}
-                {tareApplies && (tareWeight != null || canEdit) && (
-                    <TareRow tareWeight={tareWeight} unit={unit} canEdit={canEdit} onSave={onSaveTareWeight} hint={hintTare} />
-                )}
-                <CostRow cost={cost} unit={unit} canEdit={canEdit} onSave={onSaveCost} />
             </Panel>
-
-            {canEdit && onDelete && (
-                <button
-                    onClick={onDelete}
-                    className="flex items-center justify-center gap-1.5 w-full text-[12px] font-bold text-danger/80 bg-danger/5 border border-danger/20 rounded-[12px] px-3 py-2.5 hover:bg-danger/10 hover:text-danger active:scale-[0.99] transition-all"
-                >
-                    <Trash2 size={14} /> Xóa nguyên liệu
-                </button>
-            )}
         </div>
+    )
+}
+
+// ── Delete action — tách riêng để page kiểm soát vị trí (đặt sau card Kiểm kê). ──
+export function DeleteIngredientButton({ canEdit, onDelete }) {
+    if (!canEdit || !onDelete) return null
+    return (
+        <button
+            onClick={onDelete}
+            className="flex items-center justify-center gap-1.5 w-full text-[12px] font-bold text-danger/80 bg-danger/5 border border-danger/20 rounded-[12px] px-3 py-2.5 hover:bg-danger/10 hover:text-danger active:scale-[0.99] transition-all"
+        >
+            <Trash2 size={14} /> Xóa nguyên liệu
+        </button>
+    )
+}
+
+// ── Stock panel (Kiểm kê tồn kho / tồn quầy) — breakdown Đầu ngày/Lấy ra/Nhập
+// mới + sửa Tồn kho cuối ngày. Tồn quầy/Tổng cộng đã tách thành card riêng
+// (IngredientCounterPanel); toggle "báo cáo" đã tách thành 1 row ở tab Thông tin.
+export function IngredientStockPanel({
+    unit, packSize, packUnit,
+    warehouseStock, warehouseGroupNote, hintWarehouse = false,
+    dailyContext,       // { today_refill, today_restock } | null — Đầu ngày/Lấy ra/Nhập mới
+    canEdit,
+    onSaveWarehouse,    // (newWarehouse: number)  => Promise  (Kho sau)
+}) {
+    const hasPack = !!(packSize && packUnit)
+    const todayRefill = Number(dailyContext?.today_refill || 0)
+    const todayRestock = Number(dailyContext?.today_restock || 0)
+    const warehouseNow = warehouseStock ?? 0
+    const warehouseStart = warehouseNow + todayRestock - todayRefill
+    return (
+        <Panel>
+            <div className="flex flex-col divide-y divide-border/40">
+                <DailyQtyRow label="Tồn kho đầu ngày" value={warehouseStart} unit={unit} hasPack={hasPack} packSize={packSize} packUnit={packUnit} />
+                <DailyQtyRow
+                    label="Lấy ra" value={todayRestock} unit={unit} hasPack={hasPack} packSize={packSize} packUnit={packUnit}
+                    sign="−" accentClass={todayRestock > 0 ? 'text-warning' : 'text-text'}
+                />
+                <DailyQtyRow
+                    label="Nhập mới" value={todayRefill} unit={unit} hasPack={hasPack} packSize={packSize} packUnit={packUnit}
+                    sign="+" accentClass={todayRefill > 0 ? 'text-success' : 'text-text'}
+                />
+                <QtyRow
+                    label="Tồn kho cuối ngày" value={warehouseStock} unit={unit}
+                    hasPack={hasPack} packSize={packSize} packUnit={packUnit}
+                    canEdit={canEdit} editable onSave={onSaveWarehouse}
+                    groupNote={warehouseGroupNote} hint={hintWarehouse}
+                />
+            </div>
+        </Panel>
+    )
+}
+
+// ── Counter panel (Tồn quầy / Tổng cộng) — Tồn quầy sửa được (nhập số tuyệt
+// đối); Tổng cộng chỉ đọc (kho + quầy cộng lại, tính ở page).
+export function IngredientCounterPanel({
+    unit, packSize, packUnit, tareWeight,
+    counterStock, currentStock,
+    siblingCounterStocks,   // [{ addressId, addressName, counterStock }] | null — tồn quầy các địa chỉ khác dùng chung kho
+    canEdit,
+    onSaveCounter,      // (newCounter: number)    => Promise  (Tồn quầy → ghi remaining ca mới nhất)
+}) {
+    const hasPack = !!(packSize && packUnit)
+    const tareApplies = ['g', 'ml', 'kg', 'l'].includes(unit)
+    const hasTare = tareApplies && tareWeight > 0
+    // Tồn quầy đang lưu = số cân (gồm bì) → lượng thật = trừ bì (chỉ để hiển thị).
+    const counterReal = hasTare && counterStock != null
+        ? Math.max(0, Math.round((counterStock - tareWeight) * 10) / 10)
+        : null
+    return (
+        <Panel>
+            <QtyRow
+                label={siblingCounterStocks?.length ? 'Tồn quầy · đây' : 'Tồn quầy'}
+                value={counterStock} unit={unit}
+                hasPack={hasPack} packSize={packSize} packUnit={packUnit}
+                canEdit={canEdit} editable onSave={onSaveCounter}
+                note={counterReal != null ? `− bì ${tareWeight} → ${counterReal} ${unit} thật` : null}
+            />
+            {siblingCounterStocks?.map(s => (
+                <QtyRow
+                    key={s.addressId}
+                    label={`Tồn quầy · ${s.addressName}`} value={s.counterStock} unit={unit}
+                    hasPack={hasPack} packSize={packSize} packUnit={packUnit}
+                    canEdit={false} editable={false}
+                />
+            ))}
+            <QtyRow label="Tổng cộng" value={currentStock} unit={unit} hasPack={hasPack} packSize={packSize} packUnit={packUnit} canEdit={false} editable={false} />
+        </Panel>
     )
 }
 
@@ -256,6 +257,30 @@ function NameRow({ value, canEdit, onSave }) {
     )
 }
 
+// ── Daily qty row (Tồn đầu ngày / Lấy ra / Nhập mới) ────────────────────────
+// Chỉ đọc, cùng cách diễn đạt với Tồn quy đổi: số gốc đậm ở trên, breakdown quy
+// đổi (nếu có) mờ bên dưới — thay vì gộp sẵn thành 1 chuỗi compact như trước.
+function DailyQtyRow({ label, value, unit, hasPack, packSize, packUnit, sign = '', accentClass = 'text-text' }) {
+    const rounded = Math.round(value * 10) / 10
+    const showPack = hasPack && value >= packSize
+    return (
+        <Row label={label}>
+            {/* min-h giữ chỗ dòng quy đổi kể cả khi không có → các row trong cùng panel cao
+                bằng nhau; không có gì để hiện thì canh số ở giữa khối thay vì dính trên */}
+            <div className={`flex flex-col items-end gap-0.5 leading-tight ${hasPack ? 'min-h-[32px] justify-center' : ''}`}>
+                <span className={`text-[13px] font-bold tabular-nums ${accentClass}`}>
+                    {sign && `${sign} `}{rounded} <span className="text-text-dim font-medium">{unit}</span>
+                </span>
+                {showPack && (
+                    <span className="text-[11px] font-medium text-text-dim">
+                        = {formatPackedQty(value, packSize, packUnit, unit, { compact: true })}
+                    </span>
+                )}
+            </div>
+        </Row>
+    )
+}
+
 // ── Stock qty row (Kho sau / Tồn quầy / Tổng tồn) ───────────────────────────
 // editable=false → chỉ đọc (dùng cho "Tổng tồn"). editable + canEdit → tap để nhập
 // SỐ TUYỆT ĐỐI (đếm được bao nhiêu nhập bấy nhiêu); parent tự quy ra delta/ghi.
@@ -287,15 +312,17 @@ function QtyRow({ label, value, unit, hasPack, packSize, packUnit, canEdit, edit
                             if (e.key === 'Enter') commit()
                             if (e.key === 'Escape') setEditing(false)
                         }}
-                        className={`w-24 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[14px] font-black text-text text-right tabular-nums focus:outline-none focus:border-primary/50 ${onboardingHintClass(hint)}`}
+                        className={`w-24 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50 ${onboardingHintClass(hint)}`}
                     />
                     <span className="text-[12px] text-text-dim font-medium">{unit}</span>
                 </div>
             ) : (
-                <div className="flex flex-col items-end gap-0.5 leading-tight">
+                // min-h giữ chỗ dòng quy đổi kể cả khi không có → các row trong cùng panel cao
+                // bằng nhau; không có gì để hiện thì canh số ở giữa khối thay vì dính trên
+                <div className={`flex flex-col items-end gap-0.5 leading-tight ${hasPack ? 'min-h-[32px] justify-center' : ''}`}>
                     <button
                         onClick={tappable ? start : undefined}
-                        className={`inline-flex items-baseline gap-1 text-[14px] font-black tabular-nums rounded-md px-2 -mx-2 py-1 -my-1 ${tappable ? 'text-primary cursor-pointer hover:brightness-110' : `${valueClass} cursor-default`} ${onboardingHintClass(hint)}`}
+                        className={`inline-flex items-baseline gap-1 text-[13px] font-bold tabular-nums rounded-md px-2 -mx-2 py-1 -my-1 ${tappable ? 'text-primary cursor-pointer hover:brightness-110' : `${valueClass} cursor-default`} ${onboardingHintClass(hint)}`}
                     >
                         {value != null ? Math.round(value * 10) / 10 : '—'}
                         <span className="text-text-dim font-medium">{unit}</span>
@@ -347,41 +374,6 @@ function UnitRow({ value, canEdit, onSave }) {
     )
 }
 
-// ── Cost ────────────────────────────────────────────────────────────────────
-function CostRow({ cost, unit, canEdit, onSave }) {
-    const [editing, setEditing] = useState(false)
-    const [input, setInput] = useState('')
-    const start = () => { setInput(formatVNDInput(cost)); setEditing(true) }
-    const commit = () => { setEditing(false); onSave?.(parseVNDInput(input)) }
-    return (
-        <Row label="Giá vốn">
-            {canEdit && editing ? (
-                <div className="flex items-center gap-1">
-                    <MoneyInput
-                        value={input}
-                        onChange={setInput}
-                        onBlur={commit}
-                        onKeyDown={e => {
-                            if (e.key === 'Enter') commit()
-                            if (e.key === 'Escape') setEditing(false)
-                        }}
-                        autoFocus
-                        size="sm"
-                        className="w-32"
-                    />
-                    <span className="text-[12px] text-text-dim font-medium">/{unit}</span>
-                </div>
-            ) : (
-                <button
-                    onClick={canEdit ? start : undefined}
-                    className={`text-[14px] font-bold text-text tabular-nums ${canEdit ? 'cursor-pointer hover:text-primary' : ''}`}
-                >
-                    {formatVND(cost)}<span className="text-text-dim font-medium">/{unit}</span>
-                </button>
-            )}
-        </Row>
-    )
-}
 
 // ── Category (single-tap select; no edit toggle) ────────────────────────────
 function CategoryRow({ value, canEdit, saving, onChange }) {
@@ -410,19 +402,22 @@ function CategoryRow({ value, canEdit, saving, onChange }) {
 // ── Pack (opens modal) ──────────────────────────────────────────────────────
 function PackRow({ hasPack, packSize, packUnit, unit, canEdit, onConfigure, hint = false }) {
     return (
-        <Row label="Quy đổi">
+        <Row label="Tồn quy đổi">
             {hasPack ? (
                 <button
                     onClick={canEdit ? onConfigure : undefined}
                     disabled={!canEdit}
-                    className={`flex items-center gap-2 text-[13px] font-bold text-text tabular-nums ${canEdit ? 'hover:text-primary cursor-pointer' : 'cursor-default'}`}
+                    className={`flex flex-col items-end gap-0.5 leading-tight text-[13px] font-bold text-text tabular-nums ${canEdit ? 'cursor-pointer hover:text-primary' : 'cursor-default'}`}
                 >
-                    <span>1 {packUnit} = {packSize} {unit}</span>
+                    <span>
+                        {packSize} <span className="text-text-dim font-medium">{unit}</span>
+                    </span>
+                    <span className="text-[11px] font-medium text-text-dim">= 1 {packUnit}</span>
                 </button>
             ) : canEdit ? (
                 <button
                     onClick={onConfigure}
-                    className={`rounded-md px-2 -mx-2 py-1 -my-1 text-[13px] font-bold text-primary hover:underline ${onboardingHintClass(hint)}`}
+                    className={`w-6 h-6 flex items-center justify-center rounded-lg border border-primary/30 text-[13px] font-bold text-primary hover:bg-primary/10 transition-colors ${onboardingHintClass(hint)}`}
                 >
                     +
                 </button>
@@ -453,7 +448,7 @@ function MinStockRow({ minStock, unit, hasPack, packSize, packUnit, canEdit, onS
         onSave?.(raw ? Number(raw) : 0)
     }
     return (
-        <Row label="Tồn kho tối thiểu">
+        <Row label="Tồn ít nhất">
             {editing && canEdit ? (
                 <div className="flex items-center gap-1">
                     <input
@@ -488,7 +483,7 @@ function MinStockRow({ minStock, unit, hasPack, packSize, packUnit, canEdit, onS
             ) : (
                 <button
                     onClick={start}
-                    className={`rounded-md px-2 -mx-2 py-1 -my-1 text-[13px] font-bold text-primary hover:underline ${onboardingHintClass(hint)}`}
+                    className={`w-6 h-6 flex items-center justify-center rounded-lg border border-primary/30 text-[13px] font-bold text-primary hover:bg-primary/10 transition-colors ${onboardingHintClass(hint)}`}
                 >
                     +
                 </button>
@@ -515,8 +510,9 @@ function TareRow({ tareWeight, unit, canEdit, onSave, hint = false }) {
     }
     return (
         <Row
-            label="Khối lượng bì"
-            info="Khối lượng hộp/chai rỗng đựng nguyên liệu tại quầy. Kiểm kê cuối ca cân cả bì — số cân giữ nguyên, bì chỉ được trừ khi dự báo còn dùng được bao lâu."
+            label="Bao bì"
+            info="Khối lượng của hộp/chai đựng nguyên liệu tại quầy.
+ Kiểm kê cuối ca cân cả bì — số cân giữ nguyên, bì chỉ được trừ khi dự báo còn dùng được bao lâu."
         >
             {editing && canEdit ? (
                 <div className="flex items-center gap-1">
@@ -545,7 +541,7 @@ function TareRow({ tareWeight, unit, canEdit, onSave, hint = false }) {
             ) : (
                 <button
                     onClick={start}
-                    className={`rounded-md px-2 -mx-2 py-1 -my-1 text-[13px] font-bold text-primary hover:underline ${onboardingHintClass(hint)}`}
+                    className={`w-6 h-6 flex items-center justify-center rounded-lg border border-primary/30 text-[13px] font-bold text-primary hover:bg-primary/10 transition-colors ${onboardingHintClass(hint)}`}
                 >
                     +
                 </button>

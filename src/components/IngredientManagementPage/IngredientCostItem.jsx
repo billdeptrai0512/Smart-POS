@@ -1,20 +1,19 @@
 import { formatPackedQty } from '../../utils/inventory'
 import { onboardingHintClass } from '../../utils/onboardingHint'
-import { Plus } from 'lucide-react'
 
 /**
  * Compact ingredient card — read-only summary:
  *   ┌──────────────────────────┐
- *   │ Cà phê             [+]   │  ← name (tap card to open detail)
+ *   │ Cà phê                   │  ← name (tap card to open detail)
  *   │ 9180 g                   │  ← hero stock number
  *   │ = 9 bịch + 180 g         │  ← pack breakdown (if pack configured)
  *   │ Tồn đầu / Lấy ra / …     │  ← daily context
  *   │ Tồn quầy hiện có 8g      │  ← counter stock (manager only); 1 dòng/địa chỉ nếu kho dùng chung nhóm
  *   └──────────────────────────┘
  *
- * All edit affordances (name, stock, unit, pack, category, min-stock, cost)
- * live inside the /ingredients/[key] detail page — card body is a single
- * click target that navigates there. [+] restock + delete still inline.
+ * All edit affordances (name, stock, unit, pack, category, min-stock, cost,
+ * nhập kho, xóa) live inside the /ingredients/[key] detail page — card body
+ * is a single click target that navigates there.
  */
 export default function IngredientCostItem({
     ingredientLabel, getIngredientUnit, ingredient,
@@ -25,7 +24,7 @@ export default function IngredientCostItem({
     // packSize/packUnit kept for the inline "= X bịch + Y g" display.
     packSize, packUnit,
     // Stock display
-    stockData, onRestock,
+    stockData,
     // Daily context (always inline)
     dailyContext,
     // Tồn quầy theo từng địa chỉ trong nhóm kho dùng chung (null nếu kho không thuộc nhóm nào)
@@ -48,19 +47,16 @@ export default function IngredientCostItem({
             className={`bg-surface border rounded-[14px] p-3 flex flex-col gap-2 min-w-0 cursor-pointer hover:bg-surface-light/40 transition-colors ${borderClass} ${onboardingHintClass(hint)}`}
             onClick={() => onOpen?.(ingredient)}
         >
-            {/* Row 1: name + restock button */}
+            {/* Row 1: name + status badge (chiếm chỗ nút [+] nhập kho cũ) */}
             <div className="flex items-start gap-1.5 min-w-0">
                 <span className="flex-1 min-w-0 text-[14.5px] font-black text-primary leading-tight line-clamp-2 break-words">
                     {ingredientLabel(ingredient)}
                 </span>
-                {onRestock && (
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onRestock(ingredient) }}
-                        className="shrink-0 -mr-1 -mt-1 w-7 h-7 flex items-center justify-center rounded-lg text-primary bg-primary/10 hover:bg-primary/20 active:scale-95 transition-all"
-                        title="Nhập kho"
-                    >
-                        <Plus size={16} strokeWidth={3} />
-                    </button>
+                {isOutStock && (
+                    <span className="shrink-0 text-[10px] font-black text-danger uppercase tracking-wide bg-danger/10 px-1.5 py-0.5 rounded-md">Hết</span>
+                )}
+                {isLowStock && (
+                    <span className="shrink-0 text-[10px] font-black text-danger uppercase tracking-wide bg-danger/10 px-1.5 py-0.5 rounded-md">Sắp hết</span>
                 )}
             </div>
 
@@ -78,13 +74,6 @@ export default function IngredientCostItem({
                     <span className="text-[12.5px] font-semibold text-text-dim tabular-nums leading-none">
                         = {formatPackedQty(currentStock, packSize, packUnit, displayUnit, { compact: true })}
                     </span>
-                )}
-
-                {isOutStock && (
-                    <span className="ml-auto text-[10px] font-black text-danger uppercase tracking-wide bg-danger/10 px-1.5 py-0.5 rounded-md">Hết</span>
-                )}
-                {isLowStock && (
-                    <span className="ml-auto text-[10px] font-black text-danger uppercase tracking-wide bg-danger/10 px-1.5 py-0.5 rounded-md">Sắp hết</span>
                 )}
             </div>
 
