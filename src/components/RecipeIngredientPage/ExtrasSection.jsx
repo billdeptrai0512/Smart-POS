@@ -5,7 +5,7 @@ import { onboardingHintClass } from '../../utils/onboardingHint'
 export default function ExtrasSection({
     extras, extraIngs, ingredientUnits, dbIngredients, canEdit, saving,
     onAddExtra, onSaveSortOrder,
-    extraHandlers, categoryOf,
+    extraHandlers, categoryOf, baseAmounts,
     hint = false,
 }) {
     const [addingExtra, setAddingExtra] = useState(false)
@@ -85,6 +85,7 @@ export default function ExtrasSection({
                         onAddExtraIngredients={(payload) => extraHandlers.addExtraIngredients(extra.id, payload)}
                         onDuplicate={(name) => extraHandlers.duplicate(extra.id, name)}
                         categoryOf={categoryOf}
+                        baseAmounts={baseAmounts}
                     />
                 ))}
             </div>

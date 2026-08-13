@@ -117,6 +117,11 @@ export default function RecipeIngredientPage() {
         [recipes, productId, selectedAddress?.ingredient_sort_order]
     )
 
+    const baseAmounts = useMemo(
+        () => Object.fromEntries(prodRecipes.map(r => [r.ingredient, r.amount])),
+        [prodRecipes]
+    )
+
     // Render-time-adjust (cùng pattern DailyReportPage.jsx) — track hành động thật, không cần
     // nút Lưu riêng vì FastIngredientFill/ExtrasSection đã ghi DB ngay khi user nhập.
     if (isCafeDen && prodRecipes.some(r => r.amount > 0) && !recipeProgress.filledAmount) {
@@ -416,7 +421,7 @@ export default function RecipeIngredientPage() {
                 onCopyFrom={() => setShowCopyFrom(true)}
             />
 
-            <main className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-bg">
+            <main className="flex-1 overflow-y-auto px-4 max-[329px]:px-2 py-4 space-y-3 bg-bg">
                 <FastIngredientFill
                     entries={prodRecipes}
                     dbIngredients={dbIngredients}
@@ -442,6 +447,7 @@ export default function RecipeIngredientPage() {
                     onSaveSortOrder={saveExtrasSortOrder}
                     extraHandlers={extraHandlers}
                     categoryOf={categoryOf}
+                    baseAmounts={baseAmounts}
                     hint={isCafeDen && recipeProgress.filledAmount && !recipeProgress.addedExtra}
                 />
 

@@ -16,7 +16,7 @@ const CATS = [
 export default function FastIngredientFill({
     entries, dbIngredients, getUnit, categoryOf = () => 'main',
     ingredientCosts, canEdit, showCost = false, allowNegative = false,
-    onSetAmount, onRemove, onAddCustom, hint = false,
+    baseAmounts, onSetAmount, onRemove, onAddCustom, hint = false,
 }) {
     const [revealed, setRevealed] = useState(() => new Set()) // chip-tapped, not yet saved
     const [creatingCat, setCreatingCat] = useState(null) // 'main' | 'packaging' while typing a new name
@@ -55,6 +55,7 @@ export default function FastIngredientFill({
                         canEdit={canEdit}
                         showCost={showCost}
                         allowNegative={allowNegative}
+                        baseAmount={baseAmounts && (baseAmounts[k] ?? 0)}
                         autoFocus={revealed.has(k) && !(amountByKey[k] != null)}
                         onCommit={onSetAmount}
                         onRemove={() => { onRemove(k); drop(k) }}
@@ -113,35 +114,48 @@ export default function FastIngredientFill({
     )
 }
 
-function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowNegative, autoFocus, onCommit, onRemove, hint = false }) {
-    const [draft, setDraft] = useState(amount != null ? String(amount) : '')
+function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowNegative, baseAmount, autoFocus, onCommit, onRemove, hint = false }) {
+    // Khi có nút ±, dấu chỉ sống ở nút — ô số luôn là trị tuyệt đối, tránh đọc thành "− (−1)".
+    const toDraft = (a) => a == null ? '' : String(allowNegative ? Math.abs(a) : a)
+    const [draft, setDraft] = useState(() => toDraft(amount))
+    const [negative, setNegative] = useState((amount || 0) < 0)
     // Re-sync when the saved amount changes elsewhere (copy-from, context refresh).
     // Intentional prop→state sync, not a cascade: only fires when `amount` itself changes.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    useEffect(() => { setDraft(amount != null ? String(amount) : '') }, [amount])
+    useEffect(() => { setDraft(toDraft(amount)); setNegative((amount || 0) < 0) }, [amount]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    const parseDraft = () => parseFloat(draft.replace(',', '.')) || 0 // VN keyboards send "0,5"
+    const signed = (n, neg) => neg ? -Math.abs(n) : n // gõ tay "-1" ở chế độ + vẫn ra âm
 
     const commit = () => {
-        const v = parseFloat(draft.replace(',', '.')) || 0 // VN keyboards send "0,5"
+        const v = signed(parseDraft(), negative)
         if (v === (amount || 0)) return // unchanged — skip the write
         onCommit(ingredient, v, unit)
+    }
+
+    const toggleSign = () => {
+        const next = !negative
+        setNegative(next)
+        const n = Math.abs(parseDraft())
+        if (n) onCommit(ingredient, next ? -n : n, unit) // ghi ngay: bấm nút không gây blur
     }
 
     const val = amount || 0
 
     return (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-[12px] border bg-surface border-border/60">
-            <span className="flex-1 text-[13px] text-text truncate">{ingredientLabel(ingredient)}</span>
+        <div className="flex items-center gap-2 max-[329px]:gap-1.5 px-3 max-[329px]:px-2 py-2 rounded-[12px] bg-surface-light">
+            <span className="flex-1 min-w-0 text-[13px] text-text truncate">{ingredientLabel(ingredient)}</span>
             {allowNegative && canEdit && (
                 // ± toggle: bàn phím decimal trên mobile không có phím "-". Dùng cho extra
                 // "bớt nguyên liệu". preventDefault để không blur→commit khi bấm.
                 <button
                     type="button"
                     onMouseDown={e => e.preventDefault()}
-                    onClick={() => setDraft(d => d.startsWith('-') ? d.slice(1) : '-' + d)}
-                    className={`shrink-0 w-6 h-6 flex items-center justify-center rounded border text-[14px] font-bold ${draft.startsWith('-') ? 'border-danger/50 text-danger' : 'border-border/60 text-text-secondary hover:text-primary hover:border-primary/50'}`}
+                    onClick={toggleSign}
+                    className={`shrink-0 w-6 h-6 flex items-center justify-center rounded text-[14px] font-bold ${negative ? 'bg-danger/15 text-danger' : 'bg-primary/10 text-primary hover:bg-primary/20'}`}
                     title="Đổi dấu âm/dương"
                 >
-                    {draft.startsWith('-') ? '−' : '+'}
+                    {negative ? '−' : '+'}
                 </button>
             )}
             <input
@@ -154,9 +168,17 @@ function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowN
                 onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }}
                 onBlur={commit}
                 placeholder="—"
-                className={`w-[60px] bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[13px] text-text text-right focus:outline-none focus:border-primary disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${onboardingHintClass(hint)}`}
+                className={`w-[60px] max-[329px]:w-11 bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[13px] text-text text-right focus:outline-none focus:border-primary disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${onboardingHintClass(hint)}`}
             />
-            <span className="text-[11px] text-text-secondary w-6 shrink-0">{unit}</span>
+            {baseAmount != null ? (
+                // Tổng thực pha = định mức gốc + mức lệch của tùy chọn. Chỉ hiện ở extra;
+                // ô này mang luôn đơn vị nên hàng không lặp đơn vị lần nữa.
+                <span className="shrink-0 text-[11px] text-text-secondary tabular-nums">
+                    = {baseAmount + val} {unit}
+                </span>
+            ) : (
+                <span className="text-[11px] text-text-secondary w-6 shrink-0">{unit}</span>
+            )}
             {showCost && (
                 <span className="text-[10px] text-text-dim tabular-nums w-[52px] text-right shrink-0">
                     {val ? formatVND(val * unitCost) : ''}
