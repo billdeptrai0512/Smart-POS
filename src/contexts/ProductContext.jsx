@@ -3,6 +3,7 @@ import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProd
 import { useAuth } from './AuthContext'
 import { useAddress } from './AddressContext'
 import { supabase } from '../lib/supabaseClient'
+import { useOnForeground } from '../hooks/useOnForeground'
 import { Outlet } from 'react-router-dom'
 import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 
@@ -159,24 +160,14 @@ export function ProductProvider() {
     // Replaces a per-address realtime channel that previously held an open
     // WebSocket subscription on 4 tables for every signed-in client. Product
     // data changes infrequently, so an on-focus refetch is sufficient.
-    useEffect(() => {
+    //
+    // 30s: chỉ kéo lại 5 bảng sản phẩm khi tab vắng thật sự lâu. Không có ngưỡng thì mỗi
+    // cú chuyển app / khoá màn hình bắn một chùm đọc làm nghẽn đường mạng yếu (một trong
+    // những thứ gây "lag sau khi mở lại app").
+    useOnForeground(() => {
         if (!supabase || !selectedAddress?.id) return
-
-        // Only refetch the 5 product tables if the tab was actually away for a
-        // while. Without this, every quick app-switch / lock-screen fires a herd
-        // of reads that saturates a flaky connection (a key "lag after foreground"
-        // aggravator). Product data changes infrequently → 30s is plenty.
-        let hiddenAt = 0
-        const handleVisibility = () => {
-            if (document.visibilityState === 'hidden') {
-                hiddenAt = Date.now()
-            } else if (Date.now() - hiddenAt > 30000) {
-                refreshProducts().catch(() => { })
-            }
-        }
-        document.addEventListener('visibilitychange', handleVisibility)
-        return () => document.removeEventListener('visibilitychange', handleVisibility)
-    }, [selectedAddress?.id, refreshProducts])
+        refreshProducts().catch(() => { })
+    }, 30000)
 
     const value = useMemo(() => ({
         products,

@@ -10,6 +10,7 @@ import { fetchCashClosedToday, buildCashPayload } from '../services/reportServic
 import { useShiftClosingSave } from '../hooks/useShiftClosingSave'
 import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
 import { useDailyReportData } from '../hooks/useDailyReportData'
+import { useOnForeground } from '../hooks/useOnForeground'
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, computeHaoHut, findMissingCupCandidates, buildDailyHaoHutMap, buildDayCandidateSets, attachRepeatHistory, computeIngredientNoise, averageIngredientMaps, r1 } from '../utils/inventory'
 import { ingredientLabel, getIngredientUnit, lookupByLabel } from '../utils/ingredients'
 import { findCoffeeIngredient, findIngredientByLabel } from '../utils/onboardingHint'
@@ -296,30 +297,20 @@ export default function DailyReportPage() {
     // Quay lại tab thì kéo phiếu chốt một lần rồi áp qua ĐÚNG đường merge per-field ở trên,
     // rẻ hơn nhiều so với hiển thị sai số thực thu suốt cả ca.
     //
-    // Chốt "phải từng ẩn, và ẩn đủ lâu" giống hệt useOrdersPoll: hệ điều hành bắn
-    // hidden→visible thành chùm (đo được 7 sự kiện/20 giây), mà mỗi cú ở đây là xoá sạch
-    // reportCache của địa chỉ cộng một RPC báo cáo — chuyển app qua lại 2 giây không đáng.
-    const hiddenAtRef = useRef(0)
-    useEffect(() => {
+    // 30s: mỗi cú ở đây là xoá sạch reportCache của địa chỉ cộng một RPC báo cáo — chuyển
+    // app qua lại 2 giây không đáng. useOnForeground lo phần chỉ-tính-lần-quay-lại-thật.
+    useOnForeground(() => {
         if (!isTodayScope || !selectedAddress?.id) return
-        const onVis = () => {
-            if (document.visibilityState !== 'visible') { hiddenAtRef.current = Date.now(); return }
-            const away = hiddenAtRef.current ? Date.now() - hiddenAtRef.current : 0
-            hiddenAtRef.current = 0
-            if (away < 30000) return
-            invalidateDailyContext(selectedAddress.id)
-            fetchDailyReportContext(selectedAddress.id)
-                .then(d => {
-                    const row = d?.shift_closing
-                    // RPC thỉnh thoảng trả phiếu HÔM QUA (biên tz) — bỏ qua, không thì số hôm
-                    // qua nhảy vào ô thực thu hôm nay.
-                    if (row && (!row.closed_at || dateStringVN(new Date(row.closed_at)) === todayISO)) onRemoteCash(row)
-                })
-                .catch(() => { /* lưới an toàn hỏng thì im lặng — realtime vẫn là đường chính */ })
-        }
-        document.addEventListener('visibilitychange', onVis)
-        return () => document.removeEventListener('visibilitychange', onVis)
-    }, [isTodayScope, selectedAddress?.id, todayISO, onRemoteCash])
+        invalidateDailyContext(selectedAddress.id)
+        fetchDailyReportContext(selectedAddress.id)
+            .then(d => {
+                const row = d?.shift_closing
+                // RPC thỉnh thoảng trả phiếu HÔM QUA (biên tz) — bỏ qua, không thì số hôm
+                // qua nhảy vào ô thực thu hôm nay.
+                if (row && (!row.closed_at || dateStringVN(new Date(row.closed_at)) === todayISO)) onRemoteCash(row)
+            })
+            .catch(() => { /* lưới an toàn hỏng thì im lặng — realtime vẫn là đường chính */ })
+    }, 30000)
 
     // Onboarding phase 4 "Kiểm kê tồn kho": trigger khi user bấm Lưu kiểm kê (không phải lúc
     // gõ Cuối kỳ) — xem handleSaveInventory. Match theo LABEL (không hardcode key) vì shop

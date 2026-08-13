@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext'
 import { useAddress } from './AddressContext'
 import { useMonetizationEnabled } from '../hooks/useEntitlement'
 import { fetchBranchesTodayStats, fetchStaffByManager, fetchSubscriptionStatuses } from '../services/authService'
+import { useOnForeground } from '../hooks/useOnForeground'
 
 const AddressStatsContext = createContext(null)
 
@@ -57,6 +58,10 @@ export function AddressStatsProvider() {
             setRevenueMap(filledRev)
             setPrevCupsMap(prevCups)
             setSessionsMap(sessions)
+        } catch (err) {
+            // Giữ nguyên số đang hiện thay vì đổ 0 lên mọi card: rớt mạng một nhịp không
+            // có nghĩa là quán không bán được ly nào. BranchGrid vốn đã stale-while-revalidate.
+            console.error('loadStats:', err)
         } finally {
             if (!cancelRef.current) setStatsLoading(false)
         }
@@ -120,19 +125,17 @@ export function AddressStatsProvider() {
             if (document.visibilityState === 'visible') loadStats()
         }, 30_000)
 
-        const handleVisibility = () => {
-            if (document.visibilityState === 'visible') loadStats()
-        }
-        document.addEventListener('visibilitychange', handleVisibility)
         return () => {
             cancelRef.current = true
             clearInterval(intervalId)
-            document.removeEventListener('visibilitychange', handleVisibility)
         }
         // ponytail: keyed on addressIdsKey (ids only) — addresses.length is only an
         // early-bail snapshot, not something that should restart the poll interval.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [addressIdsKey, loadStats])
+
+    // Quay lại app thì số liệu chi nhánh phải tươi ngay, không đợi hết nhịp 30s ở trên.
+    useOnForeground(loadStats)
 
     useEffect(() => {
         loadStaff()

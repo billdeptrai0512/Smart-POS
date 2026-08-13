@@ -8,6 +8,7 @@ import { useOnboardingVisibility } from '../../../contexts/OnboardingVisibilityC
 import { fetchIngredientStocks } from '../../../services/orderService'
 import { trackGuestOnboardingStage } from '../../../services/onboardingFunnelService'
 import { findCoffeeIngredient } from '../../../utils/onboardingHint'
+import { useOnForeground } from '../../../hooks/useOnForeground'
 import { readOnboardingState, writeOnboardingState, DEFAULT_ONBOARDING_STATE } from '../../../utils/onboardingStorage'
 import orderStep from './steps/orderStep'
 import journalStep from './steps/journalStep'
@@ -78,10 +79,8 @@ export default function OnboardingGuide() {
 
     useEffect(() => {
         reload()
-        const onVis = () => { if (document.visibilityState === 'visible') reload() }
-        document.addEventListener('visibilitychange', onVis)
-        return () => document.removeEventListener('visibilitychange', onVis)
     }, [reload, refreshToken])
+    useOnForeground(reload)
 
     // ctx/idx tính TRƯỚC guard bên dưới vì useEffect phễu cần idx — hook không được nằm sau
     // early-return (Rules of Hooks). Cả 2 đều thuần tính toán, không side effect.

@@ -1,6 +1,5 @@
 import { supabase } from '../lib/supabaseClient'
 import { isGuest } from './localRepository'
-import { startOfDayVN } from '../utils/dateVN'
 import { computeSubscriptionStatus } from '../utils/subscriptionStatus'
 
 // Canonical login username: lowercase, only [a-z0-9_.-]. This is what the user
@@ -245,15 +244,6 @@ export async function signOut() {
     if (error) throw error
 }
 
-// Lưu SĐT cho tài khoản đang đăng nhập (RPC set_my_phone — chuẩn hoá +84,
-// lần đầu nhập sẽ bind/cấp trial theo quy tắc 1 SĐT = 1 trial).
-// Trả 'trial_granted' khi vừa kích hoạt 7 ngày dùng thử, ngược lại 'ok'.
-export async function setMyPhone(phone) {
-    const { data, error } = await supabase.rpc('set_my_phone', { p_phone: phone })
-    if (error) throw error
-    return data
-}
-
 // Lưu email cho tài khoản đang đăng nhập — đường duy nhất để đặt lại mật khẩu.
 export async function setMyEmail(email) {
     const { data, error } = await supabase.rpc('set_my_email', { p_email: email })
@@ -453,25 +443,11 @@ export async function setAddressWarehouseGroup(addressId, groupId) {
     return true
 }
 
-// Update ingredient sort order for an address.
-// addressId === null targets the global default template, persisted in app_settings.
-export async function updateAddressIngredientSort(addressId, sortOrderArray) {
-    if (!supabase) throw new Error('No Supabase connection')
-    if (addressId) {
-        const { error } = await supabase
-            .from('addresses')
-            .update({ ingredient_sort_order: sortOrderArray })
-            .eq('id', addressId)
-        if (error) throw error
-        return true
-    }
-    // Default template — write to app_settings (admin-only RLS).
-    const { error } = await supabase
-        .from('app_settings')
-        .upsert({ key: 'default_ingredient_sort_order', value: sortOrderArray, updated_at: new Date().toISOString() })
-    if (error) throw error
-    return true
-}
+// updateAddressIngredientSort đã xoá cùng AddressContext.updateSortOrder — không màn nào
+// gọi tới nó, và nó chưa từng chạy được: AddressContext gọi qua alias
+// `apiUpdateAddressIngredientSort` mà quên import (eslint no-undef). Sắp xếp nguyên liệu
+// hiện đọc `addresses.ingredient_sort_order` do backupService/DB ghi. Cần lại thì dựng
+// kèm UI, đừng để hàm ghi nằm không.
 
 // Fetch the default-template ingredient sort order (publicly readable so guests can
 // inherit it during playground init). Returns [] when missing.
@@ -562,65 +538,29 @@ export async function fetchActiveSessions(addressIds) {
 
 // countActiveSessions đã xoá (đếm sai, cả 2 cổng dùng nó đã gỡ) — xem MONETIZATION §7.1.
 
-// Group fetchActiveSessions rows into { addressId: [{ name, role }] } — dùng làm
-// fallback khi RPC gộp sessions chưa deploy (see 20260703_branches_stats_include_sessions).
-async function legacySessionsMap(addressIds) {
-    const sessions = await fetchActiveSessions(addressIds)
-    const grouped = {}
-    for (const s of sessions) {
-        if (!grouped[s.address_id]) grouped[s.address_id] = []
-        grouped[s.address_id].push({ name: s.users?.name || 'Unknown', role: s.users?.role })
-    }
-    return grouped
-}
-
 // Fetch today's cup count + revenue + active sessions (kèm tên/role) for multiple
-// addresses in ONE RPC round-trip (was 3 sequential queries at login). Returns
-// { cupsMap, revenueMap, sessionsMap }. Falls back to legacy queries if the
-// updated RPC isn't deployed yet.
+// addresses in ONE RPC round-trip (was 3 sequential queries at login).
+//
+// KHÔNG còn nhánh dự phòng "RPC chưa deploy" (get_branches_today_stats + cột sessions,
+// migration 20260703): đây là một Supabase project duy nhất, migration hoặc đã apply
+// hoặc app hỏng ở chỗ khác trước. Nhánh đó là ~45 dòng đường chết, và nó còn âm thầm
+// nuốt lỗi RPC thật thành "quán không có đơn nào hôm nay".
 export async function fetchBranchesTodayStats(addressIds) {
     const empty = { cupsMap: {}, revenueMap: {}, prevRevenueMap: {}, prevCupsMap: {}, sessionsMap: {} }
     if (isGuest()) return empty
     if (!supabase || !addressIds?.length) return empty
 
     const { data, error } = await supabase.rpc('get_branches_today_stats', { p_address_ids: addressIds })
-    if (!error && Array.isArray(data)) {
-        const cupsMap = {}, revenueMap = {}, prevRevenueMap = {}, prevCupsMap = {}, sessionsMap = {}
-        for (const row of data) {
-            cupsMap[row.address_id] = Number(row.cups || 0)
-            revenueMap[row.address_id] = Number(row.revenue || 0)
-            prevRevenueMap[row.address_id] = Number(row.prev_revenue || 0)
-            prevCupsMap[row.address_id] = Number(row.prev_cups || 0)
-            sessionsMap[row.address_id] = (row.sessions || []).map(s => ({ name: s.name || 'Unknown', role: s.role }))
-        }
-        // RPC bản cũ chưa có cột sessions (hoặc trả rỗng vì chưa migrate) → lấy rời như trước.
-        const hasSessions = data.length > 0 && data[0].sessions !== undefined
-        return { cupsMap, revenueMap, prevRevenueMap, prevCupsMap, sessionsMap: hasSessions ? sessionsMap : await legacySessionsMap(addressIds) }
+    if (error) throw error
+    if (!Array.isArray(data)) return empty
+
+    const cupsMap = {}, revenueMap = {}, prevRevenueMap = {}, prevCupsMap = {}, sessionsMap = {}
+    for (const row of data) {
+        cupsMap[row.address_id] = Number(row.cups || 0)
+        revenueMap[row.address_id] = Number(row.revenue || 0)
+        prevRevenueMap[row.address_id] = Number(row.prev_revenue || 0)
+        prevCupsMap[row.address_id] = Number(row.prev_cups || 0)
+        sessionsMap[row.address_id] = (row.sessions || []).map(s => ({ name: s.name || 'Unknown', role: s.role }))
     }
-
-    if (error && error.code !== 'PGRST202' && error.code !== '42883') {
-        console.error('fetchBranchesTodayStats RPC error:', error)
-    }
-
-    // Fallback: single query selecting both total + order_items (was two parallel
-    // queries hitting the same orders rows with overlapping filters).
-    const today = startOfDayVN()
-
-    const { data: ordersData } = await supabase
-        .from('orders')
-        .select('address_id, total, order_items(quantity, products(count_as_cup))')
-        .in('address_id', addressIds)
-        .gte('created_at', today.toISOString())
-
-    const cupsMap = {}, revenueMap = {}
-    ;(ordersData || []).forEach(order => {
-        const qty = (order.order_items || []).reduce((s, i) => {
-            if (i.products?.count_as_cup === false) return s
-            return s + i.quantity
-        }, 0)
-        cupsMap[order.address_id] = (cupsMap[order.address_id] || 0) + qty
-        revenueMap[order.address_id] = (revenueMap[order.address_id] || 0) + (order.total || 0)
-    })
-    // Legacy fallback không tính prev — thiếu delta thì card chỉ ẩn phần ↑/↓%.
-    return { cupsMap, revenueMap, prevRevenueMap: {}, prevCupsMap: {}, sessionsMap: await legacySessionsMap(addressIds) }
+    return { cupsMap, revenueMap, prevRevenueMap, prevCupsMap, sessionsMap }
 }
