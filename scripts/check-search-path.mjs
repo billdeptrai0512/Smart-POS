@@ -39,6 +39,44 @@ for (const file of files) {
     }
 }
 
+// Nhánh thứ hai của CÙNG một regression: CREATE OR REPLACE cũng cấp lại EXECUTE cho PUBLIC.
+// Với hàm chỉ dùng nội bộ (PERFORM từ hàm SECURITY DEFINER khác, hoặc chạy từ trigger) thì đó
+// là lộ thẳng ra /rest/v1/rpc — sync_group_unit_cost ghi được giá vốn mà không cần đăng nhập
+// suốt một tháng vì 20260714 quên REVOKE. Xem 20260814_fix_security_advisor_part4.
+//
+// Luật: REVOKE phải nằm ở file SAU HOẶC CÙNG file với định nghĩa mới nhất. So theo file thay vì
+// "file cuối nhắc tên" vì comment ở migration sau cũng nhắc tên — bản đầu của check này im lặng
+// bỏ qua đúng 3 hàm nguy hiểm nhất vì lý do đó.
+const INTERNAL_ONLY = [
+    'get_warehouse_group_address_ids',
+    'sync_group_unit_cost',
+    'recompute_group_unit_cost',
+    'seed_default_ingredient_costs',
+    'seed_default_expense_categories',
+    'bump_order_sync_mark',
+]
+
+// Hai cách viết REVOKE trong repo này: gọi thẳng theo signature, hoặc vòng DO $$ quét proname
+// trong một danh sách IN (...) rồi format() ra lệnh REVOKE.
+const hasRevoke = (sql, name) =>
+    new RegExp(`REVOKE[^;]{0,200}?\\b${name}\\s*\\(`, 'i').test(sql)
+    || sql.split(/DO\s+\$\$/i).slice(1).some(b => b.includes(`'${name}'`) && /REVOKE/i.test(b))
+
+const exposed = []
+for (const name of INTERNAL_ONLY) {
+    const defined = latest.get(name)
+    if (!defined) continue
+    const lastRevoke = files.filter(f => hasRevoke(readFileSync(join(DIR, f), 'utf8'), name)).at(-1)
+    if (!lastRevoke || lastRevoke < defined.file) exposed.push([name, defined.file])
+}
+
+if (exposed.length) {
+    console.error('Hàm nội bộ bị định nghĩa lại mà KHÔNG revoke lại quyền EXECUTE:\n')
+    for (const [name, file] of exposed) console.error(`  - ${name}  (định nghĩa cuối: ${file}, không có REVOKE nào sau đó)`)
+    console.error('\nThêm REVOKE EXECUTE ... FROM PUBLIC, anon, authenticated vào migration đó.')
+    process.exit(1)
+}
+
 const offenders = [...latest.entries()].filter(([, v]) => !v.hasSearchPath)
 
 if (offenders.length) {
