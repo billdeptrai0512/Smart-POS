@@ -3,6 +3,13 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getDateRange } from '../../src/utils/rangeCalc';
+import { dateStringVN, timeStringVN } from '../../src/utils/dateVN';
+
+// dateVN.js trả về Date object là 1 MỐC THỜI GIAN TUYỆT ĐỐI biểu diễn ranh giới VN-local
+// (xem comment đầu dateVN.js) — .getDate()/.getMonth()/.getHours() đọc theo TZ của máy
+// đang chạy process, nên trên máy dev (VN) khớp tình cờ nhưng trên CI (UTC) lệch hẳn
+// ngày/tháng. Phải đọc qua dateStringVN/timeStringVN (VN-aware) như mọi nơi khác trong
+// app, không đọc getter local trực tiếp.
 
 describe('getDateRange', () => {
     beforeEach(() => {
@@ -20,10 +27,10 @@ describe('getDateRange', () => {
     describe('range: day', () => {
         it('should return correct range for current day (offset = 0)', () => {
             const { start, end, days } = getDateRange('day', 0);
-            expect(start.getDate()).toBe(27);
-            expect(start.getHours()).toBe(0);
-            expect(end.getDate()).toBe(27);
-            expect(end.getHours()).toBe(23);
+            expect(dateStringVN(start)).toBe('2026-04-27');
+            expect(timeStringVN(start)).toBe('00:00');
+            expect(dateStringVN(end)).toBe('2026-04-27');
+            expect(timeStringVN(end)).toBe('23:59');
             expect(days).toBe(1);
         });
     });
@@ -34,12 +41,11 @@ describe('getDateRange', () => {
             const { start, end, days } = getDateRange('week', 0);
 
             // Start should be Monday (April 27) at 00:00:00
-            expect(start.getDate()).toBe(27);
-            expect(start.getHours()).toBe(0);
+            expect(dateStringVN(start)).toBe('2026-04-27');
+            expect(timeStringVN(start)).toBe('00:00');
 
             // End should be Sunday of this week (27 + 6 = May 3)
-            expect(end.getDate()).toBe(3);
-            expect(end.getMonth()).toBe(4); // May
+            expect(dateStringVN(end)).toBe('2026-05-03');
 
             // Since today is Monday (start of the week), elapsed days = 1
             expect(days).toBe(1);
@@ -49,8 +55,8 @@ describe('getDateRange', () => {
             // Last week should start on April 20
             const { start, end, days } = getDateRange('week', -1);
 
-            expect(start.getDate()).toBe(20);
-            expect(end.getDate()).toBe(26);
+            expect(dateStringVN(start)).toBe('2026-04-20');
+            expect(dateStringVN(end)).toBe('2026-04-26');
             expect(days).toBe(7); // Last week has full 7 days passed
         });
 
@@ -74,8 +80,8 @@ describe('getDateRange', () => {
             // Current is April 27, 2026
             const { start, end, days } = getDateRange('month', 0);
 
-            expect(start.getDate()).toBe(1); // 1st of April
-            expect(end.getDate()).toBe(27); // Current day is 27th
+            expect(dateStringVN(start)).toBe('2026-04-01'); // 1st of April
+            expect(dateStringVN(end)).toBe('2026-04-27'); // Current day is 27th
             expect(days).toBe(27); // 27 days have passed
         });
 
@@ -83,11 +89,9 @@ describe('getDateRange', () => {
             // Previous month is March, which has 31 days
             const { start, end, days } = getDateRange('month', -1);
 
-            expect(start.getMonth()).toBe(2); // March (index 2)
-            expect(start.getDate()).toBe(1);
+            expect(dateStringVN(start)).toBe('2026-03-01'); // March
 
-            expect(end.getMonth()).toBe(2);
-            expect(end.getDate()).toBe(31);
+            expect(dateStringVN(end)).toBe('2026-03-31');
 
             expect(days).toBe(31);
         });
@@ -98,9 +102,8 @@ describe('getDateRange', () => {
             // Get previous month (offset = -1), which should be February
             const { start, end, days } = getDateRange('month', -1);
 
-            expect(start.getMonth()).toBe(1); // Feb
-            expect(end.getMonth()).toBe(1); // Feb
-            expect(end.getDate()).toBe(29);
+            expect(dateStringVN(start)).toBe('2024-02-01'); // Feb
+            expect(dateStringVN(end)).toBe('2024-02-29'); // Feb, leap day
             expect(days).toBe(29);
         });
 
