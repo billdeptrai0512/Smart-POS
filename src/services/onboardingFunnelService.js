@@ -61,3 +61,12 @@ export function markGuestFunnelSignup() {
     if (!visitorId) return
     fireAndForget('mark_guest_funnel_signup', { p_visitor_id: visitorId })
 }
+
+// Đọc (admin, OnboardingFunnelCard) — 1 lần gọi trả cả 3 khoảng thời gian
+// (today/week/all), xem 20260816_guest_onboarding_funnel_v2.sql. Đổi tab
+// thời gian ở client KHÔNG cần fetch lại.
+export async function fetchGuestOnboardingFunnel() {
+    const { data, error } = await supabase.rpc('guest_onboarding_funnel_stats')
+    if (error) throw error
+    return data
+}

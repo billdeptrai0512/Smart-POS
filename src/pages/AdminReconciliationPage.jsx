@@ -15,6 +15,7 @@ const REASON_LABEL = {
     inactive: 'Không hoạt động',
     churned_recent: 'Đã rời bỏ',
     trial_inactive: 'Trial chưa dùng',
+    never_activated: 'Chưa kích hoạt',
 }
 const REASON_TAG_CLASS = {
     payment_review: 'bg-red-500/10 text-red-500',
@@ -24,6 +25,7 @@ const REASON_TAG_CLASS = {
     inactive: 'bg-danger-soft text-danger',
     churned_recent: 'bg-danger-soft text-danger',
     trial_inactive: 'bg-warning-soft text-warning',
+    never_activated: 'bg-warning-soft text-warning',
 }
 
 const fmtDT = (iso) => {
@@ -54,6 +56,12 @@ function attentionDetail(item) {
     }
     if (item.reason === 'trial_inactive') {
         return 'Dùng thử nhưng chưa phát sinh đơn hàng nào'
+    }
+    if (item.reason === 'never_activated') {
+        // v4: valid_to tái dùng để chứa NGÀY TẠO địa chỉ cho reason này (không phải hạn),
+        // xem 20260815_admin_dashboard_overview_v4.sql.
+        const days = Math.floor((Date.now() - new Date(item.valid_to).getTime()) / 86_400_000)
+        return `Đăng ký ${days} ngày trước, chưa chốt ca nào`
     }
     return `Mã SP${item.reference} · ${fmtDT(item.intent_created_at)}`
 }
