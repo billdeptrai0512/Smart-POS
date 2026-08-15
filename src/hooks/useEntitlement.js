@@ -9,20 +9,6 @@ import { useAuth } from '../contexts/AuthContext'
 //   → Hiệu lực = client(build) AND server(runtime). Khớp rollout phases (MONETIZATION.md §9).
 const CLIENT_MONETIZATION_ENABLED = import.meta.env.VITE_MONETIZATION_ENABLED === 'true'
 
-// ─── 1 gói all-access (xem docs/MONETIZATION.md §1) ──────────────────────────
-//   'all' → mở khoá CẢ 3 view báo cáo: Dòng tiền + Lợi nhuận + Tồn kho.
-export const MODULES = ['all']
-
-/**
- * Kiểm tra address đang chọn có quyền truy cập báo cáo không.
- * @param {string[]} activeModules - vd: ['all']
- * @param {string}   [module='all']
- * @returns {boolean}
- */
-export function hasModule(activeModules, module = 'all') {
-    return Array.isArray(activeModules) && activeModules.includes(module)
-}
-
 // ─── Server kill switch (runtime, app_config) ────────────────────────────────
 //   Đọc 1 lần, cache module-level → mọi hook share chung 1 request (không spam DB).
 //   _serverFlag: undefined = chưa đọc; true/false = đã rõ.
@@ -81,17 +67,18 @@ export function useMonetizationEnabled() {
 }
 
 /**
- * Hook trả về entitlement hiện tại của address đang chọn.
+ * Hook trả về quyền truy cập báo cáo của address đang chọn — 1 gói all-access
+ * duy nhất (xem docs/MONETIZATION.md §1: mô hình multi-module đã bỏ 2026-06-09),
+ * nên chỉ cần 1 boolean, không phải danh sách module.
  *
- * Bypass (trả đủ module, không query entitlement) khi:
+ * Bypass (hasAccess:true, không query) khi:
  *   - monetization OFF (client build OFF hoặc server app_config OFF), HOẶC
  *   - đang ở guest mode (Khách ghé thăm xem full tính năng), HOẶC
  *   - đang ở "Mẫu mặc định" (id: null, admin-only playground) — không phải địa
  *     chỉ trả phí thật nên không có (và không cần) hàng entitlement nào cho nó.
  *
- * Khi ON + không guest:
- *   → query RPC get_address_entitlement
- *   → activeModules = các module còn hạn (rỗng nếu hết hạn / chưa mua)
+ * Khi ON + không guest → query RPC get_address_entitlement, hasAccess = có
+ * hàng tier='all' còn hạn không.
  *
  * Trong lúc còn đọc server flag (configLoading) → trả loading:true (coi như có
  * quyền) để KHÔNG nháy gate trước khi biết trạng thái thật.
@@ -110,7 +97,7 @@ export function useEntitlement() {
     const isDefaultTemplate = selectedAddress?.id === null
     const bypass = !enabled || isGuest || isDefaultTemplate
 
-    const [state, setState] = useState({ activeModules: [], validToByModule: {}, loading: true })
+    const [state, setState] = useState({ hasAccess: false, loading: true })
 
     useEffect(() => {
         // Không query khi bypass, hoặc khi chưa biết server flag (tránh query thừa).
@@ -119,7 +106,7 @@ export function useEntitlement() {
         if (!selectedAddress?.id) {
             // Intentional reset when no address is selected — nothing to fetch.
             // eslint-disable-next-line react-hooks/set-state-in-effect
-            setState({ activeModules: [], validToByModule: {}, loading: false })
+            setState({ hasAccess: false, loading: false })
             return
         }
 
@@ -131,26 +118,19 @@ export function useEntitlement() {
                 if (error) {
                     console.error('[useEntitlement] RPC error:', error)
                     // Fail-open: lỗi mạng → không gate user (không phạt oan)
-                    setState({ activeModules: [...MODULES], validToByModule: {}, loading: false })
+                    setState({ hasAccess: true, loading: false })
                     return
                 }
-                // RPC trả về rows { tier, valid_to } — cột `tier` lưu giá trị module
+                // RPC trả về rows { tier, valid_to } — 1 row tier='all' còn hạn = có quyền.
                 const rows = Array.isArray(data) ? data : (data ? [data] : [])
-                const activeModules = rows.map(r => r.tier)
-                const validToByModule = rows.reduce((acc, r) => ({ ...acc, [r.tier]: r.valid_to }), {})
-                setState({ activeModules, validToByModule, loading: false })
+                setState({ hasAccess: rows.some(r => r.tier === 'all'), loading: false })
             })
     }, [bypass, configLoading, selectedAddress?.id])
 
-    // Bypass (monetization OFF hoặc guest) → đủ module.
+    // Bypass (monetization OFF hoặc guest) → có quyền.
     // Khi đang load server flag → loading:true để KHÔNG nháy gate.
     if (bypass) {
-        return {
-            activeModules: [...MODULES],
-            validToByModule: Object.fromEntries(MODULES.map(m => [m, '2099-12-31'])),
-            loading: configLoading,
-            enabled,
-        }
+        return { hasAccess: true, loading: configLoading, enabled }
     }
 
     return { ...state, enabled }

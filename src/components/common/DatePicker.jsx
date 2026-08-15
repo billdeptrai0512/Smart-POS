@@ -25,8 +25,6 @@ const WEEKDAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
 //                  Omit to hide the grid entirely (presets-only popover).
 //   onPresetSelect (preset)=>void — fired when a quick-preset chip is tapped.
 //   presets        boolean — show the built-in Hôm nay/Tuần này/Tháng này row.
-//   extraPresets   [{ key, label, onClick }] — optional caller chips appended to
-//                  the preset row (generic; unused by the header today).
 //   range          boolean — enable two-tap range selection.
 //   trigger        (label, toggle) => ReactNode — the chip/button that opens it.
 //   align          'center' | 'start' | 'end' — popover horizontal alignment.
@@ -40,7 +38,6 @@ export default function DatePicker({
     onChange,
     onPresetSelect,
     presets = true,
-    extraPresets = [],
     activePresetKey,   // highlight the matching quick-preset chip (e.g. 'week' | 'month' | 'today')
     range = false,
     trigger,
@@ -225,7 +222,7 @@ export default function DatePicker({
                     )}
 
                     {/* Presets — full-width grid so chips fill the popover evenly */}
-                    {(presetList.length > 0 || extraPresets.length > 0) && (
+                    {presetList.length > 0 && (
                         <>
                             {dayPickEnabled && (
                                 <div className="flex items-center gap-2 mt-3 mb-2">
@@ -252,16 +249,6 @@ export default function DatePicker({
                                         </button>
                                     )
                                 })}
-                                {extraPresets.map(p => (
-                                    <button
-                                        key={p.key}
-                                        type="button"
-                                        onClick={() => { p.onClick?.(); setOpen(false) }}
-                                        className="px-2 py-1.5 rounded-lg bg-primary/10 border border-primary/30 text-[11px] font-bold text-primary text-center hover:bg-primary/20 transition-colors"
-                                    >
-                                        {p.label}
-                                    </button>
-                                ))}
                             </div>
                         </>
                     )}

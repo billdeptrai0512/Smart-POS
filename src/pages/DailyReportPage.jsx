@@ -40,7 +40,7 @@ import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY 
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
-import { useEntitlement, hasModule } from '../hooks/useEntitlement'
+import { useEntitlement } from '../hooks/useEntitlement'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../contexts/ConfirmContext'
@@ -61,7 +61,7 @@ export default function DailyReportPage() {
     const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits, ingredientConfigs, refreshProducts } = useProducts()
     const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, refreshTodayExpenses } = useHistory()
     const { isStaff, profile, isGuest } = useAuth()
-    const { activeModules, loading: entitlementLoading, enabled: monetizationEnabled } = useEntitlement()
+    const { hasAccess, loading: entitlementLoading, enabled: monetizationEnabled } = useEntitlement()
     const { toast, showToast, showError } = useToast()
     const confirm = useConfirm()
 
@@ -1214,7 +1214,7 @@ export default function DailyReportPage() {
     // (Dòng tiền / Lợi nhuận / Tồn kho) mà address chưa có sub active → early-return
     // NGUYÊN trang đăng ký gói (chrome riêng, back về /pos). Cùng UI với /subscription.
     const needsAccess = view === VIEW_CASHFLOW || view === VIEW_INVENTORY || view === VIEW_PROFIT || view === VIEW_ALL
-    if (monetizationEnabled && !entitlementLoading && needsAccess && !hasModule(activeModules, 'all')) {
+    if (monetizationEnabled && !entitlementLoading && needsAccess && !hasAccess) {
         return (
             <Navigate
                 to="/subscription"
