@@ -125,12 +125,14 @@ export default function TableDetailModal({ table, onClose, onPick }) {
                 <button onClick={onClose} aria-label="Về lưới bàn" className="shrink-0 p-1.5 -ml-1.5 text-text-secondary hover:text-text rounded-lg hover:bg-surface-light">
                     <ArrowLeft size={18} />
                 </button>
-                <div className="min-w-0 flex-1">
-                    <p className="text-text font-black text-base leading-none uppercase tracking-wide truncate">{table.name}</p>
-                    <p className="text-[12px] font-bold text-text-secondary mt-1.5 leading-none">
-                        {table.rounds.length} đợt từ {openedLabel(table.openedAt)}
-                    </p>
-                </div>
+                <p className="min-w-0 flex-1 text-text font-black text-base leading-none uppercase tracking-wide truncate">{table.name}</p>
+                <button
+                    onClick={handlePrint}
+                    aria-label="In bill"
+                    className="shrink-0 w-[26px] h-[26px] rounded-full border bg-surface-light border-border/60 flex items-center justify-center text-text-secondary hover:text-primary transition-colors"
+                >
+                    <Printer size={14} strokeWidth={2.25} />
+                </button>
                 <span className="shrink-0 text-[17px] font-black tabular-nums text-primary">{formatVND(table.total)}</span>
             </div>
 
@@ -186,13 +188,6 @@ export default function TableDetailModal({ table, onClose, onPick }) {
                     className="flex-1 py-2.5 rounded-[12px] bg-surface-light border border-border/60 text-[12px] font-black uppercase tracking-wider text-text hover:border-primary/40 transition-colors"
                 >
                     {orderCount > 0 ? `Gọi thêm ${orderCount} ly` : 'Gọi thêm'}
-                </button>
-                <button
-                    onClick={handlePrint}
-                    aria-label="In bill"
-                    className="shrink-0 w-[46px] py-2.5 rounded-[12px] bg-surface-light border border-border/60 flex items-center justify-center text-text hover:border-primary/40 transition-colors"
-                >
-                    <Printer size={16} strokeWidth={2.25} />
                 </button>
                 <button
                     onClick={handleBill}
