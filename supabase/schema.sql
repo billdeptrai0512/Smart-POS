@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS addresses (
   tables TEXT[] NOT NULL DEFAULT '{}', -- danh sách bàn cố định, giữ thứ tự nhập; xem 20260808_address_tables
   referred_from_address_id UUID REFERENCES addresses(id) ON DELETE SET NULL, -- địa chỉ nguồn đã share-clone (hook referral)
   referral_rewarded_at TIMESTAMPTZ, -- đã thưởng người mời cho địa chỉ này chưa (dedup, §11)
+  next_order_no INTEGER NOT NULL DEFAULT 1, -- số hoá đơn kế tiếp của địa chỉ này; xem 20260814_order_sequential_number
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -97,6 +98,7 @@ CREATE TABLE IF NOT EXISTS ingredient_costs (
 CREATE TABLE IF NOT EXISTS orders (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   address_id UUID REFERENCES addresses(id) ON DELETE CASCADE,
+  order_no INTEGER, -- số hoá đơn tăng dần theo address_id; NULL cho đơn tạo trước 20260814_order_sequential_number
   total INTEGER NOT NULL, -- total in VND (net, after discount)
   total_cost INTEGER NOT NULL DEFAULT 0,
   discount_amount INTEGER NOT NULL DEFAULT 0, -- per-order discount applied at POS

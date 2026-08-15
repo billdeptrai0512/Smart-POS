@@ -389,7 +389,7 @@ export async function fetchRecentOrders(addressId: UUID | null, limit = 3): Prom
 // vốn chỉ là chữ để đọc. Không suy ngược được từ lines: hai topping có thể trùng tên.
 export type TableLine = { name: string; qty: number }
 export type TableRoundItem = { productId: UUID; qty: number; extraIds: UUID[] }
-export type TableRound = { id: UUID; createdAt: string; total: number; discountAmount: number; servedAt: string | null; lines: TableLine[]; items: TableRoundItem[] }
+export type TableRound = { id: UUID; orderNo: number | null; createdAt: string; total: number; discountAmount: number; servedAt: string | null; staffName: string | null; lines: TableLine[]; items: TableRoundItem[] }
 export type OpenTable = { name: string; total: number; rounds: TableRound[]; openedAt: string; lines: TableLine[] }
 
 // 'Tiền mặt'/'MoMo' đi chung mảng extras nhưng là cách trả tiền, không phải topping —
@@ -435,7 +435,7 @@ export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable
 
     const { data, error } = await supabase
         .from('orders')
-        .select('id, total, discount_amount, created_at, served_at, table_name, order_items(quantity, options, product_id, extra_ids, products(name))')
+        .select('id, order_no, total, discount_amount, created_at, served_at, staff_name, table_name, order_items(quantity, options, product_id, extra_ids, products(name))')
         .eq('address_id', addressId)
         .is('deleted_at', null)
         .is('table_closed_at', null)
@@ -459,7 +459,8 @@ export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable
         })))
         t.total += o.total
         t.rounds.push({
-            id: o.id, createdAt: o.created_at, total: o.total, discountAmount: o.discount_amount || 0, servedAt: o.served_at ?? null,
+            id: o.id, orderNo: o.order_no ?? null, createdAt: o.created_at, total: o.total, discountAmount: o.discount_amount || 0, servedAt: o.served_at ?? null,
+            staffName: o.staff_name ?? null,
             lines: roundLines,
             items: (o.order_items || []).map((i: any) => ({
                 productId: i.product_id, qty: i.quantity, extraIds: i.extra_ids || [],
