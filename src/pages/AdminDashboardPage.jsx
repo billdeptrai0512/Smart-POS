@@ -45,10 +45,21 @@ export default function AdminDashboardPage() {
     const { isAdmin, loading: authLoading } = useAuth()
     const [data, setData] = useState(null)
     const [error, setError] = useState(null)
+    // OnboardingFunnelCard fetch riêng (xem component đó) và chỉ tự chạy lúc mount —
+    // refreshToken là cách duy nhất để nút refresh ở header kéo nó fetch lại theo.
+    const [refreshToken, setRefreshToken] = useState(0)
 
     const reload = useCallback(() => {
         fetchAdminDashboard().then(setData).catch((e) => setError(e.message))
     }, [])
+
+    // Nút refresh ở header: reload() (fetch, không setState đồng bộ) + bump refreshToken
+    // (setState đồng bộ) — tách riêng khỏi reload() vì effect mount bên dưới không được
+    // phép setState đồng bộ trong thân effect (react-hooks/set-state-in-effect).
+    const refresh = useCallback(() => {
+        reload()
+        setRefreshToken((t) => t + 1)
+    }, [reload])
 
     useEffect(() => {
         if (isAdmin) reload()
@@ -75,7 +86,7 @@ export default function AdminDashboardPage() {
                     )}
                 </div>
                 <button
-                    onClick={reload}
+                    onClick={refresh}
                     className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text-secondary hover:bg-border/40 active:bg-border/60 transition-colors shrink-0 focus:outline-none"
                 >
                     <RefreshCw size={16} strokeWidth={2.5} />
@@ -92,7 +103,7 @@ export default function AdminDashboardPage() {
                             <Loader2 size={24} className="animate-spin text-text-dim" />
                         </div>
                     ) : (
-                        <DashboardBody data={data} navigate={navigate} />
+                        <DashboardBody data={data} navigate={navigate} refreshToken={refreshToken} />
                     )}
                 </div>
             </div>
@@ -100,7 +111,7 @@ export default function AdminDashboardPage() {
     )
 }
 
-function DashboardBody({ data, navigate }) {
+function DashboardBody({ data, navigate, refreshToken }) {
     const { subscription, attention, activity, attention_total_count, payment_issue_total_count } = data
     // total_count = đếm không giới hạn (đã dedupe theo chi nhánh) từ RPC; attention
     // (mảng) chỉ là top-20 hiển thị nên KHÔNG dùng .length làm KPI — sẽ undercount
@@ -120,7 +131,7 @@ function DashboardBody({ data, navigate }) {
             <KpiRow subscription={subscription} attentionCount={attentionCount} paymentIssueCount={paymentIssueCount} navigate={navigate} />
             <div className="flex flex-col gap-4">
                 <SubscriptionSnapshotCard subscription={subscription} />
-                <OnboardingFunnelCard subscription={subscription} navigate={navigate} />
+                <OnboardingFunnelCard subscription={subscription} navigate={navigate} refreshToken={refreshToken} />
                 <ActivityCard items={activity} />
             </div>
         </>
@@ -254,13 +265,13 @@ const RANGE_TABS = [
 // Tự fetch riêng (không qua fetchAdminDashboard) — 1 lần gọi trả cả 3 khoảng thời gian
 // (today/week/all), đổi tab KHÔNG cần round-trip mới. byRange = null khi RPC chưa apply
 // hoặc lỗi → ẩn hẳn phần guest funnel, không hỏng phần còn lại của dashboard.
-function OnboardingFunnelCard({ subscription, navigate }) {
+function OnboardingFunnelCard({ subscription, navigate, refreshToken }) {
     const [byRange, setByRange] = useState(null)
     const [range, setRange] = useState('week')
 
     useEffect(() => {
         fetchGuestOnboardingFunnel().then(setByRange).catch(() => setByRange(null))
-    }, [])
+    }, [refreshToken])
 
     const funnel = byRange?.[range]
 
