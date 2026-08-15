@@ -38,7 +38,9 @@ export default function SortableItem({ id, noAnimate, children }) {
             <GripVertical size={16} />
         </button>
     )
-    const dragHandleProps = { ref: setActivatorNodeRef, attributes, listeners }
+    // handleRef (không đặt tên "ref") — object thường, không phải React ref; đặt tên "ref"
+    // khiến react-hooks/refs hiểu lầm là truy cập .current lúc render và báo lỗi.
+    const dragHandleProps = { handleRef: setActivatorNodeRef, attributes, listeners }
     return (
         <div
             ref={setNodeRef}

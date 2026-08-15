@@ -1,11 +1,12 @@
 import { ArrowLeft, ArrowRight } from 'lucide-react'
-import MenuTabsBar, { TABS } from '../common/MenuTabsBar'
+import MenuTabsBar from '../common/MenuTabsBar'
+import { MENU_TABS } from '../../constants'
 
 export default function IngredientsHeader({
     count, onBack, onForward,
     activeTab = 'main', onTabSelect, hintTab,
 }) {
-    const title = TABS.find(t => t.key === activeTab)?.label || 'Kho hàng'
+    const title = MENU_TABS.find(t => t.key === activeTab)?.label || 'Kho hàng'
 
     return (
         <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">

@@ -40,7 +40,7 @@ async function readSnapshot(sourceAddressId) {
     // 42703: cột is_divider chưa có (migration 20260703_menu_divider chưa chạy)
     let hasDividerColumn = true
     if (e1?.code === '42703') {
-        hasDividerColumn = false
+        hasDividerColumn = false;
         ({ data: products, error: e1 } = await supabase
             .from('products')
             .select('id, name, price, sort_order, count_as_cup')

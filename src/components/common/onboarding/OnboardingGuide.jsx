@@ -64,7 +64,10 @@ export default function OnboardingGuide() {
     // refreshToken cũng re-read local (không chỉ addressId) — MenuGrid/HistoryPage ghi
     // orderProgress qua writeOnboardingState rồi tự gọi requestRefresh(), đây là cách guide
     // (component khác, mounted 1 lần ở layout level) biết mà đọc lại localStorage.
+    // Intentional state-sync from an external source (localStorage) on the addressId/
+    // refreshToken edge — not a cascading-render hazard.
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setLocal(addressId ? readOnboardingState(addressId) : DEFAULT_ONBOARDING_STATE)
     }, [addressId, refreshToken])
 

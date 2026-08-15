@@ -26,6 +26,10 @@ export function OnboardingVisibilityProvider({ children }) {
     )
 }
 
+// ponytail: hook co-located with its Provider (standard context pattern, same as
+// AuthContext/AddressContext) — splitting into its own file isn't worth the diff for
+// a fast-refresh (dev-only HMR) nag.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useOnboardingVisibility() {
     return useContext(OnboardingVisibilityContext)
 }
