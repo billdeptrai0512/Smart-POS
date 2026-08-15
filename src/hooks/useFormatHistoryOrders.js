@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { dateStringVN } from '../utils/dateVN'
 
 // Gom các dòng cùng tên+option lại: "1 Trà Đá" x3 → "3 Trà Đá".
-// rawItems: [{ label, quantity, cost, productId }] (label = tên + option, chưa có số lượng)
+// rawItems: [{ label, quantity, cost, productId, extraIds }] (label = tên + option, chưa có số lượng)
 function groupItems(rawItems) {
     const byLabel = new Map()
     for (const it of rawItems) {
@@ -19,13 +19,17 @@ function groupItems(rawItems) {
         cost: i.cost,
         quantity: i.quantity,
         productId: i.productId,
+        extraIds: i.extraIds,
     }))
 }
 
 // Normalize today's online orders + pending offline orders into the row shape
 // HistoryPage's OrdersList expects:
 //   { id, total, cost, createdAt, staffName, deletedAt, deletedBy,
-//     isOffline, paymentMethod, items: [{ text, cost, quantity, productId }] }
+//     isOffline, paymentMethod, items: [{ text, cost, quantity, productId, extraIds }] }
+// extraIds đi kèm mỗi dòng (không chỉ nằm trong label) — bill in đơn mang đi lẻ
+// (OrdersList) cần nó để tính lại Đơn giá/topping từ giá menu ĐANG hiệu lực, giống
+// priceLines() ở TableDetailModal.
 //
 // `getItemCost(productId, extras, snapshotUnitCost) → number` should be the
 // stable callback from HistoryPage (uses recipes + extraIngredients + costs).
@@ -45,7 +49,8 @@ export function useFormatHistoryOrders({ baseOrders, pendingOrders, productById,
                 label: `${pName}${options ? ` (${options})` : ''}`,
                 cost: unitCost * i.quantity,
                 quantity: i.quantity,
-                productId: i.product_id
+                productId: i.product_id,
+                extraIds: i.extra_ids || [],
             }
         })) : []
         const cost = (o.total_cost > 0)
@@ -80,12 +85,19 @@ export function useFormatHistoryOrders({ baseOrders, pendingOrders, productById,
                             label: `${i.name}${extras.length ? ` (${extras.map(e => e.name).join(' - ')})` : ''}`,
                             cost: unitCost * i.quantity,
                             quantity: i.quantity,
-                            productId: i.productId
+                            productId: i.productId,
+                            extraIds: extras.map(e => e.id).filter(Boolean),
                         }
                     }))
                     : o.orderItems ? groupItems(o.orderItems.map(i => {
                         const unitCost = getItemCost(i.productId, i.extras, i.unitCost || 0)
-                        return { label: `${i.name}`, cost: unitCost * i.quantity, quantity: i.quantity, productId: i.productId }
+                        return {
+                            label: `${i.name}`,
+                            cost: unitCost * i.quantity,
+                            quantity: i.quantity,
+                            productId: i.productId,
+                            extraIds: (i.extras || []).map(e => e.id).filter(Boolean),
+                        }
                     })) : []
                 const cost = o.totalCost > 0
                     ? o.totalCost

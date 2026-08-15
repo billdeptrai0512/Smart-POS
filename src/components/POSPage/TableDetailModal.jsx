@@ -2,11 +2,13 @@ import { useRef } from 'react'
 import { ArrowLeft, Trash2, Check, Printer } from 'lucide-react'
 import { useCart } from '../../contexts/CartContext'
 import { useHistory } from '../../contexts/HistoryContext'
-import { useAddress } from '../../contexts/AddressContext'
+import { useProducts } from '../../contexts/ProductContext'
 import { useConfirm } from '../../contexts/ConfirmContext'
-import { formatVND } from '../../utils'
+import { formatVND, discountToPercent } from '../../utils'
 import { timeStringVN, dateShortVN, isSameDayVN } from '../../utils/dateVN'
+import { priceLineFor } from '../../utils/billLines'
 import { Dialog } from '../common/ModalShell'
+import PrintBill from '../common/PrintBill'
 
 // Chi tiết một bàn — mở từ thẻ bàn trong lưới (TableModal).
 //
@@ -15,8 +17,8 @@ import { Dialog } from '../common/ModalShell'
 // không nhắm vào dòng món đã gộp. Tính tiền cũng nằm ở đây chứ không ở thẻ: bấm tính
 // tiền mà chưa đọc lại đợt nào của bàn là cách thu sai tiền dễ nhất.
 //
-// ponytail: in qua window.print() (xem #print-bill ở cuối file + @media print trong
-// index.css), không SDK máy in nhiệt. Đổi khi quán có máy ESC/POS thật.
+// ponytail: in qua window.print() (xem PrintBill.jsx + @media print trong index.css),
+// không SDK máy in nhiệt. Đổi khi quán có máy ESC/POS thật.
 // Ba nút trên mỗi đợt cùng một khuôn viên thuốc: tách chuỗi class ra để đổi kiểu một
 // lần, không phải săn từng bản chép.
 const CHIP = 'h-[26px] rounded-full border text-[11px] font-black uppercase tracking-wider transition-colors'
@@ -26,8 +28,8 @@ export default function TableDetailModal({ table, onClose, onPick }) {
     const confirm = useConfirm()
     const { handleCloseTable, refreshTables, reopenRoundIntoCart, toggleServed, orderCount } = useCart()
     const { handleDeleteOrder } = useHistory()
-    const { selectedAddress } = useAddress()
-    const printedAtRef = useRef(null)
+    const { products, productExtras } = useProducts()
+    const billRef = useRef(null)
 
     // Bàn ngồi qua nửa đêm là chuyện thường (xem fetchOpenTables) nên nhãn giờ phải kèm
     // ngày khi khác hôm nay, còn hôm nay thì chỉ giờ cho gọn.
@@ -37,6 +39,39 @@ export default function TableDetailModal({ table, onClose, onPick }) {
         return isSameDayVN(d, new Date()) ? timeStringVN(d) : fullLabel(d)
     }
     const linesLabel = (lines) => lines.map(l => `${l.qty} ${l.name}`).join(', ')
+
+    // Bill in: nhân viên hiện theo đợt gần nhất (người đang đứng thu tiền), không lặp lại
+    // theo từng đợt vì bill in theo cả bàn. orderNo = 1 SỐ DUY NHẤT CHO CẢ BÀN — mọi đợt
+    // của cùng 1 lần mở bàn dùng chung 1 số (gán ở đợt đầu, "gọi thêm" không sinh số mới,
+    // xem bulk_create_orders trong migration 20260814_order_sequential_number), nên lấy từ
+    // đợt nào cũng ra cùng giá trị; find() phòng trường hợp lẫn đơn tạo trước migration này
+    // (order_no null) với đợt tạo sau.
+    const lastStaff = table.rounds.at(-1)?.staffName || null
+    const orderNo = table.rounds.find(r => r.orderNo != null)?.orderNo ?? null
+    const discountTotal = table.rounds.reduce((s, r) => s + (r.discountAmount || 0), 0)
+    const subtotal = table.total + discountTotal
+    const { pct: discountPct } = discountToPercent(subtotal, discountTotal)
+
+    // Đơn giá/thành tiền từng dòng cho bill in: round.lines chỉ có tên+SL (giá không
+    // lưu theo dòng, xem TableRound ở orderService.ts), nên tự tính lại từ giá món/topping
+    // ĐANG hiệu lực trong menu (products/productExtras) — đúng cho bàn đang mở vì đơn vừa
+    // gọi trong ca này, giá chưa kịp đổi. Gộp qua TẤT CẢ đợt (không tách theo round nữa,
+    // bill không còn hiện nhãn "Đợt N"), nên 1 món gọi ở hai đợt khác nhau chỉ ra một dòng.
+    // extras giữ riêng mảng (không nhét vào chuỗi tên như tableLineName) — bill in mỗi
+    // topping xuống một dòng "* tên" riêng, gộp trùng phải tính theo tổ hợp món+topping.
+    function priceLines(rounds) {
+        const out = []
+        for (const round of rounds) {
+            for (const it of round.items) {
+                const { name, extras, unitPrice } = priceLineFor(it, products, productExtras)
+                const key = `${name}::${extras.map(e => e.id).sort().join(',')}`
+                const hit = out.find(l => l.key === key)
+                if (hit) hit.qty += it.qty
+                else out.push({ key, name, extras, qty: it.qty, unitPrice })
+            }
+        }
+        return out
+    }
 
     async function handleEditRound(round) {
         // Cả chuỗi xoá-nạp-giỏ nằm trong POSContext (reopenRoundIntoCart) — ở đây chỉ
@@ -58,13 +93,10 @@ export default function TableDetailModal({ table, onClose, onPick }) {
     }
 
     // In = mở hộp in của trình duyệt/hệ điều hành, CSS @media print (index.css) lo phần
-    // chỉ hiện #print-bill. Bill dựng sẵn trong DOM nên không có bước render lại nào
-    // giữa cú bấm và lệnh in.
+    // chỉ hiện #print-bill. Bill dựng sẵn trong DOM (PrintBill) nên không có bước render
+    // lại nào giữa cú bấm và lệnh in.
     function handlePrint() {
-        // Ghi thẳng vào DOM chứ không qua state: window.print() chạy đồng bộ, React chưa
-        // kịp render lại thì hộp in đã chụp mất tờ bill với giờ cũ.
-        if (printedAtRef.current) printedAtRef.current.textContent = fullLabel(new Date())
-        window.print()
+        billRef.current?.print()
     }
 
     async function handleBill() {
@@ -170,34 +202,20 @@ export default function TableDetailModal({ table, onClose, onPick }) {
                 </button>
             </div>
 
-            {/* Tờ bill. Ẩn trên màn hình, chỉ hiện khi in (@media print ở index.css).
-                Chia theo ĐỢT với tiền từng đợt — đó là dữ liệu thật đang có; ghi giá
-                từng ly thì phải đoán lại phần chiết khấu đã áp cho đợt, tức là in sai. */}
-            <div id="print-bill" className="hidden">
-                <div style={{ textAlign: 'center', fontWeight: 700, textTransform: 'uppercase' }}>
-                    {selectedAddress?.name || 'Hoá đơn'}
-                </div>
-                <div style={{ textAlign: 'center', textTransform: 'uppercase' }}>{table.name}</div>
-                <div ref={printedAtRef} style={{ textAlign: 'center' }}>{fullLabel(new Date())}</div>
-                <div>--------------------------------</div>
-                {table.rounds.map((round, i) => (
-                    <div key={round.id || i} style={{ marginBottom: 6 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>Đợt {i + 1} · {openedLabel(round.createdAt)}</span>
-                            <span>{formatVND(round.total)}</span>
-                        </div>
-                        {round.lines.map(l => (
-                            <div key={l.name}>{l.qty} {l.name}</div>
-                        ))}
-                    </div>
-                ))}
-                <div>--------------------------------</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
-                    <span>TỔNG</span>
-                    <span>{formatVND(table.total)}</span>
-                </div>
-                <div style={{ textAlign: 'center', marginTop: 8 }}>Cảm ơn quý khách!</div>
-            </div>
+            {/* Không còn hiện nhãn "Đợt N" trong bảng món — priceLines gộp món trùng tên
+                qua mọi đợt thành 1 dòng, xem comment ở priceLines. */}
+            <PrintBill
+                ref={billRef}
+                orderNo={orderNo}
+                tableName={table.name}
+                openedAt={table.openedAt}
+                staffName={lastStaff}
+                lines={priceLines(table.rounds)}
+                subtotal={subtotal}
+                discountTotal={discountTotal}
+                discountPct={discountPct}
+                total={table.total}
+            />
         </Dialog>
     )
 }

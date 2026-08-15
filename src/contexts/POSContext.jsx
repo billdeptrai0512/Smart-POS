@@ -5,7 +5,7 @@ import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder, addPendingTableClose, removePendingTableClose } from '../hooks/useOfflineSync'
 import { useOrdersPoll } from '../hooks/useOrdersPoll'
 import { dateStringVN } from '../utils/dateVN'
-import { calculateProductCost, computeDiscount } from '../utils'
+import { calculateProductCost, computeDiscount, discountToPercent } from '../utils'
 import { useProducts } from './ProductContext'
 import { useAddress } from './AddressContext'
 import { useAuth } from './AuthContext'
@@ -840,7 +840,13 @@ export function POSProvider() {
         setActiveCartItemId(null)
         // Chiết khấu sống ở tầng ĐƠN, không ở từng ly — không mang theo thì gửi lại là
         // khách trả đắt hơn lần trước. Đặt SAU setCart vì mọi thao tác giỏ đều reset nó.
-        if (round.discountAmount > 0) setDiscount({ type: 'amount', value: round.discountAmount })
+        // Chỉ lưu số đ đã giảm, không lưu %/đ đã CHỌN lúc áp (như OrdersList.jsx) — seed lại
+        // theo % suy ngược qua discountToPercent, không mặc định "đ" gây hiểu lầm. `exact`
+        // false (số tiền lẻ, không tròn %) thì giữ "đ" — xem comment ở discountToPercent.
+        if (round.discountAmount > 0) {
+            const { pct, exact } = discountToPercent(round.total + round.discountAmount, round.discountAmount)
+            setDiscount(exact ? { type: 'percent', value: pct } : { type: 'amount', value: round.discountAmount })
+        }
         showToast('Đợt cũ đã vào giỏ — sửa xong bấm Tạo đơn', 'info')
         return true
     }

@@ -423,10 +423,15 @@ body {
   justify-content: space-between;
 }
 
-/* In bill (TableDetailModal). Khối #print-bill nằm ẩn trong DOM lúc bình thường; lúc in
+/* In bill (PrintBill.jsx — dùng chung cho bill theo bàn ở TableDetailModal và bill đơn
+   mang đi lẻ ở OrdersList). Khối #print-bill nằm ẩn trong DOM lúc bình thường; lúc in
    thì nó là thứ DUY NHẤT hiện ra. visibility (không phải display) để ẩn phần còn lại:
-   #print-bill nằm sâu trong cây modal, display:none ở tổ tiên là mất luôn cả nó.
+   #print-bill nằm sâu trong cây modal/thẻ, display:none ở tổ tiên là mất luôn cả nó.
    ponytail: in qua trình duyệt, không SDK máy in nhiệt. Đổi khi quán có máy ESC/POS thật. */
+@page {
+  size: 80mm auto;
+  margin: 0;
+}
 @media print {
   body * { visibility: hidden; }
   #print-bill,

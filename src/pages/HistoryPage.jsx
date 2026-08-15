@@ -463,6 +463,7 @@ export default function HistoryPage() {
                     onUpdateDiscount={handleUpdateOrderDiscount}
                     deletingId={deletingId}
                     setDeletingId={setDeletingId}
+                    dineIn={!!selectedAddress?.dine_in}
                 />
             )}
 

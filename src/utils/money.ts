@@ -33,3 +33,14 @@ export function computeDiscount(subtotal: number, discount: Discount): DiscountR
             : Math.min(discount.value, subtotal)
     return { discountAmount, finalTotal: Math.max(0, subtotal - discountAmount) }
 }
+
+// Suy % từ số đ đã giảm — orders chỉ lưu discount_amount, không lưu %/đ đã CHỌN lúc áp
+// (xem computeDiscount ở trên). Dùng cho nhãn hiển thị (nút "-15%", bill in) lẫn seed lại
+// DiscountModal khi sửa. exact=true chỉ khi % suy ra tính NGƯỢC LẠI đúng y hệt amount gốc
+// (không lệch làm tròn) — false thì bên gọi nên giữ nguyên dạng "đ" khi seed lại modal,
+// tránh bấm "Đồng ý" mà không sửa gì lại âm thầm đổi số tiền giảm đi vài đồng.
+export function discountToPercent(subtotal: number, amount: number): { pct: number; exact: boolean } {
+    if (subtotal <= 0 || amount <= 0) return { pct: 0, exact: false }
+    const pct = Math.round((amount / subtotal) * 100)
+    return { pct, exact: Math.round(subtotal * pct / 100) === amount }
+}

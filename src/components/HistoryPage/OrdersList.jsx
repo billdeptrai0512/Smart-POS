@@ -1,11 +1,14 @@
-import { useState, memo } from 'react'
-import { Percent, Trash2 } from 'lucide-react'
-import { formatVND, computeDiscount } from '../../utils'
+import { useState, useRef, useMemo, useEffect, memo } from 'react'
+import { Percent, Trash2, Printer } from 'lucide-react'
+import { formatVND, computeDiscount, discountToPercent } from '../../utils'
 import { dateShortVN, timeStringVN } from '../../utils/dateVN'
+import { priceLineFor } from '../../utils/billLines'
 import { useConfirm } from '../../contexts/ConfirmContext'
+import { useProducts } from '../../contexts/ProductContext'
 import DiscountModal from '../POSPage/DiscountModal'
+import PrintBill from '../common/PrintBill'
 
-// Nút icon tròn trên thẻ đơn (giảm giá, xoá) — cùng một khuôn, tách ra để đổi kiểu
+// Nút icon tròn trên thẻ đơn (giảm giá, in, xoá) — cùng một khuôn, tách ra để đổi kiểu
 // một lần. Cùng kích thước với hàng nút trong TableDetailModal.
 const ICON_BTN = 'shrink-0 w-[26px] h-[26px] rounded-full border bg-surface-light border-border/60 flex items-center justify-center transition-colors'
 
@@ -13,7 +16,7 @@ export default function OrdersList({
     orders, runningTotals, isLoading, isTodayScope,
     pendingOrders, isSyncing, onRetrySync, onDeleteOffline,
     onDeleteOrder, onUpdateDiscount, deletingId, setDeletingId,
-    justArrivedIds,
+    justArrivedIds, dineIn,
 }) {
     return (
         <main className="flex-1 overflow-y-auto px-4 py-5 pb-4 space-y-3 bg-bg">
@@ -56,6 +59,7 @@ export default function OrdersList({
                         onUpdateDiscount={onUpdateDiscount}
                         onDeleteOffline={onDeleteOffline}
                         isNew={justArrivedIds?.has(order.id) || false}
+                        dineIn={dineIn}
                     />
                 ))
             )}
@@ -66,18 +70,51 @@ export default function OrdersList({
 // memo + per-card isDeleting (not the raw shared deletingId, which would change
 // for every card whenever ANY order starts/stops deleting) — otherwise deleting
 // one order re-renders the entire day's order list.
-const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, setDeletingId, onDeleteOrder, onUpdateDiscount, onDeleteOffline, isNew }) {
+const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, setDeletingId, onDeleteOrder, onUpdateDiscount, onDeleteOffline, isNew, dineIn }) {
     const confirm = useConfirm()
+    const { products, productExtras } = useProducts()
     const [showDiscount, setShowDiscount] = useState(false)
     const date = new Date(order.createdAt)
     const time = timeStringVN(date)
 
     const discountAmount = order.discountAmount || 0
     const subtotal = order.total + discountAmount   // pre-discount price (for the modal + struck original)
-    // Only stored the đ reduced, not %/đ type → reopen as a fixed amount; user can switch in the modal.
-    const seedDiscount = discountAmount ? { type: 'amount', value: discountAmount } : { type: 'percent', value: 0 }
+    // Chỉ lưu đúng số đ đã giảm, không lưu %/đ type đã chọn lúc áp — % hiển thị ở nút/bill in
+    // và seed lại DiscountModal đều suy ngược qua discountToPercent (không hardcode), đúng
+    // cho cả 2 cách giảm (theo % lẫn theo đúng số tiền) sau khi đã lưu. `exact` quyết định
+    // seedDiscount seed "%" hay "đ" — xem comment ở discountToPercent (src/utils/money.ts).
+    const { pct: discountPct, exact: discountPctExact } = discountToPercent(subtotal, discountAmount)
+    const seedDiscount = !discountAmount
+        ? { type: 'percent', value: 0 }
+        : discountPctExact
+            ? { type: 'percent', value: discountPct }
+            : { type: 'amount', value: discountAmount }
     // Online, non-deleted orders are the only ones we can edit/discount against the DB.
     const editable = !order.deletedAt && !order.isOffline
+
+    // In bill: chỉ đơn MANG ĐI đứng riêng (không table_name — đợt gọi thêm của 1 bàn phải
+    // in qua TableDetailModal, gộp chung cả bàn thành 1 tờ) VÀ chỉ khi địa chỉ có bật "Bàn
+    // ngồi" (dine_in) — tắt thì chưa có hạ tầng in bill cho quán đó.
+    const canPrint = dineIn && !order.tableName && !order.deletedAt
+    const billRef = useRef(null)
+    const [printArmed, setPrintArmed] = useState(false)
+
+    const billLines = useMemo(() => {
+        if (!canPrint) return []
+        return (order.items || []).map(it => ({ key: it.text, qty: it.quantity, ...priceLineFor(it, products, productExtras) }))
+    }, [canPrint, order.items, products, productExtras])
+
+    // Chỉ 1 thẻ được mang id="print-bill" tại 1 thời điểm (CSS @media print chọn theo id) —
+    // bấm in mới gắn id cho ĐÚNG thẻ này (mount PrintBill), in xong gỡ luôn (setPrintArmed
+    // false) để thẻ kế bấm sau không bị dính id cũ. setState ở đây là chủ đích: đây LÀ đích
+    // đến của effect (gỡ mount sau khi đã đồng bộ với window.print(), một external API),
+    // không phải suy ra state từ props/state khác.
+    useEffect(() => {
+        if (!printArmed) return
+        billRef.current?.print()
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setPrintArmed(false)
+    }, [printArmed])
 
     const deletedTimeStr = order.deletedAt ? (() => {
         const d = new Date(order.deletedAt)
@@ -119,9 +156,13 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                             <button
                                 onClick={() => setShowDiscount(true)}
                                 aria-label="Giảm giá"
-                                className={`${ICON_BTN} self-center text-text-secondary hover:text-primary`}
+                                className={discountAmount > 0
+                                    // Đã có giảm giá → hiện luôn mức % thay vì icon trơ, để không
+                                    // phải mở lại modal mới biết đã giảm bao nhiêu.
+                                    ? 'shrink-0 h-[26px] px-2.5 rounded-full border bg-primary/10 border-primary/40 text-primary text-[11px] font-black tabular-nums flex items-center justify-center self-center transition-colors hover:bg-primary/20'
+                                    : `${ICON_BTN} self-center text-text-secondary hover:text-primary`}
                             >
-                                <Percent size={14} strokeWidth={2.25} />
+                                {discountAmount > 0 ? `-${discountPct}%` : <Percent size={14} strokeWidth={2.25} />}
                             </button>
                         )}
                     </div>
@@ -147,18 +188,29 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                     <span className="text-text-secondary/70 text-[12px] font-bold truncate min-w-0 leading-none">
                         {time}{order.tableName ? <> · <span className="inline-block first-letter:uppercase">{order.tableName}</span></> : ''}{order.staffName ? ` · ${order.staffName}` : ''}
                     </span>
-                    {/* Đơn offline chưa lên DB thì xoá bằng đường khác (hàng chờ), còn lại
-                        y hệt nhau — một nút, hai nguồn dữ liệu. */}
-                    {!order.deletedAt && (
-                        <button
-                            onClick={order.isOffline ? () => onDeleteOffline(order.createdAt_key) : handleDelete}
-                            disabled={!order.isOffline && isDeleting}
-                            aria-label={order.isOffline ? 'Xóa đơn offline' : 'Xóa đơn'}
-                            className={`${ICON_BTN} ${order.isOffline ? 'text-warning/70' : 'text-text-secondary'} hover:text-danger disabled:opacity-50`}
-                        >
-                            <Trash2 size={14} strokeWidth={2.25} />
-                        </button>
-                    )}
+                    <div className="shrink-0 flex items-center gap-2">
+                        {canPrint && (
+                            <button
+                                onClick={() => setPrintArmed(true)}
+                                aria-label="In bill"
+                                className={`${ICON_BTN} text-text-secondary hover:text-primary`}
+                            >
+                                <Printer size={14} strokeWidth={2.25} />
+                            </button>
+                        )}
+                        {/* Đơn offline chưa lên DB thì xoá bằng đường khác (hàng chờ), còn lại
+                            y hệt nhau — một nút, hai nguồn dữ liệu. */}
+                        {!order.deletedAt && (
+                            <button
+                                onClick={order.isOffline ? () => onDeleteOffline(order.createdAt_key) : handleDelete}
+                                disabled={!order.isOffline && isDeleting}
+                                aria-label={order.isOffline ? 'Xóa đơn offline' : 'Xóa đơn'}
+                                className={`${ICON_BTN} ${order.isOffline ? 'text-warning/70' : 'text-text-secondary'} hover:text-danger disabled:opacity-50`}
+                            >
+                                <Trash2 size={14} strokeWidth={2.25} />
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -172,6 +224,24 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                         const { discountAmount: amt, finalTotal } = computeDiscount(subtotal, d)
                         onUpdateDiscount(order.id, finalTotal, amt)
                     }}
+                />
+            )}
+
+            {/* Chỉ mount khi đang in (printArmed) — nếu mount thường trực ở MỌI thẻ mang
+                đi thì nhiều thẻ cùng có id="print-bill" một lúc, CSS @media print (index.css)
+                chọn theo id sẽ hiện chồng hết lên nhau. */}
+            {printArmed && (
+                <PrintBill
+                    ref={billRef}
+                    orderNo={null}
+                    tableName={null}
+                    openedAt={order.createdAt}
+                    staffName={order.staffName}
+                    lines={billLines}
+                    subtotal={subtotal}
+                    discountTotal={discountAmount}
+                    discountPct={discountPct}
+                    total={order.total}
                 />
             )}
         </div>
