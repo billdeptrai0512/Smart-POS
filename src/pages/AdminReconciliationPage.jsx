@@ -16,6 +16,7 @@ const REASON_LABEL = {
     churned_recent: 'Đã rời bỏ',
     trial_inactive: 'Trial chưa dùng',
     never_activated: 'Chưa kích hoạt',
+    dormant: 'Đã bỏ (>90 ngày)',
 }
 const REASON_TAG_CLASS = {
     payment_review: 'bg-red-500/10 text-red-500',
@@ -26,6 +27,7 @@ const REASON_TAG_CLASS = {
     churned_recent: 'bg-danger-soft text-danger',
     trial_inactive: 'bg-warning-soft text-warning',
     never_activated: 'bg-warning-soft text-warning',
+    dormant: 'bg-border/60 text-text-dim',
 }
 
 const fmtDT = (iso) => {
@@ -63,6 +65,11 @@ function attentionDetail(item) {
         const days = Math.floor((Date.now() - new Date(item.valid_to).getTime()) / 86_400_000)
         return `Đăng ký ${days} ngày trước, chưa chốt ca nào`
     }
+    if (item.reason === 'dormant') {
+        return item.last_active_at
+            ? `Im lặng ${Math.floor((Date.now() - new Date(item.last_active_at).getTime()) / 86_400_000)} ngày — gần như chắc đã bỏ`
+            : 'Chưa từng hoạt động, đã trả phí lâu'
+    }
     return `Mã SP${item.reference} · ${fmtDT(item.intent_created_at)}`
 }
 
@@ -87,6 +94,8 @@ export default function AdminReconciliationPage() {
 
     const [items, setItems] = useState(null)
     const [totalCount, setTotalCount] = useState(0) // đếm thật (đã dedupe), items chỉ là top-20 hiển thị
+    const [dormant, setDormant] = useState(null) // v5: đã bỏ >90 ngày, KHÔNG tính vào KPI "Cần chú ý"
+    const [dormantCount, setDormantCount] = useState(0)
     const [busyId, setBusyId] = useState(null)
     const [confirmId, setConfirmId] = useState(null) // 2-step confirm cho "Cấp gói tay"
     const [error, setError] = useState(null)
@@ -96,6 +105,8 @@ export default function AdminReconciliationPage() {
             .then((d) => {
                 setItems(d.attention)
                 setTotalCount(d.attention_total_count ?? d.attention.length)
+                setDormant(d.dormant_addresses ?? [])
+                setDormantCount(d.dormant_count ?? 0)
             })
             .catch((e) => setError(e.message))
     }, [])
@@ -181,6 +192,20 @@ export default function AdminReconciliationPage() {
                         })
                     )}
                 </section>
+
+                {/* v5: im lặng >90 ngày — tách khỏi KPI, chỉ để tham khảo/gọi lại nếu rảnh */}
+                {dormant && dormant.length > 0 && (
+                    <section className="flex flex-col gap-2.5">
+                        <SectionHeader
+                            icon={<AlertTriangle size={14} className="text-text-dim" />}
+                            title="Đã bỏ, không tính KPI"
+                            hint={`${dormant.length}${dormantCount > dormant.length ? `/${dormantCount}` : ''} chi nhánh · im lặng >90 ngày`}
+                        />
+                        {dormant.map((it) => (
+                            <AttentionItemCard key={itemKey(it)} item={it} busy={false} confirming={false} onGrant={() => {}} onDismiss={() => {}} />
+                        ))}
+                    </section>
+                )}
             </div>
         </div>
     )
