@@ -32,6 +32,9 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
     const [todayPayments, setTodayPayments] = useState([])
     const [apiShiftClosings, setApiShiftClosings] = useState([])
     const [prevShiftClosings, setPrevShiftClosings] = useState([])
+    // Bump để buộc effect fetch bên dưới chạy lại (vd sau khi sửa 1 phiếu nhập kho
+    // từ CashFlowCard — ảnh hưởng payments/tồn kho, không patch tại chỗ được).
+    const [reloadTick, setReloadTick] = useState(0)
 
     // `todayISO` is state (not per-render) so an overnight tab can detect the date
     // change on focus/visibility and trigger a refetch of shift_closing + clear stale
@@ -109,11 +112,12 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
         }
         // todayISO so a midnight rollover invalidates cached shift_closing.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [addressId, scope, offset, rangeStart, rangeEnd, isTodayScope, todayISO])
+    }, [addressId, scope, offset, rangeStart, rangeEnd, isTodayScope, todayISO, reloadTick])
 
     return {
         todayISO,
         isTodayScope,
+        refetch: () => setReloadTick(t => t + 1),
         rangeStart, rangeEnd, prevStart, prevEnd,
         shiftClosing, setShiftClosing,
         yesterdayClosing,

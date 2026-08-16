@@ -46,6 +46,9 @@ export default function CashFlowCard({
     hintTransfer = false,
     // Bấm 1 dòng chi phí → mở modal sửa (DailyReportPage điều hướng sang tab Chi phí).
     onEditExpense,
+    // Bấm 1 dòng "Mua nguyên liệu/bao bì" → mở RestockModal sửa phiếu nhập (chỉ khi
+    // dòng gộp từ ĐÚNG 1 hoá đơn — xem groupByIngredient bên dưới).
+    onEditRestockPayment,
 }) {
     // Category (Nguyên liệu chính / Bao bì) của từng nguyên liệu — để phân loại
     // mục "Mua nguyên liệu / bao bì" bên dưới. Mặc định collapse từng nhóm.
@@ -97,9 +100,10 @@ export default function CashFlowCard({
             const ing = p.invoice_metadata?.ingredient
             const name = ing ? ingredientLabel(ing) : (p.invoice_name || 'Trả NCC')
             let g = byName.get(name)
-            if (!g) { g = { name, key: p.id, amount: 0, count: 0, hasIn: false, hasPost: false, hasCash: false, hasTransfer: false }; byName.set(name, g) }
+            if (!g) { g = { name, key: p.id, amount: 0, count: 0, hasIn: false, hasPost: false, hasCash: false, hasTransfer: false, payments: [] }; byName.set(name, g) }
             g.amount += p.amount || 0
             g.count += 1
+            g.payments.push(p)
             if (paymentPhase(p) === 'in_shift') g.hasIn = true; else g.hasPost = true
             if (methodOf(p) === 'transfer') g.hasTransfer = true; else g.hasCash = true
         }
@@ -162,7 +166,13 @@ export default function CashFlowCard({
         const b = ensureBlock(cat.key === 'packaging' ? 'Mua bao bì' : 'Mua nguyên liệu', cat.key === 'packaging' ? 20 : 10)
         for (const r of groupByIngredient(pays)) {
             b.total += r.amount; b.count += r.count
-            b.children.push({ key: r.key, name: r.name, amount: r.amount, count: r.count, phase: r.phase, method: r.method })
+            // Chỉ mở sửa được khi cả nhóm chỉ gộp từ 1 hoá đơn (1 expense_id) — gộp
+            // nhiều lần mua/trả nợ khác hoá đơn thì không có phiếu duy nhất để mở.
+            const oneInvoice = r.payments.every(p => p.expense_id === r.payments[0]?.expense_id)
+            b.children.push({
+                key: r.key, name: r.name, amount: r.amount, count: r.count, phase: r.phase, method: r.method,
+                restockPayment: oneInvoice ? r.payments[0] : null,
+            })
         }
     }
     for (const { e, phase } of tagged.inventory) {
@@ -265,7 +275,8 @@ export default function CashFlowCard({
 
                 {/* SECTION: TỒN KHO (luôn hiện) — refill + chi phí nhãn tồn kho, gộp theo dòng */}
                 <BlockSection title="Tồn kho" total={inventoryTotal} keyPrefix="inv" blocks={inventoryBlocks}
-                    expandedCats={expandedCats} toggleCat={toggleCat} emptyText="Không có chi tồn kho trong kỳ" onEditExpense={onEditExpense} />
+                    expandedCats={expandedCats} toggleCat={toggleCat} emptyText="Không có chi tồn kho trong kỳ"
+                    onEditExpense={onEditExpense} onEditRestockPayment={onEditRestockPayment} />
 
                 {/* SECTION: NGOÀI KINH DOANH (chỉ khi có chi) — không vào lợi nhuận */}
                 {nonOpGroups.length > 0 && (
@@ -381,7 +392,7 @@ function ExpenseSection({ title, total, keyPrefix, groups, expandedCats, toggleC
 
 // Section Tồn kho — blocks đã gộp sẵn (refill theo nguyên liệu + chi phí nhãn tồn
 // kho + trả nợ), children là ItemRow props dựng sẵn.
-function BlockSection({ title, total, keyPrefix, blocks, expandedCats, toggleCat, emptyText, onEditExpense }) {
+function BlockSection({ title, total, keyPrefix, blocks, expandedCats, toggleCat, emptyText, onEditExpense, onEditRestockPayment }) {
     return (
         <div className="flex flex-col gap-1 pl-1">
             <SectionHead title={title} total={total} />
@@ -392,11 +403,16 @@ function BlockSection({ title, total, keyPrefix, blocks, expandedCats, toggleCat
                 return (
                     <CollapseGroup key={k} expanded={!!expandedCats[k]} onToggle={() => toggleCat(k)}
                         label={b.label} count={b.count} total={b.total}>
-                        {/* Chỉ dòng dựng từ 1 expense thật mới sửa được; dòng đi chợ NVL là
-                            nhiều payment gộp theo nguyên liệu, không có phiếu chi để mở. */}
+                        {/* Dòng dựng từ 1 expense thật (chi phí nhãn tồn kho) sửa qua ExpenseEditorModal;
+                            dòng đi chợ NVL (restockPayment) sửa qua RestockModal — chỉ khi gộp từ
+                            đúng 1 hoá đơn, xem "oneInvoice" ở chỗ dựng block phía trên. */}
                         {b.children.map((c) => (
                             <ItemRow key={c.key} date={c.date} name={c.name} amount={c.amount} count={c.count} phase={c.phase} method={c.method}
-                                onClick={onEditExpense && c.expense ? () => onEditExpense(c.expense) : undefined} />
+                                onClick={
+                                    onEditExpense && c.expense ? () => onEditExpense(c.expense)
+                                        : onEditRestockPayment && c.restockPayment ? () => onEditRestockPayment(c.restockPayment)
+                                            : undefined
+                                } />
                         ))}
                     </CollapseGroup>
                 )

@@ -5,7 +5,7 @@ import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { formatVNDInput, parseVNDInput } from '../utils'
 import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses, dedupeShiftClosingsByDay } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
-import { fetchDailyReportContext, fetchLastWeekSameDayOrderItems, fetchReportByRange, processIngredientRestock, fetchOpenTables, invalidateDailyContext } from '../services/orderService'
+import { fetchDailyReportContext, fetchLastWeekSameDayOrderItems, fetchReportByRange, processIngredientRestock, fetchOpenTables, invalidateDailyContext, editIngredientRestock, fetchIngredientRestockHistory } from '../services/orderService'
 import { fetchCashClosedToday, buildCashPayload } from '../services/reportService'
 import { useShiftClosingSave } from '../hooks/useShiftClosingSave'
 import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
@@ -17,7 +17,7 @@ import { findCoffeeIngredient, findIngredientByLabel } from '../utils/onboarding
 import { readOnboardingState, DEFAULT_ONBOARDING_STATE, isCashFlowProgressDone, isInventoryProgressDone } from '../utils/onboardingStorage'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
 import { isRecipeStepActive } from '../components/common/onboarding/steps/recipeStep'
-import { dateStringVN, isSameDayVN, startOfDayVN, dateShortVN, dateFullVN } from '../utils/dateVN'
+import { dateStringVN, timeStringVN, isSameDayVN, startOfDayVN, dateShortVN, dateFullVN } from '../utils/dateVN'
 import { useDateScope } from '../hooks/useDateScope'
 import { goToMenuStep } from '../utils/menuSequence'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
@@ -124,6 +124,7 @@ export default function DailyReportPage() {
         apiShiftClosings,
         prevShiftClosings,
         isAsyncReady,
+        refetch: refetchReport,
     } = useDailyReportData({
         addressId: selectedAddress?.id,
         scope, offset, customRange,
@@ -368,6 +369,47 @@ export default function DailyReportPage() {
 
     // Chi phí đang mở modal sửa (bấm 1 dòng trong panel Thực chi) — null = đóng.
     const [editingExpense, setEditingExpense] = useState(null)
+
+    // Phiếu nhập kho (Mua nguyên liệu/bao bì) đang mở modal sửa — bấm 1 dòng đi chợ
+    // trong panel Thực chi. { entry, addressId, ingredient } | null = đóng. Entry được
+    // fetch lại đầy đủ (không dùng payment gộp của CashFlowCard) vì cần amount/discount/
+    // extra_cost/payments gốc của cả hoá đơn, không chỉ phần trả trong kỳ báo cáo đang xem.
+    const [editingRestock, setEditingRestock] = useState(null)
+    const handleEditRestockPayment = async (payment) => {
+        const ingredient = payment?.invoice_metadata?.ingredient
+        const expenseId = payment?.expense_id
+        if (!ingredient || !expenseId) return
+        const addressId = payment.address_id || selectedAddress?.id
+        try {
+            const history = await fetchIngredientRestockHistory([addressId], ingredient, new Date(0).toISOString(), new Date().toISOString())
+            const entry = history.find(h => h.id === expenseId)
+            if (entry) setEditingRestock({ entry, addressId, ingredient })
+        } catch (err) { showError(err, 'Tải phiếu nhập kho') }
+    }
+    const handleSaveRestockEdit = async (form) => {
+        const { entry, addressId } = editingRestock
+        // Đóng modal ngay (optimistic, khớp pattern IngredientDetailPage.handleEditRestock) —
+        // lỗi mạng vẫn báo qua toast, không cần giữ modal mở để user retry.
+        setEditingRestock(null)
+        try {
+            await editIngredientRestock(addressId, entry.id, {
+                qty: Number(form.qty),
+                subtotal: Number(form.subtotal),
+                discount: Number(form.discount),
+                extraCost: Number(form.extraCost),
+                paid: Number(form.paid),
+                paymentMethod: form.paymentMethod,
+                cashPhase: form.cashPhase,
+                purchaseDate: form.purchaseDate,
+                staffName: profile?.name,
+            })
+            await Promise.all([
+                refetchReport(),
+                inventory.reloadStocks?.(), inventory.reloadIngredients?.(), refreshProducts?.(), refreshTodayExpenses?.(),
+            ])
+            showToast('Đã lưu phiếu nhập kho', 'success')
+        } catch (err) { showError(err, 'Sửa phiếu nhập kho') }
+    }
 
     // Sau khi sửa/xoá: scope hôm nay do POSContext tự patch todayExpenses; scope quá
     // khứ đọc từ RPC báo cáo nên phải patch tay (updates = null ⇒ đã xoá).
@@ -1307,6 +1349,7 @@ export default function DailyReportPage() {
                                 hintCash={hintCash}
                                 hintTransfer={hintTransfer}
                                 onEditExpense={setEditingExpense}
+                                onEditRestockPayment={handleEditRestockPayment}
                                 salesCard={
                                     <div className="flex flex-col gap-4">
                                         <SalesCard
@@ -1533,6 +1576,36 @@ export default function DailyReportPage() {
                     onClose={() => setEditingExpense(null)}
                 />
             )}
+
+            {/* Sửa phiếu nhập kho (bấm 1 dòng "Mua nguyên liệu/bao bì" trong panel Thực chi) —
+                tái dùng RestockModal của /ingredients, xem handleEditRestockPayment. */}
+            {editingRestock && (() => {
+                const { entry, ingredient } = editingRestock
+                const cfg = (inventory.ingredientsList || []).find(i => i.ingredient === ingredient)
+                return (
+                    <RestockModal
+                        ingredient={ingredient}
+                        unit={getIngredientUnit(ingredient, ingredientUnits[ingredient])}
+                        packSize={cfg?.pack_size}
+                        packUnit={cfg?.pack_unit}
+                        cashClosedToday={false}
+                        mode="edit"
+                        initial={{
+                            qty: entry.metadata?.qty ?? 0,
+                            subtotal: entry.metadata?.subtotal ?? entry.amount ?? 0,
+                            discount: entry.discount_amount ?? 0,
+                            extraCost: entry.extra_cost ?? 0,
+                            paid: (entry.payments || []).reduce((s, p) => s + (p.amount || 0), 0),
+                            paymentMethod: entry.payment_method || 'cash',
+                            cashPhase: entry.metadata?.cash_phase || 'post_close',
+                            purchaseDate: dateStringVN(new Date(entry.created_at)),
+                            purchaseTime: timeStringVN(new Date(entry.created_at)),
+                        }}
+                        onConfirm={handleSaveRestockEdit}
+                        onClose={() => setEditingRestock(null)}
+                    />
+                )
+            })()}
 
             {/* Nhập kho từ card "Chuẩn bị tồn kho" — tái dùng RestockModal của /ingredients. */}
             {restockIngredient && (() => {
