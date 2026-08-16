@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { fetchDailyReportContext, fetchReportByDate, fetchReportByRange } from '../services/orderService'
 import { dateStringVN } from '../utils/dateVN'
 import { calcRangeWithPrev } from '../utils/rangeCalc'
@@ -32,9 +32,6 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
     const [todayPayments, setTodayPayments] = useState([])
     const [apiShiftClosings, setApiShiftClosings] = useState([])
     const [prevShiftClosings, setPrevShiftClosings] = useState([])
-    // Bump để buộc effect fetch bên dưới chạy lại (vd sau khi sửa 1 phiếu nhập kho
-    // từ CashFlowCard — ảnh hưởng payments/tồn kho, không patch tại chỗ được).
-    const [reloadTick, setReloadTick] = useState(0)
 
     // `todayISO` is state (not per-render) so an overnight tab can detect the date
     // change on focus/visibility and trigger a refetch of shift_closing + clear stale
@@ -61,24 +58,27 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
 
     const isTodayScope = scope === 'day' && offset === 0
 
-    useEffect(() => {
+    // `refetch` là hàm fetch THẬT (không phải bump 1 tick cho effect tự chạy lại) — trả về
+    // promise chỉ resolve SAU KHI state đã cập nhật, để caller (vd handleSaveRestockEdit) await
+    // xong mới báo toast/đóng modal, tránh báo "đã lưu" trước khi báo cáo thật sự làm mới.
+    const refetch = useCallback(() => {
         // addressId === null (not undefined) means "Mẫu mặc định" (admin default
         // template) — a valid target, not "no address selected yet".
-        if (addressId === undefined) return
+        if (addressId === undefined) return Promise.resolve()
 
         setIsAsyncReady(false)
+        let promise
         if (isTodayScope) {
-            fetchDailyReportContext(addressId)
+            promise = fetchDailyReportContext(addressId)
                 .then((data) => {
                     setShiftClosing(data?.shift_closing || null)
                     setYesterdayClosing(data?.yesterday_closing || null)
                     setTodayPayments(data?.target_payments || [])
                 })
                 .catch((error) => onError?.(error, 'Tải báo cáo hôm nay'))
-                .finally(() => setIsAsyncReady(true))
         } else if (scope === 'day') {
             const targetDateStr = dateStringVN(rangeStart)
-            fetchReportByDate(addressId, targetDateStr)
+            promise = fetchReportByDate(addressId, targetDateStr)
                 .then((data) => {
                     setShiftClosing(data?.shift_closing || null)
                     setYesterdayClosing(data?.yesterday_closing || null)
@@ -87,10 +87,9 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
                     setApiPayments(data?.target_payments || [])
                 })
                 .catch((error) => onError?.(error, `Tải báo cáo ngày ${targetDateStr}`))
-                .finally(() => setIsAsyncReady(true))
         } else {
             // Range scopes (week/month/custom)
-            fetchReportByRange(addressId, rangeStart.toISOString(), rangeEnd.toISOString(), prevStart.toISOString(), prevEnd.toISOString())
+            promise = fetchReportByRange(addressId, rangeStart.toISOString(), rangeEnd.toISOString(), prevStart.toISOString(), prevEnd.toISOString())
                 .then((data) => {
                     // Khử trùng phiếu chốt về 1 phiếu mới nhất/ngày VN — khớp report Ngày,
                     // tránh double-count Thực thu/hao hụt ở Tuần/Tháng (xem dedupeShiftClosingsByDay).
@@ -108,16 +107,20 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
                     }
                 })
                 .catch((error) => onError?.(error, 'Tải báo cáo theo khoảng'))
-                .finally(() => setIsAsyncReady(true))
         }
-        // todayISO so a midnight rollover invalidates cached shift_closing.
+        return promise.finally(() => setIsAsyncReady(true))
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [addressId, scope, offset, rangeStart, rangeEnd, isTodayScope, todayISO, reloadTick])
+    }, [addressId, scope, offset, rangeStart, rangeEnd, isTodayScope, prevStart, prevEnd])
+
+    // todayISO in deps: a midnight rollover invalidates cached shift_closing.
+    useEffect(() => {
+        refetch()
+    }, [refetch, todayISO])
 
     return {
         todayISO,
         isTodayScope,
-        refetch: () => setReloadTick(t => t + 1),
+        refetch,
         rangeStart, rangeEnd, prevStart, prevEnd,
         shiftClosing, setShiftClosing,
         yesterdayClosing,

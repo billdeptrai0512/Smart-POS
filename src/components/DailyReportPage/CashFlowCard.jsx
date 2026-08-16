@@ -166,9 +166,12 @@ export default function CashFlowCard({
         const b = ensureBlock(cat.key === 'packaging' ? 'Mua bao bì' : 'Mua nguyên liệu', cat.key === 'packaging' ? 20 : 10)
         for (const r of groupByIngredient(pays)) {
             b.total += r.amount; b.count += r.count
-            // Chỉ mở sửa được khi cả nhóm chỉ gộp từ 1 hoá đơn (1 expense_id) — gộp
-            // nhiều lần mua/trả nợ khác hoá đơn thì không có phiếu duy nhất để mở.
-            const oneInvoice = r.payments.every(p => p.expense_id === r.payments[0]?.expense_id)
+            // Chỉ mở sửa được khi cả nhóm chỉ gộp từ 1 hoá đơn CÓ ingredient (1 expense_id
+            // + có invoice_metadata.ingredient) — gộp nhiều lần mua/trả nợ khác hoá đơn, hoặc
+            // payment không gắn nguyên liệu (vd trả nợ NCC chung), thì không có phiếu để mở.
+            const firstExpenseId = r.payments[0]?.expense_id
+            const oneInvoice = !!firstExpenseId && !!r.payments[0]?.invoice_metadata?.ingredient
+                && r.payments.every(p => p.expense_id === firstExpenseId)
             b.children.push({
                 key: r.key, name: r.name, amount: r.amount, count: r.count, phase: r.phase, method: r.method,
                 restockPayment: oneInvoice ? r.payments[0] : null,

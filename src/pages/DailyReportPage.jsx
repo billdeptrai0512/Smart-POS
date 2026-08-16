@@ -375,15 +375,21 @@ export default function DailyReportPage() {
     // fetch lại đầy đủ (không dùng payment gộp của CashFlowCard) vì cần amount/discount/
     // extra_cost/payments gốc của cả hoá đơn, không chỉ phần trả trong kỳ báo cáo đang xem.
     const [editingRestock, setEditingRestock] = useState(null)
+    // Token chống race: bấm nhanh 2 dòng khác nhau trước khi fetch trước xong → chỉ áp
+    // kết quả của lượt bấm MỚI NHẤT, không để lượt cũ resolve trễ ghi đè modal đang mở.
+    const restockFetchTokenRef = useRef(0)
     const handleEditRestockPayment = async (payment) => {
         const ingredient = payment?.invoice_metadata?.ingredient
         const expenseId = payment?.expense_id
         if (!ingredient || !expenseId) return
         const addressId = payment.address_id || selectedAddress?.id
+        const token = ++restockFetchTokenRef.current
         try {
             const history = await fetchIngredientRestockHistory([addressId], ingredient, new Date(0).toISOString(), new Date().toISOString())
+            if (restockFetchTokenRef.current !== token) return
             const entry = history.find(h => h.id === expenseId)
             if (entry) setEditingRestock({ entry, addressId, ingredient })
+            else showError(Object.assign(new Error('Không tìm thấy phiếu nhập kho'), { expected: true }), 'Mở phiếu nhập kho')
         } catch (err) { showError(err, 'Tải phiếu nhập kho') }
     }
     const handleSaveRestockEdit = async (form) => {
