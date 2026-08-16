@@ -532,6 +532,24 @@ export async function reopenTable(addressId: UUID, tableName: string, closedAt: 
     if (error) throw error
 }
 
+// Gộp bàn (chuyển hết đợt) / tách bàn (chuyển một đợt) đều là MỘT thao tác: đổi
+// table_name của các đợt (order) đã chọn. Không đụng total/order_no — mỗi đợt giữ
+// nguyên số hoá đơn đã cấp lúc tạo (xem orderNo trong TableDetailModal), gộp/tách chỉ
+// đổi nhóm hiển thị. Cùng trust boundary như closeTable (chỉ đổi nhãn bàn, không đụng
+// tiền) nên update thẳng, không cần RPC riêng.
+export async function moveTableRounds(addressId: UUID, orderIds: UUID[], targetTableName: string): Promise<void> {
+    if (!supabase) throw new Error('No Supabase connection')
+
+    const { error } = await supabase
+        .from('orders')
+        .update({ table_name: targetTableName })
+        .eq('address_id', addressId)
+        .in('id', orderIds)
+        .is('table_closed_at', null)
+
+    if (error) throw error
+}
+
 // ---- Compat barrel: existing call sites import everything from this file.
 // New code should prefer the focused service files directly.
 export * from './productService'

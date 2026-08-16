@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { fetchTodayStats, submitOrder, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext, fetchOpenTables, closeTable, reopenTable, markOrderServed, mergeTableLines, tableLineName } from '../services/orderService'
+import { fetchTodayStats, submitOrder, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext, fetchOpenTables, closeTable, reopenTable, markOrderServed, mergeTableLines, tableLineName, moveTableRounds as moveTableRoundsService } from '../services/orderService'
 import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder, addPendingTableClose, removePendingTableClose } from '../hooks/useOfflineSync'
 import { useOrdersPoll } from '../hooks/useOrdersPoll'
@@ -227,6 +227,60 @@ export function POSProvider() {
             }
         }
     }, [addressId, refreshTables, showToast, showError])
+
+    // Gộp (chuyển hết đợt của bàn) / tách (chuyển một đợt) đều gọi hàm này — chỉ khác
+    // orderIds truyền vào. Áp lạc quan NGAY vào openTables (như handleCloseTable/
+    // toggleServed) rồi mới gọi mạng — đợi round-trip xong mới vẽ lại là lý do bấm xong
+    // đứng khựng một nhịp mới thấy đợt nhảy bàn. Đợt tự mang nguyên total/lines/orderNo
+    // của nó (xem comment orderNo ở TableDetailModal), chỉ đổi NHÓM nó thuộc về, nên dựng
+    // lại state từ dữ liệu đang có mà không cần hỏi lại server.
+    const moveTableRounds = useCallback(async (orderIds, targetTableName) => {
+        const idSet = new Set(orderIds)
+        const name = targetTableName?.trim()
+        if (!addressId || !idSet.size || !name) return
+        const linesOf = (rounds) => rounds.reduce((ls, r) => mergeTableLines(ls, r.lines), [])
+
+        const prevTables = openTablesRef.current
+        const moved = []
+        // Bàn nào có đợt bị lấy đi thì dựng lại (rounds/total/lines mới); bàn hết đợt bị
+        // lọc bỏ luôn (bàn nguồn 1 đợt duy nhất khi gộp/tách hết). Không đụng object cũ —
+        // rollback (khi network lỗi) cần prevTables còn nguyên vẹn.
+        const withoutMoved = prevTables
+            .map(t => {
+                const stay = t.rounds.filter(r => !idSet.has(r.id))
+                if (stay.length === t.rounds.length) return t
+                moved.push(...t.rounds.filter(r => idSet.has(r.id)))
+                return stay.length
+                    ? { ...t, rounds: stay, total: stay.reduce((s, r) => s + r.total, 0), lines: linesOf(stay) }
+                    : null
+            })
+            .filter(Boolean)
+
+        // orderIds không khớp round nào đang có trong state (VD state vừa đổi ở máy khác) —
+        // không có gì để áp lạc quan, cứ gọi mạng rồi refreshTables như đường cũ.
+        if (!moved.length) {
+            try { await moveTableRoundsService(addressId, orderIds, name); await refreshTables() }
+            catch (err) { showError(err, 'Chuyển bàn') }
+            return
+        }
+
+        const movedTotal = moved.reduce((s, r) => s + r.total, 0)
+        const movedLines = linesOf(moved)
+        const destIdx = withoutMoved.findIndex(t => t.name === name)
+        const nextTables = destIdx === -1
+            ? [...withoutMoved, { name, total: movedTotal, rounds: moved, openedAt: moved.reduce((min, r) => r.createdAt < min ? r.createdAt : min, moved[0].createdAt), lines: movedLines }]
+            : withoutMoved.map((t, i) => i === destIdx
+                ? { ...t, rounds: [...t.rounds, ...moved], total: t.total + movedTotal, lines: mergeTableLines(t.lines, movedLines) }
+                : t)
+
+        setOpenTables(nextTables)
+        try {
+            await moveTableRoundsService(addressId, orderIds, name)
+        } catch (err) {
+            setOpenTables(prevTables)
+            showError(err, 'Chuyển bàn')
+        }
+    }, [addressId, refreshTables, showError])
 
     // ---- Offline sync ----
     const handleSyncComplete = useCallback(() => {
@@ -975,7 +1029,7 @@ export function POSProvider() {
         handleAddItem, cancelHeld, handleToggleExtra, handleToggleStickyExtra, commitHeld, reopenRoundIntoCart,
         setItemDiscount,
         dineIn, handleConfirm, tableName, setTableName,
-        openTables, refreshTables, handleCloseTable, toggleServed,
+        openTables, refreshTables, handleCloseTable, toggleServed, moveTableRounds,
         enabledStickyExtraIds,
         total, orderCount, hasOrder,
         discountAmount, finalTotal,
@@ -983,7 +1037,7 @@ export function POSProvider() {
         toast, showToast, showError,
         // deliberately partial deps, see comment above
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [cart, activeCartItemId, dineIn, tableName, openTables, refreshTables, handleCloseTable, toggleServed, enabledStickyExtraIds, total, orderCount, hasOrder, discountAmount, finalTotal, recentOrders, draftOrder, enterKey, toast, showToast, showError])
+    }), [cart, activeCartItemId, dineIn, tableName, openTables, refreshTables, handleCloseTable, toggleServed, moveTableRounds, enabledStickyExtraIds, total, orderCount, hasOrder, discountAmount, finalTotal, recentOrders, draftOrder, enterKey, toast, showToast, showError])
 
     const statsValue = useMemo(() => ({
         revenue, totalCost, cupsSold, isOnline,

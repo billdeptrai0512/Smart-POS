@@ -222,6 +222,7 @@ export default function TableModal({ onClose }) {
             {detailTable && (
                 <TableDetailModal
                     table={detailTable}
+                    tableNames={names}
                     onClose={() => setDetail(null)}
                     onPick={() => pick(detail)}
                 />
