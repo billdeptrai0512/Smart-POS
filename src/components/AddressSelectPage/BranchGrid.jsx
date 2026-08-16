@@ -30,6 +30,7 @@ export default function BranchGrid({
     const [deleting, setDeleting] = useState(false)
     const [backupAddressId, setBackupAddressId] = useState(null) // which card has the "Nhân bản cấu hình" modal open
     const [expandedActionsId, setExpandedActionsId] = useState(null) // which card has the 3-action menu open
+    const [actionsTab, setActionsTab] = useState('shortcuts') // tab đang mở trong modal thao tác: 'shortcuts' | 'manage'
     const [wipingAddressId, setWipingAddressId] = useState(null) // which card has the wipe-sales-data confirm modal open
     const [wipeConfirmName, setWipeConfirmName] = useState('')
     const [wiping, setWiping] = useState(false)
@@ -262,7 +263,7 @@ export default function BranchGrid({
                                         />
                                         {!isStaff && (
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); setExpandedActionsId(addr.id) }}
+                                                onClick={(e) => { e.stopPropagation(); setExpandedActionsId(addr.id); setActionsTab('shortcuts') }}
                                                 className="relative w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/50 text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all shrink-0 before:absolute before:-inset-1.5 before:content-['']"
                                                 title="Thao tác khác"
                                                 aria-label="Mở menu thao tác"
@@ -289,13 +290,29 @@ export default function BranchGrid({
                                                 <X size={16} />
                                             </button>
                                         </div>
+                                        {!isStaff && (
+                                            <div className="flex gap-1.5 px-3 pt-3 pb-2 shrink-0">
+                                                <button
+                                                    onClick={() => setActionsTab('shortcuts')}
+                                                    className={`flex-1 py-2 rounded-[10px] text-xs font-black uppercase tracking-wider transition-colors ${actionsTab === 'shortcuts' ? 'bg-primary/10 text-primary' : 'bg-surface-light text-text-secondary hover:text-text'}`}
+                                                >
+                                                    Lối tắt
+                                                </button>
+                                                <button
+                                                    onClick={() => setActionsTab('manage')}
+                                                    className={`flex-1 py-2 rounded-[10px] text-xs font-black uppercase tracking-wider transition-colors ${actionsTab === 'manage' ? 'bg-primary/10 text-primary' : 'bg-surface-light text-text-secondary hover:text-text'}`}
+                                                >
+                                                    Quản lý
+                                                </button>
+                                            </div>
+                                        )}
                                         <div
                                             className="overflow-y-auto"
                                             ref={checkActionsScrollFade}
                                             onScroll={(e) => checkActionsScrollFade(e.currentTarget)}
                                         >
-                                            {!isStaff && (
-                                                <div className="px-3 pt-3 pb-1 flex flex-col gap-3">
+                                            {!isStaff && actionsTab === 'shortcuts' && (
+                                                <div className="px-3 pt-3 pb-5 flex flex-col gap-4">
                                                     <div>
                                                         <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Nhật ký</p>
                                                         <div className="grid grid-cols-2 gap-2">
@@ -374,8 +391,8 @@ export default function BranchGrid({
                                                 </div>
                                             )}
 
-                                            <div className="px-3 pt-2 pb-3">
-                                                <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Quản lý</p>
+                                            {actionsTab === 'manage' && (
+                                            <div className="px-3 pt-3 pb-5">
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <ActionPill
                                                         icon={<ClipboardCopy size={16} />}
@@ -422,6 +439,7 @@ export default function BranchGrid({
                                                     />
                                                 </div>
                                             </div>
+                                            )}
                                         </div>
                                         {actionsScrollFade && (
                                             <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-surface to-transparent" />

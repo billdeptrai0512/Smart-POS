@@ -1,4 +1,6 @@
-import type { Discount, DiscountResult } from '../types/domain'
+import type { CartItem, Discount, DiscountResult } from '../types/domain'
+
+export const NO_DISCOUNT: Discount = { type: 'percent', value: 0 }
 
 // Format VND currency
 export function formatVND(amount: number): string {
@@ -32,6 +34,14 @@ export function computeDiscount(subtotal: number, discount: Discount): DiscountR
             ? Math.round(subtotal * Math.min(discount.value, 100) / 100)
             : Math.min(discount.value, subtotal)
     return { discountAmount, finalTotal: Math.max(0, subtotal - discountAmount) }
+}
+
+// Gross subtotal of one cart line (product + extras) × quantity, before that
+// line's own discount. Shared by POSContext (order totals) and the cart list's
+// per-item discount modal (its subtotal).
+export function cartLineSubtotal(item: CartItem): number {
+    const extrasPrice = (item.extras || []).reduce((sum, e) => sum + e.price, 0)
+    return (item.basePrice + extrasPrice) * item.quantity
 }
 
 // Suy % từ số đ đã giảm — orders chỉ lưu discount_amount, không lưu %/đ đã CHỌN lúc áp

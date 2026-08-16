@@ -1,14 +1,15 @@
 import { useState, useRef, useMemo, useEffect, memo } from 'react'
 import { Percent, Trash2, Printer } from 'lucide-react'
-import { formatVND, computeDiscount, discountToPercent } from '../../utils'
+import { formatVND, computeDiscount, discountToPercent, NO_DISCOUNT } from '../../utils'
 import { dateShortVN, timeStringVN } from '../../utils/dateVN'
 import { priceLineFor } from '../../utils/billLines'
+import { useDiscountEditing } from '../../hooks/useDiscountEditing'
 import { useConfirm } from '../../contexts/ConfirmContext'
 import { useProducts } from '../../contexts/ProductContext'
-import DiscountModal from '../POSPage/DiscountModal'
+import DiscountEditor from '../POSPage/DiscountEditor'
 import PrintBill from '../common/PrintBill'
 
-// Nút icon tròn trên thẻ đơn (giảm giá, in, xoá) — cùng một khuôn, tách ra để đổi kiểu
+// Nút icon tròn trên thẻ đơn (in, xoá) — cùng một khuôn, tách ra để đổi kiểu
 // một lần. Cùng kích thước với hàng nút trong TableDetailModal.
 const ICON_BTN = 'shrink-0 w-[26px] h-[26px] rounded-full border bg-surface-light border-border/60 flex items-center justify-center transition-colors'
 
@@ -73,22 +74,14 @@ export default function OrdersList({
 const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, setDeletingId, onDeleteOrder, onUpdateDiscount, onDeleteOffline, isNew, dineIn }) {
     const confirm = useConfirm()
     const { products, productExtras } = useProducts()
-    const [showDiscount, setShowDiscount] = useState(false)
+    // Cùng pattern CartListModal (giỏ hàng chưa gửi), áp cho đơn ĐÃ CHỐT.
+    const { editingId: editingItemId, preview, setPreview, toggleEditing } = useDiscountEditing()
     const date = new Date(order.createdAt)
     const time = timeStringVN(date)
 
     const discountAmount = order.discountAmount || 0
-    const subtotal = order.total + discountAmount   // pre-discount price (for the modal + struck original)
-    // Chỉ lưu đúng số đ đã giảm, không lưu %/đ type đã chọn lúc áp — % hiển thị ở nút/bill in
-    // và seed lại DiscountModal đều suy ngược qua discountToPercent (không hardcode), đúng
-    // cho cả 2 cách giảm (theo % lẫn theo đúng số tiền) sau khi đã lưu. `exact` quyết định
-    // seedDiscount seed "%" hay "đ" — xem comment ở discountToPercent (src/utils/money.ts).
-    const { pct: discountPct, exact: discountPctExact } = discountToPercent(subtotal, discountAmount)
-    const seedDiscount = !discountAmount
-        ? { type: 'percent', value: 0 }
-        : discountPctExact
-            ? { type: 'percent', value: discountPct }
-            : { type: 'amount', value: discountAmount }
+    const subtotal = order.total + discountAmount   // pre-discount price (cho tổng gạch ngang + bill in)
+    const { pct: discountPct } = discountToPercent(subtotal, discountAmount)
     // Online, non-deleted orders are the only ones we can edit/discount against the DB.
     const editable = !order.deletedAt && !order.isOffline
 
@@ -99,9 +92,19 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
     const billRef = useRef(null)
     const [printArmed, setPrintArmed] = useState(false)
 
+    // Đơn giá bán từng dòng — order_items không lưu giá, tính lại từ giá món/topping
+    // ĐANG hiệu lực trong menu (giống bill in) — dùng chung cho hiển thị lẫn sửa giảm
+    // giá theo dòng ở dưới.
+    function lineSubtotal(item) {
+        return priceLineFor(item, products, productExtras).unitPrice * item.quantity
+    }
+
     const billLines = useMemo(() => {
         if (!canPrint) return []
-        return (order.items || []).map(it => ({ key: it.text, qty: it.quantity, ...priceLineFor(it, products, productExtras) }))
+        return (order.items || []).map(it => ({
+            key: it.id ?? it.text, qty: it.quantity, discountAmount: it.discountAmount || 0,
+            ...priceLineFor(it, products, productExtras),
+        }))
     }, [canPrint, order.items, products, productExtras])
 
     // Chỉ 1 thẻ được mang id="print-bill" tại 1 thời điểm (CSS @media print chọn theo id) —
@@ -130,6 +133,17 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
         }
     }
 
+    // Giảm giá riêng dòng `item` — ghi lại dòng đó VÀ tổng đơn (cộng dồn tất cả dòng)
+    // trong một lệnh (xem update_order_discount RPC) để không lệch giữa chừng.
+    function handleItemDiscount(item, d) {
+        const itemDiscount = computeDiscount(lineSubtotal(item), d).discountAmount
+        const nextItems = (order.items || []).map(it => it.id === item.id ? { ...it, discountAmount: itemDiscount } : it)
+        const grossTotal = nextItems.reduce((sum, it) => sum + lineSubtotal(it), 0)
+        const nextDiscountTotal = nextItems.reduce((sum, it) => sum + (it.discountAmount || 0), 0)
+        onUpdateDiscount(order.id, grossTotal - nextDiscountTotal, nextDiscountTotal, [{ id: item.id, discount_amount: itemDiscount }])
+        toggleEditing(item.id)
+    }
+
     return (
         <div className={`bg-surface border rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden transition-shadow duration-[1500ms] ${isNew ? 'border-primary shadow-[0_0_16px_rgba(255,107,53,0.45)]' : 'border-border/60'}`}>
             {/* Đơn vừa nhận realtime từ máy khác — glow cam vài giây rồi tự tắt (justArrivedIds ở POSContext) để nhân viên quầy nhận ra ngay, không phải nhìn chằm chằm danh sách */}
@@ -144,26 +158,13 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                     Offline
                 </div>
             )}
-            
+
             <div className={`flex flex-col gap-2 ${order.deletedAt ? 'opacity-40 grayscale select-none' : ''}`}>
                 <div className="flex justify-between items-center mb-1">
                     <div className="flex items-baseline gap-2 mt-1">
                         <span className="font-black text-[14px] text-primary">+ {formatVND(order.total)}</span>
                         {discountAmount > 0 && (
                             <span className="text-text-secondary/60 text-[12px] font-bold line-through tabular-nums">{formatVND(subtotal)}</span>
-                        )}
-                        {editable && (
-                            <button
-                                onClick={() => setShowDiscount(true)}
-                                aria-label="Giảm giá"
-                                className={discountAmount > 0
-                                    // Đã có giảm giá → hiện luôn mức % thay vì icon trơ, để không
-                                    // phải mở lại modal mới biết đã giảm bao nhiêu.
-                                    ? 'shrink-0 h-[26px] px-2.5 rounded-full border bg-primary/10 border-primary/40 text-primary text-[11px] font-black tabular-nums flex items-center justify-center self-center transition-colors hover:bg-primary/20'
-                                    : `${ICON_BTN} self-center text-text-secondary hover:text-primary`}
-                            >
-                                {discountAmount > 0 ? `-${discountPct}%` : <Percent size={14} strokeWidth={2.25} />}
-                            </button>
                         )}
                     </div>
                     {!order.deletedAt && (
@@ -174,11 +175,53 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                 </div>
                 <div className="mb-1 border-t border-border/40 pt-2">
                     <div className="flex flex-col gap-1.5">
-                        {order.items?.length > 0 ? order.items.map((item, idx) => (
-                            <div key={idx} className="flex flex-row gap-2 items-start w-full">
-                                <span className={`text-[14px] leading-snug font-medium max-w-[85%] whitespace-pre-wrap text-text ${order.deletedAt ? 'line-through' : ''}`}>{item.text}</span>
-                            </div>
-                        )) : (
+                        {order.items?.length > 0 ? order.items.map((item, idx) => {
+                            const itemSubtotal = lineSubtotal(item)
+                            const committedAmount = item.discountAmount || 0
+                            const { pct: itemPct, exact: itemPctExact } = discountToPercent(itemSubtotal, committedAmount)
+                            const seedDiscount = !committedAmount
+                                ? NO_DISCOUNT
+                                : itemPctExact ? { type: 'percent', value: itemPct } : { type: 'amount', value: committedAmount }
+                            const editing = editable && editingItemId === item.id
+                            const displayDiscount = editing && preview ? preview : seedDiscount
+                            const { discountAmount: liveDiscount, finalTotal: liveFinal } = computeDiscount(itemSubtotal, displayDiscount)
+
+                            return (
+                                <div key={item.id ?? idx} className="flex flex-col gap-1.5 w-full">
+                                    <div className="flex items-center gap-2 w-full">
+                                        <span className={`flex-1 min-w-0 text-[14px] leading-snug font-medium whitespace-pre-wrap text-text ${order.deletedAt ? 'line-through' : ''}`}>{item.text}</span>
+                                        <span className="shrink-0 flex flex-col items-end">
+                                            {liveDiscount > 0 && (
+                                                <span className="text-[10px] font-bold text-text-secondary/60 line-through tabular-nums">{formatVND(itemSubtotal)}</span>
+                                            )}
+                                            <span className="text-[12px] font-bold tabular-nums text-text">{formatVND(liveFinal)}</span>
+                                        </span>
+                                        {editable && item.id && (
+                                            <button
+                                                onClick={() => toggleEditing(item.id)}
+                                                aria-label={`Giảm giá ${item.text}`}
+                                                className={`shrink-0 h-[22px] min-w-[22px] px-2 rounded-full border flex items-center justify-center transition-colors ${liveDiscount > 0 ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/60 text-text-secondary hover:text-text'}`}
+                                            >
+                                                {liveDiscount > 0
+                                                    ? <span className="text-[11px] font-black tabular-nums">-{displayDiscount.type === 'percent' ? `${displayDiscount.value}%` : formatVND(displayDiscount.value)}</span>
+                                                    : <Percent size={12} strokeWidth={2.5} />}
+                                            </button>
+                                        )}
+                                    </div>
+                                    {editing && (
+                                        <div className="pb-2 space-y-3">
+                                            <DiscountEditor
+                                                discount={seedDiscount}
+                                                onPreview={setPreview}
+                                                secondaryLabel="Hủy"
+                                                onSecondary={() => toggleEditing(item.id)}
+                                                onApply={(d) => handleItemDiscount(item, d)}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            )
+                        }) : (
                             <span className="text-text text-[14px] leading-snug font-medium whitespace-pre-wrap">Không có chi tiết</span>
                         )}
                     </div>
@@ -214,26 +257,13 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                 </div>
             </div>
 
-            {editable && (
-                <DiscountModal
-                    open={showDiscount}
-                    onClose={() => setShowDiscount(false)}
-                    subtotal={subtotal}
-                    discount={seedDiscount}
-                    onApply={(d) => {
-                        const { discountAmount: amt, finalTotal } = computeDiscount(subtotal, d)
-                        onUpdateDiscount(order.id, finalTotal, amt)
-                    }}
-                />
-            )}
-
             {/* Chỉ mount khi đang in (printArmed) — nếu mount thường trực ở MỌI thẻ mang
                 đi thì nhiều thẻ cùng có id="print-bill" một lúc, CSS @media print (index.css)
                 chọn theo id sẽ hiện chồng hết lên nhau. */}
             {printArmed && (
                 <PrintBill
                     ref={billRef}
-                    orderNo={null}
+                    orderNo={order.orderNo}
                     tableName={null}
                     openedAt={order.createdAt}
                     staffName={order.staffName}

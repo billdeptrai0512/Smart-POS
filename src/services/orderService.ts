@@ -17,6 +17,7 @@ import { supabase } from '../lib/supabaseClient'
 // circular imports, captures `undefined` (prod crash: "reading 'isGuest' of undefined").
 import * as localRepo from './localRepository'
 import { startOfDayVN, dateStringVN } from '../utils/dateVN'
+import { cartLineSubtotal, computeDiscount, NO_DISCOUNT } from '../utils'
 import { reportCache, invalidateReportCache } from './cache'
 import type { UUID, CartItem, CostPerItem, OrderPayload, TodayStats } from '../types/domain'
 
@@ -82,6 +83,7 @@ export async function fetchTodayStats(addressId: UUID | null): Promise<TodayStat
 // là dòng đơn đồng bộ về từ máy khác thiếu thông tin so với dòng nạp lúc mở trang.
 const ORDER_SELECT = `
     id,
+    order_no,
     total,
     total_cost,
     discount_amount,
@@ -92,11 +94,13 @@ const ORDER_SELECT = `
     served_at,
     table_closed_at,
     order_items (
+        id,
         quantity,
         options,
         product_id,
         unit_cost,
         extra_ids,
+        discount_amount,
         products (
             name
         )
@@ -164,6 +168,11 @@ export async function fetchOrdersByIds(ids: UUID[]): Promise<any[]> {
     return data || []
 }
 
+// Số đ đã giảm cho một dòng giỏ hàng — item.discount là {type, value} chọn ở
+// CartListModal, resolve về đ để gửi đi (order_items.discount_amount cùng dạng
+// resolved-amount như orders.discount_amount, không lưu %/đ đã chọn).
+const lineDiscountAmount = (item: CartItem) => computeDiscount(cartLineSubtotal(item), item.discount || NO_DISCOUNT).discountAmount
+
 // Submit a complete order to Supabase using RPC for atomic transaction
 // totalCost: tổng giá vốn của bill (snapshot)
 // costPerItem: Map<cartItemId, unitCost> giá vốn mỗi dòng (snapshot)
@@ -190,10 +199,15 @@ export async function submitOrder(
             address_id: addressId,
             staff_name: staffName,
             order_items: cart.map(item => ({
+                // Local (guest) rows never touch the DB, nên tự sinh id ở client —
+                // updateLocalOrderDiscount cần nó để sửa giảm giá đúng dòng sau này,
+                // giống order_items.id thật ở nhánh Supabase bên dưới.
+                id: crypto.randomUUID(),
                 product_id: item.productId,
                 quantity: item.quantity,
                 options: item.extras?.length > 0 ? item.extras.map(e => e.name).join(', ') : null,
-                unit_cost: Math.round(costPerItem[item.cartItemId] || 0)
+                unit_cost: Math.round(costPerItem[item.cartItemId] || 0),
+                discount_amount: lineDiscountAmount(item)
             }))
         })
     }
@@ -202,6 +216,8 @@ export async function submitOrder(
     // total/totalCost/costPerItem are NOT sent — bulk_create_orders recomputes
     // price and COGS server-side from products/recipes, so a tampered client
     // can't write an arbitrary total. The client only declares WHAT was bought.
+    // discount_amount per item is trusted as-is (same trust boundary as the
+    // order-level discount_amount above — see 20260816_order_items_line_discount.sql).
     const orderPayload: OrderPayload = {
         id,
         discount_amount: Math.round(discountAmount),
@@ -212,7 +228,8 @@ export async function submitOrder(
         items: cart.map(item => ({
             product_id: item.productId,
             quantity: item.quantity,
-            extra_ids: item.extras?.length > 0 ? item.extras.map(e => e.id).filter(Boolean) : []
+            extra_ids: item.extras?.length > 0 ? item.extras.map(e => e.id).filter(Boolean) : [],
+            discount_amount: lineDiscountAmount(item)
         }))
     }
 
@@ -250,6 +267,7 @@ export async function bulkSubmitOrders(ordersArray: any[]): Promise<boolean> {
                 quantity: item.quantity,
                 options: item.extras?.length > 0 ? item.extras.map((e: any) => e.name).join(', ') : null,
                 unit_cost: Math.round(item.unitCost || 0),
+                discount_amount: lineDiscountAmount(item),
             })),
         }))
         return true
@@ -271,7 +289,8 @@ export async function bulkSubmitOrders(ordersArray: any[]): Promise<boolean> {
         items: o.orderItems.map((item: any) => ({
             product_id: item.productId,
             quantity: item.quantity,
-            extra_ids: item.extras?.length > 0 ? item.extras.map((e: any) => e.id).filter(Boolean) : (item.extraIds || []).filter(Boolean)
+            extra_ids: item.extras?.length > 0 ? item.extras.map((e: any) => e.id).filter(Boolean) : (item.extraIds || []).filter(Boolean),
+            discount_amount: lineDiscountAmount(item)
         }))
     }))
 
@@ -302,17 +321,22 @@ export async function deleteOrder(orderId: UUID, staffName: string | null = null
 }
 
 // Re-apply / edit a per-order discount after the fact. `total` is the new charged
-// amount (subtotal − discount); discount_amount stores the đ reduced. COGS (total_cost)
-// is unchanged — a discount affects revenue, not cost. addressId unknown → flush all.
-export async function updateOrderDiscount(orderId: UUID, total: number, discountAmount: number): Promise<boolean> {
+// amount (subtotal − discount); discount_amount stores the đ reduced. itemDiscounts
+// (optional) additionally sets order_items.discount_amount per line, in the SAME
+// transaction as the order update (see update_order_discount RPC) — không phải hai
+// ghi riêng có thể lệch nhau giữa chừng. COGS (total_cost) is unchanged — a discount
+// affects revenue, not cost. addressId unknown → flush all.
+export async function updateOrderDiscount(orderId: UUID, total: number, discountAmount: number, itemDiscounts: { id: UUID, discount_amount: number }[] = []): Promise<boolean> {
     invalidateReportCache(null)
-    if (localRepo.isGuest()) return (localRepo.updateLocalOrderDiscount as any)(orderId, total, discountAmount)
+    if (localRepo.isGuest()) return (localRepo.updateLocalOrderDiscount as any)(orderId, total, discountAmount, itemDiscounts)
     if (!supabase) throw new Error('No Supabase connection')
 
-    const { error } = await supabase
-        .from('orders')
-        .update({ total, discount_amount: discountAmount })
-        .eq('id', orderId)
+    const { error } = await supabase.rpc('update_order_discount', {
+        p_order_id: orderId,
+        p_total: total,
+        p_discount_amount: discountAmount,
+        p_item_discounts: itemDiscounts,
+    })
 
     if (error) throw error
 
@@ -334,8 +358,8 @@ export async function fetchOrdersByRange(addressId: UUID | null, start: Date, en
         if (!supabase) return []
         let query = supabase
             .from('orders')
-            .select(`id, total, total_cost, payment_method, staff_name, table_name, created_at, deleted_at, deleted_by,
-                order_items(quantity, options, product_id, unit_cost, extra_ids, products(name))`)
+            .select(`id, order_no, total, total_cost, discount_amount, payment_method, staff_name, table_name, created_at, deleted_at, deleted_by,
+                order_items(id, quantity, options, product_id, unit_cost, extra_ids, discount_amount, products(name))`)
             .gte('created_at', start.toISOString())
             .lte('created_at', end.toISOString())
         if (addressId) query = query.eq('address_id', addressId)
@@ -388,7 +412,7 @@ export async function fetchRecentOrders(addressId: UUID | null, limit = 3): Prom
 // items = nguyên liệu để DỰNG LẠI giỏ khi sửa đợt (product_id + extra_ids), khác lines
 // vốn chỉ là chữ để đọc. Không suy ngược được từ lines: hai topping có thể trùng tên.
 export type TableLine = { name: string; qty: number }
-export type TableRoundItem = { productId: UUID; qty: number; extraIds: UUID[] }
+export type TableRoundItem = { productId: UUID; qty: number; extraIds: UUID[]; discountAmount: number }
 export type TableRound = { id: UUID; orderNo: number | null; createdAt: string; total: number; discountAmount: number; servedAt: string | null; staffName: string | null; lines: TableLine[]; items: TableRoundItem[] }
 export type OpenTable = { name: string; total: number; rounds: TableRound[]; openedAt: string; lines: TableLine[] }
 
@@ -435,7 +459,7 @@ export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable
 
     const { data, error } = await supabase
         .from('orders')
-        .select('id, order_no, total, discount_amount, created_at, served_at, staff_name, table_name, order_items(quantity, options, product_id, extra_ids, products(name))')
+        .select('id, order_no, total, discount_amount, created_at, served_at, staff_name, table_name, order_items(quantity, options, product_id, extra_ids, discount_amount, products(name))')
         .eq('address_id', addressId)
         .is('deleted_at', null)
         .is('table_closed_at', null)
@@ -463,7 +487,7 @@ export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable
             staffName: o.staff_name ?? null,
             lines: roundLines,
             items: (o.order_items || []).map((i: any) => ({
-                productId: i.product_id, qty: i.quantity, extraIds: i.extra_ids || [],
+                productId: i.product_id, qty: i.quantity, extraIds: i.extra_ids || [], discountAmount: i.discount_amount || 0,
             })),
         })
         t.lines = mergeTableLines(t.lines, roundLines)

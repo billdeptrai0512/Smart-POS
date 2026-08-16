@@ -693,12 +693,16 @@ export const deleteLocalOrder = (orderId: string, staffName: string | null) => {
     return true;
 };
 
-export const updateLocalOrderDiscount = (orderId: string, total: number, discountAmount: number) => {
+export const updateLocalOrderDiscount = (orderId: string, total: number, discountAmount: number, itemDiscounts: { id: string, discount_amount: number }[] = []) => {
     const orders = get(KEYS.ORDERS);
     const o = orders.find(o => o.id === orderId);
     if (o) {
         o.total = total;
         o.discount_amount = discountAmount;
+        for (const { id, discount_amount } of itemDiscounts) {
+            const item = (o.order_items || o.items || []).find((it: Row) => it.id === id);
+            if (item) item.discount_amount = discount_amount;
+        }
         set(KEYS.ORDERS, orders);
     }
     return true;

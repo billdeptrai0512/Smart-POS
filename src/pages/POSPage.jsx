@@ -29,7 +29,7 @@ export default function POSPage() {
         handleToggleStickyExtra,
         commitHeld,
         dineIn, handleConfirm, tableName,
-        total, hasOrder, discount, setDiscount, discountAmount, finalTotal,
+        hasOrder, discountAmount, finalTotal, setItemDiscount,
     } = useCart()
     const { isOnline } = useStats()
     const { handleLoadHistory } = useHistory()
@@ -109,11 +109,10 @@ export default function POSPage() {
 
             {dineIn && (
                 <CheckoutBar
-                    total={total}
-                    discount={discount}
                     discountAmount={discountAmount}
                     finalTotal={finalTotal}
-                    onApplyDiscount={setDiscount}
+                    cart={cart}
+                    onItemDiscount={setItemDiscount}
                     tableName={tableName}
                     onConfirm={handleConfirm}
                     disabled={!hasOrder}

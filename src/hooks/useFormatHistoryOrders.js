@@ -38,26 +38,32 @@ function groupItems(rawItems) {
 // Result is sorted newest-first.
 export function useFormatHistoryOrders({ baseOrders, pendingOrders, productById, getItemCost, isTodayScope }) {
     // Per-item cost computed once and reused for the order-total fallback.
+    // Không gộp theo tên món (khác formattedOffline bên dưới) — sửa giảm giá theo dòng
+    // (OrdersList) cần bám đúng dòng order_items thật (id + discount_amount); gộp lại
+    // thì 1 món gọi 2 lần khác giảm giá sẽ không còn phân biệt được nữa.
     const formattedOnline = useMemo(() => baseOrders.map(o => {
-        const items = o.order_items ? groupItems(o.order_items.map(i => {
+        const items = (o.order_items || []).map(i => {
             const options = i.options
                 ? i.options.split(', ').filter(opt => opt !== 'Tiền mặt' && opt !== 'MoMo').join(' - ')
                 : ''
             const pName = productById.get(i.product_id)?.name || i.products?.name || '☕'
             const unitCost = getItemCost(i.product_id, i.extras || [], i.unit_cost || 0)
             return {
-                label: `${pName}${options ? ` (${options})` : ''}`,
+                id: i.id,
+                text: `${i.quantity} ${pName}${options ? ` (${options})` : ''}`,
                 cost: unitCost * i.quantity,
                 quantity: i.quantity,
                 productId: i.product_id,
                 extraIds: i.extra_ids || [],
+                discountAmount: i.discount_amount || 0,
             }
-        })) : []
+        })
         const cost = (o.total_cost > 0)
             ? o.total_cost
             : items.reduce((sum, item) => sum + item.cost, 0)
         return {
             id: o.id,
+            orderNo: o.order_no ?? null,
             total: o.total,
             discountAmount: o.discount_amount || 0,
             cost,

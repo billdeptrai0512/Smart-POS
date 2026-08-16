@@ -1,6 +1,6 @@
 import { forwardRef, useImperativeHandle, useRef } from 'react'
 import { formatVND } from '../../utils'
-import { timeStringVN, dateShortVN } from '../../utils/dateVN'
+import { timeStringVN, dateShortVN, dateFullVN } from '../../utils/dateVN'
 
 // Tờ bill khổ 80mm dùng chung cho bill theo BÀN (TableDetailModal) và bill ĐƠN LẺ
 // mang đi (OrdersList) — một mẫu in duy nhất, tránh 2 thiết kế lệch nhau khi sửa.
@@ -10,9 +10,10 @@ const BILL_COLS = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 58px 2
 
 const fullLabel = (d) => `${timeStringVN(d)} ${dateShortVN(d)}`
 
-// tableName truthy → bill theo bàn: "Bàn:" + "Giờ vào" (openedAt, cố định) + "Giờ ra"
-// (thời điểm bấm in, cập nhật lại mỗi lần in). tableName null → đơn mang đi: chỉ 1
-// mốc "Giờ" (openedAt = order.createdAt, cố định — không phải giờ bấm in lại).
+// tableName truthy → bill theo bàn: "Bàn: <tên>" + "Giờ vào" (openedAt, cố định) + "Giờ ra"
+// (thời điểm bấm in, cập nhật lại mỗi lần in). tableName null → đơn mang đi: "Bàn: Mang đi"
+// + 1 mốc "Giờ" (openedAt = order.createdAt, cố định, chỉ giờ không kèm ngày — ngày đã có
+// ở dòng "Ngày:" chung phía trên rồi).
 const PrintBill = forwardRef(function PrintBill(
     { orderNo, tableName, openedAt, staffName, lines, subtotal, discountTotal, discountPct, total },
     ref
@@ -28,7 +29,7 @@ const PrintBill = forwardRef(function PrintBill(
         print() {
             const now = new Date()
             if (printedAtRef.current) printedAtRef.current.textContent = fullLabel(now)
-            if (printDateRef.current) printDateRef.current.textContent = dateShortVN(now)
+            if (printDateRef.current) printDateRef.current.textContent = dateFullVN(now)
             printCountRef.current += 1
             if (printCountLabelRef.current) printCountLabelRef.current.textContent = String(printCountRef.current)
             window.print()
@@ -53,7 +54,7 @@ const PrintBill = forwardRef(function PrintBill(
                 Hoá đơn thanh toán
             </div>
             {orderNo != null && <div style={{ textAlign: 'center' }}>Số: HĐ{String(orderNo).padStart(6, '0')}</div>}
-            <div style={{ textAlign: 'center' }}>Ngày: <span ref={printDateRef}>{dateShortVN(new Date())}</span></div>
+            <div style={{ textAlign: 'center' }}>Ngày: <span ref={printDateRef}>{dateFullVN(new Date())}</span></div>
             {tableName ? (
                 <>
                     <div style={{ marginTop: 8 }}><b>Bàn:</b> {tableName}</div>
@@ -61,7 +62,10 @@ const PrintBill = forwardRef(function PrintBill(
                     <div><b>Giờ ra:</b> <span ref={printedAtRef}>{fullLabel(new Date())}</span></div>
                 </>
             ) : (
-                <div style={{ marginTop: 8 }}><b>Giờ:</b> {fullLabel(new Date(openedAt))}</div>
+                <>
+                    <div style={{ marginTop: 8 }}><b>Bàn:</b> Mang đi</div>
+                    <div><b>Giờ:</b> {timeStringVN(new Date(openedAt))}</div>
+                </>
             )}
             {staffName && <div><b>Nhân viên:</b> {staffName}</div>}
             <div><b>In lần:</b> <span ref={printCountLabelRef}>1</span></div>
@@ -72,19 +76,34 @@ const PrintBill = forwardRef(function PrintBill(
                 <span style={{ textAlign: 'right' }}>SL</span>
                 <span style={{ textAlign: 'center' }}>TT</span>
             </div>
-            {lines.map(l => (
-                <div key={l.key}>
-                    <div style={BILL_COLS}>
-                        <span style={{ whiteSpace: 'nowrap' }}>{l.name}</span>
-                        <span style={{ textAlign: 'right' }}>{formatVND(l.unitPrice)}</span>
-                        <span style={{ textAlign: 'right' }}>{l.qty}</span>
-                        <span style={{ textAlign: 'right' }}>{formatVND(l.unitPrice * l.qty)}</span>
+            {lines.map(l => {
+                // Dòng có giảm giá riêng → cột Đơn giá tách 2 tầng: giá gốc gạch ngang ở
+                // trên, giá thực khách trả (đã trừ phần giảm của riêng dòng này, chia đều
+                // cho SL) ở dưới. TT vẫn là thành tiền GỘP (chưa trừ) — khớp với TIỀN HÀNG/
+                // GIẢM GIÁ/TỔNG THANH TOÁN ở cuối bill, chỉ Đơn giá là annotation.
+                const discounted = l.discountAmount > 0
+                const netUnit = discounted ? Math.round((l.unitPrice * l.qty - l.discountAmount) / l.qty) : l.unitPrice
+                return (
+                    <div key={l.key}>
+                        <div style={BILL_COLS}>
+                            <span style={{ whiteSpace: 'nowrap' }}>{l.name}</span>
+                            <span style={{ textAlign: 'right' }}>
+                                {discounted ? (
+                                    <>
+                                        <span style={{ display: 'block', textDecoration: 'line-through', fontSize: 10, opacity: 0.65 }}>{formatVND(l.unitPrice)}</span>
+                                        <span style={{ display: 'block' }}>{formatVND(netUnit)}</span>
+                                    </>
+                                ) : formatVND(l.unitPrice)}
+                            </span>
+                            <span style={{ textAlign: 'right' }}>{l.qty}</span>
+                            <span style={{ textAlign: 'right' }}>{formatVND(l.unitPrice * l.qty)}</span>
+                        </div>
+                        {l.extras.map(e => (
+                            <div key={e.id} style={{ fontStyle: 'italic', fontSize: 11, whiteSpace: 'nowrap' }}>• {e.name}</div>
+                        ))}
                     </div>
-                    {l.extras.map(e => (
-                        <div key={e.id} style={{ fontStyle: 'italic', fontSize: 11, whiteSpace: 'nowrap' }}>• {e.name}</div>
-                    ))}
-                </div>
-            ))}
+                )
+            })}
             <div style={BILL_RULE} />
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontWeight: 700 }}>TIỀN HÀNG</span>

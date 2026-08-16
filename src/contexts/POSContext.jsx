@@ -5,7 +5,7 @@ import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder, addPendingTableClose, removePendingTableClose } from '../hooks/useOfflineSync'
 import { useOrdersPoll } from '../hooks/useOrdersPoll'
 import { dateStringVN } from '../utils/dateVN'
-import { calculateProductCost, computeDiscount, discountToPercent } from '../utils'
+import { calculateProductCost, computeDiscount, discountToPercent, cartLineSubtotal, NO_DISCOUNT } from '../utils'
 import { useProducts } from './ProductContext'
 import { useAddress } from './AddressContext'
 import { useAuth } from './AuthContext'
@@ -78,8 +78,6 @@ export function POSProvider() {
     // stale empty ref and silently drops the restored held item.
     const cartRef = useRef(cart)
     const [activeCartItemId, setActiveCartItemId] = useState(null)
-    // Per-order discount, ephemeral (resets after each confirm). type: 'percent' | 'amount'
-    const [discount, setDiscount] = useState({ type: 'percent', value: 0 })
     // Bàn của đợt ĐANG dựng (chỉ dùng khi dineIn). '' = chưa chọn / đơn mang đi.
     // Persist như giỏ để đi qua /history hay reload rồi quay lại vẫn còn; gửi
     // xong thì handleConfirm trả về '' (xem ở đó).
@@ -147,7 +145,6 @@ export function POSProvider() {
         if (!prev || !addressId || prev === addressId) return
         if (cartRef.current.length > 0) showToast('Đã bỏ giỏ hàng của chi nhánh trước', 'warning')
         clearCart()
-        setDiscount(d => ({ ...d, value: 0 }))
         setTableName('')
         setOpenTables([])
         // Ghi thẳng, không đợi effect persist: đổi chi nhánh có thể kéo theo unmount nên
@@ -466,7 +463,13 @@ export function POSProvider() {
     const orderCount = cart.reduce((sum, item) => sum + item.quantity, 0)
     const hasOrder = cart.length > 0
 
-    const { discountAmount, finalTotal } = computeDiscount(total, discount)
+    // Giảm giá sống trên từng dòng (item.discount, set qua % button ở CheckoutBar —
+    // xem CartListModal). Tổng đơn chỉ là cộng dồn, không có khái niệm "giảm cả đơn"
+    // riêng nữa.
+    const discountAmount = cart.reduce((sum, item) => (
+        sum + computeDiscount(cartLineSubtotal(item), item.discount || NO_DISCOUNT).discountAmount
+    ), 0)
+    const finalTotal = Math.max(0, total - discountAmount)
 
     // Live draft of the currently-held (not-yet-saved) item — shown as the top
     // line of the header journal so it appears the instant you tap, and extras
@@ -564,11 +567,17 @@ export function POSProvider() {
                 deleted_by: null,
                 payment_method: null,
                 order_items: cartItems.map(item => ({
+                    // Placeholder — hàng lạc quan này bị THAY NGUYÊN CẢ ĐƠN (không merge
+                    // từng field) khi fetch thật về (mergeFetchedOrders theo order.id), nên
+                    // id thật của order_items không cần khớp, chỉ cần có để khỏi crash nếu
+                    // ai bấm sửa giảm giá đúng lúc đơn còn đang optimistic.
+                    id: item.cartItemId,
                     quantity: item.quantity,
                     options: item.extras?.length ? item.extras.map(e => e.name).join(', ') : null,
                     product_id: item.productId,
                     unit_cost: Math.round(costPerItem[item.cartItemId] || 0),
                     extra_ids: item.extras?.map(e => e.id).filter(Boolean) || [],
+                    discount_amount: computeDiscount(cartLineSubtotal(item), item.discount || NO_DISCOUNT).discountAmount,
                     products: { name: item.name },
                 })),
             }
@@ -643,7 +652,6 @@ export function POSProvider() {
         setCart(next)
         activeCartItemIdRef.current = cartItemId // sync, same reason as cartRef above
         setActiveCartItemId(cartItemId)
-        setDiscount(d => ({ ...d, value: 0 }))
     }, [productExtras])
 
     // dineIn: xoá 1 dòng khỏi giỏ. Chỉ dùng nội bộ cho cancelHeld (nút X trên card) —
@@ -656,7 +664,14 @@ export function POSProvider() {
             activeCartItemIdRef.current = next[next.length - 1]?.cartItemId ?? null
             setActiveCartItemId(activeCartItemIdRef.current)
         }
-        setDiscount(d => ({ ...d, value: 0 }))
+    }, [])
+
+    // dineIn: giảm giá riêng một dòng trong giỏ (mở từ CartListModal). Sống trên
+    // chính cart item nên tự dọn khi dòng đó bị xoá/gửi đơn — không cần reset riêng.
+    const setItemDiscount = useCallback((cartItemId, itemDiscount) => {
+        const next = cartRef.current.map(i => i.cartItemId === cartItemId ? { ...i, discount: itemDiscount } : i)
+        cartRef.current = next
+        setCart(next)
     }, [])
 
     // Cancel the currently-held item without submitting (undo a mis-tap).
@@ -686,7 +701,6 @@ export function POSProvider() {
         if (items.length === 0) return
         clearCart()
         doSubmitRef.current(items, discountAmountArg, tableNameArg)
-        setDiscount(d => ({ ...d, value: 0 }))
         setTableName('')
     }, [clearCart])
 
@@ -728,7 +742,6 @@ export function POSProvider() {
             next[idx] = { ...target, extras: newExtras }
             cartRef.current = next
             setCart(next)
-            setDiscount(d => ({ ...d, value: 0 }))
         }
     }, [])
 
@@ -744,7 +757,6 @@ export function POSProvider() {
         next[idx] = { ...target, extras: newExtras }
         cartRef.current = next
         setCart(next)
-        setDiscount(d => ({ ...d, value: 0 }))
     }, [])
 
     async function handleLoadHistory() {
@@ -830,6 +842,26 @@ export function POSProvider() {
         // Xoá hỏng thì DỪNG: nạp giỏ lúc đợt cũ còn nguyên là nhân đôi đơn của khách.
         if (!await handleDeleteOrder(round.id)) return false
 
+        // Chiết khấu sống trên từng dòng (round.items[].discountAmount, xem fetchOpenTables)
+        // khi có — gán ĐÚNG vào dòng đã bị giảm, không dồn cục vào dòng cuối nữa. Đợt CŨ
+        // (tạo trước khi order_items có discount theo dòng) toàn 0 ở đây dù orders.discount_amount
+        // > 0 → fallback dồn cả cục vào dòng cuối như cách cũ, không thì mất giảm giá khi sửa
+        // đợt cũ. Chỉ lưu số đ đã giảm, không lưu %/đ đã CHỌN lúc áp (như OrdersList.jsx) — seed
+        // lại theo % suy ngược qua discountToPercent, không mặc định "đ" gây hiểu lầm. `exact`
+        // false (số tiền lẻ, không tròn %) thì giữ "đ" — xem comment ở discountToPercent.
+        const itemDiscountSum = round.items.reduce((sum, it) => sum + (it.discountAmount || 0), 0)
+        if (itemDiscountSum > 0) {
+            round.items.forEach((it, idx) => {
+                if (it.discountAmount > 0) {
+                    const { pct, exact } = discountToPercent(cartLineSubtotal(items[idx]), it.discountAmount)
+                    items[idx].discount = exact ? { type: 'percent', value: pct } : { type: 'amount', value: it.discountAmount }
+                }
+            })
+        } else if (round.discountAmount > 0 && items.length > 0) {
+            const { pct, exact } = discountToPercent(round.total + round.discountAmount, round.discountAmount)
+            items[items.length - 1].discount = exact ? { type: 'percent', value: pct } : { type: 'amount', value: round.discountAmount }
+        }
+
         // CỘNG vào giỏ chứ không thay: nhân viên có thể đang cầm mấy ly chưa gửi.
         const next = [...cartRef.current, ...items]
         cartRef.current = next
@@ -838,26 +870,23 @@ export function POSProvider() {
         // được đổi theo cú chạm topping tiếp theo.
         activeCartItemIdRef.current = null
         setActiveCartItemId(null)
-        // Chiết khấu sống ở tầng ĐƠN, không ở từng ly — không mang theo thì gửi lại là
-        // khách trả đắt hơn lần trước. Đặt SAU setCart vì mọi thao tác giỏ đều reset nó.
-        // Chỉ lưu số đ đã giảm, không lưu %/đ đã CHỌN lúc áp (như OrdersList.jsx) — seed lại
-        // theo % suy ngược qua discountToPercent, không mặc định "đ" gây hiểu lầm. `exact`
-        // false (số tiền lẻ, không tròn %) thì giữ "đ" — xem comment ở discountToPercent.
-        if (round.discountAmount > 0) {
-            const { pct, exact } = discountToPercent(round.total + round.discountAmount, round.discountAmount)
-            setDiscount(exact ? { type: 'percent', value: pct } : { type: 'amount', value: round.discountAmount })
-        }
         showToast('Đợt cũ đã vào giỏ — sửa xong bấm Tạo đơn', 'info')
         return true
     }
 
     // Re-apply / edit a discount on an existing order. `total` is the new charged
-    // amount (already computed from subtotal − discount by the caller). Updates the
-    // local raw row + recomputes stats + the POS journal header (total changed).
-    async function handleUpdateOrderDiscount(orderId, total, discountAmount) {
+    // amount (already computed from subtotal − discount by the caller). itemDiscounts
+    // (optional) là mảng {id, discount_amount} sửa giảm giá riêng từng dòng cùng lúc
+    // (xem OrdersList). Updates the local raw row + recomputes stats + the POS
+    // journal header (total changed).
+    async function handleUpdateOrderDiscount(orderId, total, discountAmount, itemDiscounts = []) {
         try {
-            await updateOrderDiscount(orderId, total, discountAmount)
-            setTodayOrders(prev => prev.map(o => o.id === orderId ? { ...o, total, discount_amount: discountAmount } : o))
+            await updateOrderDiscount(orderId, total, discountAmount, itemDiscounts)
+            const byId = new Map(itemDiscounts.map(d => [d.id, d.discount_amount]))
+            setTodayOrders(prev => prev.map(o => o.id !== orderId ? o : {
+                ...o, total, discount_amount: discountAmount,
+                order_items: (o.order_items || []).map(i => byId.has(i.id) ? { ...i, discount_amount: byId.get(i.id) } : i),
+            }))
             if (addressId) {
                 const { revenue: rev, cups } = await fetchTodayStats(addressId)
                 setRevenue(rev)
@@ -944,16 +973,17 @@ export function POSProvider() {
     const cartValue = useMemo(() => ({
         cart, activeCartItemId,
         handleAddItem, cancelHeld, handleToggleExtra, handleToggleStickyExtra, commitHeld, reopenRoundIntoCart,
+        setItemDiscount,
         dineIn, handleConfirm, tableName, setTableName,
         openTables, refreshTables, handleCloseTable, toggleServed,
         enabledStickyExtraIds,
         total, orderCount, hasOrder,
-        discount, setDiscount, discountAmount, finalTotal,
+        discountAmount, finalTotal,
         recentOrders, draftOrder, enterKey,
         toast, showToast, showError,
         // deliberately partial deps, see comment above
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [cart, activeCartItemId, dineIn, tableName, openTables, refreshTables, handleCloseTable, toggleServed, enabledStickyExtraIds, total, orderCount, hasOrder, discount, discountAmount, finalTotal, recentOrders, draftOrder, enterKey, toast, showToast, showError])
+    }), [cart, activeCartItemId, dineIn, tableName, openTables, refreshTables, handleCloseTable, toggleServed, enabledStickyExtraIds, total, orderCount, hasOrder, discountAmount, finalTotal, recentOrders, draftOrder, enterKey, toast, showToast, showError])
 
     const statsValue = useMemo(() => ({
         revenue, totalCost, cupsSold, isOnline,

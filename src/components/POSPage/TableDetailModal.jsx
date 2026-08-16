@@ -64,10 +64,18 @@ export default function TableDetailModal({ table, onClose, onPick }) {
         for (const round of rounds) {
             for (const it of round.items) {
                 const { name, extras, unitPrice } = priceLineFor(it, products, productExtras)
-                const key = `${name}::${extras.map(e => e.id).sort().join(',')}`
-                const hit = out.find(l => l.key === key)
-                if (hit) hit.qty += it.qty
-                else out.push({ key, name, extras, qty: it.qty, unitPrice })
+                const discountAmount = it.discountAmount || 0
+                const baseKey = `${name}::${extras.map(e => e.id).sort().join(',')}`
+                // Dòng có giảm giá riêng KHÔNG gộp qua các đợt khác — gộp sẽ chia trung bình
+                // discount qua nhiều ly khác giá nhau (vd 1 ly full giá + 1 ly miễn phí gộp
+                // thành 2 ly "nửa giá" trên bill, sai với thực tế). Chỉ món KHÔNG giảm giá
+                // mới gộp theo tên+topping như cũ.
+                const hit = discountAmount === 0 ? out.find(l => l.key === baseKey) : null
+                if (hit) { hit.qty += it.qty; continue }
+                out.push({
+                    key: discountAmount === 0 ? baseKey : `${baseKey}::${round.id}::${out.length}`,
+                    name, extras, qty: it.qty, unitPrice, discountAmount,
+                })
             }
         }
         return out

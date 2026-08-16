@@ -27,6 +27,8 @@ export interface CartItem {
     /** Present only on enriched offline-queue items. */
     unitCost?: number
     extraIds?: string[]
+    /** Per-line discount, set via the cart list's per-item discount modal. */
+    discount?: Discount
 }
 
 export type DiscountType = 'percent' | 'amount'
@@ -49,6 +51,9 @@ export interface OrderItemPayload {
     product_id: UUID
     quantity: number
     extra_ids: string[]
+    /** Resolved đ giảm cho riêng dòng này — cùng dạng resolved-amount như
+     *  OrderPayload.discount_amount, không phải %/đ đã chọn lúc áp. */
+    discount_amount?: number
 }
 
 /** A single order in the bulk_create_orders RPC payload. */

@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { Percent } from 'lucide-react'
 import { formatVND } from '../../utils'
-import DiscountModal from './DiscountModal'
 import TableModal from './TableModal'
+import CartListModal from './CartListModal'
 
 // Thanh chốt bàn — chỉ render ở địa chỉ dine_in (xem addresses.dine_in).
 // Đường 1-chạm mang đi không mount component này, nên POS mặc định không đổi gì.
 export default function CheckoutBar({
-    total, discount, discountAmount, finalTotal, onApplyDiscount,
+    discountAmount, finalTotal,
+    cart, onItemDiscount,
     tableName, onConfirm, disabled,
 }) {
     const [showDiscount, setShowDiscount] = useState(false)
@@ -57,13 +58,10 @@ export default function CheckoutBar({
                 Tạo đơn
             </button>
 
-            <DiscountModal
-                open={showDiscount}
-                onClose={() => setShowDiscount(false)}
-                subtotal={total}
-                discount={discount}
-                onApply={onApplyDiscount}
-            />
+            {/* 1 dòng thì tự mở thẳng ô sửa của dòng đó (xem CartListModal). */}
+            {showDiscount && (
+                <CartListModal cart={cart} onClose={() => setShowDiscount(false)} onItemDiscount={onItemDiscount} />
+            )}
 
             {showTables && <TableModal onClose={() => setShowTables(false)} />}
         </footer>
