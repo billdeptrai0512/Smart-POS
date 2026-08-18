@@ -7,7 +7,7 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
 import { useOrderOnboardingProgress } from '../hooks/useOrderOnboardingProgress'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { DAY_NAMES } from '../constants'
 import { dateFullVN } from '../utils/dateVN'
 
@@ -18,6 +18,7 @@ import Toast from '../components/POSPage/Toast'
 
 export default function POSPage() {
     const navigate = useNavigate()
+    const location = useLocation()
     const { isGuest } = useAuth()
     const { products, productExtras } = useProducts()
     const { selectedAddress } = useAddress()
@@ -46,6 +47,15 @@ export default function POSPage() {
     const flushRef = useRef(commitHeld)
     flushRef.current = commitHeld
     useEffect(() => () => flushRef.current(), [])
+
+    // "BÀN X" trong Nhật ký nhảy vào đây kèm state.openTableDetail (đọc lại ở CheckoutBar/
+    // TableModal) để mở thẳng chi tiết bàn đó. location.state sống mãi qua các lần
+    // mount/unmount sau đó nếu không dọn — bấm nút chọn bàn khác trên CheckoutBar sẽ vẫn
+    // ăn lại state cũ này và mở nhầm bàn. Xài đúng 1 lần rồi xoá.
+    useEffect(() => {
+        if (location.state?.openTableDetail) navigate('/pos', { replace: true, state: null })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     // OnboardingGuide is mounted once at the layout level (not per-page), so it doesn't
     // know a new order landed on its own — nudge it to re-check the "Tạo đơn" step.

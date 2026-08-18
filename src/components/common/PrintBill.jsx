@@ -79,28 +79,31 @@ const PrintBill = forwardRef(function PrintBill(
             {lines.map(l => {
                 // Dòng có giảm giá riêng → cột Đơn giá tách 2 tầng: giá gốc gạch ngang ở
                 // trên, giá thực khách trả (đã trừ phần giảm của riêng dòng này, chia đều
-                // cho SL) ở dưới. TT vẫn là thành tiền GỘP (chưa trừ) — khớp với TIỀN HÀNG/
-                // GIẢM GIÁ/TỔNG THANH TOÁN ở cuối bill, chỉ Đơn giá là annotation.
+                // cho SL) ở dưới. TT = thành tiền THỰC (đã trừ giảm giá dòng) — TIỀN HÀNG/
+                // GIẢM GIÁ/TỔNG THANH TOÁN ở cuối bill tính riêng từ subtotal/discountTotal
+                // cấp đơn (props), không cộng lại từ TT nên không bị đếm giảm giá 2 lần.
                 const discounted = l.discountAmount > 0
                 const netUnit = discounted ? Math.round((l.unitPrice * l.qty - l.discountAmount) / l.qty) : l.unitPrice
                 return (
-                    <div key={l.key}>
-                        <div style={BILL_COLS}>
-                            <span style={{ whiteSpace: 'nowrap' }}>{l.name}</span>
-                            <span style={{ textAlign: 'right' }}>
-                                {discounted ? (
-                                    <>
-                                        <span style={{ display: 'block', textDecoration: 'line-through', fontSize: 10, opacity: 0.65 }}>{formatVND(l.unitPrice)}</span>
-                                        <span style={{ display: 'block' }}>{formatVND(netUnit)}</span>
-                                    </>
-                                ) : formatVND(l.unitPrice)}
-                            </span>
-                            <span style={{ textAlign: 'right' }}>{l.qty}</span>
-                            <span style={{ textAlign: 'right' }}>{formatVND(l.unitPrice * l.qty)}</span>
+                    <div key={l.key} style={BILL_COLS}>
+                        {/* Tên món + extras gộp chung 1 cột — extras bám sát ngay dưới tên, không
+                            phụ thuộc chiều cao cột Đơn giá (2 dòng khi có giảm giá riêng dòng). */}
+                        <div>
+                            <div style={{ whiteSpace: 'nowrap' }}>{l.name}</div>
+                            {l.extras.map(e => (
+                                <div key={e.id} style={{ fontStyle: 'italic', fontSize: 11, whiteSpace: 'nowrap' }}>• {e.name}</div>
+                            ))}
                         </div>
-                        {l.extras.map(e => (
-                            <div key={e.id} style={{ fontStyle: 'italic', fontSize: 11, whiteSpace: 'nowrap' }}>• {e.name}</div>
-                        ))}
+                        <span style={{ textAlign: 'right' }}>
+                            {discounted ? (
+                                <>
+                                    <span style={{ display: 'block', textDecoration: 'line-through', fontSize: 10, opacity: 0.65 }}>{formatVND(l.unitPrice)}</span>
+                                    <span style={{ display: 'block' }}>{formatVND(netUnit)}</span>
+                                </>
+                            ) : formatVND(l.unitPrice)}
+                        </span>
+                        <span style={{ textAlign: 'right' }}>{l.qty}</span>
+                        <span style={{ textAlign: 'right' }}>{formatVND(l.unitPrice * l.qty - l.discountAmount)}</span>
                     </div>
                 )
             })}

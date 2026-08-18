@@ -30,3 +30,13 @@ export function Dialog({ onClose, zIndexClass = 'z-50', className = '', panelCla
         </div>
     )
 }
+
+// panelClassName dùng chung cho các Dialog kiểu "trang con có nút quay lại" (chọn bàn
+// đích, danh sách đơn mang đi, chi tiết bàn) — cùng khung bottom-sheet-trên-desktop nên
+// tách 1 lần thay vì mỗi modal tự khai lại chuỗi class.
+export const MODAL_PANEL = 'w-full max-w-md mx-4 max-h-[85dvh] flex flex-col bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden'
+
+// Khuôn nút chip tròn (trạng thái ra món, nút hành động nhỏ trên mỗi đợt/đơn) — dùng ở
+// TableDetailModal + TakeawayListModal.
+export const CHIP = 'h-[26px] rounded-full border text-[11px] font-black uppercase tracking-wider transition-colors'
+export const CHIP_IDLE = `${CHIP} bg-surface-light border-border/60 text-text-secondary`

@@ -5,10 +5,11 @@ import { useHistory } from '../../contexts/HistoryContext'
 import { useProducts } from '../../contexts/ProductContext'
 import { useConfirm } from '../../contexts/ConfirmContext'
 import { formatVND, discountToPercent } from '../../utils'
-import { timeStringVN, dateShortVN, isSameDayVN } from '../../utils/dateVN'
+import { timeStringVN, openedLabelVN } from '../../utils/dateVN'
 import { priceLineFor } from '../../utils/billLines'
-import { Dialog } from '../common/ModalShell'
+import { Dialog, MODAL_PANEL, CHIP, CHIP_IDLE } from '../common/ModalShell'
 import PrintBill from '../common/PrintBill'
+import TableTargetPicker from './TableTargetPicker'
 
 // Chi tiết một bàn — mở từ thẻ bàn trong lưới (TableModal).
 //
@@ -19,33 +20,20 @@ import PrintBill from '../common/PrintBill'
 //
 // ponytail: in qua window.print() (xem PrintBill.jsx + @media print trong index.css),
 // không SDK máy in nhiệt. Đổi khi quán có máy ESC/POS thật.
-// Ba nút trên mỗi đợt cùng một khuôn viên thuốc: tách chuỗi class ra để đổi kiểu một
-// lần, không phải săn từng bản chép.
-const CHIP = 'h-[26px] rounded-full border text-[11px] font-black uppercase tracking-wider transition-colors'
-const CHIP_IDLE = `${CHIP} bg-surface-light border-border/60 text-text-secondary`
-// Màn "chọn bàn đích" (moving) thay hẳn nội dung modal bằng một Dialog thứ hai cùng
-// khung — chung panelClassName với modal chính, tách hằng để đổi khung một lần.
-const PANEL = 'w-full max-w-md mx-4 max-h-[85dvh] flex flex-col bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden'
 
 export default function TableDetailModal({ table, tableNames = [], onClose, onPick }) {
     const confirm = useConfirm()
-    const { handleCloseTable, refreshTables, reopenRoundIntoCart, toggleServed, orderCount, moveTableRounds } = useCart()
+    const { handleCloseTable, refreshTables, reopenRoundIntoCart, toggleServed, orderCount } = useCart()
     const { handleDeleteOrder } = useHistory()
     const { products, productExtras } = useProducts()
     const billRef = useRef(null)
     // Gộp bàn (chuyển hết đợt) và tách bàn (chuyển một đợt) dùng chung một màn hình
-    // chọn bàn đích — orderIds là thứ duy nhất khác nhau giữa hai thao tác. moving=null
-    // là màn bình thường; có giá trị là màn "chọn bàn đích" thay chỗ danh sách đợt.
+    // chọn bàn đích (TableTargetPicker) — orderIds là thứ duy nhất khác nhau giữa hai thao
+    // tác. moving=null là màn bình thường; có giá trị là màn "chọn bàn đích" thay chỗ danh
+    // sách đợt.
     const [moving, setMoving] = useState(null) // { orderIds: string[], label: string } | null
-    const [moveTarget, setMoveTarget] = useState('')
 
-    // Bàn ngồi qua nửa đêm là chuyện thường (xem fetchOpenTables) nên nhãn giờ phải kèm
-    // ngày khi khác hôm nay, còn hôm nay thì chỉ giờ cho gọn.
-    const fullLabel = (d) => `${timeStringVN(d)} ${dateShortVN(d)}`
-    const openedLabel = (iso) => {
-        const d = new Date(iso)
-        return isSameDayVN(d, new Date()) ? timeStringVN(d) : fullLabel(d)
-    }
+    const openedLabel = openedLabelVN
     const linesLabel = (lines) => lines.map(l => `${l.qty} ${l.name}`).join(', ')
 
     // Bill in: nhân viên hiện theo đợt gần nhất (người đang đứng thu tiền), không lặp lại
@@ -138,19 +126,6 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
     // gọi hàm này đã bị ẩn ở nơi gọi trong trường hợp đó.
     function startMove(orderIds, label) {
         setMoving({ orderIds, label })
-        setMoveTarget('')
-    }
-
-    function confirmMove(target) {
-        const name = target.trim()
-        if (!name || name === table.name) return
-        // Không await: moveTableRounds áp lạc quan vào openTables trước khi đụng mạng, nên
-        // đóng picker ngay đây là đã thấy đúng kết quả rồi, không phải đợi round-trip.
-        moveTableRounds(moving.orderIds, name)
-        setMoving(null)
-        // Không tự đóng modal ở đây: table (prop từ TableModal) đọc lại từ openTables, đã
-        // đổi ngay trong tick này — gộp hết bàn thì table biến mất và TableModal tự gỡ
-        // modal xuống, tách một đợt thì table còn lại tự vẽ lại.
     }
 
     const otherTables = tableNames.filter(n => n !== table.name)
@@ -160,51 +135,19 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
 
     if (moving) {
         return (
-            <Dialog onClose={onClose} panelClassName={PANEL}>
-                <div className="shrink-0 flex items-center gap-3 px-5 pt-5 pb-4 border-b border-border/40">
-                    <button onClick={() => setMoving(null)} aria-label="Quay lại" className="shrink-0 p-1.5 -ml-1.5 text-text-secondary hover:text-text rounded-lg hover:bg-surface-light">
-                        <ArrowLeft size={18} />
-                    </button>
-                    <p className="min-w-0 flex-1 text-text font-black text-base leading-none truncate">Chuyển {moving.label} sang bàn</p>
-                </div>
-
-                <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-2">
-                    {otherTables.map(name => (
-                        <button
-                            key={name}
-                            onClick={() => confirmMove(name)}
-                            className="w-full text-left px-4 py-3 rounded-[14px] border border-border/40 bg-surface-light/40 text-[13px] font-black uppercase tracking-wide text-text hover:border-primary/40 transition-colors"
-                        >
-                            {name}
-                        </button>
-                    ))}
-                    {otherTables.length === 0 && (
-                        <p className="text-[12px] font-medium text-text-secondary py-1">Chưa có bàn nào khác — gõ tên bàn mới bên dưới.</p>
-                    )}
-                    <form onSubmit={e => { e.preventDefault(); confirmMove(moveTarget) }} className="flex gap-2 mt-1">
-                        <input
-                            type="text"
-                            autoFocus={otherTables.length === 0}
-                            value={moveTarget}
-                            onChange={e => setMoveTarget(e.target.value)}
-                            placeholder="Bàn mới..."
-                            className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[13px] font-black uppercase tracking-wide text-text placeholder:text-text-secondary/50 placeholder:normal-case placeholder:tracking-normal placeholder:font-medium focus:outline-none focus:border-primary/40 transition-colors"
-                        />
-                        <button
-                            type="submit"
-                            disabled={!moveTarget.trim()}
-                            className="shrink-0 px-4 rounded-[12px] bg-primary text-bg text-[12px] font-black uppercase tracking-wider disabled:opacity-50 hover:bg-primary/90 active:bg-primary/80 transition-colors"
-                        >
-                            Chuyển
-                        </button>
-                    </form>
-                </div>
-            </Dialog>
+            <TableTargetPicker
+                orderIds={moving.orderIds}
+                label={moving.label}
+                tableNames={otherTables}
+                showTakeawayOption
+                onBack={() => setMoving(null)}
+                onClose={onClose}
+            />
         )
     }
 
     return (
-        <Dialog onClose={onClose} panelClassName={PANEL}>
+        <Dialog onClose={onClose} panelClassName={MODAL_PANEL}>
             <div className="shrink-0 flex items-center gap-3 px-5 pt-5 pb-4 border-b border-border/40">
                 {/* Mũi tên chứ không phải dấu X: đóng cái này là quay về lưới bàn, không
                     phải thoát ra POS. */}
@@ -257,8 +200,8 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
                                         ? `${CHIP} bg-success/10 border-success/40 text-success`
                                         : `${CHIP_IDLE} hover:text-text hover:border-primary/40`}`}
                                 >
-                                    <Check size={12} strokeWidth={3} />
-                                    {round.servedAt ? `Ra ${timeStringVN(new Date(round.servedAt))}` : 'Ra món'}
+                                    {round.servedAt && <Check size={12} strokeWidth={3} />}
+                                    {round.servedAt ? `Đã ra món ${timeStringVN(new Date(round.servedAt))}` : 'Chưa ra món'}
                                 </button>
                                 <button
                                     onClick={() => handleEditRound(round)}

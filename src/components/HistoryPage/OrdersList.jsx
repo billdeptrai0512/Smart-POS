@@ -1,9 +1,11 @@
-import { useState, useRef, useMemo, useEffect, memo } from 'react'
+import { useMemo, memo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Percent, Trash2, Printer } from 'lucide-react'
 import { formatVND, computeDiscount, discountToPercent, NO_DISCOUNT } from '../../utils'
 import { dateShortVN, timeStringVN } from '../../utils/dateVN'
 import { priceLineFor } from '../../utils/billLines'
 import { useDiscountEditing } from '../../hooks/useDiscountEditing'
+import { usePrintArmed } from '../../hooks/usePrintArmed'
 import { useConfirm } from '../../contexts/ConfirmContext'
 import { useProducts } from '../../contexts/ProductContext'
 import DiscountEditor from '../POSPage/DiscountEditor'
@@ -72,6 +74,7 @@ export default function OrdersList({
 // for every card whenever ANY order starts/stops deleting) — otherwise deleting
 // one order re-renders the entire day's order list.
 const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, setDeletingId, onDeleteOrder, onUpdateDiscount, onDeleteOffline, isNew, dineIn }) {
+    const navigate = useNavigate()
     const confirm = useConfirm()
     const { products, productExtras } = useProducts()
     // Cùng pattern CartListModal (giỏ hàng chưa gửi), áp cho đơn ĐÃ CHỐT.
@@ -85,12 +88,12 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
     // Online, non-deleted orders are the only ones we can edit/discount against the DB.
     const editable = !order.deletedAt && !order.isOffline
 
-    // In bill: chỉ đơn MANG ĐI đứng riêng (không table_name — đợt gọi thêm của 1 bàn phải
-    // in qua TableDetailModal, gộp chung cả bàn thành 1 tờ) VÀ chỉ khi địa chỉ có bật "Bàn
-    // ngồi" (dine_in) — tắt thì chưa có hạ tầng in bill cho quán đó.
-    const canPrint = dineIn && !order.tableName && !order.deletedAt
-    const billRef = useRef(null)
-    const [printArmed, setPrintArmed] = useState(false)
+    // In bill: mọi đơn (mang đi lẫn đơn bàn) đều in được riêng lẻ từ Nhật ký — đơn bàn
+    // còn đang mở thì in gộp cả bàn qua TableDetailModal, còn đơn đã lên Nhật ký thì in
+    // đúng 1 lượt gọi món đó. Chỉ khi địa chỉ có bật "Bàn ngồi" (dine_in) — tắt thì chưa
+    // có hạ tầng in bill cho quán đó.
+    const canPrint = dineIn && !order.deletedAt
+    const { billRef, printArmed, arm } = usePrintArmed()
 
     // Đơn giá bán từng dòng — order_items không lưu giá, tính lại từ giá món/topping
     // ĐANG hiệu lực trong menu (giống bill in) — dùng chung cho hiển thị lẫn sửa giảm
@@ -106,18 +109,6 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
             ...priceLineFor(it, products, productExtras),
         }))
     }, [canPrint, order.items, products, productExtras])
-
-    // Chỉ 1 thẻ được mang id="print-bill" tại 1 thời điểm (CSS @media print chọn theo id) —
-    // bấm in mới gắn id cho ĐÚNG thẻ này (mount PrintBill), in xong gỡ luôn (setPrintArmed
-    // false) để thẻ kế bấm sau không bị dính id cũ. setState ở đây là chủ đích: đây LÀ đích
-    // đến của effect (gỡ mount sau khi đã đồng bộ với window.print(), một external API),
-    // không phải suy ra state từ props/state khác.
-    useEffect(() => {
-        if (!printArmed) return
-        billRef.current?.print()
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setPrintArmed(false)
-    }, [printArmed])
 
     const deletedTimeStr = order.deletedAt ? (() => {
         const d = new Date(order.deletedAt)
@@ -160,23 +151,51 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
             )}
 
             <div className={`flex flex-col gap-2 ${order.deletedAt ? 'opacity-40 grayscale select-none' : ''}`}>
+                {/* Header: định danh đơn (mã + bàn) bên trái, doanh thu luỹ kế tới đơn này bên
+                    phải — tách khỏi số tiền của RIÊNG đơn này (giờ nằm ở dòng Tổng cộng dưới),
+                    2 con số dễ đọc nhầm nếu để chung 1 hàng. */}
                 <div className="flex justify-between items-center mb-1">
-                    <div className="flex items-baseline gap-2 mt-1">
-                        <span className="font-black text-[14px] text-primary">+ {formatVND(order.total)}</span>
-                        {discountAmount > 0 && (
-                            <span className="text-text-secondary/60 text-[12px] font-bold line-through tabular-nums">{formatVND(subtotal)}</span>
+                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                        {order.orderNo != null && (
+                            <span className="shrink-0 bg-surface-light border border-border/60 rounded-full px-2 py-0.5 text-[11px] font-bold text-text-secondary tabular-nums">#{order.orderNo}</span>
+                        )}
+                        {order.tableName && (
+                            // Bàn còn đang mở (openTables) thì bấm nhảy thẳng tới modal chi tiết của
+                            // bàn đó ở /pos — bàn đã tính tiền/đóng thì chỉ mở lưới chọn bàn (TableModal
+                            // tự bỏ qua "detail" không khớp openTables, không lỗi).
+                            <button
+                                type="button"
+                                onClick={() => navigate('/pos', { state: { openTableDetail: order.tableName } })}
+                                className="shrink-0 bg-surface-light border border-border/60 rounded-full px-2 py-0.5 text-[11px] font-bold text-text-secondary uppercase tracking-wide hover:text-primary hover:border-primary/40 transition-colors"
+                            >
+                                {order.tableName}
+                            </button>
                         )}
                     </div>
                     {!order.deletedAt && (
-                        <span className="text-success leading-none text-[14px] mt-1 font-bold tabular-nums">
+                        <span className="shrink-0 text-success leading-none text-[14px] font-bold tabular-nums">
                             {formatVND(runningTotal)}
                         </span>
                     )}
                 </div>
+                <div className="border-t border-border/40 pt-2 flex items-baseline justify-between gap-2">
+                    <span className="text-[12px] font-bold uppercase tracking-wide text-text-secondary">Tổng cộng</span>
+                    <div className="flex items-baseline gap-2">
+                        {discountAmount > 0 && (
+                            <span className="text-text-secondary/60 text-[12px] font-bold line-through tabular-nums">{formatVND(subtotal)}</span>
+                        )}
+                        <span className="font-black text-[14px] text-primary">+ {formatVND(order.total)}</span>
+                    </div>
+                </div>
                 <div className="mb-1 border-t border-border/40 pt-2">
-                    <div className="flex flex-col gap-1.5">
+                    <div className="flex flex-col gap-1.5 ">
                         {order.items?.length > 0 ? order.items.map((item, idx) => {
-                            const itemSubtotal = lineSubtotal(item)
+                            // Tách extras (topping/ghi chú) xuống dòng riêng có "•" đầu dòng — cùng
+                            // cách trình bày với bill in (PrintBill.jsx) thay vì nhét chung "(...)"
+                            // vào 1 dòng với tên món. Gọi priceLineFor 1 lần, dùng chung cho cả tên
+                            // lẫn đơn giá (tránh tính lại y hệt qua lineSubtotal()).
+                            const { name: itemName, extras: itemExtras, unitPrice } = priceLineFor(item, products, productExtras)
+                            const itemSubtotal = unitPrice * item.quantity
                             const committedAmount = item.discountAmount || 0
                             const { pct: itemPct, exact: itemPctExact } = discountToPercent(itemSubtotal, committedAmount)
                             const seedDiscount = !committedAmount
@@ -188,13 +207,18 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
 
                             return (
                                 <div key={item.id ?? idx} className="flex flex-col gap-1.5 w-full">
-                                    <div className="flex items-center gap-2 w-full">
-                                        <span className={`flex-1 min-w-0 text-[14px] leading-snug font-medium whitespace-pre-wrap text-text ${order.deletedAt ? 'line-through' : ''}`}>{item.text}</span>
-                                        <span className="shrink-0 flex flex-col items-end">
+                                    <div className="flex items-start gap-2 w-full">
+                                        <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                                            <span className={`text-[14px] leading-snug font-medium whitespace-pre-wrap text-text ${order.deletedAt ? 'line-through' : ''}`}>{item.quantity} {itemName}</span>
+                                            {itemExtras.map(e => (
+                                                <span key={e.id} className={`pl-2.5 text-[12px] leading-snug text-text-secondary/70 ${order.deletedAt ? 'line-through' : ''}`}>• {e.name}</span>
+                                            ))}
+                                        </div>
+                                        <span className="shrink-0 flex items-center gap-1.5">
                                             {liveDiscount > 0 && (
                                                 <span className="text-[10px] font-bold text-text-secondary/60 line-through tabular-nums">{formatVND(itemSubtotal)}</span>
                                             )}
-                                            <span className="text-[12px] font-bold tabular-nums text-text">{formatVND(liveFinal)}</span>
+                                            <span className="text-[12px] font-bold tabular-nums text-text"> {formatVND(liveFinal)}</span>
                                         </span>
                                         {editable && item.id && (
                                             <button
@@ -229,12 +253,12 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
 
                 <div className="border-t border-border/40 pt-2 flex justify-between items-center gap-3 leading-none">
                     <span className="text-text-secondary/70 text-[12px] font-bold truncate min-w-0 leading-none">
-                        {time}{order.tableName ? <> · <span className="inline-block first-letter:uppercase">{order.tableName}</span></> : ''}{order.staffName ? ` · ${order.staffName}` : ''}
+                        {time}{order.staffName ? ` · ${order.staffName}` : ''}
                     </span>
                     <div className="shrink-0 flex items-center gap-2">
                         {canPrint && (
                             <button
-                                onClick={() => setPrintArmed(true)}
+                                onClick={arm}
                                 aria-label="In bill"
                                 className={`${ICON_BTN} text-text-secondary hover:text-primary`}
                             >
@@ -264,7 +288,7 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                 <PrintBill
                     ref={billRef}
                     orderNo={order.orderNo}
-                    tableName={null}
+                    tableName={order.tableName}
                     openedAt={order.createdAt}
                     staffName={order.staffName}
                     lines={billLines}

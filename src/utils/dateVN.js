@@ -64,6 +64,14 @@ export function isSameDayVN(d1, d2) {
     return dateStringVN(new Date(d1)) === dateStringVN(new Date(d2))
 }
 
+// Nhãn giờ mở đợt/đơn: chỉ giờ nếu cùng ngày hôm nay, kèm ngày nếu khác — bàn/đơn mang đi
+// ngồi/tồn qua đêm là chuyện thường (xem fetchOpenTables) nên không thể luôn chỉ hiện giờ.
+// Dùng ở TableDetailModal + TakeawayListModal.
+export function openedLabelVN(iso) {
+    const d = new Date(iso)
+    return isSameDayVN(d, new Date()) ? timeStringVN(d) : `${timeStringVN(d)} ${dateShortVN(d)}`
+}
+
 // Add (or subtract) days from a date, anchored to VN midnight.
 export function addDaysVN(date, days) {
     const start = startOfDayVN(date)

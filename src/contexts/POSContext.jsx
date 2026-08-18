@@ -255,8 +255,12 @@ export function POSProvider() {
     // lại state từ dữ liệu đang có mà không cần hỏi lại server.
     const moveTableRounds = useCallback(async (orderIds, targetTableName) => {
         const idSet = new Set(orderIds)
-        const name = targetTableName?.trim()
-        if (!addressId || !idSet.size || !name) return
+        // targetTableName === null là ý định rõ ràng "chuyển thành mang đi" (đích không có
+        // tên) — khác với chuỗi rỗng/chưa gõ gì, vẫn phải chặn. "Mang đi" chẳng qua là bàn
+        // có name = null trong openTables (xem fetchOpenTables), nên logic dưới đây so sánh
+        // t.name === name generic, không cần rẽ nhánh riêng cho null.
+        const name = targetTableName === null ? null : targetTableName?.trim()
+        if (!addressId || !idSet.size || (name !== null && !name)) return
         const linesOf = (rounds) => rounds.reduce((ls, r) => mergeTableLines(ls, r.lines), [])
 
         const prevTables = openTablesRef.current

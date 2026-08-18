@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Plus, X } from 'lucide-react'
 import { useCart } from '../../contexts/CartContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatVND } from '../../utils'
-import { dateShortVN, isSameDayVN } from '../../utils/dateVN'
+import { dateShortVN, isSameDayVN, timeStringVN } from '../../utils/dateVN'
 import { Dialog } from '../common/ModalShell'
 import TableDetailModal from './TableDetailModal'
+import TakeawayListModal from './TakeawayListModal'
 
 // Chọn bàn — chỉ mở được từ CheckoutBar, tức chỉ ở địa chỉ dine_in.
 //
@@ -21,18 +23,51 @@ import TableDetailModal from './TableDetailModal'
 // MỌI thẻ cùng một chiều cao. Bàn gọi nhiều loại thì cắt dòng, không kéo thẻ dài ra —
 // lưới cao thấp lởm chởm nhìn không ra bàn nào với bàn nào.
 const CARD_H = 'h-[148px]'
-// Số DÒNG tối đa phần món chiếm được. Nhiều hơn thì dòng cuối nhường chỗ cho "+N món
-// nữa" — cắt mà không nói là giấu tiền của khách.
+// Số DÒNG tối đa phần đợt chiếm được. Nhiều hơn thì dòng cuối nhường chỗ cho "+N đợt
+// nữa" — cắt mà không nói là giấu đợt của khách.
 const CARD_LINES = 3
+
+// Danh sách "giờ + số ly + đã/chưa ra món" rút gọn trên thẻ lưới — dùng chung cho cả thẻ
+// bàn busy (rounds của 1 bàn) và thẻ Mang đi (mỗi đơn mang đi là 1 "round" độc lập, xem
+// bucket name=null ở fetchOpenTables). unit đổi chữ cuối dòng "+N ... nữa" cho đúng danh
+// từ (đợt/đơn).
+function roundPreview(rounds, unit) {
+    const shown = rounds.length > CARD_LINES ? rounds.slice(0, CARD_LINES - 1) : rounds
+    return (
+        <span className="flex flex-col gap-0.5">
+            {shown.map((round, i) => {
+                const cups = round.lines.reduce((s, l) => s + (l.qty || 0), 0)
+                return (
+                    <span key={round.id || i} className="flex items-center gap-1 text-[11px] font-bold text-text-secondary leading-snug line-clamp-1">
+                        <span className="tabular-nums">{timeStringVN(new Date(round.createdAt))}</span>
+                        <span className="tabular-nums">{cups} ly</span>
+                        <span className={`ml-auto shrink-0 ${round.servedAt ? 'text-success' : 'text-warning'}`}>
+                            {round.servedAt ? 'Đã ra' : 'Chưa ra'}
+                        </span>
+                    </span>
+                )
+            })}
+            {rounds.length > shown.length && (
+                <span className="text-[12px] font-bold text-text-secondary/60 leading-snug">+{rounds.length - shown.length} {unit} nữa</span>
+            )}
+        </span>
+    )
+}
+
 export default function TableModal({ onClose }) {
     const { tableName, setTableName, openTables, refreshTables, orderCount, showError } = useCart()
     const { selectedAddress, setTables } = useAddress()
     const { isManager, isAdmin } = useAuth()
+    const { state } = useLocation()
     const [newName, setNewName] = useState('')
     const [adding, setAdding] = useState(false)
     // Tên bàn đang mở chi tiết. Giữ TÊN chứ không giữ object bàn: openTables đổi sau
-    // mỗi lần xoá đợt, ôm object cũ là modal hiện số tiền đã chết.
-    const [detail, setDetail] = useState(null)
+    // mỗi lần xoá đợt, ôm object cũ là modal hiện số tiền đã chết. Seed từ
+    // location.state.openTableDetail (tới từ Nhật ký) — bàn không còn mở (đã tính tiền)
+    // thì detailTable dưới đây không tìm thấy, modal chỉ hiện lưới, không lỗi.
+    const [detail, setDetail] = useState(state?.openTableDetail || null)
+    // Modal danh sách đơn mang đi chưa ra món (TakeawayListModal) đang mở hay không.
+    const [showTakeaway, setShowTakeaway] = useState(false)
 
     // Bàn có thể vừa được mở/đóng ở máy khác — đồng bộ lại mỗi lần mở modal thay vì
     // nuôi thêm một kênh realtime. Component chỉ mount khi mở (xem CheckoutBar) nên
@@ -49,6 +84,20 @@ export default function TableModal({ onClose }) {
     const names = [...configured, ...adHoc]
     const statsOf = (name) => openTables.find(t => t.name === name) || { name, total: 0, rounds: [], openedAt: null, lines: [] }
     const detailTable = detail ? openTables.find(t => t.name === detail) : null
+    // Đơn mang đi chưa ra món — bucket name=null trong openTables (xem fetchOpenTables).
+    // undefined khi không có đơn nào đang chờ, khi đó thẻ "Mang đi" ở dưới quay lại tile
+    // tĩnh bấm-là-chọn như cũ.
+    const takeaway = openTables.find(t => t.name === null)
+    // Đơn nào cần chú ý nhất lên trước: chưa ra món trước đã ra, cùng nhóm thì mới nhất
+    // trước — khác thứ tự "cũ nhất trước" của bàn (rounds trong 1 bàn đọc như biên bản,
+    // đơn mang đi thì mỗi đơn độc lập nên ưu tiên đơn cần xử lý). Dùng chung cho cả preview
+    // trên thẻ lưới và danh sách đầy đủ (TakeawayListModal) để hai chỗ khớp thứ tự nhau.
+    const takeawayRounds = takeaway
+        ? [...takeaway.rounds].sort((a, b) => {
+            if (!!a.servedAt !== !!b.servedAt) return a.servedAt ? 1 : -1
+            return new Date(b.createdAt) - new Date(a.createdAt)
+        })
+        : []
 
     // Bàn không bị cắt theo ngày (xem fetchOpenTables), nên bàn quên chưa tính tiền có
     // thể là của hôm qua. Giờ mở KHÔNG hiện trên thẻ — cái nhân viên cần đọc là danh
@@ -106,13 +155,27 @@ export default function TableModal({ onClose }) {
                 )}
 
                 <div className="grid grid-cols-2 gap-3">
-                    {/* Đơn mang đi ở quán có bàn: bỏ chọn bàn, đơn về lại dạng không nhãn. */}
-                    <button
-                        onClick={() => pick('')}
-                        className={`${CARD_H} rounded-[20px] border p-3.5 flex flex-col items-center justify-center transition-colors ${!tableName ? 'bg-primary/5 border-primary' : 'bg-surface border-border/60 hover:border-primary/40'}`}
-                    >
-                        <span className="text-[13px] font-black uppercase tracking-wide text-text">Mang đi</span>
-                    </button>
+                    {/* Đơn mang đi ở quán có bàn: bỏ chọn bàn, đơn về lại dạng không nhãn.
+                        Có đơn đang chờ ra món thì hiện overview như thẻ bàn busy (bấm mở
+                        danh sách) — không thì tile tĩnh bấm-là-chọn như trước. */}
+                    {takeaway ? (
+                        <div className={`${CARD_H} relative rounded-[20px] border p-3.5 flex flex-col gap-1.5 transition-colors ${!tableName ? 'bg-primary/5 border-primary' : 'bg-surface border-border/60'}`}>
+                            <button onClick={() => setShowTakeaway(true)} className="flex-1 min-h-0 w-full overflow-hidden text-left flex flex-col gap-1 focus:outline-none">
+                                <span className="w-full flex items-baseline justify-between gap-2">
+                                    <span className="text-[13px] font-black uppercase tracking-wide text-text">Mang đi</span>
+                                    <span className="shrink-0 text-[12px] font-black tabular-nums text-text-secondary">{takeawayRounds.length} đơn</span>
+                                </span>
+                                {roundPreview(takeawayRounds, 'đơn')}
+                            </button>
+                        </div>
+                    ) : (
+                        <button
+                            onClick={() => pick('')}
+                            className={`${CARD_H} rounded-[20px] border p-3.5 flex flex-col items-center justify-center transition-colors ${!tableName ? 'bg-primary/5 border-primary' : 'bg-surface border-border/60 hover:border-primary/40'}`}
+                        >
+                            <span className="text-[13px] font-black uppercase tracking-wide text-text">Mang đi</span>
+                        </button>
+                    )}
 
                     {names.map(name => {
                         const t = statsOf(name)
@@ -120,7 +183,6 @@ export default function TableModal({ onClose }) {
                         const busy = t.rounds.length > 0
                         const stale = staleLabel(t.openedAt)
                         const pending = t.rounds.filter(r => !r.servedAt).length
-                        const shown = t.lines.length > CARD_LINES ? t.lines.slice(0, CARD_LINES - 1) : t.lines
                         return (
                             <div
                                 key={name}
@@ -138,8 +200,10 @@ export default function TableModal({ onClose }) {
                                     </button>
                                 )}
                                 {/* Thẻ = tờ hoá đơn đang chạy. Tên và tổng cùng một hàng vì đó là
-                                    hai thứ hay đọc chung; danh sách món ở dưới, cắt bớt cho vừa
-                                    khung — bản đầy đủ nằm trong modal chi tiết.
+                                    hai thứ hay đọc chung; danh sách đợt ở dưới (giờ gọi + đã/chưa ra
+                                    món) để nhân viên overview được cả bàn mà không cần bấm vào từng
+                                    bàn — cắt bớt cho vừa khung, bản đầy đủ (kèm món) nằm trong modal
+                                    chi tiết.
                                     Bàn có khách: chạm = mở chi tiết (đọc/sửa/thu tiền đều ở đó).
                                     Bàn trống: không có gì để đọc, chạm = chọn bàn luôn. */}
                                 <button onClick={() => busy ? setDetail(name) : pick(name)} className="flex-1 min-h-0 w-full overflow-hidden text-left flex flex-col gap-1 focus:outline-none">
@@ -149,18 +213,7 @@ export default function TableModal({ onClose }) {
                                     </span>
                                     {stale && <span className="text-[11px] font-bold text-warning">{stale}</span>}
                                     {busy ? (
-                                        <span className="flex flex-col gap-0.5">
-                                            {/* Số lượng chỉ hiện khi > 1 — "1" lặp ở mọi dòng là nhiễu.
-                                                Cùng quy ước với dòng Nhật ký (buildLastOrderFromCart). */}
-                                            {shown.map(l => (
-                                                <span key={l.name} className="text-[12px] font-bold text-text-secondary leading-snug line-clamp-1">
-                                                    {l.qty > 1 && <span className="tabular-nums text-text">{l.qty} </span>}{l.name}
-                                                </span>
-                                            ))}
-                                            {t.lines.length > shown.length && (
-                                                <span className="text-[12px] font-bold text-text-secondary/60 leading-snug">+{t.lines.length - shown.length} món nữa</span>
-                                            )}
-                                        </span>
+                                        roundPreview(t.rounds, 'đợt')
                                     ) : (
                                         <span className="text-[12px] font-bold text-text-secondary/50">Trống</span>
                                     )}
@@ -225,6 +278,16 @@ export default function TableModal({ onClose }) {
                     tableNames={names}
                     onClose={() => setDetail(null)}
                     onPick={() => pick(detail)}
+                />
+            )}
+            {/* takeaway && cùng lý do detailTable && ở trên: đơn cuối vừa ra món/chuyển đi
+                thì bucket biến mất, modal tự đóng theo thay vì hiện danh sách rỗng. */}
+            {showTakeaway && takeaway && (
+                <TakeawayListModal
+                    orders={takeawayRounds}
+                    tableNames={names}
+                    onClose={() => setShowTakeaway(false)}
+                    onPick={() => pick('')}
                 />
             )}
         </Dialog>

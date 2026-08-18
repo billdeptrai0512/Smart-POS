@@ -411,10 +411,16 @@ export async function fetchRecentOrders(addressId: UUID | null, limit = 3): Prom
 // đúng đợt. lines (gộp) vẫn để nguyên cho thẻ bàn và câu đọc lúc tính tiền.
 // items = nguyên liệu để DỰNG LẠI giỏ khi sửa đợt (product_id + extra_ids), khác lines
 // vốn chỉ là chữ để đọc. Không suy ngược được từ lines: hai topping có thể trùng tên.
+//
+// Bucket đặc biệt name=null: đơn MANG ĐI chưa ra món (table_name thật là null). Đơn mang
+// đi không có "tính tiền" (đã trả ngay lúc tạo) nên không cần lọc table_closed_at, chỉ cần
+// served_at IS NULL — ra món xong thì coi như xong, rơi khỏi bucket này (đọc/in/xoá đơn cũ
+// vẫn làm ở Nhật ký). Nhờ vậy TableModal/moveTableRounds/toggleServed dùng lại nguyên logic
+// "một bàn" cho cả mang đi, không cần state/fetch riêng.
 export type TableLine = { name: string; qty: number }
 export type TableRoundItem = { productId: UUID; qty: number; extraIds: UUID[]; discountAmount: number }
 export type TableRound = { id: UUID; orderNo: number | null; createdAt: string; total: number; discountAmount: number; servedAt: string | null; staffName: string | null; lines: TableLine[]; items: TableRoundItem[] }
-export type OpenTable = { name: string; total: number; rounds: TableRound[]; openedAt: string; lines: TableLine[] }
+export type OpenTable = { name: string | null; total: number; rounds: TableRound[]; openedAt: string; lines: TableLine[] }
 
 // 'Tiền mặt'/'MoMo' đi chung mảng extras nhưng là cách trả tiền, không phải topping —
 // cùng quy ước với buildLastOrderFrom* ở POSContext.
@@ -463,7 +469,10 @@ export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable
         .eq('address_id', addressId)
         .is('deleted_at', null)
         .is('table_closed_at', null)
-        .not('table_name', 'is', null)
+        // Bàn thật (table_name khác null) luôn lấy, bất kể served_at — đợt đã ra món vẫn
+        // phải hiện tới khi bàn tính tiền. Đơn mang đi (table_name null) chỉ lấy khi CHƯA
+        // ra món — ra món xong thì không còn gì để nhân viên theo dõi ở màn này nữa.
+        .or('table_name.not.is.null,served_at.is.null')
         .order('created_at', { ascending: true })
 
     // NÉM lỗi thay vì trả [] — mảng rỗng nghĩa là "không bàn nào còn khách", và người
@@ -472,7 +481,7 @@ export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable
     if (error) throw error
     if (!data) return []
 
-    const byName = new Map<string, OpenTable>()
+    const byName = new Map<string | null, OpenTable>()
     for (const o of data as any[]) {
         const t: OpenTable = byName.get(o.table_name) ?? { name: o.table_name, total: 0, rounds: [], openedAt: o.created_at, lines: [] }
         const roundLines = mergeTableLines([], (o.order_items || []).map((i: any) => ({
@@ -537,7 +546,9 @@ export async function reopenTable(addressId: UUID, tableName: string, closedAt: 
 // nguyên số hoá đơn đã cấp lúc tạo (xem orderNo trong TableDetailModal), gộp/tách chỉ
 // đổi nhóm hiển thị. Cùng trust boundary như closeTable (chỉ đổi nhãn bàn, không đụng
 // tiền) nên update thẳng, không cần RPC riêng.
-export async function moveTableRounds(addressId: UUID, orderIds: UUID[], targetTableName: string): Promise<void> {
+// targetTableName = null nghĩa là "chuyển thành mang đi" (bỏ bàn) — xem bucket name=null
+// ở fetchOpenTables.
+export async function moveTableRounds(addressId: UUID, orderIds: UUID[], targetTableName: string | null): Promise<void> {
     if (!supabase) throw new Error('No Supabase connection')
 
     const { error } = await supabase
