@@ -5,6 +5,13 @@ import ErrorBanner from '../components/common/ErrorBanner'
 import PasswordInput from '../components/common/PasswordInput'
 import FloatingLabelInput from '../components/common/FloatingLabelInput'
 
+// Supabase auth trả message tiếng Anh — dịch những lỗi login thường gặp
+const AUTH_ERROR_VI = {
+    'Invalid login credentials': 'Sai tài khoản hoặc mật khẩu',
+    'Email not confirmed': 'Tài khoản chưa xác nhận email',
+    'Too many requests': 'Thử lại quá nhiều lần, vui lòng chờ một chút',
+}
+
 export default function LoginPage() {
     const { signIn, initGuestMode } = useAuth()
     const navigate = useNavigate()
@@ -30,7 +37,7 @@ export default function LoginPage() {
             await signIn(username, password)
             navigate('/addresses', { replace: true })
         } catch (err) {
-            setError(err.message || 'Đăng nhập thất bại')
+            setError(AUTH_ERROR_VI[err.message] || err.message || 'Đăng nhập thất bại')
         } finally {
             setLoading(false)
         }
@@ -72,10 +79,12 @@ export default function LoginPage() {
                                 autoComplete="current-password"
                             />
                             {/* pl-4 = px-4 của input → link thẳng hàng với chữ trong ô, không tuột ra mép thẻ */}
-                            <div className="mt-2 pl-2
-                              ">
-                                <Link to="/forgot-password" className="text-primary text-xs font-bold hover:underline">
+                            <div className="mt-3 pl-2 pr-2 flex items-center justify-between">
+                                <Link to="/forgot-password" className="text-text-secondary text-xs hover:text-primary hover:underline">
                                     Quên mật khẩu?
+                                </Link>
+                                <Link to="/signup" className="text-text-secondary text-xs hover:text-primary hover:underline">
+                                    Đăng ký
                                 </Link>
                             </div>
                         </div>
@@ -89,9 +98,11 @@ export default function LoginPage() {
                         </button>
                     </form>
 
-                    <p className="text-center text-text-secondary text-xs">
-                        Chưa có tài khoản? <Link to="/signup" className="text-primary font-bold hover:underline">Đăng ký</Link>
-                    </p>
+                    <div className="flex items-center gap-2 ml-2 mr-2">
+                        <div className="flex-1 h-px bg-border-light" />
+                        <span className="text-text-secondary text-[11px] uppercase tracking-wide">hoặc</span>
+                        <div className="flex-1 h-px bg-border-light" />
+                    </div>
 
                     {/* Sử dụng thử (Guest Mode) */}
                     <div>
