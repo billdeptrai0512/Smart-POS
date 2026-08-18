@@ -1,20 +1,14 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import {
-    fetchTodayShiftClosing,
-    fetchIngredientCostsWithUnits,
-    fetchIngredientStocks,
-} from '../services/orderService'
-import { mergeShiftClosingInventory, fetchYesterdayShiftClosing } from '../services/reportService'
+import { fetchTodayShiftClosing } from '../services/orderService'
+import { mergeShiftClosingInventory } from '../services/reportService'
 import { supabase } from '../lib/supabaseClient'
 import { isGuest } from '../services/localRepository'
-import { sortIngredients, lookupByLabel } from '../utils/ingredients'
+import { lookupByLabel } from '../utils/ingredients'
 import { dateStringVN } from '../utils/dateVN'
 import { onTabReturn } from '../utils/tabVisibility'
-
-// Chuẩn hoá 1 ô input trước khi so với baseline: undefined / null / '' đều là "chưa nhập".
-// Mọi phép so dirty trong file này phải dùng chung hàm này, không thì "" vs undefined
-// sẽ đẻ ra dirty ma sau khi load.
-const norm = (v) => (v === undefined || v === null || v === '' ? null : String(v))
+import { norm, strField, boolField, mergeField } from '../utils/fieldSync'
+import { useIngredientCatalog } from './useIngredientCatalog'
+import { useWarehouseStockSync } from './useWarehouseStockSync'
 
 // Owns all the inventory-side state and side-effects that used to live in
 // ShiftClosingPage: input maps for opening / restock / counter, the existing
@@ -23,6 +17,21 @@ const norm = (v) => (v === undefined || v === null || v === '' ? null : String(v
 //
 // Returns everything DailyReportPage needs to render InventoryReportCard
 // and build an inventory_report payload for save.
+//
+// ── Invariants (đọc trước khi sửa) ─────────────────────────────────────────
+// 1. Baseline = ảnh chụp lần load/lưu gần nhất. isDirty/dirtySummary/
+//    buildInventoryPatches đều SO input-maps hiện tại với baselineRef, không
+//    có state "dirty" rời — sửa 1 chỗ tính dirty mà quên chỗ khác sẽ lệch.
+// 2. mergeField (../utils/fieldSync) là luật hoà remote DUY NHẤT: field đang
+//    dirty (khác baseline) → giữ local; field sạch → nhận remote. Áp cho cả
+//    reconcileFromRemote lẫn tương lai nếu có thêm field cần đồng bộ.
+// 3. seed.* (dưới đây) là nguồn dữ liệu duy nhất cho ngày ĐANG XEM khi
+//    isDayScope — hook KHÔNG tự fetch song song với fetch của DailyReportPage.
+//    Ingredient catalog (useIngredientCatalog) và warehouse/opening-stock
+//    (useWarehouseStockSync) là 2 mối riêng, không đọc/ghi baseline.
+// 4. pushInventory chỉ gửi DELTA (patch từng ingredient đổi so baseline) —
+//    đây là thứ làm merge race-free giữa 2 thiết bị, đừng đổi thành gửi
+//    nguyên mảng.
 //
 // Realtime channel is named after the address (same as before) so devices
 // editing the same shift converge regardless of which page they're on.
@@ -40,7 +49,19 @@ const norm = (v) => (v === undefined || v === null || v === '' ? null : String(v
 // event — kênh này vốn đã mang sẵn actual_cash/actual_transfer/cash_closed_at trong
 // payload.new, trước đây bị vứt đi vì handler chỉ đọc inventory_report. Cho caller đồng bộ
 // ô "Thực thu" mà không tốn thêm request nào.
-export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, onFieldConflict, onRemoteCash) {
+//
+// `seed.*` (optional) — DailyReportPage (qua useDailyReportData) fetch shift_closing +
+// yesterday_closing của NGÀY ĐANG XEM ngay trong get_daily_report_context/get_report_by_date
+// — đúng 1 lần cho cả "Hôm nay" LẪN 1 ngày quá khứ cụ thể (chỉ range tuần/tháng mới không có
+// cặp này). Trước đây hook này tự fetch lại y hệt qua fetchTodayShiftClosing/
+// fetchYesterdayShiftClosing → mỗi lần mở báo cáo 1 ngày tốn thêm round-trip trùng lặp (và ở
+// scope quá khứ còn fetch NHẦM phiếu hôm nay vì fetchTodayShiftClosing không nhận tham số
+// ngày). seed.isDayScope=true (Hôm nay hoặc 1-ngày-quá-khứ) + seedReady=true (cha đã fetch
+// xong) → dùng thẳng seed.todayClosing/seed.yesterdayClosing, KHÔNG tự fetch nữa.
+// seedReady=false mà isDayScope vẫn đợi (không tự bắn fetch trùng với fetch đang chạy của
+// cha). isDayScope=false (range tuần/tháng/custom nhiều ngày) → giữ hành vi tự fetch cũ.
+export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, onFieldConflict, onRemoteCash, seed = {}) {
+    const { seedReady = false, isDayScope = false, todayClosing: seedTodayClosing, yesterdayClosing: seedYesterdayClosing } = seed
     // ── Inputs (staff-typed) ──────────────────────────────────────────────────
     const [openingInputs, setOpeningInputs] = useState({})
     const [openingLocked, setOpeningLocked] = useState({})
@@ -52,10 +73,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     const [skipped, setSkipped] = useState({})
 
     // ── Derived / fetched ─────────────────────────────────────────────────────
-    const [ingredientsList, setIngredientsList] = useState([])
-    const [isLoadingIngredients, setIsLoadingIngredients] = useState(true)
-    const [openingStock, setOpeningStock] = useState({})
-    const [warehouseStocks, setWarehouseStocks] = useState({})
+    const { ingredientsList, isLoadingIngredients, reloadIngredients } = useIngredientCatalog(addressId, ingredientSortOrder)
     const [existingClosing, setExistingClosing] = useState(null)
     const [isLoadingExisting, setIsLoadingExisting] = useState(true)
 
@@ -94,7 +112,6 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
         // addressId === null (not undefined) means "Mẫu mặc định" (admin default
         // template) — a valid target, not "no address selected yet".
         if (addressId === undefined) { setIsLoadingExisting(false); return }
-        setIsLoadingExisting(true)
         // Clear pre-existing input state so a new day starts blank if no closing exists yet.
         setExistingClosing(null)
         setInventoryInputs({})
@@ -103,7 +120,8 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
         setOpeningLocked({})
         setSkipped({})
         commitBaseline({}, {}, {}, {}, {})
-        fetchTodayShiftClosing(addressId).then(data => {
+
+        const applyTodayClosing = (data) => {
             if (!data) return
             // Guard against server returning yesterday's row as "today's" (tz / RPC
             // boundary issue). When closed_at isn't today VN, ignore — treat as no
@@ -139,8 +157,22 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
             // Giữ seed đang có trong baseline để 2 thứ khớp ở cả 2 thứ tự resolve của race.
             const openBase = Object.keys(openings).length ? openings : baselineRef.current.opening
             commitBaseline(openBase, locked, restocks, inputs, skips)
-        }).finally(() => setIsLoadingExisting(false))
-    }, [addressId, dateKey, commitBaseline])
+        }
+
+        setIsLoadingExisting(true)
+        if (seedReady) {
+            // Cha đã fetch xong (get_daily_report_context / get_report_by_date) — dùng thẳng.
+            applyTodayClosing(seedTodayClosing)
+            setIsLoadingExisting(false)
+            return
+        }
+        if (isDayScope) {
+            // Đang ở 1 ngày cụ thể nhưng cha CHƯA fetch xong — đợi seedReady flip qua deps,
+            // không tự bắn fetch trùng với fetch cha đang chạy.
+            return
+        }
+        fetchTodayShiftClosing(addressId).then(applyTodayClosing).finally(() => setIsLoadingExisting(false))
+    }, [addressId, dateKey, commitBaseline, seedReady, seedTodayClosing, isDayScope])
 
     // ── Canonical stock reader: warehouse + counter snapshots ────────────────
     // counter_stock seeds "Đầu kỳ" (= previous shift's remaining).
@@ -150,39 +182,10 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     // reflects here without manual refresh.
     // Exposed so callers can refresh after writing stock (e.g. Nhập kho từ /daily-report)
     // — the warehouse balances then reflect the new purchase without a tab switch.
+    const { warehouseStocks, openingStock, reload: reloadWarehouseStock } = useWarehouseStockSync(addressId, { seedReady, isDayScope, seedYesterdayClosing })
     const reloadStocks = useCallback(() => {
         if (addressId === undefined) return Promise.resolve()
-        return Promise.all([
-            fetchIngredientStocks(addressId),
-            fetchYesterdayShiftClosing(addressId),
-        ]).then(([rows, yesterdayClosing]) => {
-            const warehouses = {}
-            ; (rows || []).forEach(r => {
-                if (typeof r.warehouse_stock === 'number') {
-                    warehouses[r.ingredient] = r.warehouse_stock
-                }
-            })
-            setWarehouseStocks(warehouses)
-
-            let yesterdayReport = []
-            if (yesterdayClosing && yesterdayClosing.inventory_report) {
-                yesterdayReport = yesterdayClosing.inventory_report
-                if (typeof yesterdayReport === 'string') {
-                    try { yesterdayReport = JSON.parse(yesterdayReport) } catch { yesterdayReport = [] }
-                }
-            }
-
-            const counters = {}, openings = {}
-            if (Array.isArray(yesterdayReport)) {
-                yesterdayReport.forEach(item => {
-                    if (item && item.ingredient && typeof item.remaining === 'number') {
-                        counters[item.ingredient] = item.remaining
-                        openings[item.ingredient] = String(item.remaining)
-                    }
-                })
-            }
-
-            setOpeningStock(counters)
+        return reloadWarehouseStock().then(({ openings }) => {
             // Seed openingInputs only if today's closing hasn't set them yet.
             // When seeding kicks in, also fold the seed into baseline.opening so
             // a fresh tab doesn't read as "dirty" before any user edit.
@@ -193,7 +196,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
                 return openings
             })
         })
-    }, [addressId])
+    }, [addressId, reloadWarehouseStock])
 
     useEffect(() => {
         if (addressId === undefined) return
@@ -202,30 +205,11 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
         return onTabReturn(reloadStocks)
     }, [addressId, reloadStocks])
 
-    // ── Ingredient list with units (for sort + per-row metadata) ─────────────
-    // Exposed (như reloadStocks) để refresh sau khi Nhập kho làm đổi giá vốn bình quân —
-    // cột "Giá trị" hao hụt (= lượng × unit_cost) mới tươi mà không cần vào lại trang.
-    const reloadIngredients = useCallback(() => {
-        if (addressId === undefined) { setIsLoadingIngredients(false); return Promise.resolve() }
-        setIsLoadingIngredients(true)
-        return fetchIngredientCostsWithUnits(addressId).then(list => {
-            // Loại nguyên liệu được tắt "kiểm kê hao hụt" (count_in_audit === false).
-            // Thiếu cờ (phiếu cũ / chưa migrate) → mặc định hiện.
-            const sorted = [...list]
-                .filter(r => r.count_in_audit !== false)
-                .sort((a, b) => sortIngredients(a.ingredient, b.ingredient, ingredientSortOrder))
-            setIngredientsList(sorted)
-        }).finally(() => setIsLoadingIngredients(false))
-    }, [addressId, ingredientSortOrder])
-
-    useEffect(() => { reloadIngredients() }, [reloadIngredients])
-
     // ── Remote merge: fold another device's saved inventory_report into local maps ──
-    // Per-field rule: if the local field is dirty (≠ baseline → user is editing it now),
-    // KEEP local — don't yank the number they're typing; it'll get pushed on next autosave.
-    // Otherwise adopt the remote value (absent in remote = cleared) AND advance baseline to
-    // it, so isDirty stays false (no autosave loop). The DB row is the full authoritative
-    // array, so "absent" genuinely means another device deleted/cleared that ingredient.
+    // Per-field rule: nếu field local đang dirty (≠ baseline → user đang gõ dở) thì GIỮ
+    // local — xem mergeField (../utils/fieldSync). Ngược lại nhận remote (vắng mặt = bị xoá)
+    // và đẩy baseline theo → isDirty hết true (không lặp autosave). Hàng DB là mảng đầy đủ
+    // nên "vắng mặt" nghĩa thật là thiết bị khác đã xoá/clear nguyên liệu đó.
     const reconcileFromRemote = useCallback((remoteReport) => {
         let parsed = remoteReport
         if (typeof parsed === 'string') { try { parsed = JSON.parse(parsed) } catch { return } }
@@ -239,43 +223,27 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
             if (typeof item.remaining === 'number') rInventory[item.ingredient] = String(item.remaining)
             if (item.skipped) rSkipped[item.ingredient] = true
         })
-        // Ingredients where a remote value just overwrote OUR own recent push (restock/skipped
-        // only — the 2 fields "Soạn" tick touches) → reported via onFieldConflict below.
-        const conflictIngredients = new Set()
-        const CONFLICT_WINDOW_MS = 8000
-        // eq: how to compare a field for "dirty" and "present" — strings for inputs, bool for lock.
-        // watchConflicts: track ingredients whose adopted remote value differs from what we
-        // last pushed ourselves within CONFLICT_WINDOW_MS (another device raced us).
-        const mergeField = (prevMap, baseMap, remoteMap, eq, present, watchConflicts) => {
-            const out = {}, nb = {}
-            const keys = new Set([...Object.keys(prevMap), ...Object.keys(baseMap), ...Object.keys(remoteMap)])
-            for (const k of keys) {
-                const dirty = eq(prevMap[k]) !== eq(baseMap[k])
-                if (dirty) {
-                    if (present(prevMap[k])) out[k] = prevMap[k]
-                    if (present(baseMap[k])) nb[k] = baseMap[k]   // keep stale baseline → stays dirty → re-pushed
-                } else if (present(remoteMap[k])) {
-                    if (watchConflicts && eq(remoteMap[k]) !== eq(baseMap[k])) {
-                        const pushedAt = recentPushRef.current[k]
-                        if (pushedAt && Date.now() - pushedAt < CONFLICT_WINDOW_MS) conflictIngredients.add(k)
-                    }
-                    out[k] = remoteMap[k]; nb[k] = remoteMap[k]
-                }
-            }
-            return [out, nb]
-        }
-        const strEq = (v) => norm(v), strPresent = (v) => norm(v) !== null
-        const boolEq = (v) => !!v, boolPresent = (v) => !!v
         const b = baselineRef.current
-        const [oOut, oNb] = mergeField(openingInputsRef.current, b.opening, rOpening, strEq, strPresent)
-        const [lOut, lNb] = mergeField(openingLockedRef.current, b.openingLocked, rLocked, boolEq, boolPresent)
-        const [rOut, rNb] = mergeField(restockInputsRef.current, b.restock, rRestock, strEq, strPresent, true)
-        const [iOut, iNb] = mergeField(inventoryInputsRef.current, b.inventory, rInventory, strEq, strPresent)
-        const [sOut, sNb] = mergeField(skippedRef.current, b.skipped, rSkipped, boolEq, boolPresent, true)
+        const [oOut, oNb] = mergeField(openingInputsRef.current, b.opening, rOpening, strField)
+        const [lOut, lNb] = mergeField(openingLockedRef.current, b.openingLocked, rLocked, boolField)
+        const [rOut, rNb, rAdopted] = mergeField(restockInputsRef.current, b.restock, rRestock, strField)
+        const [iOut, iNb] = mergeField(inventoryInputsRef.current, b.inventory, rInventory, strField)
+        const [sOut, sNb, sAdopted] = mergeField(skippedRef.current, b.skipped, rSkipped, boolField)
         setOpeningInputs(oOut); setOpeningLocked(lOut); setRestockInputs(rOut); setInventoryInputs(iOut); setSkipped(sOut)
         baselineRef.current = { opening: oNb, openingLocked: lNb, restock: rNb, inventory: iNb, skipped: sNb }
         setBaselineVersion(v => v + 1)
-        if (onFieldConflict) conflictIngredients.forEach(ing => onFieldConflict(ing))
+        // Chỉ 2 field "Soạn" động chạm (restock/skipped) mới cần cảnh báo conflict — remote vừa
+        // đè lên push của CHÍNH thiết bị này trong vài giây gần đây (đua giữa 2 lượt merge).
+        if (onFieldConflict) {
+            const CONFLICT_WINDOW_MS = 8000
+            const now = Date.now()
+            // Set, không nối mảng thẳng: 1 nguyên liệu có thể vừa đổi CẢ restock lẫn skipped
+            // trong cùng 1 hàng remote → nối thẳng sẽ gọi onFieldConflict 2 lần (2 toast trùng).
+            for (const k of new Set([...rAdopted, ...sAdopted])) {
+                const pushedAt = recentPushRef.current[k]
+                if (pushedAt && now - pushedAt < CONFLICT_WINDOW_MS) onFieldConflict(k)
+            }
+        }
     }, [onFieldConflict])
 
     // onRemoteCash đọc state đang gõ dở của caller nên identity đổi liên tục — giữ qua ref

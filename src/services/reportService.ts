@@ -190,10 +190,14 @@ export async function mergeShiftClosingInventory(addressId: UUID, patches: Row[]
     return Array.isArray(data) ? data[0] : data
 }
 
-// get_*_report RPCs liệt kê cột shift_closing tường minh nên KHÔNG trả cash_closed_at.
-// Đọc bổ sung bằng 1 PK lookup nhẹ rồi gắn vào shift_closing. Phòng thủ: nếu cột chưa
-// migrate (42703) thì coi như null (chưa chốt → mọi khoản là trước chốt).
+// get_daily_report_context/get_report_by_date đã trả cash_closed_at thẳng trong shift_closing
+// (migration 20260818_report_rpc_cash_closed_at.sql). Trước đó 2 RPC liệt kê cột tường minh
+// nhưng thiếu cột này, phải bù bằng 1 PK lookup riêng — giữ lại làm phòng thủ cho tới khi
+// migration được apply (khoá 'cash_closed_at' in ... chứ không chỉ != null, vì giá trị thật
+// có thể là null khi ca chưa chốt tiền). Phòng thủ thêm: nếu cột chưa migrate ở TẦNG BẢNG
+// (42703) thì coi như null (chưa chốt → mọi khoản là trước chốt).
 async function attachCashClosedAt(data: Row) {
+    if (data?.shift_closing && 'cash_closed_at' in data.shift_closing) return data
     const id = data?.shift_closing?.id
     if (!id || !supabase) return data
     const { data: row, error } = await supabase

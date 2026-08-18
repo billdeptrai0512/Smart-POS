@@ -177,7 +177,16 @@ export default function DailyReportPage() {
     // drives existingClosing refetch on midnight rollover.
     // onRemoteCash chỉ truyền ở scope Hôm nay: xem ngày cũ mà nuốt event của hôm nay sẽ
     // ghi đè shiftClosing của ngày đang xem.
-    const inventory = useShiftInventoryState(selectedAddress?.id, selectedAddress?.ingredient_sort_order, todayISO, onInventoryFieldConflict, isTodayScope ? onRemoteCash : undefined)
+    // seed: useDailyReportData đã fetch đúng cặp shift_closing/yesterday_closing của NGÀY ĐANG
+    // XEM rồi — cho cả "Hôm nay" LẪN 1 ngày quá khứ cụ thể (scope === 'day'), chỉ range tuần/
+    // tháng mới không có cặp này (fetch mảng nhiều phiếu thay vì 1 cặp). Truyền xuống để hook
+    // khỏi tự fetch trùng (và ở scope quá khứ, khỏi fetch NHẦM phiếu hôm nay).
+    const isDayScope = scope === 'day'
+    const inventorySeed = useMemo(
+        () => ({ isDayScope, seedReady: isDayScope && isAsyncReady, todayClosing: shiftClosing, yesterdayClosing }),
+        [isDayScope, isAsyncReady, shiftClosing, yesterdayClosing]
+    )
+    const inventory = useShiftInventoryState(selectedAddress?.id, selectedAddress?.ingredient_sort_order, todayISO, onInventoryFieldConflict, isTodayScope ? onRemoteCash : undefined, inventorySeed)
 
     // Same-day-last-week order items — feeds the refill forecast ("Bổ sung mai")
     // inside InventoryReportCard. Today scope only; cached per address+day.
@@ -540,7 +549,7 @@ export default function DailyReportPage() {
     const lossInfo = useMemo(() => {
         // Daily scope: today's single closing + yesterday as the opening source.
         // Range scope: all closings in the period + prev-period closings.
-        const isDayScope = scope === 'day'
+        // (isDayScope = scope === 'day', khai báo ở trên cùng file — dùng chung với inventorySeed.)
         // Hôm nay: chỉ dùng shiftClosing khi closed_at ĐÚNG là hôm nay — qua nửa đêm server
         // có thể còn trả phiếu hôm qua (ranh giới TZ/RPC); không chặn thì "Hao hụt / hủy" giữ
         // số cũ của hôm qua. Ngày quá khứ (offset<0): dùng phiếu đã fetch của ngày đó.
@@ -596,7 +605,7 @@ export default function DailyReportPage() {
             .filter(l => l.value > 0)
             .sort((a, b) => b.value - a.value)
         return { lossValue: Math.round(loss), nonRecipeUsageLines }
-    }, [scope, isTodayScope, isTodaysClosing, shiftClosing, yesterdayClosing, apiShiftClosings, prevShiftClosings, apiOrders, displayOrders, offlineToday, recipes, extraIngredients, ingredientConfigs])
+    }, [isDayScope, isTodayScope, isTodaysClosing, shiftClosing, yesterdayClosing, apiShiftClosings, prevShiftClosings, apiOrders, displayOrders, offlineToday, recipes, extraIngredients, ingredientConfigs])
 
     const { lossValue, nonRecipeUsageLines } = lossInfo
     const nonRecipeUsageTotal = nonRecipeUsageLines.reduce((s, l) => s + l.value, 0)

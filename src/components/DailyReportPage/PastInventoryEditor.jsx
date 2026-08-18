@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown } from '../../utils/inventory'
 import { getIngredientUnit, ingredientLabel } from '../../utils/ingredients'
+import { norm } from '../../utils/fieldSync'
 import InventoryReportCard from './InventoryReportCard'
 
 // Hằng số ổn định ref — để IngredientRow (memo) không re-render mọi dòng mỗi keystroke.
@@ -100,7 +101,6 @@ export default function PastInventoryEditor({
         setVersion(v => v + 1)
     }
 
-    const norm = (v) => (v === undefined || v === null || v === '' ? null : String(v))
     // Các dòng "NVL · Cuối kỳ: cũ → mới" — vừa làm cờ dirty, vừa cho confirm rời trang liệt kê.
     const dirtyLines = useMemo(() => {
         const lines = []
