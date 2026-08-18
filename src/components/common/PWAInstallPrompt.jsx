@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { STORAGE_KEYS } from '../../constants/storageKeys'
+import { trackPwaShown, trackPwaInstalled } from '../../services/pwaInstallService'
 
 // Synchronous, mount-only environment checks — computed as lazy initial state so
 // they don't trigger an extra render via setState-in-effect.
@@ -15,6 +16,8 @@ export default function PWAInstallPrompt() {
     const [promptInstall, setPromptInstall] = useState(null)
     const [isStandalone] = useState(detectStandalone)
     const [isIOS] = useState(detectIOS)
+    const [platform] = useState(() => (isIOS ? 'ios' : /Android/i.test(navigator.userAgent) ? 'android' : 'other'))
+    const shownTracked = useRef(false)
     // iOS has no beforeinstallprompt event, so decide its banner up front; Android
     // flips this on in the event handler below.
     const [showPrompt, setShowPrompt] = useState(
@@ -34,6 +37,16 @@ export default function PWAInstallPrompt() {
         return () => window.removeEventListener('beforeinstallprompt', handler)
     }, [isStandalone])
 
+    // iOS không có sự kiện xác nhận cài đặt (không beforeinstallprompt/appinstalled) — nên track
+    // "đã cài" bằng cách phát hiện app đang MỞ Ở CHẾ ĐỘ STANDALONE, đúng cho cả iOS lẫn Android
+    // (Android cũng vào standalone sau khi cài, kể cả cài qua menu trình duyệt thay vì nút của ta).
+    // Chạy ở MỌI trang, không chỉ /addresses — app có thể được mở lại từ bất kỳ đâu.
+    useEffect(() => {
+        if (!isStandalone || localStorage.getItem(STORAGE_KEYS.PWA_INSTALLED_TRACKED)) return
+        localStorage.setItem(STORAGE_KEYS.PWA_INSTALLED_TRACKED, 'true')
+        trackPwaInstalled(platform)
+    }, [isStandalone, platform])
+
     const handleInstall = async () => {
         if (!promptInstall) {
             return
@@ -50,10 +63,20 @@ export default function PWAInstallPrompt() {
         localStorage.setItem(STORAGE_KEYS.PWA_PROMPT_DISMISSED, 'true')
     }
 
-    // CHỈ hiện ở màn đăng nhập: ở /pos và các màn khác nó nằm đè lên hướng dẫn
-    // onboarding. Vẫn mount ở mọi trang (listener beforeinstallprompt ở trên phải
-    // chạy sớm, event chỉ bắn 1 lần) — chỉ chặn ở khâu render.
-    if (isStandalone || !showPrompt || pathname !== '/login') {
+    // CHỈ hiện ở màn chọn địa chỉ (sau khi đã có tài khoản thật): ở /login thì thừa
+    // vì lần đầu vào user nên dùng thử trước, ở /pos và các màn khác thì đè lên
+    // hướng dẫn onboarding. Vẫn mount ở mọi trang (listener beforeinstallprompt ở
+    // trên phải chạy sớm, event chỉ bắn 1 lần) — chỉ chặn ở khâu render.
+    const visible = !isStandalone && showPrompt && pathname === '/addresses'
+
+    useEffect(() => {
+        if (!shownTracked.current && visible) {
+            shownTracked.current = true
+            trackPwaShown(platform)
+        }
+    }, [visible, platform])
+
+    if (!visible) {
         return null
     }
 
@@ -64,7 +87,7 @@ export default function PWAInstallPrompt() {
                     <div className="flex items-center gap-3">
                         <img src="/icons/icon-192x192.png" alt="App Icon" className="w-10 h-10 rounded-xl" />
                         <div>
-                            <h3 className="text-[14px] font-bold text-text">Tải ứng dụng KOPOS</h3>
+                            <h3 className="text-[14px] font-bold text-text">Sử dụng KOPOS</h3>
                             <p className="text-[12px] text-text-secondary">Vận hành quán nhỏ dễ dàng hơn</p>
                         </div>
                     </div>
@@ -77,8 +100,8 @@ export default function PWAInstallPrompt() {
                     <div className="mt-3 text-[13px] text-text-secondary flex flex-col gap-1.5">
                         <p>Để cài đặt ứng dụng trên iOS:</p>
                         <ol className="list-decimal list-inside space-y-1 pl-1">
-                            <li>Nhấn vào biểu tượng Chia sẻ (Share) ở menu trình duyệt.</li>
-                            <li>Chọn <strong>Thêm vào MH chính</strong> (Add to Home Screen).</li>
+                            <li>Bấm  <strong>Chia sẻ (Share) </strong> ở menu trình duyệt.</li>
+                            <li>Chọn <strong>Thêm vào màn hình chính</strong><br />(<strong>Add to Home Screen</strong>)</li>
                         </ol>
                     </div>
                 ) : (
@@ -86,7 +109,7 @@ export default function PWAInstallPrompt() {
                         onClick={handleInstall}
                         className="w-full mt-3 bg-primary text-bg font-bold py-2 rounded-lg text-[14px] hover:bg-primary-hover active:scale-[0.98] transition-all"
                     >
-                        Cài đặt ngay
+                        Thêm vào màn hình chính
                     </button>
                 )}
             </div>

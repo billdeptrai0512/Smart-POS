@@ -399,9 +399,12 @@ body {
 }
 
 /* ====== PWA Install Banner ====== */
+/* ponytail: chỉ hiện ở /addresses (xem PWAInstallPrompt.jsx), trang đó luôn có thanh
+   hành động dính đáy (Đăng xuất / Tạo địa chỉ) cao ~66px + safe-area. Đẩy banner lên
+   trên thanh đó thay vì đè lên — đổi cùng lúc nếu chiều cao thanh hành động đổi. */
 .pwa-install-banner {
   position: fixed;
-  bottom: 16px;
+  bottom: calc(66px + max(env(safe-area-inset-bottom), 10px) + 8px);
   left: 16px;
   right: 16px;
   z-index: 9999;

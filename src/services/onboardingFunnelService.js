@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabaseClient'
+import { fireAndForget } from './rpcFireAndForget'
 
 // Định danh ẩn danh do client tự sinh, CHỈ dùng cho phễu onboarding ở /admin/dashboard.
 // Cố tình KHÔNG dùng lại:
@@ -30,26 +31,13 @@ function readVisitorId() {
     }
 }
 
-// Chung 1 lối gọi cho cả 2 RPC: fire-and-forget, nuốt cả lỗi trả về lẫn lỗi reject (mất mạng).
-function fireAndForget(fn, args) {
-    try {
-        if (!supabase) return
-        supabase.rpc(fn, args).then(
-            ({ error }) => { if (error) console.warn(`[funnel] ${fn} failed:`, error.message) },
-            (err) => console.warn(`[funnel] ${fn} rejected:`, err),
-        )
-    } catch (err) {
-        console.warn(`[funnel] ${fn} threw:`, err)
-    }
-}
-
 // Fire-and-forget: KHÔNG bao giờ throw, KHÔNG await, KHÔNG chặn luồng của khách. RPC có thể chưa
 // tồn tại (migration 20260801_guest_onboarding_funnel.sql apply tay) → lỗi ở đây phải im lặng.
 // Gọi lại cùng 1 stage là vô hại: RPC upsert bằng GREATEST nên không đếm trùng, không lùi số.
 export function trackGuestOnboardingStage(stage) {
     const visitorId = getOrCreateVisitorId()
     if (!visitorId) return
-    fireAndForget('track_guest_onboarding_stage', { p_visitor_id: visitorId, p_stage: stage })
+    fireAndForget('track_guest_onboarding_stage', { p_visitor_id: visitorId, p_stage: stage }, 'funnel')
 }
 
 // Mốc cuối của phễu: khách dùng thử đã đăng ký tài khoản thật. Gọi sau khi signUp thành công
@@ -59,7 +47,7 @@ export function trackGuestOnboardingStage(stage) {
 export function markGuestFunnelSignup() {
     const visitorId = readVisitorId()
     if (!visitorId) return
-    fireAndForget('mark_guest_funnel_signup', { p_visitor_id: visitorId })
+    fireAndForget('mark_guest_funnel_signup', { p_visitor_id: visitorId }, 'funnel')
 }
 
 // Đọc (admin, OnboardingFunnelCard) — 1 lần gọi trả cả 3 khoảng thời gian

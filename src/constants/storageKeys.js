@@ -26,6 +26,7 @@ export const STORAGE_KEYS = {
 
     // PWA
     PWA_PROMPT_DISMISSED: 'pwa_prompt_dismissed',
+    PWA_INSTALLED_TRACKED: 'pwa_installed_tracked', // đã báo installed_at 1 lần, khỏi gọi lại mỗi lần mở app
 }
 
 // Per-address cache keys used by ProductContext / AddressSelectPage.
