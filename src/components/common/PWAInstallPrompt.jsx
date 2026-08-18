@@ -76,6 +76,14 @@ export default function PWAInstallPrompt() {
         }
     }, [visible, platform])
 
+    // Banner fixed-position đè lên đáy danh sách địa chỉ (xem .address-scroll-list trong
+    // index.css) — bật class trên <body> để list đó tự chừa chỗ cuộn, khỏi bị che nút
+    // "Mẫu mặc định" / "Bạn cần hỗ trợ".
+    useEffect(() => {
+        document.body.classList.toggle('pwa-banner-open', visible)
+        return () => document.body.classList.remove('pwa-banner-open')
+    }, [visible])
+
     if (!visible) {
         return null
     }

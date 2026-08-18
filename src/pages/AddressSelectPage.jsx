@@ -300,7 +300,7 @@ export default function AddressSelectPage() {
                 managerCount={managerCount}
             />
 
-            <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4 hide-scrollbar">
+            <div className="address-scroll-list flex-1 overflow-y-auto px-4 pt-4 pb-4 hide-scrollbar">
                 {/* ── BRANCHES TAB ── */}
                 {(activeTab === 'branches' || isStaff) && (
                     <BranchGrid

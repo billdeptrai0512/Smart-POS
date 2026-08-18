@@ -412,6 +412,12 @@ body {
   margin: 0 auto;
 }
 
+/* ponytail: banner cao ~90-165px tuỳ nội dung (nút Android ngắn / hướng dẫn iOS dài) — chừa
+   200px cho chắc thay vì đo chính xác bằng ResizeObserver. Đổi số này nếu banner đổi layout. */
+body.pwa-banner-open .address-scroll-list {
+  padding-bottom: 200px;
+}
+
 .pwa-install-content {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
