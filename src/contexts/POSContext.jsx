@@ -9,7 +9,7 @@ import { calculateProductCost, computeDiscount, discountToPercent, cartLineSubto
 import { useProducts } from './ProductContext'
 import { useAddress } from './AddressContext'
 import { useAuth } from './AuthContext'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { useToast } from '../hooks/useToast'
 import { STORAGE_KEYS } from '../constants/storageKeys'
 import { CartContext } from './CartContext'
@@ -40,6 +40,16 @@ export function POSProvider() {
     const { selectedAddress } = useAddress()
     const { profile, isGuest, hasSession } = useAuth()
     const addressId = selectedAddress?.id
+    // POSProvider bọc chung /pos, /history, /daily-report, /recipes, /ingredients (App.jsx) —
+    // nhưng revenue/cupsSold/recentOrders/openTables chỉ mỗi /pos render. Trước đây 2 effect
+    // dưới (thống kê hôm nay + mở bàn) chạy ngay khi addressId có, bất kể trang nào đang mở:
+    // vào thẳng /history qua "Lối tắt" ở /addresses (không qua /pos) vẫn kéo fetchTodayStats +
+    // fetchRecentOrders + fetchOpenTables (join nặng, dine-in) chạy song song với 3 request
+    // /history thật sự cần → tranh connection cho không. Gate theo pathname==='/pos', chỉ fetch
+    // 1 LẦN cho mỗi addressId (không refetch mỗi lần quay lại /pos — poll/realtime lo phần cập
+    // nhật tiếp theo).
+    const { pathname } = useLocation()
+    const isPosPage = pathname === '/pos'
 
     // Mirrors for the cart handlers below (useCallback'd with empty/near-empty deps
     // so ProductCard's React.memo actually bails out on untouched cards — otherwise
@@ -169,7 +179,16 @@ export function POSProvider() {
             .catch(err => { console.error('refreshTables:', err); return openTablesRef.current })
     }, [addressId])
 
-    useEffect(() => { if (dineIn) refreshTables() }, [dineIn, refreshTables])
+    // "Đã tải" reset mỗi khi ĐỔI địa chỉ (đứng riêng, không gộp deps vào effect dưới) — quay
+    // lại /pos cho CÙNG địa chỉ thì khỏi load lại (poll lo phần cập nhật tiếp theo), nhưng đổi
+    // sang địa chỉ khác rồi quay về địa chỉ cũ vẫn phải tải lại (dữ liệu có thể đã đổi lúc vắng).
+    const tablesLoadedRef = useRef(false)
+    useEffect(() => { tablesLoadedRef.current = false }, [addressId])
+    useEffect(() => {
+        if (!dineIn || !isPosPage || tablesLoadedRef.current) return
+        tablesLoadedRef.current = true
+        refreshTables()
+    }, [dineIn, isPosPage, refreshTables])
 
     // Ra món: lật cờ NGAY trong state rồi mới gọi server, lỗi thì lật lại. Chờ PATCH
     // xong rồi refreshTables (một lượt join order_items, đo được ~1s) là nhân viên bấm
@@ -291,9 +310,15 @@ export function POSProvider() {
 
     const { getPendingCount, retrySync } = useOfflineSync(handleSyncComplete)
 
-    // ---- Load data when address changes ----
+    // ---- Load data when /pos first becomes active for this address ----
+    // Chỉ /pos render thẻ doanh thu/ly + "đơn gần nhất" (recentOrders) — tải 1 lần khi /pos
+    // active cho địa chỉ hiện tại, không refetch mỗi lần quay lại /pos (poll lo cập nhật tiếp
+    // theo); nhưng ĐỔI địa chỉ thì phải tải lại — statsLoadedRef reset riêng theo addressId.
+    const statsLoadedRef = useRef(false)
+    useEffect(() => { statsLoadedRef.current = false }, [addressId])
     useEffect(() => {
-        if (!addressId) return
+        if (!addressId || !isPosPage || statsLoadedRef.current) return
+        statsLoadedRef.current = true
 
         async function load() {
             try {
@@ -311,7 +336,7 @@ export function POSProvider() {
             }
         }
         load()
-    }, [addressId, showError])
+    }, [addressId, isPosPage, showError])
 
     // ---- Online/offline status ----
     useEffect(() => {
