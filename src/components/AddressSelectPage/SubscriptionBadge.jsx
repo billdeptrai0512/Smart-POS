@@ -9,8 +9,8 @@ import { computeSubscriptionStatus } from '../../utils/subscriptionStatus'
  * 1 dòng status mảnh dưới tên quán (subtitle) — chấm màu + chữ:
  *   - không hoạt động hôm nay → ● Không hoạt động   (bất kể trạng thái gói gì —
  *     xem hasActivity bên dưới, ưu tiên cao nhất, che hết mọi nhánh khác)
- *   - đã trả       → ● Đã đăng ký · còn X ngày
- *   - trial thật   → ● Đang dùng thử · còn X ngày
+ *   - đã trả       → ● Đã đăng ký           còn X ngày (2 đầu hàng)
+ *   - trial thật   → ● Đang dùng thử         còn X ngày (2 đầu hàng)
  *   - free tạm     → ● Đang dùng miễn phí   (pending, xem dưới)
  *   - chưa có gói  → ● Chưa đăng ký   (click → /subscription)
  * Chấm đổi màu theo độ gấp: ≤3 đỏ, ≤14 vàng, còn lại xanh.
@@ -46,8 +46,7 @@ import { computeSubscriptionStatus } from '../../utils/subscriptionStatus'
  *     cao nhất, xem mô tả ở trên.
  *   loading: bool — chưa có kết quả fetch thật → không render (rows lúc này luôn
  *     rỗng/undefined nên nếu vẫn render sẽ sai thành "Chưa đăng ký"). Ẩn hẳn thay vì
- *     skeleton để nút "Thao tác khác" đứng một mình trong hàng flex justify-between
- *     → tự dạt về sát trái, không nhảy vị trí khi badge xuất hiện.
+ *     skeleton để footer không nhảy chiều cao khi badge xuất hiện.
  *   onRenewClick: () => void   — điều hướng tới /subscription (passed from parent)
  */
 export default function SubscriptionBadge({ addressId, rows, pending, hasActivity, loading, onRenewClick }) {
@@ -109,23 +108,30 @@ export default function SubscriptionBadge({ addressId, rows, pending, hasActivit
             onClick={handleClick}
             dotClass={dotClass}
             textClass={textClass}
+            right={`còn ${daysLeft} ngày`}
         >
-            {status === 'trial' ? 'Đang dùng thử' : 'Đã đăng ký'} · còn {daysLeft} ngày
+            {status === 'trial' ? 'Đang dùng thử' : 'Đã đăng ký'}
         </StatusLine>
     )
 }
 
-function StatusLine({ id, onClick, dotClass, textClass, children }) {
+// `right` (vd "Còn X ngày") tách hẳn sang lề phải hàng — chỉ nhánh trial/paid có, các nhánh
+// còn lại (Không hoạt động/Đang dùng miễn phí/Chưa đăng ký) không truyền thì layout co lại
+// bám trái như cũ.
+function StatusLine({ id, onClick, dotClass, textClass, right, children }) {
     return (
         <span
             id={id}
             role="button"
             tabIndex={0}
             onClick={onClick}
-            className="inline-flex items-center gap-1.5 text-[12px] font-bold cursor-pointer active:opacity-70 transition-opacity"
+            className="w-full flex items-center justify-between gap-2 text-[12px] font-bold cursor-pointer active:opacity-70 transition-opacity"
         >
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} />
-            <span className={textClass}>{children}</span>
+            <span className="inline-flex items-center gap-1.5">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} />
+                <span className={textClass}>{children}</span>
+            </span>
+            {right && <span className={textClass}>{right}</span>}
         </span>
     )
 }

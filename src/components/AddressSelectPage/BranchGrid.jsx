@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-    Pencil, Trash2, ClipboardCopy, MoreHorizontal, X,
+    Pencil, Trash2, ClipboardCopy, MoreVertical, X,
     Coffee, Loader, FileText, Package, ChevronRight, Eraser,
     Banknote, Receipt, Wallet, Boxes, TrendingUp, ChefHat, Box, Warehouse, Armchair,
 } from 'lucide-react'
@@ -16,7 +16,7 @@ import { Dialog } from '../common/ModalShell'
 const isManagerRole = (role) => (role === 'manager' || role === 'co-manager') ? 1 : 0
 
 export default function BranchGrid({
-    addresses, fetchError, cupsMap, revenueMap, prevCupsMap = {}, sessionsMap, subscriptionRowsMap = {}, subscriptionStatusMap = {}, subscriptionLoading, statsLoading,
+    addresses, fetchError, cupsMap, revenueMap, prevCupsMap = {}, prevRevenueMap = {}, sessionsMap, subscriptionRowsMap = {}, subscriptionStatusMap = {}, subscriptionLoading, statsLoading,
     isStaff, isAdmin, error, setError,
     onSelect, onSelectReport, onSelectHistory, onSelectIngredients, onSelectRecipes,
     onRename, onRemove, onDefaultTemplate, onSupportClick, onToggleDineIn,
@@ -182,6 +182,10 @@ export default function BranchGrid({
                     const cupsDeltaPct = prevCups > 0
                         ? Math.round(((cups - prevCups) / prevCups) * 100)
                         : null
+                    const prevRevenue = prevRevenueMap[addr.id] || 0
+                    const revenueDeltaPct = prevRevenue > 0
+                        ? Math.round(((revenue - prevRevenue) / prevRevenue) * 100)
+                        : null
                     const sessionUsers = sessionsMap[addr.id] || []
                     const isEditing = editingAddressId === addr.id
                     // Stale-while-revalidate: only hide stats on initial load.
@@ -195,61 +199,88 @@ export default function BranchGrid({
                             className="bg-surface border border-border/60 rounded-[20px] overflow-hidden shadow-sm group hover:border-border/80 hover:shadow-[0_4px_20px_rgba(0,0,0,0.15)] transition-all flex flex-col"
                         >
                             <>
-                                {/* Main click area */}
-                                <button
-                                    onClick={() => onSelect(addr)}
-                                    className="group relative flex-1 p-3 text-left hover:bg-surface-light active:bg-border/30 transition-colors min-w-0"
-                                >
-                                    {/* Tên + chevron = tín hiệu "bấm card để vào quán". Báo cáo/Tồn kho chuyển vào modal thao tác (nút ⋯). */}
-                                    <div className="mb-1.5 flex items-center justify-between gap-1">
-                                        <span className="text-text font-black text-sm transition-colors line-clamp-2 leading-tight truncate">{addr.name}</span>
-                                        <ChevronRight size={18} strokeWidth={2.5} className="text-text-secondary shrink-0 group-hover:text-primary group-active:translate-x-0.5 transition-all" />
-                                    </div>
+                                {/* Main click area — bọc trong div.relative vì nút ⋮ góc phải KHÔNG được lồng
+                                    trong button này (HTML không cho button-trong-button). */}
+                                <div className="relative flex-1 min-w-0">
+                                    <button
+                                        onClick={() => onSelect(addr)}
+                                        className="group w-full p-3 pr-11 text-left hover:bg-surface-light active:bg-border/30 transition-colors"
+                                    >
+                                        <div className="mb-1.5">
+                                            <span className="text-text font-black text-sm transition-colors line-clamp-2 leading-tight">{addr.name}</span>
+                                        </div>
 
-                                    {/* Uniform label:value list — số liệu vận hành */}
-                                    <div className="flex flex-col gap-1.5 text-sm">
-                                        {/* Skeleton giữ chỗ 2 dòng stats trong lần load đầu — card không còn trống trơn */}
-                                        {statsLoading && !hasStats && (
-                                            <>
-                                                <Skeleton className="h-4 w-32 rounded-md" />
-                                                <Skeleton className="h-4 w-44 rounded-md" />
-                                            </>
-                                        )}
-                                        {/* Mỗi người đang trong ca một dòng — nhãn theo vai trò, quản lý trước */}
-                                        {hasStats && [...sessionUsers]
-                                            .sort((a, b) => isManagerRole(b.role) - isManagerRole(a.role))
-                                            .map((u, i) => (
-                                                <div key={i} className="flex items-baseline gap-1.5 min-w-0">
-                                                    <span className="text-text-secondary shrink-0">{isManagerRole(u.role) ? 'Quản lý:' : 'Nhân viên:'}</span>
-                                                    <span className="text-text truncate">{u.name}</span>
-                                                </div>
-                                            ))}
-                                        {hasStats && (
-                                            <>
-                                                <div className="flex items-baseline gap-1.5">
-                                                    <span className="text-text-secondary">Hôm nay bán:</span>
-                                                    <span className="text-text">{cups} ly</span>
-                                                    {cupsDeltaPct !== null && cupsDeltaPct !== 0 && (
-                                                        <span
-                                                            title="So với hôm qua cùng giờ"
-                                                            className={`text-[12px] font-bold tabular-nums ${cupsDeltaPct > 0 ? 'text-success' : 'text-danger'}`}
-                                                        >
-                                                            {cupsDeltaPct > 0 ? '↑' : '↓'}{Math.abs(cupsDeltaPct)}%
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div className="flex items-baseline gap-1.5">
-                                                    <span className="text-text-secondary">Tổng doanh thu:</span>
-                                                    <span className="text-text">{formatVND(revenue)}</span>
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-                                </button>
+                                        {/* Uniform label:value list — số liệu vận hành */}
+                                        <div className="flex flex-col gap-1.5 text-sm">
+                                            {/* Skeleton giữ chỗ 2 dòng stats trong lần load đầu — card không còn trống trơn */}
+                                            {statsLoading && !hasStats && (
+                                                <>
+                                                    <Skeleton className="h-4 w-32 rounded-md" />
+                                                    <Skeleton className="h-4 w-44 rounded-md" />
+                                                </>
+                                            )}
+                                            {/* Mỗi người đang trong ca một dòng — nhãn theo vai trò, quản lý trước */}
+                                            {hasStats && [...sessionUsers]
+                                                .sort((a, b) => isManagerRole(b.role) - isManagerRole(a.role))
+                                                .map((u, i) => (
+                                                    <div key={i} className="flex items-baseline gap-1.5 min-w-0">
+                                                        <span className="text-text-secondary shrink-0">{isManagerRole(u.role) ? 'Quản lý:' : 'Nhân viên:'}</span>
+                                                        <span className="text-text truncate">{u.name}</span>
+                                                    </div>
+                                                ))}
+                                            {hasStats && (
+                                                <>
+                                                    <div className="flex items-baseline gap-1.5">
+                                                        <span className="text-text-secondary">Hôm nay bán:</span>
+                                                        <span className="text-text">{cups} ly</span>
+                                                        {cupsDeltaPct !== null && cupsDeltaPct !== 0 && (
+                                                            <span
+                                                                title="So với hôm qua cùng giờ"
+                                                                className={`text-[12px] font-bold tabular-nums ${cupsDeltaPct > 0 ? 'text-success' : 'text-danger'}`}
+                                                            >
+                                                                {cupsDeltaPct > 0 ? '↑' : '↓'}{Math.abs(cupsDeltaPct)}%
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-baseline gap-1.5">
+                                                        <span className="text-text-secondary">Tổng doanh thu:</span>
+                                                        <span className="text-text">{formatVND(revenue)}</span>
+                                                        {revenueDeltaPct !== null && revenueDeltaPct !== 0 && (
+                                                            <span
+                                                                title="So với hôm qua cùng giờ"
+                                                                className={`text-[12px] font-bold tabular-nums ${revenueDeltaPct > 0 ? 'text-success' : 'text-danger'}`}
+                                                            >
+                                                                {revenueDeltaPct > 0 ? '↑' : '↓'}{Math.abs(revenueDeltaPct)}%
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    </button>
 
-                                {/* Footer: trạng thái gói (mọi role) + menu quản lý (chỉ manager) */}
-                                <div className="border-t border-border/40 px-2 py-1.5">
-                                    <div className="flex items-center justify-between gap-2 px-1.5">
+                                    {/* Góc trên phải: manager bấm mở thẳng modal Lối tắt/Quản lý. Staff không có
+                                        quyền vào modal đó nên vẫn giữ chevron làm tín hiệu "bấm card để vào quán".
+                                        shadow-sm + before:-inset-2 = nổi khối hơn nền card + vùng bấm vô hình
+                                        44px (chuẩn touch target tối thiểu) dù hình tròn hiển thị chỉ 28px. */}
+                                    {!isStaff ? (
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setExpandedActionsId(addr.id); setActionsTab('shortcuts') }}
+                                            className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full bg-surface-light border border-border/50 shadow-sm text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all before:absolute before:-inset-2 before:content-['']"
+                                            title="Lối tắt & quản lý"
+                                            aria-label="Mở menu lối tắt và quản lý"
+                                        >
+                                            <MoreVertical size={16} />
+                                        </button>
+                                    ) : (
+                                        <ChevronRight size={18} strokeWidth={2.5} className="pointer-events-none absolute top-3.5 right-3 text-text-secondary" />
+                                    )}
+                                </div>
+
+                                {/* Footer: trạng thái gói (mọi role) — menu thao tác đã chuyển lên nút ⋮ góc trên.
+                                    px-3 khớp đúng p-3 của header phía trên → "Đã đăng ký" thẳng hàng với tên quán. */}
+                                <div className="border-t border-border/40 px-3 py-2">
+                                    <div className="flex items-center">
                                         {/* Trạng thái gói — tự ẩn khi monetization OFF (badge return null) */}
                                         <SubscriptionBadge
                                             addressId={addr.id}
@@ -261,16 +292,6 @@ export default function BranchGrid({
                                                 state: { preselectAddressId: addr.id, from: '/addresses' },
                                             })}
                                         />
-                                        {!isStaff && (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); setExpandedActionsId(addr.id); setActionsTab('shortcuts') }}
-                                                className="relative w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/50 text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all shrink-0 before:absolute before:-inset-1.5 before:content-['']"
-                                                title="Thao tác khác"
-                                                aria-label="Mở menu thao tác"
-                                            >
-                                                <MoreHorizontal size={16} />
-                                            </button>
-                                        )}
                                     </div>
                                 </div>
                             </>

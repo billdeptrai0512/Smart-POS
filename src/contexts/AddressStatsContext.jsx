@@ -28,6 +28,7 @@ export function AddressStatsProvider() {
     const [cupsMap, setCupsMap] = useState({})
     const [revenueMap, setRevenueMap] = useState({})
     const [prevCupsMap, setPrevCupsMap] = useState({})
+    const [prevRevenueMap, setPrevRevenueMap] = useState({})
     const [sessionsMap, setSessionsMap] = useState({})
     const [subscriptionStatusMap, setSubscriptionStatusMap] = useState({})
     const [subscriptionRowsMap, setSubscriptionRowsMap] = useState({})
@@ -47,7 +48,7 @@ export function AddressStatsProvider() {
         setStatsLoading(true)
         try {
             // 1 RPC duy nhất trả cả stats + sessions (kèm tên/role) + prev — was 3 round-trips.
-            const { cupsMap: cups, revenueMap: revenue, prevCupsMap: prevCups, sessionsMap: sessions } = await fetchBranchesTodayStats(addrIds)
+            const { cupsMap: cups, revenueMap: revenue, prevCupsMap: prevCups, prevRevenueMap: prevRevenue, sessionsMap: sessions } = await fetchBranchesTodayStats(addrIds)
             if (cancelRef.current) return
             const filledCups = {}, filledRev = {}
             addrIds.forEach(id => {
@@ -57,6 +58,7 @@ export function AddressStatsProvider() {
             setCupsMap(filledCups)
             setRevenueMap(filledRev)
             setPrevCupsMap(prevCups)
+            setPrevRevenueMap(prevRevenue)
             setSessionsMap(sessions)
         } catch (err) {
             // Giữ nguyên số đang hiện thay vì đổ 0 lên mọi card: rớt mạng một nhịp không
@@ -148,6 +150,7 @@ export function AddressStatsProvider() {
         cupsMap,
         revenueMap,
         prevCupsMap,
+        prevRevenueMap,
         sessionsMap,
         subscriptionStatusMap,
         subscriptionRowsMap,
@@ -158,7 +161,7 @@ export function AddressStatsProvider() {
         refreshStats: loadStats,
         refreshStaff: loadStaff,
         refreshSubscriptionStatuses: loadSubscriptionStatuses,
-    }), [cupsMap, revenueMap, prevCupsMap, sessionsMap, subscriptionStatusMap, subscriptionRowsMap, subscriptionLoading, staffList, statsLoading, staffLoading, loadStats, loadStaff, loadSubscriptionStatuses])
+    }), [cupsMap, revenueMap, prevCupsMap, prevRevenueMap, sessionsMap, subscriptionStatusMap, subscriptionRowsMap, subscriptionLoading, staffList, statsLoading, staffLoading, loadStats, loadStaff, loadSubscriptionStatuses])
 
     return (
         <AddressStatsContext.Provider value={value}>
