@@ -42,10 +42,21 @@ export function AddressStatsProvider() {
     const addressIdsKey = useMemo(() => addresses.map(a => a.id).join('|'), [addresses])
     const cancelRef = useRef(false)
 
+    // Safety valve: RPC/query không có timeout ở tầng supabase-js — mất mạng giữa chừng
+    // (đổi wifi/4G, tab bị OS pause) có thể treo promise vô thời hạn, kẹt card ở skeleton
+    // mãi. Không abort request thật (không đáng đổi phức tạp) — chỉ ngừng chặn UI sau
+    // timeout; request vẫn resolve bình thường sau đó thì state vẫn cập nhật. Cùng pattern
+    // với valve ở AuthContext.jsx (dòng ~216-222).
+    const loadingValve = (setLoading) => {
+        const id = setTimeout(() => setLoading(false), 8000)
+        return () => clearTimeout(id)
+    }
+
     const loadStats = useCallback(async () => {
         if (!addresses.length) return
         const addrIds = addresses.map(a => a.id)
         setStatsLoading(true)
+        const clearValve = loadingValve(setStatsLoading)
         try {
             // 1 RPC duy nhất trả cả stats + sessions (kèm tên/role) + prev — was 3 round-trips.
             const { cupsMap: cups, revenueMap: revenue, prevCupsMap: prevCups, prevRevenueMap: prevRevenue, sessionsMap: sessions } = await fetchBranchesTodayStats(addrIds)
@@ -65,6 +76,7 @@ export function AddressStatsProvider() {
             // có nghĩa là quán không bán được ly nào. BranchGrid vốn đã stale-while-revalidate.
             console.error('loadStats:', err)
         } finally {
+            clearValve()
             if (!cancelRef.current) setStatsLoading(false)
         }
         // ponytail: keyed on addressIdsKey — `addresses` chỉ được dùng để lấy ids, mà mảng
@@ -85,12 +97,14 @@ export function AddressStatsProvider() {
         setSubscriptionLoading(true)
         // try/finally như loadStats: throw hoặc cancelRef=true mà bỏ qua setLoading(false)
         // thì badge gói trên mọi card ẩn vĩnh viễn (BranchGrid gate bằng loading).
+        const clearValve = loadingValve(setSubscriptionLoading)
         try {
             const { statusMap, rowsMap } = await fetchSubscriptionStatuses(addresses.map(a => a.id))
             if (cancelRef.current) return
             setSubscriptionStatusMap(statusMap)
             setSubscriptionRowsMap(rowsMap)
         } finally {
+            clearValve()
             setSubscriptionLoading(false)
         }
         // ponytail: keyed on addressIdsKey như loadStats ở trên, cùng lý do.
@@ -107,10 +121,12 @@ export function AddressStatsProvider() {
         // !hasSession: profile từ cache nhưng chưa có token — xem hasSession trong AuthContext.
         if (!profile?.id || isStaff || !hasSession) return
         setStaffLoading(true)
+        const clearValve = loadingValve(setStaffLoading)
         try {
             const list = await fetchStaffByManager(profile.id)
             if (!cancelRef.current) setStaffList(list)
         } finally {
+            clearValve()
             if (!cancelRef.current) setStaffLoading(false)
         }
     }, [profile?.id, isStaff, hasSession])
