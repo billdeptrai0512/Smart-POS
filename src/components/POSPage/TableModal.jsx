@@ -27,10 +27,10 @@ const CARD_H = 'h-[148px]'
 // nữa" — cắt mà không nói là giấu đợt của khách.
 const CARD_LINES = 3
 
-// Danh sách "giờ + số ly + đã/chưa ra món" rút gọn trên thẻ lưới — dùng chung cho cả thẻ
-// bàn busy (rounds của 1 bàn) và thẻ Mang đi (mỗi đơn mang đi là 1 "round" độc lập, xem
-// bucket name=null ở fetchOpenTables). unit đổi chữ cuối dòng "+N ... nữa" cho đúng danh
-// từ (đợt/đơn).
+// Danh sách "giờ + số ly" rút gọn trên thẻ lưới — dùng chung cho cả thẻ bàn busy (rounds
+// của 1 bàn) và thẻ Mang đi (mỗi đơn mang đi là 1 "round" độc lập, xem bucket name=null ở
+// fetchOpenTables). unit đổi chữ cuối dòng "+N ... nữa" cho đúng danh từ (đợt/đơn). Đã/chưa
+// ra món không hiện ở đây nữa — dồn vào dòng tổng "N ly chưa ra" cuối thẻ (xem pendingCups).
 function roundPreview(rounds, unit) {
     const shown = rounds.length > CARD_LINES ? rounds.slice(0, CARD_LINES - 1) : rounds
     return (
@@ -38,12 +38,9 @@ function roundPreview(rounds, unit) {
             {shown.map((round, i) => {
                 const cups = round.lines.reduce((s, l) => s + (l.qty || 0), 0)
                 return (
-                    <span key={round.id || i} className="flex items-center gap-1 text-[11px] font-bold text-text-secondary leading-snug line-clamp-1">
+                    <span key={round.id || i} className="flex items-center justify-between gap-1 text-[11px] font-bold text-text-secondary leading-snug line-clamp-1">
                         <span className="tabular-nums">{timeStringVN(new Date(round.createdAt))}</span>
                         <span className="tabular-nums">{cups} ly</span>
-                        <span className={`ml-auto shrink-0 ${round.servedAt ? 'text-success' : 'text-warning'}`}>
-                            {round.servedAt ? 'Đã ra' : 'Chưa ra'}
-                        </span>
                     </span>
                 )
             })}
@@ -52,6 +49,12 @@ function roundPreview(rounds, unit) {
             )}
         </span>
     )
+}
+
+// Tổng số ly còn chưa ra của các round chưa served — thay cho đếm số đợt, vì cái nhân
+// viên cần biết khi liếc lưới là "còn thiếu bao nhiêu ly" chứ không phải "mấy đợt".
+function pendingCups(rounds) {
+    return rounds.filter(r => !r.servedAt).reduce((s, r) => s + r.lines.reduce((ss, l) => ss + (l.qty || 0), 0), 0)
 }
 
 export default function TableModal({ onClose }) {
@@ -98,6 +101,7 @@ export default function TableModal({ onClose }) {
             return new Date(b.createdAt) - new Date(a.createdAt)
         })
         : []
+    const takeawayPending = pendingCups(takeawayRounds)
 
     // Bàn không bị cắt theo ngày (xem fetchOpenTables), nên bàn quên chưa tính tiền có
     // thể là của hôm qua. Giờ mở KHÔNG hiện trên thẻ — cái nhân viên cần đọc là danh
@@ -166,6 +170,11 @@ export default function TableModal({ onClose }) {
                                     <span className="shrink-0 text-[12px] font-black tabular-nums text-text-secondary">{takeawayRounds.length} đơn</span>
                                 </span>
                                 {roundPreview(takeawayRounds, 'đơn')}
+                                {takeawayPending > 0 && (
+                                    <span className="mt-auto text-[11px] font-black uppercase tracking-wide text-warning">
+                                        {takeawayPending} ly chưa ra
+                                    </span>
+                                )}
                             </button>
                         </div>
                     ) : (
@@ -182,7 +191,7 @@ export default function TableModal({ onClose }) {
                         const active = name === tableName
                         const busy = t.rounds.length > 0
                         const stale = staleLabel(t.openedAt)
-                        const pending = t.rounds.filter(r => !r.servedAt).length
+                        const pending = pendingCups(t.rounds)
                         return (
                             <div
                                 key={name}
@@ -211,18 +220,18 @@ export default function TableModal({ onClose }) {
                                         <span className={`text-[13px] font-black uppercase tracking-wide line-clamp-1 ${busy || active ? 'text-text' : 'text-text-secondary'}`}>{name}</span>
                                         {busy && <span className="shrink-0 text-[14px] font-black tabular-nums text-primary">{formatVND(t.total)}</span>}
                                     </span>
-                                    {stale && <span className="text-[11px] font-bold text-warning">{stale}</span>}
+                                    {stale && <span className="text-[11px] font-bold text-text-secondary">{stale}</span>}
                                     {busy ? (
                                         roundPreview(t.rounds, 'đợt')
                                     ) : (
                                         <span className="text-[12px] font-bold text-text-secondary/50">Trống</span>
                                     )}
-                                    {/* Còn đợt chưa bưng ra — thứ duy nhất trên lưới mà nhân
+                                    {/* Còn ly chưa bưng ra — thứ duy nhất trên lưới mà nhân
                                         viên cần thấy trước khi bấm vào bàn. Chi tiết đợt nào
                                         thì mở thẻ ra xem. */}
                                     {pending > 0 && (
                                         <span className="mt-auto text-[11px] font-black uppercase tracking-wide text-warning">
-                                            {pending} đợt chưa ra món
+                                            {pending} ly chưa ra
                                         </span>
                                     )}
                                 </button>
