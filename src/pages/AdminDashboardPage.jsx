@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2, RefreshCw } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { fetchAdminDashboard } from '../services/adminDashboardService'
 import { fetchGuestOnboardingFunnel } from '../services/onboardingFunnelService'
+import { openedLabelVN } from '../utils/dateVN'
 import MonetizationToggle from '../components/AddressSelectPage/MonetizationToggle'
 
 // v3: chỉ còn 3 loại activity actionable (payment/review/rating) — xem
@@ -14,11 +15,31 @@ const ACTIVITY_ICON = {
     rating: { bg: 'bg-warning-soft', color: 'text-warning', symbol: '★' },
 }
 
+// Bước trong guide onboarding tầm giây (bấm tạo đơn, mở nhật ký...) — làm tròn
+// phút thì mọi bước hiện "0′" như nhau, mất hết tín hiệu bước nào chậm hơn.
+// Dưới 1 phút giữ nguyên giây; từ 1 phút trở lên mới quy tròn ra phút (bước
+// chậm, kiểu cài công thức/nguyên liệu, không cần chính xác tới giây).
+function formatStepDuration(seconds) {
+    if (seconds == null) return null
+    return seconds < 60 ? `${seconds}s` : `${Math.round(seconds / 60)}′`
+}
+
 function countDelta(current, prev) {
     const diff = current - prev
     if (diff === 0) return { text: 'Không đổi so với tháng trước', cls: 'text-text-dim' }
     return {
         text: `${diff > 0 ? '+' : ''}${diff} so với tháng trước`,
+        cls: diff > 0 ? 'text-success' : 'text-danger',
+    }
+}
+
+// So tỷ lệ chuyển đổi (dùng thử → đăng ký) với đúng kỳ liền trước (hôm qua/tuần
+// trước) — trả lời "sửa guide có thật sự giúp không" thay vì chỉ nhìn 1 ảnh chụp.
+function pctDelta(currentPct, prevPct) {
+    const diff = currentPct - prevPct
+    if (diff === 0) return { text: 'không đổi so với kỳ trước', cls: 'text-text-dim' }
+    return {
+        text: `${diff > 0 ? '+' : ''}${diff}% so với kỳ trước`,
         cls: diff > 0 ? 'text-success' : 'text-danger',
     }
 }
@@ -278,7 +299,7 @@ function OnboardingFunnelCard({ subscription, navigate, refreshToken }) {
     return (
         <div className="bg-surface border border-border/60 rounded-[20px] p-4">
             <div className="flex items-center justify-between gap-2 mb-1">
-                <h3 className="text-[12px] font-black uppercase tracking-wide text-text-secondary">Phễu onboarding dùng thử</h3>
+                <h3 className="text-[12px] font-black uppercase tracking-wide text-text-secondary">Onboarding</h3>
                 {byRange && (
                     <div className="flex gap-1 shrink-0">
                         {RANGE_TABS.map((t) => (
@@ -305,36 +326,91 @@ function OnboardingFunnelCard({ subscription, navigate, refreshToken }) {
     )
 }
 
+// Thanh % thay cho chỉ đọc số — nhìn 1 phát ra chỗ thắt cổ chai (thanh nào
+// ngắn hẳn so với thanh ngay trên nó) thay vì phải so từng dòng "N (X%)"
+// trong đầu. Cùng pattern thanh progress ở ChangeCategorySheet.jsx.
+function FunnelStageRow({ dotClass, label, count, pct, seconds, dropped }) {
+    return (
+        <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between text-[12.5px]">
+                <span className="flex items-center gap-2 text-text-secondary">
+                    <i className={`w-[7px] h-[7px] rounded-full inline-block ${dotClass}`} />
+                    {label}
+                </span>
+                <span className="font-black tabular-nums text-text">
+                    {seconds != null && <span className="text-text-dim font-medium">+{formatStepDuration(seconds)} · </span>}
+                    {count} ({pct}%)
+                </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-surface-light overflow-hidden">
+                <div className={`h-full ${dotClass} transition-all`} style={{ width: `${pct}%` }} />
+            </div>
+            {/* Số dừng ĐÚNG tại bước này (không đi tiếp được bước sau) — trừ ra từ 2 count
+                cạnh nhau, không cần query riêng. Chỉ nói lên chỗ nào rớt, không suy đoán
+                bỏ cuộc hẳn hay đang làm dở (xem "Từng khách" bên dưới để soi từng người). */}
+            {dropped > 0 && <span className="self-end text-[10px] font-bold text-danger/70">−{dropped} dừng lại ở đây</span>}
+        </div>
+    )
+}
+
+// Danh sách thô từng khách — thay cho ngưỡng "stuck > N ngày" tự động: ở quy mô
+// vài khách/tuần, mẫu quá nhỏ để thống kê có ý nghĩa, tự đọc từng dòng vừa nhanh
+// vừa chính xác hơn. Trả tối đa 20 dòng/khoảng (server đã giới hạn + sắp xếp).
+function RecentVisitorsList({ visitors, stages }) {
+    if (!visitors?.length) return null
+    const labelOf = (stage) => stages.find(s => s.stage === stage)?.label.replace(/^Xong: /, '') || `Bước ${stage}`
+
+    return (
+        <div className="border-t border-border/60 mt-3 pt-3">
+            <p className="text-[10.5px] font-black uppercase tracking-wide text-text-dim mb-2">Từng khách (mới hoạt động trước)</p>
+            <div className="flex flex-col">
+                {visitors.map(v => (
+                    <div key={v.visitor_id} className="flex items-center justify-between gap-2 text-[11px] py-1.5 border-b border-border/30 last:border-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <span className="shrink-0 bg-surface-light border border-border/60 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-text-secondary tabular-nums">#{v.visitor_id.slice(0, 8)}</span>
+                            <span className="text-text-secondary truncate">{labelOf(v.max_stage)}</span>
+                            {v.signed_up_at && <span className="shrink-0 text-success font-bold">✓ đăng ký</span>}
+                        </div>
+                        <span className="shrink-0 text-text-dim tabular-nums">{openedLabelVN(v.last_seen_at)}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    )
+}
+
 function GuestFunnelBody({ funnel }) {
-    const { stages, signup, total_median_minutes } = funnel
+    const { stages, signup, total_median_seconds, recent_visitors, prev } = funnel
     const entered = stages[0].count
     const completed = stages[stages.length - 1].count
     const totalSignup = signup.after_complete + signup.early
+    const currentPct = entered > 0 ? Math.round((totalSignup / entered) * 100) : null
+    // prev = null cho khoảng "Tất cả" (không có "kỳ trước" tự nhiên) và cho
+    // khoảng có prev.entered = 0 (không tính % được, tránh chia 0).
+    const prevPct = prev?.entered > 0 ? Math.round((prev.signed_up / prev.entered) * 100) : null
+    const delta = currentPct != null && prevPct != null ? pctDelta(currentPct, prevPct) : null
 
     return (
         <>
             <p className="text-[11px] text-text-dim mb-3">
                 {entered > 0
-                    ? `${entered} khách vào dùng thử → ${totalSignup} đăng ký (${Math.round((totalSignup / entered) * 100)}%)`
+                    ? `${entered} khách vào dùng thử → ${totalSignup} đăng ký (${currentPct}%)`
                     : 'Chưa có khách nào vào dùng thử'}
-                {total_median_minutes != null && ` · hết guide trung vị ${total_median_minutes} phút`}
+                {total_median_seconds != null && ` · hết guide trung vị ${formatStepDuration(total_median_seconds)}`}
+                {delta && <span className={`font-bold ${delta.cls}`}> · {delta.text}</span>}
             </p>
-            <div className="flex flex-col gap-2">
-                {stages.map((f) => (
-                    <StatRow
+            <div className="flex flex-col gap-3">
+                {stages.map((f, i) => (
+                    // step_median_seconds = thời gian trung vị TỪ BƯỚC TRƯỚC tới bước này —
+                    // chỗ nào số này to là chỗ khách khựng lại lâu nhất, đáng sửa guide trước.
+                    <FunnelStageRow
                         key={f.stage}
                         dotClass={f.stage === 0 ? 'bg-primary' : 'bg-warning'}
-                        label={f.label}
-                        // step_median_minutes = thời gian trung vị TỪ BƯỚC TRƯỚC tới bước này —
-                        // chỗ nào số này to là chỗ khách khựng lại lâu nhất, đáng sửa guide trước.
-                        value={
-                            <>
-                                {entered > 0 ? `${f.count} (${Math.round((f.count / entered) * 100)}%)` : f.count}
-                                {f.step_median_minutes != null && (
-                                    <span className="text-text-dim font-medium"> · +{f.step_median_minutes}′</span>
-                                )}
-                            </>
-                        }
+                        label={f.label.replace(/^Xong: /, '')}
+                        count={f.count}
+                        pct={entered > 0 ? Math.round((f.count / entered) * 100) : 0}
+                        seconds={f.step_median_seconds}
+                        dropped={i < stages.length - 1 ? f.count - stages[i + 1].count : 0}
                     />
                 ))}
                 {/* Đăng ký tách khỏi chuỗi stage: after_complete nối tiếp được vào phễu (mẫu số là
@@ -345,6 +421,7 @@ function GuestFunnelBody({ funnel }) {
                     <StatRow dotClass="bg-success" label="Đăng ký sớm (bỏ guide giữa chừng)" value={signup.early} />
                 </div>
             </div>
+            <RecentVisitorsList visitors={recent_visitors} stages={stages} />
         </>
     )
 }
