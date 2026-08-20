@@ -608,8 +608,13 @@ export function POSProvider() {
         const online = navigator.onLine && !!supabase
         const orderId = online ? crypto.randomUUID() : null
         // Bàn cộng dồn ngay, cùng kiểu lạc quan như doanh thu ở trên — nhân viên phải
-        // thấy tổng bàn nhảy lên trong cùng cú chạm, không đợi vòng fetch.
-        if (tableNameArg) setOpenTables(prev => {
+        // thấy tổng bàn nhảy lên trong cùng cú chạm, không đợi vòng fetch. Guard bằng
+        // dineIn (không phải tableNameArg): đơn mang đi ở địa chỉ CÓ bàn cũng phải cộng
+        // lạc quan vào bucket name=null — không thì thẻ "Mang đi" trong Chọn bàn chỉ cập
+        // nhật sau khi mở lại modal (refreshTables), lệch tốc độ với thẻ bàn tên thật.
+        // Địa chỉ tắt Bàn ngồi thì openTables chưa từng fetch (xem effect refreshTables ở
+        // trên), cộng vào đó không ai đọc — bỏ qua cho khỏi phình state vô ích.
+        if (dineInRef.current) setOpenTables(prev => {
             // Cùng dạng nhãn như fetchOpenTables (tên món kèm topping).
             const addLines = mergeTableLines([], cartItems.map(it => ({
                 name: tableLineName(it.name, (it.extras || []).map(e => e.name)),
@@ -694,7 +699,7 @@ export function POSProvider() {
                         setCupsSold(prev => Math.max(0, prev - countableQty))
                         setRecentOrders(prev => prev.filter(o => o !== addedRow)) // genuine failure → don't leave a phantom order in the journal
                         setTodayOrders(prev => prev.filter(o => o !== optimisticOrder))
-                        if (tableNameArg) refreshTables() // gỡ phần đã cộng lạc quan cho bàn
+                        if (dineInRef.current) refreshTables() // gỡ phần đã cộng lạc quan cho bàn
                         showError(err, 'Ghi đơn')
                     }
                 })
@@ -890,9 +895,21 @@ export function POSProvider() {
                 // leaves the removed order showing on /pos until the next reload.
                 fetchRecentOrders(addressId, 3).then(recent => setRecentOrders(recent.map(buildLastOrderFromDB)))
                 invalidateDailyContext(addressId)
-                // Tổng bàn cũng lệch sau khi xoá — gom về đây thay vì bắt từng nơi gọi
-                // nhớ tự refresh (xoá đơn dine_in từ Nhật ký trước đây bỏ sót đúng chỗ này).
-                if (dineIn) refreshTables()
+                // Tổng bàn cũng lệch sau khi xoá — gom về đây thay vì bắt từng nơi gọi nhớ tự
+                // refresh (xoá đơn dine_in từ Nhật ký trước đây bỏ sót đúng chỗ này). Dựng lại
+                // TỪ DATA ĐANG CÓ (như moveTableRounds) thay vì refreshTables() — trước đây gọi
+                // thêm 1 lượt fetchOpenTables khiến xoá đợt/đơn LÂU HƠN HẲN so với tạo/gộp/tách/
+                // ra món (đều patch state tại chỗ), thẻ "Mang đi"/bàn đứng yên vài trăm ms sau
+                // khi bấm Xoá trong lúc những nút khác phản hồi tức thì.
+                if (dineIn) setOpenTables(prev => prev
+                    .map(t => {
+                        const stay = t.rounds.filter(r => r.id !== orderId)
+                        if (stay.length === t.rounds.length) return t
+                        return stay.length
+                            ? { ...t, rounds: stay, total: stay.reduce((s, r) => s + r.total, 0), lines: stay.reduce((ls, r) => mergeTableLines(ls, r.lines), []) }
+                            : null
+                    })
+                    .filter(Boolean))
             }
             showToast('Đã xóa đơn hàng', 'success')
             return true
