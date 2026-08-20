@@ -97,6 +97,11 @@ function TakeawayRow({ order, onToggleServed, onMove, onDelete }) {
         <div className="rounded-[16px] border border-border/40 bg-surface-light/40 px-4 py-3">
             <div className="flex items-center justify-between gap-3 pb-2">
                 <div className="flex items-center gap-1.5">
+                    {/* Nhiều đơn cùng giờ (khách gọi liên tục) thì pill giờ không phân biệt
+                        được — số đơn là thứ duy nhất chắc chắn khác nhau. Có thể null (đơn cũ
+                        trước khi có order_no, hoặc offline chưa đồng bộ) → ẩn luôn thay vì hiện
+                        "#null". */}
+                    {order.orderNo != null && <span className={TIME_PILL}>#{order.orderNo}</span>}
                     {!isSameDayVN(createdAt, new Date()) && <span className={TIME_PILL}>{dateShortVN(createdAt)}</span>}
                     <span className={TIME_PILL}>{timeStringVN(createdAt)}</span>
                     <button

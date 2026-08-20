@@ -21,31 +21,39 @@ import TakeawayListModal from './TakeawayListModal'
 // nhìn ra bàn nào ngoài sân / bàn nào trong nhà, chứ không chỉ bàn nào còn trống.
 
 // MỌI thẻ cùng một chiều cao. Bàn gọi nhiều loại thì cắt dòng, không kéo thẻ dài ra —
-// lưới cao thấp lởm chởm nhìn không ra bàn nào với bàn nào.
-const CARD_H = 'h-[148px]'
-// Số DÒNG tối đa phần đợt chiếm được. Nhiều hơn thì dòng cuối nhường chỗ cho "+N đợt
-// nữa" — cắt mà không nói là giấu đợt của khách.
-const CARD_LINES = 3
+// lưới cao thấp lởm chởm nhìn không ra bàn nào với bàn nào. Thấp hơn 148px cũ theo yêu
+// cầu client (bao quát nhiều bàn hơn trong lưới) — NHƯNG không thấp tới mức cắt nội
+// dung bắt buộc: tên/tổng + tối đa CARD_LINES dòng đợt (+ dòng "..." nếu còn dư) + dòng
+// "N món chưa ra" đều phải vừa mà không cần overflow-hidden ăn bớt (từng bị: cắt 90px
+// làm mất hẳn dòng "N món chưa ra" dù bàn còn món chưa ra — xem shrink-0 ở roundPreview
+// bên dưới, giữ lại làm lưới an toàn chứ không phải cơ chế chính).
+const CARD_H = 'h-[124px]'
+// Số DÒNG tối đa phần đợt chiếm được. Nhiều hơn thì dòng cuối nhường chỗ cho "..." —
+// cắt mà không nói là giấu đợt của khách.
+const CARD_LINES = 2
 
-// Danh sách "giờ + số ly" rút gọn trên thẻ lưới — dùng chung cho cả thẻ bàn busy (rounds
+// Danh sách "giờ + số món" rút gọn trên thẻ lưới — dùng chung cho cả thẻ bàn busy (rounds
 // của 1 bàn) và thẻ Mang đi (mỗi đơn mang đi là 1 "round" độc lập, xem bucket name=null ở
-// fetchOpenTables). unit đổi chữ cuối dòng "+N ... nữa" cho đúng danh từ (đợt/đơn). Đã/chưa
-// ra món không hiện ở đây nữa — dồn vào dòng tổng "N ly chưa ra" cuối thẻ (xem pendingCups).
-function roundPreview(rounds, unit) {
-    const shown = rounds.length > CARD_LINES ? rounds.slice(0, CARD_LINES - 1) : rounds
+// fetchOpenTables). Chỉ liệt đợt CHƯA ra món — đợt đã xong không còn gì để nhân viên phải
+// hành động, liếc lưới chỉ cần thấy việc còn tồn. Đã ra hết thì danh sách rỗng, thẻ chỉ còn
+// tên/tổng tiền. Luôn hiện đủ CARD_LINES dòng đợt (không nhường 1 dòng cho "+N nữa" như
+// trước) — còn dư thì thêm đúng 1 dấu "..." báo còn nữa, không cần đếm chính xác bao nhiêu.
+function roundPreview(rounds) {
+    const pending = rounds.filter(r => !r.servedAt)
+    const shown = pending.slice(0, CARD_LINES)
     return (
-        <span className="flex flex-col gap-0.5">
+        <span className="min-h-0 overflow-hidden flex flex-col gap-0.5">
             {shown.map((round, i) => {
                 const cups = round.lines.reduce((s, l) => s + (l.qty || 0), 0)
                 return (
                     <span key={round.id || i} className="flex items-center justify-between gap-1 text-[11px] font-bold text-text-secondary leading-snug line-clamp-1">
                         <span className="tabular-nums">{timeStringVN(new Date(round.createdAt))}</span>
-                        <span className="tabular-nums">{cups} ly</span>
+                        <span className="tabular-nums">{cups} món</span>
                     </span>
                 )
             })}
-            {rounds.length > shown.length && (
-                <span className="text-[12px] font-bold text-text-secondary/60 leading-snug">+{rounds.length - shown.length} {unit} nữa</span>
+            {pending.length > shown.length && (
+                <span className="text-[12px] font-bold text-text-secondary/60 leading-snug">...</span>
             )}
         </span>
     )
@@ -141,7 +149,7 @@ export default function TableModal({ onClose }) {
     }
 
     return (
-        <Dialog onClose={onClose} panelClassName="w-full max-w-md mx-4 max-h-[85dvh] flex flex-col bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
+        <Dialog onClose={onClose} panelClassName="w-full max-w-md mx-4 max-h-[92dvh] flex flex-col bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
             {/* Header */}
             <div className="shrink-0 flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
                 <p className="text-text font-black text-base leading-none">Chọn bàn</p>
@@ -165,14 +173,19 @@ export default function TableModal({ onClose }) {
                     {takeaway ? (
                         <div className={`${CARD_H} relative rounded-[20px] border p-3.5 flex flex-col gap-1.5 transition-colors ${!tableName ? 'bg-primary/5 border-primary' : 'bg-surface border-border/60'}`}>
                             <button onClick={() => setShowTakeaway(true)} className="flex-1 min-h-0 w-full overflow-hidden text-left flex flex-col gap-1 focus:outline-none">
-                                <span className="w-full flex items-baseline justify-between gap-2">
+                                <span className="shrink-0 w-full flex items-baseline justify-between gap-2">
                                     <span className="text-[13px] font-black uppercase tracking-wide text-text">Mang đi</span>
                                     <span className="shrink-0 text-[12px] font-black tabular-nums text-text-secondary">{takeawayRounds.length} đơn</span>
                                 </span>
-                                {roundPreview(takeawayRounds, 'đơn')}
+                                {roundPreview(takeawayRounds)}
+                                {/* shrink-0: dòng cảnh báo này quan trọng hơn danh sách đợt phía
+                                    trên (min-h-0 overflow-hidden ở roundPreview) — bàn/đơn có nhiều
+                                    đợt chưa ra thì roundPreview bị cắt bớt trước, KHÔNG được để cắt
+                                    mất dòng tổng này (từng xảy ra: 6 món chưa ra mà thẻ không hiện).
+                                    Cùng lý do cho dòng "N món chưa ra" ở thẻ bàn bên dưới. */}
                                 {takeawayPending > 0 && (
-                                    <span className="mt-auto text-[11px] font-black uppercase tracking-wide text-warning">
-                                        {takeawayPending} ly chưa ra
+                                    <span className="shrink-0 mt-auto text-[11px] font-black uppercase tracking-wide text-warning">
+                                        {takeawayPending} món chưa ra
                                     </span>
                                 )}
                             </button>
@@ -216,22 +229,22 @@ export default function TableModal({ onClose }) {
                                     Bàn có khách: chạm = mở chi tiết (đọc/sửa/thu tiền đều ở đó).
                                     Bàn trống: không có gì để đọc, chạm = chọn bàn luôn. */}
                                 <button onClick={() => busy ? setDetail(name) : pick(name)} className="flex-1 min-h-0 w-full overflow-hidden text-left flex flex-col gap-1 focus:outline-none">
-                                    <span className="w-full flex items-baseline justify-between gap-2">
+                                    <span className="shrink-0 w-full flex items-baseline justify-between gap-2">
                                         <span className={`text-[13px] font-black uppercase tracking-wide line-clamp-1 ${busy || active ? 'text-text' : 'text-text-secondary'}`}>{name}</span>
                                         {busy && <span className="shrink-0 text-[14px] font-black tabular-nums text-primary">{formatVND(t.total)}</span>}
                                     </span>
-                                    {stale && <span className="text-[11px] font-bold text-text-secondary">{stale}</span>}
+                                    {stale && <span className="shrink-0 text-[11px] font-bold text-text-secondary">{stale}</span>}
                                     {busy ? (
-                                        roundPreview(t.rounds, 'đợt')
+                                        roundPreview(t.rounds)
                                     ) : (
                                         <span className="text-[12px] font-bold text-text-secondary/50">Trống</span>
                                     )}
-                                    {/* Còn ly chưa bưng ra — thứ duy nhất trên lưới mà nhân
-                                        viên cần thấy trước khi bấm vào bàn. Chi tiết đợt nào
-                                        thì mở thẻ ra xem. */}
+                                    {/* Còn ly chưa bưng ra — thứ duy nhất trên lưới mà nhân viên cần
+                                        thấy trước khi bấm vào bàn. Chi tiết đợt nào thì mở thẻ ra xem.
+                                        shrink-0: xem comment ở thẻ Mang đi phía trên. */}
                                     {pending > 0 && (
-                                        <span className="mt-auto text-[11px] font-black uppercase tracking-wide text-warning">
-                                            {pending} ly chưa ra
+                                        <span className="shrink-0 mt-auto text-[11px] font-black uppercase tracking-wide text-warning">
+                                            {pending} món chưa ra
                                         </span>
                                     )}
                                 </button>
