@@ -5,9 +5,9 @@ import { useHistory } from '../../contexts/HistoryContext'
 import { useProducts } from '../../contexts/ProductContext'
 import { useConfirm } from '../../contexts/ConfirmContext'
 import { formatVND, discountToPercent } from '../../utils'
-import { timeStringVN, openedLabelVN } from '../../utils/dateVN'
+import { timeStringVN, openedLabelVN, dateShortVN, isSameDayVN } from '../../utils/dateVN'
 import { priceLineFor } from '../../utils/billLines'
-import { Dialog, MODAL_PANEL, CHIP, CHIP_IDLE } from '../common/ModalShell'
+import { Dialog, MODAL_PANEL, CHIP, CHIP_IDLE, TIME_PILL } from '../common/ModalShell'
 import PrintBill from '../common/PrintBill'
 import TableTargetPicker from './TableTargetPicker'
 
@@ -179,11 +179,25 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
                 {table.rounds.map((round, i) => (
                     <div key={round.id || i} className="rounded-[16px] border border-border/40 bg-surface-light/40 px-4 py-3">
-                        <div className="flex items-baseline justify-between gap-3 mb-1.5">
-                            <span className="text-[12px] font-bold text-text-secondary/70 leading-none">{openedLabel(round.createdAt)}</span>
+                        <div className="flex items-center justify-between gap-3 pb-2">
+                            <div className="flex items-center gap-1.5">
+                                {!isSameDayVN(new Date(round.createdAt), new Date()) && <span className={TIME_PILL}>{dateShortVN(new Date(round.createdAt))}</span>}
+                                <span className={TIME_PILL}>{timeStringVN(new Date(round.createdAt))}</span>
+                                {/* Tách đợt này sang bàn khác — cùng màn chọn bàn đích với nút
+                                    "Gộp bàn" ở header, chỉ khác orderIds chỉ có mỗi đợt này. */}
+                                {round.id && (
+                                    <button
+                                        onClick={() => startMove([round.id], `đợt ${openedLabel(round.createdAt)}`)}
+                                        aria-label={`Chuyển đợt ${openedLabel(round.createdAt)} sang bàn khác`}
+                                        className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-text hover:border-primary/40`}
+                                    >
+                                        <ArrowRightLeft size={12} strokeWidth={2.25} />
+                                    </button>
+                                )}
+                            </div>
                             <span className="text-[13px] font-black tabular-nums text-text">{formatVND(round.total)}</span>
                         </div>
-                        <div className="flex flex-col gap-0.5">
+                        <div className="flex flex-col gap-0.5 border-t border-border/40 pt-2 pb-2 pl-2">
                             {round.lines.map(l => (
                                 <span key={l.name} className="text-[13px] font-bold text-text leading-snug">
                                     {l.qty > 1 && <span className="tabular-nums text-text-secondary">{l.qty} </span>}{l.name}
@@ -193,30 +207,12 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
                         {/* Đợt offline chưa có id trong DB → chưa sửa/xoá/đánh dấu được,
                             ẩn cả hàng nút thay vì để nút bấm vào không có gì xảy ra. */}
                         {round.id && (
-                            <div className="flex items-center gap-2 mt-2.5">
-                                <button
-                                    onClick={() => toggleServed(round)}
-                                    className={`flex items-center gap-1.5 px-2.5 ${round.servedAt
-                                        ? `${CHIP} bg-success/10 border-success/40 text-success`
-                                        : `${CHIP_IDLE} hover:text-text hover:border-primary/40`}`}
-                                >
-                                    {round.servedAt && <Check size={12} strokeWidth={3} />}
-                                    {round.servedAt ? `Đã ra món ${timeStringVN(new Date(round.servedAt))}` : 'Chưa ra món'}
-                                </button>
+                            <div className="flex items-center gap-2 border-t border-border/40 pt-2">
                                 <button
                                     onClick={() => handleEditRound(round)}
-                                    className={`${CHIP_IDLE} ml-auto px-2.5 hover:text-text hover:border-primary/40`}
+                                    className={`${CHIP_IDLE} px-2.5 hover:text-text hover:border-primary/40`}
                                 >
                                     Sửa
-                                </button>
-                                {/* Tách đợt này sang bàn khác — cùng màn chọn bàn đích với nút
-                                    "Gộp bàn" ở header, chỉ khác orderIds chỉ có mỗi đợt này. */}
-                                <button
-                                    onClick={() => startMove([round.id], `đợt ${openedLabel(round.createdAt)}`)}
-                                    aria-label={`Chuyển đợt ${openedLabel(round.createdAt)} sang bàn khác`}
-                                    className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-text hover:border-primary/40`}
-                                >
-                                    <ArrowRightLeft size={13} strokeWidth={2.25} />
                                 </button>
                                 <button
                                     onClick={() => handleDeleteRound(round)}
@@ -224,6 +220,15 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
                                     className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-danger`}
                                 >
                                     <Trash2 size={14} strokeWidth={2.25} />
+                                </button>
+                                <button
+                                    onClick={() => toggleServed(round)}
+                                    className={`flex items-center gap-1.5 px-2.5 ml-auto ${round.servedAt
+                                        ? `${CHIP} bg-success/10 border-success/40 text-success`
+                                        : `${CHIP_IDLE} hover:text-text hover:border-primary/40`}`}
+                                >
+                                    {round.servedAt && <Check size={12} strokeWidth={3} />}
+                                    {round.servedAt ? `Đã ra món ${timeStringVN(new Date(round.servedAt))}` : 'Chưa ra món'}
                                 </button>
                             </div>
                         )}

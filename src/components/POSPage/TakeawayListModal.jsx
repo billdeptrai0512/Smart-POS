@@ -1,12 +1,14 @@
 import { useState } from 'react'
-import { ArrowLeft, Check, Printer, ArrowRightLeft } from 'lucide-react'
+import { ArrowLeft, Check, Printer, ArrowRightLeft, Trash2 } from 'lucide-react'
 import { useCart } from '../../contexts/CartContext'
+import { useHistory } from '../../contexts/HistoryContext'
 import { useProducts } from '../../contexts/ProductContext'
+import { useConfirm } from '../../contexts/ConfirmContext'
 import { formatVND, discountToPercent } from '../../utils'
-import { timeStringVN, openedLabelVN } from '../../utils/dateVN'
+import { timeStringVN, openedLabelVN, dateShortVN, isSameDayVN } from '../../utils/dateVN'
 import { priceLineFor } from '../../utils/billLines'
 import { usePrintArmed } from '../../hooks/usePrintArmed'
-import { Dialog, MODAL_PANEL, CHIP, CHIP_IDLE } from '../common/ModalShell'
+import { Dialog, MODAL_PANEL, CHIP, CHIP_IDLE, TIME_PILL } from '../common/ModalShell'
 import PrintBill from '../common/PrintBill'
 import TableTargetPicker from './TableTargetPicker'
 
@@ -17,6 +19,8 @@ import TableTargetPicker from './TableTargetPicker'
 
 export default function TakeawayListModal({ orders, tableNames, onClose, onPick }) {
     const { toggleServed } = useCart()
+    const { handleDeleteOrder } = useHistory()
+    const confirm = useConfirm()
     const [moving, setMoving] = useState(null) // { orderIds: string[], label: string } | null
 
     if (moving) {
@@ -29,6 +33,17 @@ export default function TakeawayListModal({ orders, tableNames, onClose, onPick 
                 onClose={onClose}
             />
         )
+    }
+
+    async function handleDelete(order) {
+        const ok = await confirm({
+            title: `Xóa đơn ${openedLabelVN(order.createdAt)} (${formatVND(order.total)})?`,
+            detail: 'Hành động này không thể hoàn tác!',
+            danger: true,
+            confirmLabel: 'Xóa',
+        })
+        if (!ok) return
+        await handleDeleteOrder(order.id)
     }
 
     return (
@@ -48,6 +63,7 @@ export default function TakeawayListModal({ orders, tableNames, onClose, onPick 
                         order={order}
                         onToggleServed={() => toggleServed(order)}
                         onMove={() => setMoving({ orderIds: [order.id], label: `đơn ${openedLabelVN(order.createdAt)}` })}
+                        onDelete={() => handleDelete(order)}
                     />
                 ))}
             </div>
@@ -64,7 +80,7 @@ export default function TakeawayListModal({ orders, tableNames, onClose, onPick 
     )
 }
 
-function TakeawayRow({ order, onToggleServed, onMove }) {
+function TakeawayRow({ order, onToggleServed, onMove, onDelete }) {
     const { products, productExtras } = useProducts()
     const { billRef, printArmed, arm } = usePrintArmed()
 
@@ -75,43 +91,54 @@ function TakeawayRow({ order, onToggleServed, onMove }) {
         key: `${it.productId}:${idx}`, qty: it.qty, discountAmount: it.discountAmount || 0,
         ...priceLineFor(it, products, productExtras),
     }))
+    const createdAt = new Date(order.createdAt)
 
     return (
         <div className="rounded-[16px] border border-border/40 bg-surface-light/40 px-4 py-3">
-            <div className="flex items-baseline justify-between gap-3 mb-1.5">
-                <span className="text-[12px] font-bold text-text-secondary/70 leading-none">{openedLabelVN(order.createdAt)}</span>
+            <div className="flex items-center justify-between gap-3 pb-2">
+                <div className="flex items-center gap-1.5">
+                    {!isSameDayVN(createdAt, new Date()) && <span className={TIME_PILL}>{dateShortVN(createdAt)}</span>}
+                    <span className={TIME_PILL}>{timeStringVN(createdAt)}</span>
+                    <button
+                        onClick={onMove}
+                        aria-label="Chuyển vào bàn"
+                        className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-text hover:border-primary/40`}
+                    >
+                        <ArrowRightLeft size={12} strokeWidth={2.25} />
+                    </button>
+                </div>
                 <span className="text-[13px] font-black tabular-nums text-text">{formatVND(order.total)}</span>
             </div>
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-0.5 border-t border-border/40 pt-2 pb-2 pl-1">
                 {order.lines.map(l => (
                     <span key={l.name} className="text-[13px] font-bold text-text leading-snug">
                         {l.qty > 1 && <span className="tabular-nums text-text-secondary">{l.qty} </span>}{l.name}
                     </span>
                 ))}
             </div>
-            <div className="flex items-center gap-2 mt-2.5">
+            <div className="flex items-center gap-2 border-t border-border/40 pt-2">
+                <button
+                    onClick={arm}
+                    aria-label="In bill"
+                    className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-primary`}
+                >
+                    <Printer size={13} strokeWidth={2.25} />
+                </button>
+                <button
+                    onClick={onDelete}
+                    aria-label={`Xóa đơn ${openedLabelVN(order.createdAt)}`}
+                    className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-danger`}
+                >
+                    <Trash2 size={13} strokeWidth={2.25} />
+                </button>
                 <button
                     onClick={onToggleServed}
-                    className={`flex items-center gap-1.5 px-2.5 ${order.servedAt
+                    className={`flex items-center gap-1.5 px-2.5 ml-auto ${order.servedAt
                         ? `${CHIP} bg-success/10 border-success/40 text-success`
                         : `${CHIP_IDLE} hover:text-text hover:border-primary/40`}`}
                 >
                     {order.servedAt && <Check size={12} strokeWidth={3} />}
                     {order.servedAt ? `Đã ra món ${timeStringVN(new Date(order.servedAt))}` : 'Chưa ra món'}
-                </button>
-                <button
-                    onClick={arm}
-                    aria-label="In bill"
-                    className={`${CHIP_IDLE} ml-auto shrink-0 w-[26px] flex items-center justify-center hover:text-primary`}
-                >
-                    <Printer size={13} strokeWidth={2.25} />
-                </button>
-                <button
-                    onClick={onMove}
-                    aria-label="Chuyển vào bàn"
-                    className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-text hover:border-primary/40`}
-                >
-                    <ArrowRightLeft size={13} strokeWidth={2.25} />
                 </button>
             </div>
             {printArmed && (
