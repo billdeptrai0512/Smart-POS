@@ -93,6 +93,10 @@ export function POSProvider() {
     // xong thì handleConfirm trả về '' (xem ở đó).
     const [tableName, setTableName] = useState(() => persistedForThisAddress() ? (localStorage.getItem(STORAGE_KEYS.TABLE) || '') : '')
     useEffect(() => { localStorage.setItem(STORAGE_KEYS.TABLE, tableName) }, [tableName])
+    // Ref vì handleAddItem đọc ở nhánh flush tự động (deps gần-rỗng, xem comment dineInRef) —
+    // không có ref thì flush đó luôn thấy tableName rỗng dù state đang giữ tên bàn thật.
+    const tableNameRef = useRef(tableName)
+    tableNameRef.current = tableName
     // Các bàn còn khách, gộp từ DB (fetchOpenTables). Nguồn cho lưới chọn bàn và cho
     // số tổng cộng của bàn ở CheckoutBar.
     const [openTables, setOpenTables] = useState([])
@@ -720,7 +724,11 @@ export function POSProvider() {
     // never bails out, since onAdd/onCancel would be new every single tap.
     const handleAddItem = useCallback((product) => {
         // dineIn: KHÔNG chốt món trước — gom vào giỏ, chỉ handleConfirm mới ghi DB.
-        if (!dineInRef.current && cartRef.current.length > 0) doSubmitRef.current(cartRef.current)
+        // Kèm tableNameRef: nếu vừa tắt "Bàn ngồi" giữa lúc giỏ đang dựng dở cho một bàn cụ
+        // thể, đợt lỡ dở đó vẫn phải gắn đúng bàn khi bị flush qua đường mang đi này, không
+        // thì rơi thành đơn không tên (tableName chỉ tự về '' sau handleConfirm, không phải
+        // lúc toggle chế độ).
+        if (!dineInRef.current && cartRef.current.length > 0) doSubmitRef.current(cartRef.current, 0, tableNameRef.current || null)
 
         const cartItemId = crypto.randomUUID()
         const stickyExtras = (productExtras[product.id] || []).filter(e => e.is_sticky && enabledStickyExtraIdsRef.current.includes(e.id))
