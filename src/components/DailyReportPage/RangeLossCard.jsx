@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { buildIngredientToProduct, calculateEstimatedConsumption, buildRecipeIngredientSet, orderItemsOf, r1, walkDailyIngredientDiff } from '../../utils/inventory';
+import { buildIngredientToProduct, calculateEstimatedConsumption, buildRecipeIngredientSet, orderItemsOf, r1, walkDailyIngredientDiff, isLiveOrder } from '../../utils/inventory';
 import { dateStringVN } from '../../utils/dateVN';
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients';
 import { ChevronDown } from 'lucide-react';
@@ -36,7 +36,7 @@ export default function RangeLossCard({
     };
 
     // Phẳng hoá 1 lần, dùng cho cả ingredientToProduct lẫn dailyOrderItems bên dưới.
-    const liveOrders = useMemo(() => orders.filter(o => !o.deleted_at), [orders]);
+    const liveOrders = useMemo(() => orders.filter(isLiveOrder), [orders]);
 
     const ingredientToProduct = useMemo(
         () => buildIngredientToProduct({ orderItems: liveOrders.flatMap(orderItemsOf), recipes, products }),

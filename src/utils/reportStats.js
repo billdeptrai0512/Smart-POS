@@ -1,4 +1,4 @@
-import { calculateItemCost as calculateProductCost } from './inventory'
+import { calculateItemCost as calculateProductCost, isLiveOrder } from './inventory'
 import { dateStringVN } from './dateVN'
 
 // Khử trùng phiếu chốt ca: mỗi ngày VN chỉ giữ phiếu MỚI NHẤT (max closed_at), khớp
@@ -160,7 +160,7 @@ export function aggregateOrderStats({
     const activeHours = new Set()
 
     for (const o of orders || []) {
-        if (o.deleted_at) continue
+        if (!isLiveOrder(o)) continue
         const orderTotal = o.total || 0
         totalRevenue += orderTotal
         totalDiscount += o.discount_amount || o.discountAmount || 0

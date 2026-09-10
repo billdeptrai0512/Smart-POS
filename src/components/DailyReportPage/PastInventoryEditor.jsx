@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { buildIngredientToProduct, calculateEstimatedConsumption, calculateConsumptionBreakdown } from '../../utils/inventory'
+import { buildIngredientToProduct, calculateEstimatedConsumption, calculateConsumptionBreakdown, isLiveOrder } from '../../utils/inventory'
 import { getIngredientUnit, ingredientLabel } from '../../utils/ingredients'
 import { norm } from '../../utils/fieldSync'
 import InventoryReportCard from './InventoryReportCard'
@@ -35,7 +35,7 @@ export default function PastInventoryEditor({
 
     const orderItems = useMemo(() => {
         const items = []
-        dayOrders.filter(o => !o.deleted_at && !o.deletedAt).forEach(o => {
+        dayOrders.filter(isLiveOrder).forEach(o => {
             (o.order_items || o.orderItems || o.cart || []).forEach(i => items.push({
                 productId: i.product_id || i.productId,
                 qty: i.quantity || i.qty || 1,

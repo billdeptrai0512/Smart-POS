@@ -30,8 +30,9 @@ import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 //     costs:[{ingredient,unit_cost,unit}],
 //     ingredientSortOrder:[...] }
 
-// Read a source address (RLS-scoped to current user) into a snapshot.
-async function readSnapshot(sourceAddressId) {
+// products query có fallback riêng (cột is_divider có thể chưa migrate) nên tách thành
+// hàm async độc lập để chạy song song với các query còn lại qua Promise.all bên dưới.
+async function fetchSnapshotProducts(sourceAddressId) {
     let { data: products, error: e1 } = await supabase
         .from('products')
         .select('id, name, price, sort_order, count_as_cup, is_divider')
@@ -48,18 +49,29 @@ async function readSnapshot(sourceAddressId) {
             .eq('is_active', true))
     }
     if (e1) throw new Error('Lỗi khi đọc menu nguồn: ' + e1.message)
+    return { products: products || [], hasDividerColumn }
+}
 
-    const { data: recipes, error: e2 } = await supabase
-        .from('recipes')
-        .select('product_id, ingredient, amount, unit')
-        .eq('address_id', sourceAddressId)
+// Read a source address (RLS-scoped to current user) into a snapshot.
+async function readSnapshot(sourceAddressId) {
+    // 4 query độc lập chạy song song (chỉ extraIngredients cần đợi extras xong để lấy id).
+    const [
+        { products, hasDividerColumn },
+        { data: recipes, error: e2 },
+        { data: extras, error: e3 },
+        { data: costs, error: e5 },
+        { data: srcAddr, error: e6 },
+    ] = await Promise.all([
+        fetchSnapshotProducts(sourceAddressId),
+        supabase.from('recipes').select('product_id, ingredient, amount, unit').eq('address_id', sourceAddressId),
+        supabase.from('product_extras').select('id, product_id, name, price, sort_order, is_sticky').eq('address_id', sourceAddressId),
+        supabase.from('ingredient_costs').select('ingredient, unit_cost, unit').eq('address_id', sourceAddressId),
+        supabase.from('addresses').select('ingredient_sort_order').eq('id', sourceAddressId).single(),
+    ])
     if (e2) throw new Error('Lỗi khi đọc công thức nguồn: ' + e2.message)
-
-    const { data: extras, error: e3 } = await supabase
-        .from('product_extras')
-        .select('id, product_id, name, price, sort_order, is_sticky')
-        .eq('address_id', sourceAddressId)
     if (e3) throw new Error('Lỗi khi đọc tùy chọn nguồn: ' + e3.message)
+    if (e5) throw new Error('Lỗi khi đọc nguyên liệu nguồn: ' + e5.message)
+    if (e6) throw new Error('Lỗi khi đọc thứ tự nguyên liệu: ' + e6.message)
 
     let extraIngredients = []
     const extraIds = (extras || []).map(e => e.id)
@@ -72,21 +84,8 @@ async function readSnapshot(sourceAddressId) {
         extraIngredients = ei || []
     }
 
-    const { data: costs, error: e5 } = await supabase
-        .from('ingredient_costs')
-        .select('ingredient, unit_cost, unit')
-        .eq('address_id', sourceAddressId)
-    if (e5) throw new Error('Lỗi khi đọc nguyên liệu nguồn: ' + e5.message)
-
-    const { data: srcAddr, error: e6 } = await supabase
-        .from('addresses')
-        .select('ingredient_sort_order')
-        .eq('id', sourceAddressId)
-        .single()
-    if (e6) throw new Error('Lỗi khi đọc thứ tự nguyên liệu: ' + e6.message)
-
     return {
-        products: products || [],
+        products,
         recipes: recipes || [],
         extras: extras || [],
         extraIngredients,

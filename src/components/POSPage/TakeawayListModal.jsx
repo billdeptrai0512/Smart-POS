@@ -4,9 +4,9 @@ import { useCart } from '../../contexts/CartContext'
 import { useHistory } from '../../contexts/HistoryContext'
 import { useProducts } from '../../contexts/ProductContext'
 import { useConfirm } from '../../contexts/ConfirmContext'
-import { formatVND, discountToPercent } from '../../utils'
+import { formatVND } from '../../utils'
 import { timeStringVN, openedLabelVN, dateShortVN, isSameDayVN } from '../../utils/dateVN'
-import { priceLineFor } from '../../utils/billLines'
+import { priceLineFor, billSubtotal } from '../../utils/billLines'
 import { usePrintArmed } from '../../hooks/usePrintArmed'
 import { Dialog, MODAL_PANEL, CHIP, CHIP_IDLE, TIME_PILL } from '../common/ModalShell'
 import PrintBill from '../common/PrintBill'
@@ -95,8 +95,7 @@ function TakeawayRow({ order, onToggleServed, onMove, onEdit, onDelete }) {
     const { billRef, printArmed, arm } = usePrintArmed()
 
     const discountAmount = order.discountAmount || 0
-    const subtotal = order.total + discountAmount
-    const { pct: discountPct } = discountToPercent(subtotal, discountAmount)
+    const { subtotal, discountPct } = billSubtotal(order.total, discountAmount)
     const billLines = order.items.map((it, idx) => ({
         key: `${it.productId}:${idx}`, qty: it.qty, discountAmount: it.discountAmount || 0,
         ...priceLineFor(it, products, productExtras),

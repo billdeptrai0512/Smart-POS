@@ -218,7 +218,7 @@ export function splitCogsByCategory(orders, recipes, extraIngredients, ingredien
     }
     const recipesByProduct = groupRecipesByProduct(recipes)
     for (const o of orders || []) {
-        if (o?.deleted_at) continue
+        if (!isLiveOrder(o)) continue
         const items = o.order_items || o.cart || o.orderItems || []
         for (const item of items) {
             const qty = item.quantity || item.qty || 1
@@ -551,7 +551,7 @@ export function buildDailyHaoHutMap({ shiftClosings = [], orders = [], recipes =
 
     const dailyOrderItems = {}
     for (const o of orders) {
-        if (o.deleted_at) continue
+        if (!isLiveOrder(o)) continue
         const dayStr = dateStringVN(new Date(o.created_at))
         ;(dailyOrderItems[dayStr] ??= []).push(...orderItemsOf(o))
     }

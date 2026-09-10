@@ -583,7 +583,7 @@ export default function DailyReportPage() {
         }
         const sourceOrders = isDayScope ? [...displayOrders, ...offlineToday] : (apiOrders || [])
         for (const o of sourceOrders) {
-            if (o.deleted_at) continue
+            if (!isLiveOrder(o)) continue
             const dayStr = dateStringVN(new Date(o.created_at || o.createdAt))
             const items = o.order_items || o.cart || o.orderItems || []
             for (const i of items) {
@@ -637,7 +637,7 @@ export default function DailyReportPage() {
                     transfer: singleClosing.actual_transfer || 0
                 }
             }
-            const orders = [...rangeOrders, ...rangeOffline].filter(o => !o.deleted_at)
+            const orders = [...rangeOrders, ...rangeOffline].filter(isLiveOrder)
             const cash = orders.filter(o => o.payment_method === 'cash').reduce((sum, o) => sum + (o.total || 0), 0)
             const transfer = orders.filter(o => o.payment_method !== 'cash').reduce((sum, o) => sum + (o.total || 0), 0)
             return { cash, transfer }
@@ -655,7 +655,7 @@ export default function DailyReportPage() {
             })
 
         const ordersByDate = new Map()
-        const allOrders = [...rangeOrders, ...rangeOffline].filter(o => !o.deleted_at)
+        const allOrders = [...rangeOrders, ...rangeOffline].filter(isLiveOrder)
         allOrders.forEach(o => {
             const dateStr = dateStringVN(new Date(o.created_at || o.createdAt))
             if (!ordersByDate.has(dateStr)) {
@@ -1016,8 +1016,8 @@ export default function DailyReportPage() {
     const systemTotalRevenue = useMemo(() => {
         if (!isTodayScope) return 0
         let sum = 0
-        for (const o of todayOrders) if (!o.deleted_at && !o.deletedAt) sum += o.total || 0
-        for (const o of offlineToday) if (!o.deleted_at && !o.deletedAt) sum += o.total || 0
+        for (const o of todayOrders) if (isLiveOrder(o)) sum += o.total || 0
+        for (const o of offlineToday) if (isLiveOrder(o)) sum += o.total || 0
         return sum
     }, [isTodayScope, todayOrders, offlineToday])
 
