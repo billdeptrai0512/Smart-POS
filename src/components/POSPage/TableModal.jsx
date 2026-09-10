@@ -296,21 +296,22 @@ export default function TableModal({ onClose, inline = false }) {
                                             <div
                                                 className={`${CARD_H} relative rounded-[20px] border p-3.5 flex flex-col gap-1.5 transition-colors ${active ? 'bg-primary/5 border-primary' : busy ? 'bg-surface border-border/60' : 'bg-surface/50 border-border/40'}`}
                                             >
-                                                {/* Kéo để sắp xếp lại lưới — góc trên-phải, chỉ quản lý +
+                                                {/* Kéo để sắp xếp lại lưới — góc dưới-phải, chỉ quản lý +
                                                     bàn cố định. Ẩn lúc đang gõ đổi tên vì form chiếm hết
                                                     vùng thẻ. */}
                                                 {canEdit && configured.includes(name) && renaming !== name && (
-                                                    <div className="absolute top-2 right-2">{handle}</div>
+                                                    <div className="absolute bottom-2 right-2">{handle}</div>
                                                 )}
                                                 {/* Đổi tên: chạm thẳng vào tên bàn (xem span bên dưới), không cần
-                                                    nút riêng. Xoá: chỉ bàn trống — bàn còn khách mà biến mất khỏi
-                                                    lưới thì không ai bấm tính tiền cho nó được nữa. Góc dưới-phải,
-                                                    đối xứng với handle kéo ở góc trên-phải. */}
-                                                {canEdit && !busy && configured.includes(name) && renaming !== name && (
+                                                    nút riêng. Xoá được cả khi bàn còn khách — bàn vẫn hiện lại
+                                                    ngay dưới dạng "bàn tạm" (adHoc, xem openTables ở trên) chừng
+                                                    nào đơn còn mở, nên không mất quyền bấm tính tiền. Góc
+                                                    trên-phải, đối xứng với handle kéo ở góc dưới-phải. */}
+                                                {canEdit && configured.includes(name) && renaming !== name && (
                                                     <button
                                                         onClick={() => handleRemove(name)}
                                                         aria-label={`Xoá ${name}`}
-                                                        className="absolute bottom-2 right-2 w-6 h-6 rounded-full border border-border/60 flex items-center justify-center text-text-secondary/60 hover:text-danger hover:border-danger/40 transition-colors"
+                                                        className="absolute top-2 right-2 w-6 h-6 rounded-full border border-border/60 flex items-center justify-center text-text-secondary/60 hover:text-danger hover:border-danger/40 transition-colors"
                                                     >
                                                         <X size={14} strokeWidth={3} />
                                                     </button>
