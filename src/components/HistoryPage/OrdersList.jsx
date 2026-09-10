@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Percent, Trash2, Printer } from 'lucide-react'
 import { formatVND, computeDiscount, discountToPercent, NO_DISCOUNT } from '../../utils'
 import { dateShortVN, timeStringVN } from '../../utils/dateVN'
-import { priceLineFor } from '../../utils/billLines'
+import { priceLineFor, billSubtotal } from '../../utils/billLines'
 import { useDiscountEditing } from '../../hooks/useDiscountEditing'
 import { useToast } from '../../hooks/useToast'
 import { bumpOrderPrintCount } from '../../services/orderService'
@@ -112,8 +112,7 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
     const time = timeStringVN(date)
 
     const discountAmount = order.discountAmount || 0
-    const subtotal = order.total + discountAmount   // pre-discount price (cho tổng gạch ngang + bill in)
-    const { pct: discountPct } = discountToPercent(subtotal, discountAmount)
+    const { subtotal, discountPct } = billSubtotal(order.total, discountAmount) // pre-discount price (cho tổng gạch ngang + bill in)
     // Online, non-deleted orders are the only ones we can edit/discount against the DB.
     const editable = !order.deletedAt && !order.isOffline
 

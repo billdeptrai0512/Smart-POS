@@ -1,15 +1,15 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Trash2, Check, Printer, ArrowRightLeft, Loader } from 'lucide-react'
 import { useCart } from '../../contexts/CartContext'
 import { useHistory } from '../../contexts/HistoryContext'
 import { useProducts } from '../../contexts/ProductContext'
 import { useConfirm } from '../../contexts/ConfirmContext'
 import { useAddress } from '../../contexts/AddressContext'
-import { formatVND, discountToPercent } from '../../utils'
+import { formatVND } from '../../utils'
 import { printBillJob } from '../../lib/escposBitmap'
 import { bumpOrderPrintCount } from '../../services/orderService'
 import { timeStringVN, openedLabelVN, dateShortVN, isSameDayVN } from '../../utils/dateVN'
-import { priceLineFor } from '../../utils/billLines'
+import { billSubtotal, tablePriceLines } from '../../utils/billLines'
 import { Dialog, MODAL_PANEL, CHIP, CHIP_IDLE, TIME_PILL } from '../common/ModalShell'
 import PrintBill from '../common/PrintBill'
 import TableTargetPicker from './TableTargetPicker'
@@ -26,7 +26,7 @@ import TableTargetPicker from './TableTargetPicker'
 
 export default function TableDetailModal({ table, tableNames = [], onClose, onPick }) {
     const confirm = useConfirm()
-    const { handleCloseTable, refreshTables, reopenRoundIntoCart, toggleServed, orderCount, showError } = useCart()
+    const { handleCloseTable, reopenRoundIntoCart, toggleServed, orderCount, showError } = useCart()
     const { handleDeleteOrder } = useHistory()
     const { products, productExtras } = useProducts()
     const { selectedAddress } = useAddress()
@@ -62,37 +62,16 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
     const printCountRound = table.rounds.find(r => r.orderNo != null)
     const orderNo = printCountRound?.orderNo ?? null
     const discountTotal = table.rounds.reduce((s, r) => s + (r.discountAmount || 0), 0)
-    const subtotal = table.total + discountTotal
-    const { pct: discountPct } = discountToPercent(subtotal, discountTotal)
+    const { subtotal, discountPct } = billSubtotal(table.total, discountTotal)
 
-    // Đơn giá/thành tiền từng dòng cho bill in: round.lines chỉ có tên+SL (giá không
-    // lưu theo dòng, xem TableRound ở orderService.ts), nên tự tính lại từ giá món/topping
-    // ĐANG hiệu lực trong menu (products/productExtras) — đúng cho bàn đang mở vì đơn vừa
-    // gọi trong ca này, giá chưa kịp đổi. Gộp qua TẤT CẢ đợt (không tách theo round nữa,
-    // bill không còn hiện nhãn "Đợt N"), nên 1 món gọi ở hai đợt khác nhau chỉ ra một dòng.
-    // extras giữ riêng mảng (không nhét vào chuỗi tên như tableLineName) — bill in mỗi
-    // topping xuống một dòng "* tên" riêng, gộp trùng phải tính theo tổ hợp món+topping.
-    function priceLines(rounds) {
-        const out = []
-        for (const round of rounds) {
-            for (const it of round.items) {
-                const { name, extras, unitPrice } = priceLineFor(it, products, productExtras)
-                const discountAmount = it.discountAmount || 0
-                const baseKey = `${name}::${extras.map(e => e.id).sort().join(',')}`
-                // Dòng có giảm giá riêng KHÔNG gộp qua các đợt khác — gộp sẽ chia trung bình
-                // discount qua nhiều ly khác giá nhau (vd 1 ly full giá + 1 ly miễn phí gộp
-                // thành 2 ly "nửa giá" trên bill, sai với thực tế). Chỉ món KHÔNG giảm giá
-                // mới gộp theo tên+topping như cũ.
-                const hit = discountAmount === 0 ? out.find(l => l.key === baseKey) : null
-                if (hit) { hit.qty += it.qty; continue }
-                out.push({
-                    key: discountAmount === 0 ? baseKey : `${baseKey}::${round.id}::${out.length}`,
-                    name, extras, qty: it.qty, unitPrice, discountAmount,
-                })
-            }
-        }
-        return out
-    }
+    // Đơn giá/thành tiền từng dòng cho bill in (tablePriceLines, utils/billLines.js) —
+    // round.lines chỉ có tên+SL (giá không lưu theo dòng, xem TableRound ở orderService.ts),
+    // nên tự tính lại từ giá món/topping ĐANG hiệu lực trong menu. useMemo vì vòng poll
+    // ~888ms re-render modal đều đặn dù rounds/menu thường không đổi giữa 2 lần bấm.
+    const lines = useMemo(
+        () => tablePriceLines(table.rounds, products, productExtras),
+        [table.rounds, products, productExtras]
+    )
 
     async function handleEditRound(round) {
         // Cả chuỗi xoá-nạp-giỏ nằm trong POSContext (reopenRoundIntoCart) — ở đây chỉ
@@ -130,56 +109,58 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
         }
     }
 
-    // Nút "In bill" ở header — KHÁC handleBill (Tính tiền, đã có billing chặn bấm đúp): trước
-    // đây không có cờ nào chặn bấm lại trong lúc in native (vài giây thật qua mạng, không có
-    // phản hồi tức thì nào cho người dùng thấy) — bấm 2 lần liên tiếp gọi captureImage() chồng
-    // lên nhau, cùng mutate style/className của #print-bill, làm ảnh chụp lỡ dở/lỗi mà không
-    // ném ra lỗi gì để bắt (xem chainRef ở PrintBill.jsx — đã chuỗi hoá phần đó làm lưới an
-    // toàn cuối, nhưng chặn từ đây vẫn tốt hơn: khỏi phải xếp hàng chờ). Dùng lại đúng cờ
-    // billing (không cần state riêng) — khoá luôn cả "Tính tiền" trong lúc đang in tay là
-    // hợp lý, không nên đóng bàn giữa lúc in dở.
-    async function handleHeaderPrint() {
+    // Khoá dùng chung cho "In bill" (header) và "Tính tiền": trước đây không có cờ nào
+    // chặn bấm lại trong lúc in native (vài giây thật qua mạng, không có phản hồi tức thì
+    // nào cho người dùng thấy) — bấm 2 lần liên tiếp gọi captureImage() chồng lên nhau,
+    // cùng mutate style/className của #print-bill, làm ảnh chụp lỡ dở/lỗi mà không ném ra
+    // lỗi gì để bắt (xem chainRef ở PrintBill.jsx — đã chuỗi hoá phần đó làm lưới an toàn
+    // cuối, nhưng chặn từ đây vẫn tốt hơn: khỏi phải xếp hàng chờ). Dùng chung 1 cờ billing
+    // (không tách riêng theo nút) — khoá luôn cả "Tính tiền" trong lúc đang in tay là hợp
+    // lý, không nên đóng bàn giữa lúc in dở.
+    async function withBilling(fn) {
         if (billing) return
         setBilling(true)
         try {
-            await handlePrint()
+            await fn()
         } finally {
             setBilling(false)
         }
     }
 
-    async function handleBill() {
-        if (billing) return
-        setBilling(true)
-        try {
-            // Máy khác có thể vừa gửi thêm một đợt sau lần fetch gần nhất. Nhân viên thu
-            // tiền theo đúng con số trong hộp này nên lấy lại số mới nhất ngay trước khi hỏi.
-            const fresh = (await refreshTables()).find(x => x.name === table.name) || table
-            const pending = fresh.rounds.filter(r => !r.servedAt).length
-            // Chỉ hỏi xác nhận khi còn đợt chưa ra món — đây là trường hợp DUY NHẤT còn kịp
-            // cảnh báo trước khi bàn (và đợt chưa ra món) biến mất khỏi lưới. Đã ra hết món
-            // rồi thì hỏi thêm chỉ là 1 tap thừa, tính tiền + in thẳng luôn.
-            if (pending > 0) {
-                const ok = await confirm({
-                    title: `Tính tiền ${fresh.name}?`,
-                    detail: `${linesLabel(fresh.lines)} — ${formatVND(fresh.total)} · ${fresh.rounds.length} đợt từ ${openedLabel(fresh.openedAt)}\n⚠ Còn ${pending} đợt chưa ra món.`,
-                    confirmLabel: 'Tính tiền',
-                })
-                if (!ok) return
-            }
-            // In TRƯỚC khi đóng bàn: TableModal render TableDetailModal theo detailTable
-            // (tính lại từ openTables mỗi render, xem comment ở TableModal) — đóng bàn xong
-            // là table biến mất khỏi openTables, modal (và #print-bill bên trong) bị THÁO
-            // MOUNT ngay từ component cha, bất kể có gọi onClose() hay chưa. Đóng bàn trước
-            // rồi mới in gần như chắc chắn in ra giấy trắng (đường window.print()) — handlePrint
-            // tự đợi đúng việc cần đợi cho từng đường in (afterprint hoặc network gửi xong).
-            await handlePrint()
-            await handleCloseTable(fresh)
-            onClose()
-        } finally {
-            setBilling(false)
+    const handleHeaderPrint = () => withBilling(handlePrint)
+
+    const handleBill = () => withBilling(async () => {
+        // Chỉ hỏi xác nhận khi còn đợt chưa ra món — đây là trường hợp DUY NHẤT còn kịp
+        // cảnh báo trước khi bàn (và đợt chưa ra món) biến mất khỏi lưới. Đã ra hết món
+        // rồi thì hỏi thêm chỉ là 1 tap thừa, tính tiền + in thẳng luôn.
+        //
+        // Dùng thẳng `table` (đã tính lại từ openTables mỗi render — xem comment ở
+        // TableModal — và openTables được vòng poll ~888ms giữ tươi, xem useOrdersPoll.js)
+        // thay vì chặn đầu bằng một refreshTables() đồng bộ: query đó join order_items/
+        // products cho MỌI bàn đang mở, đo ~1s (xem comment ở POSContext.refreshTables),
+        // mà trước đây chạy lại mỗi lần bấm Tính tiền dù dữ liệu hiếm khi lệch quá 1 nhịp
+        // poll. Đánh đổi: cửa sổ race hẹp hơn 1 nhịp poll (đợt vừa thêm ở máy khác ngay
+        // trước cú bấm) có thể chưa kịp vào cảnh báo này — không mất dữ liệu, chỉ có thể
+        // thiếu hộp xác nhận ở trường hợp cực hiếm.
+        const pending = table.rounds.filter(r => !r.servedAt).length
+        if (pending > 0) {
+            const ok = await confirm({
+                title: `Tính tiền ${table.name}?`,
+                detail: `${linesLabel(table.lines)} — ${formatVND(table.total)} · ${table.rounds.length} đợt từ ${openedLabel(table.openedAt)}\n⚠ Còn ${pending} đợt chưa ra món.`,
+                confirmLabel: 'Tính tiền',
+            })
+            if (!ok) return
         }
-    }
+        // In TRƯỚC khi đóng bàn: TableModal render TableDetailModal theo detailTable
+        // (tính lại từ openTables mỗi render, xem comment ở TableModal) — đóng bàn xong
+        // là table biến mất khỏi openTables, modal (và #print-bill bên trong) bị THÁO
+        // MOUNT ngay từ component cha, bất kể có gọi onClose() hay chưa. Đóng bàn trước
+        // rồi mới in gần như chắc chắn in ra giấy trắng (đường window.print()) — handlePrint
+        // tự đợi đúng việc cần đợi cho từng đường in (afterprint hoặc network gửi xong).
+        await handlePrint()
+        await handleCloseTable(table)
+        onClose()
+    })
 
     const otherTables = tableNames.filter(n => n !== table.name)
     // Đợt offline chưa có id thì không chuyển được (cùng lý do ẩn hàng nút Sửa/Xoá bên
@@ -306,15 +287,15 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
                 </button>
             </div>
 
-            {/* Không còn hiện nhãn "Đợt N" trong bảng món — priceLines gộp món trùng tên
-                qua mọi đợt thành 1 dòng, xem comment ở priceLines. */}
+            {/* Không còn hiện nhãn "Đợt N" trong bảng món — tablePriceLines gộp món trùng tên
+                qua mọi đợt thành 1 dòng, xem comment ở utils/billLines.js. */}
             <PrintBill
                 ref={billRef}
                 orderNo={orderNo}
                 tableName={table.name}
                 openedAt={table.openedAt}
                 staffName={lastStaff}
-                lines={priceLines(table.rounds)}
+                lines={lines}
                 subtotal={subtotal}
                 discountTotal={discountTotal}
                 discountPct={discountPct}

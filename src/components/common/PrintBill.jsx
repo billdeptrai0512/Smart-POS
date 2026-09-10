@@ -36,6 +36,7 @@ const PrintBill = forwardRef(function PrintBill(
     // cùng tra chung document.getElementById('print-bill'); giờ mỗi thẻ đã tự giữ elRef riêng
     // (bên dưới) nên 2 thẻ khác nhau không còn đụng chung node để mà cần xếp hàng chung nữa.
     const chainRef = useRef(Promise.resolve())
+    const initialPrintCount = (printCount ?? 0) + 1
 
     // Cập nhật "Giờ ra"/"Ngày"/"In lần" ngay trước khi lấy bản in — dùng chung cho cả
     // print() (web) và captureImage() (native) nên 2 đường in không lệch giờ/lần in.
@@ -53,7 +54,7 @@ const PrintBill = forwardRef(function PrintBill(
         if (printedAtRef.current) printedAtRef.current.textContent = fullLabel(now)
         if (printDateRef.current) printDateRef.current.textContent = dateFullVN(now)
         const next = onPrinted?.()
-        if (printCountLabelRef.current) printCountLabelRef.current.textContent = String(next ?? (printCount ?? 0) + 1)
+        if (printCountLabelRef.current) printCountLabelRef.current.textContent = String(next ?? initialPrintCount)
     }
 
     useImperativeHandle(ref, () => ({
@@ -146,7 +147,7 @@ const PrintBill = forwardRef(function PrintBill(
                 </>
             )}
             {staffName && <div><b>Nhân viên:</b> {staffName}</div>}
-            <div><b>In lần:</b> <span ref={printCountLabelRef}>{(printCount ?? 0) + 1}</span></div>
+            <div><b>In lần:</b> <span ref={printCountLabelRef}>{initialPrintCount}</span></div>
             <div style={BILL_RULE} />
             <div style={{ ...BILL_COLS, fontWeight: 700 }}>
                 <span style={{ whiteSpace: 'nowrap' }}>Tên hàng</span>

@@ -11,6 +11,16 @@ import PWAInstallPrompt from './components/common/PWAInstallPrompt.jsx'
 // 3 thứ này chỉ có ý nghĩa khi chạy trong trình duyệt.
 const isNative = Capacitor.isNativePlatform()
 
+// Preload sớm 2 chunk chỉ dùng lúc in bill native (html2canvas + plugin ESC/POS,
+// xem escposBitmap.js) — nếu đợi tới lúc bấm "In bill" mới import lần đầu thì lần
+// in ĐẦU TIÊN của phiên phải cộng thêm thời gian tải+parse chunk vào độ trễ in
+// thật. Không await, không chặn render — chạy nền lúc mở app, sẵn trong cache
+// module của trình duyệt trước khi người dùng kịp bấm.
+if (isNative) {
+  import('html2canvas')
+  import('@albgen/capacitor-escpos-plugin')
+}
+
 // DSN không phải secret (nằm trong bundle client). Chỉ bật ở production để dev/tunnel
 // không bắn lỗi giả lên dashboard. tracesSampleRate=0 → chỉ theo dõi lỗi, không tốn
 // hạn ngạch performance. release = commit mới nhất (đã có trong vite.config.js).

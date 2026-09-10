@@ -78,14 +78,15 @@ function canvasToEscPosImage(canvas) {
 // isTimeout đánh dấu RIÊNG lỗi do chính đây tạo ra — printWithRetry cần phân biệt với lỗi
 // THẬT ném từ plugin/network (xem comment ở đó).
 function withTimeout(promise, ms, label) {
-    return Promise.race([
-        promise,
-        new Promise((_, reject) => setTimeout(() => {
+    let timeoutId
+    const timeout = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
             const err = new Error(`${label}: quá ${ms}ms, có thể bị treo`)
             err.isTimeout = true
             reject(err)
-        }, ms)),
-    ])
+        }, ms)
+    })
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId))
 }
 
 // Chờ ms mili giây — dùng cho khoảng nghỉ giữa các lần thử lại bên dưới.
