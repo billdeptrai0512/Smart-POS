@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Plus, X } from 'lucide-react'
+import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { useCart } from '../../contexts/CartContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -9,6 +11,7 @@ import { formatVND } from '../../utils'
 import { dateShortVN, isSameDayVN, timeStringVN } from '../../utils/dateVN'
 import { renameTable as renameTableOrders } from '../../services/orderService'
 import { Dialog } from '../common/ModalShell'
+import SortableItem from '../RecipeMenuPage/SortableItem'
 import TableDetailModal from './TableDetailModal'
 import TakeawayListModal from './TakeawayListModal'
 
@@ -169,6 +172,29 @@ export default function TableModal({ onClose, inline = false }) {
         catch (err) { showError(err, 'Xoá bàn') }
     }
 
+    // Kéo-thả để đổi thứ tự lưới — thả tay là lưu luôn, không có bước "Lưu sắp xếp"
+    // riêng. Chỉ áp cho bàn cố định (configured); bàn tạm (adHoc) không nằm trong
+    // addresses.tables nên không có gì để sắp xếp. Không giữ bản local optimistic —
+    // configured tự derive lại từ context sau khi setTables lưu xong (cùng cách
+    // handleRemove/handleRename ở trên không optimistic-copy).
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    )
+    async function handleDragEnd({ active, over }) {
+        if (!over || active.id === over.id) return
+        const from = configured.indexOf(active.id)
+        const to = configured.indexOf(over.id)
+        // -1 = bàn tạm (adHoc, không nằm trong configured) — cùng 1 SortableContext
+        // với bàn cố định (xem render bên dưới) nên có thể là target thả, bỏ qua.
+        if (from === -1 || to === -1) return
+        const updated = [...configured]
+        const [moved] = updated.splice(from, 1)
+        updated.splice(to, 0, moved)
+        try { await setTables(selectedAddress.id, updated) }
+        catch (err) { showError(err, 'Sắp xếp bàn') }
+    }
+
     function startRename(name) {
         setRenaming(name)
         setRenameValue(name)
@@ -250,96 +276,116 @@ export default function TableModal({ onClose, inline = false }) {
                         </button>
                     )}
 
-                    {names.map(name => {
-                        const t = statsOf(name)
-                        const active = name === tableName
-                        const busy = t.rounds.length > 0
-                        const stale = staleLabel(t.openedAt)
-                        const pending = pendingCups(t.rounds)
-                        return (
-                            <div
-                                key={name}
-                                className={`${CARD_H} relative rounded-[20px] border p-3.5 flex flex-col gap-1.5 transition-colors ${active ? 'bg-primary/5 border-primary' : busy ? 'bg-surface border-border/60' : 'bg-surface/50 border-border/40'}`}
-                            >
-                                {/* Đổi tên: chạm thẳng vào tên bàn (xem span bên dưới), không cần
-                                    nút riêng. Xoá: chỉ bàn trống — bàn còn khách mà biến mất khỏi
-                                    lưới thì không ai bấm tính tiền cho nó được nữa. */}
-                                {canEdit && !busy && configured.includes(name) && renaming !== name && (
-                                    <button
-                                        onClick={() => handleRemove(name)}
-                                        aria-label={`Xoá ${name}`}
-                                        className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center text-text-secondary/60 hover:text-danger transition-colors"
-                                    >
-                                        <X size={14} strokeWidth={3} />
-                                    </button>
-                                )}
-                                {renaming === name && (
-                                    <form onSubmit={e => handleRename(e, name)} className="flex-1 min-h-0 flex flex-col justify-center gap-2">
-                                        <input
-                                            type="text"
-                                            autoFocus
-                                            value={renameValue}
-                                            onChange={e => setRenameValue(e.target.value)}
-                                            onFocus={e => e.target.select()}
-                                            className="w-full min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[13px] font-black uppercase tracking-wide text-text focus:outline-none focus:border-primary/40 transition-colors"
-                                        />
-                                        <div className="flex gap-1.5">
-                                            <button type="button" onClick={() => setRenaming(null)} className="flex-1 py-1.5 rounded-[10px] bg-surface-light border border-border/60 text-[11px] font-black uppercase tracking-wide text-text-secondary hover:text-text transition-colors">
-                                                Huỷ
-                                            </button>
-                                            <button type="submit" disabled={!renameValue.trim()} className="flex-1 py-1.5 rounded-[10px] bg-primary text-bg text-[11px] font-black uppercase tracking-wide disabled:opacity-50 hover:bg-primary/90 transition-colors">
-                                                Lưu
-                                            </button>
-                                        </div>
-                                    </form>
-                                )}
-                                {/* Thẻ = tờ hoá đơn đang chạy. Tên và tổng cùng một hàng vì đó là
-                                    hai thứ hay đọc chung; danh sách đợt ở dưới (giờ gọi + đã/chưa ra
-                                    món) để nhân viên overview được cả bàn mà không cần bấm vào từng
-                                    bàn — cắt bớt cho vừa khung, bản đầy đủ (kèm món) nằm trong modal
-                                    chi tiết.
-                                    Bàn có khách mà CHƯA phải bàn đang chọn: chạm = chỉ chọn (focus),
-                                    giống mọi thẻ khác — không nhảy thẳng vào chi tiết khi nhân viên
-                                    còn đang lướt qua các bàn. Chạm lần nữa vào đúng bàn đang chọn
-                                    (active) mới mở chi tiết (đọc/sửa/thu tiền đều ở đó). Bàn trống:
-                                    không có gì để đọc, chạm = chọn bàn luôn, không có bước 2. */}
-                                {renaming !== name && (
-                                    <button onClick={() => (busy && active) ? setDetail(name) : (busy ? setTableName(name) : pick(name))} className="flex-1 min-h-0 w-full overflow-hidden text-left flex flex-col gap-1 focus:outline-none">
-                                        <span className="shrink-0 w-full flex items-baseline justify-between gap-2">
-                                            {/* Chạm thẳng vào tên = đổi tên (quản lý, bàn cố định) — tách khỏi
-                                                hành vi chọn/mở chi tiết của nút cha bằng stopPropagation, không
-                                                cần thêm nút bút chì riêng chiếm chỗ trên thẻ. */}
-                                            {canEdit && configured.includes(name) ? (
-                                                <span
-                                                    onClick={e => { e.stopPropagation(); startRename(name) }}
-                                                    className={`text-[13px] font-black uppercase tracking-wide line-clamp-1 hover:underline ${busy || active ? 'text-text' : 'text-text-secondary'}`}
-                                                >
-                                                    {name}
-                                                </span>
-                                            ) : (
-                                                <span className={`text-[13px] font-black uppercase tracking-wide line-clamp-1 ${busy || active ? 'text-text' : 'text-text-secondary'}`}>{name}</span>
-                                            )}
-                                            {busy && <span className="shrink-0 text-[14px] font-black tabular-nums text-primary">{formatVND(t.total)}</span>}
-                                        </span>
-                                        {stale && <span className="shrink-0 text-[11px] font-bold text-text-secondary">{stale}</span>}
-                                        {busy ? (
-                                            roundPreview(t.rounds)
-                                        ) : (
-                                            <span className="text-[12px] font-bold text-text-secondary/50">Trống</span>
-                                        )}
-                                        {/* Còn ly chưa bưng ra — thứ duy nhất trên lưới mà nhân viên cần
-                                            thấy trước khi bấm vào bàn. Chi tiết đợt nào thì mở thẻ ra xem.
-                                            shrink-0: xem comment ở thẻ Mang đi phía trên. */}
-                                        {pending > 0 && (
-                                            <span className="shrink-0 mt-auto text-[11px] font-black uppercase tracking-wide text-warning">
-                                                {pending} món chưa ra
-                                            </span>
-                                        )}
-                                    </button>
-                                )}
-                            </div>
-                        )
-                    })}
+                    {/* 1 SortableContext cho cả bàn cố định lẫn bàn tạm (adHoc) — nhân viên
+                        (!canEdit) hoặc bàn tạm vẫn nằm trong context này nhưng không có
+                        handle để kéo (gate canEdit/configured ở trong thẻ), nên card tĩnh
+                        như cũ, chỉ khác là không cần tách nhánh render riêng.
+                        handleDragEnd bỏ qua khi from/to rơi vào bàn tạm (-1, không ở trong
+                        configured — xem comment ở đó). */}
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                        <SortableContext items={names} strategy={rectSortingStrategy}>
+                            {names.map(name => (
+                                <SortableItem key={name} id={name}>
+                                    {({ handle }) => {
+                                        const t = statsOf(name)
+                                        const active = name === tableName
+                                        const busy = t.rounds.length > 0
+                                        const stale = staleLabel(t.openedAt)
+                                        const pending = pendingCups(t.rounds)
+                                        return (
+                                            <div
+                                                className={`${CARD_H} relative rounded-[20px] border p-3.5 flex flex-col gap-1.5 transition-colors ${active ? 'bg-primary/5 border-primary' : busy ? 'bg-surface border-border/60' : 'bg-surface/50 border-border/40'}`}
+                                            >
+                                                {/* Kéo để sắp xếp lại lưới — góc trên-phải, chỉ quản lý +
+                                                    bàn cố định. Ẩn lúc đang gõ đổi tên vì form chiếm hết
+                                                    vùng thẻ. */}
+                                                {canEdit && configured.includes(name) && renaming !== name && (
+                                                    <div className="absolute top-2 right-2">{handle}</div>
+                                                )}
+                                                {/* Đổi tên: chạm thẳng vào tên bàn (xem span bên dưới), không cần
+                                                    nút riêng. Xoá: chỉ bàn trống — bàn còn khách mà biến mất khỏi
+                                                    lưới thì không ai bấm tính tiền cho nó được nữa. Góc dưới-phải,
+                                                    đối xứng với handle kéo ở góc trên-phải. */}
+                                                {canEdit && !busy && configured.includes(name) && renaming !== name && (
+                                                    <button
+                                                        onClick={() => handleRemove(name)}
+                                                        aria-label={`Xoá ${name}`}
+                                                        className="absolute bottom-2 right-2 w-6 h-6 rounded-full flex items-center justify-center text-text-secondary/60 hover:text-danger transition-colors"
+                                                    >
+                                                        <X size={14} strokeWidth={3} />
+                                                    </button>
+                                                )}
+                                                {renaming === name && (
+                                                    <form onSubmit={e => handleRename(e, name)} className="flex-1 min-h-0 flex flex-col justify-center gap-2">
+                                                        <input
+                                                            type="text"
+                                                            autoFocus
+                                                            value={renameValue}
+                                                            onChange={e => setRenameValue(e.target.value)}
+                                                            onFocus={e => e.target.select()}
+                                                            className="w-full min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[13px] font-black uppercase tracking-wide text-text focus:outline-none focus:border-primary/40 transition-colors"
+                                                        />
+                                                        <div className="flex gap-1.5">
+                                                            <button type="button" onClick={() => setRenaming(null)} className="flex-1 py-1.5 rounded-[10px] bg-surface-light border border-border/60 text-[11px] font-black uppercase tracking-wide text-text-secondary hover:text-text transition-colors">
+                                                                Huỷ
+                                                            </button>
+                                                            <button type="submit" disabled={!renameValue.trim()} className="flex-1 py-1.5 rounded-[10px] bg-primary text-bg text-[11px] font-black uppercase tracking-wide disabled:opacity-50 hover:bg-primary/90 transition-colors">
+                                                                Lưu
+                                                            </button>
+                                                        </div>
+                                                    </form>
+                                                )}
+                                                {/* Thẻ = tờ hoá đơn đang chạy. Tên và tổng cùng một hàng vì đó là
+                                                    hai thứ hay đọc chung; danh sách đợt ở dưới (giờ gọi + đã/chưa ra
+                                                    món) để nhân viên overview được cả bàn mà không cần bấm vào từng
+                                                    bàn — cắt bớt cho vừa khung, bản đầy đủ (kèm món) nằm trong modal
+                                                    chi tiết.
+                                                    Bàn có khách mà CHƯA phải bàn đang chọn: chạm = chỉ chọn (focus),
+                                                    giống mọi thẻ khác — không nhảy thẳng vào chi tiết khi nhân viên
+                                                    còn đang lướt qua các bàn. Chạm lần nữa vào đúng bàn đang chọn
+                                                    (active) mới mở chi tiết (đọc/sửa/thu tiền đều ở đó). Bàn trống:
+                                                    không có gì để đọc, chạm = chọn bàn luôn, không có bước 2. */}
+                                                {renaming !== name && (
+                                                    <button onClick={() => (busy && active) ? setDetail(name) : (busy ? setTableName(name) : pick(name))} className="flex-1 min-h-0 w-full overflow-hidden text-left flex flex-col gap-1 focus:outline-none">
+                                                        <span className="shrink-0 w-full flex items-baseline justify-between gap-2">
+                                                            {/* Chạm thẳng vào tên = đổi tên (quản lý, bàn cố định) — tách khỏi
+                                                                hành vi chọn/mở chi tiết của nút cha bằng stopPropagation, không
+                                                                cần thêm nút bút chì riêng chiếm chỗ trên thẻ. */}
+                                                            {canEdit && configured.includes(name) ? (
+                                                                <span
+                                                                    onClick={e => { e.stopPropagation(); startRename(name) }}
+                                                                    className={`text-[13px] font-black uppercase tracking-wide line-clamp-1 hover:underline ${busy || active ? 'text-text' : 'text-text-secondary'}`}
+                                                                >
+                                                                    {name}
+                                                                </span>
+                                                            ) : (
+                                                                <span className={`text-[13px] font-black uppercase tracking-wide line-clamp-1 ${busy || active ? 'text-text' : 'text-text-secondary'}`}>{name}</span>
+                                                            )}
+                                                            {busy && <span className="shrink-0 text-[14px] font-black tabular-nums text-primary">{formatVND(t.total)}</span>}
+                                                        </span>
+                                                        {stale && <span className="shrink-0 text-[11px] font-bold text-text-secondary">{stale}</span>}
+                                                        {busy ? (
+                                                            roundPreview(t.rounds)
+                                                        ) : (
+                                                            <span className="text-[12px] font-bold text-text-secondary/50">Trống</span>
+                                                        )}
+                                                        {/* Còn ly chưa bưng ra — thứ duy nhất trên lưới mà nhân viên cần
+                                                            thấy trước khi bấm vào bàn. Chi tiết đợt nào thì mở thẻ ra xem.
+                                                            shrink-0: xem comment ở thẻ Mang đi phía trên. */}
+                                                        {pending > 0 && (
+                                                            <span className="shrink-0 mt-auto text-[11px] font-black uppercase tracking-wide text-warning">
+                                                                {pending} món chưa ra
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )
+                                    }}
+                                </SortableItem>
+                            ))}
+                        </SortableContext>
+                    </DndContext>
 
                     {/* Ô "+" là một thẻ trong lưới, không phải form riêng ở trên: bấm mới
                         mở ô gõ tên, để lưới không bị một hàng input chiếm chỗ mãi. */}
