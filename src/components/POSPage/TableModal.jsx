@@ -310,7 +310,7 @@ export default function TableModal({ onClose, inline = false }) {
                                                     <button
                                                         onClick={() => handleRemove(name)}
                                                         aria-label={`Xoá ${name}`}
-                                                        className="absolute bottom-2 right-2 w-6 h-6 rounded-full flex items-center justify-center text-text-secondary/60 hover:text-danger transition-colors"
+                                                        className="absolute bottom-2 right-2 w-6 h-6 rounded-full border border-border/60 flex items-center justify-center text-text-secondary/60 hover:text-danger hover:border-danger/40 transition-colors"
                                                     >
                                                         <X size={14} strokeWidth={3} />
                                                     </button>
