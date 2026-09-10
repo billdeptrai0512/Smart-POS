@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { X, Package, Loader } from 'lucide-react'
-import { Dialog } from '../common/ModalShell'
+import { Package, Loader } from 'lucide-react'
+import { Dialog, ModalHeader } from '../common/ModalShell'
 
 /**
  * Modal cấu hình "quy cách đóng gói" cho 1 nguyên liệu.
@@ -75,23 +75,14 @@ export default function PackConfigModal({
             onClose={!saving ? onClose : undefined}
             panelClassName="w-full max-w-md mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden"
         >
-                {/* Header */}
-                <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-[10px] bg-primary/10 flex items-center justify-center">
-                            <Package size={15} className="text-primary" />
-                        </div>
-                        <div>
-                            <p className="text-text font-black text-sm leading-none">Quy cách đóng gói</p>
-                            <p className="text-text-secondary text-xs mt-0.5 truncate max-w-[200px]">{ingredientLabel}</p>
-                        </div>
-                    </div>
-                    {!saving && (
-                        <button onClick={onClose} className="p-1.5 text-text-secondary hover:text-text rounded-lg hover:bg-surface-light">
-                            <X size={16} />
-                        </button>
-                    )}
-                </div>
+                <ModalHeader
+                    icon={Package}
+                    title="Quy cách đóng gói"
+                    subtitle={ingredientLabel}
+                    subtitleClassName="truncate max-w-[200px]"
+                    onClose={onClose}
+                    hideClose={saving}
+                />
 
                 {/* Body */}
                 <div className="px-5 py-4 space-y-4">

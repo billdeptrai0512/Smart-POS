@@ -3,9 +3,9 @@ import { ChevronDown } from 'lucide-react'
 // Khung card thu gọn/mở rộng dùng chung cho khu Tồn kho (Soạn / Hao hụt / Chuẩn bị).
 // Controlled: `open` + `onToggle` do parent giữ — parent chạy accordion (mỗi lúc mở 1 card,
 // mặc định mở card của bước hiện tại trong flow). `count` là chuỗi nhỏ cạnh chevron (vd "4/4").
-export default function CollapsibleCard({ icon, title, count, open, onToggle, children }) {
+export default function CollapsibleCard({ icon, title, titleExtra, count, open, onToggle, borderClass = 'border-border/60', children }) {
     return (
-        <div className="bg-surface rounded-[20px] p-3 border border-border/60 shadow-sm">
+        <div className={`bg-surface rounded-[20px] p-3 border ${borderClass} shadow-sm`}>
             <button
                 type="button"
                 onClick={onToggle}
@@ -14,6 +14,7 @@ export default function CollapsibleCard({ icon, title, count, open, onToggle, ch
                 <div className="flex items-center gap-1.5">
                     {icon}
                     <span className="text-[12px] font-black uppercase tracking-widest text-text">{title}</span>
+                    {titleExtra}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                     {count != null && (

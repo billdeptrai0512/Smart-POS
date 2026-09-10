@@ -7,14 +7,14 @@ import { fetchDefaultIngredientSort, setTeamMemberRole, removeTeamMember, setTea
 import { useMonetizationEnabled } from '../hooks/useEntitlement'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { cloneFromShareCode, getSharedConfig } from '../services/backupService'
-import { LogOut, Loader, Plus, X, UserPlus } from 'lucide-react'
+import { LogOut, Loader, Plus, UserPlus } from 'lucide-react'
 import Skeleton from '../components/common/Skeleton'
 import AddressHeader from '../components/AddressSelectPage/AddressHeader'
 import BranchGrid from '../components/AddressSelectPage/BranchGrid'
 import StaffTab from '../components/AddressSelectPage/StaffTab'
 import CreateStaffModal from '../components/AddressSelectPage/CreateStaffModal'
 import SupportModal from '../components/common/SupportModal'
-import { BottomSheet } from '../components/common/ModalShell'
+import { BottomSheet, SheetHeader } from '../components/common/ModalShell'
 import { cacheKey as buildCacheKey, STORAGE_KEYS } from '../constants/storageKeys'
 import { computeSubscriptionStatus } from '../utils/subscriptionStatus'
 import { dateFullVN } from '../utils/dateVN'
@@ -403,16 +403,7 @@ export default function AddressSelectPage() {
                     onClose={() => !creating && setShowCreateModal(false)}
                     panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
                 >
-                        <div className="flex items-center justify-between">
-                            <span className="text-[16px] font-black text-text">Tạo địa chỉ mới</span>
-                            <button
-                                onClick={() => setShowCreateModal(false)}
-                                disabled={creating}
-                                className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all disabled:opacity-50"
-                            >
-                                <X size={16} />
-                            </button>
-                        </div>
+                        <SheetHeader title="Tạo địa chỉ mới" onClose={() => setShowCreateModal(false)} closeDisabled={creating} />
                         <div className="flex flex-col gap-3">
                             <input
                                 type="text"

@@ -5,7 +5,7 @@ const TABS = [
     { key: 'history', label: 'Nhật ký' },
 ]
 
-// Mirrors IngredientsHeader layout but swaps the 3-way MenuTabsBar (Công thức/
+// Mirrors MenuPageHeader layout but swaps the 3-way MenuTabsBar (Công thức/
 // Nguyên liệu/Bao bì — the user is already drilled into a specific NVL, that
 // switch is noise here) for a 2-way Thông tin/Nhật ký tab bar in the same style.
 export default function IngredientDetailHeader({

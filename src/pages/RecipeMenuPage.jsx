@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Plus, X } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import {
     DndContext, DragOverlay, PointerSensor, KeyboardSensor,
     closestCenter, useSensor, useSensors,
 } from '@dnd-kit/core'
 import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { restrictToFirstScrollableAncestor } from '@dnd-kit/modifiers'
-import { BottomSheet } from '../components/common/ModalShell'
+import { BottomSheet, SheetHeader } from '../components/common/ModalShell'
 import MenuDivider from '../components/common/MenuDivider'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
@@ -18,7 +18,7 @@ import { parseVNDInput } from '../utils'
 import { useToast } from '../hooks/useToast'
 import Toast from '../components/POSPage/Toast'
 import SortableItem from '../components/RecipeMenuPage/SortableItem'
-import RecipeMenuHeader from '../components/RecipeMenuPage/RecipeMenuHeader'
+import MenuPageHeader from '../components/common/MenuPageHeader'
 import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
 import ExcelImportModal from '../components/RecipeMenuPage/ExcelImportModal'
@@ -236,8 +236,9 @@ export default function RecipeMenuPage() {
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
 
-            <RecipeMenuHeader
-                productCount={products.filter(p => !p.is_divider).length}
+            <MenuPageHeader
+                count={products.filter(p => !p.is_divider).length}
+                unitLabel="món"
                 onBack={() => goToMenuStep('recipes', -1, { navigate, backTo, wizard: location.state?.wizard })}
                 onForward={() => goToMenuStep('recipes', +1, { navigate, backTo, wizard: location.state?.wizard })}
                 activeTab="recipes"
@@ -390,16 +391,7 @@ export default function RecipeMenuPage() {
                     onClose={() => !saving && setShowCreateModal(false)}
                     panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
                 >
-                        <div className="flex items-center justify-between">
-                            <span className="text-[16px] font-black text-text">Tạo công thức mới</span>
-                            <button
-                                onClick={() => setShowCreateModal(false)}
-                                disabled={saving}
-                                className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all disabled:opacity-50"
-                            >
-                                <X size={16} />
-                            </button>
-                        </div>
+                        <SheetHeader title="Tạo công thức mới" onClose={() => setShowCreateModal(false)} closeDisabled={saving} />
                         <CreateProductForm
                             name={newProductName}
                             price={newProductPrice}
@@ -424,16 +416,7 @@ export default function RecipeMenuPage() {
                     onClose={() => !saving && setDividerModal(null)}
                     panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
                 >
-                        <div className="flex items-center justify-between">
-                            <span className="text-[16px] font-black text-text">{dividerModal.mode === 'create' ? 'Tạo danh mục' : 'Sửa danh mục'}</span>
-                            <button
-                                onClick={() => setDividerModal(null)}
-                                disabled={saving}
-                                className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all disabled:opacity-50"
-                            >
-                                <X size={16} />
-                            </button>
-                        </div>
+                        <SheetHeader title={dividerModal.mode === 'create' ? 'Tạo danh mục' : 'Sửa danh mục'} onClose={() => setDividerModal(null)} closeDisabled={saving} />
                         <p className="text-[13px] text-text-secondary -mt-2">Danh mục là dòng tiêu đề ——— tên ——— để phân nhóm menu trên trang bán hàng.</p>
                         <input
                             autoFocus

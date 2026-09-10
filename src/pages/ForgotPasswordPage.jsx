@@ -5,6 +5,7 @@ import { requestPasswordReset, verifyPasswordResetCode, updateOwnPassword, signO
 import ErrorBanner from '../components/common/ErrorBanner'
 import FloatingLabelInput from '../components/common/FloatingLabelInput'
 import PasswordInput from '../components/common/PasswordInput'
+import PasswordChecklist from '../components/common/PasswordChecklist'
 
 const CODE_TTL = 15 * 60
 const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
@@ -188,19 +189,7 @@ export default function ForgotPasswordPage() {
                                         required
                                         autoComplete="new-password"
                                     />
-                                    <ul className="mt-2 space-y-1">
-                                        {[
-                                            { ok: password.length >= 8, label: 'Ít nhất 8 ký tự' },
-                                            { ok: /[a-zA-Z]/.test(password), label: 'Có chữ cái' },
-                                            { ok: /[0-9]/.test(password), label: 'Có chữ số' },
-                                            { ok: !!password && password === confirm, label: 'Hai mật khẩu khớp nhau' },
-                                        ].map((r, i) => (
-                                            <li key={i} className={`flex items-center gap-1.5 text-[11px] ${r.ok ? 'text-success' : 'text-text-secondary'}`}>
-                                                <Check size={12} className={r.ok ? 'opacity-100' : 'opacity-30'} />
-                                                {r.label}
-                                            </li>
-                                        ))}
-                                    </ul>
+                                    <PasswordChecklist password={password} confirm={confirm} />
                                 </div>
                             </>
                         )}

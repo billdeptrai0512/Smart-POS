@@ -5,7 +5,6 @@ import { useHistory } from '../../contexts/HistoryContext'
 import { useProducts } from '../../contexts/ProductContext'
 import { useConfirm } from '../../contexts/ConfirmContext'
 import { useAddress } from '../../contexts/AddressContext'
-import { useMoveTarget } from '../../hooks/useMoveTarget'
 import { formatVND, discountToPercent } from '../../utils'
 import { printBillJob } from '../../lib/escposBitmap'
 import { bumpOrderPrintCount } from '../../services/orderService'
@@ -38,7 +37,9 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
     // sách đợt.
     // orderIds rỗng (mọi đợt đều offline chưa có id) thì không có gì để chuyển — cả hai nút
     // gọi startMove bên dưới (Gộp bàn, Chuyển đợt) đã tự ẩn ở nơi gọi trong trường hợp đó.
-    const { moving, startMove, cancelMove } = useMoveTarget()
+    const [moving, setMoving] = useState(null) // { orderIds: string[], label: string } | null
+    const startMove = (orderIds, label) => setMoving({ orderIds, label })
+    const cancelMove = () => setMoving(null)
     // In native (html2canvas + gửi mạng) mất vài giây thật, không tức thì như
     // window.print() — thiếu cờ này thì bấm 2 lần liên tiếp trong lúc đang xử lý sẽ in/
     // tính tiền 2 lần, và người dùng không biết bấm có ăn hay chưa.

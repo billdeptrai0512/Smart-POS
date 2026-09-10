@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { Check } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate, Link } from 'react-router-dom'
 import ErrorBanner from '../components/common/ErrorBanner'
 import FloatingLabelInput from '../components/common/FloatingLabelInput'
 import PasswordInput from '../components/common/PasswordInput'
+import PasswordChecklist from '../components/common/PasswordChecklist'
 import { capitalizeWords } from '../utils'
 
 // ponytail: bảng typo cứng thay vì thư viện (mailcheck) — email chỉ dùng để reset
@@ -115,18 +115,7 @@ export default function SignUpPage() {
                             onChange={e => setPassword(e.target.value)}
                             required
                         />
-                        <ul className="mt-2 space-y-1">
-                            {[
-                                { ok: password.length >= 8, label: 'Ít nhất 8 ký tự' },
-                                { ok: /[a-zA-Z]/.test(password), label: 'Có chữ cái' },
-                                { ok: /[0-9]/.test(password), label: 'Có chữ số' },
-                            ].map((r, i) => (
-                                <li key={i} className={`flex items-center gap-1.5 text-[11px] ${r.ok ? 'text-success' : 'text-text-secondary'}`}>
-                                    <Check size={12} className={r.ok ? 'opacity-100' : 'opacity-30'} />
-                                    {r.label}
-                                </li>
-                            ))}
-                        </ul>
+                        <PasswordChecklist password={password} />
                     </div>
 
                     <button

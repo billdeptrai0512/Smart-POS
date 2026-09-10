@@ -1,9 +1,9 @@
+import { useState } from 'react'
 import { ArrowLeft, Check, Printer, ArrowRightLeft, Trash2 } from 'lucide-react'
 import { useCart } from '../../contexts/CartContext'
 import { useHistory } from '../../contexts/HistoryContext'
 import { useProducts } from '../../contexts/ProductContext'
 import { useConfirm } from '../../contexts/ConfirmContext'
-import { useMoveTarget } from '../../hooks/useMoveTarget'
 import { formatVND, discountToPercent } from '../../utils'
 import { timeStringVN, openedLabelVN, dateShortVN, isSameDayVN } from '../../utils/dateVN'
 import { priceLineFor } from '../../utils/billLines'
@@ -21,7 +21,9 @@ export default function TakeawayListModal({ orders, tableNames, onClose, onPick 
     const { toggleServed } = useCart()
     const { handleDeleteOrder } = useHistory()
     const confirm = useConfirm()
-    const { moving, startMove, cancelMove } = useMoveTarget()
+    const [moving, setMoving] = useState(null) // { orderIds: string[], label: string } | null
+    const startMove = (orderIds, label) => setMoving({ orderIds, label })
+    const cancelMove = () => setMoving(null)
 
     if (moving) {
         return (

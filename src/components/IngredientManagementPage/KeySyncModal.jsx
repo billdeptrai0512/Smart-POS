@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react'
-import { X, Check, Loader, AlertTriangle, ChevronRight, Plus } from 'lucide-react'
+import { Check, Loader, AlertTriangle, ChevronRight, Plus } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
 import { syncIngredientKey, upsertIngredientCost } from '../../services/orderService'
 import { suggestCanonical } from '../../utils/ingredientKeySync'
-import { Dialog } from '../common/ModalShell'
+import { Dialog, ModalHeader } from '../common/ModalShell'
 
 // Tiny heuristic: guess a sensible default unit from the orphan key so users
 // rarely have to retype it. Falls back to 'đv' for anything unrecognized.
@@ -232,23 +232,16 @@ export default function KeySyncModal({
             onClose={handleClose}
             panelClassName="w-full max-w-lg mx-4 my-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
         >
-                {/* Header */}
-                <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40 shrink-0">
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-[10px] bg-warning/10 flex items-center justify-center">
-                            <AlertTriangle size={15} className="text-warning" />
-                        </div>
-                        <div>
-                            <p className="text-text font-black text-sm leading-none">Đồng bộ nguyên liệu</p>
-                            <p className="text-text-secondary text-xs mt-0.5">Gộp các key trùng nghĩa</p>
-                        </div>
-                    </div>
-                    {!syncing && (
-                        <button onClick={handleClose} className="p-1.5 text-text-secondary hover:text-text transition-colors rounded-lg hover:bg-surface-light">
-                            <X size={16} />
-                        </button>
-                    )}
-                </div>
+                <ModalHeader
+                    icon={AlertTriangle}
+                    iconColorClass="text-warning"
+                    iconBgClass="bg-warning/10"
+                    title="Đồng bộ nguyên liệu"
+                    subtitle="Gộp các key trùng nghĩa"
+                    onClose={handleClose}
+                    hideClose={syncing}
+                    className="shrink-0"
+                />
 
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">

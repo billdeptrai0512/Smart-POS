@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Search, ChevronDown, Info } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
 import { formatVND } from '../../utils'
+import CollapsibleCard from './CollapsibleCard'
 
 // PROTOTYPE — hiện gợi ý "có thể pha bán nhưng chưa bấm bill" khi hao hụt của
 // NHIỀU nguyên liệu trong cùng 1 công thức cùng khớp ra 1 số ly (xem thuật toán ở
@@ -23,43 +24,35 @@ export default function MissingCupSuspicionCard({ candidates = [] }) {
     if (!candidates.length) return null
 
     return (
-        <div className="bg-surface rounded-[20px] p-3 border border-warning/30 shadow-sm">
-            <button
-                type="button"
-                onClick={() => setOpen(o => !o)}
-                className={`w-full flex items-center justify-between gap-2 ${open ? 'mb-3' : ''}`}
-            >
-                <div className="flex items-center gap-1.5">
-                    <Search size={15} className="text-warning shrink-0" />
-                    <span className="text-[12px] font-black uppercase tracking-widest text-text">Nghi vấn bán thiếu ghi nhận</span>
-                    <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => { e.stopPropagation(); setShowInfo(s => !s) }}
-                        className="text-text-dim shrink-0"
-                    >
-                        <Info size={11} />
-                    </span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[11px] font-bold text-text-secondary tabular-nums">{candidates.length}</span>
-                    <ChevronDown size={16} className={`text-text-dim transition-transform ${open ? 'rotate-180' : ''}`} />
-                </div>
-            </button>
-
-            {open && (
-                <div className="flex flex-col gap-2">
-                    {showInfo && (
-                        <div className="px-3 py-2 bg-surface-light rounded-[10px] border border-border/40 text-[10.5px] text-text-secondary leading-snug">
-                            Hao hụt nhiều nguyên liệu cùng khớp ra 1 số ly — có thể đã pha bán nhưng
-                            chưa bấm bill. Món <b>lặp lại nhiều ngày</b> đáng tin hơn nhiều so với chỉ
-                            xuất hiện 1 lần — đây chỉ là <b>gợi ý để soi lại</b>, không phải kết luận chắc chắn.
-                        </div>
-                    )}
-                    {candidates.map(c => <CandidateRow key={c.productId} c={c} />)}
-                </div>
-            )}
-        </div>
+        <CollapsibleCard
+            icon={<Search size={15} className="text-warning shrink-0" />}
+            title="Nghi vấn bán thiếu ghi nhận"
+            titleExtra={
+                <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); setShowInfo(s => !s) }}
+                    className="text-text-dim shrink-0"
+                >
+                    <Info size={11} />
+                </span>
+            }
+            count={candidates.length}
+            open={open}
+            onToggle={() => setOpen(o => !o)}
+            borderClass="border-warning/30"
+        >
+            <div className="flex flex-col gap-2">
+                {showInfo && (
+                    <div className="px-3 py-2 bg-surface-light rounded-[10px] border border-border/40 text-[10.5px] text-text-secondary leading-snug">
+                        Hao hụt nhiều nguyên liệu cùng khớp ra 1 số ly — có thể đã pha bán nhưng
+                        chưa bấm bill. Món <b>lặp lại nhiều ngày</b> đáng tin hơn nhiều so với chỉ
+                        xuất hiện 1 lần — đây chỉ là <b>gợi ý để soi lại</b>, không phải kết luận chắc chắn.
+                    </div>
+                )}
+                {candidates.map(c => <CandidateRow key={c.productId} c={c} />)}
+            </div>
+        </CollapsibleCard>
     )
 }
 

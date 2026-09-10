@@ -1,9 +1,12 @@
 import { useState } from 'react'
-import { Shield, UserPlus, Loader, X, Check, Eye, EyeOff } from 'lucide-react'
+import { Shield, UserPlus, Loader } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import { capitalizeWords } from '../../utils'
 import { createTeamMember } from '../../services/authService'
-import { Dialog } from '../common/ModalShell'
+import { Dialog, SheetHeader } from '../common/ModalShell'
+import FloatingLabelInput from '../common/FloatingLabelInput'
+import PasswordInput from '../common/PasswordInput'
+import PasswordChecklist from '../common/PasswordChecklist'
 
 const ROLES = [
     { key: 'staff', label: 'Nhân viên', icon: UserPlus, description: 'Đăng nhập bằng mã PIN 6 số' },
@@ -15,18 +18,10 @@ export default function CreateStaffModal({ onClose, onSuccess }) {
     const [name, setName] = useState('')
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
-    const [pwVisible, setPwVisible] = useState(false)
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
 
     const isCo = role === 'manager'
-
-    // Realtime check for password strength
-    const pwChecks = [
-        { ok: password.length >= 8, label: 'Ít nhất 8 ký tự' },
-        { ok: /[a-zA-Z]/.test(password), label: 'Có chữ cái' },
-        { ok: /[0-9]/.test(password), label: 'Có chữ số' },
-    ]
 
     const pwValid = isCo
         ? password.length >= 8 && /[a-zA-Z]/.test(password) && /[0-9]/.test(password)
@@ -64,16 +59,7 @@ export default function CreateStaffModal({ onClose, onSuccess }) {
             zIndexClass="z-[100]"
             panelClassName="w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
         >
-                <div className="flex items-center justify-between p-4 border-b border-border/20">
-                    <span className="text-[15px] font-black text-text">Thêm nhân sự mới</span>
-                    <button
-                        onClick={onClose}
-                        disabled={loading}
-                        className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all disabled:opacity-50 shrink-0"
-                    >
-                        <X size={16} />
-                    </button>
-                </div>
+                <SheetHeader title="Thêm nhân sự mới" onClose={onClose} closeDisabled={loading} className="p-4 border-b border-border/20" />
 
                 <form onSubmit={handleSubmit} className="p-5 overflow-y-auto space-y-4 hide-scrollbar">
                     <ErrorBanner message={error} />
@@ -110,98 +96,42 @@ export default function CreateStaffModal({ onClose, onSuccess }) {
                     </div>
 
                     {/* Họ tên */}
-                    <div>
-                        <div className="relative">
-                            <input
-                                id="create-staff-name"
-                                type="text"
-                                autoCapitalize="words"
-                                value={name}
-                                onChange={e => setName(capitalizeWords(e.target.value))}
-                                required
-                                disabled={loading}
-                                placeholder=" "
-                                className="peer w-full px-3 py-2.5 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            />
-                            <label
-                                htmlFor="create-staff-name"
-                                className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-xs font-bold uppercase tracking-wider transition-all duration-150 pointer-events-none
-                                    peer-focus:top-0 peer-focus:text-[10px] peer-focus:px-1 peer-focus:bg-surface peer-focus:text-primary
-                                    peer-[:not(:placeholder-shown)]:top-0 peer-[:not(:placeholder-shown)]:text-[10px] peer-[:not(:placeholder-shown)]:px-1 peer-[:not(:placeholder-shown)]:bg-surface"
-                            >
-                                Họ và Tên
-                            </label>
-                        </div>
-                    </div>
+                    <FloatingLabelInput
+                        id="create-staff-name"
+                        label="Họ và Tên"
+                        autoCapitalize="words"
+                        value={name}
+                        onChange={e => setName(capitalizeWords(e.target.value))}
+                        required
+                        disabled={loading}
+                    />
 
                     {/* Tên đăng nhập */}
-                    <div>
-                        <div className="relative">
-                            <input
-                                id="create-staff-username"
-                                type="text"
-                                value={username}
-                                onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, ''))}
-                                required
-                                disabled={loading}
-                                placeholder=" "
-                                className="peer w-full px-3 py-2.5 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            />
-                            <label
-                                htmlFor="create-staff-username"
-                                className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-xs font-bold uppercase tracking-wider transition-all duration-150 pointer-events-none
-                                    peer-focus:top-0 peer-focus:text-[10px] peer-focus:px-1 peer-focus:bg-surface peer-focus:text-primary
-                                    peer-[:not(:placeholder-shown)]:top-0 peer-[:not(:placeholder-shown)]:text-[10px] peer-[:not(:placeholder-shown)]:px-1 peer-[:not(:placeholder-shown)]:bg-surface"
-                            >
-                                Tên đăng nhập
-                            </label>
-                        </div>
-                    </div>
+                    <FloatingLabelInput
+                        id="create-staff-username"
+                        label="Tên đăng nhập"
+                        value={username}
+                        onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, ''))}
+                        required
+                        disabled={loading}
+                    />
 
                     {/* Mật khẩu */}
                     <div>
-                        <div className="relative">
-                            <input
-                                id="create-staff-password"
-                                type={pwVisible ? 'text' : 'password'}
-                                value={password}
-                                onChange={e => setPassword(isCo ? e.target.value : e.target.value.replace(/\D/g, ''))}
-                                required
-                                disabled={loading}
-                                inputMode={isCo ? 'text' : 'numeric'}
-                                maxLength={isCo ? undefined : 6}
-                                autoComplete="new-password"
-                                placeholder=" "
-                                className="peer w-full px-3 py-2.5 pr-10 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
-                            />
-                            <label
-                                htmlFor="create-staff-password"
-                                className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-xs font-bold uppercase tracking-wider transition-all duration-150 pointer-events-none
-                                    peer-focus:top-0 peer-focus:text-[10px] peer-focus:px-1 peer-focus:bg-surface peer-focus:text-primary
-                                    peer-[:not(:placeholder-shown)]:top-0 peer-[:not(:placeholder-shown)]:text-[10px] peer-[:not(:placeholder-shown)]:px-1 peer-[:not(:placeholder-shown)]:bg-surface"
-                            >
-                                {isCo ? 'Mật khẩu đăng nhập' : 'Mã PIN gồm 6 chữ số'}
-                            </label>
-                            <button
-                                type="button"
-                                onClick={() => setPwVisible(v => !v)}
-                                tabIndex={-1}
-                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text transition-colors"
-                                aria-label={pwVisible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-                            >
-                                {pwVisible ? <EyeOff size={15} /> : <Eye size={15} />}
-                            </button>
-                        </div>
+                        <PasswordInput
+                            id="create-staff-password"
+                            label={isCo ? 'Mật khẩu đăng nhập' : 'Mã PIN gồm 6 chữ số'}
+                            value={password}
+                            onChange={e => setPassword(isCo ? e.target.value : e.target.value.replace(/\D/g, ''))}
+                            required
+                            disabled={loading}
+                            inputMode={isCo ? 'text' : 'numeric'}
+                            maxLength={isCo ? undefined : 6}
+                            autoComplete="new-password"
+                        />
 
                         {isCo ? (
-                            <ul className="mt-2 space-y-1">
-                                {pwChecks.map((r, i) => (
-                                    <li key={i} className={`flex items-center gap-1.5 text-[11px] ${r.ok ? 'text-success font-bold' : 'text-text-secondary/60'}`}>
-                                        <Check size={12} className={r.ok ? 'opacity-100' : 'opacity-30'} />
-                                        {r.label}
-                                    </li>
-                                ))}
-                            </ul>
+                            <PasswordChecklist password={password} />
                         ) : (
                             <p className="text-text-secondary/60 text-[11px] px-1 mt-1.5">
                                 Mã PIN dùng để đăng nhập nhanh tại POS

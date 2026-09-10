@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Plus, X } from 'lucide-react'
-import { BottomSheet } from '../components/common/ModalShell'
+import { Plus } from 'lucide-react'
+import { BottomSheet, SheetHeader } from '../components/common/ModalShell'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -15,7 +15,7 @@ import IngredientCostItem from '../components/IngredientManagementPage/Ingredien
 import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
 import StockDeficitBanner from '../components/IngredientManagementPage/StockDeficitBanner'
 import KeyMismatchBanner from '../components/IngredientManagementPage/KeyMismatchBanner'
-import IngredientsHeader from '../components/IngredientManagementPage/IngredientsHeader'
+import MenuPageHeader from '../components/common/MenuPageHeader'
 import CreateIngredientForm from '../components/IngredientManagementPage/CreateIngredientForm'
 import { detectKeyMismatches } from '../utils/ingredientKeySync'
 import { useToast } from '../hooks/useToast'
@@ -372,8 +372,9 @@ export default function IngredientManagementPage() {
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
 
-            <IngredientsHeader
+            <MenuPageHeader
                 count={visibleIngredients.length}
+                unitLabel="loại"
                 onBack={() => goToMenuStep(viewMode, -1, { navigate, backTo: location.state?.from || '/history', setViewMode, wizard: location.state?.wizard })}
                 onForward={() => goToMenuStep(viewMode, +1, { navigate, backTo: location.state?.from || '/history', setViewMode, wizard: location.state?.wizard })}
                 activeTab={viewMode}
@@ -464,16 +465,7 @@ export default function IngredientManagementPage() {
                     onClose={() => !saving && setShowCreateModal(false)}
                     panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
                 >
-                        <div className="flex items-center justify-between">
-                            <span className="text-[16px] font-black text-text">{newCategory === 'packaging' ? 'Tạo bao bì mới' : 'Tạo nguyên liệu mới'}</span>
-                            <button
-                                onClick={() => setShowCreateModal(false)}
-                                disabled={saving}
-                                className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all disabled:opacity-50"
-                            >
-                                <X size={16} />
-                            </button>
-                        </div>
+                        <SheetHeader title={newCategory === 'packaging' ? 'Tạo bao bì mới' : 'Tạo nguyên liệu mới'} onClose={() => setShowCreateModal(false)} closeDisabled={saving} />
                         <CreateIngredientForm
                             name={newName}
                             unit={newUnit}

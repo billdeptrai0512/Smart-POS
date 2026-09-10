@@ -64,13 +64,6 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                     tabIndex={0}
                     className={`cursor-pointer bg-linear-to-b from-primary to-primary-dark rounded-[20px] p-3 sm:p-3.5 border border-primary shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full hover:brightness-105 active:brightness-95 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${hintClass}`}
                 >
-                    {/* <div className="flex flex-col justify-between relative z-10">
-                        <span className="text-[12px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider">{dayName}</span>
-                        <span className="text-[15px] sm:text-[16px] text-text font-black tracking-tight">{dateOnly}</span>
-                    </div>
-
-                    <div className="w-full h-[1px] bg-primary/15 rounded-full relative z-10 my-[3px]"></div> */}
-
                     <div className="flex flex-col justify-between items-start relative z-10 w-full">
                         <div className="flex items-center justify-between w-full">
                             <span className="text-[12px] sm:text-[13px] text-white font-black uppercase tracking-wider">Nhật ký</span>

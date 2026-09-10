@@ -8,13 +8,13 @@ import {
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
 import { formatVND } from '../../utils'
+import { supabase } from '../../lib/supabaseClient'
 import SubscriptionBadge from './SubscriptionBadge'
 import BackupModal from './BackupModal'
 import RenameAddressModal from './RenameAddressModal'
 import PrinterIpModal from './PrinterIpModal'
 import WarehouseGroupModal from './WarehouseGroupModal'
-import WipeAddressModal from './WipeAddressModal'
-import DeleteAddressModal from './DeleteAddressModal'
+import ConfirmByNameModal from './ConfirmByNameModal'
 import { Dialog } from '../common/ModalShell'
 
 const isManagerRole = (role) => (role === 'manager' || role === 'co-manager') ? 1 : 0
@@ -30,7 +30,7 @@ export default function BranchGrid({
     // address. Layers ON TOP of expandedActionsId's action-sheet (both can be open at once —
     // "Hủy" inside a sub-modal clears just this, returning to the sheet; X/backdrop clears
     // both). Mỗi modal tự quản lý form state riêng (xem RenameAddressModal, PrinterIpModal,
-    // WarehouseGroupModal, WipeAddressModal, DeleteAddressModal) — BranchGrid chỉ còn giữ
+    // WarehouseGroupModal, ConfirmByNameModal) — BranchGrid chỉ còn giữ
     // subModal (đang mở modal nào, cho địa chỉ nào) và error dùng chung cho ErrorBanner cuối trang.
     const [subModal, setSubModal] = useState(null) // { type: 'rename'|'printers'|'delete'|'backup'|'wipe'|'group', addressId } | null
     const closeSubModal = () => setSubModal(null)
@@ -407,8 +407,21 @@ export default function BranchGrid({
                             )}
 
                             {subModal?.type === 'wipe' && subModal.addressId === addr.id && (
-                                <WipeAddressModal
-                                    addr={addr}
+                                <ConfirmByNameModal
+                                    icon={Eraser}
+                                    title="Xoá dữ liệu bán hàng"
+                                    confirmLabel="Xoá vĩnh viễn"
+                                    targetName={addr.name}
+                                    description={
+                                        <p className="text-text-secondary text-xs leading-relaxed">
+                                            Xoá toàn bộ đơn hàng, chi phí, phiếu chốt ca của <span className="font-bold text-text">{addr.name}</span>. Menu, công thức, nguyên liệu, gói đăng ký được giữ nguyên. <span className="text-danger font-bold">Không thể hoàn tác.</span>
+                                        </p>
+                                    }
+                                    onConfirm={async () => {
+                                        const { error: rpcError } = await supabase.rpc('admin_wipe_address_sales_data', { p_address_id: addr.id })
+                                        if (rpcError) throw rpcError
+                                        window.location.reload() // đơn giản nhất để làm mới cupsMap/revenueMap sau khi xoá
+                                    }}
                                     onCancel={cancelSubModal}
                                     onClose={closeAllWithError}
                                     error={error}
@@ -417,10 +430,22 @@ export default function BranchGrid({
                             )}
 
                             {subModal?.type === 'delete' && subModal.addressId === addr.id && (
-                                <DeleteAddressModal
-                                    addr={addr}
-                                    addresses={addresses}
-                                    onRemove={onRemove}
+                                <ConfirmByNameModal
+                                    icon={Trash2}
+                                    title="Xóa địa chỉ"
+                                    confirmLabel="Xóa vĩnh viễn"
+                                    targetName={addr.name}
+                                    description={
+                                        <p className="text-text-secondary text-xs leading-relaxed">
+                                            Xoá toàn bộ dữ liệu của <span className="font-bold text-text">{addr.name}</span> — menu, công thức, nguyên liệu, đơn hàng, chi phí, gói đăng ký. <span className="text-danger font-bold">Không thể hoàn tác.</span>
+                                        </p>
+                                    }
+                                    warning={addr.warehouse_group_id && addresses.some(a => a.id !== addr.id && a.warehouse_group_id === addr.warehouse_group_id) && (
+                                        <p className="text-warning text-xs font-bold leading-relaxed -mt-1">
+                                            {addr.name} đang dùng chung kho tổng với địa chỉ khác — xoá sẽ làm mất phần đóng góp của {addr.name} trong số tồn kho tổng của các địa chỉ đó.
+                                        </p>
+                                    )}
+                                    onConfirm={() => onRemove(addr.id)}
                                     onCancel={cancelSubModal}
                                     onClose={closeAllWithError}
                                     onSuccess={closeAll}

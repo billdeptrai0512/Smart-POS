@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Warehouse, X, Pencil, Trash2, Loader } from 'lucide-react'
-import { Dialog } from '../common/ModalShell'
+import { Dialog, ModalHeader } from '../common/ModalShell'
 
 // Modal kho tổng chung — chọn/tạo nhóm để dùng chung kho tổng với địa chỉ khác.
 // Không phải thao tác phá dữ liệu (ON DELETE SET NULL khi xoá nhóm) nên không cần
@@ -80,20 +80,7 @@ export default function WarehouseGroupModal({
             onClose={() => { if (!groupSaving && !creatingGroup) onClose() }}
             panelClassName="w-full max-w-sm mx-4 my-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden max-h-[calc(100dvh-2rem)] flex flex-col"
         >
-            <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40 shrink-0">
-                <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-[10px] bg-warning/10 flex items-center justify-center">
-                        <Warehouse size={15} className="text-warning" />
-                    </div>
-                    <p className="text-text font-black text-sm leading-none">Kho tổng chung</p>
-                </div>
-                <button
-                    onClick={onClose}
-                    className="p-1.5 text-text-secondary hover:text-text transition-colors rounded-lg hover:bg-surface-light"
-                >
-                    <X size={16} />
-                </button>
-            </div>
+            <ModalHeader icon={Warehouse} iconColorClass="text-warning" iconBgClass="bg-warning/10" title="Kho tổng chung" onClose={onClose} className="shrink-0" />
             <div className="p-5 flex flex-col gap-2.5 overflow-y-auto">
                 <p className="text-text-secondary text-xs leading-relaxed mb-1">
                     Gộp <span className="font-bold text-text">{addr.name}</span> vào 1 nhóm để dùng chung kho tổng —

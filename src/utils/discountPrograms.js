@@ -6,7 +6,7 @@ import { dateStringVN } from './dateVN'
 
 // 0=CN..6=T7, cùng convention EXTRACT(DOW) phía SQL. Trick giống startOfWeekVN (dateVN.js):
 // neo 12:00Z của ngày VN để .getUTCDay() luôn đúng bất kể TZ máy chạy.
-export function todayDowVN() {
+function todayDowVN() {
     return new Date(`${dateStringVN()}T12:00:00Z`).getUTCDay()
 }
 

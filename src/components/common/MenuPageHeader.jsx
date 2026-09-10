@@ -1,13 +1,11 @@
 import { ArrowLeft, ArrowRight } from 'lucide-react'
-import MenuTabsBar from '../common/MenuTabsBar'
+import MenuTabsBar from './MenuTabsBar'
 import { MENU_TABS } from '../../constants'
 
-export default function IngredientsHeader({
-    count, onBack, onForward,
-    activeTab = 'main', onTabSelect, hintTab,
-}) {
+// Header dùng chung cho /recipes (Công thức) và /ingredients (Nguyên liệu/Bao bì) —
+// 2 file trước đây giống hệt nhau, chỉ khác đơn vị đếm ("món" vs "loại").
+export default function MenuPageHeader({ count, unitLabel, onBack, onForward, activeTab, onTabSelect, hintTab }) {
     const title = MENU_TABS.find(t => t.key === activeTab)?.label || 'Kho hàng'
-
     return (
         <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
             <div className="flex items-center gap-3">
@@ -21,7 +19,7 @@ export default function IngredientsHeader({
 
                 <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
                     <span className="text-[12px] font-black text-primary uppercase line-clamp-1">{title}</span>
-                    <span className="text-[12px] font-bold text-text/80 leading-none mt-1 tabular-nums">{count} loại</span>
+                    <span className="text-[12px] font-bold text-text/80 leading-none mt-1 tabular-nums">{count} {unitLabel}</span>
                 </div>
 
                 {onForward && (

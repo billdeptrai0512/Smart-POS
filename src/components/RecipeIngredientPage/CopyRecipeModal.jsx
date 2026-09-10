@@ -1,5 +1,4 @@
-import { X } from 'lucide-react'
-import { BottomSheet } from '../common/ModalShell'
+import { BottomSheet, SheetHeader } from '../common/ModalShell'
 
 // Pick another product to copy its base recipe from. Merges into the current
 // product (existing ingredients with the same key get overwritten).
@@ -11,13 +10,7 @@ export default function CopyRecipeModal({ products, recipesByProduct, onPick, on
             onClose={onClose}
             panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-3 animate-slide-up max-h-[80dvh]"
         >
-                <div className="flex items-center justify-between">
-                    <span className="text-[16px] font-black text-text">Chép công thức từ món</span>
-                    <button onClick={onClose}
-                        className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all">
-                        <X size={16} />
-                    </button>
-                </div>
+                <SheetHeader title="Chép công thức từ món" onClose={onClose} />
 
                 <p className="text-[12px] text-text-secondary">Chọn món có sẵn công thức để chép sang món này.</p>
 

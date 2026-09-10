@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback } from 'react'
-import { X, Check, ChevronDown, Settings2 } from 'lucide-react'
+import { Check, ChevronDown, Settings2 } from 'lucide-react'
 import MoneyInput from '../common/MoneyInput'
 import DatePicker from '../common/DatePicker'
 import ChangeCategorySheet from './ChangeCategorySheet'
@@ -7,7 +7,7 @@ import { formatIsoDisplay } from '../common/datePickerUtils'
 import { parseVNDInput } from '../../utils'
 import { dateStringVN } from '../../utils/dateVN'
 import { EXPENSE_GROUPS, groupMeta, labelsInGroup } from '../../constants/expenseGroups'
-import { BottomSheet } from '../common/ModalShell'
+import { BottomSheet, SheetHeader } from '../common/ModalShell'
 import { useClickOutside } from '../../hooks/useClickOutside'
 
 // Create flow: pick label → name → amount → (date) → submit. Payment defaults to
@@ -96,12 +96,7 @@ export default function AddExpenseModal({
             onClose={onClose}
             panelClassName="w-full max-w-lg max-h-[92dvh] overflow-y-auto [&>*]:shrink-0 bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
         >
-                <div className="flex items-center justify-between">
-                    <span className="text-[16px] font-black text-text">{isEditing ? 'Sửa chi phí' : 'Thêm chi phí'}</span>
-                    <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all">
-                        <X size={16} />
-                    </button>
-                </div>
+                <SheetHeader title={isEditing ? 'Sửa chi phí' : 'Thêm chi phí'} onClose={onClose} />
 
                 {/* Ngày chi — lên đầu modal, full-width. Mặc định hôm nay; chọn ngày quá khứ để ghi lùi. */}
                 <div className="flex flex-col gap-1.5">
@@ -125,25 +120,12 @@ export default function AddExpenseModal({
                 </div>
 
                 {/* Thời điểm — toggle full-width dưới nhãn */}
-                <div className="flex flex-col gap-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Thời điểm</span>
-                    <div className="w-full flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
-                        <button
-                            type="button"
-                            onClick={() => onAfterShiftChange?.(false)}
-                            className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${!isAfterShift ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                        >
-                            Trong ca
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => onAfterShiftChange?.(true)}
-                            className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${isAfterShift ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                        >
-                            Sau ca
-                        </button>
-                    </div>
-                </div>
+                <SegmentToggle
+                    label="Thời điểm"
+                    value={isAfterShift}
+                    onChange={onAfterShiftChange}
+                    options={[{ value: false, label: 'Trong ca' }, { value: true, label: 'Sau ca' }]}
+                />
 
                 {/* Phân loại — dropdown chọn nhóm */}
                 <div className="flex flex-col gap-1.5">
@@ -239,25 +221,12 @@ export default function AddExpenseModal({
                 />
 
                 {/* Phương thức — toggle full-width dưới nhãn */}
-                <div className="flex flex-col gap-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Phương thức</span>
-                    <div className="w-full flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
-                        <button
-                            type="button"
-                            onClick={() => onPaymentMethodChange?.('cash')}
-                            className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${paymentMethod === 'cash' ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                        >
-                            Tiền mặt
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => onPaymentMethodChange?.('transfer')}
-                            className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                        >
-                            Bank
-                        </button>
-                    </div>
-                </div>
+                <SegmentToggle
+                    label="Phương thức"
+                    value={paymentMethod}
+                    onChange={onPaymentMethodChange}
+                    options={[{ value: 'cash', label: 'Tiền mặt' }, { value: 'transfer', label: 'Bank' }]}
+                />
 
                 <button
                     onClick={() => canSubmit && onSubmit()}
@@ -351,5 +320,27 @@ function OptionRow({ dotCls, name, active, onClick }) {
             </span>
             {active && <Check size={12} strokeWidth={3} className="shrink-0" />}
         </button>
+    )
+}
+
+// Toggle 2 lựa chọn dạng segmented control — dùng cho Thời điểm (Trong ca/Sau ca)
+// và Phương thức (Tiền mặt/Bank), cùng 1 khung trước đây lặp lại y hệt nhau.
+function SegmentToggle({ label, options, value, onChange }) {
+    return (
+        <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">{label}</span>
+            <div className="w-full flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
+                {options.map(opt => (
+                    <button
+                        key={String(opt.value)}
+                        type="button"
+                        onClick={() => onChange?.(opt.value)}
+                        className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${value === opt.value ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                    >
+                        {opt.label}
+                    </button>
+                ))}
+            </div>
+        </div>
     )
 }

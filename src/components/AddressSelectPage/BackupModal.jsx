@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react'
-import { X, ClipboardCopy, Check, ChevronRight, Loader, Share2, Copy } from 'lucide-react'
+import { ClipboardCopy, Check, ChevronRight, Loader, Share2, Copy } from 'lucide-react'
 import { cloneAddressConfig, createAddressShareCode } from '../../services/backupService'
 import { useAddress } from '../../contexts/AddressContext'
-import { Dialog } from '../common/ModalShell'
+import { Dialog, ModalHeader } from '../common/ModalShell'
 
 const ALL_OPTIONS = { menu: true, recipes: true, extras: true, ingredients: true }
 
@@ -153,23 +153,13 @@ export default function BackupModal({ sourceAddress, onClose, onBack }) {
             onClose={!loading ? onClose : undefined}
             panelClassName="w-full max-w-lg mx-4 mb-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden"
         >
-                {/* Header */}
-                <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-[10px] bg-primary/10 flex items-center justify-center">
-                            <ClipboardCopy size={15} className="text-primary" />
-                        </div>
-                        <div>
-                            <p className="text-text font-black text-sm leading-none">Nhân bản cấu hình</p>
-                            <p className="text-text-secondary text-xs mt-0.5">Nguồn: <span className="text-primary font-bold">{sourceAddress.name}</span></p>
-                        </div>
-                    </div>
-                    {!loading && (
-                        <button onClick={onClose} className="p-1.5 text-text-secondary hover:text-text transition-colors rounded-lg hover:bg-surface-light">
-                            <X size={16} />
-                        </button>
-                    )}
-                </div>
+                <ModalHeader
+                    icon={ClipboardCopy}
+                    title="Nhân bản cấu hình"
+                    subtitle={<>Nguồn: <span className="text-primary font-bold">{sourceAddress.name}</span></>}
+                    onClose={onClose}
+                    hideClose={loading}
+                />
 
                 {done ? (
                     /* ── Done state ── */

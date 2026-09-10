@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { useProducts } from '../contexts/ProductContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { useToast } from '../hooks/useToast'
+import { useSavingAction } from '../hooks/useSavingAction'
 import Toast from '../components/POSPage/Toast'
-import InlineEditor from '../components/RecipeIngredientPage/InlineEditor'
+import EditableEntityHeader from '../components/common/EditableEntityHeader'
 import DayOfWeekPicker from '../components/common/DayOfWeekPicker'
 import DiscountTypePicker from '../components/common/DiscountTypePicker'
 import MoneyInput from '../components/common/MoneyInput'
@@ -29,7 +30,7 @@ export default function DiscountProgramDetailPage() {
 
     const program = discountPrograms.find(p => p.id === programId)
 
-    const [saving, setSaving] = useState(false)
+    const { saving, withSaving } = useSavingAction(showError)
     const [selectedProductIds, setSelectedProductIds] = useState(new Set())
     const [savedProductIds, setSavedProductIds] = useState(new Set())
 
@@ -45,11 +46,6 @@ export default function DiscountProgramDetailPage() {
         load()
         return () => { cancelled = true }
     }, [programId])
-
-    const withSaving = async (errorContext, fn) => {
-        setSaving(true)
-        try { await fn() } catch (err) { showError(err, errorContext) } finally { setSaving(false) }
-    }
 
     async function saveName(name) {
         if (!name.trim()) return
@@ -129,40 +125,21 @@ export default function DiscountProgramDetailPage() {
         <div className="flex flex-col h-full bg-bg">
             <Toast toast={toast} />
 
-            <header className="shrink-0 pt-6 pb-3 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
-                <div className="flex items-center gap-3">
+            <EditableEntityHeader
+                name={program.name}
+                canEdit={canEdit}
+                onBack={() => navigate('/discounts')}
+                onSaveName={saveName}
+                action={canEdit && (
                     <button
-                        onClick={() => navigate('/discounts')}
-                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none shrink-0"
-                        title="Trở về"
+                        onClick={handleDelete}
+                        className="w-10 h-10 flex items-center justify-center rounded-[14px] border border-danger/20 text-danger hover:bg-danger/10 active:scale-95 transition-all shadow-sm focus:outline-none shrink-0"
+                        title="Xoá chương trình"
                     >
-                        <ArrowLeft size={20} strokeWidth={2.5} />
+                        <Trash2 size={20} strokeWidth={2.5} />
                     </button>
-
-                    <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center min-w-0">
-                        <InlineEditor
-                            value={program.name}
-                            canEdit={canEdit}
-                            onSave={saveName}
-                            type="text"
-                            inputWidthClassName="w-full"
-                            displayClassName="text-[13px] font-black text-primary uppercase line-clamp-1 break-words w-full px-2"
-                            inputClassName="!text-center uppercase"
-                            renderDisplay={(v) => <span title={v}>{v}</span>}
-                        />
-                    </div>
-
-                    {canEdit && (
-                        <button
-                            onClick={handleDelete}
-                            className="w-10 h-10 flex items-center justify-center rounded-[14px] border border-danger/20 text-danger hover:bg-danger/10 active:scale-95 transition-all shadow-sm focus:outline-none shrink-0"
-                            title="Xoá chương trình"
-                        >
-                            <Trash2 size={20} strokeWidth={2.5} />
-                        </button>
-                    )}
-                </div>
-            </header>
+                )}
+            />
 
             <main className="flex-1 overflow-y-auto px-4 py-4 space-y-4 bg-bg">
                 <section className="bg-surface border border-border/60 rounded-[16px] p-4 flex items-center gap-3">

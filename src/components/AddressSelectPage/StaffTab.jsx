@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, Loader, MoreVertical, ArrowUp, ArrowDown, Trash2, X, Check, KeyRound, Store, LayoutDashboard, ChevronRight } from 'lucide-react'
+import { Users, Loader, MoreVertical, ArrowUp, ArrowDown, Trash2, Check, KeyRound, Store, LayoutDashboard, ChevronRight } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
-import { BottomSheet } from '../common/ModalShell'
+import { BottomSheet, SheetHeader } from '../common/ModalShell'
 import { useAuth } from '../../contexts/AuthContext'
 import { capitalizeWords } from '../../utils'
 import { dateFullVN } from '../../utils/dateVN'
@@ -149,16 +149,7 @@ function MemberPanel({ member, addresses, initialRevoked, onRevokedChange, onRen
             onClose={() => !busy && onClose()}
             panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-5 animate-slide-up max-h-[88vh] overflow-y-auto overscroll-contain hide-scrollbar"
         >
-                <div className="flex items-center justify-between">
-                    <span className="text-[16px] font-black text-text truncate">Quản lý nhân sự</span>
-                    <button
-                        onClick={onClose}
-                        disabled={busy}
-                        className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all disabled:opacity-50 shrink-0"
-                    >
-                        <X size={16} />
-                    </button>
-                </div>
+                <SheetHeader title="Quản lý nhân sự" onClose={onClose} closeDisabled={busy} />
 
                 {/* ── Họ tên ── */}
                 <div className="flex flex-col gap-1.5">

@@ -59,13 +59,6 @@ export default function MonetizationToggle() {
             </div>
             <div className="flex-1 min-w-0">
                 <p className="text-text text-sm font-black">Tính tiền user</p>
-                {/* <p className="text-text-secondary text-[11px] leading-tight">
-                    {value === null
-                        ? 'Đang tải…'
-                        : on
-                            ? 'Đang BẬT — gate & đăng ký gói hoạt động'
-                            : 'Đang TẮT — mọi tính năng mở khoá'}
-                </p> */}
             </div>
             <button
                 onClick={handleToggle}

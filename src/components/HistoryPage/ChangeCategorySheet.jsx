@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { X, Plus, Check, Pencil, Trash2, ChevronDown } from 'lucide-react'
+import { Plus, Check, Pencil, Trash2, ChevronDown } from 'lucide-react'
 import { EXPENSE_GROUPS, groupMeta, labelsInGroup } from '../../constants/expenseGroups'
 import { formatVND } from '../../utils/money'
 import { dayMonthVN } from '../../utils/dateVN'
-import { BottomSheet } from '../common/ModalShell'
+import { BottomSheet, SheetHeader } from '../common/ModalShell'
 
 // Nhãn fallback (Vận hành · "Chi phí khác") là nơi dồn chi phí khi chi phí không
 // gắn nhãn — KHÓA xoá VÀ khoá đổi nhóm để không gãy fallback. Nhãn còn lại tự do.
@@ -173,12 +173,7 @@ export default function ChangeCategorySheet({
             onClose={handleClose}
             panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up max-h-[85vh] overflow-y-auto"
         >
-                <div className="flex items-center justify-between">
-                    <span className="text-[16px] font-black text-text">Quản lý nhãn</span>
-                    <button onClick={handleClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all">
-                        <X size={16} />
-                    </button>
-                </div>
+                <SheetHeader title="Quản lý nhãn" onClose={handleClose} />
 
                 {EXPENSE_GROUPS.map(g => {
                     const labels = labelsInGroup(categories, g.key)
@@ -359,12 +354,7 @@ function ReassignView({ category, remaining, moved, total, targets, busy, onMove
             onClose={onClose}
             panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up max-h-[85vh] overflow-y-auto"
         >
-                <div className="flex items-center justify-between">
-                    <span className="text-[16px] font-black text-text">Chuyển chi phí trước khi xoá</span>
-                    <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all">
-                        <X size={16} />
-                    </button>
-                </div>
+                <SheetHeader title="Chuyển chi phí trước khi xoá" onClose={onClose} />
 
                 <div className="flex flex-col gap-1.5">
                     <p className="text-[12px] text-text-secondary leading-snug">

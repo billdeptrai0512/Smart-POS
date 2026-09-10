@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
-import { Printer, X, Loader } from 'lucide-react'
-import { Dialog } from '../common/ModalShell'
+import { Printer } from 'lucide-react'
+import { Dialog, ModalHeader, ModalActions } from '../common/ModalShell'
 
 // Modal cấu hình IP máy in — chỉ có tác dụng trên app native (Capacitor), web vẫn
 // window.print() bất kể có nhập gì ở đây. Xem escposBitmap.js.
@@ -35,23 +35,7 @@ export default function PrinterIpModal({ addr, onSetPrinters, onCancel, onClose,
             panelClassName="w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden"
         >
             <form onSubmit={handleSubmit}>
-                <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-[10px] bg-primary/10 flex items-center justify-center">
-                            <Printer size={15} className="text-primary" />
-                        </div>
-                        <p className="text-text font-black text-sm leading-none">IP máy in (app native)</p>
-                    </div>
-                    {!savingPrinters && (
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="p-1.5 text-text-secondary hover:text-text transition-colors rounded-lg hover:bg-surface-light"
-                        >
-                            <X size={16} />
-                        </button>
-                    )}
-                </div>
+                <ModalHeader icon={Printer} title="IP máy in (app native)" onClose={onClose} hideClose={savingPrinters} />
                 <div className="p-5 flex flex-col gap-4">
                     <p className="text-text-secondary text-xs font-medium -mt-1">
                         Để trống nếu chưa có máy in — app sẽ dùng hộp in của trình duyệt như bình thường.
@@ -81,23 +65,12 @@ export default function PrinterIpModal({ addr, onSetPrinters, onCancel, onClose,
                             className="w-full px-4 py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50"
                         />
                     </div>
-                    <div className="flex gap-2">
-                        <button
-                            type="button"
-                            disabled={savingPrinters}
-                            onClick={onCancel}
-                            className="flex-1 py-3 rounded-[14px] bg-bg border border-border/60 text-text-secondary font-bold text-sm hover:bg-surface-light transition-colors disabled:opacity-50"
-                        >
-                            Hủy
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={savingPrinters}
-                            className="flex-1 py-3 rounded-[14px] bg-primary text-black font-black text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                            {savingPrinters ? <Loader size={14} className="animate-spin" /> : 'Lưu'}
-                        </button>
-                    </div>
+                    <ModalActions
+                        confirmLabel="Lưu"
+                        confirmType="submit"
+                        onCancel={onCancel}
+                        loading={savingPrinters}
+                    />
                 </div>
             </form>
         </Dialog>

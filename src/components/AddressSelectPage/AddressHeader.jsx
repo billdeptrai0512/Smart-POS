@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Building2, Users, Mail, Loader2, Check, X } from 'lucide-react'
+import { Building2, Users, Mail, Loader2, Check } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { setMyEmail } from '../../services/authService'
-import { Dialog } from '../common/ModalShell'
+import { Dialog, ModalHeader } from '../common/ModalShell'
 
 export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTab, profile, setError, addressCount, staffCount, managerCount }) {
     const showTabs = !isStaff && !isGuest;
@@ -133,23 +133,7 @@ function EmailModal({ email, onClose }) {
             onClose={() => { if (!busy) onClose() }}
             panelClassName="w-full max-w-sm mx-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden"
         >
-                <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-[10px] bg-primary/10 flex items-center justify-center">
-                            <Mail size={15} className="text-primary" />
-                        </div>
-                        <p className="text-text font-black text-sm leading-none">Email</p>
-                    </div>
-                    {!busy && (
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="p-1.5 text-text-secondary hover:text-text transition-colors rounded-lg hover:bg-surface-light"
-                        >
-                            <X size={16} />
-                        </button>
-                    )}
-                </div>
+                <ModalHeader icon={Mail} title="Email" onClose={onClose} hideClose={busy} />
                 <div className="p-5 flex flex-col gap-4">
                     <input
                         type="email"

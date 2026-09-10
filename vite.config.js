@@ -14,7 +14,6 @@ const getLatestCommitMessage = () => {
 
 export default defineConfig({
   test: {
-    environment: 'node',
     exclude: ['**/node_modules/**', '**/.claude/worktrees/**', '**/dist/**'],
   },
   define: {

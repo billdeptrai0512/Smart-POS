@@ -26,6 +26,7 @@ import InvoicePaymentSheet from '../components/IngredientManagementPage/InvoiceP
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
+import { useSavingAction } from '../hooks/useSavingAction'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { dateStringVN, timeStringVN, startOfMonthVN, endOfMonthVN } from '../utils/dateVN'
 import { findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
@@ -69,7 +70,7 @@ export default function IngredientDetailPage() {
     const [stockData, setStockData] = useState(null)
     const [dailyContext, setDailyContext] = useState(null)
     const [siblingCounterStocks, setSiblingCounterStocks] = useState(null)
-    const [saving, setSaving] = useState(false)
+    const { saving, withSaving, setSaving } = useSavingAction(showError)
     const [packModalOpen, setPackModalOpen] = useState(false)
     const [paymentInvoice, setPaymentInvoice] = useState(null)
     const [editingEntry, setEditingEntry] = useState(null)
@@ -208,34 +209,28 @@ export default function IngredientDetailPage() {
 
     // ── Save callbacks for child rows ───────────────────────────────────────
     async function saveCategory(newCat) {
-        setSaving(true)
-        try {
+        await withSaving('Lưu nhóm nguyên liệu', async () => {
             await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, unit, { category: newCat })
             refreshProducts?.()
-        } catch (err) { showError(err, 'Lưu nhóm nguyên liệu') }
-        finally { setSaving(false) }
+        })
     }
 
     async function saveCountInAudit(next) {
         if (next === countInAudit) return
-        setSaving(true)
-        try {
+        await withSaving('Lưu thiết lập kiểm kê', async () => {
             await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, unit, { countInAudit: next })
             refreshProducts?.()
             showToast(next ? 'Nguyên liệu này sẽ được kiểm kê trong báo cáo tồn kho' : 'Nguyên liệu này sẽ không phải kiểm kê trong báo cáo tồn kho', 'success')
-        } catch (err) { showError(err, 'Lưu thiết lập kiểm kê') }
-        finally { setSaving(false) }
+        })
     }
 
     async function savePackConfig({ packSize: ps, packUnit: pu }) {
-        setSaving(true)
-        try {
+        await withSaving('Lưu quy cách đóng gói', async () => {
             await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, unit, {
                 packSize: ps, packUnit: pu, minStock: config.min_stock,
             })
             refreshProducts?.()
-        } catch (err) { showError(err, 'Lưu quy cách đóng gói') }
-        finally { setSaving(false) }
+        })
     }
 
     // Sửa KHO SAU (warehouse) = nhập số tuyệt đối. delta so với kho sau hiện tại
@@ -244,16 +239,14 @@ export default function IngredientDetailPage() {
         const current = stockData?.warehouse_stock ?? 0
         const delta = newWarehouse - current
         if (delta === 0) return
-        setSaving(true)
-        try {
+        await withSaving('Hiệu chỉnh kho sau', async () => {
             // Snapshot kho sau để Nhật ký vẽ "Tồn X → Y". Chỉ truyền khi stocks đã load.
             const snapshotOpts = stockData ? { beforeStock: stockData.warehouse_stock } : {}
             await adjustIngredientStock(selectedAddress?.id, ingredientKey, delta, profile?.name, snapshotOpts)
             await Promise.all([reloadStock(), refreshTodayExpenses?.()])
             showToast('Đã hiệu chỉnh kho sau', 'success')
             requestOnboardingRefresh()
-        } catch (err) { showError(err, 'Hiệu chỉnh kho sau') }
-        finally { setSaving(false) }
+        })
     }
 
     // Sửa TỒN QUẦY (counter) = nhập số tuyệt đối. Ghi thẳng `remaining` vào phiếu
@@ -263,8 +256,7 @@ export default function IngredientDetailPage() {
     // tiên sẽ tự tính hao hụt dựa trên Đầu kỳ này.
     async function saveCounter(newCounter) {
         if (newCounter === (stockData?.counter_stock ?? 0)) return
-        setSaving(true)
-        try {
+        await withSaving('Sửa tồn quầy', async () => {
             const res = await setCounterStock(selectedAddress?.id, ingredientKey, newCounter)
             if (!res) {
                 await mergeShiftClosingInventory(selectedAddress?.id, [{
@@ -280,38 +272,32 @@ export default function IngredientDetailPage() {
             await reloadStock()
             showToast('Đã sửa tồn quầy', 'success')
             requestOnboardingRefresh()
-        } catch (err) { showError(err, 'Sửa tồn quầy') }
-        finally { setSaving(false) }
+        })
     }
 
     async function saveUnit(newUnit) {
         if (newUnit === unit) return
-        setSaving(true)
-        try {
+        await withSaving('Lưu đơn vị', async () => {
             await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, newUnit, { category: config.category })
             refreshProducts?.()
-        } catch (err) { showError(err, 'Lưu đơn vị') }
-        finally { setSaving(false) }
+        })
     }
 
     async function saveName(newDisplayName) {
         const newKey = normalizeIngredientKey(newDisplayName)
         if (!newKey || newKey === ingredientKey) return
-        setSaving(true)
-        try {
+        await withSaving('Đổi tên nguyên liệu', async () => {
             await renameIngredient(ingredientKey, newKey, selectedAddress?.id)
             refreshProducts?.()
             // URL param drives every fetch on this page — repoint at the new key
             // so the page keeps showing the same ingredient under its new name.
             navigate(`/ingredients/${newKey}`, { replace: true, state: location.state })
-        } catch (err) { showError(err, 'Đổi tên nguyên liệu') }
-        finally { setSaving(false) }
+        })
     }
 
     async function saveMinStock(newMin) {
         if (newMin === (minStock || 0)) return
-        setSaving(true)
-        try {
+        await withSaving('Lưu tồn tối thiểu', async () => {
             await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, unit, {
                 category: config.category,
                 packSize: config.pack_size,
@@ -319,14 +305,12 @@ export default function IngredientDetailPage() {
                 minStock: newMin,
             })
             refreshProducts?.()
-        } catch (err) { showError(err, 'Lưu tồn tối thiểu') }
-        finally { setSaving(false) }
+        })
     }
 
     async function saveTareWeight(newTare) {
         if (newTare === (tareWeight || 0)) return
-        setSaving(true)
-        try {
+        await withSaving('Lưu khối lượng bì', async () => {
             await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, unit, {
                 category: config.category,
                 packSize: config.pack_size,
@@ -334,8 +318,7 @@ export default function IngredientDetailPage() {
                 tareWeight: newTare || null, // 0 = xoá bì
             })
             refreshProducts?.()
-        } catch (err) { showError(err, 'Lưu khối lượng bì') }
-        finally { setSaving(false) }
+        })
     }
 
     async function handleRestock({ ingredient: ing, qty, subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate }) {
@@ -354,8 +337,7 @@ export default function IngredientDetailPage() {
 
     async function handleRecordPayment({ amount, paymentMethod, paidAt, cashPhase }) {
         if (!paymentInvoice) return
-        setSaving(true)
-        try {
+        await withSaving('Ghi nhận thanh toán', async () => {
             // Kho tổng nhóm: hoá đơn đang trả nợ có thể ghi nhận ở địa chỉ KHÁC địa chỉ đang xem —
             // dùng address_id thật của hoá đơn để invalidate đúng cache báo cáo.
             await recordInvoicePayment(
@@ -365,8 +347,7 @@ export default function IngredientDetailPage() {
             await Promise.all([reloadHistory(), refreshTodayExpenses?.()])
             setPaymentInvoice(null)
             showToast('Đã ghi nhận thanh toán', 'success')
-        } catch (err) { showError(err, 'Ghi nhận thanh toán') }
-        finally { setSaving(false) }
+        })
     }
 
     async function handleCancelRestock(entry) {
@@ -383,15 +364,13 @@ export default function IngredientDetailPage() {
             ? `Tồn kho sẽ thay đổi ${revertStr} để hoàn lại hiện trạng.`
             : `Tồn kho ${revertStr}, hoàn tiền đã trả, và tính lại giá vốn.`
         if (!await confirm({ title: head, detail, danger: true, confirmLabel: 'Hủy phiếu' })) return
-        setSaving(true)
-        try {
+        await withSaving(isAdjust ? 'Hủy hiệu chỉnh tồn' : 'Hủy phiếu nhập kho', async () => {
             // Kho tổng nhóm: Nhật ký có thể hiện phiếu ghi nhận ở địa chỉ KHÁC (đang xem chỉ là 1
             // thành viên) — phải hủy đúng theo address_id thật của phiếu, không phải địa chỉ đang xem.
             await cancelRestock(entry.address_id || selectedAddress?.id, entry.id, profile?.name)
             await Promise.all([reloadHistory(), reloadStock(), refreshProducts?.(), refreshTodayExpenses?.()])
             showToast(isAdjust ? 'Đã hủy hiệu chỉnh tồn' : 'Đã hủy phiếu nhập kho', 'success')
-        } catch (err) { showError(err, isAdjust ? 'Hủy hiệu chỉnh tồn' : 'Hủy phiếu nhập kho') }
-        finally { setSaving(false) }
+        })
     }
 
     async function handleEditRestock(entry, form) {

@@ -1,7 +1,7 @@
-import { X, Percent } from 'lucide-react'
+import { Percent } from 'lucide-react'
 import { formatVND, cartLineSubtotal, computeDiscount, NO_DISCOUNT } from '../../utils'
 import { useDiscountEditing } from '../../hooks/useDiscountEditing'
-import { Dialog } from '../common/ModalShell'
+import { Dialog, ModalHeader } from '../common/ModalShell'
 import DiscountEditor from './DiscountEditor'
 
 // Giảm giá cho giỏ đang dựng (đợt chưa gửi) — mở từ nút % ở CheckoutBar. 1 dòng
@@ -12,12 +12,7 @@ export default function CartListModal({ cart, onClose, onItemDiscount }) {
 
     return (
         <Dialog onClose={onClose} panelClassName="w-full max-w-md mx-4 max-h-[85dvh] flex flex-col bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
-            <div className="shrink-0 flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
-                <p className="text-text font-black text-base leading-none">Giảm giá</p>
-                <button onClick={onClose} className="p-1.5 text-text-secondary hover:text-text rounded-lg hover:bg-surface-light">
-                    <X size={16} />
-                </button>
-            </div>
+            <ModalHeader title="Giảm giá" onClose={onClose} className="shrink-0" />
 
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
                 {cart.map(item => {

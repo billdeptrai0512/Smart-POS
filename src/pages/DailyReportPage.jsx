@@ -5,9 +5,8 @@ import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { formatVNDInput, parseVNDInput } from '../utils'
 import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
-import { fetchDailyReportContext, fetchLastWeekSameDayOrderItems, processIngredientRestock, fetchOpenTables, invalidateDailyContext, editIngredientRestock, fetchIngredientRestockHistory } from '../services/orderService'
+import { fetchDailyReportContext, fetchLastWeekSameDayOrderItems, processIngredientRestock, fetchOpenTables, invalidateDailyContext, editIngredientRestock, fetchIngredientRestockHistory, insertShiftClosing, updateShiftClosing } from '../services/orderService'
 import { fetchCashClosedToday, buildCashPayload } from '../services/reportService'
-import { useShiftClosingSave } from '../hooks/useShiftClosingSave'
 import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
 import { useDailyReportData } from '../hooks/useDailyReportData'
 import { onTabReturn } from '../utils/tabVisibility'
@@ -135,7 +134,25 @@ export default function DailyReportPage() {
     // makes the Lưu button disappear again.
     const [cashInput, setCashInput] = useState('')
     const [transferInput, setTransferInput] = useState('')
-    const { save: saveShiftClosing, isSaving: isSavingShift } = useShiftClosingSave(selectedAddress?.id)
+    // shift_finalized flag is NOT touched here — it's derived purely from persisted
+    // shift_closing data below (all Cuối kỳ counted + cash + transfer both entered),
+    // and only synced to localStorage for HistoryPage to classify subsequent expenses
+    // as "Sau ca".
+    const [isSavingShift, setIsSavingShift] = useState(false)
+    const saveShiftClosing = useCallback(async (payload, { existingId } = {}) => {
+        if (isSavingShift) return null
+        setIsSavingShift(true)
+        try {
+            const saved = existingId
+                ? await updateShiftClosing(existingId, payload)
+                : await insertShiftClosing(payload)
+
+            invalidateDailyContext(selectedAddress?.id)
+            return saved
+        } finally {
+            setIsSavingShift(false)
+        }
+    }, [selectedAddress?.id, isSavingShift])
 
     // Onboarding phase 3 "Báo cáo dòng tiền" + phase 4 "Báo cáo tồn kho" progress — xem
     // cashReportStep.jsx/inventoryStep.jsx. Cờ chỉ set true (không revert) nên không tái xuất

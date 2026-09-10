@@ -29,6 +29,7 @@ import {
 } from '../services/orderService'
 import { sortIngredients, getIngredientUnit, normalizeIngredientCategory, registerNewIngredients } from '../utils/ingredients'
 import { useToast } from '../hooks/useToast'
+import { useSavingAction } from '../hooks/useSavingAction'
 import { useConfirm } from '../contexts/ConfirmContext'
 import Toast from '../components/POSPage/Toast'
 import RecipeHeader from '../components/RecipeIngredientPage/RecipeHeader'
@@ -59,7 +60,7 @@ export default function RecipeIngredientPage() {
     const [recipes, setRecipes] = useState(allRecipes || [])
     const [extras, setExtras] = useState([])
     const [extraIngs, setExtraIngs] = useState(contextExtraIngs || {})
-    const [saving, setSaving] = useState(false)
+    const { saving, withSaving } = useSavingAction(showError)
     const [showCopyFrom, setShowCopyFrom] = useState(false)
     const [recipeProgress, setRecipeProgress] = useState(() =>
         (selectedAddress?.id ? readOnboardingState(selectedAddress.id) : DEFAULT_ONBOARDING_STATE).recipeProgress
@@ -137,14 +138,6 @@ export default function RecipeIngredientPage() {
             .sort((a, b) => sortIngredients(a, b, selectedAddress?.ingredient_sort_order)),
         [ingredientCosts, selectedAddress?.ingredient_sort_order]
     )
-    // Wraps an async action with saving=true/false + error toast
-    const withSaving = async (errorContext, fn) => {
-        setSaving(true)
-        try { await fn() }
-        catch (err) { showError(err, errorContext) }
-        finally { setSaving(false) }
-    }
-
     // ─── Base recipe handlers ─────────────────────────────────────────
     // Amount box only upserts (0 stays a 0-amount row, never deletes — removal is the
     // ✕ button). Optimistic state is authoritative; no refetch on a pure amount edit.

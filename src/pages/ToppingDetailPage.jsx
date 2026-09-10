@@ -1,15 +1,16 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { useToast } from '../hooks/useToast'
+import { useSavingAction } from '../hooks/useSavingAction'
 import Toast from '../components/POSPage/Toast'
-import InlineEditor from '../components/RecipeIngredientPage/InlineEditor'
+import EditableEntityHeader from '../components/common/EditableEntityHeader'
 import FastIngredientFill from '../components/RecipeIngredientPage/FastIngredientFill'
-import { formatVND, capitalizeWords } from '../utils'
+import { capitalizeWords } from '../utils'
 import { getIngredientUnit, normalizeIngredientCategory, registerNewIngredients } from '../utils/ingredients'
 import {
     updateToppingName, updateToppingPrice, deleteTopping,
@@ -30,7 +31,7 @@ export default function ToppingDetailPage() {
 
     const topping = toppings.find(t => t.id === toppingId)
 
-    const [saving, setSaving] = useState(false)
+    const { saving, withSaving } = useSavingAction(showError)
     const [toppingIngs, setToppingIngs] = useState([])
     const [selectedProductIds, setSelectedProductIds] = useState(new Set())
     const [savedProductIds, setSavedProductIds] = useState(new Set())
@@ -59,11 +60,6 @@ export default function ToppingDetailPage() {
     }, [ingredientConfigs])
 
     const dbIngredients = useMemo(() => Object.keys(ingredientCosts || {}), [ingredientCosts])
-
-    const withSaving = async (errorContext, fn) => {
-        setSaving(true)
-        try { await fn() } catch (err) { showError(err, errorContext) } finally { setSaving(false) }
-    }
 
     async function saveName(name) {
         if (!name.trim()) return
@@ -163,52 +159,25 @@ export default function ToppingDetailPage() {
         <div className="flex flex-col h-full bg-bg">
             <Toast toast={toast} />
 
-            <header className="shrink-0 pt-6 pb-3 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
-                <div className="flex items-center gap-3">
+            <EditableEntityHeader
+                name={topping.name}
+                nameTransform={capitalizeWords}
+                canEdit={canEdit}
+                onBack={() => navigate('/toppings')}
+                onSaveName={saveName}
+                price={topping.price}
+                priceLabel="Giá cộng thêm:"
+                onSavePrice={savePrice}
+                action={canEdit && (
                     <button
-                        onClick={() => navigate('/toppings')}
-                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none shrink-0"
-                        title="Trở về"
+                        onClick={handleDelete}
+                        className="w-10 h-10 flex items-center justify-center rounded-[14px] border border-danger/20 text-danger hover:bg-danger/10 active:scale-95 transition-all shadow-sm focus:outline-none shrink-0"
+                        title="Xoá topping"
                     >
-                        <ArrowLeft size={20} strokeWidth={2.5} />
+                        <Trash2 size={20} strokeWidth={2.5} />
                     </button>
-
-                    <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center min-w-0">
-                        <InlineEditor
-                            value={topping.name}
-                            canEdit={canEdit}
-                            onSave={saveName}
-                            type="text"
-                            transform={capitalizeWords}
-                            inputWidthClassName="w-full"
-                            displayClassName="text-[13px] font-black text-primary uppercase line-clamp-1 break-words w-full px-2"
-                            inputClassName="!text-center uppercase"
-                            renderDisplay={(v) => <span title={v}>{v}</span>}
-                        />
-                        <div className="flex items-center justify-center gap-1.5 text-[12px] font-bold text-text-secondary leading-none mt-1 w-full">
-                            <span>Giá cộng thêm:</span>
-                            <InlineEditor
-                                value={topping.price}
-                                canEdit={canEdit}
-                                onSave={savePrice}
-                                type="number"
-                                renderDisplay={(v) => <span className="text-success font-bold">{formatVND(v)}</span>}
-                                inputWidthClassName="w-[72px]"
-                            />
-                        </div>
-                    </div>
-
-                    {canEdit && (
-                        <button
-                            onClick={handleDelete}
-                            className="w-10 h-10 flex items-center justify-center rounded-[14px] border border-danger/20 text-danger hover:bg-danger/10 active:scale-95 transition-all shadow-sm focus:outline-none shrink-0"
-                            title="Xoá topping"
-                        >
-                            <Trash2 size={20} strokeWidth={2.5} />
-                        </button>
-                    )}
-                </div>
-            </header>
+                )}
+            />
 
             <main className="flex-1 overflow-y-auto px-4 py-4 space-y-4 bg-bg">
                 <section>
