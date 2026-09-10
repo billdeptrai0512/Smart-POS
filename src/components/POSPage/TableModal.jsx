@@ -303,11 +303,10 @@ export default function TableModal({ onClose, inline = false }) {
                                                     <div className="absolute bottom-2 right-2">{handle}</div>
                                                 )}
                                                 {/* Đổi tên: chạm thẳng vào tên bàn (xem span bên dưới), không cần
-                                                    nút riêng. Xoá được cả khi bàn còn khách — bàn vẫn hiện lại
-                                                    ngay dưới dạng "bàn tạm" (adHoc, xem openTables ở trên) chừng
-                                                    nào đơn còn mở, nên không mất quyền bấm tính tiền. Góc
-                                                    trên-phải, đối xứng với handle kéo ở góc dưới-phải. */}
-                                                {canEdit && configured.includes(name) && renaming !== name && (
+                                                    nút riêng. Xoá: chỉ bàn trống — bàn còn khách mà biến mất khỏi
+                                                    lưới thì không ai bấm tính tiền cho nó được nữa. Góc trên-phải,
+                                                    đối xứng với handle kéo ở góc dưới-phải. */}
+                                                {canEdit && !busy && configured.includes(name) && renaming !== name && (
                                                     <button
                                                         onClick={() => handleRemove(name)}
                                                         aria-label={`Xoá ${name}`}
