@@ -18,7 +18,7 @@ import TableTargetPicker from './TableTargetPicker'
 // từng đơn riêng thay vì gộp cả nhóm thành 1 bill.
 
 export default function TakeawayListModal({ orders, tableNames, onClose, onPick }) {
-    const { toggleServed } = useCart()
+    const { toggleServed, reopenRoundIntoCart } = useCart()
     const { handleDeleteOrder } = useHistory()
     const confirm = useConfirm()
     const [moving, setMoving] = useState(null) // { orderIds: string[], label: string } | null
@@ -48,6 +48,13 @@ export default function TakeawayListModal({ orders, tableNames, onClose, onPick 
         await handleDeleteOrder(order.id)
     }
 
+    // Cùng cơ chế "Sửa" của đợt bàn (TableDetailModal): xoá đơn cũ rồi đổ nguyên món
+    // vào giỏ, sửa xong bấm "Tạo đơn" là một đơn MỚI — id lẫn order_no đều đổi khác,
+    // không sửa tại chỗ (xem reopenRoundIntoCart trong POSContext.jsx).
+    async function handleEdit(order) {
+        if (await reopenRoundIntoCart(order)) onPick()
+    }
+
     return (
         <Dialog onClose={onClose} panelClassName={MODAL_PANEL}>
             <div className="shrink-0 flex items-center gap-3 px-5 pt-5 pb-4 border-b border-border/40">
@@ -65,6 +72,7 @@ export default function TakeawayListModal({ orders, tableNames, onClose, onPick 
                         order={order}
                         onToggleServed={() => toggleServed(order)}
                         onMove={() => startMove([order.id], `đơn ${openedLabelVN(order.createdAt)}`)}
+                        onEdit={() => handleEdit(order)}
                         onDelete={() => handleDelete(order)}
                     />
                 ))}
@@ -82,7 +90,7 @@ export default function TakeawayListModal({ orders, tableNames, onClose, onPick 
     )
 }
 
-function TakeawayRow({ order, onToggleServed, onMove, onDelete }) {
+function TakeawayRow({ order, onToggleServed, onMove, onEdit, onDelete }) {
     const { products, productExtras } = useProducts()
     const { billRef, printArmed, arm } = usePrintArmed()
 
@@ -130,6 +138,12 @@ function TakeawayRow({ order, onToggleServed, onMove, onDelete }) {
                     className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-primary`}
                 >
                     <Printer size={13} strokeWidth={2.25} />
+                </button>
+                <button
+                    onClick={onEdit}
+                    className={`${CHIP_IDLE} px-2.5 hover:text-text hover:border-primary/40`}
+                >
+                    Sửa
                 </button>
                 <button
                     onClick={onDelete}
