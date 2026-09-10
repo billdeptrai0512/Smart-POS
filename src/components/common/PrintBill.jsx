@@ -96,7 +96,13 @@ const PrintBill = forwardRef(function PrintBill(
                 await new Promise(requestAnimationFrame)
                 try {
                     const { default: html2canvas } = await import('html2canvas')
-                    return await html2canvas(el, { backgroundColor: '#fff' })
+                    // scale cố định (không theo devicePixelRatio của máy) — el rộng 300px,
+                    // ảnh in ra cần ~576px (PRINTER_WIDTH_PX, xem escposBitmap.js). DPR thấp
+                    // (1x) để mặc định sẽ ra ảnh 300px rồi bị phóng to mờ ở bước scale sau;
+                    // DPR cao (3x, phổ biến Android) ra ảnh ~900px, rasterize thừa ~9 lần khối
+                    // lượng pixel cần rồi vẫn bị scale ngược xuống — 2x cho ảnh ~600px, đủ nét
+                    // mà không phụ thuộc máy.
+                    return await html2canvas(el, { backgroundColor: '#fff', scale: 2 })
                 } finally {
                     el.className = prevClassName
                     if (prevStyle) el.setAttribute('style', prevStyle)
