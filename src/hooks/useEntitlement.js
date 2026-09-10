@@ -5,6 +5,12 @@ import { useAuth } from '../contexts/AuthContext'
 import { ALL_TIER } from '../constants/monetization'
 import { onTabReturn } from '../utils/tabVisibility'
 
+// app_config chỉ RLS cho role `authenticated` (xem 20260511_monetization_phase1.sql)
+// → nếu query bắn đi TRƯỚC KHI supabase-js gắn xong access token của session (ngay
+// lúc app vừa mount, trước khi AuthContext.hasSession=true), request đi bằng anon
+// key, RLS lọc ra [] (không phải lỗi) → _serverFlag cắm cứng thành false CẢ PHIÊN,
+// badge gói biến mất khỏi mọi card dù server đang bật thật. Gate bằng hasSession.
+
 // ─── Client kill switch (build-time) ─────────────────────────────────────────
 //   Master capability. Build với false → monetization TẮT CỨNG, không hỏi server.
 //   Build với true  → bật/tắt thực tế do SERVER quyết (app_config.monetization_enabled).
@@ -43,10 +49,13 @@ function loadServerFlag() {
  * @returns {{ enabled: boolean, loading: boolean }}
  */
 export function useMonetizationEnabled() {
+    const { hasSession, isGuest } = useAuth()
     const [flag, setFlag] = useState(CLIENT_MONETIZATION_ENABLED ? _serverFlag : false)
 
     useEffect(() => {
-        if (!CLIENT_MONETIZATION_ENABLED) return
+        // Guest không có session thật (xem AuthContext) → sẽ không bao giờ authenticated,
+        // đọc thẳng bằng anon key cũng được (app_config không có gì nhạy cảm với guest).
+        if (!CLIENT_MONETIZATION_ENABLED || (!hasSession && !isGuest)) return
         // loadServerFlag() trả promise đã cache → nếu đã đọc xong, .then resolve ngay
         // với giá trị cũ (React bỏ qua nếu không đổi). Không setState đồng bộ trong effect.
         let cancelled = false
@@ -67,7 +76,7 @@ export function useMonetizationEnabled() {
         // lại app là 1 cơ hội đọc lại, không cần đợi F5.
         const offTabReturn = onTabReturn(() => loadServerFlag().then(apply(true)))
         return () => { cancelled = true; clearTimeout(retryId); offTabReturn() }
-    }, [])
+    }, [hasSession, isGuest])
 
     const loading = CLIENT_MONETIZATION_ENABLED && flag === undefined
     const enabled = CLIENT_MONETIZATION_ENABLED && flag === true
