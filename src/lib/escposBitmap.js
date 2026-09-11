@@ -147,7 +147,15 @@ async function printBillNative(billRef, printerIp) {
             // action kết thúc bằng "Cut" → plugin gọi printFormattedTextAndCut thay vì
             // printFormattedText (xem ESCPOSPlugin.java) — thiếu cái này máy không tự cắt giấy.
             action: 'printAndCut',
-            text: `[C]<img>${hex}</img>\n\n\n`,
+            // Đo thật trên máy quầy (gửi ESC/POS test rồi đo tờ in): đầu in cách lưỡi cắt
+            // D ≈ 25mm. Phải đẩy > D thì dòng cuối mới vượt qua lưỡi, không thì cắt sát chân
+            // nội dung ("đuôi chưa ra hết"). 32mm = D + 7mm lề đáy.
+            // Dùng MỘT tham số mmFeedPaper thay vì mấy dòng \n: chiều cao dòng trống phụ
+            // thuộc font của máy, không đoán được, nên cộng dồn kiểu cũ là đẩy mù.
+            // (25mm trắng ở ĐẦU mỗi bill là cơ học: đoạn giấy giữa đầu in và lưỡi cắt luôn
+            // trắng, cắt xong thành mép đầu tờ kế tiếp — không xoá được bằng phần mềm.)
+            mmFeedPaper: '32',
+            text: `[C]<img>${hex}</img>\n`,
         })
     } catch (err) {
         err.stage = 'send'

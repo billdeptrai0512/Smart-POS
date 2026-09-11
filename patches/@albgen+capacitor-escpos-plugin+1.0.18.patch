@@ -1,21 +1,47 @@
 diff --git a/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java b/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java
-index 4f0c81d..dbce81a 100644
+index 4f0c81d..2f112ae 100644
 --- a/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java
 +++ b/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java
-@@ -248,7 +248,16 @@ public class ESCPOSPlugin extends Plugin {
+@@ -63,6 +63,9 @@ public class ESCPOSPlugin extends Plugin {
+     private static final String[] aliasesPermissions = new String[]{BT_ALIAS};
+     private final HashMap<String, DeviceConnection> connections = new HashMap<>();
+ 
++    // PATCH (KOPOS): timeout connect TCP (ms) — xem chỗ dùng trong getDevice().
++    private static final int TCP_CONNECT_TIMEOUT_MS = 5000;
++
+     @Override
+     public void load() {
+         Log.i("ESCPOSPlugin", "loading the plugin...");
+@@ -248,7 +251,17 @@ public class ESCPOSPlugin extends Plugin {
                  throw new JSONException("EscPosConnectionException: " + e.getMessage());
              } catch (Exception e) {
                  throw new JSONException("Exception: " + e.getMessage());
 +            } finally {
 +                // PATCH (KOPOS): đóng kết nối ngay sau mỗi lần in — bản gốc không bao giờ gọi
 +                // disconnectPrinter(), để socket TCP treo lại vô thời hạn. Nhiều máy in nhiệt rẻ
-+                // chỉ nhận 1 kết nối cùng lúc; kết nối cũ còn treo làm lần in kế tiếp bị từ chối
-+                // "Unable to connect to TCP device" dù cùng mạng, cùng máy in — đúng triệu chứng
-+                // "lúc in được lúc không". Bọc try/catch riêng vì lỗi lúc đóng kết nối không được
-+                // che mất lỗi in thật (nếu có) đang trên đường ném ra ngoài.
++                // chỉ nhận 1 kết nối cùng lúc, kết nối cũ còn treo thì lần in kế tiếp bị từ chối.
++                // (KHÔNG phải nguyên nhân của "lúc in được lúc không" — cái đó là timeout 30ms,
++                // xem TCP_CONNECT_TIMEOUT_MS. Đây chỉ là dọn tài nguyên cho đúng.)
++                // Bọc try/catch riêng vì lỗi lúc đóng kết nối không được che mất lỗi in thật
++                // (nếu có) đang trên đường ném ra ngoài.
 +                try { printer.disconnectPrinter(); } catch (Exception ignored) {}
              }
 +            call.resolve();
          }
          catch(Exception ex)
          {
+@@ -421,7 +434,13 @@ public class ESCPOSPlugin extends Plugin {
+                 try { if (bluetoothDevice.getName().equals(id)) { return bluetoothConnection; } } catch (SecurityException ignored) {}
+             }
+         } else if (type.equals("tcp")) {
+-            TcpConnection tcpConnection =  new TcpConnection(address, port);
++            // PATCH (KOPOS): constructor 2 tham số của TcpConnection truyền timeout = 30 —
++            // và DantSu đưa thẳng số đó vào Socket.connect(addr, timeout), vốn tính bằng
++            // MILLIGIÂY. 30ms đủ cho PC (ARP cache nóng, link khỏe) nhưng điện thoại qua WiFi
++            // (radio power-save, ARP nguội) bắt tay TCP thường mất 50–500ms → luôn
++            // SocketTimeoutException, bị nuốt thành "Unable to connect to TCP device" dù đúng
++            // IP, đúng mạng, máy in đang bật. Đây là thủ phạm thật của "lúc in được lúc không".
++            TcpConnection tcpConnection =  new TcpConnection(address, port, TCP_CONNECT_TIMEOUT_MS);
+             tcpConnection.setSendDelay(sendDelay);
+             return tcpConnection;
+         } else {

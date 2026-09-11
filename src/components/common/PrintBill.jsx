@@ -90,7 +90,12 @@ const PrintBill = forwardRef(function PrintBill(
                 // MÀN HÌNH thường (@media print không áp dụng) thì chữ kế thừa màu SÁNG từ
                 // theme tối của app → trắng trên nền trắng tôi ép, chữ vô hình dù đường viền
                 // (inline #000 riêng) vẫn thấy.
-                el.style.cssText = 'position:fixed; left:-9999px; top:0; width:300px; background:#fff; color:#000; padding:10px 12px;'
+                // font-size/line-height PHẢI set ở đây: html2canvas render theo style MÀN HÌNH,
+                // không áp @media print — thiếu thì bill in từ app native ăn 16px mặc định của
+                // body (cao hơn bản in qua trình duyệt ~25%, tốn giấy mà không ai thấy vì hai
+                // đường in không bao giờ chạy cùng lúc). Giữ khớp với khối #print-bill trong
+                // index.css để hai đường in ra cùng một tờ.
+                el.style.cssText = 'position:fixed; left:-9999px; top:0; width:300px; background:#fff; color:#000; padding:10px 12px; font-size:12px; line-height:1.3;'
                 // Đợi 1 khung hình để trình duyệt thực sự layout/paint xong trước khi chụp —
                 // đổi style xong gọi html2canvas ngay có thể chụp trúng lúc chưa kịp vẽ.
                 await new Promise(requestAnimationFrame)
@@ -128,7 +133,7 @@ const PrintBill = forwardRef(function PrintBill(
                 set theo từng địa chỉ. Sau này mỗi khách cần tự upload logo + nhập
                 địa chỉ/SĐT riêng cho quán của họ thay vì dùng chung khối này. */}
             <div style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-                <div style={{ textAlign: 'center', fontWeight: 800, fontSize: 20, letterSpacing: 0.5 }}>KÔPHiN COFFEE</div>
+                <div style={{ textAlign: 'center', fontWeight: 800, fontSize: 16, letterSpacing: 0.5 }}>KÔPHiN COFFEE</div>
                 {/* <div style={{ textAlign: 'center', fontWeight: 800, fontSize: 9, letterSpacing: 3, marginTop: 2 }}>COFFEE TO GO</div> */}
             </div>
             <div style={{ textAlign: 'center', marginTop: 4, whiteSpace: 'nowrap' }}>Địa chỉ: 31 Nguyễn Thị Tươi,</div>
@@ -176,13 +181,13 @@ const PrintBill = forwardRef(function PrintBill(
                         <div>
                             <div style={{ wordBreak: 'break-word' }}>{l.name}</div>
                             {l.extras.map(e => (
-                                <div key={e.id} style={{ fontStyle: 'italic', fontSize: 11, whiteSpace: 'nowrap' }}>• {e.name}</div>
+                                <div key={e.id} style={{ fontStyle: 'italic', fontSize: 10, whiteSpace: 'nowrap' }}>• {e.name}</div>
                             ))}
                         </div>
                         <span style={{ textAlign: 'right' }}>
                             {discounted ? (
                                 <>
-                                    <span style={{ display: 'block', textDecoration: 'line-through', fontSize: 10, opacity: 0.65 }}>{formatVND(l.unitPrice)}</span>
+                                    <span style={{ display: 'block', textDecoration: 'line-through', fontSize: 9, opacity: 0.65 }}>{formatVND(l.unitPrice)}</span>
                                     <span style={{ display: 'block' }}>{formatVND(netUnit)}</span>
                                 </>
                             ) : formatVND(l.unitPrice)}

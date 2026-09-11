@@ -483,6 +483,9 @@ body.pwa-banner-open .address-scroll-list {
     color: #000;
     font-family: ui-monospace, "Courier New", monospace;
     font-size: 12px;
-    line-height: 1.45;
+    /* Khớp với cssText trong PrintBill.captureImage (đường in app native) — sửa một bên
+       thì sửa cả hai, không thì hai đường in ra hai tờ cao khác nhau. 1.3 thay cho 1.45:
+       giãn dòng là thứ ăn giấy nhiều hơn cỡ chữ trên bill dài. */
+    line-height: 1.3;
   }
 }
