@@ -111,7 +111,7 @@ export function POSProvider() {
     const [totalCost, setTotalCost] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.TOTAL_COST)) || 0)
     const [cupsSold, setCupsSold] = useState(() => Number(localStorage.getItem(STORAGE_KEYS.CUPS)) || 0)
     const [isOnline, setIsOnline] = useState(navigator.onLine)
-    const { toast, showToast, showError } = useToast()
+    const { toast, showToast, showError, reportError } = useToast()
 
     // ---- History State ----
     const [todayOrders, setTodayOrders] = useState([])
@@ -218,7 +218,7 @@ export function POSProvider() {
     // Tính tiền = đóng bàn. Tiền đã vào doanh thu từng đợt nên ở đây không cộng trừ gì,
     // chỉ đóng dấu "lượt khách này xong". Nhận cả object bàn (không phải mỗi tên) để
     // hoàn tác dựng lại được thẻ mà không cần fetch — quan trọng khi đang mất mạng.
-    const handleCloseTable = useCallback(async (table) => {
+    const handleCloseTable = useCallback(async (table, { printFailed = false } = {}) => {
         const name = table?.name
         if (!addressId || !name) return
         const closedAt = new Date().toISOString()
@@ -231,8 +231,11 @@ export function POSProvider() {
         try {
             await closeTable(addressId, name, closedAt)
             drop()
+            // printFailed (TableDetailModal.handleBill: in trước, tính tiền sau): toast lỗi
+            // in đã bị nuốt (reportError-only, xem handlePrint) để khỏi bị toast "Đã tính
+            // tiền" đè mất ngay sau — gộp cả hai ý vào đây thay vì hai toast xếp hàng.
             // Không có hoàn tác thì bấm nhầm là phải vào DB mới cứu được bàn.
-            showToast(`Đã tính tiền ${name}`, 'success', {
+            showToast(printFailed ? `Đã tính tiền ${name} — in lỗi, in lại tay` : `Đã tính tiền ${name}`, printFailed ? 'warning' : 'success', {
                 label: 'Hoàn tác',
                 onClick: () => reopenTable(addressId, name, closedAt)
                     .then(() => { restore(); refreshTables(); showToast(`Đã mở lại ${name}`, 'info') })
@@ -1092,10 +1095,10 @@ export function POSProvider() {
         total, orderCount, hasOrder,
         discountAmount, finalTotal,
         recentOrders, draftOrder, enterKey,
-        toast, showToast, showError,
+        toast, showToast, showError, reportError,
         // deliberately partial deps, see comment above
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [cart, activeCartItemId, dineIn, tableName, openTables, refreshTables, handleCloseTable, toggleServed, moveTableRounds, enabledStickyExtraIds, total, orderCount, hasOrder, discountAmount, finalTotal, recentOrders, draftOrder, enterKey, toast, showToast, showError])
+    }), [cart, activeCartItemId, dineIn, tableName, openTables, refreshTables, handleCloseTable, toggleServed, moveTableRounds, enabledStickyExtraIds, total, orderCount, hasOrder, discountAmount, finalTotal, recentOrders, draftOrder, enterKey, toast, showToast, showError, reportError])
 
     const statsValue = useMemo(() => ({
         revenue, totalCost, cupsSold, isOnline,

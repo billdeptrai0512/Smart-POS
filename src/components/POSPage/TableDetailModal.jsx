@@ -26,7 +26,7 @@ import TableTargetPicker from './TableTargetPicker'
 
 export default function TableDetailModal({ table, tableNames = [], onClose, onPick }) {
     const confirm = useConfirm()
-    const { handleCloseTable, reopenRoundIntoCart, toggleServed, orderCount, showError } = useCart()
+    const { handleCloseTable, reopenRoundIntoCart, toggleServed, orderCount, showError, reportError } = useCart()
     const { handleDeleteOrder } = useHistory()
     const { products, productExtras } = useProducts()
     const { selectedAddress } = useAddress()
@@ -97,15 +97,20 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
     // chưa cấu hình thì mở hộp in trình duyệt/hệ điều hành như cũ, CSS @media print (index.css)
     // lo phần chỉ hiện #print-bill — bill dựng sẵn trong DOM (PrintBill) nên không có bước
     // render lại nào giữa cú bấm và lệnh in.
-    async function handlePrint() {
+    // silent: dùng từ handleBill — toast lỗi ở đây bị handleCloseTable gọi ngay sau đè
+    // mất (cùng chung 1 ô toast, xem useToast.js), nên chỉ reportError (console+Sentry)
+    // rồi trả lỗi ra để handleBill gộp vào toast "Đã tính tiền" luôn.
+    async function handlePrint({ silent = false } = {}) {
         try {
             await printBillJob(billRef, selectedAddress?.counter_printer_ip)
+            return null
         } catch (e) {
             // Trước đây chỉ console.error — người bấm Tính tiền không thấy gì cả khi
             // máy in mất kết nối (IP đổi, mất mạng...), tưởng app đứng im. Bàn vẫn
             // đóng bình thường bên dưới (tiền đã tính, in chỉ là giấy tiện cho khách)
             // nhưng phải báo rõ để nhân viên biết mà in lại tay.
-            showError(e, 'In hoá đơn')
+            ;(silent ? reportError : showError)(e, 'In hoá đơn')
+            return e
         }
     }
 
@@ -151,14 +156,24 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
             })
             if (!ok) return
         }
+        // Hỏi in hay không — tách khỏi Tính tiền theo yêu cầu: khách không phải lúc nào
+        // cũng cần giấy, và trước đây in luôn kèm theo là chỗ toast lỗi in bị tính tiền
+        // đè mất (xem printFailed/handleCloseTable). "Không in" hay Esc đều chỉ bỏ qua
+        // bước in — bàn vẫn tính tiền bình thường ở dưới, không huỷ cả thao tác.
+        const wantsPrint = await confirm({
+            title: `In bill cho ${table.name}?`,
+            detail: `${linesLabel(table.lines)} — ${formatVND(table.total)}`,
+            cancelLabel: 'Không in',
+            confirmLabel: 'In & Tính tiền',
+        })
         // In TRƯỚC khi đóng bàn: TableModal render TableDetailModal theo detailTable
         // (tính lại từ openTables mỗi render, xem comment ở TableModal) — đóng bàn xong
         // là table biến mất khỏi openTables, modal (và #print-bill bên trong) bị THÁO
         // MOUNT ngay từ component cha, bất kể có gọi onClose() hay chưa. Đóng bàn trước
         // rồi mới in gần như chắc chắn in ra giấy trắng (đường window.print()) — handlePrint
         // tự đợi đúng việc cần đợi cho từng đường in (afterprint hoặc network gửi xong).
-        await handlePrint()
-        await handleCloseTable(table)
+        const printErr = wantsPrint ? await handlePrint({ silent: true }) : null
+        await handleCloseTable(table, { printFailed: !!printErr })
         onClose()
     })
 
@@ -206,7 +221,7 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
                     aria-label="In bill"
                     className="shrink-0 w-[26px] h-[26px] rounded-full border bg-surface-light border-border/60 flex items-center justify-center text-text-secondary hover:text-primary transition-colors disabled:opacity-60 disabled:pointer-events-none"
                 >
-                    <Printer size={14} strokeWidth={2.25} />
+                    {billing ? <Loader size={14} className="animate-spin" /> : <Printer size={14} strokeWidth={2.25} />}
                 </button>
                 <span className="shrink-0 text-[17px] font-black tabular-nums text-primary">{formatVND(table.total)}</span>
             </div>

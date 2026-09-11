@@ -3,7 +3,7 @@ import { useAuth } from './AuthContext'
 import {
     fetchAddresses, createAddress as apiCreateAddress, updateAddress as apiUpdateAddress, deleteAddress as apiDeleteAddress,
     setAddressDineIn as apiSetAddressDineIn, setAddressTables as apiSetAddressTables,
-    setAddressPrinters as apiSetAddressPrinters,
+    setAddressPrinters as apiSetAddressPrinters, fetchAddressPrinters,
     upsertSession,
     fetchWarehouseGroups, upsertWarehouseGroup as apiUpsertWarehouseGroup,
     deleteWarehouseGroup as apiDeleteWarehouseGroup, setAddressWarehouseGroup as apiSetAddressWarehouseGroup
@@ -187,6 +187,20 @@ export function AddressProvider() {
         return newAddr
     }, [profile, addresses, isGuest])
 
+    // Khuôn chung "ghi API xong, phản chiếu vào addresses + selectedAddress (nếu đang chọn
+    // đúng địa chỉ đó) + cache localStorage" — rename/setDineIn/setTables/setPrinters/poll IP
+    // bên dưới đều cùng một khuôn này, gộp lại đỡ chép tay 5 lần. `patch` là object đủ field
+    // (rename/setDineIn/setTables/setPrinters — API trả cả row) hoặc chỉ vài cột (poll IP).
+    const syncAddressPatch = useCallback((addressId, patch) => {
+        setAddresses(prev => prev.map(a => a.id === addressId ? { ...a, ...patch } : a))
+        setSelectedAddressState(prev => {
+            if (!prev || prev.id !== addressId) return prev
+            const updated = { ...prev, ...patch }
+            localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, JSON.stringify(updated))
+            return updated
+        })
+    }, [])
+
     const renameAddress = useCallback(async (addressId, newName) => {
         if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
         if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể sửa địa chỉ')
@@ -197,13 +211,9 @@ export function AddressProvider() {
             throw new Error(`Địa chỉ "${cleanName}" đã tồn tại`)
         }
         const updatedAddr = await apiUpdateAddress(addressId, cleanName)
-        setAddresses(prev => prev.map(a => a.id === addressId ? updatedAddr : a))
-        if (selectedAddress?.id === addressId) {
-            setSelectedAddressState(updatedAddr)
-            localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, JSON.stringify(updatedAddr))
-        }
+        syncAddressPatch(addressId, updatedAddr)
         return updatedAddr
-    }, [profile, selectedAddress, addresses, isGuest])
+    }, [profile, addresses, isGuest, syncAddressPatch])
 
     // Bật/tắt chế độ bàn ngồi lại. Mirror renameAddress: cùng guard quản lý, cùng
     // cách đồng bộ selectedAddress + cache localStorage (POS đọc cờ này từ đó khi
@@ -212,13 +222,9 @@ export function AddressProvider() {
         if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
         if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể sửa địa chỉ')
         const updatedAddr = await apiSetAddressDineIn(addressId, dineIn)
-        setAddresses(prev => prev.map(a => a.id === addressId ? updatedAddr : a))
-        if (selectedAddress?.id === addressId) {
-            setSelectedAddressState(updatedAddr)
-            localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, JSON.stringify(updatedAddr))
-        }
+        syncAddressPatch(addressId, updatedAddr)
         return updatedAddr
-    }, [profile, selectedAddress, isGuest])
+    }, [profile, isGuest, syncAddressPatch])
 
     // Danh sách bàn cố định. Cùng guard/cách đồng bộ như setDineIn ở trên — POS đọc
     // addresses.tables từ cache localStorage nên lưới bàn vẽ được ngay lúc cold-start.
@@ -226,13 +232,9 @@ export function AddressProvider() {
         if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
         if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể sửa danh sách bàn')
         const updatedAddr = await apiSetAddressTables(addressId, tables)
-        setAddresses(prev => prev.map(a => a.id === addressId ? updatedAddr : a))
-        if (selectedAddress?.id === addressId) {
-            setSelectedAddressState(updatedAddr)
-            localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, JSON.stringify(updatedAddr))
-        }
+        syncAddressPatch(addressId, updatedAddr)
         return updatedAddr
-    }, [profile, selectedAddress, isGuest])
+    }, [profile, isGuest, syncAddressPatch])
 
     // IP máy in ESC/POS (quầy + bếp) cho app native. Cùng guard/cách đồng bộ như
     // setDineIn/setTables ở trên.
@@ -240,13 +242,28 @@ export function AddressProvider() {
         if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
         if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể sửa địa chỉ')
         const updatedAddr = await apiSetAddressPrinters(addressId, printers)
-        setAddresses(prev => prev.map(a => a.id === addressId ? updatedAddr : a))
-        if (selectedAddress?.id === addressId) {
-            setSelectedAddressState(updatedAddr)
-            localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, JSON.stringify(updatedAddr))
-        }
+        syncAddressPatch(addressId, updatedAddr)
         return updatedAddr
-    }, [profile, selectedAddress, isGuest])
+    }, [profile, isGuest, syncAddressPatch])
+
+    // Đổi IP máy in ở máy A chỉ tự cập nhật selectedAddress ở CHÍNH máy A (xem setPrinters
+    // ở trên) — máy B ngồi cùng địa chỉ không có gì đẩy realtime, chỉ thấy IP mới sau khi
+    // tự fetchAddresses lại (đăng nhập lại / mở app). Poll nhẹ theo chu kỳ ở đây để máy B
+    // bắt kịp trong lúc vẫn đang mở app, không cần khởi động lại. Chỉ 3 cột, rẻ hơn hẳn
+    // fetchAddresses (select * toàn bộ danh sách) — xem fetchAddressPrinters.
+    useEffect(() => {
+        if (isGuest || !selectedAddress?.id) return
+        const id = selectedAddress.id
+        const tick = async () => {
+            if (document.hidden) return
+            const fresh = await fetchAddressPrinters(id)
+            if (!fresh) return
+            if (fresh.counter_printer_ip === selectedAddress.counter_printer_ip && fresh.kitchen_printer_ip === selectedAddress.kitchen_printer_ip) return
+            syncAddressPatch(id, { counter_printer_ip: fresh.counter_printer_ip, kitchen_printer_ip: fresh.kitchen_printer_ip })
+        }
+        const interval = setInterval(tick, 20000)
+        return () => clearInterval(interval)
+    }, [isGuest, selectedAddress?.id, selectedAddress?.counter_printer_ip, selectedAddress?.kitchen_printer_ip, syncAddressPatch])
 
     const removeAddress = useCallback(async (addressId) => {
         if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')

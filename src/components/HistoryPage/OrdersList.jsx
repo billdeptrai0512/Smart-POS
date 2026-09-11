@@ -1,6 +1,6 @@
 import { useMemo, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Percent, Trash2, Printer } from 'lucide-react'
+import { Percent, Trash2, Printer, Loader } from 'lucide-react'
 import { formatVND, computeDiscount, discountToPercent, NO_DISCOUNT } from '../../utils'
 import { dateShortVN, timeStringVN } from '../../utils/dateVN'
 import { priceLineFor, billSubtotal } from '../../utils/billLines'
@@ -361,10 +361,11 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                         {canPrint && (
                             <button
                                 onClick={arm}
+                                disabled={printArmed}
                                 aria-label="In bill"
-                                className={`${ICON_BTN} text-text-secondary hover:text-primary`}
+                                className={`${ICON_BTN} text-text-secondary hover:text-primary disabled:opacity-50`}
                             >
-                                <Printer size={14} strokeWidth={2.25} />
+                                {printArmed ? <Loader size={14} className="animate-spin" /> : <Printer size={14} strokeWidth={2.25} />}
                             </button>
                         )}
                         {/* Đơn offline chưa lên DB thì xoá bằng đường khác (hàng chờ), còn lại

@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { ArrowLeft, Check, Printer, ArrowRightLeft, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check, Printer, ArrowRightLeft, Trash2, Loader } from 'lucide-react'
 import { useCart } from '../../contexts/CartContext'
 import { useHistory } from '../../contexts/HistoryContext'
 import { useProducts } from '../../contexts/ProductContext'
 import { useConfirm } from '../../contexts/ConfirmContext'
+import { useAddress } from '../../contexts/AddressContext'
 import { formatVND } from '../../utils'
 import { timeStringVN, openedLabelVN, dateShortVN, isSameDayVN } from '../../utils/dateVN'
 import { priceLineFor, billSubtotal } from '../../utils/billLines'
@@ -92,7 +93,15 @@ export default function TakeawayListModal({ orders, tableNames, onClose, onPick 
 
 function TakeawayRow({ order, onToggleServed, onMove, onEdit, onDelete }) {
     const { products, productExtras } = useProducts()
-    const { billRef, printArmed, arm } = usePrintArmed()
+    const { showError } = useCart()
+    const { selectedAddress } = useAddress()
+    // Trước đây gọi usePrintArmed() không tham số — thiếu cả printerIp (đơn mang đi không
+    // bao giờ in qua máy in mạng, luôn rơi về window.print()) lẫn onError (in lỗi bị nuốt
+    // lặng lẽ, giống bug đã sửa ở OrdersList/TableDetailModal).
+    const { billRef, printArmed, arm } = usePrintArmed(
+        selectedAddress?.counter_printer_ip,
+        (err) => showError(err, 'In hoá đơn')
+    )
 
     const discountAmount = order.discountAmount || 0
     const { subtotal, discountPct } = billSubtotal(order.total, discountAmount)
@@ -133,10 +142,11 @@ function TakeawayRow({ order, onToggleServed, onMove, onEdit, onDelete }) {
             <div className="flex items-center gap-2 border-t border-border/40 pt-2">
                 <button
                     onClick={arm}
+                    disabled={printArmed}
                     aria-label="In bill"
-                    className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-primary`}
+                    className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-primary disabled:opacity-50`}
                 >
-                    <Printer size={13} strokeWidth={2.25} />
+                    {printArmed ? <Loader size={13} className="animate-spin" /> : <Printer size={13} strokeWidth={2.25} />}
                 </button>
                 <button
                     onClick={onEdit}

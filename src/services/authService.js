@@ -413,6 +413,20 @@ export async function setAddressPrinters(addressId, { counterPrinterIp, kitchenP
     return data
 }
 
+// Poll nhẹ cho IP máy in (xem AddressContext) — đổi trên máy A phải thấy trên máy B
+// trong lúc app đang mở, không đợi khởi động lại. Chỉ chọn 3 cột, rẻ hơn hẳn
+// fetchAddresses (select *, cả danh sách) cho một nhịp poll chạy đều đặn.
+export async function fetchAddressPrinters(addressId) {
+    if (!supabase || !addressId) return null
+    const { data, error } = await supabase
+        .from('addresses')
+        .select('id, counter_printer_ip, kitchen_printer_ip')
+        .eq('id', addressId)
+        .maybeSingle()
+    if (error) return null
+    return data
+}
+
 // Soft-delete an address: set deleted_at instead of DELETE. 8 tables
 // (orders, shift_closings, address_subscriptions, expenses, supplier_debt...)
 // REFERENCES addresses(id) ON DELETE CASCADE — a hard delete here would have

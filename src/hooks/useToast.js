@@ -40,7 +40,26 @@ export function useToast(duration = 3500) {
         timer.current = setTimeout(() => setToast(null), duration)
     }, [duration])
 
+    // Console + Sentry only, không toast — tách riêng để chỗ nào cần báo lỗi ngay sau
+    // đó lại tự toast một thông báo khác (vd TableDetailModal: in lỗi rồi tính tiền
+    // thành công) vẫn ghi nhận lỗi mà không bị toast tính tiền đè mất toast lỗi.
+    const reportError = useCallback((err, actionLabel) => {
+        console.error(`[${actionLabel}]`, err)
+        // err.expected = validation/guard-rail message, không phải lỗi thật (đã biết
+        // trước có thể xảy ra) — không đáng báo Sentry, chỉ cần console + toast.
+        if (!err?.expected) {
+            // Dynamic import (thay vì static) — useToast được import ở gần như mọi
+            // context/page, nên import tĩnh @sentry/react ở đây từng kéo cả SDK vào
+            // bundle đầu tiên y hệt vấn đề bên main.jsx. No-op khi Sentry chưa init
+            // (dev) — tag `action` để lọc lỗi theo thao tác, `stage` nếu có để lọc sâu hơn.
+            import('@sentry/react')
+                .then(Sentry => Sentry.captureException(err, { tags: { action: actionLabel, ...(err?.stage ? { stage: err.stage } : {}) } }))
+                .catch(() => { })
+        }
+    }, [])
+
     const showError = useCallback((err, actionLabel) => {
+        reportError(err, actionLabel)
         const errMsg = err?.message || String(err) || 'Lỗi không xác định'
         const errCode = err?.code ? `\nCode: ${err.code}` : ''
         const errDetails = err?.details ? `\nDetails: ${err.details}` : ''
@@ -54,18 +73,6 @@ export function useToast(duration = 3500) {
             `Trang: ${window.location.pathname}`
         ].join('\n')
 
-        console.error(`[${actionLabel}]`, err)
-        // err.expected = validation/guard-rail message, không phải lỗi thật (đã biết
-        // trước có thể xảy ra) — không đáng báo Sentry, chỉ cần console + toast.
-        if (!err?.expected) {
-            // Dynamic import (thay vì static) — useToast được import ở gần như mọi
-            // context/page, nên import tĩnh @sentry/react ở đây từng kéo cả SDK vào
-            // bundle đầu tiên y hệt vấn đề bên main.jsx. No-op khi Sentry chưa init
-            // (dev) — tag `action` để lọc lỗi theo thao tác, `stage` nếu có để lọc sâu hơn.
-            import('@sentry/react')
-                .then(Sentry => Sentry.captureException(err, { tags: { action: actionLabel, ...(err?.stage ? { stage: err.stage } : {}) } }))
-                .catch(() => { })
-        }
         showToast('Có lỗi xảy ra', 'error', {
             label: 'Sao chép lỗi',
             onClick: async () => {
@@ -73,7 +80,7 @@ export function useToast(duration = 3500) {
                 showToast(ok ? 'Đã sao chép lỗi' : 'Không sao chép được — copy thủ công từ console', ok ? 'success' : 'warning')
             }
         })
-    }, [showToast])
+    }, [showToast, reportError])
 
-    return { toast, showToast, showError }
+    return { toast, showToast, showError, reportError }
 }
