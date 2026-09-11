@@ -4,19 +4,26 @@ import { Percent } from 'lucide-react'
 import { formatVND } from '../../utils'
 import TableModal from './TableModal'
 import CartListModal from './CartListModal'
+import CartNoteModal from './CartNoteModal'
+
+// Ô bàn và nút Ghi chú cùng một dáng nút trên thanh.
+const CHIP_BTN = 'min-w-[92px] shrink-0 bg-surface-light border border-border/60 rounded-[12px] px-1.5 text-center focus:outline-none focus:border-primary/40 hover:border-primary/40 transition-colors'
+const CHIP_LABEL = 'block text-[12px] font-bold uppercase tracking-wider text-text'
 
 // Thanh chốt bàn — chỉ render ở địa chỉ dine_in (xem addresses.dine_in).
 // Đường 1-chạm mang đi không mount component này, nên POS mặc định không đổi gì.
 export default function CheckoutBar({
     discountAmount, finalTotal,
-    cart, onItemDiscount,
+    cart, onItemDiscount, onItemNote,
     tableName, onConfirm, disabled,
 }) {
     // "BÀN 3" trong Nhật ký nhảy tới /pos kèm state này — mở thẳng lưới bàn (TableModal
     // tự đọc lại state này để seed "detail" cho đúng bàn đó, xem TableModal.jsx).
     const { state } = useLocation()
     const [showDiscount, setShowDiscount] = useState(false)
+    const [showNotes, setShowNotes] = useState(false)
     const [showTables, setShowTables] = useState(!!state?.openTableDetail)
+    const noteCount = cart.filter(i => i.note).length
 
     return (
         <footer className="shrink-0 bg-surface border-t border-border/80 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),16px)] shadow-[0_-4px_24px_rgba(0,0,0,0.02)]">
@@ -51,28 +58,42 @@ export default function CheckoutBar({
                         const tablePane = document.querySelector('.pos-table-pane')
                         if (getComputedStyle(tablePane).display === 'none') setShowTables(true)
                     }}
-                    className="min-w-[92px] shrink-0 ml-auto bg-surface-light border border-border/60 rounded-[12px] px-1.5 py-1.5 text-center focus:outline-none focus:border-primary/40 hover:border-primary/40 transition-colors"
+                    className={`${CHIP_BTN} ml-auto py-1.5`}
                 >
                     {/* Không chọn bàn = mang đi, đó là một trạng thái thật chứ không phải
                         "chưa chọn" — hiện đúng tên nó để không ai đi tìm nút mang đi. */}
-                    <span className="block text-[12px] font-bold uppercase tracking-wider text-text">
+                    <span className={CHIP_LABEL}>
                         {tableName || 'Mang đi'}
                     </span>
                 </button>
             </div>
 
-            <button
-                onClick={() => onConfirm(discountAmount, tableName)}
-                disabled={disabled}
-                className="w-full py-2.5 rounded-[12px] bg-primary text-bg text-[14px] font-black uppercase tracking-wider hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-                Tạo đơn
-            </button>
+            <div className="flex gap-3">
+                {/* Ghi chú từng món (CartNoteModal) — in lên phiếu bếp. Đếm số món đã có ghi
+                    chú để nhìn thanh là biết, không phải mở modal. */}
+                <button
+                    type="button"
+                    onClick={() => setShowNotes(true)}
+                    disabled={disabled}
+                    className={`${CHIP_BTN} disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                    <span className={CHIP_LABEL}>Ghi chú{noteCount > 0 && ` (${noteCount})`}</span>
+                </button>
+                <button
+                    onClick={() => onConfirm(discountAmount, tableName)}
+                    disabled={disabled}
+                    className="flex-1 py-2.5 rounded-[12px] bg-primary text-bg text-[14px] font-black uppercase tracking-wider hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    Tạo đơn
+                </button>
+            </div>
 
             {/* 1 dòng thì tự mở thẳng ô sửa của dòng đó (xem CartListModal). */}
             {showDiscount && (
                 <CartListModal cart={cart} onClose={() => setShowDiscount(false)} onItemDiscount={onItemDiscount} />
             )}
+
+            {showNotes && <CartNoteModal cart={cart} onClose={() => setShowNotes(false)} onItemNote={onItemNote} />}
 
             {showTables && <TableModal onClose={() => setShowTables(false)} />}
         </footer>

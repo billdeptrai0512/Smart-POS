@@ -35,6 +35,10 @@ export interface CartItem {
     toppingIds?: string[]
     /** Per-line discount, set via the cart list's per-item discount modal. */
     discount?: Discount
+    /** Per-line kitchen note, set via CartNoteModal. */
+    note?: string | null
+    /** Set on lines reloaded by "Sửa" (reopenRoundIntoCart) — kitchen ticket prints "SỬA ĐƠN". */
+    edit?: { orderNo: number | null }
 }
 
 export type DiscountType = 'percent' | 'amount'
@@ -61,6 +65,8 @@ export interface OrderItemPayload {
     /** Resolved đ giảm cho riêng dòng này — cùng dạng resolved-amount như
      *  OrderPayload.discount_amount, không phải %/đ đã chọn lúc áp. */
     discount_amount?: number
+    /** Ghi chú riêng dòng (in lên phiếu bếp). NULL = không có. */
+    note?: string | null
 }
 
 /** A single order in the bulk_create_orders RPC payload. */

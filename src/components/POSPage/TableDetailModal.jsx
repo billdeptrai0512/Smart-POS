@@ -13,6 +13,7 @@ import { billSubtotal, tablePriceLines } from '../../utils/billLines'
 import { Dialog, MODAL_PANEL, CHIP, CHIP_IDLE, TIME_PILL } from '../common/ModalShell'
 import PrintBill from '../common/PrintBill'
 import TableTargetPicker from './TableTargetPicker'
+import KitchenReprintButton from './KitchenReprintButton'
 
 // Chi tiết một bàn — mở từ thẻ bàn trong lưới (TableModal).
 //
@@ -258,6 +259,7 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
                             ẩn cả hàng nút thay vì để nút bấm vào không có gì xảy ra. */}
                         {round.id && (
                             <div className="flex items-center gap-2 border-t border-border/40 pt-2">
+                                <KitchenReprintButton round={round} tableName={table.name} />
                                 <button
                                     onClick={() => handleEditRound(round)}
                                     className={`${CHIP_IDLE} px-2.5 hover:text-text hover:border-primary/40`}

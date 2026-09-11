@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { fetchTodayStats, submitOrder, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext, fetchOpenTables, closeTable, reopenTable, markOrderServed, mergeTableLines, extractRounds, dropTableByName, restoreTable, moveRoundsIntoTable, tableLineName, moveTableRounds as moveTableRoundsService } from '../services/orderService'
+import { nativePrinterIp, printKitchenTicket } from '../lib/escposBitmap'
+import { fetchTodayStats, submitOrder, fetchOrderNo, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext, fetchOpenTables, closeTable, reopenTable, markOrderServed, mergeTableLines, extractRounds, dropTableByName, restoreTable, moveRoundsIntoTable, tableLineName, moveTableRounds as moveTableRoundsService } from '../services/orderService'
 import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder, addPendingTableClose, removePendingTableClose } from '../hooks/useOfflineSync'
 import { useOrdersPoll } from '../hooks/useOrdersPoll'
@@ -598,6 +599,31 @@ export function POSProvider() {
         // ẩn nút xoá cho tới khi có mạng.
         const online = navigator.onLine && !!supabase
         const orderId = online ? crypto.randomUUID() : null
+        // Cùng dạng nhãn như fetchOpenTables (tên món kèm topping) — dùng cho đợt lạc quan của
+        // bàn lẫn phiếu bếp.
+        const addLines = mergeTableLines([], cartItems.map(it => ({
+            name: tableLineName(it.name, [...(it.extras || []), ...(it.toppings || [])].map(e => e.name), it.note),
+            qty: it.quantity,
+        })))
+        // Phiếu bếp: chỉ app native + địa chỉ đã cấu hình IP máy bếp (web không có đường in
+        // mạng; bật hộp in trình duyệt mỗi đơn thì phiền hơn có ích). id null = đơn offline chưa
+        // có số (server cấp order_no lúc ghi) → in không số, bếp vẫn phải làm món ngay. Không
+        // bao giờ ném ra ngoài: gọi trong .then của submitOrder, lỗi lọt ra sẽ bị .catch bên
+        // dưới hiểu nhầm là ghi đơn thất bại.
+        const kitchenIp = nativePrinterIp(selectedAddress?.kitchen_printer_ip)
+        // Món nạp lại từ "Sửa" (reopenRoundIntoCart gắn item.edit) → phiếu ghi SỬA ĐƠN để bếp
+        // bỏ phiếu cũ thay vì làm thêm. Đơn mang đi được cấp số MỚI khi sửa (bàn thì giữ số) —
+        // ghi kèm số cũ để bếp dò ra phiếu nào bị thay.
+        const edit = cartItems.find(it => it.edit)?.edit
+        const printKitchen = (id) => {
+            if (!kitchenIp) return
+            ;(id ? fetchOrderNo(id).catch(() => null) : Promise.resolve(null))
+                .then(orderNo => printKitchenTicket(kitchenIp, {
+                    orderNo, tableName: tableNameArg, lines: addLines,
+                    tag: edit && `SỬA ĐƠN${edit.orderNo != null && edit.orderNo !== orderNo ? ` (thay #${edit.orderNo})` : ''}`,
+                }))
+                .catch(err => showError(err, 'In phiếu bếp'))
+        }
         // Bàn cộng dồn ngay, cùng kiểu lạc quan như doanh thu ở trên — nhân viên phải
         // thấy tổng bàn nhảy lên trong cùng cú chạm, không đợi vòng fetch. Guard bằng
         // dineIn (không phải tableNameArg): đơn mang đi ở địa chỉ CÓ bàn cũng phải cộng
@@ -606,17 +632,13 @@ export function POSProvider() {
         // Địa chỉ tắt Bàn ngồi thì openTables chưa từng fetch (xem effect refreshTables ở
         // trên), cộng vào đó không ai đọc — bỏ qua cho khỏi phình state vô ích.
         if (dineInRef.current) setOpenTables(prev => {
-            // Cùng dạng nhãn như fetchOpenTables (tên món kèm topping).
-            const addLines = mergeTableLines([], cartItems.map(it => ({
-                name: tableLineName(it.name, [...(it.extras || []), ...(it.toppings || [])].map(e => e.name)),
-                qty: it.quantity,
-            })))
             const addRound = {
                 id: orderId, createdAt: addedRow.createdAt, total: netTotal, servedAt: null, lines: addLines,
                 items: cartItems.map(it => ({
                     productId: it.productId, qty: it.quantity,
                     extraIds: (it.extras || []).map(e => e.id).filter(Boolean),
                     toppingIds: (it.toppings || []).map(t => t.id).filter(Boolean),
+                    note: it.note || null,
                 })),
             }
             const i = prev.findIndex(t => t.name === tableNameArg)
@@ -664,11 +686,13 @@ export function POSProvider() {
                     extra_ids: item.extras?.map(e => e.id).filter(Boolean) || [],
                     topping_ids: item.toppings?.map(t => t.id).filter(Boolean) || [],
                     discount_amount: computeDiscount(cartLineSubtotal(item), item.discount || NO_DISCOUNT).discountAmount,
+                    note: item.note || null,
                     products: { name: item.name },
                 })),
             }
             setTodayOrders(prev => [optimisticOrder, ...prev])
             submitOrder(cartItems, netTotal, null, addressId, cartCost, costPerItem, profile?.name, discountApplied, orderId, tableNameArg)
+                .then(() => printKitchen(orderId))
                 .catch(err => {
                     if (isNetworkError(err)) {
                         // Reuse orderId already sent to the RPC above — if the server actually
@@ -680,6 +704,7 @@ export function POSProvider() {
                         )
                         setTodayOrders(prev => prev.filter(o => o !== optimisticOrder)) // offline pending list shows it instead
                         showToast('Lỗi mạng – lưu offline', 'warning')
+                        printKitchen(null)
                     } else {
                         // dineIn: handleConfirm đã dọn giỏ trước khi gửi (guard chống double-tap),
                         // nên lỗi thật (không phải mạng — nhánh trên đã nuốt) sẽ làm MẤT nguyên
@@ -703,6 +728,7 @@ export function POSProvider() {
                 netTotal, null, addressId, cartCost, profile?.name, discountApplied, null, tableNameArg
             )
             showToast(`Lưu offline (${getPendingCount()} đơn chờ)`, 'warning')
+            printKitchen(null)
         }
     }
 
@@ -757,13 +783,15 @@ export function POSProvider() {
         }
     }, [])
 
-    // dineIn: giảm giá riêng một dòng trong giỏ (mở từ CartListModal). Sống trên
-    // chính cart item nên tự dọn khi dòng đó bị xoá/gửi đơn — không cần reset riêng.
-    const setItemDiscount = useCallback((cartItemId, itemDiscount) => {
-        const next = cartRef.current.map(i => i.cartItemId === cartItemId ? { ...i, discount: itemDiscount } : i)
+    // dineIn: giảm giá / ghi chú riêng một dòng trong giỏ (mở từ CartListModal / CartNoteModal).
+    // Sống trên chính cart item nên tự dọn khi dòng đó bị xoá/gửi đơn — không cần reset riêng.
+    const patchCartItem = useCallback((cartItemId, patch) => {
+        const next = cartRef.current.map(i => i.cartItemId === cartItemId ? { ...i, ...patch } : i)
         cartRef.current = next
         setCart(next)
     }, [])
+    const setItemDiscount = useCallback((cartItemId, discount) => patchCartItem(cartItemId, { discount }), [patchCartItem])
+    const setItemNote = useCallback((cartItemId, note) => patchCartItem(cartItemId, { note }), [patchCartItem])
 
     // Cancel the currently-held item without submitting (undo a mis-tap).
     // dineIn: mọi món có trong giỏ đều hiện X trên card (held = qty > 0), nên X phải
@@ -952,6 +980,8 @@ export function POSProvider() {
                 quantity: it.qty,
                 extras: (productExtras[p.id] || []).filter(e => it.extraIds.includes(e.id)),
                 toppings: (productToppings[p.id] || []).filter(t => (it.toppingIds || []).includes(t.id)),
+                note: it.note,
+                edit: { orderNo: round.orderNo ?? null }, // phiếu bếp in "SỬA ĐƠN", xem doSubmit
             })
         }
         // Xoá hỏng thì DỪNG: nạp giỏ lúc đợt cũ còn nguyên là nhân đôi đơn của khách.
@@ -1088,7 +1118,7 @@ export function POSProvider() {
     const cartValue = useMemo(() => ({
         cart, activeCartItemId,
         handleAddItem, cancelHeld, handleToggleExtra, handleToggleStickyExtra, handleToggleTopping, commitHeld, reopenRoundIntoCart,
-        setItemDiscount,
+        setItemDiscount, setItemNote,
         dineIn, handleConfirm, tableName, setTableName,
         openTables, refreshTables, handleCloseTable, toggleServed, moveTableRounds,
         enabledStickyExtraIds,

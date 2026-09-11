@@ -297,9 +297,10 @@ export default function TableModal({ onClose, inline = false }) {
                                                 className={`${CARD_H} relative rounded-[20px] border p-3.5 flex flex-col gap-1.5 transition-colors ${active ? 'bg-primary/5 border-primary' : busy ? 'bg-surface border-border/60' : 'bg-surface/50 border-border/40'}`}
                                             >
                                                 {/* Kéo để sắp xếp lại lưới — góc dưới-phải, chỉ quản lý +
-                                                    bàn cố định. Ẩn lúc đang gõ đổi tên vì form chiếm hết
-                                                    vùng thẻ. */}
-                                                {canEdit && configured.includes(name) && renaming !== name && (
+                                                    bàn cố định + bàn trống (bàn có món thì góc đó dành cho
+                                                    dòng "N món chưa ra"). Ẩn lúc đang gõ đổi tên vì form
+                                                    chiếm hết vùng thẻ. */}
+                                                {canEdit && !busy && configured.includes(name) && renaming !== name && (
                                                     <div className="absolute bottom-2 right-2">{handle}</div>
                                                 )}
                                                 {/* Đổi tên: chạm thẳng vào tên bàn (xem span bên dưới), không cần

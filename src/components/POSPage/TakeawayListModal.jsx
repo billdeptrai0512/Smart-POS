@@ -12,6 +12,7 @@ import { usePrintArmed } from '../../hooks/usePrintArmed'
 import { Dialog, MODAL_PANEL, CHIP, CHIP_IDLE, TIME_PILL } from '../common/ModalShell'
 import PrintBill from '../common/PrintBill'
 import TableTargetPicker from './TableTargetPicker'
+import KitchenReprintButton from './KitchenReprintButton'
 
 // Đơn mang đi chưa ra món, gộp từ chính bucket name=null trong openTables (xem
 // fetchOpenTables) — mở từ thẻ "Mang đi" trong TableModal khi có đơn đang chờ. Khác
@@ -148,6 +149,7 @@ function TakeawayRow({ order, onToggleServed, onMove, onEdit, onDelete }) {
                 >
                     {printArmed ? <Loader size={13} className="animate-spin" /> : <Printer size={13} strokeWidth={2.25} />}
                 </button>
+                <KitchenReprintButton round={order} tableName={null} />
                 <button
                     onClick={onEdit}
                     className={`${CHIP_IDLE} px-2.5 hover:text-text hover:border-primary/40`}

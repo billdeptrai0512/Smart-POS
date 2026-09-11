@@ -6,12 +6,14 @@ import { dateStringVN } from '../utils/dateVN'
 function groupItems(rawItems) {
     const byLabel = new Map()
     for (const it of rawItems) {
-        const prev = byLabel.get(it.label)
+        // Khác ghi chú = khác dòng (bếp làm khác nhau), không gộp chung.
+        const key = it.note ? `${it.label} — ${it.note}` : it.label
+        const prev = byLabel.get(key)
         if (prev) {
             prev.quantity += it.quantity
             prev.cost += it.cost
         } else {
-            byLabel.set(it.label, { ...it })
+            byLabel.set(key, { ...it })
         }
     }
     return [...byLabel.values()].map(i => ({
@@ -20,13 +22,14 @@ function groupItems(rawItems) {
         quantity: i.quantity,
         productId: i.productId,
         extraIds: i.extraIds,
+        note: i.note || null,
     }))
 }
 
 // Normalize today's online orders + pending offline orders into the row shape
 // HistoryPage's OrdersList expects:
 //   { id, total, cost, createdAt, staffName, deletedAt, deletedBy,
-//     isOffline, paymentMethod, items: [{ text, cost, quantity, productId, extraIds }] }
+//     isOffline, paymentMethod, items: [{ text, cost, quantity, productId, extraIds, note }] }
 // extraIds đi kèm mỗi dòng (không chỉ nằm trong label) — bill in đơn mang đi lẻ
 // (OrdersList) cần nó để tính lại Đơn giá/topping từ giá menu ĐANG hiệu lực, giống
 // priceLines() ở TableDetailModal.
@@ -56,6 +59,7 @@ export function useFormatHistoryOrders({ baseOrders, pendingOrders, productById,
                 productId: i.product_id,
                 extraIds: i.extra_ids || [],
                 discountAmount: i.discount_amount || 0,
+                note: i.note || null,
             }
         })
         const cost = (o.total_cost > 0)
@@ -104,6 +108,7 @@ export function useFormatHistoryOrders({ baseOrders, pendingOrders, productById,
                             quantity: i.quantity,
                             productId: i.productId,
                             extraIds: (i.extras || []).map(e => e.id).filter(Boolean),
+                            note: i.note || null,
                         }
                     })) : []
                 const cost = o.totalCost > 0

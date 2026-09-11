@@ -297,6 +297,9 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                                             {itemExtras.map(e => (
                                                 <span key={e.id} className={`pl-2.5 text-[12px] leading-snug text-text-secondary/70 ${order.deletedAt ? 'line-through' : ''}`}>• {e.name}</span>
                                             ))}
+                                            {item.note && (
+                                                <span className={`pl-2.5 text-[12px] leading-snug italic text-text-secondary break-words ${order.deletedAt ? 'line-through' : ''}`}>Ghi chú: {item.note}</span>
+                                            )}
                                         </div>
                                         {showOrderTotal && (
                                             <>

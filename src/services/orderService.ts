@@ -107,6 +107,7 @@ const ORDER_SELECT = `
         extra_ids,
         topping_ids,
         discount_amount,
+        note,
         products (
             name
         )
@@ -238,6 +239,7 @@ export async function submitOrder(
             quantity: item.quantity,
             extra_ids: item.extras?.length > 0 ? item.extras.map(e => e.id).filter(Boolean) : [],
             topping_ids: item.toppings?.length > 0 ? item.toppings.map(t => t.id).filter(Boolean) : [],
+            note: item.note || null,
             discount_amount: lineDiscountAmount(item)
         }))
     }
@@ -251,6 +253,15 @@ export async function submitOrder(
 
     if (error) throw error
     return { id }
+}
+
+// order_no do bulk_create_orders cấp lúc ghi (RPC trả VOID) — phiếu bếp đọc lại sau khi
+// submitOrder xong để in số.
+export async function fetchOrderNo(id: UUID): Promise<number | null> {
+    if (localRepo.isGuest() || !supabase) return null
+    const { data, error } = await supabase.from('orders').select('order_no').eq('id', id).single()
+    if (error) throw error
+    return data?.order_no ?? null
 }
 
 // Bulk submit offline orders in ONE HTTP Request
@@ -300,6 +311,7 @@ export async function bulkSubmitOrders(ordersArray: any[]): Promise<boolean> {
             quantity: item.quantity,
             extra_ids: item.extras?.length > 0 ? item.extras.map((e: any) => e.id).filter(Boolean) : (item.extraIds || []).filter(Boolean),
             topping_ids: item.toppings?.length > 0 ? item.toppings.map((t: any) => t.id).filter(Boolean) : (item.toppingIds || []).filter(Boolean),
+            note: item.note || null,
             discount_amount: lineDiscountAmount(item)
         }))
     }))
@@ -369,7 +381,7 @@ export async function fetchOrdersByRange(addressId: UUID | null, start: Date, en
         let query = supabase
             .from('orders')
             .select(`id, order_no, total, total_cost, discount_amount, payment_method, staff_name, table_name, created_at, deleted_at, deleted_by, print_count,
-                order_items(id, quantity, options, product_id, unit_cost, extra_ids, discount_amount, products(name))`)
+                order_items(id, quantity, options, product_id, unit_cost, extra_ids, discount_amount, note, products(name))`)
             .gte('created_at', start.toISOString())
             .lte('created_at', end.toISOString())
         if (addressId) query = query.eq('address_id', addressId)
@@ -428,7 +440,7 @@ export async function fetchRecentOrders(addressId: UUID | null, limit = 3): Prom
 // vẫn làm ở Nhật ký). Nhờ vậy TableModal/moveTableRounds/toggleServed dùng lại nguyên logic
 // "một bàn" cho cả mang đi, không cần state/fetch riêng.
 export type TableLine = { name: string; qty: number }
-export type TableRoundItem = { productId: UUID; qty: number; extraIds: UUID[]; toppingIds: UUID[]; discountAmount: number }
+export type TableRoundItem = { productId: UUID; qty: number; extraIds: UUID[]; toppingIds: UUID[]; discountAmount: number; note: string | null }
 export type TableRound = { id: UUID; orderNo: number | null; createdAt: string; total: number; discountAmount: number; servedAt: string | null; staffName: string | null; printCount: number; lines: TableLine[]; items: TableRoundItem[] }
 export type OpenTable = { name: string | null; total: number; rounds: TableRound[]; openedAt: string; lines: TableLine[] }
 
@@ -438,9 +450,12 @@ const PAYMENT_EXTRAS = new Set(['Tiền mặt', 'MoMo'])
 
 // Nhãn một dòng hoá đơn. Dùng ở fetchOpenTables (extras đã là chuỗi 'a, b' trong
 // order_items.options) và ở POSContext (extras còn là mảng object của giỏ).
-export function tableLineName(name: string, extraNames: (string | undefined)[]): string {
+// note: ghi chú riêng dòng (order_items.note) — nối sau " — " nên 2 ly cùng món khác ghi chú
+// không bị mergeTableLines gộp làm một, và tự hiện ở chi tiết bàn lẫn phiếu bếp.
+export function tableLineName(name: string, extraNames: (string | undefined)[], note?: string | null): string {
     const opts = extraNames.filter((n): n is string => !!n && !PAYMENT_EXTRAS.has(n))
-    return opts.length ? `${name} (${opts.join(', ')})` : name
+    const base = opts.length ? `${name} (${opts.join(', ')})` : name
+    return note ? `${base} — ${note}` : base
 }
 
 // Gộp dòng trùng nhãn. Dùng cả ở đây và ở POSContext (cộng lạc quan đợt vừa gửi).
@@ -589,7 +604,7 @@ export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable
 
     const { data, error } = await supabase
         .from('orders')
-        .select('id, order_no, total, discount_amount, created_at, served_at, staff_name, table_name, print_count, order_items(quantity, options, product_id, extra_ids, topping_ids, discount_amount, products(name))')
+        .select('id, order_no, total, discount_amount, created_at, served_at, staff_name, table_name, print_count, order_items(quantity, options, product_id, extra_ids, topping_ids, discount_amount, note, products(name))')
         .eq('address_id', addressId)
         .is('deleted_at', null)
         .is('table_closed_at', null)
@@ -618,7 +633,7 @@ export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable
         const roundLines = mergeTableLines([], (o.order_items || []).map((i: any) => ({
             // Món bị xoá khỏi menu sau khi đã bán: vẫn phải hiện một dòng, nếu không
             // thì tổng tiền không khớp với danh sách món.
-            name: tableLineName(i.products?.name || 'Món đã xoá', (i.options || '').split(', ')),
+            name: tableLineName(i.products?.name || 'Món đã xoá', (i.options || '').split(', '), i.note),
             qty: i.quantity,
         })))
         t.total += o.total
@@ -627,7 +642,7 @@ export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable
             staffName: o.staff_name ?? null, printCount: o.print_count || 0,
             lines: roundLines,
             items: (o.order_items || []).map((i: any) => ({
-                productId: i.product_id, qty: i.quantity, extraIds: i.extra_ids || [], toppingIds: i.topping_ids || [], discountAmount: i.discount_amount || 0,
+                productId: i.product_id, qty: i.quantity, extraIds: i.extra_ids || [], toppingIds: i.topping_ids || [], discountAmount: i.discount_amount || 0, note: i.note ?? null,
             })),
         })
         t.lines = mergeTableLines(t.lines, roundLines)

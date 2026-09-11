@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { formatVND } from '../../utils'
 import { timeStringVN, dateShortVN, dateFullVN } from '../../utils/dateVN'
+import { captureOffscreen, OFFSCREEN_FRAME_CSS } from '../../lib/escposBitmap'
 
 // Tờ bill khổ 80mm dùng chung cho bill theo BÀN (TableDetailModal) và bill ĐƠN LẺ
 // mang đi (OrdersList) — một mẫu in duy nhất, tránh 2 thiết kế lệch nhau khi sửa.
@@ -95,19 +96,9 @@ const PrintBill = forwardRef(function PrintBill(
                 // body (cao hơn bản in qua trình duyệt ~25%, tốn giấy mà không ai thấy vì hai
                 // đường in không bao giờ chạy cùng lúc). Giữ khớp với khối #print-bill trong
                 // index.css để hai đường in ra cùng một tờ.
-                el.style.cssText = 'position:fixed; left:-9999px; top:0; width:300px; background:#fff; color:#000; padding:10px 12px; font-size:12px; line-height:1.3;'
-                // Đợi 1 khung hình để trình duyệt thực sự layout/paint xong trước khi chụp —
-                // đổi style xong gọi html2canvas ngay có thể chụp trúng lúc chưa kịp vẽ.
-                await new Promise(requestAnimationFrame)
+                el.style.cssText = `${OFFSCREEN_FRAME_CSS} font-size:12px; line-height:1.3;`
                 try {
-                    const { default: html2canvas } = await import('html2canvas')
-                    // scale cố định (không theo devicePixelRatio của máy) — el rộng 300px,
-                    // ảnh in ra cần ~576px (PRINTER_WIDTH_PX, xem escposBitmap.js). DPR thấp
-                    // (1x) để mặc định sẽ ra ảnh 300px rồi bị phóng to mờ ở bước scale sau;
-                    // DPR cao (3x, phổ biến Android) ra ảnh ~900px, rasterize thừa ~9 lần khối
-                    // lượng pixel cần rồi vẫn bị scale ngược xuống — 2x cho ảnh ~600px, đủ nét
-                    // mà không phụ thuộc máy.
-                    return await html2canvas(el, { backgroundColor: '#fff', scale: 2 })
+                    return await captureOffscreen(el)
                 } finally {
                     el.className = prevClassName
                     if (prevStyle) el.setAttribute('style', prevStyle)

@@ -122,16 +122,46 @@ async function printWithRetry(ESCPOSPlugin, payload, attempts = PRINT_RETRY_ATTE
     throw lastErr
 }
 
+// Khung chụp ngoài màn hình dùng chung cho bill quầy (PrintBill.captureImage) và phiếu bếp.
+export const OFFSCREEN_FRAME_CSS = 'position:fixed; left:-9999px; top:0; width:300px; background:#fff; color:#000; padding:10px 12px;'
+
+// Chụp el (con TRỰC TIẾP của body: PrintBill portal ra body, phiếu bếp tự append) thành canvas.
+// Đợi 1 khung hình để trình duyệt layout/paint xong — đổi style xong chụp ngay có thể trúng
+// lúc chưa kịp vẽ. scale cố định 2 (không theo devicePixelRatio): el rộng 300px → ảnh ~600px,
+// đủ nét cho PRINTER_WIDTH_PX; DPR 1x mặc định ra ảnh 300px bị phóng mờ, DPR 3x (phổ biến
+// Android) rasterize thừa ~9 lần rồi vẫn bị scale ngược xuống. ignoreElements bỏ qua các con
+// khác của body (cả cây React của app) — html2canvas mặc định clone NGUYÊN document để chụp 1
+// phần tử, tốn vô ích mỗi đơn khi phiếu bếp tự in.
+export async function captureOffscreen(el) {
+    await new Promise(requestAnimationFrame)
+    const { default: html2canvas } = await import('html2canvas')
+    return html2canvas(el, { backgroundColor: '#fff', scale: 2, ignoreElements: n => n.parentElement === document.body && n !== el })
+}
+
+// In mạng được không: chỉ app native (Capacitor) + đã cấu hình IP. null → người gọi tự
+// fallback (bill quầy: hộp in trình duyệt; phiếu bếp: bỏ qua).
+export const nativePrinterIp = (ip) => (Capacitor.isNativePlatform() && ip) || null
+
+// Chuỗi gửi theo từng IP: máy in nhiệt TCP chỉ có 1 khe kết nối (xem printWithRetry) — 2 lệnh
+// cùng IP (phiếu bếp tự bắn liên tiếp, hoặc quán dùng 1 máy cho cả quầy lẫn bếp) xếp hàng thay
+// vì đụng nhau; khác IP vẫn in song song.
+const printerChains = new Map()
+function onPrinter(printerIp, job) {
+    const result = (printerChains.get(printerIp) ?? Promise.resolve()).then(job)
+    printerChains.set(printerIp, result.catch(() => {}))
+    return result
+}
+
 // In thẳng qua mạng bằng plugin native — dùng trên app Capacitor khi địa chỉ đã cấu
-// hình IP máy in (xem setPrinters ở AddressContext). billRef: ref tới <PrintBill>
-// đang mount sẵn trong DOM (đã có cùng props với bản in web). err.stage đánh dấu lỗi xảy
-// ra ở bước nào (capture DOM hay gửi mạng) — showError/Sentry (useToast.js) đọc lại để
-// debug từ xa không phải đoán, thay vì mọi lỗi in đều chung 1 message mù mờ như nhau.
-async function printBillNative(billRef, printerIp) {
+// hình IP máy in (xem setPrinters ở AddressContext). capture: promise canvas đang chụp
+// (PrintBill.captureImage cho bill quầy, captureOffscreen cho phiếu bếp). err.stage đánh dấu
+// lỗi xảy ra ở bước nào (capture DOM hay gửi mạng) — showError/Sentry (useToast.js) đọc lại
+// để debug từ xa không phải đoán, thay vì mọi lỗi in đều chung 1 message mù mờ như nhau.
+async function printImageNative(capture, label, printerIp) {
     let canvas
     try {
-        canvas = await withTimeout(billRef.current?.captureImage(), CAPTURE_TIMEOUT_MS, 'captureImage')
-        if (!canvas) throw new Error('Không tìm thấy #print-bill để chụp')
+        canvas = await withTimeout(capture, CAPTURE_TIMEOUT_MS, label)
+        if (!canvas) throw new Error(`${label}: không tìm thấy phần tử để chụp`)
     } catch (err) {
         err.stage = 'capture'
         throw err
@@ -139,7 +169,7 @@ async function printBillNative(billRef, printerIp) {
     const hex = canvasToEscPosImage(canvas)
     const { ESCPOSPlugin } = await import('@albgen/capacitor-escpos-plugin')
     try {
-        await printWithRetry(ESCPOSPlugin, {
+        await onPrinter(printerIp, () => printWithRetry(ESCPOSPlugin, {
             type: 'tcp',
             id: printerIp,
             address: printerIp,
@@ -156,14 +186,48 @@ async function printBillNative(billRef, printerIp) {
             // trắng, cắt xong thành mép đầu tờ kế tiếp — không xoá được bằng phần mềm.)
             mmFeedPaper: '32',
             text: `[C]<img>${hex}</img>\n`,
-        })
+        }))
     } catch (err) {
         err.stage = 'send'
         throw err
     }
 }
 
-// Khoá in — CẤP MODULE: chỉ 1 máy in vật lý dùng chung cho MỌI lệnh in trong app (bàn ở
+// Phiếu bếp: tự in mỗi lần tạo đơn (POSContext.doSubmit) ra máy bếp (kitchen_printer_ip).
+// Không có <PrintBill> mount sẵn như bill quầy — doSubmit chạy fire-and-forget trong context,
+// không có component để gắn ref — nên dựng DOM tạm, chụp, rồi gỡ. textContent chứ không
+// innerHTML: ghi chú là chữ người dùng gõ.
+const TICKET_RULE = 'border-top:1px dashed #000; margin:6px 0;'
+
+function buildKitchenTicket({ orderNo, tableName, lines, tag }) {
+    const el = document.createElement('div')
+    el.style.cssText = `${OFFSCREEN_FRAME_CSS} font:16px/1.35 Arial, Helvetica, sans-serif;` // chữ to hơn bill quầy — bếp đọc từ xa
+    const row = (text, css) => {
+        const d = document.createElement('div')
+        d.textContent = text
+        d.style.cssText = css
+        el.appendChild(d)
+    }
+    // tag: "SỬA ĐƠN" / "IN LẠI" — đóng khung ở đầu phiếu để bếp nhận ra ngay, không làm trùng món.
+    if (tag) row(tag, 'text-align:center; font-size:18px; font-weight:800; border:2px solid #000; padding:2px 0; margin-bottom:6px;')
+    if (orderNo != null) row(`#${orderNo}`, 'text-align:center; font-size:26px; font-weight:800;')
+    row(tableName ? `Bàn: ${tableName}` : 'Mang đi', 'text-align:center; font-size:20px; font-weight:800;')
+    row('', TICKET_RULE)
+    // Ghi chú từng món đã nằm sẵn trong l.name (tableLineName: "Tên (topping) — ghi chú").
+    for (const l of lines) row(`${l.qty} x ${l.name}`, 'font-weight:700; word-break:break-word;')
+    return el
+}
+
+// Không qua printBusy (fail-fast của nút In bill): phiếu bếp tự bắn theo từng đơn, không ai
+// đứng bấm lại, nên đơn tạo liền tay phải xếp hàng (onPrinter) chứ không được bị từ chối.
+// printerIp đã qua nativePrinterIp ở người gọi.
+export function printKitchenTicket(printerIp, ticket) {
+    const el = buildKitchenTicket(ticket)
+    document.body.appendChild(el)
+    return printImageNative(captureOffscreen(el).finally(() => el.remove()), 'captureKitchenTicket', printerIp)
+}
+
+// Khoá in bill — CẤP MODULE: chỉ 1 máy in quầy dùng chung cho MỌI lệnh in bill trong app (bàn ở
 // TableDetailModal lẫn từng đơn lẻ ở Nhật ký/OrdersList), nhưng không nơi nào khoá nút in
 // chéo giữa 2 bàn/đơn KHÁC nhau — bấm in bàn A rồi bấm in đơn B trong lúc A còn đang gửi dữ
 // liệu (vài giây thật qua mạng) là 2 lệnh cùng chạm máy in vật lý cùng lúc. Từ chối NGAY
@@ -173,7 +237,7 @@ let printBusy = false
 
 // In bill dùng chung cho mọi nơi gọi in (TableDetailModal, usePrintArmed) — trước đây mỗi
 // nơi tự chép lại y hệt logic native/web bên dưới, sửa 1 chỗ (như đợt vá timeout/retry ở
-// printBillNative) dễ quên áp lại chỗ còn lại. Native (Capacitor + đã cấu hình IP máy in):
+// printImageNative) dễ quên áp lại chỗ còn lại. Native (Capacitor + đã cấu hình IP máy in):
 // in bitmap qua mạng, không dialog. Web hoặc chưa cấu hình: mở hộp in trình duyệt/hệ điều
 // hành, đợi 'afterprint' hoặc tối đa AFTERPRINT_FALLBACK_MS.
 export async function printBillJob(billRef, printerIp) {
@@ -184,8 +248,8 @@ export async function printBillJob(billRef, printerIp) {
     }
     printBusy = true
     try {
-        if (Capacitor.isNativePlatform() && printerIp) {
-            await printBillNative(billRef, printerIp)
+        if (nativePrinterIp(printerIp)) {
+            await printImageNative(billRef.current?.captureImage(), 'captureImage', printerIp)
             return
         }
         await new Promise((resolve) => {
