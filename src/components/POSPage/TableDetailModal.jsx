@@ -161,7 +161,7 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
         // đè mất (xem printFailed/handleCloseTable). "Không in" hay Esc đều chỉ bỏ qua
         // bước in — bàn vẫn tính tiền bình thường ở dưới, không huỷ cả thao tác.
         const wantsPrint = await confirm({
-            title: `In bill cho ${table.name}?`,
+            title: `Xuất hoá đơn cho ${table.name}?`,
             detail: `${linesLabel(table.lines)} — ${formatVND(table.total)}`,
             cancelLabel: 'Không in',
             confirmLabel: 'In & Tính tiền',
