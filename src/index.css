@@ -1,6 +1,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
+/* html2canvas đo baseline font bằng 1 ảnh gif 1×1 (SMALL_IMAGE trong FontMetrics) chèn vào body
+   thật; preflight của Tailwind ép img thành display:block nên đo sai → mọi chữ trên bill quầy lẫn
+   phiếu bếp chụp ra bị vẽ lệch xuống vài px, đè lên viền/đường kẻ ("font bị hư"). Chỉ trả đúng
+   ảnh đo đó về inline, không đụng ảnh nào của app. */
+img[src^="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP"] {
+  display: inline;
+}
+
 /* Bàn ngồi chia đôi màn hình (POSPage): tablet/foldable thật, không phải phone
    xoay ngang. md:768px một mình rớt tablet nhỏ (iPad mini 744px, tablet Android
    7-8" 700-760px, Samsung Z Fold mở ra ~673-717px) — width>=650 chỉ tính khi
@@ -481,7 +489,7 @@ body.pwa-banner-open .address-scroll-list {
     padding: 8px 14px;
     background: #fff;
     color: #000;
-    font-family: ui-monospace, "Courier New", monospace;
+    font-family: Arial, Helvetica, sans-serif;
     font-size: 12px;
     /* Khớp với cssText trong PrintBill.captureImage (đường in app native) — sửa một bên
        thì sửa cả hai, không thì hai đường in ra hai tờ cao khác nhau. 1.3 thay cho 1.45:

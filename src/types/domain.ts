@@ -37,7 +37,7 @@ export interface CartItem {
     discount?: Discount
     /** Per-line kitchen note, set via CartNoteModal. */
     note?: string | null
-    /** Set on lines reloaded by "Sửa" (reopenRoundIntoCart) — kitchen ticket prints "SỬA ĐƠN". */
+    /** Set on lines reloaded by "Sửa" (reopenRoundIntoCart) — kitchen ticket prints "HỦY #<old no>". */
     edit?: { orderNo: number | null }
 }
 

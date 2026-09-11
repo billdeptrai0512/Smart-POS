@@ -2,22 +2,36 @@ import { forwardRef, useImperativeHandle, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { formatVND } from '../../utils'
+import { vietQrPayload } from '../../utils/vietqr'
 import { timeStringVN, dateShortVN, dateFullVN } from '../../utils/dateVN'
 import { captureOffscreen, OFFSCREEN_FRAME_CSS } from '../../lib/escposBitmap'
 
 // Tờ bill khổ 80mm dùng chung cho bill theo BÀN (TableDetailModal) và bill ĐƠN LẺ
 // mang đi (OrdersList) — một mẫu in duy nhất, tránh 2 thiết kế lệch nhau khi sửa.
 // Ẩn trên màn hình, chỉ hiện khi in (@media print + @page trong index.css).
-const BILL_RULE = { borderTop: '1px dashed #000', margin: '6px 0' }
+// Bố cục theo phong cách mẫu VietQR compact2: căn giữa, thoáng, đường kẻ mảnh liền thay cho
+// gạch đứt, thông tin dạng nhãn trái — giá trị phải, QR đóng khung mảnh + STK/số tiền bên dưới.
+const BILL_RULE = { borderTop: '1px solid #000', margin: '10px 0' }
 const BILL_COLS = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 58px 26px 58px', gap: 6 }
+const CENTER = { textAlign: 'center' }
+const MUTED = { fontSize: 11 }
 
-// ponytail: wifi quán hardcode cùng chỗ với logo/địa chỉ/SĐT (xem comment ngay dưới) —
-// đổi mật khẩu wifi sau này chỉ cần sửa 2 hằng này, QR tự sinh lại theo giá trị mới.
-const WIFI_SSID = 'KOPHIN COFFEE'
-const WIFI_PASSWORD = 'kophinxinchao'
-const WIFI_QR_VALUE = `WIFI:T:WPA;S:${WIFI_SSID};P:${WIFI_PASSWORD};;`
+// ponytail: tài khoản nhận chuyển khoản hardcode cùng chỗ với logo/địa chỉ/SĐT (xem comment
+// ngay dưới) — đổi tài khoản chỉ cần sửa 2 hằng này; QR tự sinh theo tổng hoá đơn.
+const BANK_BIN = '970407' // mã NAPAS của Techcombank (TCB)
+const BANK_ACCOUNT = '2274868686'
 
 const fullLabel = (d) => `${timeStringVN(d)} ${dateShortVN(d)}`
+
+// Dòng nhãn trái — giá trị phải (thông tin bàn/giờ lẫn các dòng tổng tiền).
+function Row({ label, children, style }) {
+    return (
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, ...style }}>
+            <span style={{ fontWeight: 700 }}>{label}</span>
+            <span style={{ textAlign: 'right' }}>{children}</span>
+        </div>
+    )
+}
 
 // tableName truthy → bill theo bàn: "Bàn: <tên>" + "Giờ vào" (openedAt, cố định) + "Giờ ra"
 // (thời điểm bấm in, cập nhật lại mỗi lần in). tableName null → đơn mang đi: "Bàn: Mang đi"
@@ -91,12 +105,12 @@ const PrintBill = forwardRef(function PrintBill(
                 // MÀN HÌNH thường (@media print không áp dụng) thì chữ kế thừa màu SÁNG từ
                 // theme tối của app → trắng trên nền trắng tôi ép, chữ vô hình dù đường viền
                 // (inline #000 riêng) vẫn thấy.
-                // font-size/line-height PHẢI set ở đây: html2canvas render theo style MÀN HÌNH,
-                // không áp @media print — thiếu thì bill in từ app native ăn 16px mặc định của
-                // body (cao hơn bản in qua trình duyệt ~25%, tốn giấy mà không ai thấy vì hai
+                // font/cỡ chữ/line-height PHẢI set ở đây: html2canvas render theo style MÀN HÌNH,
+                // không áp @media print — thiếu thì bill in từ app native ăn font + 16px mặc định
+                // của body (cao hơn bản in qua trình duyệt ~25%, tốn giấy mà không ai thấy vì hai
                 // đường in không bao giờ chạy cùng lúc). Giữ khớp với khối #print-bill trong
                 // index.css để hai đường in ra cùng một tờ.
-                el.style.cssText = `${OFFSCREEN_FRAME_CSS} font-size:12px; line-height:1.3;`
+                el.style.cssText = `${OFFSCREEN_FRAME_CSS} font-family:Arial, Helvetica, sans-serif; font-size:12px; line-height:1.3;`
                 try {
                     return await captureOffscreen(el)
                 } finally {
@@ -123,35 +137,36 @@ const PrintBill = forwardRef(function PrintBill(
                 chưa có cột logo/address/phone (xem AddressContext), nên chưa thể tự
                 set theo từng địa chỉ. Sau này mỗi khách cần tự upload logo + nhập
                 địa chỉ/SĐT riêng cho quán của họ thay vì dùng chung khối này. */}
-            <div style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-                <div style={{ textAlign: 'center', fontWeight: 800, fontSize: 16, letterSpacing: 0.5 }}>KÔPHiN COFFEE</div>
-                {/* <div style={{ textAlign: 'center', fontWeight: 800, fontSize: 9, letterSpacing: 3, marginTop: 2 }}>COFFEE TO GO</div> */}
+            <div style={{ ...CENTER, fontWeight: 800, fontSize: 18, letterSpacing: 0.5 }}>KÔPHiN COFFEE</div>
+            {/* <div style={{ textAlign: 'center', fontWeight: 800, fontSize: 9, letterSpacing: 3, marginTop: 2 }}>COFFEE TO GO</div> */}
+            <div style={{ ...CENTER, ...MUTED, marginTop: 4 }}>
+                <div style={{ whiteSpace: 'nowrap' }}>Địa chỉ: 31 Nguyễn Thị Tươi,</div>
+                <div style={{ whiteSpace: 'nowrap' }}>P. Tân Đông Hiệp, TPHCM</div>
+                <div>Điện thoại: 0794 466 366</div>
             </div>
-            <div style={{ textAlign: 'center', marginTop: 4, whiteSpace: 'nowrap' }}>Địa chỉ: 31 Nguyễn Thị Tươi,</div>
-            <div style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>P. Tân Đông Hiệp, TPHCM</div>
-            <div style={{ textAlign: 'center' }}>Điện thoại: 0794 466 366</div>
             <div style={BILL_RULE} />
-            <div style={{ textAlign: 'center', fontWeight: 700, textTransform: 'uppercase' }}>
+            <div style={{ ...CENTER, fontWeight: 800, fontSize: 14, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Hoá đơn thanh toán
             </div>
-            {orderNo != null && <div style={{ textAlign: 'center' }}>Số: HĐ{String(orderNo).padStart(6, '0')}</div>}
-            <div style={{ textAlign: 'center' }}>Ngày: <span ref={printDateRef}>{dateFullVN(new Date())}</span></div>
-            {tableName ? (
-                <>
-                    <div style={{ marginTop: 8 }}><b>Bàn:</b> {tableName}</div>
-                    <div><b>Giờ vào:</b> {fullLabel(new Date(openedAt))}</div>
-                    <div><b>Giờ ra:</b> <span ref={printedAtRef}>{fullLabel(new Date())}</span></div>
-                </>
-            ) : (
-                <>
-                    <div style={{ marginTop: 8 }}><b>Bàn:</b> Mang đi</div>
-                    <div><b>Giờ:</b> {timeStringVN(new Date(openedAt))}</div>
-                </>
-            )}
-            {staffName && <div><b>Nhân viên:</b> {staffName}</div>}
-            <div><b>In lần:</b> <span ref={printCountLabelRef}>{initialPrintCount}</span></div>
+            <div style={{ ...CENTER, ...MUTED, marginTop: 2 }}>
+                {orderNo != null && <div>Số: HĐ{String(orderNo).padStart(6, '0')}</div>}
+                <div>Ngày: <span ref={printDateRef}>{dateFullVN(new Date())}</span></div>
+            </div>
+            <div style={{ marginTop: 10 }}>
+                <Row label="Bàn">{tableName || 'Mang đi'}</Row>
+                {tableName ? (
+                    <>
+                        <Row label="Giờ vào">{fullLabel(new Date(openedAt))}</Row>
+                        <Row label="Giờ ra"><span ref={printedAtRef}>{fullLabel(new Date())}</span></Row>
+                    </>
+                ) : (
+                    <Row label="Giờ">{timeStringVN(new Date(openedAt))}</Row>
+                )}
+                {staffName && <Row label="Nhân viên">{staffName}</Row>}
+                <Row label="In lần"><span ref={printCountLabelRef}>{initialPrintCount}</span></Row>
+            </div>
             <div style={BILL_RULE} />
-            <div style={{ ...BILL_COLS, fontWeight: 700 }}>
+            <div style={{ ...BILL_COLS, fontWeight: 700, marginBottom: 2 }}>
                 <span style={{ whiteSpace: 'nowrap' }}>Tên hàng</span>
                 <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Đơn giá</span>
                 <span style={{ textAlign: 'right' }}>SL</span>
@@ -189,29 +204,23 @@ const PrintBill = forwardRef(function PrintBill(
                 )
             })}
             <div style={BILL_RULE} />
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontWeight: 700 }}>TIỀN HÀNG</span>
-                <span>{formatVND(subtotal)}</span>
-            </div>
-            {discountTotal > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: 700 }}>GIẢM GIÁ ({discountPct}%)</span>
-                    <span>-{formatVND(discountTotal)}</span>
+            <Row label="TIỀN HÀNG">{formatVND(subtotal)}</Row>
+            {discountTotal > 0 && <Row label={`GIẢM GIÁ (${discountPct}%)`}>-{formatVND(discountTotal)}</Row>}
+            <Row label="TỔNG THANH TOÁN" style={{ fontWeight: 800, fontSize: 14, marginTop: 4 }}>{formatVND(total)}</Row>
+            {/* QR chuyển khoản (VietQR, tự sinh — không cần mạng lúc in). Bọc flex chứ không
+                margin:auto trên chính <svg>: html2canvas chụp svg block-level bị bóp méo tỉ lệ,
+                QR in ra quét không được. */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+                <div style={{ padding: 6, border: '1px solid #000' }}>
+                    <QRCodeSVG value={vietQrPayload({ bin: BANK_BIN, account: BANK_ACCOUNT, amount: total })} size={140} />
                 </div>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
-                <span>TỔNG THANH TOÁN</span>
-                <span>{formatVND(total)}</span>
             </div>
-            <div style={BILL_RULE} />
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
-                <QRCodeSVG value={WIFI_QR_VALUE} size={90} />
-            </div>
-            <div style={{ textAlign: 'center', marginTop: 4 }}>Quét mã QR để truy cập Wifi</div>
-            <div style={{ textAlign: 'center', marginTop: 8, fontWeight: 700, whiteSpace: 'nowrap' }}>
+            <div style={{ ...CENTER, ...MUTED, marginTop: 6 }}>Techcombank - {BANK_ACCOUNT}</div>
+            <div style={{ ...CENTER, ...MUTED }}>Số tiền: {formatVND(total)}</div>
+            <div style={{ ...CENTER, marginTop: 10, fontWeight: 700, whiteSpace: 'nowrap' }}>
                 Xin cảm ơn và hẹn gặp lại quý khách!
             </div>
-            <div style={{ textAlign: 'center', fontStyle: 'italic' }}>Powered by KOPOS</div>
+            <div style={{ ...CENTER, ...MUTED, fontStyle: 'italic' }}>Powered by KOPOS</div>
         </div>
     ), document.body)
 })

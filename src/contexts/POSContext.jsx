@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { nativePrinterIp, printKitchenTicket } from '../lib/escposBitmap'
-import { fetchTodayStats, submitOrder, fetchOrderNo, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext, fetchOpenTables, closeTable, reopenTable, markOrderServed, mergeTableLines, extractRounds, dropTableByName, restoreTable, moveRoundsIntoTable, tableLineName, moveTableRounds as moveTableRoundsService } from '../services/orderService'
+import { nativePrinterIp } from '../lib/escposBitmap'
+import { printKitchenTicket } from '../components/common/KitchenTicket'
+import { fetchTodayStats, submitOrder, fetchOrderNo, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext, fetchOpenTables, closeTable, reopenTable, markOrderServed, mergeTableLines, extractRounds, dropTableByName, restoreTable, moveRoundsIntoTable, tableLineName, tableLine, moveTableRounds as moveTableRoundsService } from '../services/orderService'
 import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder, addPendingTableClose, removePendingTableClose } from '../hooks/useOfflineSync'
 import { useOrdersPoll } from '../hooks/useOrdersPoll'
@@ -601,26 +602,25 @@ export function POSProvider() {
         const orderId = online ? crypto.randomUUID() : null
         // Cùng dạng nhãn như fetchOpenTables (tên món kèm topping) — dùng cho đợt lạc quan của
         // bàn lẫn phiếu bếp.
-        const addLines = mergeTableLines([], cartItems.map(it => ({
-            name: tableLineName(it.name, [...(it.extras || []), ...(it.toppings || [])].map(e => e.name), it.note),
-            qty: it.quantity,
-        })))
+        const addLines = mergeTableLines([], cartItems.map(it =>
+            tableLine(it.name, [...(it.extras || []), ...(it.toppings || [])].map(e => e.name), it.note, it.quantity)))
         // Phiếu bếp: chỉ app native + địa chỉ đã cấu hình IP máy bếp (web không có đường in
         // mạng; bật hộp in trình duyệt mỗi đơn thì phiền hơn có ích). id null = đơn offline chưa
         // có số (server cấp order_no lúc ghi) → in không số, bếp vẫn phải làm món ngay. Không
         // bao giờ ném ra ngoài: gọi trong .then của submitOrder, lỗi lọt ra sẽ bị .catch bên
         // dưới hiểu nhầm là ghi đơn thất bại.
         const kitchenIp = nativePrinterIp(selectedAddress?.kitchen_printer_ip)
-        // Món nạp lại từ "Sửa" (reopenRoundIntoCart gắn item.edit) → phiếu ghi SỬA ĐƠN để bếp
-        // bỏ phiếu cũ thay vì làm thêm. Đơn mang đi được cấp số MỚI khi sửa (bàn thì giữ số) —
-        // ghi kèm số cũ để bếp dò ra phiếu nào bị thay.
+        // Món nạp lại từ "Sửa" (reopenRoundIntoCart gắn item.edit) → phiếu in như thường, chỉ
+        // thêm khung "HỦY #số cũ": bếp huỷ phiếu cũ, làm theo phiếu này thay vì làm thêm. Phải ghi
+        // số cũ vì đơn mang đi được cấp số MỚI khi sửa (bàn thì giữ số). Đơn cũ không có số
+        // (offline chưa đồng bộ) thì bếp không dò theo số được → "HỦY PHIẾU CŨ".
         const edit = cartItems.find(it => it.edit)?.edit
         const printKitchen = (id) => {
             if (!kitchenIp) return
             ;(id ? fetchOrderNo(id).catch(() => null) : Promise.resolve(null))
                 .then(orderNo => printKitchenTicket(kitchenIp, {
                     orderNo, tableName: tableNameArg, lines: addLines,
-                    tag: edit && `SỬA ĐƠN${edit.orderNo != null && edit.orderNo !== orderNo ? ` (thay #${edit.orderNo})` : ''}`,
+                    tag: edit && (edit.orderNo != null ? `HỦY #${edit.orderNo}` : 'HỦY PHIẾU CŨ'),
                 }))
                 .catch(err => showError(err, 'In phiếu bếp'))
         }
@@ -981,7 +981,7 @@ export function POSProvider() {
                 extras: (productExtras[p.id] || []).filter(e => it.extraIds.includes(e.id)),
                 toppings: (productToppings[p.id] || []).filter(t => (it.toppingIds || []).includes(t.id)),
                 note: it.note,
-                edit: { orderNo: round.orderNo ?? null }, // phiếu bếp in "SỬA ĐƠN", xem doSubmit
+                edit: { orderNo: round.orderNo ?? null }, // phiếu bếp in "HỦY #số cũ", xem doSubmit
             })
         }
         // Xoá hỏng thì DỪNG: nạp giỏ lúc đợt cũ còn nguyên là nhân đôi đơn của khách.

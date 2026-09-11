@@ -154,10 +154,10 @@ function onPrinter(printerIp, job) {
 
 // In thẳng qua mạng bằng plugin native — dùng trên app Capacitor khi địa chỉ đã cấu
 // hình IP máy in (xem setPrinters ở AddressContext). capture: promise canvas đang chụp
-// (PrintBill.captureImage cho bill quầy, captureOffscreen cho phiếu bếp). err.stage đánh dấu
+// (PrintBill.captureImage cho bill quầy, printKitchenTicket cho phiếu bếp). err.stage đánh dấu
 // lỗi xảy ra ở bước nào (capture DOM hay gửi mạng) — showError/Sentry (useToast.js) đọc lại
 // để debug từ xa không phải đoán, thay vì mọi lỗi in đều chung 1 message mù mờ như nhau.
-async function printImageNative(capture, label, printerIp) {
+export async function printImageNative(capture, label, printerIp) {
     let canvas
     try {
         canvas = await withTimeout(capture, CAPTURE_TIMEOUT_MS, label)
@@ -191,40 +191,6 @@ async function printImageNative(capture, label, printerIp) {
         err.stage = 'send'
         throw err
     }
-}
-
-// Phiếu bếp: tự in mỗi lần tạo đơn (POSContext.doSubmit) ra máy bếp (kitchen_printer_ip).
-// Không có <PrintBill> mount sẵn như bill quầy — doSubmit chạy fire-and-forget trong context,
-// không có component để gắn ref — nên dựng DOM tạm, chụp, rồi gỡ. textContent chứ không
-// innerHTML: ghi chú là chữ người dùng gõ.
-const TICKET_RULE = 'border-top:1px dashed #000; margin:6px 0;'
-
-function buildKitchenTicket({ orderNo, tableName, lines, tag }) {
-    const el = document.createElement('div')
-    el.style.cssText = `${OFFSCREEN_FRAME_CSS} font:16px/1.35 Arial, Helvetica, sans-serif;` // chữ to hơn bill quầy — bếp đọc từ xa
-    const row = (text, css) => {
-        const d = document.createElement('div')
-        d.textContent = text
-        d.style.cssText = css
-        el.appendChild(d)
-    }
-    // tag: "SỬA ĐƠN" / "IN LẠI" — đóng khung ở đầu phiếu để bếp nhận ra ngay, không làm trùng món.
-    if (tag) row(tag, 'text-align:center; font-size:18px; font-weight:800; border:2px solid #000; padding:2px 0; margin-bottom:6px;')
-    if (orderNo != null) row(`#${orderNo}`, 'text-align:center; font-size:26px; font-weight:800;')
-    row(tableName ? `Bàn: ${tableName}` : 'Mang đi', 'text-align:center; font-size:20px; font-weight:800;')
-    row('', TICKET_RULE)
-    // Ghi chú từng món đã nằm sẵn trong l.name (tableLineName: "Tên (topping) — ghi chú").
-    for (const l of lines) row(`${l.qty} x ${l.name}`, 'font-weight:700; word-break:break-word;')
-    return el
-}
-
-// Không qua printBusy (fail-fast của nút In bill): phiếu bếp tự bắn theo từng đơn, không ai
-// đứng bấm lại, nên đơn tạo liền tay phải xếp hàng (onPrinter) chứ không được bị từ chối.
-// printerIp đã qua nativePrinterIp ở người gọi.
-export function printKitchenTicket(printerIp, ticket) {
-    const el = buildKitchenTicket(ticket)
-    document.body.appendChild(el)
-    return printImageNative(captureOffscreen(el).finally(() => el.remove()), 'captureKitchenTicket', printerIp)
 }
 
 // Khoá in bill — CẤP MODULE: chỉ 1 máy in quầy dùng chung cho MỌI lệnh in bill trong app (bàn ở

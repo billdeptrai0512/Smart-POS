@@ -439,7 +439,7 @@ export async function fetchRecentOrders(addressId: UUID | null, limit = 3): Prom
 // served_at IS NULL — ra món xong thì coi như xong, rơi khỏi bucket này (đọc/in/xoá đơn cũ
 // vẫn làm ở Nhật ký). Nhờ vậy TableModal/moveTableRounds/toggleServed dùng lại nguyên logic
 // "một bàn" cho cả mang đi, không cần state/fetch riêng.
-export type TableLine = { name: string; qty: number }
+export type TableLine = { name: string; qty: number; dish: string; opts: string[]; note: string | null }
 export type TableRoundItem = { productId: UUID; qty: number; extraIds: UUID[]; toppingIds: UUID[]; discountAmount: number; note: string | null }
 export type TableRound = { id: UUID; orderNo: number | null; createdAt: string; total: number; discountAmount: number; servedAt: string | null; staffName: string | null; printCount: number; lines: TableLine[]; items: TableRoundItem[] }
 export type OpenTable = { name: string | null; total: number; rounds: TableRound[]; openedAt: string; lines: TableLine[] }
@@ -447,15 +447,23 @@ export type OpenTable = { name: string | null; total: number; rounds: TableRound
 // 'Tiền mặt'/'MoMo' đi chung mảng extras nhưng là cách trả tiền, không phải topping —
 // cùng quy ước với buildLastOrderFrom* ở POSContext.
 const PAYMENT_EXTRAS = new Set(['Tiền mặt', 'MoMo'])
+const isOption = (n: string | undefined): n is string => !!n && !PAYMENT_EXTRAS.has(n)
 
 // Nhãn một dòng hoá đơn. Dùng ở fetchOpenTables (extras đã là chuỗi 'a, b' trong
 // order_items.options) và ở POSContext (extras còn là mảng object của giỏ).
 // note: ghi chú riêng dòng (order_items.note) — nối sau " — " nên 2 ly cùng món khác ghi chú
 // không bị mergeTableLines gộp làm một, và tự hiện ở chi tiết bàn lẫn phiếu bếp.
 export function tableLineName(name: string, extraNames: (string | undefined)[], note?: string | null): string {
-    const opts = extraNames.filter((n): n is string => !!n && !PAYMENT_EXTRAS.has(n))
+    const opts = extraNames.filter(isOption)
     const base = opts.length ? `${name} (${opts.join(', ')})` : name
     return note ? `${base} — ${note}` : base
+}
+
+// Dòng kèm các phần đã tách — phiếu bếp (KitchenTicket) in tên món rồi từng extra/ghi chú
+// xuống dòng riêng; không tách ngược được từ nhãn vì tên món/extra có thể chứa "(" hay " — ".
+// name vẫn là nhãn gộp (khoá của mergeTableLines): cùng nhãn thì các phần cũng giống nhau.
+export function tableLine(dish: string, extraNames: (string | undefined)[], note: string | null | undefined, qty: number): TableLine {
+    return { name: tableLineName(dish, extraNames, note), qty, dish, opts: extraNames.filter(isOption), note: note || null }
 }
 
 // Gộp dòng trùng nhãn. Dùng cả ở đây và ở POSContext (cộng lạc quan đợt vừa gửi).
@@ -630,12 +638,10 @@ export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable
     const byName = new Map<string | null, OpenTable>()
     for (const o of data as any[]) {
         const t: OpenTable = byName.get(o.table_name) ?? { name: o.table_name, total: 0, rounds: [], openedAt: o.created_at, lines: [] }
-        const roundLines = mergeTableLines([], (o.order_items || []).map((i: any) => ({
+        const roundLines = mergeTableLines([], (o.order_items || []).map((i: any) =>
             // Món bị xoá khỏi menu sau khi đã bán: vẫn phải hiện một dòng, nếu không
             // thì tổng tiền không khớp với danh sách món.
-            name: tableLineName(i.products?.name || 'Món đã xoá', (i.options || '').split(', '), i.note),
-            qty: i.quantity,
-        })))
+            tableLine(i.products?.name || 'Món đã xoá', (i.options || '').split(', '), i.note, i.quantity)))
         t.total += o.total
         t.rounds.push({
             id: o.id, orderNo: o.order_no ?? null, createdAt: o.created_at, total: o.total, discountAmount: o.discount_amount || 0, servedAt: o.served_at ?? null,

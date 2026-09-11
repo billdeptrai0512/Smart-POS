@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { ChefHat, Loader } from 'lucide-react'
 import { useCart } from '../../contexts/CartContext'
 import { useAddress } from '../../contexts/AddressContext'
-import { nativePrinterIp, printKitchenTicket } from '../../lib/escposBitmap'
+import { nativePrinterIp } from '../../lib/escposBitmap'
+import { printKitchenTicket } from '../common/KitchenTicket'
 import { CHIP_IDLE } from '../common/ModalShell'
 
 // In lại phiếu bếp cho 1 đợt/đơn (TableDetailModal, TakeawayListModal) — khi lần in tự động
