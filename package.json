@@ -15,7 +15,7 @@
     "test:money": "node scripts/test-money-staging.mjs",
     "check:search-path": "node scripts/check-search-path.mjs",
     "cap:sync": "vite build && npx cap sync",
-    "postinstall": "patch-package"
+    "postinstall": "node scripts/postinstall.mjs"
   },
   "dependencies": {
     "@albgen/capacitor-escpos-plugin": "^1.0.18",
