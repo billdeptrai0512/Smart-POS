@@ -55,11 +55,15 @@ beforeEach(() => { installLocalStorage() })
 const CONTRACTS = {
     today: {
         fn: (addr) => fetchDailyReportContext(addr),
-        keys: ['shift_closing', 'yesterday_closing', 'yesterday_orders', 'yesterday_expenses', 'target_payments'],
+        // KHÔNG có yesterday_orders/yesterday_expenses/target_orders/target_expenses: nhánh
+        // "Hôm nay" chỉ đọc 3 key này, đơn+chi phí hôm nay đi đường fetchTodayOrders/
+        // fetchTodayExpenses (xem migration 20260912_daily_report_context_trim.sql).
+        keys: ['shift_closing', 'yesterday_closing', 'target_payments'],
     },
     byDate: {
         fn: (addr) => fetchReportByDate(addr, '2026-06-01'),
-        keys: ['shift_closing', 'yesterday_closing', 'yesterday_orders', 'yesterday_expenses', 'target_orders', 'target_expenses', 'target_payments'],
+        // Cùng lý do với today: yesterday_* không ai đọc (20260912_report_by_date_trim.sql).
+        keys: ['shift_closing', 'yesterday_closing', 'target_orders', 'target_expenses', 'target_payments'],
     },
     range: {
         fn: (addr) => fetchReportByRange(addr, '2026-06-01T00:00:00.000Z', '2026-06-02T00:00:00.000Z', '2026-05-31T00:00:00.000Z', '2026-06-01T00:00:00.000Z'),

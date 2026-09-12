@@ -195,10 +195,16 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
 
     useEffect(() => {
         if (addressId === undefined) return
+        // Scope 1 ngày: ĐỢI cha fetch xong phiếu chốt rồi mới đọc tồn. Gọi sớm là gọi thừa —
+        // reload chưa có phiếu hôm qua nên openingStock ra rỗng, rồi seedReady bật làm reload
+        // đổi identity và effect này bắn lại get_ingredient_stocks_v2 y hệt lần nữa (mỗi lần
+        // mở trang 2 lượt quét toàn bộ shift_closings). Đợi không mất gì: trang vẫn đang
+        // skeleton chờ đúng RPC báo cáo đó (isReady trong DailyReportPage).
+        if (isDayScope && !seedReady) return
         reloadStocks()
         // Chỉ khi tab quay lại sau khi đi vắng — mỗi lần 'visible' là 2 query lặp vô hạn.
         return onTabReturn(reloadStocks)
-    }, [addressId, reloadStocks])
+    }, [addressId, reloadStocks, isDayScope, seedReady])
 
     // ── Remote merge: fold another device's saved inventory_report into local maps ──
     // Per-field rule: nếu field local đang dirty (≠ baseline → user đang gõ dở) thì GIỮ

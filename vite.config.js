@@ -33,7 +33,11 @@ export default defineConfig({
           // accident and drags it into the always-eager vendor-react chunk.
           if (id.includes('@sentry')) return
           if (id.includes('@supabase')) return 'vendor-supabase'
-          if (id.includes('recharts') || id.includes('/d3-') || id.includes('victory-vendor')) return 'vendor-charts'
+          // KHÔNG gom recharts/d3 vào một chunk tên sẵn. Làm thế thì React core bị kéo theo vào
+          // đúng chunk đó (rolldown đặt module dùng chung vào chunk đầu tiên cần nó), mà React
+          // core thì entry nào cũng cần ⇒ index.html modulepreload nguyên cụm recharts ~105KB
+          // gz trên MỌI trang, kể cả màn đăng nhập. Để rolldown tự tách: recharts rơi vào
+          // chunk riêng và chỉ tải khi thật sự vẽ biểu đồ (xem lazy() ở SalesCard/DailyReportPage).
           if (id.includes('react-router') || id.includes('react-dom') || id.includes('/react/') || id.includes('scheduler')) return 'vendor-react'
         },
       },

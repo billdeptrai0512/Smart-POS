@@ -1,8 +1,14 @@
-import { memo, useState, useEffect, useRef } from 'react'
+import { memo, useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { BarChart, Bar, CartesianGrid, XAxis } from 'recharts'
 import { formatVND } from '../../utils'
 import { useClickOutside } from '../../hooks/useClickOutside'
+
+// lazy: recharts nặng hơn cả phần còn lại của trang báo cáo cộng lại, mà chỉ để vẽ 1 biểu
+// đồ giờ. Tải SAU khi trang đã mount thay vì chặn trước nó — xem HourlyRevenueBars.
+// .catch → component rỗng: chunk tải hỏng (deploy mới, hoặc offline mà precache trượt) thì
+// lazy() THROW, mà <Suspense> không bắt lỗi — nó bay lên ErrorBoundary gốc và thổi bay CẢ
+// trang báo cáo vì một cái biểu đồ. Số liệu nằm ở các thẻ khác, mất biểu đồ thì thôi.
+const HourlyRevenueBars = lazy(() => import('./HourlyRevenueBars').catch(() => ({ default: () => null })))
 
 const CHART_HEIGHT = 200
 
@@ -225,11 +231,17 @@ function SalesCard({
                             </div>
                         )}
                         {chartWidth > 0 && (
-                            <BarChart width={chartWidth} height={CHART_HEIGHT} data={lineChartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#44403c" vertical={false} />
-                                <XAxis dataKey="hour" tick={{ fontSize: 10, fill: '#a8a29e' }} axisLine={false} tickLine={false} tickMargin={10} />
-                                <Bar dataKey="hourRevenue" shape={renderBar} />
-                            </BarChart>
+                            // fallback null: wrapper đã khoá sẵn CHART_HEIGHT nên chỗ trống lúc
+                            // tải không làm nhảy layout. Suspense phải đặt ở ĐÂY chứ không mượn
+                            // boundary của route — nếu không cả trang chớp lại skeleton.
+                            <Suspense fallback={null}>
+                                <HourlyRevenueBars
+                                    width={chartWidth}
+                                    height={CHART_HEIGHT}
+                                    data={lineChartData}
+                                    renderBar={renderBar}
+                                />
+                            </Suspense>
                         )}
                     </div>
                 ) : (

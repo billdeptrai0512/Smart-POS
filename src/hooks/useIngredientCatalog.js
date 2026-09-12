@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { fetchIngredientCostsWithUnits } from '../services/orderService'
 import { sortIngredients } from '../utils/ingredients'
 
@@ -7,7 +7,7 @@ import { sortIngredients } from '../utils/ingredients'
 // tới state kiểm kê/baseline/đồng bộ đa thiết bị của 1 ca — reload độc lập,
 // không đọc/ghi baseline.
 export function useIngredientCatalog(addressId, ingredientSortOrder) {
-    const [ingredientsList, setIngredientsList] = useState([])
+    const [rawList, setRawList] = useState([])
     const [isLoadingIngredients, setIsLoadingIngredients] = useState(true)
 
     const reloadIngredients = useCallback(() => {
@@ -16,12 +16,17 @@ export function useIngredientCatalog(addressId, ingredientSortOrder) {
         return fetchIngredientCostsWithUnits(addressId).then(list => {
             // Loại nguyên liệu được tắt "kiểm kê hao hụt" (count_in_audit === false).
             // Thiếu cờ (phiếu cũ / chưa migrate) → mặc định hiện.
-            const sorted = [...list]
-                .filter(r => r.count_in_audit !== false)
-                .sort((a, b) => sortIngredients(a.ingredient, b.ingredient, ingredientSortOrder))
-            setIngredientsList(sorted)
+            setRawList(list.filter(r => r.count_in_audit !== false))
         }).finally(() => setIsLoadingIngredients(false))
-    }, [addressId, ingredientSortOrder])
+    }, [addressId])
+
+    // Sắp xếp tách khỏi fetch: ingredient_sort_order đi kèm object địa chỉ, mà AddressContext
+    // thay object đó sau khi fetch addresses xong (cold start seed từ localStorage trước) —
+    // để array này trong deps của reloadIngredients thì mỗi lần thay là một round-trip thừa.
+    const ingredientsList = useMemo(
+        () => [...rawList].sort((a, b) => sortIngredients(a.ingredient, b.ingredient, ingredientSortOrder)),
+        [rawList, ingredientSortOrder],
+    )
 
     // Fetch-on-mount + refetch-on-dep-change; reloadIngredients sets isLoading=true
     // synchronously before the async fetch so the very first render already shows

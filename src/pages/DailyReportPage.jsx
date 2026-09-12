@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react'
 import { useHistory } from '../contexts/HistoryContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
@@ -21,7 +21,6 @@ import { useDateScope } from '../hooks/useDateScope'
 import { goToMenuStep } from '../utils/menuSequence'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import SalesCard from '../components/DailyReportPage/SalesCard'
-import DayPerformanceChart from '../components/DailyReportPage/DayPerformanceChart'
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import ExpenseEditorModal from '../components/DailyReportPage/ExpenseEditorModal'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
@@ -50,6 +49,12 @@ const isPrepFilled = (v) => v !== undefined && v !== null && v !== '' && Number(
 
 // Mốc lịch sử cho dự báo Soạn/Chuẩn bị — 3 tuần gần nhất cùng thứ, trung bình hoá (xem
 // averageIngredientMaps) thay vì chỉ đúng 1 tuần trước để đỡ nhạy với 1 ngày bất thường.
+// lazy: kéo theo recharts (vendor-charts) và chỉ hiện ở scope tuần/tháng — import tĩnh ở
+// đây bắt cả những lần mở tab Dòng tiền phải chờ nó. Cùng lý do với HourlyRevenueBars.
+// .catch → component rỗng, cùng lý do với HourlyRevenueBars trong SalesCard: <Suspense>
+// không bắt được lỗi tải chunk, để throw là mất cả trang chứ không chỉ mất biểu đồ.
+const DayPerformanceChart = lazy(() => import('../components/DailyReportPage/DayPerformanceChart').catch(() => ({ default: () => null })))
+
 const HISTORY_OFFSETS_TODAY = [7, 14, 21]     // cùng thứ HÔM NAY
 const HISTORY_OFFSETS_TOMORROW = [6, 13, 20]  // cùng thứ NGÀY MAI
 
@@ -279,10 +284,14 @@ export default function DailyReportPage() {
     // address; new tags added in /history are picked up on next mount or after
     // reportCache invalidation.
     const [expenseCategories, setExpenseCategories] = useState([])
+    // Dep là .id chứ không phải cả object: AddressContext seed selectedAddress từ localStorage
+    // rồi THAY bằng object mới khi fetch addresses xong (cold start) — nghe cả object thì mỗi
+    // lần thay là một round-trip thừa dù địa chỉ không hề đổi.
+    const selectedAddressId = selectedAddress?.id
     useEffect(() => {
-        if (!selectedAddress) return
-        fetchExpenseCategories(selectedAddress.id).then(setExpenseCategories)
-    }, [selectedAddress])
+        if (selectedAddressId === undefined) return
+        fetchExpenseCategories(selectedAddressId).then(setExpenseCategories)
+    }, [selectedAddressId])
 
     useEffect(() => {
         if (!isLoadingHistory) handleLoadHistory()
@@ -724,9 +733,9 @@ export default function DailyReportPage() {
         // khu Tồn kho. Tab mặc định là Dòng tiền, nên trước đây mỗi lần mở trang là 6
         // round-trip cho thứ chưa ai nhìn. An toàn được là nhờ forecastReady: chưa tải thì
         // isShiftFinalized không thể true, không latch nhầm (xem chỗ khai báo nó).
-        if (!isTodayScope || !selectedAddress || !showsInventoryTab) { setLastWeekItemsWeeks([]); setNextDowItemsWeeks([]); return }
+        if (!isTodayScope || selectedAddressId === undefined || !showsInventoryTab) { setLastWeekItemsWeeks([]); setNextDowItemsWeeks([]); return }
         let alive = true
-        const weeksOf = (offsets) => Promise.all(offsets.map(d => fetchLastWeekSameDayOrderItems(selectedAddress.id, d)))
+        const weeksOf = (offsets) => Promise.all(offsets.map(d => fetchLastWeekSameDayOrderItems(selectedAddressId, d)))
         // Gộp 2 chuỗi vào 1 Promise.all: 6 request vẫn bắn song song như cũ, chỉ chờ áp state
         // cùng lúc — để `forecastReady` chỉ bật khi CẢ HAI dự báo đã có mặt.
         Promise.all([weeksOf(HISTORY_OFFSETS_TODAY), weeksOf(HISTORY_OFFSETS_TOMORROW)])
@@ -738,7 +747,7 @@ export default function DailyReportPage() {
             })
             .catch(() => { if (alive) { setLastWeekItemsWeeks([]); setNextDowItemsWeeks([]) } })
         return () => { alive = false }
-    }, [isTodayScope, selectedAddress, showsInventoryTab])
+    }, [isTodayScope, selectedAddressId, showsInventoryTab])
 
     const toUsedMap = useCallback((items) => calculateEstimatedConsumption(
         items.map(i => ({ productId: i.product_id, qty: i.quantity, extras: (i.extra_ids || []).map(id => ({ id })) })),
@@ -1323,12 +1332,14 @@ export default function DailyReportPage() {
                                         showChart={!isRangeScope}
                                     />
                                     {isRangeScope && (
-                                        <DayPerformanceChart
-                                            orders={displayOrders}
-                                            range={scope}
-                                            start={rangeStart}
-                                            products={products}
-                                        />
+                                        <Suspense fallback={null}>
+                                            <DayPerformanceChart
+                                                orders={displayOrders}
+                                                range={scope}
+                                                start={rangeStart}
+                                                products={products}
+                                            />
+                                        </Suspense>
                                     )}
                                 </div>
                             </CashFlowCard>

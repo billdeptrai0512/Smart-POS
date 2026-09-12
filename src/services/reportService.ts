@@ -337,19 +337,14 @@ export async function fetchDailyReportContext(addressId: UUID) {
     return reportCache.through([addressId, 'dailyReportContext'], async () => {
         if (localRepo.isGuest()) {
             const todayStr = dateStringVN()
-            const yesterday = new Date(startOfDayVN().getTime() - 86_400_000)
-            const yesterdayStr = dateStringVN(yesterday)
+            const yesterdayStr = dateStringVN(new Date(startOfDayVN().getTime() - 86_400_000))
             const startToday = startOfDayVN()
-            const startYday = new Date(yesterday.getTime())
             const allExp = localRepo.fetchAllLocalExpenses(addressId)
             const expMap = new Map<string, Row>(allExp.map((e: Row) => [e.id, e]))
             return {
                 shift_closing: localRepo.fetchLocalShiftClosing(addressId, todayStr) || null,
                 yesterday_closing: localRepo.fetchLocalShiftClosing(addressId, yesterdayStr) || localRepo.fetchLocalYesterdayShiftClosing(addressId) || null,
-                yesterday_orders: localRepo.fetchLocalOrders(addressId, yesterdayStr),
-                yesterday_expenses: localRepo.fetchLocalExpenses(addressId, yesterdayStr),
                 target_payments: attachInvoiceMeta(filterLocalPayments(addressId, startToday, new Date(startToday.getTime() + 86_400_000)), expMap),
-                yesterday_payments: attachInvoiceMeta(filterLocalPayments(addressId, startYday, startToday), expMap),
             }
         }
         if (!supabase) return {}
@@ -365,9 +360,7 @@ export async function fetchReportByDate(addressId: UUID, dateStr: string) {
             const targetDateStr = dateStringVN(new Date(dateStr))
             const targetDate = startOfDayVN(new Date(dateStr))
             const targetEnd = new Date(targetDate.getTime() + 86_400_000)
-
-            const yesterday = new Date(targetDate.getTime() - 86_400_000)
-            const yesterdayStr = dateStringVN(yesterday)
+            const yesterdayStr = dateStringVN(new Date(targetDate.getTime() - 86_400_000))
 
             const allExp = localRepo.fetchAllLocalExpenses(addressId)
             const expMap = new Map<string, Row>(allExp.map((e: Row) => [e.id, e]))
@@ -375,12 +368,9 @@ export async function fetchReportByDate(addressId: UUID, dateStr: string) {
             return {
                 shift_closing: localRepo.fetchLocalShiftClosing(addressId, targetDateStr) || null,
                 yesterday_closing: localRepo.fetchLocalShiftClosing(addressId, yesterdayStr) || null,
-                yesterday_orders: localRepo.fetchLocalOrders(addressId, yesterdayStr),
-                yesterday_expenses: localRepo.fetchLocalExpenses(addressId, yesterdayStr),
                 target_orders: localRepo.fetchLocalOrders(addressId, targetDateStr),
                 target_expenses: localRepo.fetchLocalExpenses(addressId, targetDateStr),
                 target_payments: attachInvoiceMeta(filterLocalPayments(addressId, targetDate, targetEnd), expMap),
-                yesterday_payments: attachInvoiceMeta(filterLocalPayments(addressId, yesterday, targetDate), expMap),
             }
         }
         if (!supabase) return {}
