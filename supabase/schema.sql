@@ -275,18 +275,22 @@ CREATE POLICY "managers_full_access" ON orders
 -- Order items: cascade through orders
 ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "managers_order_items" ON order_items;
+-- Đồng bộ với 20260912_order_items_rls_exists.sql. KHÔNG quay lại dạng `order_id IN (SELECT
+-- id FROM orders WHERE ...)`: subquery đó không có mốc nên gom id của MỌI đơn user từng tạo,
+-- đo trên prod là Seq Scan 41.021 dòng / 571 ms để trả về 97 dòng. EXISTS tương quan tra thẳng
+-- PK → 4,8 ms. Bọc CẢ lời gọi is_admin_auth trong (SELECT ...) để thành InitPlan chạy 1 lần.
 CREATE POLICY "managers_order_items" ON order_items
   FOR ALL USING (
-    order_id IN (
-      SELECT o.id FROM orders o
-      WHERE o.address_id IN (
-        SELECT a.id FROM addresses a
-        JOIN users u ON u.id = a.manager_id
-        WHERE u.auth_id = auth.uid() OR u.id IN (
-          SELECT manager_id FROM users WHERE auth_id = auth.uid() AND role = 'staff'
+    EXISTS (
+      SELECT 1 FROM orders o
+      WHERE o.id = order_items.order_id
+        AND (
+          (SELECT public.is_admin_auth(auth.uid()))
+          OR o.address_id IN (
+            SELECT address_id FROM user_address_access
+            WHERE auth_id = (SELECT auth.uid())
+          )
         )
-      )
-      OR EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND role = 'admin')
     )
   );
 
