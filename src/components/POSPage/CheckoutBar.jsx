@@ -36,16 +36,16 @@ export default function CheckoutBar({
                     <span className="text-[17px] font-black text-text tabular-nums">{formatVND(finalTotal)}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                {/* Giỏ rỗng thì không có gì để giảm — ẩn hẳn thay vì để nút mờ, đỡ một
-                    món đồ chết trên thanh mà nhân viên vẫn thử bấm. */}
-                {!disabled && (
-                    <button
-                        onClick={() => setShowDiscount(true)}
-                        className={`${ICON_BTN} ${discountAmount > 0 ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/60 text-text'}`}
-                    >
-                        <Percent size={15} strokeWidth={2.5} />
-                    </button>
-                )}
+                {/* Giỏ rỗng thì không có gì để giảm — mờ đi như nút Ghi chú, giữ chỗ để thanh không nhảy. */}
+                <button
+                    type="button"
+                    onClick={() => setShowDiscount(true)}
+                    disabled={disabled}
+                    aria-label="Giảm giá"
+                    className={`${ICON_BTN} ${discountAmount > 0 ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/60 text-text'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                    <Percent size={15} strokeWidth={2.5} />
+                </button>
                 {/* Ghi chú từng món (CartNoteModal) — in lên phiếu bếp. Đếm số món đã có ghi
                     chú để nhìn thanh là biết, không phải mở modal. */}
                 <button
