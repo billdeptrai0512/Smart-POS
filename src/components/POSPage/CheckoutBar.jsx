@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Percent } from 'lucide-react'
+import { Percent, Pencil } from 'lucide-react'
 import { formatVND } from '../../utils'
 import TableModal from './TableModal'
 import CartListModal from './CartListModal'
 import CartNoteModal from './CartNoteModal'
 
-// Ô bàn và nút Ghi chú cùng một dáng nút trên thanh.
+// Ô bàn dùng dáng nút này; nút % và Ghi chú là bản icon cùng viền/bo, cỡ cố định bằng nhau.
 const CHIP_BTN = 'min-w-[92px] shrink-0 bg-surface-light border border-border/60 rounded-[12px] px-1.5 text-center focus:outline-none focus:border-primary/40 hover:border-primary/40 transition-colors'
+const ICON_BTN = 'shrink-0 w-[52px] h-[34px] border rounded-[12px] flex items-center justify-center gap-1 focus:outline-none hover:border-primary/40 transition-colors'
 const CHIP_LABEL = 'block text-[12px] font-bold uppercase tracking-wider text-text'
 
 // Thanh chốt bàn — chỉ render ở địa chỉ dine_in (xem addresses.dine_in).
@@ -26,24 +27,41 @@ export default function CheckoutBar({
     const noteCount = cart.filter(i => i.note).length
 
     return (
-        <footer className="shrink-0 bg-surface border-t border-border/80 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),16px)] shadow-[0_-4px_24px_rgba(0,0,0,0.02)]">
-            <div className="flex items-center gap-3 mb-3">
+        <footer className="shrink-0 bg-surface border-t border-border/80 px-6 dine-split:px-4 pt-3 pb-[max(env(safe-area-inset-bottom),16px)] shadow-[0_-4px_24px_rgba(0,0,0,0.02)]">
+            <div className="flex items-center justify-between gap-3 mb-3">
                 {/* Một con số duy nhất: số khách phải trả. Có giảm giá hay không thì đọc ở
-                    nút % ngay cạnh (sáng lên khi đang giảm), không cần thêm số thứ hai. */}
+                    nút % bên phải (sáng lên khi đang giảm), không cần thêm số thứ hai. */}
                 <div className="min-w-0 flex items-baseline gap-2">
                     <span className="text-[14px] font-black uppercase tracking-wider text-text-secondary">Tổng:</span>
                     <span className="text-[17px] font-black text-text tabular-nums">{formatVND(finalTotal)}</span>
                 </div>
+                <div className="flex items-center gap-3">
                 {/* Giỏ rỗng thì không có gì để giảm — ẩn hẳn thay vì để nút mờ, đỡ một
                     món đồ chết trên thanh mà nhân viên vẫn thử bấm. */}
                 {!disabled && (
                     <button
                         onClick={() => setShowDiscount(true)}
-                        className={`shrink-0 w-[30px] h-[30px] rounded-[25px] border flex items-center justify-center transition-colors ${discountAmount > 0 ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/60 text-text'}`}
+                        className={`${ICON_BTN} ${discountAmount > 0 ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/60 text-text'}`}
                     >
                         <Percent size={15} strokeWidth={2.5} />
                     </button>
                 )}
+                {/* Ghi chú từng món (CartNoteModal) — in lên phiếu bếp. Đếm số món đã có ghi
+                    chú để nhìn thanh là biết, không phải mở modal. */}
+                <button
+                    type="button"
+                    onClick={() => setShowNotes(true)}
+                    disabled={disabled}
+                    aria-label="Ghi chú"
+                    className={`${ICON_BTN} bg-surface-light border-border/60 disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                    <Pencil size={16} strokeWidth={2.5} className="text-text" />
+                    {noteCount > 0 && <span className={CHIP_LABEL}>{noteCount}</span>}
+                </button>
+                </div>
+            </div>
+
+            <div className="flex gap-3">
                 {/* Ô bàn mở lưới bàn thay vì gõ tay: bàn là một tab còn mở nhiều đợt,
                     gõ lại tên mỗi đợt thì sai chính tả một lần là tách thành hai bàn.
                     Chỉ tên bàn — tổng đang chạy của bàn nằm trên thẻ trong lưới, để đây
@@ -58,26 +76,13 @@ export default function CheckoutBar({
                         const tablePane = document.querySelector('.pos-table-pane')
                         if (getComputedStyle(tablePane).display === 'none') setShowTables(true)
                     }}
-                    className={`${CHIP_BTN} ml-auto py-1.5`}
+                    className={CHIP_BTN}
                 >
                     {/* Không chọn bàn = mang đi, đó là một trạng thái thật chứ không phải
                         "chưa chọn" — hiện đúng tên nó để không ai đi tìm nút mang đi. */}
                     <span className={CHIP_LABEL}>
                         {tableName || 'Mang đi'}
                     </span>
-                </button>
-            </div>
-
-            <div className="flex gap-3">
-                {/* Ghi chú từng món (CartNoteModal) — in lên phiếu bếp. Đếm số món đã có ghi
-                    chú để nhìn thanh là biết, không phải mở modal. */}
-                <button
-                    type="button"
-                    onClick={() => setShowNotes(true)}
-                    disabled={disabled}
-                    className={`${CHIP_BTN} disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                    <span className={CHIP_LABEL}>Ghi chú{noteCount > 0 && ` (${noteCount})`}</span>
                 </button>
                 <button
                     onClick={() => onConfirm(discountAmount, tableName)}

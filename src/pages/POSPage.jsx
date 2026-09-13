@@ -143,7 +143,7 @@ export default function POSPage() {
     // Samsung Z Fold giữa lúc sửa giảm giá là mất thao tác dở dang).
     return (
         <div className="pos-dine-grid h-full">
-            <div className="[grid-area:left] flex flex-col h-full min-h-0 max-w-lg mx-auto bg-bg dine-split:max-w-none dine-split:mx-0 dine-split:border-r dine-split:border-border/80">
+            <div className="[grid-area:left] flex flex-col h-full min-h-0 w-full max-w-lg mx-auto bg-bg dine-split:max-w-none dine-split:mx-0 dine-split:border-r dine-split:border-border/80">
                 {menuColumn}
             </div>
 
@@ -151,7 +151,7 @@ export default function POSPage() {
                 <TableModal inline />
             </div>
 
-            <div className="[grid-area:checkout]">
+            <div className="[grid-area:checkout] w-full max-w-lg mx-auto dine-split:max-w-none">
                 <CheckoutBar
                     discountAmount={discountAmount}
                     finalTotal={finalTotal}
