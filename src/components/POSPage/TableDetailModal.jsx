@@ -9,7 +9,7 @@ import { formatVND } from '../../utils'
 import { printBillJob } from '../../lib/escposBitmap'
 import { bumpOrderPrintCount } from '../../services/orderService'
 import { timeStringVN, openedLabelVN, dateShortVN, isSameDayVN } from '../../utils/dateVN'
-import { billSubtotal, tablePriceLines } from '../../utils/billLines'
+import { tablePriceLines } from '../../utils/billLines'
 import { Dialog, MODAL_PANEL, CHIP, CHIP_IDLE, TIME_PILL } from '../common/ModalShell'
 import PrintBill from '../common/PrintBill'
 import TableTargetPicker from './TableTargetPicker'
@@ -63,7 +63,7 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
     const printCountRound = table.rounds.find(r => r.orderNo != null)
     const orderNo = printCountRound?.orderNo ?? null
     const discountTotal = table.rounds.reduce((s, r) => s + (r.discountAmount || 0), 0)
-    const { subtotal, discountPct } = billSubtotal(table.total, discountTotal)
+    const subtotal = table.total + discountTotal
 
     // Đơn giá/thành tiền từng dòng cho bill in (tablePriceLines, utils/billLines.js) —
     // round.lines chỉ có tên+SL (giá không lưu theo dòng, xem TableRound ở orderService.ts),
@@ -315,7 +315,6 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
                 lines={lines}
                 subtotal={subtotal}
                 discountTotal={discountTotal}
-                discountPct={discountPct}
                 total={table.total}
                 printCount={printCountRound?.printCount ?? 0}
                 onPrinted={() => bumpOrderPrintCount(printCountRound?.id ?? null, printCountRound?.printCount ?? 0)}

@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Percent, Trash2, Printer, Loader } from 'lucide-react'
 import { formatVND, computeDiscount, discountToPercent, NO_DISCOUNT } from '../../utils'
 import { dateShortVN, timeStringVN } from '../../utils/dateVN'
-import { priceLineFor, billSubtotal } from '../../utils/billLines'
+import { priceLineFor } from '../../utils/billLines'
+import { resolveDiscountedPrice } from '../../utils/discountPrograms'
 import { useDiscountEditing } from '../../hooks/useDiscountEditing'
 import { useToast } from '../../hooks/useToast'
 import { bumpOrderPrintCount } from '../../services/orderService'
@@ -103,7 +104,7 @@ export default function OrdersList({
 const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, setDeletingId, onDeleteOrder, onUpdateDiscount, onDeleteOffline, isNew, dineIn }) {
     const navigate = useNavigate()
     const confirm = useConfirm()
-    const { products, productExtras } = useProducts()
+    const { products, productExtras, productDiscounts } = useProducts()
     const { selectedAddress } = useAddress()
     const { toast, showError } = useToast()
     // Cùng pattern CartListModal (giỏ hàng chưa gửi), áp cho đơn ĐÃ CHỐT.
@@ -112,7 +113,7 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
     const time = timeStringVN(date)
 
     const discountAmount = order.discountAmount || 0
-    const { subtotal, discountPct } = billSubtotal(order.total, discountAmount) // pre-discount price (cho tổng gạch ngang + bill in)
+    const subtotal = order.total + discountAmount // pre-discount price (cho tổng gạch ngang + bill in)
     // Online, non-deleted orders are the only ones we can edit/discount against the DB.
     const editable = !order.deletedAt && !order.isOffline
 
@@ -153,7 +154,15 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
         const editing = editable && editingItemId === item.id
         const displayDiscount = editing && preview ? preview : seedDiscount
         const { discountAmount: liveDiscount, finalTotal: liveFinal } = computeDiscount(itemSubtotal, displayDiscount)
-        return { itemName, itemExtras, itemSubtotal, seedDiscount, editing, displayDiscount, liveDiscount, liveFinal }
+        // Từ migration 20260916, giảm giá của discount_programs nằm chung trong item.discountAmount
+        // — sửa/bỏ ở ô này là ghi đè luôn phần đó (món về giá gốc trong khi khách đã trả giá chương
+        // trình), nên nói thẳng cho người bấm biết.
+        const listPrice = products.find(p => p.id === item.productId)?.price || 0
+        const programAmount = Math.max(0, listPrice - (resolveDiscountedPrice(listPrice, productDiscounts[item.productId]) ?? listPrice)) * item.quantity
+        const discountNote = committedAmount > 0 && programAmount > 0
+            ? `Đang gồm ${formatVND(programAmount)} giảm giá chương trình — sửa ở đây là ghi đè phần đó.`
+            : null
+        return { itemName, itemExtras, itemSubtotal, seedDiscount, editing, displayDiscount, liveDiscount, liveFinal, discountNote }
     }
 
     // Mang đi 1 món (!showOrderTotal): giá + nút giảm giá của món đó lên thẳng header thay
@@ -276,6 +285,7 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                     <div className="pb-1">
                         <DiscountEditor
                             discount={firstItemInfo.seedDiscount}
+                            note={firstItemInfo.discountNote}
                             onPreview={setPreview}
                             secondaryLabel="Hủy"
                             onSecondary={() => toggleEditing(firstItem.id)}
@@ -287,7 +297,7 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                     {order.items?.length > 0 ? order.items.map((item, idx) => {
                             // Đơn 1 món mang đi (!showOrderTotal) đã hiện giá + nút giảm giá ở
                             // header (firstItemInfo) — ở đây chỉ còn tên + extras, khỏi lặp lại.
-                            const { itemName, itemExtras, itemSubtotal, seedDiscount, editing, displayDiscount, liveDiscount, liveFinal } = deriveItem(item)
+                            const { itemName, itemExtras, itemSubtotal, seedDiscount, editing, displayDiscount, liveDiscount, liveFinal, discountNote } = deriveItem(item)
 
                             return (
                                 <div key={item.id ?? idx} className="flex flex-col gap-1.5 w-full">
@@ -327,6 +337,7 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                                         <div className="pb-2 space-y-3">
                                             <DiscountEditor
                                                 discount={seedDiscount}
+                                                note={discountNote}
                                                 onPreview={setPreview}
                                                 secondaryLabel="Hủy"
                                                 onSecondary={() => toggleEditing(item.id)}
@@ -400,7 +411,6 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                     lines={billLines}
                     subtotal={subtotal}
                     discountTotal={discountAmount}
-                    discountPct={discountPct}
                     total={order.total}
                     printCount={order.printCount ?? 0}
                     // Đơn offline chưa lên DB (id giả "offline-...") — không có gì để đọc/ghi.

@@ -193,7 +193,11 @@ export async function submitOrder(
     staffName: string | null = null,
     discountAmount = 0,
     id: UUID | null = null,
-    tableName: string | null = null
+    tableName: string | null = null,
+    // Phần discount_programs đã giảm (xem POSContext.doSubmit). CHỈ dùng cho nhánh guest —
+    // bản Supabase để server tự cộng (20260916_bulk_create_orders_program_discount_recorded.sql),
+    // gửi kèm là trừ hai lần.
+    programDiscount = 0
 ): Promise<{ id: string | null }> {
     invalidateReportCache(addressId)
     if (localRepo.isGuest()) {
@@ -201,7 +205,7 @@ export async function submitOrder(
             id,
             total,
             total_cost: Math.round(totalCost),
-            discount_amount: Math.round(discountAmount),
+            discount_amount: Math.round(discountAmount + programDiscount),
             payment_method: paymentMethod,
             address_id: addressId,
             staff_name: staffName,

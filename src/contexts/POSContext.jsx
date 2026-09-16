@@ -583,6 +583,18 @@ export function POSProvider() {
         // và hàng DB không lệch khi realtime echo về.
         const discountApplied = Math.min(Math.round(discountAmountArg) || 0, itemTotal)
         const netTotal = itemTotal - discountApplied
+        // Giảm giá theo chương trình (discount_programs): giỏ mang sẵn GIÁ ĐÃ GIẢM ở basePrice
+        // (handleAddItem), nên phần chênh so với products.price không nằm trong discountApplied.
+        // Server ghi nó vào discount_amount của đơn lẫn của dòng (20260916_bulk_create_orders_
+        // program_discount_recorded.sql) — mirror lại cho hàng lạc quan, nếu không thẻ Doanh thu
+        // và bill in của đơn vừa tạo hiện "giảm giá 0đ" cho tới vòng poll kế. netTotal KHÔNG đổi:
+        // tiền hàng theo giá gốc trừ đi đúng phần chênh này ra lại chính nó.
+        // KHÔNG gửi lên RPC (submitOrder/addPendingOrder vẫn nhận discountApplied) — server tự
+        // cộng phần chương trình, gửi kèm là trừ hai lần.
+        const programLineDiscount = (item) => Math.max(0, (products?.find(p => p.id === item.productId)?.price ?? item.basePrice) - item.basePrice) * item.quantity
+        const programDiscount = cartItems.reduce((sum, item) => sum + programLineDiscount(item), 0)
+        // Tổng giảm giá của 1 dòng (bấm tay + chương trình) cho các hàng lạc quan bên dưới.
+        const lineDiscount = (item) => computeDiscount(cartLineSubtotal(item), item.discount || NO_DISCOUNT).discountAmount + programLineDiscount(item)
 
         // Optimistic UI
         setRevenue(prev => prev + netTotal)
@@ -634,8 +646,9 @@ export function POSProvider() {
         if (dineInRef.current) setOpenTables(prev => {
             const addRound = {
                 id: orderId, createdAt: addedRow.createdAt, total: netTotal, servedAt: null, lines: addLines,
+                discountAmount: discountApplied + programDiscount,
                 items: cartItems.map(it => ({
-                    productId: it.productId, qty: it.quantity,
+                    productId: it.productId, qty: it.quantity, discountAmount: lineDiscount(it),
                     extraIds: (it.extras || []).map(e => e.id).filter(Boolean),
                     toppingIds: (it.toppings || []).map(t => t.id).filter(Boolean),
                     note: it.note || null,
@@ -665,7 +678,7 @@ export function POSProvider() {
                 _optimistic: true,
                 id: orderId,
                 total: netTotal,
-                discount_amount: discountApplied,
+                discount_amount: discountApplied + programDiscount,
                 total_cost: Math.round(cartCost),
                 created_at: addedRow.createdAt,
                 staff_name: profile?.name || null,
@@ -685,13 +698,13 @@ export function POSProvider() {
                     unit_cost: Math.round(costPerItem[item.cartItemId] || 0),
                     extra_ids: item.extras?.map(e => e.id).filter(Boolean) || [],
                     topping_ids: item.toppings?.map(t => t.id).filter(Boolean) || [],
-                    discount_amount: computeDiscount(cartLineSubtotal(item), item.discount || NO_DISCOUNT).discountAmount,
+                    discount_amount: lineDiscount(item),
                     note: item.note || null,
                     products: { name: item.name },
                 })),
             }
             setTodayOrders(prev => [optimisticOrder, ...prev])
-            submitOrder(cartItems, netTotal, null, addressId, cartCost, costPerItem, profile?.name, discountApplied, orderId, tableNameArg)
+            submitOrder(cartItems, netTotal, null, addressId, cartCost, costPerItem, profile?.name, discountApplied, orderId, tableNameArg, programDiscount)
                 .then(() => printKitchen(orderId))
                 .catch(err => {
                     if (isNetworkError(err)) {
@@ -966,17 +979,22 @@ export function POSProvider() {
         // Món bị xoá khỏi menu sau khi bán thì không dựng lại được (không còn giá) —
         // dừng trước khi xoá, thà không sửa được còn hơn nạp một giỏ thiếu món.
         const items = []
+        const programDeltas = [] // phần chương trình giảm của từng dòng — xem chỗ seed giảm giá bên dưới
         for (const it of round.items) {
             const p = products.find(x => x.id === it.productId)
             if (!p) {
                 showError(new Error('Đợt này có món đã xoá khỏi menu'), 'Sửa đợt')
                 return false
             }
+            // Giá chương trình như lúc chạm món mới (handleAddItem) — nạp lại nguyên giá gốc thì
+            // dòng trong giỏ hiện đắt hơn giá khách đã trả.
+            const basePrice = resolveDiscountedPrice(p.price, productDiscounts[p.id]) ?? p.price
+            programDeltas.push((p.price - basePrice) * it.qty)
             items.push({
                 cartItemId: crypto.randomUUID(),
                 productId: p.id,
                 name: p.name,
-                basePrice: p.price,
+                basePrice,
                 quantity: it.qty,
                 extras: (productExtras[p.id] || []).filter(e => it.extraIds.includes(e.id)),
                 toppings: (productToppings[p.id] || []).filter(t => (it.toppingIds || []).includes(t.id)),
@@ -997,9 +1015,14 @@ export function POSProvider() {
         const itemDiscountSum = round.items.reduce((sum, it) => sum + (it.discountAmount || 0), 0)
         if (itemDiscountSum > 0) {
             round.items.forEach((it, idx) => {
-                if (it.discountAmount > 0) {
-                    const { pct, exact } = discountToPercent(cartLineSubtotal(items[idx]), it.discountAmount)
-                    items[idx].discount = exact ? { type: 'percent', value: pct } : { type: 'amount', value: it.discountAmount }
+                // Phần chương trình giảm cũng nằm trong it.discountAmount (xem migration
+                // 20260916_bulk_create_orders_program_discount_recorded.sql) nhưng basePrice nạp
+                // lại ở trên ĐÃ là giá chương trình — trừ ra để còn đúng phần bấm tay, không thì
+                // bấm Tạo đơn lại là giảm hai lần trên cùng một món.
+                const manual = (it.discountAmount || 0) - programDeltas[idx]
+                if (manual > 0) {
+                    const { pct, exact } = discountToPercent(cartLineSubtotal(items[idx]), manual)
+                    items[idx].discount = exact ? { type: 'percent', value: pct } : { type: 'amount', value: manual }
                 }
             })
         } else if (round.discountAmount > 0 && items.length > 0) {

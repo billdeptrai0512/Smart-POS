@@ -13,13 +13,18 @@ export function priceLineFor(it, products, productExtras) {
     return { name: product?.name || 'Món đã xoá', extras, unitPrice }
 }
 
-// Giá gộp trước giảm + % giảm cho bill in/hiển thị — dùng chung cho bàn (TableDetailModal,
-// discountAmount cộng dồn qua nhiều round) và đơn mang đi lẻ (OrdersList, discountAmount lấy
-// thẳng từ order). subtotal = total NET + discountAmount, discountPct suy ngược từ đó.
-export function billSubtotal(total, discountAmount) {
-    const subtotal = total + discountAmount
-    const { pct: discountPct } = discountToPercent(subtotal, discountAmount)
-    return { subtotal, discountPct }
+// Phần tổng cuối bill in, khớp với các dòng món phía trên: dòng có giảm giá riêng đã in sẵn
+// TT đã trừ giảm, nên TIỀN HÀNG = gộp − giảm theo dòng (= tổng cột TT), còn GIẢM GIÁ chỉ là
+// phần giảm cả đơn KHÔNG nằm trên dòng nào (đơn cũ, trước khi có giảm theo dòng). Trước đây
+// TIỀN HÀNG in giá gốc rồi trừ tiếp toàn bộ giảm kèm 1 % bình quân tự suy (2 trà sữa -25% +
+// 1 bạc xỉu đồng giá 10k → "GIẢM GIÁ (32%)") — khách thấy như trừ 2 lần. % chỉ hiện khi tính
+// ngược lại đúng y số tiền giảm.
+export function billFooter(lines, subtotal, discountTotal) {
+    const lineDiscount = lines.reduce((s, l) => s + (l.discountAmount || 0), 0)
+    const goods = subtotal - lineDiscount
+    const orderDiscount = Math.max(0, discountTotal - lineDiscount)
+    const { pct, exact } = discountToPercent(goods, orderDiscount)
+    return { goods, orderDiscount, discountLabel: exact ? `GIẢM GIÁ (${pct}%)` : 'GIẢM GIÁ' }
 }
 
 // Đơn giá/thành tiền từng dòng cho bill in theo BÀN (TableDetailModal): gộp mọi round của

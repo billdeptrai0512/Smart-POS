@@ -7,7 +7,7 @@ import { useConfirm } from '../../contexts/ConfirmContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { formatVND } from '../../utils'
 import { timeStringVN, openedLabelVN, dateShortVN, isSameDayVN } from '../../utils/dateVN'
-import { priceLineFor, billSubtotal } from '../../utils/billLines'
+import { priceLineFor } from '../../utils/billLines'
 import { usePrintArmed } from '../../hooks/usePrintArmed'
 import { Dialog, MODAL_PANEL, CHIP, CHIP_IDLE, TIME_PILL } from '../common/ModalShell'
 import PrintBill from '../common/PrintBill'
@@ -105,7 +105,7 @@ function TakeawayRow({ order, onToggleServed, onMove, onEdit, onDelete }) {
     )
 
     const discountAmount = order.discountAmount || 0
-    const { subtotal, discountPct } = billSubtotal(order.total, discountAmount)
+    const subtotal = order.total + discountAmount
     const billLines = order.items.map((it, idx) => ({
         key: `${it.productId}:${idx}`, qty: it.qty, discountAmount: it.discountAmount || 0,
         ...priceLineFor(it, products, productExtras),
@@ -183,7 +183,6 @@ function TakeawayRow({ order, onToggleServed, onMove, onEdit, onDelete }) {
                     lines={billLines}
                     subtotal={subtotal}
                     discountTotal={discountAmount}
-                    discountPct={discountPct}
                     total={order.total}
                 />
             )}

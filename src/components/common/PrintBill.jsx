@@ -5,6 +5,7 @@ import { formatVND } from '../../utils'
 import { vietQrPayload } from '../../utils/vietqr'
 import { timeStringVN, dateShortVN, dateFullVN } from '../../utils/dateVN'
 import { captureOffscreen, OFFSCREEN_FRAME_CSS } from '../../lib/escposBitmap'
+import { billFooter } from '../../utils/billLines'
 
 // Tờ bill khổ 80mm dùng chung cho bill theo BÀN (TableDetailModal) và bill ĐƠN LẺ
 // mang đi (OrdersList) — một mẫu in duy nhất, tránh 2 thiết kế lệch nhau khi sửa.
@@ -38,7 +39,7 @@ function Row({ label, children, style }) {
 // + 1 mốc "Giờ" (openedAt = order.createdAt, cố định, chỉ giờ không kèm ngày — ngày đã có
 // ở dòng "Ngày:" chung phía trên rồi).
 const PrintBill = forwardRef(function PrintBill(
-    { orderNo, tableName, openedAt, staffName, lines, subtotal, discountTotal, discountPct, total, printCount, onPrinted },
+    { orderNo, tableName, openedAt, staffName, lines, subtotal, discountTotal, total, printCount, onPrinted },
     ref
 ) {
     const printedAtRef = useRef(null)
@@ -52,6 +53,7 @@ const PrintBill = forwardRef(function PrintBill(
     // (bên dưới) nên 2 thẻ khác nhau không còn đụng chung node để mà cần xếp hàng chung nữa.
     const chainRef = useRef(Promise.resolve())
     const initialPrintCount = (printCount ?? 0) + 1
+    const { goods, orderDiscount, discountLabel } = billFooter(lines, subtotal, discountTotal)
 
     // Cập nhật "Giờ ra"/"Ngày"/"In lần" ngay trước khi lấy bản in — dùng chung cho cả
     // print() (web) và captureImage() (native) nên 2 đường in không lệch giờ/lần in.
@@ -176,8 +178,7 @@ const PrintBill = forwardRef(function PrintBill(
                 // Dòng có giảm giá riêng → cột Đơn giá tách 2 tầng: giá gốc gạch ngang ở
                 // trên, giá thực khách trả (đã trừ phần giảm của riêng dòng này, chia đều
                 // cho SL) ở dưới. TT = thành tiền THỰC (đã trừ giảm giá dòng) — TIỀN HÀNG/
-                // GIẢM GIÁ/TỔNG THANH TOÁN ở cuối bill tính riêng từ subtotal/discountTotal
-                // cấp đơn (props), không cộng lại từ TT nên không bị đếm giảm giá 2 lần.
+                // GIẢM GIÁ/TỔNG THANH TOÁN ở cuối bill khớp theo TT — xem billFooter (utils/billLines.js).
                 const discounted = l.discountAmount > 0
                 const netUnit = discounted ? Math.round((l.unitPrice * l.qty - l.discountAmount) / l.qty) : l.unitPrice
                 return (
@@ -204,8 +205,8 @@ const PrintBill = forwardRef(function PrintBill(
                 )
             })}
             <div style={BILL_RULE} />
-            <Row label="TIỀN HÀNG">{formatVND(subtotal)}</Row>
-            {discountTotal > 0 && <Row label={`GIẢM GIÁ (${discountPct}%)`}>-{formatVND(discountTotal)}</Row>}
+            <Row label="TIỀN HÀNG">{formatVND(goods)}</Row>
+            {orderDiscount > 0 && <Row label={discountLabel}>-{formatVND(orderDiscount)}</Row>}
             <Row label="TỔNG THANH TOÁN" style={{ fontWeight: 800, fontSize: 14, marginTop: 4 }}>{formatVND(total)}</Row>
             {/* QR chuyển khoản (VietQR, tự sinh — không cần mạng lúc in). Bọc flex chứ không
                 margin:auto trên chính <svg>: html2canvas chụp svg block-level bị bóp méo tỉ lệ,

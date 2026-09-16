@@ -10,7 +10,9 @@ const AMOUNT_PRESETS = [10000, 20000, 50000]
 // nên không cần khối kết quả nào ở đây. Luôn mount/unmount theo điều kiện ở nơi gọi
 // (không giữ mount rồi đổi `open`) nên state seed lại đúng mỗi lần mở — khỏi cần
 // effect đồng bộ riêng cho việc đó.
-export default function DiscountEditor({ discount, onApply, onSecondary, onPreview, secondaryLabel = 'Đóng' }) {
+// note: cảnh báo hiện ngay trên ô nhập (OrdersList dùng để báo "số đang có gồm cả giảm giá
+// chương trình") — bỏ trống thì không chiếm chỗ nào.
+export default function DiscountEditor({ discount, onApply, onSecondary, onPreview, secondaryLabel = 'Đóng', note = null }) {
     const [type, setType] = useState(discount.value ? discount.type : 'percent')
     const [input, setInput] = useState(!discount.value ? '' : discount.type === 'amount' ? formatVNDInput(discount.value) : String(discount.value))
 
@@ -37,6 +39,7 @@ export default function DiscountEditor({ discount, onApply, onSecondary, onPrevi
 
     return (
         <>
+            {note && <p className="text-[11px] font-bold text-warning leading-snug">{note}</p>}
             {/* Value input — bấm cụm %/đ để đổi đơn vị, khỏi cần 2 nút rời bên cạnh. */}
             <div className="relative flex items-center h-12 bg-surface-light border border-border/60 rounded-[14px] focus-within:border-primary/40 transition-colors overflow-hidden">
                 <input
