@@ -74,7 +74,7 @@ function pendingCups(rounds) {
 // (POSPage) instead of a bottom-sheet Dialog — no backdrop, no close button, picking
 // a table just updates this pane (no onClose to call back to).
 export default function TableModal({ onClose, inline = false }) {
-    const { tableName, setTableName, openTables, refreshTables, orderCount, showError } = useCart()
+    const { tableName, setTableName, openTables, refreshTables, showError } = useCart()
     const { selectedAddress, setTables } = useAddress()
     const { isManager, isAdmin } = useAuth()
     const { state } = useLocation()
@@ -233,12 +233,6 @@ export default function TableModal({ onClose, inline = false }) {
         <>
             {/* Body */}
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-                {orderCount > 0 && (
-                    <p className="text-[12px] font-bold text-warning bg-warning/10 border border-warning/40 rounded-[14px] px-4 py-3">
-                        Đang có {orderCount} ly chưa gửi — sẽ tính cho bàn bạn chọn ở đây.
-                    </p>
-                )}
-
                 <div className="grid grid-cols-2 gap-3">
                     {/* Đơn mang đi ở quán có bàn: bỏ chọn bàn, đơn về lại dạng không nhãn.
                         Có đơn đang chờ ra món thì hiện overview như thẻ bàn busy — chạm 1 cái

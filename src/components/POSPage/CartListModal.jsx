@@ -2,11 +2,11 @@ import { useState } from 'react'
 import { Percent } from 'lucide-react'
 import { formatVND, cartLineSubtotal, computeDiscount, NO_DISCOUNT } from '../../utils'
 import { useDiscountEditing } from '../../hooks/useDiscountEditing'
-import { Dialog, ModalHeader } from '../common/ModalShell'
+import { Dialog } from '../common/ModalShell'
 import DiscountEditor from './DiscountEditor'
 
 // Giảm giá cho giỏ đang dựng (đợt chưa gửi) — mở từ nút % ở CheckoutBar.
-// 1 món: mở thẳng ô sửa của dòng đó, không cần tab. Nhiều món: 2 tab —
+// Luôn có 2 tab (kể cả 1 món; 1 món thì tab Từng món mở sẵn ô sửa dòng đó) —
 // "Từng món" (sửa riêng từng dòng, hành vi cũ) và "Tất cả" (1 ô, áp cùng
 // mức giảm cho mọi dòng cùng lúc — đỡ phải mở/sửa từng món khi muốn giảm
 // đều cho cả bàn).
@@ -23,28 +23,20 @@ export default function CartListModal({ cart, onClose, onItemDiscount }) {
 
     return (
         <Dialog onClose={onClose} panelClassName="w-full max-w-md mx-4 max-h-[85dvh] flex flex-col bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
-            <ModalHeader title="Giảm giá" onClose={onClose} className="shrink-0" />
-
-            {!singleItem && (
-                <div className="flex gap-1.5 px-5 pt-4 shrink-0">
+            <div className="flex gap-1.5 px-5 pt-4 shrink-0">
+                {[['each', 'Từng món'], ['all', 'Tất cả']].map(([key, label]) => (
                     <button
+                        key={key}
                         type="button"
-                        onClick={() => setTab('each')}
-                        className={`flex-1 py-2 rounded-[10px] text-xs font-black uppercase tracking-wider transition-colors ${tab === 'each' ? 'bg-primary/10 text-primary' : 'bg-surface-light text-text-secondary hover:text-text'}`}
+                        onClick={() => setTab(key)}
+                        className={`flex-1 py-2 rounded-[10px] text-xs font-black uppercase tracking-wider transition-colors ${tab === key ? 'bg-primary/10 text-primary' : 'bg-surface-light text-text-secondary hover:text-text'}`}
                     >
-                        Từng món
+                        {label}
                     </button>
-                    <button
-                        type="button"
-                        onClick={() => setTab('all')}
-                        className={`flex-1 py-2 rounded-[10px] text-xs font-black uppercase tracking-wider transition-colors ${tab === 'all' ? 'bg-primary/10 text-primary' : 'bg-surface-light text-text-secondary hover:text-text'}`}
-                    >
-                        Tất cả
-                    </button>
-                </div>
-            )}
+                ))}
+            </div>
 
-            {(singleItem || tab === 'each') && (
+            {tab === 'each' && (
                 <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
                     {cart.map(item => {
                         const subtotal = cartLineSubtotal(item)
@@ -102,7 +94,7 @@ export default function CartListModal({ cart, onClose, onItemDiscount }) {
                 </div>
             )}
 
-            {!singleItem && tab === 'all' && (() => {
+            {tab === 'all' && (() => {
                 // Tổng trước/sau — cùng mức giảm đang gõ áp cho MỖI món, để thấy ngay
                 // tác động lên cả đơn trước khi bấm Đồng ý. 1 pass thay vì 3 reduce riêng.
                 const { subtotal: allSubtotal, final: allFinal } = cart.reduce((acc, item) => {
