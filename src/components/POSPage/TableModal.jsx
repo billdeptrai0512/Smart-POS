@@ -227,8 +227,10 @@ export default function TableModal({ onClose, inline = false, takeawaySlot }) {
         } catch (err) { showError(err, 'Đổi tên bàn') }
     }
 
+    // Trên header (inline) nền bg-bg cho khớp thẻ Địa chỉ — bg-surface trùng màu nền header.
+    const idleBg = inline ? 'bg-bg' : 'bg-surface'
     const takeawayCard = takeaway ? (
-        <div className={`${CARD_H} relative rounded-[20px] border p-3.5 flex flex-col gap-1.5 transition-colors ${!tableName ? 'bg-primary/5 border-primary' : 'bg-surface border-border/60'}`}>
+        <div className={`${CARD_H} relative rounded-[20px] border p-3.5 flex flex-col gap-1.5 transition-colors ${!tableName ? 'bg-primary/5 border-primary' : `${idleBg} border-border/60`}`}>
             {/* Chỉ đổi tiêu điểm, không pick('') (không gọi onClose) — mobile
                 là bottom-sheet, đóng ngay thì tap thứ 2 (mở chi tiết) không còn
                 gì để nhấn vào, phải mở lại sheet từ đầu. */}
@@ -253,7 +255,7 @@ export default function TableModal({ onClose, inline = false, takeawaySlot }) {
     ) : (
         <button
             onClick={() => pick('')}
-            className={`${CARD_H} rounded-[20px] border p-3.5 flex flex-col items-center justify-center transition-colors ${!tableName ? 'bg-primary/5 border-primary' : 'bg-surface border-border/60 hover:border-primary/40'}`}
+            className={`${CARD_H} rounded-[20px] border p-3.5 flex flex-col items-center justify-center transition-colors ${!tableName ? 'bg-primary/5 border-primary' : `${idleBg} border-border/60 hover:border-primary/40`}`}
         >
             <span className="text-[13px] font-black uppercase tracking-wide text-text">Mang đi</span>
         </button>
