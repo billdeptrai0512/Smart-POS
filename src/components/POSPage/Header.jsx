@@ -105,8 +105,9 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
 
                 {/* Cột 4 (tablet): thẻ Mang đi — TableModal inline portal vào đây, state
                     + modal danh sách vẫn ở TableModal. [&>*]:h-full: cao bằng hàng header
-                    thay vì CARD_H của lưới bàn. */}
-                {dineIn && <div ref={takeawaySlotRef} className="hidden dine-split:block [&>*]:h-full" />}
+                    thay vì CARD_H của lưới bàn. [&>*]:w-full: tile tĩnh (chưa có đơn) là
+                    <button>, ngoài grid thì chỉ rộng vừa chữ. */}
+                {dineIn && <div ref={takeawaySlotRef} className="hidden dine-split:block [&>*]:h-full [&>*]:w-full" />}
             </div>
         </header >
     )
