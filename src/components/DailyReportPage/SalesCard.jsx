@@ -1,20 +1,11 @@
-import { memo, useState, useEffect, useRef, lazy, Suspense } from 'react'
+import { memo, useState, useRef } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { formatVND } from '../../utils'
 import { useClickOutside } from '../../hooks/useClickOutside'
 
-// lazy: recharts nặng hơn cả phần còn lại của trang báo cáo cộng lại, mà chỉ để vẽ 1 biểu
-// đồ giờ. Tải SAU khi trang đã mount thay vì chặn trước nó — xem HourlyRevenueBars.
-// .catch → component rỗng: chunk tải hỏng (deploy mới, hoặc offline mà precache trượt) thì
-// lazy() THROW, mà <Suspense> không bắt lỗi — nó bay lên ErrorBoundary gốc và thổi bay CẢ
-// trang báo cáo vì một cái biểu đồ. Số liệu nằm ở các thẻ khác, mất biểu đồ thì thôi.
-const HourlyRevenueBars = lazy(() => import('./HourlyRevenueBars').catch(() => ({ default: () => null })))
-
-const CHART_HEIGHT = 200
-
 // memo: parent (DailyReportPage) re-renders on every cash/inventory keystroke;
 // all props here come from page-level useMemo / stable setters, so memo lets the
-// recharts subtree bail out instead of re-rendering per keystroke.
+// chart subtree bail out instead of re-rendering per keystroke.
 function SalesCard({
     totalCups,
     products,
@@ -26,95 +17,21 @@ function SalesCard({
 }) {
     const [expandedId, setExpandedId] = useState(null)
     const [showAllProducts, setShowAllProducts] = useState(false)
-    const [activePoint, setActivePoint] = useState(null)
-    const [chartWidth, setChartWidth] = useState(0)
+    // Tap a column to pin its tooltip; tap it again (or anywhere else) to close.
+    const [activeIdx, setActiveIdx] = useState(null)
     const wrapperRef = useRef(null)
 
-    useEffect(() => {
-        if (!wrapperRef.current) return
-        const ro = new ResizeObserver(([entry]) => setChartWidth(entry.contentRect.width))
-        ro.observe(wrapperRef.current)
-        return () => ro.disconnect()
-    }, [])
-
-    useClickOutside(wrapperRef, () => setActivePoint(null))
-
-    const handleChartClick = (e) => {
-        if (e?.target?.dataset?.bar !== 'true') setActivePoint(null)
-    }
+    useClickOutside(wrapperRef, () => setActiveIdx(null))
 
     const peakRevenue = lineChartData.length > 0 ? Math.max(...lineChartData.map(d => d.hourRevenue)) : 0
-
-    // Custom shape (not recharts <Bar>'s default) so the peak hour can be highlighted
-    // and tap-to-pin the same tooltip the old line chart used. Passed to <Bar> as a plain
-    // function (not a JSX element) — recharts calls function-shapes directly instead of
-    // reconciling them as a component, so redefining it each render (needed to close over
-    // activePoint) doesn't force-remount the bars. Remounting mid-click was dropping fast
-    // successive clicks on different bars.
-    const renderBar = (props) => {
-        const { x, y, width, height, payload, index } = props
-        const isActive = activePoint?.hour === payload.hour
-        const isPeak = peakRevenue > 0 && payload.hourRevenue === peakRevenue
-        const prevEntry = index > 0 ? lineChartData[index - 1] : null
-        return (
-            <g>
-                {isPeak && (
-                    <text x={x + width / 2} y={y - 6} textAnchor="middle" fontSize={9} fontWeight="900" fill="#f59e0b">
-                        Cao điểm
-                    </text>
-                )}
-                <rect
-                    data-bar="true"
-                    x={x} y={y} width={width} height={Math.max(height, 1)}
-                    rx={4}
-                    fill={isActive || isPeak ? '#f59e0b' : '#57534e'}
-                    style={{ cursor: 'pointer' }}
-                    onClick={(e) => {
-                        e.stopPropagation()
-                        if (isActive) {
-                            setActivePoint(null)
-                        } else {
-                            setActivePoint({
-                                cx: x + width / 2, cy: y,
-                                hour: payload.hour,
-                                items: payload.items || [],
-                                hourRevenue: payload.hourRevenue || 0,
-                                revenue: payload.revenue || 0,
-                                prevRevenue: prevEntry ? prevEntry.hourRevenue : null,
-                            })
-                        }
-                    }}
-                />
-            </g>
-        )
-    }
+    const barPct = (d) => (peakRevenue ? (d.hourRevenue / peakRevenue) * 100 : 0)
+    const active = activeIdx != null ? lineChartData[activeIdx] : null
+    const tipPos = ((activeIdx + 0.5) / lineChartData.length) * 100
 
     const rankedProducts = Object.entries(productStats || {})
         .filter(([id]) => soldProducts.has(id))
         .sort((a, b) => b[1].revenue - a[1].revenue)
         .map(([id, stats]) => ({ id, name: products.find(p => p.id === id)?.name || '', ...stats }))
-
-    const getTooltipStyle = () => {
-        // Use measured width (ResizeObserver state) + the fixed chart height instead of
-        // reading the ref's layout during render — avoids the stale-render hazard and the
-        // value is identical (the wrapper's height is locked to CHART_HEIGHT).
-        if (!activePoint || !chartWidth) return {}
-        const tooltipWidth = 220
-        const left = Math.max(tooltipWidth / 2 + 8, Math.min(activePoint.cx, chartWidth - tooltipWidth / 2 - 8))
-        return {
-            position: 'absolute',
-            left,
-            top: activePoint.cy,
-            // Always above the bar's top edge — a below-placement can land on top of
-            // neighboring hour columns and block taps on them.
-            transform: 'translate(-50%, calc(-100% - 14px))',
-            zIndex: 50,
-            pointerEvents: 'none',
-            width: 'fit-content',
-            minWidth: 140,
-            maxWidth: tooltipWidth,
-        }
-    }
 
     return (
         <div className="bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col gap-4">
@@ -199,50 +116,74 @@ function SalesCard({
             <div>
                 {lineChartData.length > 0 ? (
                     <div
-                        className="w-full relative [&_*]:outline-none [&_*]:focus:outline-none"
-                        style={{ height: CHART_HEIGHT }}
+                        className="w-full h-[200px] relative flex flex-col pt-5"
                         ref={wrapperRef}
-                        onClick={handleChartClick}
+                        onClick={() => setActiveIdx(null)}
                     >
-                        {activePoint && (
-                            <div style={getTooltipStyle()}>
-                                <div className="bg-[#1c1917] border border-[#44403c] rounded-[14px] px-3 py-2.5 shadow-xl">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="text-[11px] font-black text-warning uppercase tracking-wider">{activePoint.hour}</span>
-                                        <span className="text-[11px] font-black text-warning">+{formatVND(activePoint.hourRevenue)}</span>
+                        <div className="relative flex-1 flex">
+                            {[0, 25, 50, 75].map(p => (
+                                <div key={p} className="absolute inset-x-0 border-t border-dashed border-[#44403c]" style={{ top: `${p}%` }} />
+                            ))}
+                            {active && (
+                                // Always above the bar's top edge — a below-placement can land on top of
+                                // neighboring hour columns and block taps on them. left p% + translateX(-p%)
+                                // keeps it inside both edges at any width without measuring.
+                                <div
+                                    className="absolute z-50 pointer-events-none w-max min-w-[140px] max-w-[220px]"
+                                    style={{ left: `${tipPos}%`, bottom: `calc(${barPct(active)}% + 14px)`, transform: `translateX(-${tipPos}%)` }}
+                                >
+                                    <div className="bg-[#1c1917] border border-[#44403c] rounded-[14px] px-3 py-2.5 shadow-xl">
+                                        <div className="flex items-center justify-between gap-3 mb-2">
+                                            <span className="text-[11px] font-black text-warning uppercase tracking-wider">{active.hour}</span>
+                                            <span className="text-[11px] font-black text-warning">+{formatVND(active.hourRevenue || 0)}</span>
+                                        </div>
+                                        {!active.items?.length ? (
+                                            <span className="text-[12px] text-[#a8a29e]">Không có đơn</span>
+                                        ) : (
+                                            <div className="flex flex-col gap-1 mb-2">
+                                                {active.items.map((item, i) => (
+                                                    <span key={i} className="text-[12px] text-[#fafaf9] font-medium leading-snug">
+                                                        {item.qty} {item.name}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {activeIdx > 0 && (
+                                            <div className="flex flex-col items-start border-t border-[#44403c] pt-1.5 mt-1">
+                                                <span className="text-[11px] text-warning">Tổng: {formatVND(active.revenue || 0)}</span>
+                                            </div>
+                                        )}
                                     </div>
-                                    {activePoint.items.length === 0 ? (
-                                        <span className="text-[12px] text-[#a8a29e]">Không có đơn</span>
-                                    ) : (
-                                        <div className="flex flex-col gap-1 mb-2">
-                                            {activePoint.items.map((item, i) => (
-                                                <span key={i} className="text-[12px] text-[#fafaf9] font-medium leading-snug">
-                                                    {item.qty} {item.name}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    )}
-                                    {activePoint.prevRevenue !== null && (
-                                        <div className="flex flex-col items-start border-t border-[#44403c] pt-1.5 mt-1">
-                                            <span className="text-[11px] text-warning">Tổng: {formatVND(activePoint.revenue)}</span>
-                                        </div>
-                                    )}
                                 </div>
-                            </div>
-                        )}
-                        {chartWidth > 0 && (
-                            // fallback null: wrapper đã khoá sẵn CHART_HEIGHT nên chỗ trống lúc
-                            // tải không làm nhảy layout. Suspense phải đặt ở ĐÂY chứ không mượn
-                            // boundary của route — nếu không cả trang chớp lại skeleton.
-                            <Suspense fallback={null}>
-                                <HourlyRevenueBars
-                                    width={chartWidth}
-                                    height={CHART_HEIGHT}
-                                    data={lineChartData}
-                                    renderBar={renderBar}
-                                />
-                            </Suspense>
-                        )}
+                            )}
+                            {lineChartData.map((d, i) => {
+                                const isPeak = peakRevenue > 0 && d.hourRevenue === peakRevenue
+                                return (
+                                    <div
+                                        key={d.hour}
+                                        className="flex-1 flex items-end justify-center cursor-pointer"
+                                        onClick={(e) => { e.stopPropagation(); setActiveIdx(cur => cur === i ? null : i) }}
+                                    >
+                                        <div
+                                            className={`relative w-[90%] rounded-[4px] ${activeIdx === i || isPeak ? 'bg-[#f59e0b]' : 'bg-[#57534e]'}`}
+                                            style={{ height: `max(${barPct(d)}%, 1px)` }}
+                                        >
+                                            {isPeak && (
+                                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 text-[9px] font-black text-[#f59e0b] whitespace-nowrap">Cao điểm</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                        <div className="flex pt-2.5">
+                            {lineChartData.map((d, i) => (
+                                // ponytail: >12 cột thì chỉ ghi nhãn cách 1 để khỏi đè nhau trên màn hẹp.
+                                <span key={d.hour} className="flex-1 text-center text-[10px] text-[#a8a29e] whitespace-nowrap">
+                                    {lineChartData.length <= 12 || i % 2 === 0 ? d.hour : ''}
+                                </span>
+                            ))}
+                        </div>
                     </div>
                 ) : (
                     <div className="text-center text-text-secondary text-[12px] py-4 bg-surface-light rounded-xl border border-border/40">

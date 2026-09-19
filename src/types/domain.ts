@@ -9,7 +9,7 @@ export type UUID = string
 export type Row = Record<string, any>
 
 /** An extra option (size/đường/đá...) selected on a cart line — a `product_extras` row. */
-export interface CartExtra {
+interface CartExtra {
     id: string
     name: string
     price: number
@@ -18,7 +18,7 @@ export interface CartExtra {
 
 /** A topping selected on a cart line — a `toppings` row (global entity, own id space,
  *  attached to many products via `product_toppings`; separate from CartExtra). */
-export type CartTopping = Omit<CartExtra, 'is_sticky'>
+type CartTopping = Omit<CartExtra, 'is_sticky'>
 
 /** A single line in the POS cart (see POSContext.handleAddItem). */
 export interface CartItem {
@@ -41,7 +41,7 @@ export interface CartItem {
     edit?: { orderNo: number | null }
 }
 
-export type DiscountType = 'percent' | 'amount'
+type DiscountType = 'percent' | 'amount'
 
 /** Per-order discount state (single source of truth: utils/money.computeDiscount). */
 export interface Discount {
@@ -57,7 +57,7 @@ export interface DiscountResult {
 /** One item inside a bulk_create_orders RPC payload. Declares WHAT was bought
  *  only — price and cost are looked up server-side from products/recipes, the
  *  client is not trusted to state its own total (see 20260708 migration). */
-export interface OrderItemPayload {
+interface OrderItemPayload {
     product_id: UUID
     quantity: number
     extra_ids: string[]

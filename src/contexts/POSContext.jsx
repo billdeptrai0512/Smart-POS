@@ -8,7 +8,7 @@ import { useOfflineSync, addPendingOrder, addPendingTableClose, removePendingTab
 import { useOrdersPoll } from '../hooks/useOrdersPoll'
 import { dateStringVN } from '../utils/dateVN'
 import { resolveDiscountedPrice } from '../utils/discountPrograms'
-import { calculateProductCost, computeDiscount, discountToPercent, cartLineSubtotal, NO_DISCOUNT } from '../utils'
+import { calculateItemCost, computeDiscount, discountToPercent, cartLineSubtotal, NO_DISCOUNT } from '../utils'
 import { cartBelongsToAddress, shouldRestoreCartOnFailure } from '../utils/posCartGuards'
 import { useProducts } from './ProductContext'
 import { useAddress } from './AddressContext'
@@ -566,7 +566,7 @@ export function POSProvider() {
         // sửa lại khi đơn thật echo về qua postgres_changes. Thêm nếu cần hiển thị đúng
         // ngay lúc optimistic.
         const cartCost = cartItems.reduce((sum, item) => {
-            const c = calculateProductCost(item.productId, item.extras || [], recipes, extraIngredients, ingredientCosts)
+            const c = calculateItemCost(item.productId, item.extras || [], recipes, extraIngredients, ingredientCosts)
             costPerItem[item.cartItemId] = c
             return sum + c * item.quantity
         }, 0)

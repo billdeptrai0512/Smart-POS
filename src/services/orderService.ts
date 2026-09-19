@@ -443,10 +443,10 @@ export async function fetchRecentOrders(addressId: UUID | null, limit = 3): Prom
 // served_at IS NULL — ra món xong thì coi như xong, rơi khỏi bucket này (đọc/in/xoá đơn cũ
 // vẫn làm ở Nhật ký). Nhờ vậy TableModal/moveTableRounds/toggleServed dùng lại nguyên logic
 // "một bàn" cho cả mang đi, không cần state/fetch riêng.
-export type TableLine = { name: string; qty: number; dish: string; opts: string[]; note: string | null }
-export type TableRoundItem = { productId: UUID; qty: number; extraIds: UUID[]; toppingIds: UUID[]; discountAmount: number; note: string | null }
+type TableLine = { name: string; qty: number; dish: string; opts: string[]; note: string | null }
+type TableRoundItem = { productId: UUID; qty: number; extraIds: UUID[]; toppingIds: UUID[]; discountAmount: number; note: string | null }
 export type TableRound = { id: UUID; orderNo: number | null; createdAt: string; total: number; discountAmount: number; servedAt: string | null; staffName: string | null; printCount: number; lines: TableLine[]; items: TableRoundItem[] }
-export type OpenTable = { name: string | null; total: number; rounds: TableRound[]; openedAt: string; lines: TableLine[] }
+type OpenTable = { name: string | null; total: number; rounds: TableRound[]; openedAt: string; lines: TableLine[] }
 
 // 'Tiền mặt'/'MoMo' đi chung mảng extras nhưng là cách trả tiền, không phải topping —
 // cùng quy ước với buildLastOrderFrom* ở POSContext.

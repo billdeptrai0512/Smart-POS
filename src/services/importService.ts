@@ -11,7 +11,7 @@ import type { UUID } from '../types/domain'
 // 2 hàm tách bạch: resolveImportPlan (thuần, không gọi mạng — dùng cho màn xem trước) và
 // commitImportPlan (gọi service layer có sẵn theo đúng thứ tự phụ thuộc FK).
 
-export interface ParsedWorkbook {
+interface ParsedWorkbook {
     products: Record<string, unknown>[]
     ingredients: Record<string, unknown>[]
     recipes: Record<string, unknown>[]
@@ -71,7 +71,7 @@ function mapCategory(raw: unknown): 'main' | 'packaging' {
     return 'main'
 }
 
-export interface ImportPlan {
+interface ImportPlan {
     products: Array<{ name: string; price: number }>
     productUpdates: Array<{ name: string; price: number }>
     ingredients: Array<{ key: string; unitCost: number; unit: string; category: 'main' | 'packaging' }>
@@ -93,7 +93,7 @@ interface ExistingData {
     extras: Array<{ id: UUID; productName: string; name: string }>
 }
 
-export interface ResolveResult {
+interface ResolveResult {
     plan: ImportPlan
     blockingErrors: string[]
     warnings: string[]

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useHistory } from '../contexts/HistoryContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
@@ -43,18 +43,13 @@ import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { shiftFinalizedKey, cashClosedKey } from '../constants/storageKeys'
+import DayPerformanceChart from '../components/DailyReportPage/DayPerformanceChart'
 
 // "Soạn cho hôm nay" coi là đã làm khi Nhập thêm (restock) khác 0 — rỗng/0 = chưa soạn.
 const isPrepFilled = (v) => v !== undefined && v !== null && v !== '' && Number(v) !== 0
 
 // Mốc lịch sử cho dự báo Soạn/Chuẩn bị — 3 tuần gần nhất cùng thứ, trung bình hoá (xem
 // averageIngredientMaps) thay vì chỉ đúng 1 tuần trước để đỡ nhạy với 1 ngày bất thường.
-// lazy: kéo theo recharts (vendor-charts) và chỉ hiện ở scope tuần/tháng — import tĩnh ở
-// đây bắt cả những lần mở tab Dòng tiền phải chờ nó. Cùng lý do với HourlyRevenueBars.
-// .catch → component rỗng, cùng lý do với HourlyRevenueBars trong SalesCard: <Suspense>
-// không bắt được lỗi tải chunk, để throw là mất cả trang chứ không chỉ mất biểu đồ.
-const DayPerformanceChart = lazy(() => import('../components/DailyReportPage/DayPerformanceChart').catch(() => ({ default: () => null })))
-
 const HISTORY_OFFSETS_TODAY = [7, 14, 21]     // cùng thứ HÔM NAY
 const HISTORY_OFFSETS_TOMORROW = [6, 13, 20]  // cùng thứ NGÀY MAI
 
@@ -1332,14 +1327,12 @@ export default function DailyReportPage() {
                                         showChart={!isRangeScope}
                                     />
                                     {isRangeScope && (
-                                        <Suspense fallback={null}>
-                                            <DayPerformanceChart
-                                                orders={displayOrders}
-                                                range={scope}
-                                                start={rangeStart}
-                                                products={products}
-                                            />
-                                        </Suspense>
+                                        <DayPerformanceChart
+                                            orders={displayOrders}
+                                            range={scope}
+                                            start={rangeStart}
+                                            products={products}
+                                        />
                                     )}
                                 </div>
                             </CashFlowCard>

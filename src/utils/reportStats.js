@@ -1,4 +1,4 @@
-import { calculateItemCost as calculateProductCost, isLiveOrder } from './inventory'
+import { calculateItemCost, isLiveOrder } from './inventory'
 import { dateStringVN } from './dateVN'
 
 // Khử trùng phiếu chốt ca: mỗi ngày VN chỉ giữ phiếu MỚI NHẤT (max closed_at), khớp
@@ -189,7 +189,7 @@ export function aggregateOrderStats({
                 const snapshotCost = i.unit_cost || i.unitCost || 0
                 cost = snapshotCost > 0
                     ? snapshotCost
-                    : calculateProductCost(productId, i.extras || [], recipes, extraIngredients, ingredientCosts)
+                    : calculateItemCost(productId, i.extras || [], recipes, extraIngredients, ingredientCosts)
                 totalCOGS += cost * qty
             }
 

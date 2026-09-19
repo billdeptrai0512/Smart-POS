@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { calculateProductCost, parseVNDInput, formatVNDInput } from '../utils'
+import { calculateItemCost, parseVNDInput, formatVNDInput } from '../utils'
 import { getPendingOrders, removePendingOrder } from '../hooks/useOfflineSync'
 import { dateStringVN } from '../utils/dateVN'
 import { calcRangeWithLabel } from '../utils/rangeCalc'
@@ -268,7 +268,7 @@ export default function HistoryPage() {
     // honor it instead of recomputing from current recipes/prices.
     const getItemCost = useCallback((productId, extras, snapshotUnitCost) => {
         if (snapshotUnitCost > 0) return snapshotUnitCost
-        return calculateProductCost(productId, extras || [], recipes, extraIngredients, ingredientCosts)
+        return calculateItemCost(productId, extras || [], recipes, extraIngredients, ingredientCosts)
     }, [recipes, extraIngredients, ingredientCosts])
 
     const baseOrders = isTodayScope ? (todayOrders || []) : rangeOrders

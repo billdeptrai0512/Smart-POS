@@ -1,6 +1,6 @@
-import { memo, useMemo } from 'react'
-import { BarChart, Bar, XAxis, ResponsiveContainer, Cell, Tooltip } from 'recharts'
+import { memo, useMemo, useState, useRef } from 'react'
 import { formatVND } from '../../utils'
+import { useClickOutside } from '../../hooks/useClickOutside'
 
 const DAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
 
@@ -30,24 +30,14 @@ function buildDayData(orders, countMap, start) {
     return slots
 }
 
-const CustomTooltip = ({ active, payload, label }) => {
-    if (!active || !payload?.length) return null
-    const { cups, revenue } = payload[0].payload
-    if (!cups) return null
-    return (
-        <div className="bg-[#1c1917] border border-[#44403c] rounded-[12px] px-3 py-2 shadow-xl">
-            <div className="text-[11px] font-black text-warning uppercase mb-1">{label}</div>
-            <div className="text-[12px] text-white font-bold">{cups} ly</div>
-            <div className="text-[11px] text-[#a8a29e]">{formatVND(revenue)}</div>
-        </div>
-    )
-}
-
 // memo: only mounts in range scope, but the parent still re-renders on unrelated
 // state changes — props (orders/range/start/products) are stable refs, so memo
-// keeps the recharts bar chart from re-rendering needlessly.
+// keeps the bar chart from re-rendering needlessly.
 function DayPerformanceChart({ orders, range, start, products }) {
     const now = new Date()
+    const [active, setActive] = useState(null)
+    const chartRef = useRef(null)
+    useClickOutside(chartRef, () => setActive(null), { active: active !== null })
 
     const countMap = useMemo(
         () => new Map((products || []).map(p => [p.id, p.count_as_cup !== false])),
@@ -86,28 +76,40 @@ function DayPerformanceChart({ orders, range, start, products }) {
                 )}
             </div>
 
-            <div className="h-[140px] w-full [&_*]:outline-none [&_*]:focus:outline-none">
-                <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data} barCategoryGap="28%" margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-                        <XAxis
-                            dataKey="label"
-                            tick={{ fontSize: 10, fill: '#a8a29e', fontWeight: 700 }}
-                            axisLine={false}
-                            tickLine={false}
-                            tickMargin={6}
-                        />
-                        <Tooltip content={<CustomTooltip />} cursor={false} />
-                        <Bar dataKey="cups" radius={[6, 6, 0, 0]}>
-                            {data.map((entry, i) => (
-                                <Cell
-                                    key={i}
-                                    fill={isFuture(entry) ? '#292524' : getBarColor(entry)}
-                                    fillOpacity={isFuture(entry) ? 0.4 : 1}
-                                />
-                            ))}
-                        </Bar>
-                    </BarChart>
-                </ResponsiveContainer>
+            <div ref={chartRef} className="h-[140px] w-full flex flex-col px-1 pt-1">
+                <div className="flex-1 flex">
+                    {data.map((entry, i) => (
+                        <div
+                            key={entry.label}
+                            className="flex-1 flex items-end justify-center"
+                            onMouseEnter={() => setActive(i)}
+                            onMouseLeave={() => setActive(null)}
+                            onClick={() => setActive(i)}
+                        >
+                            <div
+                                className="relative w-[72%] rounded-t-[6px]"
+                                style={{
+                                    height: `${(entry.cups / maxCups) * 100}%`,
+                                    background: isFuture(entry) ? '#292524' : getBarColor(entry),
+                                    opacity: isFuture(entry) ? 0.4 : 1,
+                                }}
+                            >
+                                {active === i && entry.cups > 0 && (
+                                    <div className={`absolute bottom-full mb-1 z-10 whitespace-nowrap bg-[#1c1917] border border-[#44403c] rounded-[12px] px-3 py-2 shadow-xl ${i === 0 ? 'left-0' : i === data.length - 1 ? 'right-0' : 'left-1/2 -translate-x-1/2'}`}>
+                                        <div className="text-[11px] font-black text-warning uppercase mb-1">{entry.label}</div>
+                                        <div className="text-[12px] text-white font-bold">{entry.cups} ly</div>
+                                        <div className="text-[11px] text-[#a8a29e]">{formatVND(entry.revenue)}</div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <div className="flex pt-1.5">
+                    {data.map(entry => (
+                        <span key={entry.label} className="flex-1 text-center text-[10px] font-bold text-[#a8a29e]">{entry.label}</span>
+                    ))}
+                </div>
             </div>
         </div>
     )
