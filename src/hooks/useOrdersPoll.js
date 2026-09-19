@@ -88,21 +88,24 @@ export function diffOrderHeads(localOrders, heads, knownIds = null) {
             if (knownIds && !knownIds.has(head.id)) {
                 newIds.push(head.id)
                 moneyChanged = true
-                // table_name có trong heads chỉ để trả lời đúng câu này: đơn mang đi của
-                // máy khác không đụng gì tới lưới bàn.
-                if (head.table_name) tableChanged = true
+                // Mọi đơn mới đều đụng lưới bàn: đơn bàn vào thẻ bàn, đơn mang đi (chưa ra
+                // món) vào thẻ "Mang đi" (bucket name=null của fetchOpenTables). Trước đây
+                // bỏ qua đơn mang đi → thẻ Mang đi ở máy khác đứng im tới khi có sự kiện bàn.
+                tableChanged = true
             }
             continue
         }
+        const deleted = !local.deleted_at !== !head.deleted_at
         const money = local.total !== head.total
             || (local.discount_amount || 0) !== (head.discount_amount || 0)
-            || !local.deleted_at !== !head.deleted_at
+            || deleted
         const table = !local.served_at !== !head.served_at
             || !local.table_closed_at !== !head.table_closed_at
         if (money) moneyChanged = true
         // Xoá mềm một đơn của bàn đang mở cũng đổi tổng bàn, nên cờ bàn ăn theo cả `money`
-        // khi đơn đó có bàn.
-        if (table || (money && head.table_name)) tableChanged = true
+        // khi đơn đó có bàn. Đơn mang đi chưa ra món bị xoá thì rơi khỏi thẻ Mang đi —
+        // chỉ sửa chiết khấu đơn mang đi mới là không đụng lưới.
+        if (table || (money && head.table_name) || (deleted && !head.served_at)) tableChanged = true
         // Vá cả loại chỉ-đổi-cờ-bàn: không ghi lại vào bản local thì nhịp sau vẫn thấy lệch
         // và gọi refreshTables mãi mãi.
         if (money || table) patched.push(head)

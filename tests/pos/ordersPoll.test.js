@@ -66,12 +66,21 @@ describe('diffOrderHeads', () => {
         expect(tableChanged).toBe(true)
     })
 
-    it('đơn mới của máy khác: có bàn thì mới đụng lưới bàn', () => {
+    it('đơn mới của máy khác, mang đi hay có bàn, đều đụng lưới bàn (thẻ Mang đi nằm trong lưới)', () => {
         const mangDi = diffOrderHeads([], [head({ id: 'x' })], known())
         const coBan = diffOrderHeads([], [head({ id: 'y', table_name: 'Bàn 1' })], known())
 
-        expect(mangDi.tableChanged).toBe(false)
+        expect(mangDi.tableChanged).toBe(true)
         expect(coBan.tableChanged).toBe(true)
+    })
+
+    it('máy khác xoá đơn mang đi: chưa ra món thì thẻ Mang đi đổi, đã ra món thì không', () => {
+        const del = { deleted_at: '2026-08-13T10:05:00Z' }
+        const choRa = diffOrderHeads([head()], [head(del)])
+        const daRa = diffOrderHeads([head({ served_at: 'x' })], [head({ served_at: 'x', ...del })])
+
+        expect(choRa.tableChanged).toBe(true)
+        expect(daRa.tableChanged).toBe(false)
     })
 
     it('máy khác xoá mềm → patched, dù mốc giờ xoá là gì', () => {
