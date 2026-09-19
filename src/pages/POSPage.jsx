@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useCart } from '../contexts/CartContext'
 import { useStats } from '../contexts/StatsContext'
 import { useHistory } from '../contexts/HistoryContext'
@@ -87,22 +87,29 @@ export default function POSPage() {
         handleLoadHistory()
     }
 
+    // Ô cột 4 trong Header (tablet) — TableModal inline portal thẻ Mang đi vào đây.
+    // State (không phải ref) để TableModal render lại khi ô đã gắn vào DOM.
+    const [takeawaySlot, setTakeawaySlot] = useState(null)
+
+    const header = (
+        <Header
+            isOnline={isOnline}
+            dayName={dayName}
+            dateOnly={dateOnly}
+            onOpenHistory={handleOpenHistory}
+            addressName={selectedAddress?.name}
+            onAddressClick={() => navigate(isGuest ? '/login' : '/addresses')}
+            recentOrders={recentOrders}
+            draftOrder={draftOrder}
+            enterKey={enterKey}
+            showOnboardingHint={showHistoryHint}
+            dineIn={dineIn}
+            takeawaySlotRef={setTakeawaySlot}
+        />
+    )
+
     const menuColumn = (
         <>
-            <Header
-                isOnline={isOnline}
-                dayName={dayName}
-                dateOnly={dateOnly}
-                onOpenHistory={handleOpenHistory}
-                addressName={selectedAddress?.name}
-                onAddressClick={() => navigate(isGuest ? '/login' : '/addresses')}
-                recentOrders={recentOrders}
-                draftOrder={draftOrder}
-                enterKey={enterKey}
-                showOnboardingHint={showHistoryHint}
-                dineIn={dineIn}
-            />
-
             <MenuGrid
                 products={products}
                 cart={cart}
@@ -128,6 +135,7 @@ export default function POSPage() {
     if (!dineIn) {
         return (
             <div className="flex flex-col h-full max-w-lg mx-auto bg-bg">
+                {header}
                 {menuColumn}
             </div>
         )
@@ -143,12 +151,17 @@ export default function POSPage() {
     // Samsung Z Fold giữa lúc sửa giảm giá là mất thao tác dở dang).
     return (
         <div className="pos-dine-grid h-full">
+            {/* Header phủ cả 2 cột ở dine-split (4 cột bên trong, xem Header.jsx). */}
+            <div className="[grid-area:header] w-full max-w-lg mx-auto dine-split:max-w-none">
+                {header}
+            </div>
+
             <div className="[grid-area:left] flex flex-col h-full min-h-0 w-full max-w-lg mx-auto bg-bg dine-split:max-w-none dine-split:mx-0 dine-split:border-r dine-split:border-border/80">
                 {menuColumn}
             </div>
 
             <div className="pos-table-pane hidden dine-split:flex flex-col min-h-0 [grid-area:table] bg-bg">
-                <TableModal inline />
+                <TableModal inline takeawaySlot={takeawaySlot} />
             </div>
 
             <div className="[grid-area:checkout] w-full max-w-lg mx-auto dine-split:max-w-none">

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import { Plus, X } from 'lucide-react'
 import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core'
@@ -73,7 +74,7 @@ function pendingCups(rounds) {
 // inline = true: render as the permanent right-pane "screen" on tablet split-view
 // (POSPage) instead of a bottom-sheet Dialog — no backdrop, no close button, picking
 // a table just updates this pane (no onClose to call back to).
-export default function TableModal({ onClose, inline = false }) {
+export default function TableModal({ onClose, inline = false, takeawaySlot }) {
     const { tableName, setTableName, openTables, refreshTables, showError } = useCart()
     const { selectedAddress, setTables } = useAddress()
     const { isManager, isAdmin } = useAuth()
@@ -226,6 +227,38 @@ export default function TableModal({ onClose, inline = false }) {
         } catch (err) { showError(err, 'Đổi tên bàn') }
     }
 
+    const takeawayCard = takeaway ? (
+        <div className={`${CARD_H} relative rounded-[20px] border p-3.5 flex flex-col gap-1.5 transition-colors ${!tableName ? 'bg-primary/5 border-primary' : 'bg-surface border-border/60'}`}>
+            {/* Chỉ đổi tiêu điểm, không pick('') (không gọi onClose) — mobile
+                là bottom-sheet, đóng ngay thì tap thứ 2 (mở chi tiết) không còn
+                gì để nhấn vào, phải mở lại sheet từ đầu. */}
+            <button onClick={() => (!tableName ? setShowTakeaway(true) : setTableName(''))} className="flex-1 min-h-0 w-full overflow-hidden text-left flex flex-col gap-1 focus:outline-none">
+                <span className="shrink-0 w-full flex items-baseline justify-between gap-2">
+                    <span className="text-[13px] font-black uppercase tracking-wide text-text">Mang đi</span>
+                    <span className="shrink-0 text-[12px] font-black tabular-nums text-text-secondary">{takeawayRounds.length} đơn</span>
+                </span>
+                {roundPreview(takeawayRounds)}
+                {/* shrink-0: dòng cảnh báo này quan trọng hơn danh sách đợt phía
+                    trên (min-h-0 overflow-hidden ở roundPreview) — bàn/đơn có nhiều
+                    đợt chưa ra thì roundPreview bị cắt bớt trước, KHÔNG được để cắt
+                    mất dòng tổng này (từng xảy ra: 6 món chưa ra mà thẻ không hiện).
+                    Cùng lý do cho dòng "N món chưa ra" ở thẻ bàn bên dưới. */}
+                {takeawayPending > 0 && (
+                    <span className="shrink-0 mt-auto text-[11px] font-black uppercase tracking-wide text-warning">
+                        {takeawayPending} món chưa ra
+                    </span>
+                )}
+            </button>
+        </div>
+    ) : (
+        <button
+            onClick={() => pick('')}
+            className={`${CARD_H} rounded-[20px] border p-3.5 flex flex-col items-center justify-center transition-colors ${!tableName ? 'bg-primary/5 border-primary' : 'bg-surface border-border/60 hover:border-primary/40'}`}
+        >
+            <span className="text-[13px] font-black uppercase tracking-wide text-text">Mang đi</span>
+        </button>
+    )
+
     // Header + body + child modals shared by both the mobile Dialog and the tablet
     // inline panel (see `inline` prop) — only the outer chrome (backdrop, and the
     // close button which inline has no use for) differs.
@@ -237,38 +270,10 @@ export default function TableModal({ onClose, inline = false }) {
                     {/* Đơn mang đi ở quán có bàn: bỏ chọn bàn, đơn về lại dạng không nhãn.
                         Có đơn đang chờ ra món thì hiện overview như thẻ bàn busy — chạm 1 cái
                         để CHỌN (như mọi thẻ khác), chạm cái nữa vào đúng thẻ đang chọn mới mở
-                        danh sách chi tiết. Không thì tile tĩnh bấm-là-chọn như trước. */}
-                    {takeaway ? (
-                        <div className={`${CARD_H} relative rounded-[20px] border p-3.5 flex flex-col gap-1.5 transition-colors ${!tableName ? 'bg-primary/5 border-primary' : 'bg-surface border-border/60'}`}>
-                            {/* Chỉ đổi tiêu điểm, không pick('') (không gọi onClose) — mobile
-                                là bottom-sheet, đóng ngay thì tap thứ 2 (mở chi tiết) không còn
-                                gì để nhấn vào, phải mở lại sheet từ đầu. */}
-                            <button onClick={() => (!tableName ? setShowTakeaway(true) : setTableName(''))} className="flex-1 min-h-0 w-full overflow-hidden text-left flex flex-col gap-1 focus:outline-none">
-                                <span className="shrink-0 w-full flex items-baseline justify-between gap-2">
-                                    <span className="text-[13px] font-black uppercase tracking-wide text-text">Mang đi</span>
-                                    <span className="shrink-0 text-[12px] font-black tabular-nums text-text-secondary">{takeawayRounds.length} đơn</span>
-                                </span>
-                                {roundPreview(takeawayRounds)}
-                                {/* shrink-0: dòng cảnh báo này quan trọng hơn danh sách đợt phía
-                                    trên (min-h-0 overflow-hidden ở roundPreview) — bàn/đơn có nhiều
-                                    đợt chưa ra thì roundPreview bị cắt bớt trước, KHÔNG được để cắt
-                                    mất dòng tổng này (từng xảy ra: 6 món chưa ra mà thẻ không hiện).
-                                    Cùng lý do cho dòng "N món chưa ra" ở thẻ bàn bên dưới. */}
-                                {takeawayPending > 0 && (
-                                    <span className="shrink-0 mt-auto text-[11px] font-black uppercase tracking-wide text-warning">
-                                        {takeawayPending} món chưa ra
-                                    </span>
-                                )}
-                            </button>
-                        </div>
-                    ) : (
-                        <button
-                            onClick={() => pick('')}
-                            className={`${CARD_H} rounded-[20px] border p-3.5 flex flex-col items-center justify-center transition-colors ${!tableName ? 'bg-primary/5 border-primary' : 'bg-surface border-border/60 hover:border-primary/40'}`}
-                        >
-                            <span className="text-[13px] font-black uppercase tracking-wide text-text">Mang đi</span>
-                        </button>
-                    )}
+                        danh sách chi tiết. Không thì tile tĩnh bấm-là-chọn như trước.
+                        Tablet (inline): thẻ portal lên cột 4 của Header (xem takeawaySlot ở
+                        POSPage) — state + TakeawayListModal vẫn ở đây, chỉ chỗ hiện đổi. */}
+                    {inline ? (takeawaySlot && createPortal(takeawayCard, takeawaySlot)) : takeawayCard}
 
                     {/* 1 SortableContext cho cả bàn cố định lẫn bàn tạm (adHoc) — nhân viên
                         (!canEdit) hoặc bàn tạm vẫn nằm trong context này nhưng không có

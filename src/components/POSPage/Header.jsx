@@ -15,7 +15,7 @@ function Typewriter({ text }) {
     return <>{text.slice(0, n)}{n < text.length && <span className="opacity-50">▌</span>}</>
 }
 
-export default function Header({ dayName, dateOnly, onOpenHistory, addressName, onAddressClick, recentOrders = [], draftOrder, enterKey, showOnboardingHint = false, dineIn = false }) {
+export default function Header({ dayName, dateOnly, onOpenHistory, addressName, onAddressClick, recentOrders = [], draftOrder, enterKey, showOnboardingHint = false, dineIn = false, takeawaySlotRef }) {
     const hintClass = onboardingHintClass(showOnboardingHint, 'light')
     // Draft (held, unsaved) line on top, then saved orders. Cap at 3 rows.
     // key 'draft' is stable so extras overwrite it in place; typeKey = the held
@@ -33,7 +33,7 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
     ].slice(0, 3)
     return (
         <header className="shrink-0 pt-6 pb-6 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)] relative z-20">
-            <div className="px-6 grid grid-cols-2 gap-3 mb-1">
+            <div className={`px-6 grid grid-cols-2 ${dineIn ? 'dine-split:grid-cols-4' : ''} gap-3 mb-1`}>
                 {/* Card 1: Address & Status */}
                 <div
                     onClick={onAddressClick}
@@ -62,7 +62,7 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                     onClick={onOpenHistory}
                     role="button"
                     tabIndex={0}
-                    className={`cursor-pointer bg-linear-to-b from-primary to-primary-dark rounded-[20px] p-3 sm:p-3.5 border border-primary shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full hover:brightness-105 active:brightness-95 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${hintClass}`}
+                    className={`${dineIn ? 'dine-split:col-span-2' : ''} cursor-pointer bg-linear-to-b from-primary to-primary-dark rounded-[20px] p-3 sm:p-3.5 border border-primary shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full hover:brightness-105 active:brightness-95 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${hintClass}`}
                 >
                     <div className="flex flex-col justify-between items-start relative z-10 w-full">
                         <div className="flex items-center justify-between w-full">
@@ -102,6 +102,11 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                     </div>
                     <div className="absolute bottom-0 right-0 w-24 h-24 bg-white/15 rounded-full blur-2xl -mr-10 -mb-10 pointer-events-none" />
                 </div>
+
+                {/* Cột 4 (tablet): thẻ Mang đi — TableModal inline portal vào đây, state
+                    + modal danh sách vẫn ở TableModal. [&>*]:h-full: cao bằng hàng header
+                    thay vì CARD_H của lưới bàn. */}
+                {dineIn && <div ref={takeawaySlotRef} className="hidden dine-split:block [&>*]:h-full" />}
             </div>
         </header >
     )

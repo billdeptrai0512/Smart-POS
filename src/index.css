@@ -26,11 +26,11 @@ img[src^="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP"] {
 .pos-dine-grid {
   display: grid;
   grid-template-columns: 1fr;
-  grid-template-rows: 1fr auto;
-  grid-template-areas: "left" "checkout";
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas: "header" "left" "checkout";
   @variant dine-split {
     grid-template-columns: 1fr 1fr;
-    grid-template-areas: "left table" "left checkout";
+    grid-template-areas: "header header" "left table" "left checkout";
   }
 }
 
