@@ -96,6 +96,7 @@ const ORDER_SELECT = `
     deleted_at,
     deleted_by,
     served_at,
+    paid_at,
     table_closed_at,
     print_count,
     order_items (
@@ -441,11 +442,11 @@ export async function fetchRecentOrders(addressId: UUID | null, limit = 3): Prom
 // Bucket đặc biệt name=null: đơn MANG ĐI chưa ra món (table_name thật là null). Đơn mang
 // đi không có "tính tiền" (đã trả ngay lúc tạo) nên không cần lọc table_closed_at, chỉ cần
 // served_at IS NULL — ra món xong thì coi như xong, rơi khỏi bucket này (đọc/in/xoá đơn cũ
-// vẫn làm ở Nhật ký). Nhờ vậy TableModal/moveTableRounds/toggleServed dùng lại nguyên logic
+// vẫn làm ở Nhật ký). Nhờ vậy TableModal/moveTableRounds/toggleMark dùng lại nguyên logic
 // "một bàn" cho cả mang đi, không cần state/fetch riêng.
 type TableLine = { name: string; qty: number; dish: string; opts: string[]; note: string | null }
 type TableRoundItem = { productId: UUID; qty: number; extraIds: UUID[]; toppingIds: UUID[]; discountAmount: number; note: string | null }
-export type TableRound = { id: UUID; orderNo: number | null; createdAt: string; total: number; discountAmount: number; servedAt: string | null; staffName: string | null; printCount: number; lines: TableLine[]; items: TableRoundItem[] }
+export type TableRound = { id: UUID; orderNo: number | null; createdAt: string; total: number; discountAmount: number; servedAt: string | null; paidAt: string | null; staffName: string | null; printCount: number; lines: TableLine[]; items: TableRoundItem[] }
 type OpenTable = { name: string | null; total: number; rounds: TableRound[]; openedAt: string; lines: TableLine[] }
 
 // 'Tiền mặt'/'MoMo' đi chung mảng extras nhưng là cách trả tiền, không phải topping —
@@ -538,16 +539,17 @@ export function moveRoundsIntoTable(prevTables: OpenTable[], idSet: Set<UUID>, t
     return { nextTables, moved }
 }
 
-// Đánh dấu một đợt đã pha xong và bưng ra. Chỉ là mốc thời gian trên orders, không
-// đụng tiền — bàn 2 người vừa pha vừa thu tiền nhìn vào đây để biết đợt nào còn nợ khách.
-// servedAt = null để bỏ đánh dấu (bấm nhầm).
-export async function markOrderServed(orderId: UUID, servedAt: string | null): Promise<void> {
+// Đánh dấu mốc trên một đợt: served_at (đã pha xong, bưng ra) hoặc paid_at (đã thu tiền).
+// Chỉ là mốc thời gian trên orders, không đụng tiền (doanh thu ghi từng đợt lúc tạo) — bàn
+// 2 người vừa pha vừa thu tiền nhìn vào đây để biết đợt nào còn nợ khách.
+// Giá trị null = bỏ đánh dấu (bấm nhầm).
+export async function markOrder(orderId: UUID, patch: { served_at?: string | null; paid_at?: string | null }): Promise<void> {
     if (localRepo.isGuest()) return // chế độ khách demo không có bàn (xem fetchOpenTables)
     if (!supabase) throw new Error('No Supabase connection')
 
     const { error } = await supabase
         .from('orders')
-        .update({ served_at: servedAt })
+        .update(patch)
         .eq('id', orderId)
 
     if (error) throw error
@@ -555,9 +557,8 @@ export async function markOrderServed(orderId: UUID, servedAt: string | null): P
 
 // Đọc số lần đã in TRỰC TIẾP TỪ SERVER rồi +1 và ghi lại — không tin props.printCount
 // (nguồn todayOrders/openTables ở client): orders_sync (poll đồng bộ, useOrdersPoll.js) chỉ
-// patch một tập cột "head" cố định (total, discount_amount, deleted_at, served_at,
-// table_closed_at, table_name — xem diffOrderHeads), KHÔNG có print_count, nên bản trong bộ
-// nhớ đứng im ở giá trị lúc tải trang, mãi mãi không tự cập nhật dù server đã tăng.
+// patch một tập cột "head" cố định (xem diffOrderHeads) — có print_count từ 20260919, nhưng
+// chỉ tới sau một nhịp poll, không kịp cho cú in liên tiếp ngay trên máy này.
 //
 // Có round-trip mạng nên hàm này CHỈ nên gọi Ở NỀN (không await trước khi in) — xem
 // bumpOrderPrintCount bên dưới, chỗ duy nhất gọi hàm này.
@@ -616,7 +617,7 @@ export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable
 
     const { data, error } = await supabase
         .from('orders')
-        .select('id, order_no, total, discount_amount, created_at, served_at, staff_name, table_name, print_count, order_items(quantity, options, product_id, extra_ids, topping_ids, discount_amount, note, products(name))')
+        .select('id, order_no, total, discount_amount, created_at, served_at, paid_at, staff_name, table_name, print_count, order_items(quantity, options, product_id, extra_ids, topping_ids, discount_amount, note, products(name))')
         .eq('address_id', addressId)
         .is('deleted_at', null)
         .is('table_closed_at', null)
@@ -648,7 +649,7 @@ export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable
             tableLine(i.products?.name || 'Món đã xoá', (i.options || '').split(', '), i.note, i.quantity)))
         t.total += o.total
         t.rounds.push({
-            id: o.id, orderNo: o.order_no ?? null, createdAt: o.created_at, total: o.total, discountAmount: o.discount_amount || 0, servedAt: o.served_at ?? null,
+            id: o.id, orderNo: o.order_no ?? null, createdAt: o.created_at, total: o.total, discountAmount: o.discount_amount || 0, servedAt: o.served_at ?? null, paidAt: o.paid_at ?? null,
             staffName: o.staff_name ?? null, printCount: o.print_count || 0,
             lines: roundLines,
             items: (o.order_items || []).map((i: any) => ({

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { nativePrinterIp } from '../lib/escposBitmap'
 import { printKitchenTicket } from '../components/common/KitchenTicket'
-import { fetchTodayStats, submitOrder, fetchOrderNo, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext, fetchOpenTables, closeTable, reopenTable, markOrderServed, mergeTableLines, extractRounds, dropTableByName, restoreTable, moveRoundsIntoTable, tableLineName, tableLine, moveTableRounds as moveTableRoundsService } from '../services/orderService'
+import { fetchTodayStats, submitOrder, fetchOrderNo, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext, fetchOpenTables, closeTable, reopenTable, markOrder, mergeTableLines, extractRounds, dropTableByName, restoreTable, moveRoundsIntoTable, tableLineName, tableLine, moveTableRounds as moveTableRoundsService } from '../services/orderService'
 import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder, addPendingTableClose, removePendingTableClose } from '../hooks/useOfflineSync'
 import { useOrdersPoll } from '../hooks/useOrdersPoll'
@@ -198,28 +198,29 @@ export function POSProvider() {
         refreshTables()
     }, [dineIn, isPosPage, refreshTables])
 
-    // Ra món: lật cờ NGAY trong state rồi mới gọi server, lỗi thì lật lại. Chờ PATCH
-    // xong rồi refreshTables (một lượt join order_items, đo được ~1s) là nhân viên bấm
-    // xong đứng nhìn nút không đổi màu. Không fetch lại sau khi PATCH thành công: thứ
-    // duy nhất đổi là đúng cái cờ vừa lật.
-    const toggleServed = useCallback(async (round) => {
-        const next = round.servedAt ? null : new Date().toISOString()
+    // Ra món (key 'servedAt') / Tính tiền ('paidAt') của một đợt: lật cờ NGAY trong state rồi
+    // mới gọi server, lỗi thì lật lại. Chờ PATCH xong rồi refreshTables (một lượt join
+    // order_items, đo được ~1s) là nhân viên bấm xong đứng nhìn nút không đổi màu. Không fetch
+    // lại sau khi PATCH thành công: thứ duy nhất đổi là đúng cái cờ vừa lật.
+    const toggleMark = useCallback(async (round, key) => {
+        const [column, label] = key === 'paidAt' ? ['paid_at', 'Tính tiền'] : ['served_at', 'Đánh dấu ra món']
+        const next = round[key] ? null : new Date().toISOString()
         const apply = (v) => setOpenTables(prev => prev.map(t => ({
             ...t,
-            rounds: t.rounds.map(r => (r.id === round.id ? { ...r, servedAt: v } : r)),
+            rounds: t.rounds.map(r => (r.id === round.id ? { ...r, [key]: v } : r)),
         })))
         apply(next)
         try {
-            await markOrderServed(round.id, next)
+            await markOrder(round.id, { [column]: next })
         } catch (err) {
-            apply(round.servedAt)
-            showError(err, 'Đánh dấu ra món')
+            apply(round[key])
+            showError(err, label)
         }
     }, [showError])
 
-    // Tính tiền = đóng bàn. Tiền đã vào doanh thu từng đợt nên ở đây không cộng trừ gì,
-    // chỉ đóng dấu "lượt khách này xong". Nhận cả object bàn (không phải mỗi tên) để
-    // hoàn tác dựng lại được thẻ mà không cần fetch — quan trọng khi đang mất mạng.
+    // Dọn bàn = đóng bàn (khách đã về). Tiền đã vào doanh thu từng đợt nên ở đây không cộng
+    // trừ gì. Nhận cả object bàn (không phải mỗi tên) để hoàn tác dựng lại được thẻ mà không
+    // cần fetch — quan trọng khi đang mất mạng.
     const handleCloseTable = useCallback(async (table, { printFailed = false } = {}) => {
         const name = table?.name
         if (!addressId || !name) return
@@ -237,7 +238,7 @@ export function POSProvider() {
             // in đã bị nuốt (reportError-only, xem handlePrint) để khỏi bị toast "Đã tính
             // tiền" đè mất ngay sau — gộp cả hai ý vào đây thay vì hai toast xếp hàng.
             // Không có hoàn tác thì bấm nhầm là phải vào DB mới cứu được bàn.
-            showToast(printFailed ? `Đã tính tiền ${name} — in lỗi, in lại tay` : `Đã tính tiền ${name}`, printFailed ? 'warning' : 'success', {
+            showToast(printFailed ? `Đã dọn ${name} — in lỗi, in lại tay` : `Đã dọn ${name}`, printFailed ? 'warning' : 'success', {
                 label: 'Hoàn tác',
                 onClick: () => reopenTable(addressId, name, closedAt)
                     .then(() => { restore(); refreshTables(); showToast(`Đã mở lại ${name}`, 'info') })
@@ -248,19 +249,19 @@ export function POSProvider() {
                 // Khách đang đứng trả tiền, mất mạng không được phép chặn. Xếp hàng như đơn.
                 addPendingTableClose(addressId, name, closedAt)
                 drop()
-                showToast(`Đã tính tiền ${name} — chờ mạng để đồng bộ`, 'warning', {
+                showToast(`Đã dọn ${name} — chờ mạng để đồng bộ`, 'warning', {
                     label: 'Hoàn tác',
                     onClick: () => { removePendingTableClose(closedAt); restore(); showToast(`Đã mở lại ${name}`, 'info') },
                 })
             } else {
-                showError(err, 'Tính tiền bàn')
+                showError(err, 'Dọn bàn')
             }
         }
     }, [addressId, refreshTables, showToast, showError])
 
     // Gộp (chuyển hết đợt của bàn) / tách (chuyển một đợt) đều gọi hàm này — chỉ khác
     // orderIds truyền vào. Áp lạc quan NGAY vào openTables (như handleCloseTable/
-    // toggleServed) rồi mới gọi mạng — đợi round-trip xong mới vẽ lại là lý do bấm xong
+    // toggleMark) rồi mới gọi mạng — đợi round-trip xong mới vẽ lại là lý do bấm xong
     // đứng khựng một nhịp mới thấy đợt nhảy bàn. Đợt tự mang nguyên total/lines/orderNo
     // của nó (xem comment orderNo ở TableDetailModal), chỉ đổi NHÓM nó thuộc về, nên dựng
     // lại state từ dữ liệu đang có mà không cần hỏi lại server.
@@ -1143,7 +1144,7 @@ export function POSProvider() {
         handleAddItem, cancelHeld, handleToggleExtra, handleToggleStickyExtra, handleToggleTopping, commitHeld, reopenRoundIntoCart,
         setItemDiscount, setItemNote,
         dineIn, handleConfirm, tableName, setTableName,
-        openTables, refreshTables, handleCloseTable, toggleServed, moveTableRounds,
+        openTables, refreshTables, handleCloseTable, toggleMark, moveTableRounds,
         enabledStickyExtraIds,
         total, orderCount, hasOrder,
         discountAmount, finalTotal,
@@ -1151,7 +1152,7 @@ export function POSProvider() {
         toast, showToast, showError, reportError,
         // deliberately partial deps, see comment above
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [cart, activeCartItemId, dineIn, tableName, openTables, refreshTables, handleCloseTable, toggleServed, moveTableRounds, enabledStickyExtraIds, total, orderCount, hasOrder, discountAmount, finalTotal, recentOrders, draftOrder, enterKey, toast, showToast, showError, reportError])
+    }), [cart, activeCartItemId, dineIn, tableName, openTables, refreshTables, handleCloseTable, toggleMark, moveTableRounds, enabledStickyExtraIds, total, orderCount, hasOrder, discountAmount, finalTotal, recentOrders, draftOrder, enterKey, toast, showToast, showError, reportError])
 
     const statsValue = useMemo(() => ({
         revenue, totalCost, cupsSold, isOnline,

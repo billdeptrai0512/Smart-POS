@@ -109,6 +109,15 @@ describe('diffOrderHeads', () => {
         expect(moneyChanged).toBe(false)
     })
 
+    it('máy khác bấm Tính tiền / in bill → lưới bàn vẽ lại nhãn Đã thu / Đã in bill', () => {
+        for (const over of [{ paid_at: '2026-09-19T11:00:00Z' }, { print_count: 1 }]) {
+            const { patched, moneyChanged, tableChanged } = diffOrderHeads([head()], [head(over)])
+            expect(patched).toHaveLength(1)
+            expect(tableChanged).toBe(true)
+            expect(moneyChanged).toBe(false)
+        }
+    })
+
     it('hàng lạc quan thiếu hẳn cột cờ bàn → undefined vs null không phải là lệch', () => {
         // doSubmit dựng hàng lạc quan không có served_at/table_closed_at. Nếu coi là lệch
         // thì mỗi nhịp poll lại vá + refreshTables cho tới hết ca.

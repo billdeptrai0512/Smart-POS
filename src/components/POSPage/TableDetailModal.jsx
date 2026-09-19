@@ -27,7 +27,7 @@ import KitchenReprintButton from './KitchenReprintButton'
 
 export default function TableDetailModal({ table, tableNames = [], onClose, onPick }) {
     const confirm = useConfirm()
-    const { handleCloseTable, reopenRoundIntoCart, toggleServed, orderCount, showError, reportError } = useCart()
+    const { handleCloseTable, reopenRoundIntoCart, toggleMark, orderCount, showError, reportError } = useCart()
     const { handleDeleteOrder } = useHistory()
     const { products, productExtras } = useProducts()
     const { selectedAddress } = useAddress()
@@ -135,10 +135,10 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
 
     const handleHeaderPrint = () => withBilling(handlePrint)
 
-    const handleBill = () => withBilling(async () => {
-        // Chỉ hỏi xác nhận khi còn đợt chưa ra món — đây là trường hợp DUY NHẤT còn kịp
-        // cảnh báo trước khi bàn (và đợt chưa ra món) biến mất khỏi lưới. Đã ra hết món
-        // rồi thì hỏi thêm chỉ là 1 tap thừa, tính tiền + in thẳng luôn.
+    // Dọn bàn (khách đã về, bàn rời lưới) hỏi lần lượt: ra món chưa → tính tiền chưa → in
+    // bill không. Hai câu đầu chỉ hỏi khi còn đợt chưa ra/chưa thu, và huỷ là dừng hẳn —
+    // đó là chỗ duy nhất còn kịp cảnh báo trước khi bàn biến mất.
+    const handleClear = () => withBilling(async () => {
         //
         // Dùng thẳng `table` (đã tính lại từ openTables mỗi render — xem comment ở
         // TableModal — và openTables được vòng poll ~888ms giữ tươi, xem useOrdersPoll.js)
@@ -149,23 +149,26 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
         // trước cú bấm) có thể chưa kịp vào cảnh báo này — không mất dữ liệu, chỉ có thể
         // thiếu hộp xác nhận ở trường hợp cực hiếm.
         const pending = table.rounds.filter(r => !r.servedAt).length
-        if (pending > 0) {
-            const ok = await confirm({
-                title: `Tính tiền ${table.name}?`,
-                detail: `${linesLabel(table.lines)} — ${formatVND(table.total)} · ${table.rounds.length} đợt từ ${openedLabel(table.openedAt)}\n⚠ Còn ${pending} đợt chưa ra món.`,
-                confirmLabel: 'Tính tiền',
-            })
-            if (!ok) return
-        }
-        // Hỏi in hay không — tách khỏi Tính tiền theo yêu cầu: khách không phải lúc nào
-        // cũng cần giấy, và trước đây in luôn kèm theo là chỗ toast lỗi in bị tính tiền
-        // đè mất (xem printFailed/handleCloseTable). "Không in" hay Esc đều chỉ bỏ qua
-        // bước in — bàn vẫn tính tiền bình thường ở dưới, không huỷ cả thao tác.
+        if (pending > 0 && !await confirm({
+            title: `${table.name} ra món chưa?`,
+            detail: `⚠ Còn ${pending} đợt chưa ra món.`,
+            confirmLabel: 'Đã ra, dọn tiếp',
+        })) return
+        // Tính tiền (pill từng đợt) tách khỏi Dọn bàn: khách trả xong có thể còn ngồi, hoặc in
+        // bill trước rồi cuối buổi mới trả — tới lúc dọn mà còn đợt chưa thu thì hỏi lại.
+        const unpaid = table.rounds.filter(r => !r.paidAt)
+        if (unpaid.length > 0 && !await confirm({
+            title: `${table.name} tính tiền chưa?`,
+            detail: `${linesLabel(table.lines)} — chưa thu ${formatVND(unpaid.reduce((s, r) => s + r.total, 0))} · ${table.rounds.length} đợt từ ${openedLabel(table.openedAt)}`,
+            confirmLabel: 'Đã thu, dọn tiếp',
+        })) return
+        // "Không in" hay Esc đều chỉ bỏ qua bước in — bàn vẫn dọn bình thường ở dưới.
+        const printed = printCountRound?.printCount ?? 0
         const wantsPrint = await confirm({
-            title: `Xuất hoá đơn cho ${table.name}?`,
-            detail: `${linesLabel(table.lines)} — ${formatVND(table.total)}`,
+            title: `In bill cho ${table.name}?`,
+            detail: `${linesLabel(table.lines)} — ${formatVND(table.total)}${printed ? ` · đã in ${printed} lần` : ''}`,
             cancelLabel: 'Không in',
-            confirmLabel: 'In & Tính tiền',
+            confirmLabel: 'In & Dọn bàn',
         })
         // In TRƯỚC khi đóng bàn: TableModal render TableDetailModal theo detailTable
         // (tính lại từ openTables mỗi render, xem comment ở TableModal) — đóng bàn xong
@@ -230,41 +233,50 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
                 {table.rounds.map((round, i) => (
                     <div key={round.id || i} className="rounded-[16px] border border-border/40 bg-surface-light/40 px-4 py-3">
-                        <div className="flex items-center justify-between gap-3 pb-2">
-                            <div className="flex items-center gap-1.5">
+                        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 pb-2">
+                            <div className="flex flex-wrap items-center gap-1.5">
                                 {!isSameDayVN(new Date(round.createdAt), new Date()) && <span className={TIME_PILL}>{dateShortVN(new Date(round.createdAt))}</span>}
                                 <span className={TIME_PILL}>{timeStringVN(new Date(round.createdAt))}</span>
-                                {/* Tách đợt này sang bàn khác — cùng màn chọn bàn đích với nút
-                                    "Gộp bàn" ở header, chỉ khác orderIds chỉ có mỗi đợt này. */}
                                 {round.id && (
                                     <button
-                                        onClick={() => startMove([round.id], `đợt ${openedLabel(round.createdAt)}`)}
-                                        aria-label={`Chuyển đợt ${openedLabel(round.createdAt)} sang bàn khác`}
-                                        className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-text hover:border-primary/40`}
+                                        onClick={() => handleEditRound(round)}
+                                        className={`${CHIP_IDLE} px-2.5 hover:text-text hover:border-primary/40`}
                                     >
-                                        <ArrowRightLeft size={12} strokeWidth={2.25} />
+                                        Sửa
                                     </button>
                                 )}
                             </div>
-                            <span className="text-[13px] font-black tabular-nums text-text">{formatVND(round.total)}</span>
+                            <span className="ml-auto whitespace-nowrap text-[13px] font-black tabular-nums text-text">{formatVND(round.total)}</span>
                         </div>
                         <div className="flex flex-col gap-0.5 border-t border-border/40 pt-2 pb-2 pl-2">
+                            {/* Topping/option + ghi chú xuống dòng riêng, cùng kiểu thẻ đơn ở Nhật ký (OrdersList). */}
                             {round.lines.map(l => (
-                                <span key={l.name} className="text-[13px] font-bold text-text leading-snug">
-                                    {l.qty > 1 && <span className="tabular-nums text-text-secondary">{l.qty} </span>}{l.name}
-                                </span>
+                                <div key={l.name} className="flex flex-col gap-0.5">
+                                    <span className="text-[13px] font-bold text-text leading-snug">
+                                        {l.qty > 1 && <span className="tabular-nums text-text-secondary">{l.qty} </span>}{l.dish}
+                                    </span>
+                                    {l.opts.map(o => (
+                                        <span key={o} className="pl-2.5 text-[12px] leading-snug text-text-secondary/70">• {o}</span>
+                                    ))}
+                                    {l.note && (
+                                        <span className="pl-2.5 text-[12px] leading-snug italic text-text-secondary break-words">Ghi chú: {l.note}</span>
+                                    )}
+                                </div>
                             ))}
                         </div>
                         {/* Đợt offline chưa có id trong DB → chưa sửa/xoá/đánh dấu được,
                             ẩn cả hàng nút thay vì để nút bấm vào không có gì xảy ra. */}
                         {round.id && (
-                            <div className="flex items-center gap-2 border-t border-border/40 pt-2">
+                            <div className="flex flex-wrap items-center gap-2 border-t border-border/40 pt-2">
                                 <KitchenReprintButton round={round} tableName={table.name} />
+                                {/* Tách đợt này sang bàn khác — cùng màn chọn bàn đích với nút
+                                    "Gộp bàn" ở header, chỉ khác orderIds chỉ có mỗi đợt này. */}
                                 <button
-                                    onClick={() => handleEditRound(round)}
-                                    className={`${CHIP_IDLE} px-2.5 hover:text-text hover:border-primary/40`}
+                                    onClick={() => startMove([round.id], `đợt ${openedLabel(round.createdAt)}`)}
+                                    aria-label={`Chuyển đợt ${openedLabel(round.createdAt)} sang bàn khác`}
+                                    className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-text hover:border-primary/40`}
                                 >
-                                    Sửa
+                                    <ArrowRightLeft size={12} strokeWidth={2.25} />
                                 </button>
                                 <button
                                     onClick={() => handleDeleteRound(round)}
@@ -273,15 +285,21 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
                                 >
                                     <Trash2 size={14} strokeWidth={2.25} />
                                 </button>
-                                <button
-                                    onClick={() => toggleServed(round)}
-                                    className={`flex items-center gap-1.5 px-2.5 ml-auto ${round.servedAt
-                                        ? `${CHIP} bg-success/10 border-success/40 text-success`
-                                        : `${CHIP_IDLE} hover:text-text hover:border-primary/40`}`}
-                                >
-                                    {round.servedAt && <Check size={12} strokeWidth={3} />}
-                                    {round.servedAt ? `Đã ra món ${timeStringVN(new Date(round.servedAt))}` : 'Chưa ra món'}
-                                </button>
+                                {/* ml-auto trên cả cụm: hẹp quá thì cụm xuống dòng mà vẫn dạt phải. */}
+                                <div className="ml-auto flex flex-wrap justify-end items-center gap-2">
+                                    {[['servedAt', 'ra món'], ['paidAt', 'tính tiền']].map(([key, label]) => (
+                                        <button
+                                            key={key}
+                                            onClick={() => toggleMark(round, key)}
+                                            className={`flex items-center gap-1.5 px-2.5 ${round[key]
+                                                ? `${CHIP} bg-success/10 border-success/40 text-success`
+                                                : `${CHIP_IDLE} hover:text-text hover:border-primary/40`}`}
+                                        >
+                                            {round[key] && <Check size={12} strokeWidth={3} />}
+                                            {round[key] ? `Đã ${label}` : `Chưa ${label}`}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                         )}
                     </div>
@@ -296,11 +314,11 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
                     {orderCount > 0 ? `Gọi thêm ${orderCount} ly` : 'Gọi thêm'}
                 </button>
                 <button
-                    onClick={handleBill}
+                    onClick={handleClear}
                     disabled={billing}
                     className="flex-1 py-2.5 rounded-[12px] bg-primary text-bg text-[12px] font-black uppercase tracking-wider hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-60 disabled:pointer-events-none flex items-center justify-center gap-1.5"
                 >
-                    {billing ? <Loader size={14} className="animate-spin" /> : 'Tính tiền'}
+                    {billing ? <Loader size={14} className="animate-spin" /> : 'Dọn bàn'}
                 </button>
             </div>
 

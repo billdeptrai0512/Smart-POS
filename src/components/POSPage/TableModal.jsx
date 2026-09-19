@@ -300,7 +300,8 @@ export default function TableModal({ onClose, inline = false, takeawaySlot }) {
                         </button>
                     </div>
                 )}
-                <div className="grid grid-cols-2 gap-3">
+                {/* Dưới 360px (máy gập, pane hẹp) thẻ 2 cột chỉ còn ~100px — không đủ cho tên + tổng. */}
+                <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-3">
                     {/* Đơn mang đi ở quán có bàn: bỏ chọn bàn, đơn về lại dạng không nhãn.
                         Có đơn đang chờ ra món thì hiện overview như thẻ bàn busy — chạm 1 cái
                         để CHỌN (như mọi thẻ khác), chạm cái nữa vào đúng thẻ đang chọn mới mở
@@ -361,7 +362,6 @@ export default function TableModal({ onClose, inline = false, takeawaySlot }) {
                                                         <span className={`text-[13px] font-black uppercase tracking-wide line-clamp-1 ${busy || active ? 'text-text' : 'text-text-secondary'}`}>{name}</span>
                                                         {busy && <span className="shrink-0 text-[14px] font-black tabular-nums text-primary">{formatVND(t.total)}</span>}
                                                     </span>
-                                                    {stale && <span className="shrink-0 text-[11px] font-bold text-text-secondary">{stale}</span>}
                                                     {busy ? (
                                                         roundPreview(t.rounds)
                                                     ) : (
@@ -369,10 +369,22 @@ export default function TableModal({ onClose, inline = false, takeawaySlot }) {
                                                     )}
                                                     {/* Còn ly chưa bưng ra — thứ duy nhất trên lưới mà nhân viên cần
                                                         thấy trước khi bấm vào bàn. Chi tiết đợt nào thì mở thẻ ra xem.
-                                                        shrink-0: xem comment ở thẻ Mang đi phía trên. */}
-                                                    {pending > 0 && (
-                                                        <span className="shrink-0 mt-auto text-[11px] font-black uppercase tracking-wide text-warning">
-                                                            {pending} món chưa ra
+                                                        shrink-0: xem comment ở thẻ Mang đi phía trên.
+                                                        "Từ 08/08" (bàn mở từ hôm trước) nằm chung hàng đáy này, bên phải —
+                                                        đứng dòng riêng thì thẻ 124px không đủ chỗ, các dòng đợt bị ép dẹt.
+                                                        Khoá đúng 1 dòng (h + overflow-hidden + flex-wrap): thẻ hẹp không đủ chỗ
+                                                        thì "Từ ..." rớt xuống dòng 2 và bị ẩn, trạng thái không bao giờ gãy. */}
+                                                    {(busy || stale) && (
+                                                        <span className="shrink-0 mt-auto h-[15px] leading-[15px] overflow-hidden flex flex-wrap justify-between gap-x-2 whitespace-nowrap text-[11px] font-black uppercase tracking-wide">
+                                                            {pending > 0 ? (
+                                                                <span className="text-warning">{pending} món chưa ra</span>
+                                                            ) : busy && t.rounds.every(r => r.paidAt) ? (
+                                                                // Ra hết món rồi thì ô này báo chặng thu tiền: đã thu (chờ dọn) / đã in bill (chờ thu).
+                                                                <span className="text-success">Đã thu</span>
+                                                            ) : busy && t.rounds.some(r => r.printCount > 0) ? (
+                                                                <span className="text-text-secondary">Đã in bill</span>
+                                                            ) : null}
+                                                            {stale && <span className="ml-auto shrink-0 font-bold normal-case tracking-normal text-text-secondary">{stale}</span>}
                                                         </span>
                                                     )}
                                                 </button>

@@ -20,7 +20,7 @@ import KitchenReprintButton from './KitchenReprintButton'
 // từng đơn riêng thay vì gộp cả nhóm thành 1 bill.
 
 export default function TakeawayListModal({ orders, tableNames, onClose, onPick }) {
-    const { toggleServed, reopenRoundIntoCart } = useCart()
+    const { toggleMark, reopenRoundIntoCart } = useCart()
     const { handleDeleteOrder } = useHistory()
     const confirm = useConfirm()
     const [moving, setMoving] = useState(null) // { orderIds: string[], label: string } | null
@@ -72,7 +72,7 @@ export default function TakeawayListModal({ orders, tableNames, onClose, onPick 
                     <TakeawayRow
                         key={order.id}
                         order={order}
-                        onToggleServed={() => toggleServed(order)}
+                        onToggleServed={() => toggleMark(order, 'servedAt')}
                         onMove={() => startMove([order.id], `đơn ${openedLabelVN(order.createdAt)}`)}
                         onEdit={() => handleEdit(order)}
                         onDelete={() => handleDelete(order)}

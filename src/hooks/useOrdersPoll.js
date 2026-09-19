@@ -99,7 +99,10 @@ export function diffOrderHeads(localOrders, heads, knownIds = null) {
         const money = local.total !== head.total
             || (local.discount_amount || 0) !== (head.discount_amount || 0)
             || deleted
+        // paid_at / print_count: nhãn "Đã thu" / "Đã in bill" trên thẻ bàn (20260919).
         const table = !local.served_at !== !head.served_at
+            || !local.paid_at !== !head.paid_at
+            || (local.print_count || 0) !== (head.print_count || 0)
             || !local.table_closed_at !== !head.table_closed_at
         if (money) moneyChanged = true
         // Xoá mềm một đơn của bàn đang mở cũng đổi tổng bàn, nên cờ bàn ăn theo cả `money`

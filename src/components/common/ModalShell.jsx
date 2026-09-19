@@ -42,13 +42,13 @@ export const MODAL_PANEL = 'w-full max-w-md mx-4 max-h-[85dvh] flex flex-col bg-
 
 // Khuôn nút chip tròn (trạng thái ra món, nút hành động nhỏ trên mỗi đợt/đơn) — dùng ở
 // TableDetailModal + TakeawayListModal.
-export const CHIP = 'h-[26px] rounded-full border text-[11px] font-black uppercase tracking-wider transition-colors'
+export const CHIP = 'h-[26px] whitespace-nowrap rounded-full border text-[11px] font-black uppercase tracking-wider transition-colors'
 export const CHIP_IDLE = `${CHIP} bg-surface-light border-border/60 text-text-secondary`
 
 // Pill ngày/giờ mở đợt/đơn — tách riêng ngày và giờ thành 2 pill cạnh nhau (thay vì 1
 // chuỗi text) để dễ quét mắt hơn khi liệt kê nhiều đợt/đơn liên tiếp. Cùng h-[26px] với
 // CHIP để pill và nút chip tròn đứng cạnh nhau (xem TableDetailModal) cao bằng nhau.
-export const TIME_PILL = 'h-[26px] inline-flex items-center rounded-full bg-surface-light border border-border/60 px-2.5 text-[11px] font-bold text-text-secondary/70 leading-none'
+export const TIME_PILL = 'h-[26px] whitespace-nowrap inline-flex items-center rounded-full bg-surface-light border border-border/60 px-2.5 text-[11px] font-bold text-text-secondary/70 leading-none'
 
 // Header dùng chung cho modal dạng panel: icon vuông (tuỳ chọn) + tiêu đề (+ dòng phụ
 // tuỳ chọn) + nút đóng — cùng 1 khối markup lặp lại y hệt ở 8+ modal trước đây.
