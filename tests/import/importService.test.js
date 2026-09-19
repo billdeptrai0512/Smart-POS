@@ -4,18 +4,18 @@
 import { describe, it, expect } from 'vitest'
 import { resolveImportPlan } from '../../src/services/importService'
 
-const EMPTY_EXISTING = { products: [], toppings: [], ingredientCosts: {} }
+const EMPTY_EXISTING = { products: [], toppings: [], ingredientCosts: {}, extras: [] }
 
 function parsed(overrides = {}) {
     return {
-        products: [], ingredients: [], recipes: [], toppings: [], toppingIngredients: [], toppingLinks: [],
+        products: [], ingredients: [], recipes: [], toppings: [], toppingIngredients: [], toppingLinks: [], extras: [], extraIngredients: [],
         ...overrides,
     }
 }
 
 describe('resolveImportPlan', () => {
     it('tạo sản phẩm + nguyên liệu + công thức mới, bỏ qua sản phẩm đã tồn tại', () => {
-        const existing = { products: [{ id: 'p-existing', name: 'Trà Đá' }], toppings: [], ingredientCosts: {} }
+        const existing = { products: [{ id: 'p-existing', name: 'Trà Đá' }], toppings: [], ingredientCosts: {}, extras: [] }
         const { plan, blockingErrors, warnings } = resolveImportPlan(parsed({
             products: [{ 'Tên món': 'Trà Đá', 'Giá bán': 10000 }, { 'Tên món': 'Cà Phê Sữa', 'Giá bán': 20000 }],
             ingredients: [{ 'Tên nguyên liệu': 'Sữa đặc', 'Đơn vị': 'ml', 'Giá vốn/đơn vị': 100, 'Loại': 'chính' }],
@@ -57,7 +57,7 @@ describe('resolveImportPlan', () => {
     })
 
     it('tự đăng ký nguyên liệu chỉ xuất hiện trong Công thức (chưa có ở sheet Nguyên liệu)', () => {
-        const existing = { products: [{ id: 'p1', name: 'Trà Đá' }], toppings: [], ingredientCosts: {} }
+        const existing = { products: [{ id: 'p1', name: 'Trà Đá' }], toppings: [], ingredientCosts: {}, extras: [] }
         const { plan, blockingErrors } = resolveImportPlan(parsed({
             recipes: [{ 'Tên món': 'Trà Đá', 'Tên nguyên liệu': 'Đá viên', 'Số lượng': 5, 'Đơn vị': 'viên' }],
         }), existing)
@@ -66,7 +66,7 @@ describe('resolveImportPlan', () => {
     })
 
     it('gom Topping áp dụng món theo topping thay vì tạo 1 dòng/liên kết', () => {
-        const existing = { products: [{ id: 'p1', name: 'Trà Sữa' }, { id: 'p2', name: 'Cà Phê Đen' }], toppings: [{ id: 't1', name: 'Trân Châu' }], ingredientCosts: {} }
+        const existing = { products: [{ id: 'p1', name: 'Trà Sữa' }, { id: 'p2', name: 'Cà Phê Đen' }], toppings: [{ id: 't1', name: 'Trân Châu' }], ingredientCosts: {}, extras: [] }
         const { plan, blockingErrors } = resolveImportPlan(parsed({
             toppingLinks: [
                 { 'Tên topping': 'Trân Châu', 'Tên món': 'Trà Sữa' },
