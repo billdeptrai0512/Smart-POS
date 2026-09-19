@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import { Percent, Pencil } from 'lucide-react'
 import { formatVND } from '../../utils'
@@ -37,9 +38,11 @@ export default function CheckoutBar({
                 </div>
                 <div className="flex items-center gap-3">
                 {/* Giỏ rỗng thì không có gì để giảm — mờ đi như nút Ghi chú, giữ chỗ để thanh không nhảy. */}
+                {/* flushSync: modal + autoFocus ô nhập commit NGAY trong cú tap. React 19 mặc định
+                    dời sang microtask, máy thật coi là focus ngoài thao tác → không bật bàn phím. */}
                 <button
                     type="button"
-                    onClick={() => setShowDiscount(true)}
+                    onClick={() => flushSync(() => setShowDiscount(true))}
                     disabled={disabled}
                     aria-label="Giảm giá"
                     className={`${ICON_BTN} ${discountAmount > 0 ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/60 text-text'} disabled:opacity-50 disabled:cursor-not-allowed`}

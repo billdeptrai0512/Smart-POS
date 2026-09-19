@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Percent } from 'lucide-react'
 import { formatVND, cartLineSubtotal, computeDiscount, NO_DISCOUNT } from '../../utils'
 import { useDiscountEditing } from '../../hooks/useDiscountEditing'
@@ -22,13 +23,13 @@ export default function CartListModal({ cart, onClose, onItemDiscount }) {
     }
 
     return (
-        <Dialog onClose={onClose} panelClassName="w-full max-w-md mx-4 max-h-[85dvh] flex flex-col bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
+        <Dialog onClose={onClose} panelClassName="w-full max-w-md mx-4 max-h-[85%] flex flex-col bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
             <div className="flex gap-1.5 px-5 pt-4 shrink-0">
                 {[['each', 'Từng món'], ['all', 'Tất cả']].map(([key, label]) => (
                     <button
                         key={key}
                         type="button"
-                        onClick={() => setTab(key)}
+                        onClick={() => flushSync(() => setTab(key))}
                         className={`flex-1 py-2 rounded-[10px] text-xs font-black uppercase tracking-wider transition-colors ${tab === key ? 'bg-primary/10 text-primary' : 'bg-surface-light text-text-secondary hover:text-text'}`}
                     >
                         {label}
@@ -54,7 +55,7 @@ export default function CartListModal({ cart, onClose, onItemDiscount }) {
                                     khi chưa giảm, "-X%"/"-Yđ" khi đã giảm), không phải nút riêng nữa. */}
                                 <button
                                     type="button"
-                                    onClick={() => toggleEditing(item.cartItemId)}
+                                    onClick={() => flushSync(() => toggleEditing(item.cartItemId))}
                                     aria-label={`Giảm giá ${item.name}`}
                                     className="w-full flex items-center gap-3 px-4 py-3 text-left"
                                 >

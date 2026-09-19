@@ -1,4 +1,5 @@
 import { X, Loader } from 'lucide-react'
+import { useVisualViewportBox } from '../../hooks/useVisualViewportBox'
 
 // Shared overlay shell behind every bottom-sheet / centered-dialog modal in the
 // app — the "fixed inset-0 + backdrop + panel" boilerplate was copy-pasted into
@@ -23,8 +24,9 @@ export function BottomSheet({ onClose, zIndexClass = 'z-[100]', className = '', 
 // panel needs no stopPropagation — it's a sibling, never a bubble target of a
 // backdrop click.
 export function Dialog({ onClose, zIndexClass = 'z-50', className = '', panelClassName, children }) {
+    const vvBox = useVisualViewportBox()
     return (
-        <div className={`fixed inset-0 ${zIndexClass} flex items-center justify-center ${className}`}>
+        <div className={`fixed inset-0 ${zIndexClass} flex items-center justify-center ${className}`} style={vvBox}>
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
             <div className={`relative ${panelClassName}`}>
                 {children}

@@ -18,6 +18,7 @@ import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPers
 import { isRecipeStepActive } from '../components/common/onboarding/steps/recipeStep'
 import { dateStringVN, timeStringVN, isSameDayVN, dateShortVN, dateFullVN } from '../utils/dateVN'
 import { useDateScope } from '../hooks/useDateScope'
+import { useVisualViewportBox } from '../hooks/useVisualViewportBox'
 import { goToMenuStep } from '../utils/menuSequence'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import SalesCard from '../components/DailyReportPage/SalesCard'
@@ -1134,19 +1135,8 @@ export default function DailyReportPage() {
     // Bàn phím ảo trên điện thoại KHÔNG đẩy `position: fixed` lên — nó chỉ co
     // visualViewport, nên FAB "Lưu thực thu" nằm lọt dưới bàn phím ngay sau khi
     // chủ quán gõ xong số. Nhấc FAB lên đúng phần bị che.
-    // Trần: trình duyệt không có visualViewport (rất cũ) thì giữ nguyên hành vi cũ.
-    const [kbInset, setKbInset] = useState(0)
-    useEffect(() => {
-        const vv = window.visualViewport
-        if (!vv) return
-        const update = () => setKbInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop))
-        vv.addEventListener('resize', update)
-        vv.addEventListener('scroll', update)
-        return () => {
-            vv.removeEventListener('resize', update)
-            vv.removeEventListener('scroll', update)
-        }
-    }, [])
+    const vvBox = useVisualViewportBox()
+    const kbInset = vvBox ? Math.max(0, window.innerHeight - vvBox.height - vvBox.top) : 0
 
     const handleSaveCashflow = async () => {
         if (!selectedAddress || savingCashflow) return
