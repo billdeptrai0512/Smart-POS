@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { formatVND, formatVNDInput, parseVNDInput } from '../../utils'
 
-const PERCENT_PRESETS = [25, 50, 100]
+const PERCENT_PRESETS = [20, 50, 100]
 const AMOUNT_PRESETS = [10000, 20000, 50000]
 
 // Input + preset cho MỘT giảm giá (% hoặc đ) — không phải modal, chỉ là khối form.
