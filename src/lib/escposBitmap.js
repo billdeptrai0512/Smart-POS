@@ -141,6 +141,8 @@ export async function captureOffscreen(el) {
 // In mạng được không: chỉ app native (Capacitor) + đã cấu hình IP. null → người gọi tự
 // fallback (bill quầy: hộp in trình duyệt; phiếu bếp: bỏ qua).
 export const nativePrinterIp = (ip) => (Capacitor.isNativePlatform() && ip) || null
+// "usb" (bấm nút USB ở PrinterIpModal) thay cho IP = máy in cắm USB thẳng vào tablet.
+const isUsbPrinter = (ip) => /^usb$/i.test(ip?.trim() || '')
 
 // Chuỗi gửi theo từng IP: máy in nhiệt TCP chỉ có 1 khe kết nối (xem printWithRetry) — 2 lệnh
 // cùng IP (phiếu bếp tự bắn liên tiếp, hoặc quán dùng 1 máy cho cả quầy lẫn bếp) xếp hàng thay
@@ -168,10 +170,14 @@ export async function printImageNative(capture, label, printerIp) {
     }
     const hex = canvasToEscPosImage(canvas)
     const { ESCPOSPlugin } = await import('@albgen/capacitor-escpos-plugin')
+    // "usb" thay cho IP = máy in cắm USB thẳng vào tablet → plugin lấy máy in USB đầu tiên
+    // (id 'first', xem patch ESCPOSPlugin). Không retry: retry dành cho tranh khe TCP, còn với
+    // USB mỗi lần thử lại là thêm một hộp thoại xin quyền chồng lên.
+    const usb = isUsbPrinter(printerIp)
     try {
         await onPrinter(printerIp, () => printWithRetry(ESCPOSPlugin, {
-            type: 'tcp',
-            id: printerIp,
+            type: usb ? 'usb' : 'tcp',
+            id: usb ? 'first' : printerIp,
             address: printerIp,
             port: '9100',
             // action kết thúc bằng "Cut" → plugin gọi printFormattedTextAndCut thay vì
@@ -186,9 +192,11 @@ export async function printImageNative(capture, label, printerIp) {
             // trắng, cắt xong thành mép đầu tờ kế tiếp — không xoá được bằng phần mềm.)
             mmFeedPaper: '32',
             text: `[C]<img>${hex}</img>\n`,
-        }))
+        }, usb ? 1 : undefined))
     } catch (err) {
         err.stage = 'send'
+        if (usb && /USB_PERMISSION/.test(err.message)) Object.assign(err, { message: 'Bấm "Cho phép" trên hộp thoại USB rồi in lại', expected: true })
+        else if (usb && /not found/i.test(err.message)) err.message = 'Không thấy máy in USB — kiểm tra cáp và nguồn máy in'
         throw err
     }
 }

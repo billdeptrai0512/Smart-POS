@@ -1,8 +1,19 @@
 diff --git a/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java b/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java
-index 4f0c81d..2f112ae 100644
+index 4f0c81d..bdf38c7 100644
 --- a/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java
 +++ b/node_modules/@albgen/capacitor-escpos-plugin/android/src/main/java/com/albgen/plugins/escposplugincap/ESCPOSPlugin.java
-@@ -63,6 +63,9 @@ public class ESCPOSPlugin extends Plugin {
+@@ -21,6 +21,10 @@ import com.getcapacitor.annotation.PermissionCallback;
+ 
+ import android.bluetooth.BluetoothDevice;
+ import android.hardware.usb.UsbDevice;
++import android.hardware.usb.UsbManager;
++import android.app.PendingIntent;
++import android.content.Context;
++import android.content.Intent;
+ 
+ import com.dantsu.escposprinter.EscPosCharsetEncoding;
+ import com.dantsu.escposprinter.EscPosPrinter;
+@@ -63,6 +67,9 @@ public class ESCPOSPlugin extends Plugin {
      private static final String[] aliasesPermissions = new String[]{BT_ALIAS};
      private final HashMap<String, DeviceConnection> connections = new HashMap<>();
  
@@ -12,7 +23,7 @@ index 4f0c81d..2f112ae 100644
      @Override
      public void load() {
          Log.i("ESCPOSPlugin", "loading the plugin...");
-@@ -248,7 +251,17 @@ public class ESCPOSPlugin extends Plugin {
+@@ -248,7 +255,17 @@ public class ESCPOSPlugin extends Plugin {
                  throw new JSONException("EscPosConnectionException: " + e.getMessage());
              } catch (Exception e) {
                  throw new JSONException("Exception: " + e.getMessage());
@@ -30,7 +41,7 @@ index 4f0c81d..2f112ae 100644
          }
          catch(Exception ex)
          {
-@@ -421,7 +434,13 @@ public class ESCPOSPlugin extends Plugin {
+@@ -421,16 +438,36 @@ public class ESCPOSPlugin extends Plugin {
                  try { if (bluetoothDevice.getName().equals(id)) { return bluetoothConnection; } } catch (SecurityException ignored) {}
              }
          } else if (type.equals("tcp")) {
@@ -45,3 +56,28 @@ index 4f0c81d..2f112ae 100644
              tcpConnection.setSendDelay(sendDelay);
              return tcpConnection;
          } else {
++            // PATCH (KOPOS): id "first" = máy in USB đầu tiên đang cắm (như "first" của bluetooth)
++            // — tablet cắm thẳng 1 máy in, deviceId đổi mỗi lần cắm lại nên không lưu được.
++            // Bản gốc KHÔNG xin quyền USB: mở kết nối khi chưa có quyền thì Android chặn. Chưa
++            // có quyền → bật hộp thoại xin quyền rồi báo USB_PERMISSION_REQUESTED để JS nhắc bấm
++            // "Cho phép" rồi in lại (không chờ kết quả hộp thoại: FLAG_IMMUTABLE, không đọc extra).
++            UsbManager usbManager = (UsbManager) getContext().getSystemService(Context.USB_SERVICE);
+             UsbConnections printerConnections = new UsbConnections(this.getActivity());
+             for (UsbConnection usbConnection : printerConnections.getList()) {
+                 UsbDevice usbDevice = usbConnection.getDevice();
++                boolean match = id.equals("first");
++                try { if (usbDevice.getDeviceId() == Integer.parseInt(id)) { match = true; } } catch (Exception ignored) {}
++                try { if (Objects.requireNonNull(usbDevice.getProductName()).trim().equals(id)) { match = true; } } catch (Exception ignored) {}
++                if (!match) continue;
++                if (!usbManager.hasPermission(usbDevice)) {
++                    Intent permissionIntent = new Intent("com.albgen.plugins.escposplugincap.USB_PERMISSION").setPackage(getContext().getPackageName());
++                    usbManager.requestPermission(usbDevice, PendingIntent.getBroadcast(getContext(), 0, permissionIntent, PendingIntent.FLAG_IMMUTABLE));
++                    throw new JSONException("USB_PERMISSION_REQUESTED");
++                }
+                 usbConnection.setSendDelay(sendDelay);
+-                try { if (usbDevice.getDeviceId() == Integer.parseInt(id)) { return usbConnection; } } catch (Exception ignored) {}
+-                try { if (Objects.requireNonNull(usbDevice.getProductName()).trim().equals(id)) { return usbConnection; } } catch (Exception ignored) {}
++                return usbConnection;
+             }
+         }
+ 

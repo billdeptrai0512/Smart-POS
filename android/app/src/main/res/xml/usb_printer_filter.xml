@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- class 7 = USB printer class — Android khớp cả class của từng interface, nên máy in
+     khai class 0 ở cấp thiết bị (đa số máy nhiệt) vẫn khớp. -->
+<resources>
+    <usb-device class="7" />
+</resources>

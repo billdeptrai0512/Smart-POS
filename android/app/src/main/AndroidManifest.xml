@@ -18,6 +18,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Máy in nhiệt cắm USB thẳng vào tablet: cắm vào là Android hỏi mở bằng app,
+                 tick "Luôn dùng" thì cấp quyền USB vĩnh viễn cho máy in đó (không thì mỗi lần
+                 cắm lại phải cho phép lại lúc in — xem patch ESCPOSPlugin). -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" android:resource="@xml/usb_printer_filter" />
         </activity>
 
         <provider
