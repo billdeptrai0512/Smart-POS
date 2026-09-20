@@ -53,6 +53,8 @@ const isPrepFilled = (v) => v !== undefined && v !== null && v !== '' && Number(
 // averageIngredientMaps) thay vì chỉ đúng 1 tuần trước để đỡ nhạy với 1 ngày bất thường.
 const HISTORY_OFFSETS_TODAY = [7, 14, 21]     // cùng thứ HÔM NAY
 const HISTORY_OFFSETS_TOMORROW = [6, 13, 20]  // cùng thứ NGÀY MAI
+// Pill cuối trang (Hỗ trợ / góp ý · In báo cáo).
+const FOOT_BTN = 'px-5 py-2.5 rounded-full bg-surface-light border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all duration-300 cursor-pointer text-[10px] font-black uppercase tracking-[0.15em] whitespace-nowrap text-primary'
 
 export default function DailyReportPage() {
     const navigate = useNavigate()
@@ -404,6 +406,8 @@ export default function DailyReportPage() {
     const showsInventoryTab = view === VIEW_ALL || view === VIEW_INVENTORY
     const isRangeScope = scope === 'week' || scope === 'month'
         || (scope === 'custom' && !isSameDayVN(rangeStart, rangeEnd))
+
+    const [printPreview, setPrintPreview] = useState(false)
 
     // Chi phí đang mở modal sửa (bấm 1 dòng trong panel Thực chi) — null = đóng.
     const [editingExpense, setEditingExpense] = useState(null)
@@ -1305,6 +1309,10 @@ export default function DailyReportPage() {
                                 hintTransfer={hintTransfer}
                                 onEditExpense={setEditingExpense}
                                 onEditRestockPayment={handleEditRestockPayment}
+                                printInfo={{ addressName: selectedAddress?.name, dateLabel: rangeLabel, revenue: totalRevenue, cups: totalCups, printerIp: selectedAddress?.counter_printer_ip }}
+                                printPreview={printPreview}
+                                onPreviewClose={() => setPrintPreview(false)}
+                                onPrintError={e => showError(e, 'In báo cáo')}
                             >
                                 <div className="flex flex-col gap-4">
                                     <SalesCard
@@ -1449,15 +1457,13 @@ export default function DailyReportPage() {
                             </>
                         )}
 
-                        <div className="flex flex-col items-center justify-center p-3">
-                            <button
-                                onClick={() => setShowSupportModal(true)}
-                                className="flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-surface-light border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all duration-300 cursor-pointer"
-                            >
-                                <span className="text-[10px] font-black uppercase tracking-[0.15em] whitespace-nowrap mt-[1px] text-primary">
-                                    Bạn cần hỗ trợ / có góp ý?
-                                </span>
-                            </button>
+                        <div className="flex items-center justify-center gap-2 p-3">
+                            <button onClick={() => setShowSupportModal(true)} className={FOOT_BTN}>Hỗ trợ / góp ý</button>
+                            {/* In báo cáo dòng tiền cuối ca — tờ in dựng trong CashFlowCard nên
+                                chỉ có khi tab đang hiện Dòng tiền. */}
+                            {(view === VIEW_ALL || view === VIEW_CASHFLOW) && (
+                                <button onClick={() => setPrintPreview(true)} className={FOOT_BTN}>In báo cáo</button>
+                            )}
                         </div>
                     </div>
                 )}

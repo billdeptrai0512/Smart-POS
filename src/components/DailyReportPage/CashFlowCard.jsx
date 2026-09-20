@@ -1,7 +1,10 @@
 import { useMemo, useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { formatVND, parseVNDInput, capFirst } from '../../utils'
-import { dayMonthVN } from '../../utils/dateVN'
+import { dayMonthVN, timeStringVN } from '../../utils/dateVN'
+import { OFFSCREEN_FRAME_CSS, captureOffscreen, printBillJob } from '../../lib/escposBitmap'
+import { Dialog } from '../common/ModalShell'
 import { ingredientLabel, normalizeIngredientCategory, INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 import { groupMeta } from '../../constants/expenseGroups'
 import { useClickOutside } from '../../hooks/useClickOutside'
@@ -44,6 +47,13 @@ export default function CashFlowCard({
     // Bấm 1 dòng "Mua nguyên liệu/bao bì" → mở RestockModal sửa phiếu nhập (chỉ khi
     // dòng gộp từ ĐÚNG 1 hoá đơn — xem groupByIngredient bên dưới).
     onEditRestockPayment,
+    // Tờ in báo cáo dòng tiền cuối ca (nút "In báo cáo" ở DailyReportPage mở modal xem trước,
+    // bấm "In" trong đó đi qua printBillJob như bill). printInfo = { addressName, dateLabel,
+    // revenue, cups, printerIp }.
+    printInfo,
+    printPreview = false,
+    onPreviewClose,
+    onPrintError,
 }) {
     // Category (Nguyên liệu chính / Bao bì) của từng nguyên liệu — để phân loại
     // mục "Mua nguyên liệu / bao bì" bên dưới. Mặc định collapse từng nhóm.
@@ -208,6 +218,71 @@ export default function CashFlowCard({
         inShiftRefillCash, inShiftOpsCash,
     } = computeCashFlowTotals({ liveCash, liveTransfer, payments, shiftExpenses, afterShiftExpenses: afterShiftOps })
 
+    // Cùng hợp đồng { print, captureImage } với PrintBill để dùng lại printBillJob (web: hộp
+    // in trình duyệt qua @media print #print-bill; native: chụp bitmap gửi máy in quầy).
+    // Bấm lại lúc đang in đã có khoá printBusy trong printBillJob chặn ("Máy in đang bận").
+    // ponytail: mượn id #print-bill của bill — trang Báo cáo không mount PrintBill nào nên
+    // không đụng id. Trang nào cần cả hai thì tách CSS in theo class.
+    const printElRef = useRef(null)
+    const printedAtRef = useRef(null)
+    const confirmPrint = () => {
+        const stamp = () => { printedAtRef.current.textContent = timeStringVN(new Date()) }
+        const target = {
+            print() { stamp(); window.print() },
+            async captureImage() {
+                stamp()
+                const el = printElRef.current
+                el.className = ''
+                el.style.cssText = OFFSCREEN_FRAME_CSS // font/cỡ chữ do sheet() tự đặt
+                try {
+                    return await captureOffscreen(el)
+                } finally {
+                    el.className = 'hidden'
+                    el.removeAttribute('style')
+                }
+            },
+        }
+        printBillJob({ current: target }, printInfo?.printerIp).then(onPreviewClose, onPrintError)
+    }
+    const money = (v) => (cashNotEntered ? '—' : formatVND(v))
+
+    // Nội dung tờ in — dựng 1 lần, dùng cho cả bản in ẩn (#print-bill) lẫn modal xem trước,
+    // để xem trước luôn khớp đúng thứ sẽ in ra. stampRef chỉ gắn ở bản in (giờ in cập nhật lúc in).
+    // Font Inter (font app, đã nạp đủ 400–800 + dấu tiếng Việt) thay Arial của #print-bill:
+    // Arial không có nét 800 nên trình duyệt tự làm đậm giả, dấu chữ hoa bị méo.
+    const sheet = (stampRef) => (
+        <div style={{ fontFamily: "'Inter', Arial, sans-serif", fontSize: 12, lineHeight: 1.35, fontVariantNumeric: 'tabular-nums' }}>
+            <div style={{ textAlign: 'center', fontWeight: 700, fontSize: 14, textTransform: 'uppercase' }}>Báo cáo dòng tiền</div>
+            <div style={{ textAlign: 'center', fontSize: 11, marginTop: 2 }}>
+                {printInfo?.addressName && <div>{printInfo.addressName}</div>}
+                <div>{printInfo?.dateLabel} · In lúc <span ref={stampRef}>{timeStringVN(new Date())}</span></div>
+            </div>
+            <PrintRule />
+            <PrintRow label="DOANH THU" strong>{formatVND(printInfo?.revenue || 0)}</PrintRow>
+            <PrintRow label="Số ly">{printInfo?.cups || 0}</PrintRow>
+            <PrintRule />
+            <PrintRow label="Tiền mặt">{formatVND(liveCash)}</PrintRow>
+            <PrintRow label="Chuyển khoản">{formatVND(liveTransfer)}</PrintRow>
+            <PrintRow label="Chi phí trong ca">{formatVND(inShiftOpsCash)}</PrintRow>
+            {inShiftRefillCash > 0 && <PrintRow label="Mua NVL trong ca">{formatVND(inShiftRefillCash)}</PrintRow>}
+            <PrintRow label="TỔNG THỰC THU" strong>{formatVND(actualTotal)}</PrintRow>
+            <PrintRule />
+            {[['Vận hành', operating.groups], ['Quản lý & khác', overhead.groups], ['Tồn kho', inventoryBlocks], ['Ngoài kinh doanh', nonOp.groups]]
+                .filter(([, groups]) => groups.length > 0)
+                .map(([title, groups]) => (
+                    <div key={title} style={{ marginBottom: 4 }}>
+                        <div style={{ fontWeight: 700 }}>{title}</div>
+                        {groups.map(g => <PrintRow key={g.label} label={`  ${g.label}`}>{formatVND(g.total)}</PrintRow>)}
+                    </div>
+                ))}
+            <PrintRow label="TỔNG THỰC CHI" strong>{totalExpenses ? '-' : ''}{formatVND(totalExpenses)}</PrintRow>
+            <PrintRule />
+            <PrintRow label="Thực nhận TM">{money(takeHomeCash)}</PrintRow>
+            <PrintRow label="Thực nhận CK">{money(takeHomeTransfer)}</PrintRow>
+            <PrintRow label="TỔNG THỰC NHẬN" strong>{money(takeHome)}</PrintRow>
+        </div>
+    )
+
     return (
         <div className="flex flex-col gap-4">
             {children && <div className="w-full">{children}</div>}
@@ -321,6 +396,36 @@ export default function CashFlowCard({
                 </div>
             </div>
 
+            {createPortal((
+                <div id="print-bill" ref={printElRef} className="hidden">{sheet(printedAtRef)}</div>
+            ), document.body)}
+
+            {/* Xem trước: tờ giấy trắng 300px (= khung chụp OFFSCREEN_FRAME_CSS của bản in native),
+                modal ôm sát tờ giấy thay vì rộng max-w-md như các modal khác. */}
+            {printPreview && (
+                <Dialog onClose={onPreviewClose} panelClassName="w-[324px] max-w-[calc(100vw-32px)] max-h-[85dvh] flex flex-col bg-surface border border-border/60 rounded-[20px] shadow-2xl overflow-hidden">
+                    <div className="flex-1 overflow-y-auto p-3 pb-0">
+                        <div className="rounded-[10px] bg-white text-black px-3 py-2.5">
+                            {sheet()}
+                        </div>
+                    </div>
+                    <div className="shrink-0 flex gap-2 p-3">
+                        <button
+                            onClick={onPreviewClose}
+                            className="flex-1 py-2.5 rounded-[12px] bg-surface-light border border-border/60 text-[12px] font-black uppercase tracking-wider text-text hover:border-primary/40 transition-colors"
+                        >
+                            Huỷ
+                        </button>
+                        <button
+                            onClick={confirmPrint}
+                            className="flex-1 py-2.5 rounded-[12px] bg-primary text-bg text-[12px] font-black uppercase tracking-wider hover:bg-primary/90 transition-colors"
+                        >
+                            In
+                        </button>
+                    </div>
+                </Dialog>
+            )}
+
             {/* PANEL 4: THỰC NHẬN */}
             <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
                 <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Thực nhận</h3>
@@ -348,6 +453,17 @@ export default function CashFlowCard({
                     </span>
                 </div>
             </div>
+        </div>
+    )
+}
+
+// Tờ in báo cáo: style inline (không Tailwind) vì html2canvas chụp ngoài @media print.
+const PrintRule = () => <div style={{ borderTop: '1px solid #000', margin: '8px 0' }} />
+function PrintRow({ label, strong, children }) {
+    return (
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontWeight: strong ? 700 : 400, whiteSpace: 'pre' }}>
+            <span>{label}</span>
+            <span>{children}</span>
         </div>
     )
 }
