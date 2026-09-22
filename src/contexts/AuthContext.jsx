@@ -4,6 +4,7 @@ import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, fet
 import { isGuest as getLocalIsGuest, setIsGuest as setLocalIsGuest, initializeGuestFromGlobal, clearGuestData, setGuestIngredientSortOrder } from '../services/localRepository'
 import { trackGuestOnboardingStage, markGuestFunnelSignup } from '../services/onboardingFunnelService'
 import { STORAGE_KEYS } from '../constants/storageKeys'
+import { readJSON, writeJSON } from '../utils/storage'
 
 const AuthContext = createContext(null)
 
@@ -12,13 +13,6 @@ const AuthContext = createContext(null)
 // launch-time token refresh fails on a flaky connection we keep the user signed
 // in instead of bouncing them to /login. Only a real onAuthStateChange
 // 'SIGNED_OUT' clears them.
-function readCachedAuth(key) {
-    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null }
-    catch { return null }
-}
-function cacheAuth(key, val) {
-    try { localStorage.setItem(key, JSON.stringify(val)) } catch { /* quota */ }
-}
 function clearCachedAuth() {
     localStorage.removeItem(STORAGE_KEYS.AUTH_USER)
     localStorage.removeItem(STORAGE_KEYS.AUTH_PROFILE)
@@ -35,8 +29,8 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }) {
-    const [user, setUser] = useState(() => getLocalIsGuest() ? null : readCachedAuth(STORAGE_KEYS.AUTH_USER))       // Supabase auth user (hydrated from cache on cold start)
-    const [profile, setProfile] = useState(() => getLocalIsGuest() ? null : readCachedAuth(STORAGE_KEYS.AUTH_PROFILE))  // User profile row (from 'users' table)
+    const [user, setUser] = useState(() => getLocalIsGuest() ? null : readJSON(STORAGE_KEYS.AUTH_USER, null))       // Supabase auth user (hydrated from cache on cold start)
+    const [profile, setProfile] = useState(() => getLocalIsGuest() ? null : readJSON(STORAGE_KEYS.AUTH_PROFILE, null))  // User profile row (from 'users' table)
     const [loading, setLoading] = useState(true)
     const [isGuest, setIsGuestState] = useState(() => getLocalIsGuest())
     // Chỉ true khi supabase-js THỰC SỰ có session. user/profile hydrate từ cache nên vẫn
@@ -150,8 +144,8 @@ export function AuthProvider({ children }) {
         // role-gated UI on a flaky refetch; only overwrite when we actually got one.
         if (pf) {
             setProfile(pf)
-            cacheAuth(STORAGE_KEYS.AUTH_PROFILE, pf)
-        } else if (!readCachedAuth(STORAGE_KEYS.AUTH_PROFILE)) {
+            writeJSON(STORAGE_KEYS.AUTH_PROFILE, pf)
+        } else if (!readJSON(STORAGE_KEYS.AUTH_PROFILE, null)) {
             setProfile(null)
         }
     }, [])
@@ -182,7 +176,7 @@ export function AuthProvider({ children }) {
             if (authUser) {
                 setUser(authUser)
                 setHasSession(true)
-                cacheAuth(STORAGE_KEYS.AUTH_USER, authUser)
+                writeJSON(STORAGE_KEYS.AUTH_USER, authUser)
                 setIsGuest(false)
                 // Profile is already hydrated from cache (see useState init), so the UI
                 // can render immediately. Don't gate PageLoading on the refetch: on
@@ -190,7 +184,7 @@ export function AuthProvider({ children }) {
                 // 3×500ms (+ slow network each), freezing the whole app on the loading
                 // skeleton for seconds. Release now and refresh in the background; only a
                 // genuine first launch (no cache, role-gating needs the profile) waits.
-                if (readCachedAuth(STORAGE_KEYS.AUTH_PROFILE)) {
+                if (readJSON(STORAGE_KEYS.AUTH_PROFILE, null)) {
                     setLoading(false)
                     loadProfileOnce(authUser)
                 } else {
@@ -201,7 +195,7 @@ export function AuthProvider({ children }) {
                 setIsGuestState(true)
                 setProfile({ id: 'guest', name: 'Khách Ghé Thăm', role: 'manager', email: 'guest@demo.local' })
                 setLoading(false)
-            } else if (readCachedAuth(STORAGE_KEYS.AUTH_USER)) {
+            } else if (readJSON(STORAGE_KEYS.AUTH_USER, null)) {
                 // We had a real session but getSession came back empty (or too slow) —
                 // on a flaky launch that's a failed/hung token refresh, NOT a sign-out.
                 // Stay in (cached user/profile already hydrated); a genuine sign-out
@@ -218,7 +212,7 @@ export function AuthProvider({ children }) {
         // gate. If we already have a cached session, stop blocking after 2.5s and let
         // onAuthStateChange reconcile once the refresh eventually resolves.
         const valve = setTimeout(() => {
-            if (readCachedAuth(STORAGE_KEYS.AUTH_USER)) finish(null)
+            if (readJSON(STORAGE_KEYS.AUTH_USER, null)) finish(null)
         }, 2500)
 
         // Listen for auth changes
@@ -237,7 +231,7 @@ export function AuthProvider({ children }) {
             if (authUser) {
                 setUser(authUser)
                 setHasSession(true)
-                cacheAuth(STORAGE_KEYS.AUTH_USER, authUser)
+                writeJSON(STORAGE_KEYS.AUTH_USER, authUser)
                 setIsGuest(false)
                 // Có session thật → profile sentinel {id:'guest'} hết đúng, mà setIsGuest(false)
                 // vừa tắt guard isGuest() trong authService. Giữ lại dù chỉ 1 nhịp là đủ để các
@@ -279,8 +273,8 @@ export function AuthProvider({ children }) {
         const data = await authSignUp(username, password, name, email)
         setUser(data.user)
         setProfile(data.profile)
-        cacheAuth(STORAGE_KEYS.AUTH_USER, data.user)
-        cacheAuth(STORAGE_KEYS.AUTH_PROFILE, data.profile)
+        writeJSON(STORAGE_KEYS.AUTH_USER, data.user)
+        writeJSON(STORAGE_KEYS.AUTH_PROFILE, data.profile)
         // Phễu onboarding: mốc cuối "Đăng ký tài khoản". No-op nếu máy này chưa từng dùng thử.
         // Gọi trước clearGuestData() để không phụ thuộc việc hàm đó có xoá visitor id hay không.
         markGuestFunnelSignup()

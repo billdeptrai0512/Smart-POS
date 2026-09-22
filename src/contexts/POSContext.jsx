@@ -10,6 +10,7 @@ import { dateStringVN } from '../utils/dateVN'
 import { resolveDiscountedPrice } from '../utils/discountPrograms'
 import { calculateItemCost, computeDiscount, discountToPercent, cartLineSubtotal, NO_DISCOUNT } from '../utils'
 import { cartBelongsToAddress, shouldRestoreCartOnFailure } from '../utils/posCartGuards'
+import { readJSON } from '../utils/storage'
 import { useProducts } from './ProductContext'
 import { useAddress } from './AddressContext'
 import { useAuth } from './AuthContext'
@@ -69,11 +70,6 @@ export function POSProvider() {
     dineInRef.current = dineIn
 
     // ---- Persisted State ----
-    const loadLocalJSON = (key, fallback) => {
-        try { const val = localStorage.getItem(key); return val ? JSON.parse(val) : fallback }
-        catch { return fallback }
-    }
-
     // Giỏ và nhãn bàn thuộc về ĐÚNG MỘT chi nhánh, nhưng localStorage không ghi điều đó.
     // Đổi chi nhánh qua màn /addresses làm POSProvider unmount rồi mount lại hẳn, nên
     // effect "đổi địa chỉ = bỏ giỏ" bên dưới KHÔNG chạy (bản mới sinh ra đã thấy địa chỉ
@@ -85,7 +81,7 @@ export function POSProvider() {
     // mount — để thành const là đọc localStorage lại sau mỗi cú chạm món.
     const persistedForThisAddress = () => cartBelongsToAddress(localStorage.getItem(STORAGE_KEYS.CART_ADDRESS), addressId)
 
-    const [cart, setCart] = useState(() => persistedForThisAddress() ? loadLocalJSON(STORAGE_KEYS.CART, []) : [])
+    const [cart, setCart] = useState(() => persistedForThisAddress() ? readJSON(STORAGE_KEYS.CART, []) : [])
     // Initialized to cart (not []) so a held item restored from localStorage on
     // mount is visible to handleAddItem/commitHeld immediately — otherwise there's
     // a window before the [cart] sync effect below runs where a fast tap reads a

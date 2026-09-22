@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import { bulkSubmitOrders, closeTable } from '../services/orderService'
 import { supabase } from '../lib/supabaseClient'
 import { STORAGE_KEYS } from '../constants/storageKeys'
+import { readJSON } from '../utils/storage'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -13,12 +14,7 @@ function isValidOrder(order) {
 const PENDING_ORDERS_KEY = STORAGE_KEYS.PENDING_ORDERS
 
 export function getPendingOrders() {
-    try {
-        const raw = localStorage.getItem(PENDING_ORDERS_KEY)
-        return raw ? JSON.parse(raw) : []
-    } catch {
-        return []
-    }
+    return readJSON(PENDING_ORDERS_KEY, [])
 }
 
 function savePendingOrders(orders) {
@@ -57,12 +53,7 @@ export function addPendingOrder(orderItems, total, paymentMethod = null, address
 const PENDING_CLOSES_KEY = STORAGE_KEYS.PENDING_TABLE_CLOSES
 
 function getPendingTableCloses() {
-    try {
-        const raw = localStorage.getItem(PENDING_CLOSES_KEY)
-        return raw ? JSON.parse(raw) : []
-    } catch {
-        return []
-    }
+    return readJSON(PENDING_CLOSES_KEY, [])
 }
 
 function savePendingTableCloses(list) {

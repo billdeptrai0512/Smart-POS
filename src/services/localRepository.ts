@@ -6,6 +6,7 @@
 import { dateStringVN, startOfDayVN } from '../utils/dateVN'
 import { ONBOARDING_STORAGE_PREFIX } from '../utils/onboardingStorage'
 import type { Row } from '../types/domain'
+import { readJSON } from '../utils/storage'
 
 const generateId = () => crypto.randomUUID();
 
@@ -30,14 +31,7 @@ const KEYS = {
     IS_GUEST: 'pos_is_guest'
 };
 
-const get = (key: string, fallback: Row[] = []): Row[] => {
-    try {
-        const val = localStorage.getItem(key);
-        return val ? JSON.parse(val) : fallback;
-    } catch {
-        return fallback;
-    }
-};
+const get = (key: string, fallback: Row[] = []): Row[] => readJSON(key, fallback);
 
 const set = (key: string, val: unknown) => localStorage.setItem(key, JSON.stringify(val));
 
@@ -49,12 +43,7 @@ export const isGuest = () => localStorage.getItem(KEYS.IS_GUEST) === 'true';
 const DEMO_ADDRESS_ID = 'demo-address-uuid-123';
 const KEY_GUEST_INGREDIENT_SORT = 'guest_ingredient_sort_order';
 
-export const getGuestIngredientSortOrder = () => {
-    try {
-        const raw = localStorage.getItem(KEY_GUEST_INGREDIENT_SORT);
-        return raw ? JSON.parse(raw) : null;
-    } catch { return null; }
-};
+export const getGuestIngredientSortOrder = () => readJSON<string[] | null>(KEY_GUEST_INGREDIENT_SORT, null);
 
 export const setGuestIngredientSortOrder = (arr: string[]) => {
     localStorage.setItem(KEY_GUEST_INGREDIENT_SORT, JSON.stringify(arr || []));

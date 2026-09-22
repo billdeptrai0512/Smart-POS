@@ -9,8 +9,6 @@ import { supabase } from '../../lib/supabaseClient'
  * (bảng chỉ có RLS SELECT → phải qua RPC SECURITY DEFINER).
  *
  * Đổi xong reload trang để toàn app (cache server flag ở useEntitlement) nhận trạng thái mới.
- * Lưu ý: chỉ có hiệu lực khi build client bật (VITE_MONETIZATION_ENABLED=true);
- * nếu client tắt cứng thì toggle này không làm gì ở phía UI gate.
  */
 export default function MonetizationToggle() {
     const { isAdmin } = useAuth()

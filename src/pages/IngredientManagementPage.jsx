@@ -11,6 +11,7 @@ import {
     fetchIngredientStocks, fetchIngredientDeficits, fetchIngredientDailyContext,
 } from '../services/orderService'
 import { sortIngredients, ingredientLabel, getIngredientUnit, normalizeIngredientCategory, normalizeIngredientKey } from '../utils/ingredients'
+import { readJSON } from '../utils/storage'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
 import StockDeficitBanner from '../components/IngredientManagementPage/StockDeficitBanner'
@@ -131,10 +132,7 @@ export default function IngredientManagementPage() {
     const [ignoredOrphans, setIgnoredOrphans] = useState(() => new Set())
     useEffect(() => {
         if (!selectedAddress) { setIgnoredOrphans(new Set()); return }
-        try {
-            const raw = localStorage.getItem(orphanIgnoredKey(selectedAddress.id))
-            setIgnoredOrphans(new Set(raw ? JSON.parse(raw) : []))
-        } catch { setIgnoredOrphans(new Set()) }
+        setIgnoredOrphans(new Set(readJSON(orphanIgnoredKey(selectedAddress.id), [])))
     }, [selectedAddress])
 
     const handleIgnoreOrphan = (key) => {

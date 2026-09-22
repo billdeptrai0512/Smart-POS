@@ -10,6 +10,7 @@ import {
 } from '../services/authService'
 import { getDemoAddress } from '../services/localRepository'
 import { STORAGE_KEYS } from '../constants/storageKeys'
+import { readJSON } from '../utils/storage'
 import { Outlet } from 'react-router-dom'
 
 const AddressContext = createContext(null)
@@ -29,12 +30,7 @@ const normalizeName = (s) => (s || '').trim().replace(/\s+/g, ' ').toLowerCase()
 // Cached selected-address object → lets the POS render on cold start without
 // waiting for the addresses network fetch (which can hang 5s behind the SW
 // NetworkFirst timeout on a flaky connection = "lag không bấm được order").
-function readCachedAddress() {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ)
-        return raw ? JSON.parse(raw) : null
-    } catch { return null }
-}
+const readCachedAddress = () => readJSON(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, null)
 
 export function AddressProvider() {
     const { profile, isGuest, hasSession } = useAuth()

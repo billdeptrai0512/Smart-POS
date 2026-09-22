@@ -11,12 +11,6 @@ import { onTabReturn } from '../utils/tabVisibility'
 // key, RLS lọc ra [] (không phải lỗi) → _serverFlag cắm cứng thành false CẢ PHIÊN,
 // badge gói biến mất khỏi mọi card dù server đang bật thật. Gate bằng hasSession.
 
-// ─── Client kill switch (build-time) ─────────────────────────────────────────
-//   Master capability. Build với false → monetization TẮT CỨNG, không hỏi server.
-//   Build với true  → bật/tắt thực tế do SERVER quyết (app_config.monetization_enabled).
-//   → Hiệu lực = client(build) AND server(runtime). Khớp rollout phases (MONETIZATION.md §9).
-const CLIENT_MONETIZATION_ENABLED = import.meta.env.VITE_MONETIZATION_ENABLED === 'true'
-
 // ─── Server kill switch (runtime, app_config) ────────────────────────────────
 //   Đọc 1 lần, cache module-level → mọi hook share chung 1 request (không spam DB).
 //   _serverFlag: undefined = chưa đọc; true/false = đã rõ.
@@ -44,18 +38,18 @@ function loadServerFlag() {
 }
 
 /**
- * Trạng thái bật/tắt monetization HIỆU LỰC = client(build) AND server(app_config).
+ * Trạng thái bật/tắt monetization — do server quyết (app_config.monetization_enabled).
  * Dùng cho mọi quyết định hiển thị gate/badge/route monetization.
  * @returns {{ enabled: boolean, loading: boolean }}
  */
 export function useMonetizationEnabled() {
     const { hasSession, isGuest } = useAuth()
-    const [flag, setFlag] = useState(CLIENT_MONETIZATION_ENABLED ? _serverFlag : false)
+    const [flag, setFlag] = useState(_serverFlag)
 
     useEffect(() => {
         // Guest không có session thật (xem AuthContext) → sẽ không bao giờ authenticated,
         // đọc thẳng bằng anon key cũng được (app_config không có gì nhạy cảm với guest).
-        if (!CLIENT_MONETIZATION_ENABLED || (!hasSession && !isGuest)) return
+        if (!hasSession && !isGuest) return
         // loadServerFlag() trả promise đã cache → nếu đã đọc xong, .then resolve ngay
         // với giá trị cũ (React bỏ qua nếu không đổi). Không setState đồng bộ trong effect.
         let cancelled = false
@@ -78,8 +72,8 @@ export function useMonetizationEnabled() {
         return () => { cancelled = true; clearTimeout(retryId); offTabReturn() }
     }, [hasSession, isGuest])
 
-    const loading = CLIENT_MONETIZATION_ENABLED && flag === undefined
-    const enabled = CLIENT_MONETIZATION_ENABLED && flag === true
+    const loading = flag === undefined
+    const enabled = flag === true
     return { enabled, loading }
 }
 
@@ -89,7 +83,7 @@ export function useMonetizationEnabled() {
  * nên chỉ cần 1 boolean, không phải danh sách module.
  *
  * Bypass (hasAccess:true, không query) khi:
- *   - monetization OFF (client build OFF hoặc server app_config OFF), HOẶC
+ *   - monetization OFF (server app_config), HOẶC
  *   - đang ở guest mode (Khách ghé thăm xem full tính năng), HOẶC
  *   - đang ở "Mẫu mặc định" (id: null, admin-only playground) — không phải địa
  *     chỉ trả phí thật nên không có (và không cần) hàng entitlement nào cho nó.

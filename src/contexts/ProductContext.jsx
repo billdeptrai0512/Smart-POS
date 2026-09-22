@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabaseClient'
 import { Outlet } from 'react-router-dom'
 import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 import { onTabReturn } from '../utils/tabVisibility'
+import { readJSON } from '../utils/storage'
 
 const ProductContext = createContext(null)
 
@@ -91,12 +92,7 @@ export function ProductProvider() {
 
     const cacheKey = useCallback((name) => buildCacheKey(selectedAddress?.id || 'default', name), [selectedAddress?.id])
 
-    const readCache = useCallback((name, fallback) => {
-        try {
-            const cached = localStorage.getItem(cacheKey(name))
-            return cached ? JSON.parse(cached) : fallback
-        } catch { return fallback }
-    }, [cacheKey])
+    const readCache = useCallback((name, fallback) => readJSON(cacheKey(name), fallback), [cacheKey])
 
     const [products, setProducts] = useState(() => readCache('products', []))
     const [recipes, setRecipes] = useState(() => readCache('recipes', []))
