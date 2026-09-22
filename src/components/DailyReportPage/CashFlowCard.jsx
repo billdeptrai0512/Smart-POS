@@ -272,7 +272,16 @@ export default function CashFlowCard({
                 .map(([title, groups]) => (
                     <div key={title} style={{ marginBottom: 4 }}>
                         <div style={{ fontWeight: 700 }}>{title}</div>
-                        {groups.map(g => <PrintRow key={g.label} label={`  ${g.label}`}>{formatVND(g.total)}</PrintRow>)}
+                        {groups.map(g => (
+                            <div key={g.label}>
+                                <PrintRow label={`  ${g.label}`}>{formatVND(g.total)}</PrintRow>
+                                {g.children.map(c => (
+                                    <PrintItem key={c.key} amount={`-${formatVND(c.amount)}`}>
+                                        {METHOD_TAGS[c.method]?.[0] || 'TM'} {c.date ? `${c.date} · ` : ''}{c.name}{c.count > 1 ? ` ×${c.count}` : ''}
+                                    </PrintItem>
+                                ))}
+                            </div>
+                        ))}
                     </div>
                 ))}
             <PrintRow label="TỔNG THỰC CHI" strong>{totalExpenses ? '-' : ''}{formatVND(totalExpenses)}</PrintRow>
@@ -464,6 +473,16 @@ function PrintRow({ label, strong, children }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontWeight: strong ? 700 : 400, whiteSpace: 'pre' }}>
             <span>{label}</span>
             <span>{children}</span>
+        </div>
+    )
+}
+
+// Dòng món chi tiết trên tờ in — thụt vào, chữ nhỏ, tên được xuống dòng khi dài.
+function PrintItem({ children, amount }) {
+    return (
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontSize: 11, paddingLeft: 14 }}>
+            <span>{children}</span>
+            <span style={{ whiteSpace: 'pre' }}>{amount}</span>
         </div>
     )
 }
