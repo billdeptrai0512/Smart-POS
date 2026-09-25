@@ -42,7 +42,7 @@ Lý do: mục tiêu là owner phải THỰC SỰ vận hành đủ (nhập thự
 
 - **Lịch sử (KHÔNG còn hiệu lực)**: trước đó có ràng buộc `trial_grants(phone PK)` "1 SĐT = 1 trial trọn đời" — chỉ 1 địa chỉ/SĐT được hưởng free-tới-full-close, các chi nhánh sau bị khoá ngay từ đầu. Bỏ ở migration `20260717_trial_4_per_address_not_per_phone.sql` theo yêu cầu: đơn giản hoá setup nhiều chi nhánh, để mỗi chi nhánh mới đều có đủ thời gian trải nghiệm trước khi trả phí.
 - **⚠️ Đánh đổi đã cân nhắc & chấp nhận có chủ đích**: xoá 1 địa chỉ (sau khi hết trial) rồi tạo lại → được 1 vòng trial mới (lỗ hổng mà `20260622_fix_trial_phone_change_loophole.sql` từng vá cho mô hình CŨ, nay mở lại có chủ đích). Chấp nhận vì lặp lại thao tác này vô nghĩa với 1 quán thật — mỗi lần phải xoá sạch dữ liệu bán hàng + giả vờ chốt ca full lại từ đầu, friction thật không đáng để lách.
-- Owner vẫn cần nhập SĐT trước khi được cấp trial thật ở ca full đầu tiên (mồi UX thu thập liên hệ, KHÔNG còn phải là anti-abuse). Xác thực SĐT thật bằng OTP (Giai đoạn B — Zalo Mini App / Twilio fallback) **chưa build**, xem `docs/phoneAuth.md`.
+- Owner vẫn cần nhập SĐT trước khi được cấp trial thật ở ca full đầu tiên (mồi UX thu thập liên hệ, KHÔNG còn phải là anti-abuse). Xác thực SĐT thật bằng OTP (Giai đoạn B — Zalo Mini App / Twilio fallback) **chưa build**, xem `docs/phoneAuth.md` (đã HUỶ 2026-08-02, file đã xoá — xem git history).
 - **Cơ chế cấp trial** (tiến hoá qua nhiều migration cùng ngày — `20260717_trial_1_reanchor_requires_full_close.sql` → `20260717_trial_2_deferred_until_first_full_close.sql` → `20260717_trial_4_per_address_not_per_phone.sql`, bản có hiệu lực CUỐI CÙNG là file `_4_`; 1 file trung gian từng thêm RPC `list_pending_trial_addresses` cho UI rồi bị chính file `_4_` DROP luôn vì hết cần thiết sau khi bỏ check SĐT — xem §6):
   - "Full" = đã bấm "Lưu thực thu" (`cash_closed_at IS NOT NULL`) **và** kiểm kho phủ hết mọi nguyên liệu active (`ingredient_costs`) trong `inventory_report`. Địa chỉ chưa cấu hình nguyên liệu nào → coi như đủ.
   - **Trước ca full đầu tiên**: địa chỉ **chưa có row `address_subscriptions` nào** → `get_address_entitlement()` bypass trả `'all'` (free, không hạn). Không check SĐT.
@@ -633,10 +633,10 @@ Hoàn toàn khả thi để bắt đầu làm Feature Flag, Schema, Trial grant 
 
 ### Phase 2: Phone OTP (chống trial abuse)
 
-**Giai đoạn A (thu SĐT + bind trial) ĐÃ LIVE. Giai đoạn B (xác thực SĐT thật bằng OTP) CHƯA build** — xem `docs/phoneAuth.md` cho thiết kế + checklist Zalo Mini App / Twilio fallback.
+**Giai đoạn A (thu SĐT + bind trial) ĐÃ LIVE. Giai đoạn B (xác thực SĐT thật bằng OTP) CHƯA build** — xem `docs/phoneAuth.md` (đã HUỶ 2026-08-02, file đã xoá — xem git history) cho thiết kế + checklist Zalo Mini App / Twilio fallback.
 
 - [x] **Bước 8 (Bind Trial to Phone):** RPC `set_my_phone(p_phone)` chuẩn hoá SĐT + bind trial 1-SĐT-1-lần; trigger `grant_trial_on_address_creation` cấp trial cho địa chỉ mới nếu owner đã có SĐT chưa dùng trial. Migration `20260611_phase2a_users_phone_trial_binding.sql`, vá 2 lỗ lách ở `20260622_fix_trial_phone_change_loophole.sql` (đổi số + xoá địa chỉ tạo lại).
-- [ ] **Bước 7 (Phone OTP thật):** hiện chỉ THU số (đúng định dạng), CHƯA có bằng chứng sở hữu số (không OTP) — user có thể bịa số hợp lệ để lấy trial mới. Cần chọn 1 trong 2 hướng ở `docs/phoneAuth.md`: Zalo Mini App (`getPhoneNumber`, 0đ nhưng cần hộ KD/GPKD xác thực OA) hoặc Twilio OTP (tốn phí/SMS, không cần pháp nhân). Đang chờ owner xác nhận có hộ KD/GPKD chưa để chốt hướng.
+- [ ] **Bước 7 (Phone OTP thật):** hiện chỉ THU số (đúng định dạng), CHƯA có bằng chứng sở hữu số (không OTP) — user có thể bịa số hợp lệ để lấy trial mới. Cần chọn 1 trong 2 hướng ở `docs/phoneAuth.md` (đã HUỶ 2026-08-02, file đã xoá — xem git history): Zalo Mini App (`getPhoneNumber`, 0đ nhưng cần hộ KD/GPKD xác thực OA) hoặc Twilio OTP (tốn phí/SMS, không cần pháp nhân). Đang chờ owner xác nhận có hộ KD/GPKD chưa để chốt hướng.
 
 ### Phase 3: Payment Automation (SePay) & Admin
 *Mục tiêu: Tự động hóa thanh toán, gia hạn, và công cụ quản trị tay.*

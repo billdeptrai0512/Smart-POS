@@ -6,7 +6,7 @@
 import { dateStringVN, startOfDayVN } from '../utils/dateVN'
 import { ONBOARDING_STORAGE_PREFIX } from '../utils/onboardingStorage'
 import type { Row } from '../types/domain'
-import { readJSON } from '../utils/storage'
+import { readJSON, writeJSON } from '../utils/storage'
 
 const generateId = () => crypto.randomUUID();
 
@@ -35,6 +35,16 @@ const get = (key: string, fallback: Row[] = []): Row[] => readJSON(key, fallback
 
 const set = (key: string, val: unknown) => localStorage.setItem(key, JSON.stringify(val));
 
+// Sửa tại chỗ 1 dòng theo id rồi ghi lại cả bảng; trả dòng đã sửa, null nếu không có.
+const patchLocal = (key: string, id: string, patch: Row): Row | null => {
+    const rows = get(key);
+    const r = rows.find(r => r.id === id);
+    if (!r) return null;
+    Object.assign(r, patch);
+    set(key, rows);
+    return r;
+};
+
 // --- Auth / State ---
 export const setIsGuest = (val: boolean) => localStorage.setItem(KEYS.IS_GUEST, val ? 'true' : 'false');
 export const isGuest = () => localStorage.getItem(KEYS.IS_GUEST) === 'true';
@@ -45,9 +55,7 @@ const KEY_GUEST_INGREDIENT_SORT = 'guest_ingredient_sort_order';
 
 export const getGuestIngredientSortOrder = () => readJSON<string[] | null>(KEY_GUEST_INGREDIENT_SORT, null);
 
-export const setGuestIngredientSortOrder = (arr: string[]) => {
-    localStorage.setItem(KEY_GUEST_INGREDIENT_SORT, JSON.stringify(arr || []));
-};
+export const setGuestIngredientSortOrder = (arr: string[]) => writeJSON(KEY_GUEST_INGREDIENT_SORT, arr || []);
 
 export const getDemoAddress = () => ({
     id: DEMO_ADDRESS_ID,
@@ -534,16 +542,8 @@ export const insertLocalExpenseCategory = (payload: Row) => {
     return newItem;
 };
 
-export const updateLocalExpenseCategory = (id: string, updates: Row) => {
-    const list = get(KEYS.EXPENSE_CATEGORIES);
-    const idx = list.findIndex(c => c.id === id);
-    if (idx >= 0) {
-        list[idx] = { ...list[idx], ...updates, updated_at: new Date().toISOString() };
-        set(KEYS.EXPENSE_CATEGORIES, list);
-        return list[idx];
-    }
-    return null;
-};
+export const updateLocalExpenseCategory = (id: string, updates: Row) =>
+    patchLocal(KEYS.EXPENSE_CATEGORIES, id, { ...updates, updated_at: new Date().toISOString() });
 
 export const fetchLocalExpensesByCategory = (addressId: string | null, categoryId: string) =>
     get(KEYS.EXPENSES)
@@ -559,24 +559,12 @@ export const fetchLocalExpenseCategoryCounts = (addressId: string | null) => {
 };
 
 export const restoreLocalExpenseCategory = (id: string) => {
-    const list = get(KEYS.EXPENSE_CATEGORIES);
-    const idx = list.findIndex(c => c.id === id);
-    if (idx >= 0) {
-        list[idx].is_active = true;
-        list[idx].updated_at = new Date().toISOString();
-        set(KEYS.EXPENSE_CATEGORIES, list);
-    }
+    patchLocal(KEYS.EXPENSE_CATEGORIES, id, { is_active: true, updated_at: new Date().toISOString() });
     return true;
 };
 
 export const deleteLocalExpenseCategory = (id: string) => {
-    const list = get(KEYS.EXPENSE_CATEGORIES);
-    const idx = list.findIndex(c => c.id === id);
-    if (idx >= 0) {
-        list[idx].is_active = false;
-        list[idx].updated_at = new Date().toISOString();
-        set(KEYS.EXPENSE_CATEGORIES, list);
-    }
+    patchLocal(KEYS.EXPENSE_CATEGORIES, id, { is_active: false, updated_at: new Date().toISOString() });
     return true;
 };
 
@@ -619,23 +607,11 @@ export const clearGuestData = () => {
 };
 
 // --- Missing Product & Order Helpers ---
-export const updateLocalProductPrice = (productId: string, price: number) => {
-    const products = get(KEYS.PRODUCTS);
-    const p = products.find(p => p.id === productId);
-    if (p) { p.price = price; set(KEYS.PRODUCTS, products); }
-};
+export const updateLocalProductPrice = (productId: string, price: number) => { patchLocal(KEYS.PRODUCTS, productId, { price }); };
 
-export const updateLocalProductName = (productId: string, name: string) => {
-    const products = get(KEYS.PRODUCTS);
-    const p = products.find(p => p.id === productId);
-    if (p) { p.name = name; set(KEYS.PRODUCTS, products); }
-};
+export const updateLocalProductName = (productId: string, name: string) => { patchLocal(KEYS.PRODUCTS, productId, { name }); };
 
-export const updateLocalProductCountAsCup = (productId: string, countAsCup: boolean) => {
-    const products = get(KEYS.PRODUCTS);
-    const p = products.find(p => p.id === productId);
-    if (p) { p.count_as_cup = countAsCup; set(KEYS.PRODUCTS, products); }
-};
+export const updateLocalProductCountAsCup = (productId: string, countAsCup: boolean) => { patchLocal(KEYS.PRODUCTS, productId, { count_as_cup: countAsCup }); };
 
 export const updateLocalProductSortOrder = (orderedProductIds: string[]) => {
     const products = get(KEYS.PRODUCTS);
@@ -649,25 +625,12 @@ export const updateLocalProductSortOrder = (orderedProductIds: string[]) => {
 // Soft-delete a product (mirror of the remote `is_active = false` write). Lives here so
 // callers never reach into localStorage with an out-of-module key constant.
 export const deleteLocalProduct = (productId: string) => {
-    const products = get(KEYS.PRODUCTS);
-    const idx = products.findIndex(p => p.id === productId);
-    if (idx >= 0) {
-        products[idx].is_active = false;
-        set(KEYS.PRODUCTS, products);
-    }
+    patchLocal(KEYS.PRODUCTS, productId, { is_active: false });
     return true;
 };
 
-export const updateLocalExpense = (id: string, updates: Row) => {
-    const list = get(KEYS.EXPENSES);
-    const idx = list.findIndex(e => e.id === id);
-    if (idx >= 0) {
-        list[idx] = { ...list[idx], ...updates, updated_at: new Date().toISOString() };
-        set(KEYS.EXPENSES, list);
-        return list[idx];
-    }
-    return null;
-};
+export const updateLocalExpense = (id: string, updates: Row) =>
+    patchLocal(KEYS.EXPENSES, id, { ...updates, updated_at: new Date().toISOString() });
 
 export const deleteLocalExpense = (expenseId: string) => {
     let expenses = get(KEYS.EXPENSES);
@@ -677,13 +640,7 @@ export const deleteLocalExpense = (expenseId: string) => {
 };
 
 export const deleteLocalOrder = (orderId: string, staffName: string | null) => {
-    const orders = get(KEYS.ORDERS);
-    const o = orders.find(o => o.id === orderId);
-    if (o) {
-        o.deleted_at = new Date().toISOString();
-        o.deleted_by = staffName;
-        set(KEYS.ORDERS, orders);
-    }
+    patchLocal(KEYS.ORDERS, orderId, { deleted_at: new Date().toISOString(), deleted_by: staffName });
     return true;
 };
 
@@ -724,23 +681,11 @@ export const insertLocalProductExtra = (payload: Row) => {
     return newExtra;
 };
 
-export const updateLocalProductExtraName = (extraId: string, name: string) => {
-    const extras = get(KEYS.PRODUCT_EXTRAS);
-    const e = extras.find(e => e.id === extraId);
-    if (e) { e.name = name; set(KEYS.PRODUCT_EXTRAS, extras); }
-};
+export const updateLocalProductExtraName = (extraId: string, name: string) => { patchLocal(KEYS.PRODUCT_EXTRAS, extraId, { name }); };
 
-export const updateLocalProductExtraPrice = (extraId: string, price: number) => {
-    const extras = get(KEYS.PRODUCT_EXTRAS);
-    const e = extras.find(e => e.id === extraId);
-    if (e) { e.price = price; set(KEYS.PRODUCT_EXTRAS, extras); }
-};
+export const updateLocalProductExtraPrice = (extraId: string, price: number) => { patchLocal(KEYS.PRODUCT_EXTRAS, extraId, { price }); };
 
-export const updateLocalProductExtraSticky = (extraId: string, isSticky: boolean) => {
-    const extras = get(KEYS.PRODUCT_EXTRAS);
-    const e = extras.find(e => e.id === extraId);
-    if (e) { e.is_sticky = isSticky; set(KEYS.PRODUCT_EXTRAS, extras); }
-};
+export const updateLocalProductExtraSticky = (extraId: string, isSticky: boolean) => { patchLocal(KEYS.PRODUCT_EXTRAS, extraId, { is_sticky: isSticky }); };
 
 export const updateLocalExtrasSortOrder = (orderedExtraIds: string[]) => {
     const extras = get(KEYS.PRODUCT_EXTRAS);
@@ -822,17 +767,9 @@ export const insertLocalTopping = (payload: Row) => {
     return newTopping;
 };
 
-export const updateLocalToppingName = (toppingId: string, name: string) => {
-    const toppings = get(KEYS.TOPPINGS);
-    const t = toppings.find(t => t.id === toppingId);
-    if (t) { t.name = name; set(KEYS.TOPPINGS, toppings); }
-};
+export const updateLocalToppingName = (toppingId: string, name: string) => { patchLocal(KEYS.TOPPINGS, toppingId, { name }); };
 
-export const updateLocalToppingPrice = (toppingId: string, price: number) => {
-    const toppings = get(KEYS.TOPPINGS);
-    const t = toppings.find(t => t.id === toppingId);
-    if (t) { t.price = price; set(KEYS.TOPPINGS, toppings); }
-};
+export const updateLocalToppingPrice = (toppingId: string, price: number) => { patchLocal(KEYS.TOPPINGS, toppingId, { price }); };
 
 export const deleteLocalTopping = (toppingId: string) => {
     let toppings = get(KEYS.TOPPINGS);
@@ -908,11 +845,7 @@ export const insertLocalDiscountProgram = (payload: Row) => {
     return newProgram;
 };
 
-export const updateLocalDiscountProgram = (programId: string, patch: Row) => {
-    const programs = get(KEYS.DISCOUNT_PROGRAMS);
-    const p = programs.find(p => p.id === programId);
-    if (p) { Object.assign(p, patch); set(KEYS.DISCOUNT_PROGRAMS, programs); }
-};
+export const updateLocalDiscountProgram = (programId: string, patch: Row) => { patchLocal(KEYS.DISCOUNT_PROGRAMS, programId, patch); };
 
 export const deleteLocalDiscountProgram = (programId: string) => {
     let programs = get(KEYS.DISCOUNT_PROGRAMS);

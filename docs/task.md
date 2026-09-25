@@ -234,7 +234,7 @@ Bỏ bán lẻ module, bỏ chu kỳ tháng/năm, bỏ bundle. Trial 7 ngày. Mu
 
 ### ❌ Giai đoạn B — verify SĐT thật — HUỶ, không làm
 
-Nghiên cứu giữ ở `docs/phoneAuth.md` (Zalo Mini App `getPhoneNumber` 0đ; fallback Twilio OTP).
+Nghiên cứu giữ ở `docs/phoneAuth.md` (đã HUỶ 2026-08-02, file đã xoá — xem git history) (Zalo Mini App `getPhoneNumber` 0đ; fallback Twilio OTP).
 Chưa từng bắt tay code, và cũng không còn lý do: trial không bind theo SĐT nữa.
 
 ### ❌ Giai đoạn C — SĐT làm phương thức đăng ký — HUỶ, không làm
