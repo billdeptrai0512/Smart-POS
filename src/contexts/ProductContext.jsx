@@ -4,7 +4,6 @@ import { fetchToppings, fetchProductToppingLinks } from '../services/toppingServ
 import { fetchDiscountPrograms, fetchDiscountProgramProductLinks } from '../services/discountService'
 import { useAuth } from './AuthContext'
 import { useAddress } from './AddressContext'
-import { supabase } from '../lib/supabaseClient'
 import { Outlet } from 'react-router-dom'
 import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 import { onTabReturn } from '../utils/tabVisibility'
@@ -226,7 +225,7 @@ export function ProductProvider() {
     // WebSocket subscription on 4 tables for every signed-in client. Product
     // data changes infrequently, so an on-focus refetch is sufficient.
     useEffect(() => {
-        if (!supabase || !selectedAddress?.id) return
+        if (!selectedAddress?.id) return
 
         // Only refetch the 5 product tables if the tab was actually away for a
         // while. Without this, every quick app-switch / lock-screen fires a herd

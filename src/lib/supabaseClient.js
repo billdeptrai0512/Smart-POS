@@ -17,8 +17,9 @@ const nativeStorage = {
     removeItem: (key) => Preferences.remove({ key }),
 }
 
-export const supabase = supabaseUrl && supabaseAnonKey
-    ? createClient(supabaseUrl, supabaseAnonKey, Capacitor.getPlatform() === 'ios'
-        ? { auth: { storage: nativeStorage } }
-        : undefined)
-    : null
+// Thiếu env = app không chạy được gì — báo lỗi 1 lần ở đây thay vì rải `if (!supabase)` khắp nơi.
+if (!supabaseUrl || !supabaseAnonKey) throw new Error('Thiếu VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY (xem .env.example)')
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, Capacitor.getPlatform() === 'ios'
+    ? { auth: { storage: nativeStorage } }
+    : undefined)

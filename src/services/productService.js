@@ -6,7 +6,6 @@ import * as localRepo from './localRepository'
 // Fetch all products for the menu (purely branch isolated)
 export async function fetchProducts(addressId) {
     if (localRepo.isGuest()) return localRepo.fetchLocalProducts(addressId)
-    if (!supabase) return []
 
     const run = (cols) => {
         let q = supabase.from('products').select(cols).eq('is_active', true)
@@ -39,7 +38,6 @@ export async function fetchProducts(addressId) {
 // Update product price directly (isolated clone architecture)
 export async function upsertProductPrice(productId, addressId, price) {
     if (localRepo.isGuest()) return localRepo.updateLocalProductPrice(productId, price)
-    if (!supabase) return
     // .select() forces PostgREST to return affected rows — without it, an UPDATE
     // silently blocked by RLS (0 rows matched) returns no error at all, and the
     // caller wrongly thinks the save succeeded.
@@ -55,7 +53,6 @@ export async function upsertProductPrice(productId, addressId, price) {
 // Rename a product
 export async function updateProductName(productId, name) {
     if (localRepo.isGuest()) return localRepo.updateLocalProductName(productId, name)
-    if (!supabase) return
     const { error } = await supabase
         .from('products')
         .update({ name })
@@ -66,7 +63,6 @@ export async function updateProductName(productId, name) {
 // Toggle whether a product counts toward daily cup total
 export async function updateProductCountAsCup(productId, countAsCup) {
     if (localRepo.isGuest()) return localRepo.updateLocalProductCountAsCup(productId, countAsCup)
-    if (!supabase) return
     const { error } = await supabase
         .from('products')
         .update({ count_as_cup: countAsCup })
@@ -85,7 +81,6 @@ export async function insertProduct(name, price, addressId = null, isDivider = f
         const sortOrder = Math.min(0, ...existing.map(p => p.sort_order ?? 0)) - 1
         return localRepo.insertLocalProduct({ name, price, owner_address_id: addressId, is_divider: isDivider, sort_order: sortOrder })
     }
-    if (!supabase) throw new Error('No Supabase connection')
 
     const payload = { name, price }
     if (isDivider) payload.is_divider = true
@@ -113,7 +108,6 @@ export async function insertProduct(name, price, addressId = null, isDivider = f
 // used because each address owns its own product rows.
 export async function removeProductFromAddress(productId, _addressId) {
     if (localRepo.isGuest()) return localRepo.deleteLocalProduct(productId)
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase.from('products').update({ is_active: false }).eq('id', productId)
     if (error) throw error
     return true
@@ -125,7 +119,6 @@ export async function removeProductFromAddress(productId, _addressId) {
 // if the RPC isn't deployed yet.
 export async function updateProductSortOrder(addressId, orderedProductIds) {
     if (localRepo.isGuest()) return localRepo.updateLocalProductSortOrder(orderedProductIds)
-    if (!supabase) throw new Error('No Supabase connection')
     if (!orderedProductIds?.length) return
 
     const { error } = await supabase.rpc('update_products_sort_order', { p_ids: orderedProductIds })
@@ -148,7 +141,6 @@ export async function updateProductSortOrder(addressId, orderedProductIds) {
 // Fetch all product extras (Pure isolated)
 export async function fetchProductExtras(addressId) {
     if (localRepo.isGuest()) return localRepo.fetchLocalProductExtras(addressId)
-    if (!supabase) return {}
     let query = supabase.from('product_extras').select('id, product_id, name, price, address_id, sort_order, is_sticky').order('sort_order', { ascending: true, nullsFirst: false })
 
     if (addressId) {
@@ -176,7 +168,6 @@ export async function fetchProductExtras(addressId) {
 // Add a new product extra
 export async function insertProductExtra(productId, name, price, addressId = null) {
     if (localRepo.isGuest()) return localRepo.insertLocalProductExtra({ product_id: productId, name, price, address_id: addressId })
-    if (!supabase) throw new Error('No Supabase connection')
     const payload = { product_id: productId, name, price }
     if (addressId) payload.address_id = addressId
 
@@ -202,7 +193,6 @@ export async function insertProductExtra(productId, name, price, addressId = nul
 // Update a product extra's name
 export async function updateProductExtraName(extraId, name) {
     if (localRepo.isGuest()) return localRepo.updateLocalProductExtraName(extraId, name)
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
         .from('product_extras')
         .update({ name })
@@ -213,7 +203,6 @@ export async function updateProductExtraName(extraId, name) {
 // Update a product extra's price
 export async function updateProductExtraPrice(extraId, price) {
     if (localRepo.isGuest()) return localRepo.updateLocalProductExtraPrice(extraId, price)
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
         .from('product_extras')
         .update({ price })
@@ -224,7 +213,6 @@ export async function updateProductExtraPrice(extraId, price) {
 // Duplicate a product extra (copy extra + all its extra_ingredients) with a new name
 export async function duplicateProductExtra(extraId, newName, addressId = null) {
     if (localRepo.isGuest()) return localRepo.duplicateLocalProductExtra(extraId, newName, addressId)
-    if (!supabase) throw new Error('No Supabase connection')
 
     const { data: src, error: e1 } = await supabase
         .from('product_extras').select('product_id, price').eq('id', extraId).single()
@@ -261,7 +249,6 @@ export async function duplicateProductExtra(extraId, newName, addressId = null) 
 // reasoning behind the single-RPC pattern.
 export async function updateExtrasSortOrder(orderedExtraIds) {
     if (localRepo.isGuest()) return localRepo.updateLocalExtrasSortOrder(orderedExtraIds)
-    if (!supabase) throw new Error('No Supabase connection')
     if (!orderedExtraIds?.length) return
 
     const { error } = await supabase.rpc('update_extras_sort_order', { p_ids: orderedExtraIds })
@@ -280,7 +267,6 @@ export async function updateExtrasSortOrder(orderedExtraIds) {
 
 export async function updateProductExtraSticky(extraId, isSticky) {
     if (localRepo.isGuest()) return localRepo.updateLocalProductExtraSticky(extraId, isSticky)
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
         .from('product_extras')
         .update({ is_sticky: isSticky })
@@ -290,7 +276,6 @@ export async function updateProductExtraSticky(extraId, isSticky) {
 
 export async function deleteProductExtra(extraId) {
     if (localRepo.isGuest()) return localRepo.deleteLocalProductExtra(extraId)
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
         .from('product_extras')
         .delete()
@@ -304,7 +289,6 @@ export async function deleteProductExtra(extraId) {
 // Fetch extra ingredients scoped to a set of extra IDs (pass [] to skip, null to fetch all)
 export async function fetchExtraIngredients(extraIds = null) {
     if (localRepo.isGuest()) return localRepo.fetchLocalExtraIngredients(extraIds)
-    if (!supabase) return {}
     if (Array.isArray(extraIds) && extraIds.length === 0) return {}
 
     let query = supabase.from('extra_ingredients').select('id, extra_id, ingredient, amount, unit')
@@ -326,7 +310,6 @@ export async function fetchExtraIngredients(extraIds = null) {
 // Upsert extra ingredient
 export async function upsertExtraIngredient(extraId, ingredient, amount, unit = null) {
     if (localRepo.isGuest()) return localRepo.upsertLocalExtraIngredient({ extra_id: extraId, ingredient, amount, unit })
-    if (!supabase) throw new Error('No Supabase connection')
     const payload = { extra_id: extraId, ingredient, amount }
     if (unit) payload.unit = unit
     const { error } = await supabase
@@ -338,7 +321,6 @@ export async function upsertExtraIngredient(extraId, ingredient, amount, unit = 
 // Delete extra ingredient
 export async function deleteExtraIngredient(extraId, ingredient) {
     if (localRepo.isGuest()) return localRepo.deleteLocalExtraIngredient(extraId, ingredient)
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
         .from('extra_ingredients')
         .delete()

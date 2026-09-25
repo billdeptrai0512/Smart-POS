@@ -345,7 +345,7 @@ export function POSProvider() {
             const storedDate = localStorage.getItem(STORAGE_KEYS.CURRENT_DATE)
             const todayStr = dateStringVN()
             if (storedDate && storedDate !== todayStr) {
-                if (navigator.onLine && supabase && addressId) {
+                if (navigator.onLine && addressId) {
                     fetchTodayStats(addressId).then(({ revenue, cups }) => { setRevenue(revenue); setCupsSold(cups) })
                     setTotalCost(0)
                     showToast('Đã qua ngày mới, dữ liệu đã được làm mới!', 'info')
@@ -607,7 +607,7 @@ export function POSProvider() {
         // lạc quan cho bàn mang đúng id — modal chi tiết bàn xoá theo id này. Offline
         // chưa có id (addPendingOrder tự sinh lúc sync) → đợt đó chưa xoá được, modal
         // ẩn nút xoá cho tới khi có mạng.
-        const online = navigator.onLine && !!supabase
+        const online = navigator.onLine
         const orderId = online ? crypto.randomUUID() : null
         // Cùng dạng nhãn như fetchOpenTables (tên món kèm topping) — dùng cho đợt lạc quan của
         // bàn lẫn phiếu bếp.

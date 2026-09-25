@@ -15,7 +15,6 @@ export async function fetchIngredientCostsAndUnits(addressId: UUID | null) {
         })
         return { costs, units, rows }
     }
-    if (!supabase) return { costs: {}, units: {}, rows: [] }
     // ingredient_costs is now per-address (like products/recipes). Default rows
     // (address_id IS NULL) are a one-time seed/template — copied to each new
     // address via the seed_address_ingredient_costs trigger and the backfill in
@@ -25,7 +24,6 @@ export async function fetchIngredientCostsAndUnits(addressId: UUID | null) {
     // 20260523_add_ingredient_category.sql isn't deployed yet (Postgres 42703).
     const BASE = 'ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock'
     const runQuery = async (cols: string) => {
-        if (!supabase) return { data: null, error: null } as { data: Row[] | null; error: SupabaseError }
         let q = supabase.from('ingredient_costs').select(cols)
         q = addressId ? q.eq('address_id', addressId) : q.is('address_id', null)
         // .select(cols) with a dynamic column string (not a literal) makes supabase-js
@@ -70,7 +68,6 @@ export async function upsertIngredientCost(ingredient: string, unitCost: number,
     // entirely (like the Supabase branch below already does via `if (unit) ...`), or
     // upsertLocalIngredientCost's merge will wipe the ingredient's already-stored unit.
     if (localRepo.isGuest()) return localRepo.upsertLocalIngredientCost({ ingredient, unit_cost: unitCost, address_id: addressId, ...(unit ? { unit } : {}), ...opts })
-    if (!supabase) throw new Error('No Supabase connection')
     const sb = supabase
 
     const payload: Row = { ingredient, unit_cost: unitCost }
@@ -112,7 +109,6 @@ export async function upsertIngredientCost(ingredient: string, unitCost: number,
 // không có khái niệm nhóm nên giữ nguyên đường upsert local cũ.
 export async function updateIngredientUnitCost(ingredient: string, unitCost: number, addressId: UUID) {
     if (localRepo.isGuest()) return localRepo.upsertLocalIngredientCost({ ingredient, unit_cost: unitCost, address_id: addressId })
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase.rpc('set_ingredient_unit_cost', { p_address_id: addressId, p_ingredient: ingredient, p_unit_cost: unitCost })
     if (error) throw error
 }
@@ -128,7 +124,6 @@ export async function syncIngredientKey(addressId: UUID, oldKey: string, newKey:
     if (localRepo.isGuest()) {
         return localRepo.renameLocalIngredient(addressId, oldKey, newKey)
     }
-    if (!supabase) throw new Error('No Supabase connection')
     if (!addressId) throw new Error('addressId required for syncIngredientKey')
     if (oldKey === newKey) return { recipes_updated: 0, closings_updated: 0, expenses_updated: 0, costs_action: 'noop' }
     const { data, error } = await supabase.rpc('sync_ingredient_key', {
@@ -151,7 +146,6 @@ export async function renameIngredient(oldKey: string, newKey: string, addressId
 // Uses the delete_ingredient RPC for atomic cleanup across all tables.
 export async function deleteIngredientCost(ingredient: string, addressId: UUID | null = null) {
     if (localRepo.isGuest()) return localRepo.deleteLocalIngredientCost(ingredient)
-    if (!supabase) throw new Error('No Supabase connection')
 
     if (addressId) {
         // Use RPC for full cleanup (ingredient_costs + recipes + extra_ingredients)

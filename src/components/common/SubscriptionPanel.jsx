@@ -121,7 +121,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
     // Tạo intent khi đổi tập chi nhánh / số tiền → reference cố định cho lần CK này.
     const selectedKey = [...selectedAddressIds].sort().join(',')
     useEffect(() => {
-        if (addrCount === 0 || total <= 0 || !supabase) { setReference(null); return }
+        if (addrCount === 0 || total <= 0) { setReference(null); return }
         let cancelled = false
         setRefError(false)
         supabase

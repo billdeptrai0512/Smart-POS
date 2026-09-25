@@ -8,7 +8,6 @@ import { reportCache, invalidateReportCache } from './cache'
 // Fetch today's expenses, newest first (optionally scoped by address)
 export async function fetchTodayExpenses(addressId) {
     if (localRepo.isGuest()) return localRepo.fetchLocalExpenses(addressId)
-    if (!supabase) return []
     const today = startOfDayVN()
 
     let query = supabase
@@ -56,7 +55,6 @@ export async function insertExpense(name, amount, addressId = null, isFixed = fa
         if (createdAt) guestPayload.created_at = createdAt
         return localRepo.insertLocalExpense(guestPayload)
     }
-    if (!supabase) throw new Error('No Supabase connection')
     const payload = { name, amount, is_fixed: isFixed, is_refill: isRefill, payment_method: paymentMethod, metadata }
     if (addressId) payload.address_id = addressId
     if (staffName) payload.staff_name = staffName
@@ -78,7 +76,6 @@ export async function insertExpense(name, amount, addressId = null, isFixed = fa
 export async function updateExpense(id, updates) {
     invalidateReportCache(null)
     if (localRepo.isGuest()) return localRepo.updateLocalExpense(id, updates)
-    if (!supabase) throw new Error('No Supabase connection')
     const payload = {}
     if (updates.category_id !== undefined) payload.category_id = updates.category_id
     if (updates.name !== undefined) payload.name = updates.name
@@ -102,7 +99,6 @@ export async function updateExpense(id, updates) {
 export async function deleteExpense(expenseId) {
     invalidateReportCache(null)
     if (localRepo.isGuest()) return localRepo.deleteLocalExpense(expenseId)
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
         .from('expenses')
         .delete()
@@ -123,7 +119,6 @@ export async function fetchExpensesByRange(addressId, start, end) {
                 })
                 .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
         }
-        if (!supabase) return []
         let query = supabase
             .from('expenses')
             .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, metadata, category_id, created_at, address_id')
@@ -162,7 +157,7 @@ export async function fetchIngredientRestockHistory(addressIds, ingredient, from
                 payments: payments.filter(p => p.expense_id === e.id),
             }))
     }
-    if (!supabase || !ids.length) return []
+    if (!ids.length) return []
     // Nested select kéo luôn payments để FE tính owing & hiển thị badge mà không cần round-trip phụ.
     // Có 3 cấp fallback nếu migration 20260528 chưa deploy: bỏ payments → bỏ discount/extra columns.
     const trySelects = [
@@ -208,7 +203,6 @@ export async function fetchExpenseCategories(addressId) {
     if (!addressId) return []
     return reportCache.through([addressId, 'expenseCategories'], async () => {
         if (localRepo.isGuest()) return localRepo.fetchLocalExpenseCategories(addressId)
-        if (!supabase) return []
         const { data, error } = await supabase
             .from('expense_categories')
             .select('id, name, group_section, sort_order, is_active, is_default, created_at')
@@ -228,7 +222,6 @@ export async function insertExpenseCategory(addressId, { name, group_section, so
     if (!addressId) throw new Error('addressId required')
     invalidateReportCache(addressId)
     if (localRepo.isGuest()) return localRepo.insertLocalExpenseCategory({ address_id: addressId, name, group_section, sort_order })
-    if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase
         .from('expense_categories')
         .insert({ address_id: addressId, name, group_section, sort_order })
@@ -242,7 +235,6 @@ export async function insertExpenseCategory(addressId, { name, group_section, so
 export async function updateExpenseCategory(id, updates) {
     invalidateReportCache(null)
     if (localRepo.isGuest()) return localRepo.updateLocalExpenseCategory(id, updates)
-    if (!supabase) throw new Error('No Supabase connection')
     const payload = {}
     if (updates.name !== undefined) payload.name = updates.name
     if (updates.group_section !== undefined) payload.group_section = updates.group_section
@@ -263,7 +255,6 @@ export async function updateExpenseCategory(id, updates) {
 export async function fetchExpenseCategoryCounts(addressId) {
     if (!addressId) return {}
     if (localRepo.isGuest()) return localRepo.fetchLocalExpenseCategoryCounts(addressId)
-    if (!supabase) return {}
     const { data, error } = await supabase
         .from('expenses')
         .select('category_id')
@@ -284,7 +275,6 @@ export async function fetchExpenseCategoryCounts(addressId) {
 export async function restoreExpenseCategory(id) {
     invalidateReportCache(null)
     if (localRepo.isGuest()) return localRepo.restoreLocalExpenseCategory(id)
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
         .from('expense_categories')
         .update({ is_active: true })
@@ -300,7 +290,6 @@ export async function restoreExpenseCategory(id) {
 export async function fetchExpensesByCategory(addressId, categoryId) {
     if (!addressId || !categoryId) return []
     if (localRepo.isGuest()) return localRepo.fetchLocalExpensesByCategory(addressId, categoryId)
-    if (!supabase) return []
     const { data, error } = await supabase
         .from('expenses')
         .select('id, name, amount, category_id, created_at')
@@ -324,7 +313,6 @@ export async function fetchExpensesByCategory(addressId, categoryId) {
 export async function deleteExpenseCategory(id) {
     invalidateReportCache(null)
     if (localRepo.isGuest()) return localRepo.deleteLocalExpenseCategory(id)
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase
         .from('expense_categories')
         .update({ is_active: false })

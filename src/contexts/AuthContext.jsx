@@ -152,11 +152,6 @@ export function AuthProvider({ children }) {
 
     // Initialize: check existing session
     useEffect(() => {
-        if (!supabase) {
-            setLoading(false)
-            return
-        }
-
         // supabase-js re-notify 'SIGNED_IN' với ĐÚNG session cũ mỗi lần tab visible
         // (_onVisibilityChanged → _recoverAndRefresh) → khoá theo auth_id, nếu không là
         // 1 GET /users mỗi lần. refreshProfile() vẫn gọi thẳng loadProfile, không qua đây.

@@ -30,7 +30,6 @@ export async function adjustIngredientStock(addressId: UUID | null, ingredient: 
     if (localRepo.isGuest()) {
         return await insertExpense(displayName, 0, addressId, false, staffName, true, 'cash', meta)
     }
-    if (!supabase) throw new Error('No Supabase connection')
     return await insertExpense(displayName, 0, addressId, false, staffName, true, 'cash', meta)
 }
 
@@ -60,7 +59,6 @@ export async function setCounterStock(addressId: UUID | null, ingredient: string
         invalidateReportCache(addressId)
         return localRepo.upsertLocalShiftClosing({ ...latest, inventory_report: applyToReport(latest.inventory_report) })
     }
-    if (!supabase) throw new Error('No Supabase connection')
 
     let latestQ = supabase.from('shift_closings').select('id, inventory_report')
     latestQ = addressId ? latestQ.eq('address_id', addressId) : latestQ.is('address_id', null)
@@ -175,7 +173,6 @@ export async function processIngredientRestock(addressId: UUID | null, ingredien
         }
         result = { success: true, expense_id: invoice?.id, amount: amountDue, paid: paidAmount, owing: amountDue - paidAmount }
     } else {
-        if (!supabase) throw new Error('No Supabase connection')
         if (addressId) {
             const params: Row = {
                 p_address_id: addressId,
@@ -349,7 +346,6 @@ export async function editIngredientRestock(addressId: UUID, expenseId: UUID, op
 
         result = { success: true, expense_id: expenseId, amount: amountDue, paid: paidAmount, owing: amountDue - paidAmount, new_unit_cost: newUnitCost }
     } else {
-        if (!supabase) throw new Error('No Supabase connection')
         const params: Row = {
             p_address_id: addressId,
             p_expense_id: expenseId,
@@ -397,7 +393,6 @@ export async function recordInvoicePayment(addressId: UUID | null, expenseId: UU
             cash_phase: cashPhase,
         })
     } else {
-        if (!supabase) throw new Error('No Supabase connection')
         const params: Row = {
             p_expense_id: expenseId,
             p_amount: amount,
@@ -480,7 +475,6 @@ export async function cancelRestock(addressId: UUID | null, expenseId: UUID, sta
         }
         result = { success: true, ingredient, cancelled_qty: cancelledQty, was_adjustment: wasAdjustment }
     } else {
-        if (!supabase) throw new Error('No Supabase connection')
         const params: Row = { p_address_id: addressId, p_expense_id: expenseId }
         if (staffName) params.p_staff_name = staffName
         const { data, error } = await supabase.rpc('cancel_restock', params)

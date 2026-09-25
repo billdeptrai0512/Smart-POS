@@ -1,6 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { bulkSubmitOrders, closeTable } from '../services/orderService'
-import { supabase } from '../lib/supabaseClient'
 import { STORAGE_KEYS } from '../constants/storageKeys'
 import { readJSON } from '../utils/storage'
 
@@ -84,7 +83,7 @@ export function useOfflineSync(onSyncComplete) {
     const isSyncing = useRef(false)
 
     const syncPending = useCallback(async () => {
-        if (isSyncing.current || !supabase) return
+        if (isSyncing.current) return
         isSyncing.current = true
         try {
             const allPending = getPendingOrders()

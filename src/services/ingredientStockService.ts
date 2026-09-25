@@ -24,7 +24,6 @@ export function roundStock(x: number) {
 let _warnedFetchStocksFallback = false
 export async function fetchIngredientStocks(addressId: UUID | null) {
     if (localRepo.isGuest()) return localRepo.fetchLocalIngredientStocks(addressId)
-    if (!supabase) return []
 
     // Default address (addressId=null) = global playground template. Anon callers can't
     // read expenses/shift_closings directly (RLS), so use a SECURITY DEFINER RPC that
@@ -230,7 +229,6 @@ export async function fetchIngredientDailyContext(addressId: UUID | null) {
         }
         return result
     }
-    if (!supabase) return {}
     const isDefault = !addressId
     const apply = (q: any) => isDefault ? q.is('address_id', null) : q.eq('address_id', addressId)
     const [refillsRes, closingsRes] = await Promise.all([
@@ -352,7 +350,7 @@ export async function fetchIngredientWithdrawals(addressIds: UUID[] | UUID | nul
             localRepo.fetchAllLocalShiftClosings(addressId),
         )
     }
-    if (!supabase || !ids.length) return []
+    if (!ids.length) return []
     const sb = supabase
     const closingsQuery = async (sel: string) => await sb
         .from('shift_closings')
@@ -395,7 +393,6 @@ export async function fetchIngredientDeficits(addressIds: UUID[] | UUID | null) 
         const closings = localRepo.fetchAllLocalShiftClosings(addressId)
         return computeDeficits(expenses, closings)
     }
-    if (!supabase) return []
     const isDefault = ids.length === 1 && !ids[0]
     const applyAddrFilter = (q: any) => isDefault ? q.is('address_id', null) : q.in('address_id', ids)
     const [refillsRes, closingsRes] = await Promise.all([

@@ -46,7 +46,7 @@ export async function fetchTodayStats(addressId: UUID | null): Promise<TodayStat
         })
         return { revenue, cups }
     }
-    if (!supabase || !addressId) return { revenue: 0, cups: 0 }
+    if (!addressId) return { revenue: 0, cups: 0 }
 
     const { data, error } = await supabase.rpc('get_today_stats', { p_address_id: addressId })
     if (!error && data) {
@@ -119,7 +119,6 @@ const ORDER_SELECT = `
 
 export async function fetchTodayOrders(addressId: UUID | null): Promise<any> {
     if (localRepo.isGuest()) return localRepo.fetchLocalOrders(addressId)
-    if (!supabase) return []
     const today = startOfDayVN()
 
     let query = supabase
@@ -157,7 +156,7 @@ export async function fetchTodayOrders(addressId: UUID | null): Promise<any> {
 // người gọi phải phân biệt, nhầm là xoá trắng danh sách (cùng bẫy đã làm mất lưới bàn).
 export async function fetchOrdersSync(addressId: UUID | null, rev: number | null): Promise<{ rev: number; heads: any[] | null }> {
     // Guest là local-only (một demo address dùng chung) — không có máy thứ hai để đồng bộ.
-    if (localRepo.isGuest() || !supabase || !addressId) return { rev: 0, heads: [] }
+    if (localRepo.isGuest() || !addressId) return { rev: 0, heads: [] }
 
     const { data, error } = await supabase.rpc('orders_sync', { p_address_id: addressId, p_rev: rev })
     if (error) throw error   // ném chứ không nuốt: lỗi mạng không phải là "không có đơn nào"
@@ -165,7 +164,7 @@ export async function fetchOrdersSync(addressId: UUID | null, rev: number | null
 }
 
 export async function fetchOrdersByIds(ids: UUID[]): Promise<any[]> {
-    if (localRepo.isGuest() || !supabase || !ids.length) return []
+    if (localRepo.isGuest() || !ids.length) return []
 
     const { data, error } = await supabase
         .from('orders')
@@ -225,7 +224,6 @@ export async function submitOrder(
             }))
         })
     }
-    if (!supabase) throw new Error('No Supabase connection')
 
     // total/totalCost/costPerItem are NOT sent — bulk_create_orders recomputes
     // price and COGS server-side from products/recipes, so a tampered client
@@ -263,7 +261,7 @@ export async function submitOrder(
 // order_no do bulk_create_orders cấp lúc ghi (RPC trả VOID) — phiếu bếp đọc lại sau khi
 // submitOrder xong để in số.
 export async function fetchOrderNo(id: UUID): Promise<number | null> {
-    if (localRepo.isGuest() || !supabase) return null
+    if (localRepo.isGuest()) return null
     const { data, error } = await supabase.from('orders').select('order_no').eq('id', id).single()
     if (error) throw error
     return data?.order_no ?? null
@@ -297,7 +295,6 @@ export async function bulkSubmitOrders(ordersArray: any[]): Promise<boolean> {
         }))
         return true
     }
-    if (!supabase) throw new Error('No Supabase connection')
 
     // Same server-priced contract as submitOrder — total/unit_cost aren't sent,
     // bulk_create_orders recomputes them from products/recipes. id is the fixed
@@ -335,7 +332,6 @@ export async function deleteOrder(orderId: UUID, staffName: string | null = null
     // localRepository is untyped JS; its `= null` defaults make tsc infer params as `null`.
     // Cast the fn (lazy, at call time — safe under circular imports) until it's converted.
     if (localRepo.isGuest()) return (localRepo.deleteLocalOrder as any)(orderId, staffName)
-    if (!supabase) throw new Error('No Supabase connection')
 
     const { error: orderError } = await supabase
         .from('orders')
@@ -356,7 +352,6 @@ export async function deleteOrder(orderId: UUID, staffName: string | null = null
 export async function updateOrderDiscount(orderId: UUID, total: number, discountAmount: number, itemDiscounts: { id: UUID, discount_amount: number }[] = []): Promise<boolean> {
     invalidateReportCache(null)
     if (localRepo.isGuest()) return (localRepo.updateLocalOrderDiscount as any)(orderId, total, discountAmount, itemDiscounts)
-    if (!supabase) throw new Error('No Supabase connection')
 
     const { error } = await supabase.rpc('update_order_discount', {
         p_order_id: orderId,
@@ -382,7 +377,6 @@ export async function fetchOrdersByRange(addressId: UUID | null, start: Date, en
                 })
                 .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         }
-        if (!supabase) return []
         let query = supabase
             .from('orders')
             .select(`id, order_no, total, total_cost, discount_amount, payment_method, staff_name, table_name, created_at, deleted_at, deleted_by, print_count,
@@ -405,7 +399,6 @@ export async function fetchRecentOrders(addressId: UUID | null, limit = 3): Prom
             .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
             .slice(0, limit)
     }
-    if (!supabase) return []
     const today = startOfDayVN()
 
     let query = supabase
@@ -545,7 +538,6 @@ export function moveRoundsIntoTable(prevTables: OpenTable[], idSet: Set<UUID>, t
 // Giá trị null = bỏ đánh dấu (bấm nhầm).
 export async function markOrder(orderId: UUID, patch: { served_at?: string | null; paid_at?: string | null }): Promise<void> {
     if (localRepo.isGuest()) return // chế độ khách demo không có bàn (xem fetchOpenTables)
-    if (!supabase) throw new Error('No Supabase connection')
 
     const { error } = await supabase
         .from('orders')
@@ -568,7 +560,7 @@ export async function markOrder(orderId: UUID, patch: { served_at?: string | nul
 // cùng lúc cho cùng 1 đơn có thể mất 1 lần đếm — chấp nhận được, đây chỉ là số tham khảo
 // cho nhân viên, không phải sổ sách.
 async function incrementOrderPrintCount(orderId: UUID): Promise<number | null> {
-    if (!orderId || localRepo.isGuest() || !supabase) return null
+    if (!orderId || localRepo.isGuest()) return null
 
     const { data: current, error: readError } = await supabase
         .from('orders')
@@ -613,7 +605,7 @@ export function bumpOrderPrintCount(orderId: UUID | null, knownCount: number): n
 
 export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable[]> {
     // ponytail: chế độ khách demo chạy localRepository và không bật dine_in → không có bàn.
-    if (!supabase || !addressId || localRepo.isGuest()) return []
+    if (!addressId || localRepo.isGuest()) return []
 
     const { data, error } = await supabase
         .from('orders')
@@ -671,7 +663,6 @@ export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable
 // lại) và nút Hoàn tác — reopenTable gỡ ĐÚNG những đơn mang mốc đó, không đụng các đợt
 // đã đóng ở lần tính tiền trước.
 export async function closeTable(addressId: UUID, tableName: string, closedAt = new Date().toISOString()): Promise<string> {
-    if (!supabase) throw new Error('No Supabase connection')
 
     const { error } = await supabase
         .from('orders')
@@ -686,7 +677,6 @@ export async function closeTable(addressId: UUID, tableName: string, closedAt = 
 
 // Hoàn tác tính tiền: mở lại đúng nhóm đơn mà closeTable vừa đóng.
 export async function reopenTable(addressId: UUID, tableName: string, closedAt: string): Promise<void> {
-    if (!supabase) throw new Error('No Supabase connection')
 
     const { error } = await supabase
         .from('orders')
@@ -703,7 +693,6 @@ export async function reopenTable(addressId: UUID, tableName: string, closedAt: 
 // (biến thành ad-hoc, xem TableModal) mà bill vẫn hiện tên cũ, sai với tên mới vừa đổi.
 // Cùng trust boundary như closeTable (chỉ đổi nhãn, không đụng tiền) nên update thẳng.
 export async function renameTable(addressId: UUID, oldName: string, newName: string): Promise<void> {
-    if (!supabase) throw new Error('No Supabase connection')
 
     const { error } = await supabase
         .from('orders')
@@ -723,7 +712,6 @@ export async function renameTable(addressId: UUID, oldName: string, newName: str
 // targetTableName = null nghĩa là "chuyển thành mang đi" (bỏ bàn) — xem bucket name=null
 // ở fetchOpenTables.
 export async function moveTableRounds(addressId: UUID, orderIds: UUID[], targetTableName: string | null): Promise<void> {
-    if (!supabase) throw new Error('No Supabase connection')
 
     const { error } = await supabase
         .from('orders')

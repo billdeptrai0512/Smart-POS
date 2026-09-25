@@ -30,7 +30,7 @@ export function usePaymentPoll({ reference, enabled = true, onPaid, onExpired })
     }, [onPaid, onExpired])
 
     useEffect(() => {
-        if (!enabled || !reference || !supabase) return
+        if (!enabled || !reference) return
         let stopped = false
 
         const tick = async () => {

@@ -76,7 +76,7 @@ export function buildCashPayload(
 // Tìm id phiếu chốt cùng NGÀY VN với `refIso` (mặc định now) cho 1 address. Dùng để
 // tự lành khi insert đụng unique index → UPDATE phiếu đã có thay vì vỡ "Lưu".
 async function findSameDayClosingId(addressId: UUID, refIso?: string | Date | null) {
-    if (!addressId || !supabase) return null
+    if (!addressId) return null
     const ref = refIso ? new Date(refIso) : new Date()
     const { data } = await supabase
         .from('shift_closings')
@@ -94,7 +94,6 @@ async function findSameDayClosingId(addressId: UUID, refIso?: string | Date | nu
 export async function insertShiftClosing(data: Row) {
     invalidateReportCache(data?.address_id)
     if (localRepo.isGuest()) return localRepo.upsertLocalShiftClosing(data)
-    if (!supabase) throw new Error('No Supabase connection')
     let { data: row, error } = await supabase
         .from('shift_closings')
         .insert(data)
@@ -119,7 +118,6 @@ export async function updateShiftClosing(id: UUID, data: Row) {
     // Guest: thread `id` through so upsertLocalShiftClosing targets THIS row (e.g.
     // editing a past day's closing) instead of falling back to its "today" heuristic.
     if (localRepo.isGuest()) return localRepo.upsertLocalShiftClosing({ ...data, id })
-    if (!supabase) throw new Error('No Supabase connection')
     let { data: row, error } = await supabase
         .from('shift_closings')
         .update(data)
@@ -178,7 +176,6 @@ export async function mergeShiftClosingInventory(addressId: UUID, patches: Row[]
         if (!existing?.id) payload.system_total_revenue = systemTotalRevenue
         return localRepo.upsertLocalShiftClosing(payload)
     }
-    if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase.rpc('merge_shift_closing_inventory', {
         p_address_id: addressId,
         p_patches: patches,
@@ -196,7 +193,6 @@ export async function mergeShiftClosingInventory(addressId: UUID, patches: Row[]
 // Fetch today's shift closing for an address (latest one)
 export async function fetchTodayShiftClosing(addressId: UUID) {
     if (localRepo.isGuest()) return localRepo.fetchLocalShiftClosing(addressId, new Date().toISOString())
-    if (!supabase) return null
     const startOfDay = startOfDayVN()
 
     // address_id IS NULL (Mẫu mặc định) — `.eq()` never matches NULL rows in Postgres.
@@ -228,7 +224,6 @@ export async function fetchCashClosedToday(addressId: UUID) {
 // Fetch the most recent shift closing BEFORE today (for opening stock)
 export async function fetchYesterdayShiftClosing(addressId: UUID) {
     if (localRepo.isGuest()) return localRepo.fetchLocalYesterdayShiftClosing(addressId)
-    if (!supabase) return null
     const startOfDay = startOfDayVN()
 
     let q = supabase.from('shift_closings').select('id, closed_at, address_id, inventory_report')
@@ -273,7 +268,6 @@ export async function fetchLastWeekSameDayOrderItems(addressId: UUID, daysAgo = 
             return allItems
         }
 
-        if (!supabase) return []
 
         let query = supabase
             .from('orders')
@@ -347,7 +341,6 @@ export async function fetchDailyReportContext(addressId: UUID) {
                 target_payments: attachInvoiceMeta(filterLocalPayments(addressId, startToday, new Date(startToday.getTime() + 86_400_000)), expMap),
             }
         }
-        if (!supabase) return {}
         const { data, error } = await supabase.rpc('get_daily_report_context', { p_address_id: addressId })
         if (error) throw error
         return data || {}
@@ -373,7 +366,6 @@ export async function fetchReportByDate(addressId: UUID, dateStr: string) {
                 target_payments: attachInvoiceMeta(filterLocalPayments(addressId, targetDate, targetEnd), expMap),
             }
         }
-        if (!supabase) return {}
         const { data, error } = await supabase.rpc('get_report_by_date', { p_address_id: addressId, p_date: dateStr })
         if (error) throw error
         return data || {}
@@ -409,7 +401,6 @@ export async function fetchReportByRange(addressId: UUID, targetStart: string | 
                 prev_shift_closings: filterRange(allClosings, pS, pE)
             }
         }
-        if (!supabase) return {}
         const { data, error } = await supabase.rpc('get_report_by_range', {
             p_address_id: addressId,
             p_target_start: targetStart,

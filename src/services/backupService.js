@@ -259,7 +259,6 @@ async function applySnapshot(targetAddressId, snapshot, options, onProgress) {
 }
 
 export async function cloneAddressConfig(sourceAddressId, targetAddressId, options = {}, onProgress) {
-    if (!supabase) throw new Error('No Supabase connection')
     const snapshot = await readSnapshot(sourceAddressId)
     return applySnapshot(targetAddressId, snapshot, options, onProgress)
 }
@@ -269,7 +268,6 @@ export async function cloneAddressConfig(sourceAddressId, targetAddressId, optio
  * write into target (owned by caller), then record referral attribution.
  */
 export async function cloneFromShareCode(code, targetAddressId, onProgress) {
-    if (!supabase) throw new Error('No Supabase connection')
 
     const { data, error } = await supabase.rpc('get_shared_config', { p_code: code })
     if (error) throw new Error(error.message || 'Mã không hợp lệ')
@@ -304,7 +302,7 @@ export async function cloneFromShareCode(code, targetAddressId, onProgress) {
  * Returns the snapshot data, or null if the code is invalid/expired.
  */
 export async function getSharedConfig(code) {
-    if (!supabase || !code) return null
+    if (!code) return null
     const { data, error } = await supabase.rpc('get_shared_config', { p_code: code })
     if (error || !data) return null
     return data
@@ -312,7 +310,6 @@ export async function getSharedConfig(code) {
 
 /** Generate (or reuse) a share code for an address the caller owns. */
 export async function createAddressShareCode(addressId) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase.rpc('create_address_share_code', { p_address_id: addressId })
     if (error) throw new Error(error.message || 'Không thể tạo mã')
     return data

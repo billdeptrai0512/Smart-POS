@@ -11,7 +11,6 @@ const formatUsernameToEmail = (username) => `${sanitizeUsername(username)}@coffe
 
 // Sign in with username and password via Supabase Auth
 export async function signIn(username, password) {
-    if (!supabase) throw new Error('No Supabase connection')
     const email = formatUsernameToEmail(username)
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
@@ -22,7 +21,6 @@ export async function signIn(username, password) {
 // Email tuỳ chọn — đăng nhập dùng username (→ email giả), chưa có flow reset
 // password qua email. Chỉ validate khi có nhập.
 export async function signUp(username, password, name, email) {
-    if (!supabase) throw new Error('No Supabase connection')
 
     const trimmedEmail = (email || '').trim()
     if (trimmedEmail) {
@@ -62,7 +60,6 @@ export async function signUp(username, password, name, email) {
 
 // Create a team member directly via Edge Function
 export async function createTeamMember(name, username, password, role) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase.functions.invoke('create-team-member', {
         body: { name, username, password, role },
     })
@@ -83,7 +80,6 @@ export async function createTeamMember(name, username, password, role) {
 // Fetch staff and co-managers belonging to a manager
 export async function fetchStaffByManager(managerId) {
     if (isGuest()) return []
-    if (!supabase) return []
     const { data, error } = await supabase
         .from('users')
         .select('id, name, role, username')
@@ -101,7 +97,7 @@ export async function fetchStaffByManager(managerId) {
 // active_sessions.last_seen) qua RPC vì client không query thẳng schema auth được.
 // Trả về Map<userId, ISOString|null>.
 export async function fetchStaffLastLogins(userIds) {
-    if (isGuest() || !supabase || !userIds.length) return new Map()
+    if (isGuest() || !userIds.length) return new Map()
     const { data, error } = await supabase.rpc('get_staff_last_logins', { p_user_ids: userIds })
     if (error) {
         console.error('fetchStaffLastLogins error:', error)
@@ -113,7 +109,6 @@ export async function fetchStaffLastLogins(userIds) {
 // Promote (staff → manager) or demote (manager → staff) a team member.
 // Authorization is enforced server-side by the set_team_member_role RPC.
 export async function setTeamMemberRole(userId, role) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase.rpc('set_team_member_role', { p_user_id: userId, p_role: role })
     if (error) throw error
 }
@@ -121,14 +116,12 @@ export async function setTeamMemberRole(userId, role) {
 // Hard-delete a team member's profile. Authorization is enforced server-side
 // by the remove_team_member RPC.
 export async function removeTeamMember(userId) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase.rpc('remove_team_member', { p_user_id: userId })
     if (error) throw error
 }
 
 // Rename a team member. Authorization enforced server-side by set_team_member_name RPC.
 export async function setTeamMemberName(userId, name) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase.rpc('set_team_member_name', { p_user_id: userId, p_name: name })
     if (error) throw error
 }
@@ -137,7 +130,6 @@ export async function setTeamMemberName(userId, name) {
 // instant (no per-open round trip). RLS scopes the result to the caller's team.
 // Returns rows [{ user_id, address_id }].
 export async function fetchTeamRevokedAddresses() {
-    if (!supabase) return []
     const { data, error } = await supabase
         .from('user_address_revoked')
         .select('user_id, address_id')
@@ -151,7 +143,6 @@ export async function fetchTeamRevokedAddresses() {
 // Branch visibility uses a REVOKE model (default = see all). Returns the set of
 // address IDs this staff member is BLOCKED from. RLS lets only their manager read.
 export async function fetchStaffRevokedAddresses(userId) {
-    if (!supabase) return []
     const { data, error } = await supabase
         .from('user_address_revoked')
         .select('address_id')
@@ -165,7 +156,6 @@ export async function fetchStaffRevokedAddresses(userId) {
 
 // Toggle one branch's visibility for one staff member (p_allowed: true = can see).
 export async function setStaffAddressAccess(userId, addressId, allowed) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase.rpc('set_staff_address_access', {
         p_user_id: userId, p_address_id: addressId, p_allowed: allowed,
     })
@@ -175,7 +165,6 @@ export async function setStaffAddressAccess(userId, addressId, allowed) {
 // Reset a team member's login password — manager-only, via Edge Function (needs
 // service_role; the browser SDK can only change the current user's own password).
 export async function setStaffPassword(userId, password) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase.functions.invoke('set-staff-password', {
         body: { user_id: userId, password },
     })
@@ -194,7 +183,6 @@ export async function setStaffPassword(userId, password) {
 // của Supabase gửi vào đó thì không ai nhận được.
 // Luôn trả ok kể cả khi không tìm thấy tài khoản (không để dò username).
 export async function requestPasswordReset(username) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase.functions.invoke('request-password-reset', {
         body: { username: sanitizeUsername(username) },
     })
@@ -214,7 +202,6 @@ export async function requestPasswordReset(username) {
 // mình). Email truyền vào verifyOtp là email GIẢ của tài khoản — cùng công thức
 // lúc đăng nhập, KHÔNG phải email thật đã nhận mã.
 export async function verifyPasswordResetCode(username, code) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase.auth.verifyOtp({
         email: formatUsernameToEmail(username),
         token: code.trim(),
@@ -229,7 +216,6 @@ export async function verifyPasswordResetCode(username, code) {
 
 // Đổi mật khẩu của chính user đang có session (dùng ngay sau verifyPasswordResetCode).
 export async function updateOwnPassword(password) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase.auth.updateUser({ password })
     if (!error) return
     if (error.code === 'same_password') throw new Error('Mật khẩu mới phải khác mật khẩu cũ')
@@ -239,7 +225,6 @@ export async function updateOwnPassword(password) {
 
 // Sign out
 export async function signOut() {
-    if (!supabase) return
     const { error } = await supabase.auth.signOut()
     if (error) throw error
 }
@@ -253,7 +238,6 @@ export async function setMyEmail(email) {
 
 // Fetch user profile by Supabase Auth user ID
 export async function fetchProfileByAuthId(authId) {
-    if (!supabase) return null
     const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -269,7 +253,6 @@ export async function fetchProfileByAuthId(authId) {
 // Fetch addresses for a manager
 // Returns { data, error } — caller decides how to surface failures.
 export async function fetchAddresses(managerId) {
-    if (!supabase) return { data: [], error: null }
 
     let query = supabase.from('addresses').select('*').is('deleted_at', null).order('created_at')
 
@@ -289,7 +272,7 @@ export async function fetchAddresses(managerId) {
 // duy nhất dùng chung cho sort BranchGrid, SubscriptionBadge (badge từng card) và
 // SubscriptionPanel (chip Đã mở/Chưa mở) — trước đây 3 nơi tự fetch riêng (N+1).
 export async function fetchSubscriptionStatuses(addressIds) {
-    if (isGuest() || !supabase || !addressIds.length) return { statusMap: {}, rowsMap: {} }
+    if (isGuest() || !addressIds.length) return { statusMap: {}, rowsMap: {} }
     const { data, error } = await supabase
         .from('address_subscriptions')
         .select('address_id, valid_from, valid_to, note')
@@ -325,7 +308,6 @@ function rethrowAddressError(error, name) {
 
 // Create a new address for a manager
 export async function createAddress(managerId, name) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase
         .from('addresses')
         .insert({ manager_id: managerId, name })
@@ -360,7 +342,6 @@ async function restoreMenuDividers(addressId) {
 
 // Update an address for a manager
 export async function updateAddress(addressId, name) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase
         .from('addresses')
         .update({ name })
@@ -374,7 +355,6 @@ export async function updateAddress(addressId, name) {
 // Bật/tắt chế độ bàn ngồi lại (giỏ hàng + thanh toán gộp ở POS) cho 1 địa chỉ.
 // Tách khỏi updateAddress vì hàm đó map lỗi unique-name theo `name`.
 export async function setAddressDineIn(addressId, dineIn) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase
         .from('addresses')
         .update({ dine_in: dineIn })
@@ -388,7 +368,6 @@ export async function setAddressDineIn(addressId, dineIn) {
 // Danh sách bàn cố định của địa chỉ (mảng tên, giữ nguyên thứ tự). Tách khỏi
 // updateAddress cùng lý do như setAddressDineIn ở trên.
 export async function setAddressTables(addressId, tables) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase
         .from('addresses')
         .update({ tables })
@@ -402,7 +381,6 @@ export async function setAddressTables(addressId, tables) {
 // IP máy in ESC/POS (quầy + bếp) — app native (Capacitor) in bitmap thẳng qua mạng
 // bằng IP này thay vì window.print(). NULL = chưa cấu hình, fallback về window.print().
 export async function setAddressPrinters(addressId, { counterPrinterIp, kitchenPrinterIp }) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase
         .from('addresses')
         .update({ counter_printer_ip: counterPrinterIp || null, kitchen_printer_ip: kitchenPrinterIp || null })
@@ -417,7 +395,7 @@ export async function setAddressPrinters(addressId, { counterPrinterIp, kitchenP
 // trong lúc app đang mở, không đợi khởi động lại. Chỉ chọn 3 cột, rẻ hơn hẳn
 // fetchAddresses (select *, cả danh sách) cho một nhịp poll chạy đều đặn.
 export async function fetchAddressPrinters(addressId) {
-    if (!supabase || !addressId) return null
+    if (!addressId) return null
     const { data, error } = await supabase
         .from('addresses')
         .select('id, counter_printer_ip, kitchen_printer_ip')
@@ -434,7 +412,6 @@ export async function fetchAddressPrinters(addressId) {
 // short of a full project point-in-time restore. See
 // 20260824_addresses_soft_delete.sql.
 export async function deleteAddress(id) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase.from('addresses').update({ deleted_at: new Date().toISOString() }).eq('id', id)
     if (error) throw error
     return true
@@ -442,7 +419,6 @@ export async function deleteAddress(id) {
 
 // Kho tổng dùng chung nhiều địa chỉ — nhóm thuộc về 1 manager (RLS lọc theo manager_id/user_address_access).
 export async function fetchWarehouseGroups(managerId) {
-    if (!supabase) return { data: [], error: null }
     const { data, error } = await supabase
         .from('warehouse_groups')
         .select('*')
@@ -457,14 +433,12 @@ export async function fetchWarehouseGroups(managerId) {
 
 // p_group_id null → tạo nhóm mới; có giá trị → đổi tên. Trả về group id.
 export async function upsertWarehouseGroup(groupId, name) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase.rpc('upsert_warehouse_group', { p_group_id: groupId, p_name: name })
     if (error) throw error
     return data
 }
 
 export async function deleteWarehouseGroup(groupId) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase.rpc('delete_warehouse_group', { p_group_id: groupId })
     if (error) throw error
     return true
@@ -472,7 +446,6 @@ export async function deleteWarehouseGroup(groupId) {
 
 // p_group_id null → rời nhóm (kho tổng độc lập trở lại).
 export async function setAddressWarehouseGroup(addressId, groupId) {
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase.rpc('set_address_warehouse_group', { p_address_id: addressId, p_group_id: groupId })
     if (error) throw error
     return true
@@ -487,7 +460,6 @@ export async function setAddressWarehouseGroup(addressId, groupId) {
 // Fetch the default-template ingredient sort order (publicly readable so guests can
 // inherit it during playground init). Returns [] when missing.
 export async function fetchDefaultIngredientSort() {
-    if (!supabase) return []
     const { data, error } = await supabase
         .from('app_settings')
         .select('value')
@@ -510,7 +482,6 @@ export async function fetchDefaultIngredientSort() {
 // Upsert active session when user enters POS
 export async function upsertSession(userId, addressId) {
     if (isGuest()) return  // guest is local-only — never write active_sessions (non-UUID ids)
-    if (!supabase) return
     const { error } = await supabase
         .from('active_sessions')
         .upsert(
@@ -523,7 +494,6 @@ export async function upsertSession(userId, addressId) {
 // Remove session on signout
 export async function removeSession(userId) {
     if (isGuest()) return  // guest is local-only — never touch active_sessions
-    if (!supabase) return
     const { error } = await supabase
         .from('active_sessions')
         .delete()
@@ -545,7 +515,7 @@ export async function removeSession(userId) {
 export async function fetchBranchesTodayStats(addressIds) {
     const empty = { cupsMap: {}, revenueMap: {}, prevRevenueMap: {}, prevCupsMap: {}, sessionsMap: {} }
     if (isGuest()) return empty
-    if (!supabase || !addressIds?.length) return empty
+    if (!addressIds?.length) return empty
 
     const { data, error } = await supabase.rpc('get_branches_today_stats', { p_address_ids: addressIds })
     if (error) throw error

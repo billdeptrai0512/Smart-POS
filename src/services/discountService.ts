@@ -8,7 +8,7 @@ import type { UUID, Row } from '../types/domain'
 
 export async function fetchDiscountPrograms(addressId: UUID | null) {
     if (localRepo.isGuest()) return localRepo.fetchLocalDiscountPrograms(addressId)
-    if (!supabase || !addressId) return []
+    if (!addressId) return []
     const { data, error } = await supabase
         .from('discount_programs')
         .select('id, address_id, name, type, value, days_of_week, start_date, end_date, enabled')
@@ -23,7 +23,6 @@ export async function fetchDiscountPrograms(addressId: UUID | null) {
 
 export async function insertDiscountProgram(payload: Row) {
     if (localRepo.isGuest()) return localRepo.insertLocalDiscountProgram(payload)
-    if (!supabase) throw new Error('No Supabase connection')
     const { data, error } = await supabase.from('discount_programs').insert(payload).select().single()
     if (error) throw error
     return data
@@ -31,14 +30,12 @@ export async function insertDiscountProgram(payload: Row) {
 
 export async function updateDiscountProgram(programId: UUID, patch: Row) {
     if (localRepo.isGuest()) return localRepo.updateLocalDiscountProgram(programId, patch)
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase.from('discount_programs').update(patch).eq('id', programId)
     if (error) throw error
 }
 
 export async function deleteDiscountProgram(programId: UUID) {
     if (localRepo.isGuest()) return localRepo.deleteLocalDiscountProgram(programId)
-    if (!supabase) throw new Error('No Supabase connection')
     const { error } = await supabase.from('discount_programs').delete().eq('id', programId)
     if (error) throw error
     return true
@@ -48,7 +45,6 @@ export async function deleteDiscountProgram(programId: UUID) {
 
 export async function fetchDiscountProgramProductLinks(programIds: UUID[]) {
     if (localRepo.isGuest()) return localRepo.fetchLocalDiscountProgramProductLinks(programIds)
-    if (!supabase) return []
     if (!programIds?.length) return []
     const { data, error } = await supabase
         .from('discount_program_products')
@@ -65,7 +61,6 @@ export async function fetchDiscountProgramProductLinks(programIds: UUID[]) {
 // sách mới, mirrors setToppingProductLinks (số lượng nhỏ, đơn giản hơn tính diff).
 export async function setDiscountProgramProducts(programId: UUID, productIds: UUID[]) {
     if (localRepo.isGuest()) return localRepo.setLocalDiscountProgramProducts(programId, productIds)
-    if (!supabase) throw new Error('No Supabase connection')
     const { error: delError } = await supabase.from('discount_program_products').delete().eq('discount_program_id', programId)
     if (delError) throw delError
     if (productIds.length === 0) return

@@ -15,6 +15,9 @@ const getLatestCommitMessage = () => {
 export default defineConfig({
   test: {
     exclude: ['**/node_modules/**', '**/.claude/worktrees/**', '**/dist/**'],
+    // CI không có .env; giá trị giả để supabaseClient không throw lúc import — test không
+    // được gọi mạng thật (localhost:1 nếu lỡ gọi thì fail ngay, không chạm production).
+    env: { VITE_SUPABASE_URL: 'http://localhost:1', VITE_SUPABASE_ANON_KEY: 'test-anon-key' },
   },
   define: {
     '__APP_UPDATE_LOG__': JSON.stringify(getLatestCommitMessage()),

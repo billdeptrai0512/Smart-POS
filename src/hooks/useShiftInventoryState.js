@@ -263,7 +263,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     // Đổi lại là mỗi máy đang ở màn báo cáo giữ một websocket; hook này chỉ sống trong
     // DailyReportPage nên kênh chỉ mở vài phút/ngày/máy, không phải cả ngày như orders.
     useEffect(() => {
-        if (!addressId || !supabase || isGuest()) return
+        if (!addressId || isGuest()) return
         const channel = supabase
             .channel(`shift-closing-db-${addressId}`)
             .on('postgres_changes',
