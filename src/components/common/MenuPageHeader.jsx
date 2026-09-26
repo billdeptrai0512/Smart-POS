@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import MenuTabsBar from './MenuTabsBar'
-import { MENU_TABS } from '../../constants'
+import { MENU_TABS } from '../../constants/menuTabs'
 
 // Header dùng chung cho /recipes (Công thức) và /ingredients (Nguyên liệu/Bao bì) —
 // 2 file trước đây giống hệt nhau, chỉ khác đơn vị đếm ("món" vs "loại").

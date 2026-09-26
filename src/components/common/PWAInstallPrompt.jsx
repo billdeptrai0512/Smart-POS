@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { STORAGE_KEYS } from '../../constants/storageKeys'
-import { trackPwaShown, trackPwaInstalled } from '../../services/pwaInstallService'
+import { fireAndForget } from '../../services/rpcFireAndForget'
 
 // Synchronous, mount-only environment checks — computed as lazy initial state so
 // they don't trigger an extra render via setState-in-effect.
@@ -44,7 +44,8 @@ export default function PWAInstallPrompt() {
     useEffect(() => {
         if (!isStandalone || localStorage.getItem(STORAGE_KEYS.PWA_INSTALLED_TRACKED)) return
         localStorage.setItem(STORAGE_KEYS.PWA_INSTALLED_TRACKED, 'true')
-        trackPwaInstalled(platform)
+        // Chạy standalone = đã cài — đúng cho cả iOS lẫn Android, xem ghi chú trong migration.
+        fireAndForget('track_pwa_installed', { p_platform: platform }, 'pwa')
     }, [isStandalone, platform])
 
     const handleInstall = async () => {
@@ -72,7 +73,7 @@ export default function PWAInstallPrompt() {
     useEffect(() => {
         if (!shownTracked.current && visible) {
             shownTracked.current = true
-            trackPwaShown(platform)
+            fireAndForget('track_pwa_shown', { p_platform: platform }, 'pwa')
         }
     }, [visible, platform])
 

@@ -9,6 +9,7 @@ import { formatVND } from '../../utils'
 import { PLAN, ALL_TIER, BANK_INFO, TRIAL_DAYS } from '../../constants/monetization'
 import { computeSubscriptionStatus } from '../../utils/subscriptionStatus'
 import { dateFullVN } from '../../utils/dateVN'
+import { copyText } from '../../utils/clipboard'
 
 // Gradient vàng thương hiệu (đồng bộ badge "developed by").
 const GOLD = 'linear-gradient(135deg, #f8c577, #f59e0b, #d4882f, #b8732a)'
@@ -140,23 +141,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }) {
     const qrUrl = `https://qr.sepay.vn/img?bank=MBBank&acc=${BANK_INFO.accountNumber}&template=&amount=${total}&des=${encodeURIComponent(transferContent)}`
 
     const copy = async (text, key) => {
-        let ok = false
-        // Clipboard API: cần secure context (https/localhost) + document focus.
-        if (navigator.clipboard && window.isSecureContext) {
-            ok = await navigator.clipboard.writeText(text).then(() => true, () => false)
-        }
-        // Fallback (http/LAN, webview, mất focus): textarea + execCommand.
-        if (!ok) {
-            const ta = document.createElement('textarea')
-            ta.value = text
-            ta.style.position = 'fixed'
-            ta.style.opacity = '0'
-            document.body.appendChild(ta)
-            ta.focus(); ta.select()
-            try { ok = document.execCommand('copy') } catch { ok = false }
-            document.body.removeChild(ta)
-        }
-        if (ok) {
+        if (await copyText(text)) {
             setCopied(key)
             setTimeout(() => setCopied(null), 1500)
         }

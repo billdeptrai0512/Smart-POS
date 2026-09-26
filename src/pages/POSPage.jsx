@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
 import { useOrderOnboardingProgress } from '../hooks/useOrderOnboardingProgress'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { DAY_NAMES } from '../constants'
+import { DAY_NAMES } from '../constants/products'
 import { dateFullVN } from '../utils/dateVN'
 
 import Header from '../components/POSPage/Header'

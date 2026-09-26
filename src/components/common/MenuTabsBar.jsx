@@ -1,5 +1,5 @@
 import { onboardingHintClass } from '../../utils/onboardingHint'
-import { MENU_TABS } from '../../constants'
+import { MENU_TABS } from '../../constants/menuTabs'
 
 // Shared tab bar for the Menu/Ingredients dashboard. Three tabs span both
 // /recipes (Công thức) and /ingredients (Nguyên liệu / Bao bì sub-views).

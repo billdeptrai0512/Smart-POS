@@ -1,4 +1,4 @@
-import { INGREDIENT_NAMES } from '../constants'
+import { INGREDIENT_NAMES } from '../constants/products'
 
 // Display order matters: used as the tab order in /ingredients.
 // `null` (chưa phân loại) folds into 'main' per UX rule.
