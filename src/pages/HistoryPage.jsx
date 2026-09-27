@@ -15,11 +15,10 @@ import { useStats } from '../contexts/StatsContext'
 import { useHistory } from '../contexts/HistoryContext'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { useAuth } from '../contexts/AuthContext'
-import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
 import { readOnboardingState, writeOnboardingState, DEFAULT_ONBOARDING_STATE, isInventoryProgressDone } from '../utils/onboardingStorage'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
-import { isRecipeStepActive } from '../components/common/onboarding/steps/recipeStep'
+import { orderStep, isRecipeStepActive } from '../components/common/onboarding/steps'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import OrdersList from '../components/HistoryPage/OrdersList'
 import ExpensePanel from '../components/HistoryPage/ExpensePanel'
@@ -46,24 +45,22 @@ export default function HistoryPage() {
     const { retrySync } = useStats()
     const { toast, showToast } = useCart()
     const { isGuest } = useAuth()
-    const { requestRefresh: requestOnboardingRefresh } = useOnboardingVisibility()
 
     useEffect(() => {
         if (!isLoadingHistory) handleLoadHistory()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
-    // Onboarding "Tạo đơn" step's 3rd requirement — "Xem nhật ký" — only counts once both
-    // drinks are already done (see orderStep.jsx); visiting /history before that doesn't
-    // tick it, so the order matters, not just "has this page ever been opened".
+    // Onboarding: "Xem nhật ký" only counts once step "Tạo đơn" is done (drinks picked AND
+    // sent — see onboarding/steps.js); visiting /history before that doesn't tick it, so the order
+    // matters, not just "has this page ever been opened".
     useEffect(() => {
         if (!isGuest || !selectedAddress?.id) return
         const { orderProgress } = readOnboardingState(selectedAddress.id)
-        if (orderProgress.cafeSua && orderProgress.cacaoCaPheLon && orderProgress.matcha && !orderProgress.viewedHistory) {
+        if (!orderProgress.viewedHistory && orderStep.items({ orderProgress }).every(i => i.done)) {
             writeOnboardingState(selectedAddress.id, { orderProgress: { ...orderProgress, viewedHistory: true } })
-            requestOnboardingRefresh()
         }
-    }, [isGuest, selectedAddress?.id, requestOnboardingRefresh])
+    }, [isGuest, selectedAddress?.id])
 
     // ─── Navigation state ─────────────────────────────────────────────
     const initialTab = location.state?.tab === 'expense' ? 'expense' : 'orders'
@@ -76,7 +73,7 @@ export default function HistoryPage() {
     const [showAddModal, setShowAddModal] = useState(false)
 
     // Onboarding phase 2 "Nhật ký" — tick theo tab /history user tự bấm qua (Thu nhập/Chi
-    // phí/Báo cáo, xem HistoryTabsBar.jsx + journalStep.jsx). "Xem thu nhập" chỉ cần tick 1
+    // phí/Báo cáo, xem HistoryTabsBar.jsx + onboarding/steps.js). "Xem thu nhập" chỉ cần tick 1
     // lần lúc khởi tạo state (là tab mặc định, không đổi lại sau đó); "Xem chi phí" theo dõi
     // lại mỗi render vì user có thể bấm qua tab đó bất cứ lúc nào (render-time-adjust, cùng
     // pattern với useOrderOnboardingProgress.js). Persist dùng chung
@@ -88,7 +85,7 @@ export default function HistoryPage() {
     if (isGuest && activeTab === 'expense' && !journalProgress.viewedExpense) {
         setJournalProgress(prev => ({ ...prev, viewedExpense: true }))
     }
-    useOnboardingProgressPersist('journalProgress', journalProgress, { isGuest, addressId: selectedAddress?.id, requestOnboardingRefresh })
+    useOnboardingProgressPersist('journalProgress', journalProgress, { isGuest, addressId: selectedAddress?.id })
     // Hint tuần tự: Chi phí trước, Báo cáo sau khi Chi phí đã xong.
     const journalHintTab = !isGuest ? null
         : !journalProgress.viewedExpense ? 'expense'
@@ -98,7 +95,7 @@ export default function HistoryPage() {
     // Phase 5 "Điều chỉnh công thức" không còn nút riêng trong guide — hint thẳng vào mũi tên
     // "tiến" ở header (như DailyReportPage.jsx), cho user quay lại /history rồi đi tiếp tới
     // /recipes qua menuSequence.js. inventoryProgress/recipeProgress không thuộc trang này —
-    // đọc read-only qua useOnboardingProgress (xem recipeStep.jsx).
+    // đọc read-only qua useOnboardingProgress (xem onboarding/steps.js).
     const inventoryProgress = useOnboardingProgress('inventoryProgress', { isGuest, addressId: selectedAddress?.id })
     const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId: selectedAddress?.id })
     const hintGoToRecipes = isGuest && isRecipeStepActive(isInventoryProgressDone(inventoryProgress), recipeProgress)
@@ -294,19 +291,7 @@ export default function HistoryPage() {
         }, 0)
     }, 0), [allOrders, productCountMap])
 
-    const runningTotals = useMemo(() => {
-        const map = new Map()
-        let cumulative = 0
-        for (let i = allOrders.length - 1; i >= 0; i--) {
-            const order = allOrders[i]
-            if (!order.deletedAt) cumulative += order.total
-            map.set(order.id, cumulative)
-        }
-        return map
-    }, [allOrders])
-
-    // runningTotals is cumulative newest-first, so allOrders[0]'s value is the grand total.
-    const totalRevenue = runningTotals.get(allOrders[0]?.id) || 0
+    const totalRevenue = useMemo(() => allOrders.reduce((sum, o) => o.deletedAt ? sum : sum + o.total, 0), [allOrders])
 
     // ─── Expense data ─────────────────────────────────────────────────
     const baseExpenses = useMemo(() => {
@@ -408,7 +393,6 @@ export default function HistoryPage() {
         if (isGuest && selectedAddress?.id && !journalProgress.viewedReport) {
             const next = { ...journalProgress, viewedReport: true }
             writeOnboardingState(selectedAddress.id, { journalProgress: next })
-            requestOnboardingRefresh()
         }
         // Tab-switch within the Nhật-ký/Báo-cáo dashboard: use replace so the back button
         // returns to the entry point (e.g. /addresses) instead of cycling through tab toggles.
@@ -456,7 +440,6 @@ export default function HistoryPage() {
                     orders={allOrders}
                     totalCups={totalCups}
                     totalRevenue={totalRevenue}
-                    runningTotals={runningTotals}
                     isLoading={isTodayScope ? isLoadingHistory : isLoadingRangeOrders}
                     isTodayScope={isTodayScope}
                     justArrivedIds={isTodayScope ? justArrivedIds : null}
@@ -468,7 +451,6 @@ export default function HistoryPage() {
                     onUpdateDiscount={handleUpdateOrderDiscount}
                     deletingId={deletingId}
                     setDeletingId={setDeletingId}
-                    dineIn={!!selectedAddress?.dine_in}
                 />
             )}
 

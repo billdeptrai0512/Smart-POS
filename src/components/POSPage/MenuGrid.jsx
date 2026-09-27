@@ -10,15 +10,14 @@ import { resolveDiscountedPrice } from '../../utils/discountPrograms'
 import { onboardingHintClass, norm } from '../../utils/onboardingHint'
 
 // The WHOLE card is the tap surface.
-//   tap (any card)  → activate/order that item (onAdd); extras bar opens
-//   tap corner X    → cancel the active order (onCancel).
-// Committing happens elsewhere: tap another card's order (auto-commit) or the
-// journal card in the header.
+//   tap (any card)  → add one of that item to the cart (onAdd); extras bar opens
+//   tap corner X    → remove the newest one of that item (onRemove).
+// The cart only becomes an order via "Tạo đơn" (CheckoutBar).
 
-// memo: onAdd/onCancel are now stable across taps (see POSContext's useCallback
+// memo: onAdd/onRemove are stable across taps (see POSContext's useCallback
 // wiring) and product/qty are cheap-to-compare — lets untouched cards skip
 // re-rendering when MenuGrid re-renders on every single tap.
-const ProductCard = memo(function ProductCard({ product, qty, onAdd, onCancel, hint, showQty, discountedPrice }) {
+const ProductCard = memo(function ProductCard({ product, qty, onAdd, onRemove, hint, discountedPrice }) {
     const held = qty > 0
     const hintClass = onboardingHintClass(hint)
     const [pulseKey, setPulseKey] = useState(0)        // bump per tap-add → replays the confirm pulse
@@ -38,9 +37,9 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onCancel, h
         onAdd(product)
     }
     const stop = (e) => e.stopPropagation()
-    // product đi kèm để chế độ dineIn biết X này thuộc món nào — ở đó MỌI món trong
-    // giỏ đều hiện X, không chỉ món đang giữ. Đường 1-chạm bỏ qua tham số này.
-    const cancel = (e) => { e.stopPropagation(); onCancel(product) }
+    // product đi kèm để biết X này thuộc món nào — MỌI món trong giỏ đều hiện X,
+    // không chỉ món đang chọn.
+    const cancel = (e) => { e.stopPropagation(); onRemove(product) }
 
     return (
         <div
@@ -66,16 +65,14 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onCancel, h
             {/* Glow Effect */}
             {held && <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />}
 
-            {/* Confirm pulse: a primary ring that pings out on each tap-add — the ack the
-                chained 1-tap flow otherwise lacks (card stays held, no toast). Keyed so it
-                replays every tap. */}
+            {/* Confirm pulse: a primary ring that pings out on each tap-add, so a repeat tap
+                on an already-selected card still visibly registers. Keyed so it replays
+                every tap. */}
             {pulseKey > 0 && <span key={pulseKey} className="tap-pulse absolute inset-0 rounded-[1.5rem] ring-2 ring-primary pointer-events-none z-30" />}
 
             {/* Badge số ly, góc dưới-phải — cùng cách neo với nút X ở góc trên-phải
-                (offset -4 + p-2.5) nên hai huy hiệu thò ra khỏi card đúng bằng nhau.
-                Chỉ ở dineIn: đường 1-chạm giỏ luôn ≤1 ly nên badge "1" là nhiễu
-                (đã gỡ ở 49b0f02), viền + nút X đã nói đủ. */}
-            {showQty && qty > 0 && (
+                (offset -4 + p-2.5) nên hai huy hiệu thò ra khỏi card đúng bằng nhau. */}
+            {qty > 0 && (
                 <span className="absolute -bottom-4 -right-4 z-20 p-2.5
                   " aria-hidden="true">
                     <span className="badge-pop w-8 h-8 rounded-full flex items-center justify-center bg-text text-bg text-[14px] font-black shadow-lg border-2 border-primary/10">
@@ -177,7 +174,7 @@ function ExtrasPopover({ activeProductId, extras, toppings, activeItem, enabledS
     )
 }
 
-export default function MenuGrid({ products, cart, activeItem, onAddItem, onCancelHeld, productExtras, productToppings, productDiscounts, onToggleExtra, onToggleTopping, enabledStickyExtraIds = [], onToggleStickyExtra, hintProductId, hintExtraName = null, dineIn = false }) {
+export default function MenuGrid({ products, cart, activeItem, onAddItem, onRemoveItem, productExtras, productToppings, productDiscounts, onToggleExtra, onToggleTopping, enabledStickyExtraIds = [], onToggleStickyExtra, hintProductId, hintExtraName = null }) {
     const navigate = useNavigate()
     const { isManager, isAdmin } = useAuth()
     const { loading, loadError } = useProducts()
@@ -259,9 +256,8 @@ export default function MenuGrid({ products, cart, activeItem, onAddItem, onCanc
                 product={product}
                 qty={cartQtyMap.get(product.id) || 0}
                 onAdd={onAddItem}
-                onCancel={onCancelHeld}
+                onRemove={onRemoveItem}
                 hint={product.id === hintProductId}
-                showQty={dineIn}
                 discountedPrice={resolveDiscountedPrice(product.price, productDiscounts?.[product.id])}
             />
         ))

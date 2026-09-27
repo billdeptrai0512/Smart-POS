@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef } from 'react'
+import { useMemo, useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { formatVND, parseVNDInput, capFirst } from '../../utils'
@@ -40,6 +40,10 @@ export default function CashFlowCard({
     isSaving = false,
     onCashChange,
     onTransferChange,
+    // Onboarding bước 3: hintCard sáng cả panel Thực thu, onCardFullyVisible báo khi panel hiện
+    // trọn trong màn hình (việc "Kéo xuống"); sau đó hintCash/hintTransfer sáng từng ô.
+    hintCard = false,
+    onCardFullyVisible,
     hintCash = false,
     hintTransfer = false,
     // Bấm 1 dòng chi phí → mở modal sửa (DailyReportPage điều hướng sang tab Chi phí).
@@ -55,6 +59,17 @@ export default function CashFlowCard({
     onPreviewClose,
     onPrintError,
 }) {
+    // "Hiện trọn" = 100% panel nằm trong màn hình (IntersectionObserver tự tính cả phần bị
+    // <main> cuộn che). ponytail: panel cao hơn vùng cuộn thì không bao giờ trọn — hiện ~210px,
+    // hạ threshold nếu panel phình ra.
+    const panelRef = useRef(null)
+    useEffect(() => {
+        const el = panelRef.current
+        if (!onCardFullyVisible || !el) return
+        const io = new IntersectionObserver(([e]) => { if (e.intersectionRatio >= 1) onCardFullyVisible() }, { threshold: 1 })
+        io.observe(el)
+        return () => io.disconnect()
+    }, [onCardFullyVisible])
     // Category (Nguyên liệu chính / Bao bì) của từng nguyên liệu — để phân loại
     // mục "Mua nguyên liệu / bao bì" bên dưới. Mặc định collapse từng nhóm.
     const { ingredientConfigs } = useProducts()
@@ -297,7 +312,7 @@ export default function CashFlowCard({
             {children && <div className="w-full">{children}</div>}
 
             {/* PANEL 1: THỰC THU */}
-            <div className={`w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group ${onboardingHintClass(hintCash || hintTransfer)}`}>
+            <div ref={panelRef} className={`w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group ${onboardingHintClass(hintCard)}`}>
                 <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Thực thu</h3>
                 <div className="flex flex-col gap-2.5 pl-2">
                     {editable ? (
@@ -307,12 +322,14 @@ export default function CashFlowCard({
                                 value={cashInput}
                                 disabled={isSaving}
                                 onChange={onCashChange}
+                                hint={hintCash}
                             />
                             <MoneyInputRow
                                 label="Chuyển khoản"
                                 value={transferInput}
                                 disabled={isSaving}
                                 onChange={onTransferChange}
+                                hint={hintTransfer}
                             />
                         </>
                     ) : (
@@ -624,7 +641,7 @@ function ItemRow({ date, name, amount, count, phase = 'in_shift', method = 'cash
     )
 }
 
-function MoneyInputRow({ label, value, disabled, onChange }) {
+function MoneyInputRow({ label, value, disabled, onChange, hint }) {
     // Chưa gõ gì → ô trông y hệt dòng chỉ-đọc bên dưới, chủ quán không biết là
     // bấm được. Viền đứt + icon bút chỉ hiện lúc rỗng, gõ vào là biến mất.
     const empty = !value
@@ -633,7 +650,7 @@ function MoneyInputRow({ label, value, disabled, onChange }) {
             <span className="text-[12px] font-bold text-text-secondary shrink-0">{label}</span>
             {/* pr-0: khung viền đứt chỉ chừa lề bên trái, để mép phải của "đ" thẳng
                 hàng với số của các dòng chỉ-đọc bên dưới (Chi phí trong ca, Tổng thực thu). */}
-            <div className={`flex items-center max-w-[180px] flex-1 justify-end rounded-[8px] pl-1.5 pr-0 py-0.5 transition-colors ${empty ? 'border border-dashed border-primary/50 bg-primary/5' : 'border border-transparent'}`}>
+            <div className={`flex items-center max-w-[180px] flex-1 justify-end rounded-[8px] pl-1.5 pr-0 py-0.5 transition-colors ${empty ? 'border border-dashed border-primary/50 bg-primary/5' : 'border border-transparent'} ${onboardingHintClass(hint)}`}>
                 <input
                     type="text"
                     inputMode="numeric"

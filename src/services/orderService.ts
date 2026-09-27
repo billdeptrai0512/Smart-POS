@@ -180,6 +180,22 @@ export async function fetchOrdersByIds(ids: UUID[]): Promise<any[]> {
 // resolved-amount như orders.discount_amount, không lưu %/đ đã chọn).
 const lineDiscountAmount = (item: CartItem) => computeDiscount(cartLineSubtotal(item), item.discount || NO_DISCOUNT).discountAmount
 
+// Một dòng giỏ → order_items bản local (guest). Chung cho đơn online (submitOrder) lẫn đơn
+// offline đồng bộ lại (bulkSubmitOrders) để hai đường không lệch cột nhau.
+const toLocalOrderItem = (item: CartItem, unitCost: number) => ({
+    // Local rows never touch the DB, nên tự sinh id ở client — updateLocalOrderDiscount cần
+    // nó để sửa giảm giá đúng dòng, giống order_items.id thật ở nhánh Supabase.
+    id: crypto.randomUUID(),
+    product_id: item.productId,
+    quantity: item.quantity,
+    options: [...(item.extras || []), ...(item.toppings || [])].map(e => e.name).join(', ') || null,
+    unit_cost: Math.round(unitCost || 0),
+    extra_ids: item.extras?.map(e => e.id).filter(Boolean) || [],
+    topping_ids: item.toppings?.map(t => t.id).filter(Boolean) || [],
+    discount_amount: lineDiscountAmount(item),
+    note: item.note || null,
+})
+
 // Submit a complete order to Supabase using RPC for atomic transaction
 // totalCost: tổng giá vốn của bill (snapshot)
 // costPerItem: Map<cartItemId, unitCost> giá vốn mỗi dòng (snapshot)
@@ -209,19 +225,8 @@ export async function submitOrder(
             payment_method: paymentMethod,
             address_id: addressId,
             staff_name: staffName,
-            order_items: cart.map(item => ({
-                // Local (guest) rows never touch the DB, nên tự sinh id ở client —
-                // updateLocalOrderDiscount cần nó để sửa giảm giá đúng dòng sau này,
-                // giống order_items.id thật ở nhánh Supabase bên dưới.
-                id: crypto.randomUUID(),
-                product_id: item.productId,
-                quantity: item.quantity,
-                options: [...(item.extras || []), ...(item.toppings || [])].map(e => e.name).join(', ') || null,
-                unit_cost: Math.round(costPerItem[item.cartItemId] || 0),
-                extra_ids: item.extras?.map(e => e.id).filter(Boolean) || [],
-                topping_ids: item.toppings?.map(t => t.id).filter(Boolean) || [],
-                discount_amount: lineDiscountAmount(item)
-            }))
+            table_name: tableName,
+            order_items: cart.map(item => toLocalOrderItem(item, costPerItem[item.cartItemId]))
         })
     }
 
@@ -284,14 +289,9 @@ export async function bulkSubmitOrders(ordersArray: any[]): Promise<boolean> {
             payment_method: o.paymentMethod,
             address_id: o.addressId,
             staff_name: o.staffName,
+            table_name: o.tableName || null,
             created_at: o.createdAt,
-            order_items: (o.orderItems || []).map((item: any) => ({
-                product_id: item.productId,
-                quantity: item.quantity,
-                options: [...(item.extras || []), ...(item.toppings || [])].map((e: any) => e.name).join(', ') || null,
-                unit_cost: Math.round(item.unitCost || 0),
-                discount_amount: lineDiscountAmount(item),
-            })),
+            order_items: (o.orderItems || []).map((item: any) => toLocalOrderItem(item, item.unitCost)),
         }))
         return true
     }
@@ -414,7 +414,7 @@ export async function fetchRecentOrders(addressId: UUID | null, limit = 3): Prom
     return data
 }
 
-// ---- Bàn đang mở (địa chỉ dine_in) ----
+// ---- Bàn đang mở ----
 // Một bàn = nhóm đơn cùng table_name, chưa xoá, chưa tính tiền (table_closed_at
 // IS NULL — xem migration 20260808_dine_in_open_tables). Gộp ở client: tập này
 // luôn nhỏ (số bàn đang có khách), không đáng một RPC riêng.
@@ -537,7 +537,7 @@ export function moveRoundsIntoTable(prevTables: OpenTable[], idSet: Set<UUID>, t
 // 2 người vừa pha vừa thu tiền nhìn vào đây để biết đợt nào còn nợ khách.
 // Giá trị null = bỏ đánh dấu (bấm nhầm).
 export async function markOrder(orderId: UUID, patch: { served_at?: string | null; paid_at?: string | null }): Promise<void> {
-    if (localRepo.isGuest()) return // chế độ khách demo không có bàn (xem fetchOpenTables)
+    if (localRepo.isGuest()) return localRepo.updateLocalOrders(o => o.id === orderId, patch)
 
     const { error } = await supabase
         .from('orders')
@@ -604,8 +604,14 @@ export function bumpOrderPrintCount(orderId: UUID | null, knownCount: number): n
 }
 
 export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable[]> {
-    // ponytail: chế độ khách demo chạy localRepository và không bật dine_in → không có bàn.
-    if (!addressId || localRepo.isGuest()) return []
+    if (!addressId) return []
+    if (localRepo.isGuest()) {
+        // Cùng bộ lọc với query Supabase bên dưới, chạy trên localRepository.
+        const since = startOfDayVN().toISOString()
+        return groupOpenTables(localRepo.fetchAllLocalOrders(addressId)
+            .filter(o => !o.deleted_at && !o.table_closed_at && (o.table_name || (!o.served_at && o.created_at >= since)))
+            .sort((a, b) => a.created_at.localeCompare(b.created_at)))
+    }
 
     const { data, error } = await supabase
         .from('orders')
@@ -616,7 +622,7 @@ export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable
         // Bàn thật (table_name khác null) luôn lấy, bất kể served_at HAY NGÀY TẠO — đợt
         // đã ra món vẫn phải hiện tới khi bàn tính tiền, và bàn mở trước nửa đêm vẫn phải
         // còn nguyên sau 0h. Đơn mang đi (table_name null) thì chỉ lấy khi CHƯA ra món VÀ
-        // tạo hôm nay — không chặn ngày ở đây thì địa chỉ vừa bật dine_in sẽ thấy nguyên
+        // tạo hôm nay — không chặn ngày ở đây thì địa chỉ vừa chuyển sang chế độ bàn sẽ thấy nguyên
         // lịch sử đơn mang đi TRƯỚC ĐÓ hiện ra là "chưa ra món" (served_at vốn luôn NULL ở
         // chế độ takeaway cũ, vì nút Đã ra món chỉ tồn tại trong UI dine_in) — bắt được
         // thật: 1 địa chỉ mới bật dine_in, hiện tới 1281 "món chưa ra" ngày đầu tiên. Cùng
@@ -630,10 +636,12 @@ export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable
     // gọi sẽ tin: một lỗi mạng/schema hoá ra xoá trắng cả lưới bàn giữa ca (xem
     // refreshTables). Không phân biệt được hai thứ này là bug từng làm mất bàn thật.
     if (error) throw error
-    if (!data) return []
+    return groupOpenTables(data || [])
+}
 
+function groupOpenTables(data: any[]): OpenTable[] {
     const byName = new Map<string | null, OpenTable>()
-    for (const o of data as any[]) {
+    for (const o of data) {
         const t: OpenTable = byName.get(o.table_name) ?? { name: o.table_name, total: 0, rounds: [], openedAt: o.created_at, lines: [] }
         const roundLines = mergeTableLines([], (o.order_items || []).map((i: any) =>
             // Món bị xoá khỏi menu sau khi đã bán: vẫn phải hiện một dòng, nếu không
@@ -663,6 +671,10 @@ export async function fetchOpenTables(addressId: UUID | null): Promise<OpenTable
 // lại) và nút Hoàn tác — reopenTable gỡ ĐÚNG những đơn mang mốc đó, không đụng các đợt
 // đã đóng ở lần tính tiền trước.
 export async function closeTable(addressId: UUID, tableName: string, closedAt = new Date().toISOString()): Promise<string> {
+    if (localRepo.isGuest()) {
+        localRepo.updateLocalOrders(o => o.address_id === addressId && o.table_name === tableName && !o.table_closed_at, { table_closed_at: closedAt })
+        return closedAt
+    }
 
     const { error } = await supabase
         .from('orders')
@@ -677,6 +689,7 @@ export async function closeTable(addressId: UUID, tableName: string, closedAt = 
 
 // Hoàn tác tính tiền: mở lại đúng nhóm đơn mà closeTable vừa đóng.
 export async function reopenTable(addressId: UUID, tableName: string, closedAt: string): Promise<void> {
+    if (localRepo.isGuest()) return localRepo.updateLocalOrders(o => o.address_id === addressId && o.table_name === tableName && o.table_closed_at === closedAt, { table_closed_at: null })
 
     const { error } = await supabase
         .from('orders')
@@ -693,6 +706,7 @@ export async function reopenTable(addressId: UUID, tableName: string, closedAt: 
 // (biến thành ad-hoc, xem TableModal) mà bill vẫn hiện tên cũ, sai với tên mới vừa đổi.
 // Cùng trust boundary như closeTable (chỉ đổi nhãn, không đụng tiền) nên update thẳng.
 export async function renameTable(addressId: UUID, oldName: string, newName: string): Promise<void> {
+    if (localRepo.isGuest()) return localRepo.updateLocalOrders(o => o.address_id === addressId && o.table_name === oldName && !o.table_closed_at, { table_name: newName })
 
     const { error } = await supabase
         .from('orders')
@@ -712,6 +726,7 @@ export async function renameTable(addressId: UUID, oldName: string, newName: str
 // targetTableName = null nghĩa là "chuyển thành mang đi" (bỏ bàn) — xem bucket name=null
 // ở fetchOpenTables.
 export async function moveTableRounds(addressId: UUID, orderIds: UUID[], targetTableName: string | null): Promise<void> {
+    if (localRepo.isGuest()) return localRepo.updateLocalOrders(o => o.address_id === addressId && orderIds.includes(o.id) && !o.table_closed_at, { table_name: targetTableName })
 
     const { error } = await supabase
         .from('orders')

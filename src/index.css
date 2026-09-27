@@ -17,7 +17,7 @@ img[src^="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP"] {
    hướng nào (phone landscape rộng vậy là rủi ro sẵn có từ trước, không mới). */
 @custom-variant dine-split (@media (min-width: 768px), @media (min-width: 650px) and (orientation: portrait));
 
-/* Layout lưới cho POSPage khi dineIn: 1 cột (menu trên, chốt đơn dưới) ở phone,
+/* Layout lưới cho POSPage: 1 cột (menu trên, chốt đơn dưới) ở phone,
    2 cột đều nhau (menu | bàn, chốt đơn dưới cột bàn) ở dine-split — xem POSPage.jsx.
    Grid thay vì 2 flex-col tách rời để CheckoutBar chỉ cần mount MỘT lần, tự "nhảy"
    chỗ theo breakpoint bằng grid-area thay vì phải render 2 bản rồi ẩn bớt (2 bản
@@ -157,7 +157,7 @@ body {
 }
 
 /* Tap-add confirmation: a ring that pings outward and fades. Keyed remount in
-   ProductCard replays it on every tap — the ack the chained 1-tap flow lacks. */
+   ProductCard replays it on every tap, so a repeat tap on a selected card still registers. */
 @keyframes tap-pulse {
   from { opacity: 0.6; transform: scale(0.98); }
   to   { opacity: 0;   transform: scale(1.05); }
@@ -237,30 +237,6 @@ body {
 
 .order-enter {
   animation: order-enter 260ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* ====== Checkmark vẽ từng nét khi xuất hiện (POS header: đơn nháp sẵn sàng chốt) ====== */
-@keyframes check-draw {
-  from {
-    stroke-dashoffset: 1;
-  }
-
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-.check-draw path {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: check-draw 350ms 80ms ease-out forwards;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .check-draw path {
-    animation: none;
-    stroke-dashoffset: 0;
-  }
 }
 
 /* ====== Modal slide-up ====== */

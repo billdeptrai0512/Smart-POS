@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useMemo } 
 import { useAuth } from './AuthContext'
 import {
     fetchAddresses, createAddress as apiCreateAddress, updateAddress as apiUpdateAddress, deleteAddress as apiDeleteAddress,
-    setAddressDineIn as apiSetAddressDineIn, setAddressTables as apiSetAddressTables,
+    setAddressTables as apiSetAddressTables,
     setAddressPrinters as apiSetAddressPrinters, fetchAddressPrinters,
     upsertSession,
     fetchWarehouseGroups, upsertWarehouseGroup as apiUpsertWarehouseGroup,
@@ -184,9 +184,9 @@ export function AddressProvider() {
     }, [profile, addresses, isGuest])
 
     // Khuôn chung "ghi API xong, phản chiếu vào addresses + selectedAddress (nếu đang chọn
-    // đúng địa chỉ đó) + cache localStorage" — rename/setDineIn/setTables/setPrinters/poll IP
-    // bên dưới đều cùng một khuôn này, gộp lại đỡ chép tay 5 lần. `patch` là object đủ field
-    // (rename/setDineIn/setTables/setPrinters — API trả cả row) hoặc chỉ vài cột (poll IP).
+    // đúng địa chỉ đó) + cache localStorage" — rename/setTables/setPrinters/poll IP
+    // bên dưới đều cùng một khuôn này, gộp lại đỡ chép tay 4 lần. `patch` là object đủ field
+    // (rename/setTables/setPrinters — API trả cả row) hoặc chỉ vài cột (poll IP).
     const syncAddressPatch = useCallback((addressId, patch) => {
         setAddresses(prev => prev.map(a => a.id === addressId ? { ...a, ...patch } : a))
         setSelectedAddressState(prev => {
@@ -211,29 +211,18 @@ export function AddressProvider() {
         return updatedAddr
     }, [profile, addresses, isGuest, syncAddressPatch])
 
-    // Bật/tắt chế độ bàn ngồi lại. Mirror renameAddress: cùng guard quản lý, cùng
-    // cách đồng bộ selectedAddress + cache localStorage (POS đọc cờ này từ đó khi
-    // cold-start, trước cả khi fetch addresses về).
-    const setDineIn = useCallback(async (addressId, dineIn) => {
-        if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
-        if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể sửa địa chỉ')
-        const updatedAddr = await apiSetAddressDineIn(addressId, dineIn)
-        syncAddressPatch(addressId, updatedAddr)
-        return updatedAddr
-    }, [profile, isGuest, syncAddressPatch])
-
-    // Danh sách bàn cố định. Cùng guard/cách đồng bộ như setDineIn ở trên — POS đọc
+    // Danh sách bàn cố định. Mirror renameAddress: cùng guard quản lý — POS đọc
     // addresses.tables từ cache localStorage nên lưới bàn vẽ được ngay lúc cold-start.
+    // Khách dùng thử cũng qua đây (profile giả là manager) — service tự ghi local.
     const setTables = useCallback(async (addressId, tables) => {
-        if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
         if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể sửa danh sách bàn')
         const updatedAddr = await apiSetAddressTables(addressId, tables)
         syncAddressPatch(addressId, updatedAddr)
         return updatedAddr
-    }, [profile, isGuest, syncAddressPatch])
+    }, [profile, syncAddressPatch])
 
     // IP máy in ESC/POS (quầy + bếp) cho app native. Cùng guard/cách đồng bộ như
-    // setDineIn/setTables ở trên.
+    // setTables ở trên.
     const setPrinters = useCallback(async (addressId, printers) => {
         if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
         if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể sửa địa chỉ')
@@ -323,7 +312,6 @@ export function AddressProvider() {
         setSelectedAddress,
         createNewAddress,
         renameAddress,
-        setDineIn,
         setTables,
         setPrinters,
         removeAddress,
@@ -335,7 +323,7 @@ export function AddressProvider() {
         setAddressGroup,
         loading,
         fetchError
-    }), [addresses, selectedAddress, setSelectedAddress, createNewAddress, renameAddress, setDineIn, setTables, setPrinters, removeAddress, warehouseGroups, siblingsByAddress, createWarehouseGroup, renameWarehouseGroup, removeWarehouseGroup, setAddressGroup, loading, fetchError])
+    }), [addresses, selectedAddress, setSelectedAddress, createNewAddress, renameAddress, setTables, setPrinters, removeAddress, warehouseGroups, siblingsByAddress, createWarehouseGroup, renameWarehouseGroup, removeWarehouseGroup, setAddressGroup, loading, fetchError])
 
     return (
         <AddressContext.Provider value={value}>

@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabaseClient'
-import { isGuest } from './localRepository'
+import { isGuest, setGuestTables } from './localRepository'
 import { computeSubscriptionStatus } from '../utils/subscriptionStatus'
 
 // Canonical login username: lowercase, only [a-z0-9_.-]. This is what the user
@@ -352,22 +352,11 @@ export async function updateAddress(addressId, name) {
     return data
 }
 
-// Bật/tắt chế độ bàn ngồi lại (giỏ hàng + thanh toán gộp ở POS) cho 1 địa chỉ.
-// Tách khỏi updateAddress vì hàm đó map lỗi unique-name theo `name`.
-export async function setAddressDineIn(addressId, dineIn) {
-    const { data, error } = await supabase
-        .from('addresses')
-        .update({ dine_in: dineIn })
-        .eq('id', addressId)
-        .select()
-        .single()
-    if (error) throw error
-    return data
-}
-
 // Danh sách bàn cố định của địa chỉ (mảng tên, giữ nguyên thứ tự). Tách khỏi
-// updateAddress cùng lý do như setAddressDineIn ở trên.
+// updateAddress vì hàm đó map lỗi unique-name theo `name`.
 export async function setAddressTables(addressId, tables) {
+    // Demo lưu bàn ở localStorage; trả cùng dạng row để AddressContext đồng bộ y như thật.
+    if (isGuest()) { setGuestTables(tables); return { id: addressId, tables } }
     const { data, error } = await supabase
         .from('addresses')
         .update({ tables })

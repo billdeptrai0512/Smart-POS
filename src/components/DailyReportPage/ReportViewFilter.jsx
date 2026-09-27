@@ -12,7 +12,7 @@ const MENU = [
 ]
 
 // hintView: key của view đang được onboarding phase 3→4 gợi ý bấm tiếp — xem
-// DailyReportPage.jsx (hintInventoryTab) + inventoryStep.jsx.
+// DailyReportPage.jsx (hintInventoryTab) + onboarding/steps.js.
 // Card-style segmented control — visually part of the main panel family.
 export default function ReportViewFilter({ value, onChange, isStaff, hintView }) {
     const menu = MENU.filter(item => !(isStaff && item.key === VIEW_PROFIT))

@@ -52,7 +52,7 @@ export default function InventoryReportCard({
     open = true, onToggleOpen,
     onOpeningChange, onRestockChange, onInventoryChange,
     // Nguyên liệu đang được onboarding phase 4 gợi ý bấm vào — xem DailyReportPage.jsx
-    // (hintCoffeeIngredient) + inventoryStep.jsx.
+    // (hintCoffeeIngredient) + onboarding/steps.js.
     hintIngredient = null,
 }) {
     // Sort by status priority so staff sees "Chưa nhập" first, then anomalies,

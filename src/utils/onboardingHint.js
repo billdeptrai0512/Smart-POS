@@ -32,16 +32,19 @@ export function findCoffeeIngredient(list) {
     return findIngredientByLabel(list, 'cà phê')
 }
 
-// Phase 6 "Cài đặt nguyên liệu" — 4 việc cần làm cho đúng 1 ingredient mẫu (Cà phê): tồn kho
-// cuối ngày (warehouse_stock_set, đến từ fetchIngredientStocks() — bảng riêng) + 3 field cấu
-// hình (pack/min_stock/tare_weight, đọc thẳng từ ingredientConfigs — khỏi fetch thêm). Trả về
-// field ĐẦU TIÊN chưa xong theo đúng thứ tự hiện trên UI, hoặc null nếu xong cả 4 — dùng chung
-// bởi ingredientSetupStep.jsx (done gate), IngredientManagementPage.jsx (hint thẻ trong list),
-// IngredientDetailPage.jsx (hint từng field trên trang chi tiết).
+// Phase 6 "Cài đặt nguyên liệu" — 4 việc cần làm cho đúng 1 ingredient mẫu (Cà phê), theo đúng
+// thứ tự hiện trên UI: tồn kho cuối ngày (cờ warehouse_stock_set) + 3 field cấu hình đọc thẳng
+// từ ingredientConfigs. Checklist bước 6 (onboarding/steps.js) và hint từng field cùng đọc 1 danh
+// sách này nên không lệch nhau.
+export const INGREDIENT_SETUP_FIELDS = [
+    { key: 'warehouse', label: 'Nhập tồn kho cuối ngày', done: (c, warehouseStockSet) => !!warehouseStockSet },
+    { key: 'pack', label: 'Cài quy đổi', done: (c) => !!(c?.pack_size && c?.pack_unit) },
+    { key: 'minStock', label: 'Cài tồn kho tối thiểu', done: (c) => c?.min_stock != null },
+    { key: 'tare', label: 'Cài khối lượng bì', done: (c) => c?.tare_weight != null && c.tare_weight > 0 },
+]
+
+// Field ĐẦU TIÊN chưa xong, hoặc null nếu xong cả 4 — IngredientManagementPage.jsx (hint thẻ
+// trong list), IngredientDetailPage.jsx (hint từng field trên trang chi tiết).
 export function nextIngredientSetupField(config, warehouseStockSet) {
-    if (!warehouseStockSet) return 'warehouse'
-    if (!(config?.pack_size && config?.pack_unit)) return 'pack'
-    if (config?.min_stock == null) return 'minStock'
-    if (!(config?.tare_weight != null && config.tare_weight > 0)) return 'tare'
-    return null
+    return INGREDIENT_SETUP_FIELDS.find(f => !f.done(config, warehouseStockSet))?.key ?? null
 }

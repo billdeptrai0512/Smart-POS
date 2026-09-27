@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import { Percent, Pencil } from 'lucide-react'
 import { formatVND } from '../../utils'
+import { onboardingHintClass } from '../../utils/onboardingHint'
 import TableModal from './TableModal'
 import CartListModal from './CartListModal'
 import CartNoteModal from './CartNoteModal'
@@ -12,12 +13,11 @@ const CHIP_BTN = 'min-w-[92px] shrink-0 bg-surface-light border border-border/60
 const ICON_BTN = 'shrink-0 w-[52px] h-[34px] border rounded-[12px] flex items-center justify-center gap-1 focus:outline-none hover:border-primary/40 transition-colors'
 const CHIP_LABEL = 'block text-[12px] font-bold uppercase tracking-wider text-text'
 
-// Thanh chốt bàn — chỉ render ở địa chỉ dine_in (xem addresses.dine_in).
-// Đường 1-chạm mang đi không mount component này, nên POS mặc định không đổi gì.
+// Thanh chốt bàn: giỏ chỉ thành đơn khi bấm Tạo đơn ở đây.
 export default function CheckoutBar({
     discountAmount, finalTotal,
     cart, onItemDiscount, onItemNote,
-    tableName, onConfirm, disabled,
+    tableName, onConfirm, disabled, showOnboardingHint = false,
 }) {
     // "BÀN 3" trong Nhật ký nhảy tới /pos kèm state này — mở thẳng lưới bàn (TableModal
     // tự đọc lại state này để seed "detail" cho đúng bàn đó, xem TableModal.jsx).
@@ -90,7 +90,7 @@ export default function CheckoutBar({
                 <button
                     onClick={() => onConfirm(discountAmount, tableName)}
                     disabled={disabled}
-                    className="flex-1 py-2.5 rounded-[12px] bg-primary text-bg text-[14px] font-black uppercase tracking-wider hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`flex-1 py-2.5 rounded-[12px] bg-primary text-bg text-[14px] font-black uppercase tracking-wider hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${onboardingHintClass(showOnboardingHint, 'light')}`}
                 >
                     Tạo đơn
                 </button>

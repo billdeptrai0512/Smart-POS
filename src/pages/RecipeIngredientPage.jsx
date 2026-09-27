@@ -3,11 +3,10 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useAddress } from '../contexts/AddressContext'
-import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
 import { readOnboardingState, DEFAULT_ONBOARDING_STATE, isRecipeProgressDone } from '../utils/onboardingStorage'
 import { norm, findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
-import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps/recipeStep'
+import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps'
 import {
     upsertRecipe,
     upsertRecipes,
@@ -53,7 +52,6 @@ export default function RecipeIngredientPage() {
     const { toast, showError, showToast } = useToast()
     const confirm = useConfirm()
     const canEdit = isManager || isAdmin
-    const { requestRefresh: requestOnboardingRefresh } = useOnboardingVisibility()
 
     const [ingredientCosts, setIngredientCosts] = useState(contextCosts || {})
     const [ingredientUnits, setIngredientUnits] = useState(contextUnits || {})
@@ -65,7 +63,7 @@ export default function RecipeIngredientPage() {
     const [recipeProgress, setRecipeProgress] = useState(() =>
         (selectedAddress?.id ? readOnboardingState(selectedAddress.id) : DEFAULT_ONBOARDING_STATE).recipeProgress
     )
-    useOnboardingProgressPersist('recipeProgress', recipeProgress, { isGuest, addressId: selectedAddress?.id, requestOnboardingRefresh })
+    useOnboardingProgressPersist('recipeProgress', recipeProgress, { isGuest, addressId: selectedAddress?.id })
 
     const product = useMemo(() => products.find(p => p.id === productId), [products, productId])
 
@@ -75,7 +73,7 @@ export default function RecipeIngredientPage() {
     // Phase 5 xong nhưng user vẫn đứng ở trang chi tiết công thức — tab "Nguyên liệu" của
     // phase 6 chỉ có ở /recipes (trang này không render MenuTabsBar), nên hint nút trở về
     // trước, rồi RecipeMenuPage.jsx (hintIngredientsTab) tiếp quản. Cùng điều kiện với nó,
-    // kể cả guard coffeeConfig: không còn NVL "Cà phê" thì phase 6 tự done (ingredientSetupStep)
+    // kể cả guard coffeeConfig: không còn NVL "Cà phê" thì phase 6 tự done (bước 6, onboarding/steps.js)
     // → không được hint nữa, nếu không nút trở về nhấp nháy vĩnh viễn.
     const coffeeConfig = useMemo(() => findCoffeeIngredient(ingredientConfigs), [ingredientConfigs])
     const hintBack = isGuest && isRecipeProgressDone(recipeProgress)
@@ -396,7 +394,7 @@ export default function RecipeIngredientPage() {
     }
 
     return (
-        <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
+        <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
 
             <RecipeHeader

@@ -6,7 +6,6 @@ import { AddressStatsProvider } from './contexts/AddressStatsContext'
 import { ProductProvider } from './contexts/ProductContext'
 import { POSProvider } from './contexts/POSContext'
 import { ConfirmProvider } from './contexts/ConfirmContext'
-import { OnboardingVisibilityProvider, useOnboardingVisibility } from './contexts/OnboardingVisibilityContext'
 import ErrorBoundary from './components/common/ErrorBoundary'
 import OnboardingGuide from './components/common/onboarding/OnboardingGuide'
 import './index.css'
@@ -89,20 +88,15 @@ function RequireAddress() {
 
 // Mounts the "Bắt đầu bán hàng" onboarding guide once for every page inside
 // RequireAddress/ProductProvider, instead of each page wiring it in individually.
-// Pages can still hide it via useOnboardingVisibility() when they have their
-// own bottom-fixed UI (e.g. sort mode) that would otherwise overlap it.
 function OnboardingLayout() {
   return (
-    <OnboardingVisibilityProvider>
-      <Outlet />
-      <OnboardingGuideSlot />
-    </OnboardingVisibilityProvider>
+    <div className="flex flex-col h-full">
+      <OnboardingGuide />
+      <div className="flex-1 min-h-0">
+        <Outlet />
+      </div>
+    </div>
   )
-}
-function OnboardingGuideSlot() {
-  const { hidden } = useOnboardingVisibility()
-  if (hidden) return null
-  return <OnboardingGuide />
 }
 
 export default function App() {

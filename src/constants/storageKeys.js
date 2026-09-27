@@ -13,7 +13,7 @@ export const STORAGE_KEYS = {
 
     // POS session state
     CART: 'pos_cart',
-    TABLE: 'pos_table', // bàn đang chọn (địa chỉ dine_in) — sống qua reload như CART
+    TABLE: 'pos_table', // bàn đang chọn — sống qua reload như CART
     CART_ADDRESS: 'pos_cart_address', // chi nhánh mà CART/TABLE đang thuộc về, xem POSContext
     REVENUE: 'pos_revenue',
     TOTAL_COST: 'pos_total_cost',

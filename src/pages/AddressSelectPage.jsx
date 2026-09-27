@@ -37,7 +37,7 @@ const prefetchedIds = new Set()
 
 export default function AddressSelectPage() {
     const {
-        addresses, setSelectedAddress, createNewAddress, renameAddress, setDineIn, setPrinters, removeAddress, loading, fetchError,
+        addresses, setSelectedAddress, createNewAddress, renameAddress, setPrinters, removeAddress, loading, fetchError,
         warehouseGroups, createWarehouseGroup, renameWarehouseGroup, removeWarehouseGroup, setAddressGroup,
     } = useAddress()
     const { cupsMap, revenueMap, prevCupsMap, prevRevenueMap, sessionsMap, subscriptionStatusMap, subscriptionRowsMap, subscriptionLoading, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
@@ -325,7 +325,6 @@ export default function AddressSelectPage() {
                         onSelectIngredients={handleSelectIngredients}
                         onSelectRecipes={handleSelectRecipes}
                         onRename={renameAddress}
-                        onToggleDineIn={setDineIn}
                         onSetPrinters={setPrinters}
                         onRemove={removeAddress}
                         warehouseGroups={warehouseGroups}

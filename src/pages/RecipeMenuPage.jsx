@@ -12,7 +12,6 @@ import MenuDivider from '../components/common/MenuDivider'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
-import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
 import { upsertProductPrice, insertProduct, updateProductSortOrder, updateProductName, removeProductFromAddress } from '../services/orderService'
 import { parseVNDInput } from '../utils'
 import { useToast } from '../hooks/useToast'
@@ -26,7 +25,7 @@ import { goToMenuStep } from '../utils/menuSequence'
 import { norm, findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
 import { isRecipeProgressDone } from '../utils/onboardingStorage'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
-import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps/recipeStep'
+import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps'
 
 // Module-level scroll cache. Set when user clicks a product card to drill into
 // /recipes/:productId; consumed once on next mount of /recipes (back nav).
@@ -75,7 +74,7 @@ export default function RecipeMenuPage() {
     // xong theo hint sequence, nên xấp xỉ này khớp trong mọi trường hợp đi đúng theo hint.
     const coffeeConfig = useMemo(() => findCoffeeIngredient(ingredientConfigs), [ingredientConfigs])
     // !!coffeeConfig: shop xoá/đổi tên NVL "Cà phê" thì phase 6 vacuously done (xem
-    // ingredientSetupStep.done) — thiếu guard này tab sẽ nhấp nháy hoài vì
+    // bước 6 onboarding/steps.js) — thiếu guard này tab sẽ nhấp nháy hoài vì
     // nextIngredientSetupField(undefined) luôn trả 'pack'.
     const hintIngredientsTab = isGuest && isRecipeProgressDone(recipeProgress)
         && !!coffeeConfig && nextIngredientSetupField(coffeeConfig, true) !== null
@@ -86,15 +85,8 @@ export default function RecipeMenuPage() {
     const [newProductName, setNewProductName] = useState('')
     const [newProductPrice, setNewProductPrice] = useState('')
     const [saving, setSaving] = useState(false)
-    // Kéo-thả trực tiếp trên lưới chính — không có "chế độ sắp xếp" riêng, chỉ ẩn
-    // onboarding trong lúc đang thực sự kéo (tránh che tay/gesture).
-    const [isDragging, setIsDragging] = useState(false)
+    // Kéo-thả trực tiếp trên lưới chính — không có "chế độ sắp xếp" riêng.
     const [activeId, setActiveId] = useState(null)
-    const { setHidden: setOnboardingHidden } = useOnboardingVisibility()
-    useEffect(() => {
-        setOnboardingHidden(isDragging)
-        return () => setOnboardingHidden(false)
-    }, [isDragging, setOnboardingHidden])
     // Bản sao local để phản hồi ngay khi thả tay, trước khi round-trip lưu server xong.
     const [orderedProducts, setOrderedProducts] = useState(products)
     useEffect(() => { setOrderedProducts(products) }, [products])
@@ -203,7 +195,6 @@ export default function RecipeMenuPage() {
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
     )
     async function handleDragEnd({ active, over }) {
-        setIsDragging(false)
         setActiveId(null)
         if (!over || active.id === over.id) return
         const keys = orderedProducts.map(p => p.id)
@@ -233,7 +224,7 @@ export default function RecipeMenuPage() {
     const dividerIds = useMemo(() => orderedProducts.filter(p => p.is_divider).map(p => p.id), [orderedProducts])
 
     return (
-        <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
+        <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
 
             <MenuPageHeader
@@ -286,8 +277,8 @@ export default function RecipeMenuPage() {
                         sensors={sensors}
                         collisionDetection={closestCenter}
                         modifiers={[restrictToFirstScrollableAncestor]}
-                        onDragStart={({ active }) => { setIsDragging(true); setActiveId(active.id) }}
-                        onDragCancel={() => { setIsDragging(false); setActiveId(null) }}
+                        onDragStart={({ active }) => setActiveId(active.id)}
+                        onDragCancel={() => setActiveId(null)}
                         onDragEnd={handleDragEnd}
                     >
                         <div className="flex flex-col gap-3">

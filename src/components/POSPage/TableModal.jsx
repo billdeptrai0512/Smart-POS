@@ -16,7 +16,7 @@ import SortableItem from '../RecipeMenuPage/SortableItem'
 import TableDetailModal from './TableDetailModal'
 import TakeawayListModal from './TakeawayListModal'
 
-// Chọn bàn — chỉ mở được từ CheckoutBar, tức chỉ ở địa chỉ dine_in.
+// Chọn bàn — mở từ CheckoutBar (phone) hoặc hiện sẵn inline (dine-split).
 //
 // Lưới bàn = danh sách bàn cố định của địa chỉ (addresses.tables, quản lý tạo sẵn một
 // lần) chồng lên các bàn ĐANG có khách (nhóm đơn chưa tính tiền, xem fetchOpenTables).
@@ -105,7 +105,7 @@ export default function TableModal({ onClose, inline = false, takeawaySlot }) {
     // nuôi thêm một kênh realtime. Component chỉ mount khi mở (xem CheckoutBar) nên
     // effect này = "mở modal", và lúc đóng không còn render rỗng ăn theo mỗi cú chạm món.
     // inline (tablet, POSPage) thì KHÔNG mount-khi-mở — nó sống suốt vòng đời /pos và
-    // POSContext đã tự refreshTables lúc đó rồi (xem effect dineIn/isPosPage ở đó); bắn
+    // POSContext đã tự refreshTables lúc đó rồi (xem effect isPosPage ở đó); bắn
     // thêm 1 request y hệt ngay lúc mount chỉ là 2 response đua nhau, cái về sau có thể
     // đè cái mới hơn.
     useEffect(() => { if (!inline) refreshTables() }, [inline, refreshTables])

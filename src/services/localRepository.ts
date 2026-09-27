@@ -28,6 +28,7 @@ const KEYS = {
     FIXED_COSTS: 'guest_fixed_costs',
     EXPENSE_CATEGORIES: 'guest_expense_categories',
     EXPENSE_PAYMENTS: 'guest_expense_payments',
+    TABLES: 'guest_tables',
     IS_GUEST: 'pos_is_guest'
 };
 
@@ -35,15 +36,16 @@ const get = (key: string, fallback: Row[] = []): Row[] => readJSON(key, fallback
 
 const set = (key: string, val: unknown) => localStorage.setItem(key, JSON.stringify(val));
 
-// Sửa tại chỗ 1 dòng theo id rồi ghi lại cả bảng; trả dòng đã sửa, null nếu không có.
-const patchLocal = (key: string, id: string, patch: Row): Row | null => {
+// UPDATE ... WHERE bản local: sửa tại chỗ mọi dòng khớp rồi ghi lại cả bảng (không ghi nếu
+// không dòng nào khớp).
+const patchLocalWhere = (key: string, match: (r: Row) => boolean, patch: Row) => {
     const rows = get(key);
-    const r = rows.find(r => r.id === id);
-    if (!r) return null;
-    Object.assign(r, patch);
-    set(key, rows);
-    return r;
+    const hit = rows.filter(match);
+    hit.forEach(r => Object.assign(r, patch));
+    if (hit.length) set(key, rows);
 };
+
+const patchLocal = (key: string, id: string, patch: Row) => patchLocalWhere(key, r => r.id === id, patch);
 
 // --- Auth / State ---
 export const setIsGuest = (val: boolean) => localStorage.setItem(KEYS.IS_GUEST, val ? 'true' : 'false');
@@ -57,11 +59,16 @@ export const getGuestIngredientSortOrder = () => readJSON<string[] | null>(KEY_G
 
 export const setGuestIngredientSortOrder = (arr: string[]) => writeJSON(KEY_GUEST_INGREDIENT_SORT, arr || []);
 
+// Bàn cố định của quán demo (addresses.tables bản local) — seed sẵn để khách dùng thử thấy
+// ngay lưới bàn thay vì phải tự tạo trước khi gọi món được.
+export const setGuestTables = (tables: string[]) => writeJSON(KEYS.TABLES, tables);
+
 export const getDemoAddress = () => ({
     id: DEMO_ADDRESS_ID,
     name: 'Sử dụng thử',
     manager_id: 'guest',
     ingredient_sort_order: getGuestIngredientSortOrder() || [],
+    tables: readJSON<string[]>(KEYS.TABLES, ['Bàn 1', 'Bàn 2', 'Bàn 3', 'Bàn 4', 'Bàn 5', 'Bàn 6']),
     created_at: new Date().toISOString()
 });
 
@@ -129,11 +136,9 @@ export const initializeGuestFromGlobal = (data: Row) => {
     }] : []);
     // fixed_costs seed removed — "thực chi" model no longer uses templates.
 
-    // Onboarding widget UI state (collapsed/expanded) is scoped by addressId but lives outside
-    // KEYS.* — every other piece of this address's guest data resets fresh above, so a
-    // leftover "collapsed" from a previous trial session would hide the guide with nothing
-    // in this function's own output explaining why. Clear it so each "Sử dụng thử" starts
-    // the guide fresh too.
+    // Onboarding progress is scoped by addressId but lives outside KEYS.* — every other piece
+    // of this address's guest data resets fresh above, so clear it too: each "Sử dụng thử"
+    // starts the guide from step 1.
     localStorage.removeItem(ONBOARDING_STORAGE_PREFIX + addressId);
 };
 
@@ -259,12 +264,17 @@ export const submitLocalOrder = (order: Row) => {
     return newOrder;
 };
 
+// Đưa đơn local về đúng shape của select Supabase: order_items (bản cũ ghi là 'items') kèm
+// products(name) — đơn local không có join, gắn tên từ bảng món local (kể cả món đã ẩn,
+// như join thật) để Nhật ký, lưới bàn, báo cáo đọc chung một shape.
+const asOrderRows = (orders: Row[]): Row[] => {
+    const names = new Map(get(KEYS.PRODUCTS).map(p => [p.id, p.name]));
+    return orders.map(o => ({ ...o, order_items: (o.order_items || o.items || []).map((i: Row) => ({ ...i, products: { name: names.get(i.product_id) } })) }));
+};
+
 export const fetchLocalOrders = (addressId: string | null, dateStr: string | null = null): Row[] => {
-    let orders = get(KEYS.ORDERS).filter(o => o.address_id === addressId);
     const d = dateStr ? dateStringVN(new Date(dateStr)) : dateStringVN();
-    orders = orders.filter(o => dateStringVN(new Date(o.created_at)) === d);
-    // Maintain compatibility with both 'items' and 'order_items'
-    return orders.map(o => ({ ...o, order_items: o.order_items || o.items }));
+    return asOrderRows(get(KEYS.ORDERS).filter(o => o.address_id === addressId && dateStringVN(new Date(o.created_at)) === d));
 };
 
 export const fetchLocalExpenses = (addressId: string | null, dateStr: string | null = null) => {
@@ -274,10 +284,7 @@ export const fetchLocalExpenses = (addressId: string | null, dateStr: string | n
     return list;
 };
 
-// `: Row[]` bắt buộc, không phải trang trí: object spread làm RƠI index signature của Row,
-// nên kiểu suy ra là `{ order_items: any }` — mọi field khác (deleted_at, created_at...)
-// thành lỗi TS2339 ở phía caller dù runtime vẫn đúng. Cùng lý do cho fetchLocalOrders trên.
-export const fetchAllLocalOrders = (addressId: string | null): Row[] => get(KEYS.ORDERS).filter(o => o.address_id === addressId).map(o => ({ ...o, order_items: o.order_items || o.items }));
+export const fetchAllLocalOrders = (addressId: string | null): Row[] => asOrderRows(get(KEYS.ORDERS).filter(o => o.address_id === addressId));
 export const fetchAllLocalExpenses = (addressId: string | null) => get(KEYS.EXPENSES).filter(e => e.address_id === addressId);
 export const fetchAllLocalShiftClosings = (addressId: string | null) => get(KEYS.SHIFT_CLOSINGS).filter(s => s.address_id === addressId);
 
@@ -638,6 +645,9 @@ export const deleteLocalExpense = (expenseId: string) => {
     set(KEYS.EXPENSES, expenses);
     return true;
 };
+
+// Các thao tác bàn (đóng/mở lại/đổi tên/chuyển/ra món) bản local.
+export const updateLocalOrders = (match: (o: Row) => boolean, patch: Row) => { patchLocalWhere(KEYS.ORDERS, match, patch); };
 
 export const deleteLocalOrder = (orderId: string, staffName: string | null) => {
     patchLocal(KEYS.ORDERS, orderId, { deleted_at: new Date().toISOString(), deleted_by: staffName });

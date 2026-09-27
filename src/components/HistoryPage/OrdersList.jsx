@@ -1,4 +1,4 @@
-import { useMemo, memo } from 'react'
+import { memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Percent, Trash2, Printer, Loader } from 'lucide-react'
 import { formatVND, computeDiscount, discountToPercent, NO_DISCOUNT } from '../../utils'
@@ -27,10 +27,10 @@ const PILL = 'shrink-0 bg-surface-light border border-border/60 rounded-full px-
 const PILL_LG = 'shrink-0 bg-surface-light border border-border/60 rounded-full px-2.5 py-1 text-[11px] font-bold text-text-secondary'
 
 export default function OrdersList({
-    orders, totalCups, totalRevenue, runningTotals, isLoading, isTodayScope,
+    orders, totalCups, totalRevenue, isLoading, isTodayScope,
     pendingOrders, isSyncing, onRetrySync, onDeleteOffline,
     onDeleteOrder, onUpdateDiscount, deletingId, setDeletingId,
-    justArrivedIds, dineIn,
+    justArrivedIds,
 }) {
     return (
         <main className="flex-1 overflow-y-auto px-4 py-5 pb-4 space-y-3 bg-bg">
@@ -83,14 +83,12 @@ export default function OrdersList({
                     <OrderCard
                         key={order.id}
                         order={order}
-                        runningTotal={runningTotals.get(order.id) || 0}
                         isDeleting={deletingId === order.id}
                         setDeletingId={setDeletingId}
                         onDeleteOrder={onDeleteOrder}
                         onUpdateDiscount={onUpdateDiscount}
                         onDeleteOffline={onDeleteOffline}
                         isNew={justArrivedIds?.has(order.id) || false}
-                        dineIn={dineIn}
                     />
                 ))
             )}
@@ -101,7 +99,7 @@ export default function OrdersList({
 // memo + per-card isDeleting (not the raw shared deletingId, which would change
 // for every card whenever ANY order starts/stops deleting) — otherwise deleting
 // one order re-renders the entire day's order list.
-const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, setDeletingId, onDeleteOrder, onUpdateDiscount, onDeleteOffline, isNew, dineIn }) {
+const OrderCard = memo(function OrderCard({ order, isDeleting, setDeletingId, onDeleteOrder, onUpdateDiscount, onDeleteOffline, isNew }) {
     const navigate = useNavigate()
     const confirm = useConfirm()
     const { products, productExtras, productDiscounts } = useProducts()
@@ -117,17 +115,6 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
     // Online, non-deleted orders are the only ones we can edit/discount against the DB.
     const editable = !order.deletedAt && !order.isOffline
 
-    // Mang đi (!dineIn) mỗi đơn đúng 1 món (POSContext chốt ngay khi chạm) nên dòng "Tổng
-    // cộng" chỉ lặp lại giá món ngay trên — ẩn cho gọn. Vẫn hiện nếu đơn có >1 món dù địa
-    // chỉ đang tắt Bàn ngồi: đơn cũ từ hồi còn bật Bàn ngồi (toggle không đụng dữ liệu đã
-    // ghi, xem BranchGrid) vẫn cần tổng.
-    const showOrderTotal = dineIn || (order.items?.length || 0) > 1
-
-    // In bill: mọi đơn (mang đi lẫn đơn bàn) đều in được riêng lẻ từ Nhật ký — đơn bàn
-    // còn đang mở thì in gộp cả bàn qua TableDetailModal, còn đơn đã lên Nhật ký thì in
-    // đúng 1 lượt gọi món đó. Chỉ khi địa chỉ có bật "Bàn ngồi" (dine_in) — tắt thì chưa
-    // có hạ tầng in bill cho quán đó.
-    const canPrint = dineIn && !order.deletedAt
     const { billRef, printArmed, arm } = usePrintArmed(
         selectedAddress?.counter_printer_ip,
         (err) => showError(err, 'In hoá đơn')
@@ -140,9 +127,7 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
         return priceLineFor(item, products, productExtras).unitPrice * item.quantity
     }
 
-    // Giá + trạng thái giảm giá hiển thị của 1 dòng — dùng chung cho danh sách món (đơn
-    // nhiều món/dine-in) VÀ header rút gọn (đơn 1 món mang đi, xem showOrderTotal/firstItem
-    // bên dưới) để không tính lặp 2 lần cùng một dòng.
+    // Giá + trạng thái giảm giá hiển thị của 1 dòng trong danh sách món.
     function deriveItem(item) {
         const { name: itemName, extras: itemExtras, unitPrice } = priceLineFor(item, products, productExtras)
         const itemSubtotal = unitPrice * item.quantity
@@ -164,20 +149,6 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
             : null
         return { itemName, itemExtras, itemSubtotal, seedDiscount, editing, displayDiscount, liveDiscount, liveFinal, discountNote }
     }
-
-    // Mang đi 1 món (!showOrderTotal): giá + nút giảm giá của món đó lên thẳng header thay
-    // vì mã đơn (#orderNo vô nghĩa với khách mang đi) — tránh lặp lại giá ở danh sách món
-    // bên dưới (xem showOrderTotal chi phối cả hai chỗ này).
-    const firstItem = order.items?.[0]
-    const firstItemInfo = !showOrderTotal && firstItem ? deriveItem(firstItem) : null
-
-    const billLines = useMemo(() => {
-        if (!canPrint) return []
-        return (order.items || []).map(it => ({
-            key: it.id ?? it.text, qty: it.quantity, discountAmount: it.discountAmount || 0,
-            ...priceLineFor(it, products, productExtras),
-        }))
-    }, [canPrint, order.items, products, productExtras])
 
     const deletedTimeStr = order.deletedAt ? (() => {
         const d = new Date(order.deletedAt)
@@ -221,82 +192,37 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
             )}
 
             <div className={`flex flex-col gap-2 ${order.deletedAt ? 'opacity-40 grayscale select-none' : ''}`}>
-                {/* Đơn bàn: giờ + tên bàn/mang đi bên trái, luỹ kế bên phải — tổng riêng của
-                    ĐỢT này thử bỏ (đã có trong hoá đơn in, và đọc được từ danh sách món ngay
-                    dưới), xem còn thiếu không trước khi quyết giữ hay bỏ hẳn. Mã đơn (#id) dồn
+                {/* Tên bàn/Mang đi + giờ bên trái, tiền của đơn bên phải. Mã đơn (#id) dồn
                     xuống hàng footer chung với tên nhân viên — chỉ để tra cứu/đối chiếu. */}
-                {showOrderTotal ? (
-                    <div>
-                        <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                                {order.tableName ? (
-                                    // Bàn còn đang mở (openTables) thì bấm nhảy thẳng tới modal chi tiết của
-                                    // bàn đó ở /pos — bàn đã tính tiền/đóng thì chỉ mở lưới chọn bàn (TableModal
-                                    // tự bỏ qua "detail" không khớp openTables, không lỗi).
-                                    <button
-                                        type="button"
-                                        onClick={() => navigate('/pos', { state: { openTableDetail: order.tableName } })}
-                                        className={`${PILL} uppercase tracking-wide hover:text-primary hover:border-primary/40 transition-colors`}
-                                    >
-                                        {order.tableName}
-                                    </button>
-                                ) : (
-                                    <span className={`${PILL} uppercase tracking-wide`}>Mang đi</span>
-                                )}
-                                <span className={`${PILL} tabular-nums`}>{time}</span>
-                            </div>
-                            {!order.deletedAt && (
-                                <span className="shrink-0 text-primary leading-none text-[14px] font-bold tabular-nums">
-                                    + {formatVND(order.total)}
-                                </span>
+                <div>
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                            {order.tableName ? (
+                                // Bàn còn đang mở (openTables) thì bấm nhảy thẳng tới modal chi tiết của
+                                // bàn đó ở /pos — bàn đã tính tiền/đóng thì chỉ mở lưới chọn bàn (TableModal
+                                // tự bỏ qua "detail" không khớp openTables, không lỗi).
+                                <button
+                                    type="button"
+                                    onClick={() => navigate('/pos', { state: { openTableDetail: order.tableName } })}
+                                    className={`${PILL} uppercase tracking-wide hover:text-primary hover:border-primary/40 transition-colors`}
+                                >
+                                    {order.tableName}
+                                </button>
+                            ) : (
+                                <span className={`${PILL} uppercase tracking-wide`}>Mang đi</span>
                             )}
+                            <span className={`${PILL} tabular-nums`}>{time}</span>
                         </div>
-                        <div className="border-t border-border/40 my-1.5" />
-                    </div>
-                ) : (
-                    <div className="flex justify-between items-start mb-1 gap-2">
-                        {firstItemInfo && (
-                            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                                <span className="shrink-0 font-black text-[14px] text-primary">+ {formatVND(firstItemInfo.liveFinal)}</span>
-                                {firstItemInfo.liveDiscount > 0 && (
-                                    <span className="shrink-0 text-text-secondary/60 text-[12px] font-bold line-through tabular-nums">{formatVND(firstItemInfo.itemSubtotal)}</span>
-                                )}
-                                {editable && firstItem.id && (
-                                    <button
-                                        onClick={() => toggleEditing(firstItem.id)}
-                                        aria-label={`Giảm giá ${firstItem.text}`}
-                                        className={`shrink-0 h-[22px] min-w-[22px] px-2 rounded-full border flex items-center justify-center transition-colors ${firstItemInfo.liveDiscount > 0 ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/60 text-text-secondary hover:text-text'}`}
-                                    >
-                                        {firstItemInfo.liveDiscount > 0
-                                            ? <span className="text-[11px] font-black tabular-nums">-{firstItemInfo.displayDiscount.type === 'percent' ? `${firstItemInfo.displayDiscount.value}%` : formatVND(firstItemInfo.displayDiscount.value)}</span>
-                                            : <Percent size={12} strokeWidth={2.5} />}
-                                    </button>
-                                )}
-                            </div>
-                        )}
                         {!order.deletedAt && (
-                            <span className="shrink-0 text-success leading-none text-[14px] font-bold tabular-nums">
-                                {formatVND(runningTotal)}
+                            <span className="shrink-0 text-primary leading-none text-[14px] font-bold tabular-nums">
+                                + {formatVND(order.total)}
                             </span>
                         )}
                     </div>
-                )}
-                {firstItemInfo?.editing && (
-                    <div className="pb-1">
-                        <DiscountEditor
-                            discount={firstItemInfo.seedDiscount}
-                            note={firstItemInfo.discountNote}
-                            onPreview={setPreview}
-                            secondaryLabel="Hủy"
-                            onSecondary={() => toggleEditing(firstItem.id)}
-                            onApply={(d) => handleItemDiscount(firstItem, d)}
-                        />
-                    </div>
-                )}
+                    <div className="border-t border-border/40 my-1.5" />
+                </div>
                 <div className="pl-2 flex flex-col gap-1.5">
                     {order.items?.length > 0 ? order.items.map((item, idx) => {
-                            // Đơn 1 món mang đi (!showOrderTotal) đã hiện giá + nút giảm giá ở
-                            // header (firstItemInfo) — ở đây chỉ còn tên + extras, khỏi lặp lại.
                             const { itemName, itemExtras, itemSubtotal, seedDiscount, editing, displayDiscount, liveDiscount, liveFinal, discountNote } = deriveItem(item)
 
                             return (
@@ -311,29 +237,25 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                                                 <span className={`pl-2.5 text-[12px] leading-snug italic text-text-secondary break-words ${order.deletedAt ? 'line-through' : ''}`}>Ghi chú: {item.note}</span>
                                             )}
                                         </div>
-                                        {showOrderTotal && (
-                                            <>
-                                                <span className="shrink-0 flex items-center gap-1.5">
-                                                    {liveDiscount > 0 && (
-                                                        <span className="text-[10px] font-bold text-text-secondary/60 line-through tabular-nums">{formatVND(itemSubtotal)}</span>
-                                                    )}
-                                                    <span className="text-[12px] font-bold tabular-nums text-text"> {formatVND(liveFinal)}</span>
-                                                </span>
-                                                {editable && item.id && (
-                                                    <button
-                                                        onClick={() => toggleEditing(item.id)}
-                                                        aria-label={`Giảm giá ${item.text}`}
-                                                        className={`shrink-0 h-[22px] min-w-[22px] px-2 rounded-full border flex items-center justify-center transition-colors ${liveDiscount > 0 ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/60 text-text-secondary hover:text-text'}`}
-                                                    >
-                                                        {liveDiscount > 0
-                                                            ? <span className="text-[11px] font-black tabular-nums">-{displayDiscount.type === 'percent' ? `${displayDiscount.value}%` : formatVND(displayDiscount.value)}</span>
-                                                            : <Percent size={12} strokeWidth={2.5} />}
-                                                    </button>
-                                                )}
-                                            </>
+                                        <span className="shrink-0 flex items-center gap-1.5">
+                                            {liveDiscount > 0 && (
+                                                <span className="text-[10px] font-bold text-text-secondary/60 line-through tabular-nums">{formatVND(itemSubtotal)}</span>
+                                            )}
+                                            <span className="text-[12px] font-bold tabular-nums text-text"> {formatVND(liveFinal)}</span>
+                                        </span>
+                                        {editable && item.id && (
+                                            <button
+                                                onClick={() => toggleEditing(item.id)}
+                                                aria-label={`Giảm giá ${item.text}`}
+                                                className={`shrink-0 h-[22px] min-w-[22px] px-2 rounded-full border flex items-center justify-center transition-colors ${liveDiscount > 0 ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/60 text-text-secondary hover:text-text'}`}
+                                            >
+                                                {liveDiscount > 0
+                                                    ? <span className="text-[11px] font-black tabular-nums">-{displayDiscount.type === 'percent' ? `${displayDiscount.value}%` : formatVND(displayDiscount.value)}</span>
+                                                    : <Percent size={12} strokeWidth={2.5} />}
+                                            </button>
                                         )}
                                     </div>
-                                    {showOrderTotal && editing && (
+                                    {editing && (
                                         <div className="pb-2 space-y-3">
                                             <DiscountEditor
                                                 discount={seedDiscount}
@@ -353,46 +275,42 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                 </div>
 
                 <div className="border-t border-border/40 pt-2 flex justify-between items-center gap-3 leading-none">
-                    {/* showOrderTotal: giờ đã lên đầu thẻ (header), mã đơn dồn xuống đây chung
+                    {/* Giờ đã lên đầu thẻ (header), mã đơn dồn xuống đây chung
                         với người tạo — cả hai đều là thông tin tra cứu, không cần nổi bật riêng
                         một hàng ở trên. Cùng kiểu pill (border+background) với giờ/tên bàn ở
-                        header để đồng bộ, không lẫn với text thường của các đơn không phải bàn. */}
-                    {showOrderTotal ? (
-                        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                            {order.orderNo != null && (
-                                <span className={`${PILL_LG} tabular-nums`}>#{order.orderNo}</span>
-                            )}
-                            {order.staffName && (
-                                <span className={`${PILL_LG} truncate`}>{order.staffName}</span>
-                            )}
-                        </div>
-                    ) : (
-                        <span className="text-text-secondary/70 text-[12px] font-bold truncate min-w-0 leading-none">
-                            {time}{order.staffName ? ` · ${order.staffName}` : ''}
-                        </span>
-                    )}
-                    <div className="shrink-0 flex items-center gap-2">
-                        {canPrint && (
-                            <button
-                                onClick={arm}
-                                disabled={printArmed}
-                                aria-label="In bill"
-                                className={`${ICON_BTN} text-text-secondary hover:text-primary disabled:opacity-50`}
-                            >
-                                {printArmed ? <Loader size={14} className="animate-spin" /> : <Printer size={14} strokeWidth={2.25} />}
-                            </button>
+                        header để đồng bộ. */}
+                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                        {order.orderNo != null && (
+                            <span className={`${PILL_LG} tabular-nums`}>#{order.orderNo}</span>
                         )}
-                        {/* Đơn offline chưa lên DB thì xoá bằng đường khác (hàng chờ), còn lại
-                            y hệt nhau — một nút, hai nguồn dữ liệu. */}
+                        {order.staffName && (
+                            <span className={`${PILL_LG} truncate`}>{order.staffName}</span>
+                        )}
+                    </div>
+                    <div className="shrink-0 flex items-center gap-2">
+                        {/* In bill: mọi đơn (mang đi lẫn đơn bàn) in được riêng lẻ từ Nhật ký — đơn bàn
+                            còn mở thì in gộp cả bàn qua TableDetailModal, đơn đã lên Nhật ký thì in
+                            đúng 1 lượt gọi món đó. Xoá: đơn offline chưa lên DB đi đường khác (hàng
+                            chờ), còn lại y hệt nhau — một nút, hai nguồn dữ liệu. */}
                         {!order.deletedAt && (
-                            <button
-                                onClick={order.isOffline ? () => onDeleteOffline(order.createdAt_key) : handleDelete}
-                                disabled={!order.isOffline && isDeleting}
-                                aria-label={order.isOffline ? 'Xóa đơn offline' : 'Xóa đơn'}
-                                className={`${ICON_BTN} ${order.isOffline ? 'text-warning/70' : 'text-text-secondary'} hover:text-danger disabled:opacity-50`}
-                            >
-                                <Trash2 size={14} strokeWidth={2.25} />
-                            </button>
+                            <>
+                                <button
+                                    onClick={arm}
+                                    disabled={printArmed}
+                                    aria-label="In bill"
+                                    className={`${ICON_BTN} text-text-secondary hover:text-primary disabled:opacity-50`}
+                                >
+                                    {printArmed ? <Loader size={14} className="animate-spin" /> : <Printer size={14} strokeWidth={2.25} />}
+                                </button>
+                                <button
+                                    onClick={order.isOffline ? () => onDeleteOffline(order.createdAt_key) : handleDelete}
+                                    disabled={!order.isOffline && isDeleting}
+                                    aria-label={order.isOffline ? 'Xóa đơn offline' : 'Xóa đơn'}
+                                    className={`${ICON_BTN} ${order.isOffline ? 'text-warning/70' : 'text-text-secondary'} hover:text-danger disabled:opacity-50`}
+                                >
+                                    <Trash2 size={14} strokeWidth={2.25} />
+                                </button>
+                            </>
                         )}
                     </div>
                 </div>
@@ -408,7 +326,10 @@ const OrderCard = memo(function OrderCard({ order, runningTotal, isDeleting, set
                     tableName={order.tableName}
                     openedAt={order.createdAt}
                     staffName={order.staffName}
-                    lines={billLines}
+                    lines={(order.items || []).map(it => ({
+                        key: it.id ?? it.text, qty: it.quantity, discountAmount: it.discountAmount || 0,
+                        ...priceLineFor(it, products, productExtras),
+                    }))}
                     subtotal={subtotal}
                     discountTotal={discountAmount}
                     total={order.total}

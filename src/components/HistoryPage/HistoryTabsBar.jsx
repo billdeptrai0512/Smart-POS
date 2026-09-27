@@ -7,7 +7,7 @@ const TABS = [
 ]
 
 // hintTab: key của tab đang được onboarding phase 2 "Nhật ký" gợi ý bấm tiếp — xem
-// HistoryPage.jsx (journalHintTab) + journalStep.jsx.
+// HistoryPage.jsx (journalHintTab) + onboarding/steps.js.
 export default function HistoryTabsBar({ activeTab, onSelect, hintTab }) {
     return (
         <div className="bg-surface-light border border-border/50 rounded-[14px] flex p-1 gap-1 shadow-sm">

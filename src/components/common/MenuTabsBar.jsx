@@ -7,7 +7,7 @@ import { MENU_TABS } from '../../constants/menuTabs'
 // ingredient viewMode ('main' / 'packaging') on the Ingredients page.
 
 // hintTab: key của tab đang được onboarding phase 6 "Cài đặt nguyên liệu" gợi ý bấm tiếp — xem
-// RecipeMenuPage.jsx/IngredientManagementPage.jsx (hintIngredientsTab) + ingredientSetupStep.jsx.
+// RecipeMenuPage.jsx/IngredientManagementPage.jsx (hintIngredientsTab) + onboarding/steps.js.
 export default function MenuTabsBar({ activeTab, onSelect, hintTab }) {
     return (
         <div className="bg-surface-light border border-border/50 rounded-[14px] flex p-1 gap-1 shadow-sm">

@@ -1,4 +1,4 @@
-// POS (dine_in) — 2 guard rút ra từ src/contexts/POSContext.jsx, khoá lại 2 bug đã xảy ra
+// POS — 2 guard rút ra từ src/contexts/POSContext.jsx, khoá lại 2 bug đã xảy ra
 // thật (xem comment tại nguồn).
 
 import { describe, it, expect } from 'vitest'
@@ -30,15 +30,11 @@ describe('cartBelongsToAddress', () => {
 // phải trả giỏ về để nhân viên bấm lại, nhưng KHÔNG được đè lên đợt mới nếu nhân viên đã
 // bắt đầu gọi món tiếp trong lúc đợi response.
 describe('shouldRestoreCartOnFailure', () => {
-    it('dineIn + giỏ đang trống (chưa gọi gì thêm) → khôi phục đợt vừa gửi hỏng', () => {
-        expect(shouldRestoreCartOnFailure(true, 0)).toBe(true)
+    it('giỏ đang trống (chưa gọi gì thêm) → khôi phục đợt vừa gửi hỏng', () => {
+        expect(shouldRestoreCartOnFailure(0)).toBe(true)
     })
 
-    it('dineIn nhưng nhân viên đã gọi món mới trong lúc chờ → KHÔNG đè lên đợt mới', () => {
-        expect(shouldRestoreCartOnFailure(true, 1)).toBe(false)
-    })
-
-    it('không phải dineIn (mang đi) → không khôi phục, đường 1-chạm không dùng cơ chế này', () => {
-        expect(shouldRestoreCartOnFailure(false, 0)).toBe(false)
+    it('nhân viên đã gọi món mới trong lúc chờ → KHÔNG đè lên đợt mới', () => {
+        expect(shouldRestoreCartOnFailure(1)).toBe(false)
     })
 })

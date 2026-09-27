@@ -367,7 +367,7 @@ export default function IngredientManagementPage() {
     }
 
     return (
-        <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
+        <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
 
             <MenuPageHeader

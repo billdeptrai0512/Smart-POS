@@ -4,7 +4,6 @@ import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useHistory } from '../contexts/HistoryContext'
-import { useOnboardingVisibility } from '../contexts/OnboardingVisibilityContext'
 import {
     fetchIngredientRestockHistory, fetchIngredientStocks, fetchIngredientWithdrawals,
     deleteIngredientCost, upsertIngredientCost, renameIngredient,
@@ -30,7 +29,7 @@ import { useSavingAction } from '../hooks/useSavingAction'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { dateStringVN, timeStringVN, startOfMonthVN, endOfMonthVN } from '../utils/dateVN'
 import { findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
-import { isRecipeProgressDone } from '../utils/onboardingStorage'
+import { isRecipeProgressDone, readOnboardingState, writeOnboardingState } from '../utils/onboardingStorage'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 
 // Page-level orchestrator: fetches data, owns the canonical state (stock, history,
@@ -42,7 +41,6 @@ export default function IngredientDetailPage() {
     const { ingredientKey } = useParams()
     const { ingredientCosts, ingredientUnits, ingredientConfigs, refreshProducts } = useProducts()
     const { selectedAddress, siblingsByAddress } = useAddress()
-    const { requestRefresh: requestOnboardingRefresh } = useOnboardingVisibility()
     const warehouseSiblings = selectedAddress ? siblingsByAddress[selectedAddress.id] : null
     const warehouseGroupNote = warehouseSiblings?.length
         ? `Dùng chung với: ${warehouseSiblings.map(a => a.name).join(', ')}`
@@ -245,7 +243,6 @@ export default function IngredientDetailPage() {
             await adjustIngredientStock(selectedAddress?.id, ingredientKey, delta, profile?.name, snapshotOpts)
             await Promise.all([reloadStock(), refreshTodayExpenses?.()])
             showToast('Đã hiệu chỉnh kho sau', 'success')
-            requestOnboardingRefresh()
         })
     }
 
@@ -271,7 +268,6 @@ export default function IngredientDetailPage() {
             }
             await reloadStock()
             showToast('Đã sửa tồn quầy', 'success')
-            requestOnboardingRefresh()
         })
     }
 
@@ -331,7 +327,6 @@ export default function IngredientDetailPage() {
         })
         await Promise.all([reloadStock(), reloadHistory(), refreshProducts?.(), refreshTodayExpenses?.()])
         showToast('Đã nhập kho', 'success')
-        requestOnboardingRefresh()
         return result
     }
 
@@ -474,6 +469,15 @@ export default function IngredientDetailPage() {
     // field ĐẦU TIÊN chưa xong theo đúng thứ tự hiện trên UI — xem onboardingHint.js.
     const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId: selectedAddress?.id })
     const isCoffee = isGuest && findCoffeeIngredient(ingredientConfigs)?.ingredient === ingredientKey
+    // Tick "Nhập tồn kho cuối ngày" của guide. Mọi đường lưu kho đều reloadStock() → stockData
+    // mới nên 1 effect phủ hết. ponytail: kho Cà phê nhập ở trang khác thì chỉ tick khi mở
+    // trang này — hint bước 6 vốn dẫn khách vào đây.
+    const warehouseSet = !!stockData?.warehouse_stock_set
+    useEffect(() => {
+        const id = selectedAddress?.id
+        if (!isCoffee || !warehouseSet || !id || readOnboardingState(id).stockProgress.coffeeWarehouseSet) return
+        writeOnboardingState(id, { stockProgress: { coffeeWarehouseSet: true } })
+    }, [isCoffee, warehouseSet, selectedAddress?.id])
     const setupField = isCoffee && isRecipeProgressDone(recipeProgress)
         ? nextIngredientSetupField(config, stockData?.warehouse_stock_set)
         : null
@@ -483,7 +487,7 @@ export default function IngredientDetailPage() {
     const hintTare = setupField === 'tare'
 
     return (
-        <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg relative">
+        <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
 
             <IngredientDetailHeader

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { ArrowRight } from 'lucide-react'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 
-// Types the draft text out left→right. Keyed by the held item's id (in render)
+// Types the draft text out left→right. Keyed by the newest cart line's id (in render)
 // so a NEW tap retypes from scratch; toggling extras only grows the text, so the
 // suffix (e.g. " · Lớn") types on without restarting.
 function Typewriter({ text }) {
@@ -15,11 +15,11 @@ function Typewriter({ text }) {
     return <>{text.slice(0, n)}{n < text.length && <span className="opacity-50">▌</span>}</>
 }
 
-export default function Header({ dayName, dateOnly, onOpenHistory, addressName, onAddressClick, recentOrders = [], draftOrder, enterKey, showOnboardingHint = false, dineIn = false, takeawaySlotRef }) {
+export default function Header({ dayName, dateOnly, onOpenHistory, addressName, onAddressClick, recentOrders = [], draftOrder, enterKey, showOnboardingHint = false, takeawaySlotRef }) {
     const hintClass = onboardingHintClass(showOnboardingHint, 'light')
-    // Draft (held, unsaved) line on top, then saved orders. Cap at 3 rows.
-    // key 'draft' is stable so extras overwrite it in place; typeKey = the held
-    // item's id so the typewriter restarts only on a new tap. isNew matches only the
+    // Draft (cart not yet sent) line on top, then saved orders. Cap at 3 rows.
+    // key 'draft' is stable so extras overwrite it in place; typeKey = the newest
+    // cart line's id so the typewriter restarts only on a new tap. isNew matches only the
     // exact row just committed locally (enterKey) → the realtime DB echo, which
     // remounts the row under a new server-timestamp key, can't replay the slide-in.
     const rows = [
@@ -33,7 +33,7 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
     ].slice(0, 3)
     return (
         <header className="shrink-0 pt-6 pb-6 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)] relative z-20">
-            <div className={`px-6 grid grid-cols-2 ${dineIn ? 'dine-split:grid-cols-4' : ''} gap-3 mb-1`}>
+            <div className="px-6 grid grid-cols-2 dine-split:grid-cols-4 gap-3 mb-1">
                 {/* Card 1: Address & Status */}
                 <div
                     onClick={onAddressClick}
@@ -62,22 +62,13 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                     onClick={onOpenHistory}
                     role="button"
                     tabIndex={0}
-                    className={`${dineIn ? 'dine-split:col-span-2' : ''} cursor-pointer bg-linear-to-b from-primary to-primary-dark rounded-[20px] p-3 sm:p-3.5 border border-primary shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full hover:brightness-105 active:brightness-95 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${hintClass}`}
+                    className={`dine-split:col-span-2 cursor-pointer bg-linear-to-b from-primary to-primary-dark rounded-[20px] p-3 sm:p-3.5 border border-primary shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full hover:brightness-105 active:brightness-95 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${hintClass}`}
                 >
                     <div className="flex flex-col justify-between items-start relative z-10 w-full">
                         <div className="flex items-center justify-between w-full">
                             <span className="text-[12px] sm:text-[13px] text-white font-black uppercase tracking-wider">Nhật ký</span>
-                            {/* Draft pending → check: "tap to commit". Otherwise arrow: "go to history".
-                                dineIn: giỏ chỉ chốt qua nút Thanh toán ở CheckoutBar, nên ✓ ở đây sẽ
-                                hứa một hành động không xảy ra — giữ mũi tên. */}
                             <span className="shrink-0 w-6 h-6 rounded-full bg-white shadow-sm flex items-center justify-center">
-                                {draftOrder && !dineIn
-                                    ? (
-                                        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.125} strokeLinecap="round" strokeLinejoin="round" className="text-bg check-draw">
-                                            <path d="M4 12 9 17 20 6" pathLength="1" />
-                                        </svg>
-                                    )
-                                    : <ArrowRight size={16} strokeWidth={3.125} className="text-bg" />}
+                                <ArrowRight size={16} strokeWidth={3.125} className="text-bg" />
                             </span>
                         </div>
                         <div className="w-full">
@@ -107,7 +98,7 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                     + modal danh sách vẫn ở TableModal. [&>*]:h-full: cao bằng hàng header
                     thay vì CARD_H của lưới bàn. [&>*]:w-full: tile tĩnh (chưa có đơn) là
                     <button>, ngoài grid thì chỉ rộng vừa chữ. */}
-                {dineIn && <div ref={takeawaySlotRef} className="hidden dine-split:block [&>*]:h-full [&>*]:w-full" />}
+                <div ref={takeawaySlotRef} className="hidden dine-split:block [&>*]:h-full [&>*]:w-full" />
             </div>
         </header >
     )

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
     Pencil, Trash2, ClipboardCopy, MoreVertical, X,
     Coffee, FileText, Package, ChevronRight, Eraser,
-    Banknote, Receipt, Wallet, Boxes, TrendingUp, ChefHat, Box, Warehouse, Armchair, Printer,
+    Banknote, Receipt, Wallet, Boxes, TrendingUp, ChefHat, Box, Warehouse, Printer,
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
@@ -23,7 +23,7 @@ export default function BranchGrid({
     addresses, fetchError, cupsMap, revenueMap, prevCupsMap = {}, prevRevenueMap = {}, sessionsMap, subscriptionRowsMap = {}, subscriptionStatusMap = {}, subscriptionLoading, statsLoading,
     isStaff, isAdmin, error, setError,
     onSelect, onSelectReport, onSelectHistory, onSelectIngredients, onSelectRecipes,
-    onRename, onRemove, onDefaultTemplate, onSupportClick, onToggleDineIn, onSetPrinters,
+    onRename, onRemove, onDefaultTemplate, onSupportClick, onSetPrinters,
     warehouseGroups = [], onCreateWarehouseGroup, onRenameWarehouseGroup, onRemoveWarehouseGroup, onSetAddressGroup,
 }) {
     // Which per-card sub-modal (rename/delete/backup/wipe/group/printers) is open, and for which
@@ -316,19 +316,6 @@ export default function BranchGrid({
                                                         label="Đổi tên"
                                                         tone="primary"
                                                         onClick={() => { setSubModal({ type: 'rename', addressId: addr.id }); setError('') }}
-                                                    />
-                                                    {/* POS của địa chỉ này gộp nhiều ly thành 1 đơn + có nút Thanh toán
-                                                        thay vì 1-chạm-1-đơn. Bật/tắt ngay, không cần modal xác nhận:
-                                                        đảo lại chỉ là một cú chạm nữa và không đụng dữ liệu đã ghi. */}
-                                                    <ActionPill
-                                                        icon={<Armchair size={16} />}
-                                                        label={addr.dine_in ? 'Bàn ngồi: Bật' : 'Bàn ngồi: Tắt'}
-                                                        tone={addr.dine_in ? 'success' : 'primary'}
-                                                        onClick={async () => {
-                                                            setError('')
-                                                            try { await onToggleDineIn?.(addr.id, !addr.dine_in) }
-                                                            catch (err) { setError(err.message || 'Không thể đổi chế độ bán') }
-                                                        }}
                                                     />
                                                     {/* Chỉ dùng cho app native (Capacitor) — máy in ESC/POS qua mạng, xem
                                                         escposBitmap.js. Web bỏ qua 2 cột này, vẫn window.print() như cũ. */}
