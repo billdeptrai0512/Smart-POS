@@ -32,12 +32,11 @@ export default function CashFlowCard({
     // Khối doanh thu (SalesCard + biểu đồ) render phía trên panel Thực thu.
     children,
     // Inline-edit props (today scope on /daily-report). When `editable` is true the
-    // Tiền mặt / Chuyển khoản rows become text inputs. The Lưu thực thu CTA itself
-    // lives as a FAB on DailyReportPage so it shares position/style with Lưu báo cáo.
+    // Tiền mặt / Chuyển khoản rows become text inputs; rời ô (blur) là tự lưu.
     editable = false,
     cashInput = '',
     transferInput = '',
-    isSaving = false,
+    onInputBlur,
     onCashChange,
     onTransferChange,
     // Onboarding bước 3: hintCard sáng cả panel Thực thu, onCardFullyVisible báo khi panel hiện
@@ -320,14 +319,14 @@ export default function CashFlowCard({
                             <MoneyInputRow
                                 label="Tiền mặt"
                                 value={cashInput}
-                                disabled={isSaving}
+                                onBlur={onInputBlur}
                                 onChange={onCashChange}
                                 hint={hintCash}
                             />
                             <MoneyInputRow
                                 label="Chuyển khoản"
                                 value={transferInput}
-                                disabled={isSaving}
+                                onBlur={onInputBlur}
                                 onChange={onTransferChange}
                                 hint={hintTransfer}
                             />
@@ -641,7 +640,7 @@ function ItemRow({ date, name, amount, count, phase = 'in_shift', method = 'cash
     )
 }
 
-function MoneyInputRow({ label, value, disabled, onChange, hint }) {
+function MoneyInputRow({ label, value, onChange, onBlur, hint }) {
     // Chưa gõ gì → ô trông y hệt dòng chỉ-đọc bên dưới, chủ quán không biết là
     // bấm được. Viền đứt + icon bút chỉ hiện lúc rỗng, gõ vào là biến mất.
     const empty = !value
@@ -657,8 +656,8 @@ function MoneyInputRow({ label, value, disabled, onChange, hint }) {
                     placeholder="0"
                     value={value}
                     onChange={e => onChange?.(e.target.value)}
-                    disabled={disabled}
-                    className="flex-1 w-0 min-w-0 bg-transparent text-right text-[13px] font-bold text-text tabular-nums placeholder:text-text-secondary/40 focus:outline-none disabled:opacity-50"
+                    onBlur={onBlur}
+                    className="flex-1 w-0 min-w-0 bg-transparent text-right text-[13px] font-bold text-text tabular-nums placeholder:text-text-secondary/40 focus:outline-none"
                 />
                 {/* "đ" đi theo màu của con số: mờ như placeholder khi chưa ai nhập,
                     đậm bằng chữ khi đã có số — để "0đ" đọc ra như một cụm. */}

@@ -5,7 +5,7 @@ import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { formatVNDInput, parseVNDInput } from '../utils'
 import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
-import { fetchDailyReportContext, fetchLastWeekSameDayOrderItems, processIngredientRestock, fetchOpenTables, invalidateDailyContext, editIngredientRestock, fetchIngredientRestockHistory, insertShiftClosing, updateShiftClosing } from '../services/orderService'
+import { fetchDailyReportContext, fetchLastWeekSameDayOrderItems, processIngredientRestock, invalidateDailyContext, editIngredientRestock, fetchIngredientRestockHistory, insertShiftClosing, updateShiftClosing } from '../services/orderService'
 import { fetchCashClosedToday, buildCashPayload } from '../services/reportService'
 import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
 import { useDailyReportData } from '../hooks/useDailyReportData'
@@ -1122,34 +1122,30 @@ export default function DailyReportPage() {
     }
 
     // isSavingShift (cờ của hook) chỉ true trong lúc GHI, nhả ngay khi save() xong — nhưng
-    // nút chỉ ẩn khi cashDirty=false, mà cashDirty phụ thuộc shiftClosing chỉ cập nhật SAU
-    // refetch. Cờ riêng này giữ nút disabled suốt cả refetch → không có khe double-click.
+    // cashDirty phụ thuộc shiftClosing chỉ cập nhật SAU refetch. Cờ riêng này phủ cả refetch
+    // → lượt lưu kế tiếp tính payload trên shiftClosing mới, không INSERT/gửi trùng.
     const [savingCashflow, setSavingCashflow] = useState(false)
 
     // Bàn phím ảo trên điện thoại KHÔNG đẩy `position: fixed` lên — nó chỉ co
-    // visualViewport, nên FAB "Lưu thực thu" nằm lọt dưới bàn phím ngay sau khi
-    // chủ quán gõ xong số. Nhấc FAB lên đúng phần bị che.
+    // visualViewport, nên FAB "Lưu báo cáo" nằm lọt dưới bàn phím ngay sau khi
+    // gõ xong số. Nhấc FAB lên đúng phần bị che.
     const vvBox = useVisualViewportBox()
     const kbInset = vvBox ? Math.max(0, window.innerHeight - vvBox.height - vvBox.top) : 0
 
+    // Tự lưu khi rời ô Tiền mặt/Chuyển khoản. Blur trúng lúc đang ghi (ô kia vừa blur, hoặc
+    // kiểm kê đang lưu — save() của hook bỏ qua lượt chồng) → đánh dấu chờ, effect bên dưới
+    // chạy lại bằng closure mới (input + shiftClosing mới nhất) khi cả 2 cờ nhả.
+    const cashSavePendingRef = useRef(false)
+    useEffect(() => {
+        if (savingCashflow || isSavingShift || !cashSavePendingRef.current) return
+        cashSavePendingRef.current = false
+        handleSaveCashflow()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [savingCashflow, isSavingShift])
+
     const handleSaveCashflow = async () => {
-        if (!selectedAddress || savingCashflow) return
-        // Mỗi đợt gọi món ghi 1 đơn ngay, nên bàn chưa tính tiền =
-        // tiền đã nằm trong doanh thu hệ thống mà chưa nằm trong két. Cảnh báo ở lần chốt
-        // đầu (sửa lại số sau đó thì thôi) — không chặn, vì có bàn ngồi thật qua giờ chốt.
-        if (!shiftClosing?.cash_closed_at) {
-            // Cảnh báo là phụ — hỏng ở đây (mạng, cột chưa có) không được chặn chốt ca.
-            // Bỏ bucket name=null (đơn mang đi chưa ra món): khách đã trả ngay lúc tạo.
-            const openNow = (await fetchOpenTables(selectedAddress.id).catch(() => [])).filter(t => t.name !== null)
-            if (openNow.length > 0) {
-                const ok = await confirm({
-                    title: `Còn ${openNow.length} bàn chưa tính tiền`,
-                    detail: `${openNow.map(t => t.name).join(', ')} — ${formatVNDInput(openNow.reduce((s, t) => s + t.total, 0))}đ đã tính vào doanh thu nhưng chưa thu của khách.`,
-                    confirmLabel: 'Vẫn chốt',
-                })
-                if (!ok) return
-            }
-        }
+        if (!selectedAddress) return
+        if (savingCashflow || isSavingShift) { cashSavePendingRef.current = true; return }
         // CHỈ ô đã sửa (xem buildCashPayload): máy kia đang đếm ô còn lại thì số của họ không
         // bị bản cũ trong state máy này đè lên. Đường UPDATE dùng lại đúng cashChanges đã
         // tính cho nút Lưu; chỉ phiếu MỚI mới phải dựng payload đầy đủ.
@@ -1176,8 +1172,8 @@ export default function DailyReportPage() {
                 existingId: isTodaysClosing ? shiftClosing?.id : undefined,
             })
             // save() trả null khi bị bỏ qua do đang lưu việc khác → không báo thành công giả,
-            // giữ cashDirty để user bấm lại.
-            if (!saved) return
+            // xếp chờ lưu lại khi rảnh.
+            if (!saved) { cashSavePendingRef.current = true; return }
             showToast('Đã lưu thực thu', 'success')
             // Onboarding phase 3: cash/transfer done độc lập theo ô có gõ gì hay không lúc bấm
             // lưu — "trigger không theo thứ tự" (không đọc actual_cash/actual_transfer trong
@@ -1294,7 +1290,7 @@ export default function DailyReportPage() {
                                 transferInput={transferInput}
                                 onCashChange={(v) => setCashInput(formatVNDInput(v))}
                                 onTransferChange={(v) => setTransferInput(formatVNDInput(v))}
-                                isSaving={isSavingShift}
+                                onInputBlur={handleSaveCashflow}
                                 hintCard={hintCashCard}
                                 onCardFullyVisible={hintCashCard ? markCashCardSeen : undefined}
                                 hintCash={hintCash}
@@ -1461,39 +1457,24 @@ export default function DailyReportPage() {
                 )}
             </main>
 
-            {/* FABs: Lưu thực thu + Lưu báo cáo — both floating bottom-right with the same
-                CTA style (bg-primary + text-black), each auto-hidden until its section is dirty.
-                Stacked when both appear (view = all + both dirty). */}
-            {isTodayScope && (
-                (((view === VIEW_ALL || view === VIEW_CASHFLOW) && cashDirty) ||
-                    ((view === VIEW_ALL || view === VIEW_INVENTORY) && inventory.isDirty && !autoSavePending)) && (
-                    <div
-                        className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40"
-                        style={kbInset ? { transform: `translateY(-${kbInset}px)` } : undefined}
-                    >
-                        {/* Bàn phím mở thì thanh nav dưới cũng bị che luôn → không cần chừa 72px nữa. */}
-                        <div className={`flex flex-col items-end gap-2 px-4 pointer-events-auto ${kbInset ? 'mb-3' : 'mb-[72px]'}`}>
-                            {(view === VIEW_ALL || view === VIEW_CASHFLOW) && cashDirty && (
-                                <button
-                                    onClick={handleSaveCashflow}
-                                    disabled={isSavingShift || savingCashflow}
-                                    className="bg-primary text-black rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider hover:bg-primary/90 active:scale-95 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
-                                >
-                                    {(isSavingShift || savingCashflow) ? 'Đang lưu...' : 'Lưu thực thu'}
-                                </button>
-                            )}
-                            {(view === VIEW_ALL || view === VIEW_INVENTORY) && inventory.isDirty && !autoSavePending && (
-                                <button
-                                    onClick={() => handleSaveInventory()}
-                                    disabled={isSavingShift}
-                                    className="bg-primary text-black rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider hover:bg-primary/90 active:scale-95 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
-                                >
-                                    {isSavingShift ? 'Đang lưu...' : 'Lưu báo cáo'}
-                                </button>
-                            )}
-                        </div>
+            {/* FAB Lưu báo cáo — floating bottom-right, auto-hidden until inventory is dirty.
+                Thực thu không có FAB: rời ô là tự lưu (handleSaveCashflow). */}
+            {isTodayScope && (view === VIEW_ALL || view === VIEW_INVENTORY) && inventory.isDirty && !autoSavePending && (
+                <div
+                    className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40"
+                    style={kbInset ? { transform: `translateY(-${kbInset}px)` } : undefined}
+                >
+                    {/* Bàn phím mở thì thanh nav dưới cũng bị che luôn → không cần chừa 72px nữa. */}
+                    <div className={`flex justify-end px-4 pointer-events-auto ${kbInset ? 'mb-3' : 'mb-[72px]'}`}>
+                        <button
+                            onClick={() => handleSaveInventory()}
+                            disabled={isSavingShift}
+                            className="bg-primary text-black rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider hover:bg-primary/90 active:scale-95 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                            {isSavingShift ? 'Đang lưu...' : 'Lưu báo cáo'}
+                        </button>
                     </div>
-                )
+                </div>
             )}
 
             {/* Footer = report view switcher (Dòng tiền / Tồn kho / Lợi nhuận).
