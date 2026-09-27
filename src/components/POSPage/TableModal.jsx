@@ -124,16 +124,14 @@ export default function TableModal({ onClose, inline = false, takeawaySlot }) {
     // undefined khi không có đơn nào đang chờ, khi đó thẻ "Mang đi" ở dưới quay lại tile
     // tĩnh bấm-là-chọn như cũ.
     const takeaway = openTables.find(t => t.name === null)
-    // Đơn nào cần chú ý nhất lên trước: chưa ra món trước đã ra, cùng nhóm thì mới nhất
-    // trước — khác thứ tự "cũ nhất trước" của bàn (rounds trong 1 bàn đọc như biên bản,
-    // đơn mang đi thì mỗi đơn độc lập nên ưu tiên đơn cần xử lý). Dùng chung cho cả preview
-    // trên thẻ lưới và danh sách đầy đủ (TakeawayListModal) để hai chỗ khớp thứ tự nhau.
+    // Mới nhất trước — khác thứ tự "cũ nhất trước" của bàn (rounds trong 1 bàn đọc như biên
+    // bản, đơn mang đi thì mỗi đơn độc lập nên ưu tiên đơn mới). KHÔNG đẩy đơn đã ra món xuống
+    // cuối: nó chỉ còn tạm tới poll kế tiếp, và TakeawayListModal cần nó đứng yên tại chỗ để
+    // hiện tick trước khi ẩn. Dùng chung cho cả preview trên thẻ lưới và danh sách đầy đủ.
     const takeawayRounds = takeaway
-        ? [...takeaway.rounds].sort((a, b) => {
-            if (!!a.servedAt !== !!b.servedAt) return a.servedAt ? 1 : -1
-            return new Date(b.createdAt) - new Date(a.createdAt)
-        })
+        ? [...takeaway.rounds].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         : []
+    const takeawayQueue = takeawayRounds.filter(r => !r.servedAt)
     const takeawayPending = pendingCups(takeawayRounds)
 
     // Bàn không bị cắt theo ngày (xem fetchOpenTables), nên bàn quên chưa tính tiền có
@@ -257,9 +255,9 @@ export default function TableModal({ onClose, inline = false, takeawaySlot }) {
             <button onClick={() => (!tableName ? setShowTakeaway(true) : setTableName(''))} className="flex-1 min-h-0 w-full overflow-hidden text-left flex flex-col gap-1 focus:outline-none">
                 <span className="shrink-0 w-full flex items-baseline justify-between gap-2">
                     <span className="text-[13px] font-black uppercase tracking-wide text-text">Mang đi</span>
-                    <span className="shrink-0 text-[12px] font-black tabular-nums text-text-secondary">{takeawayRounds.length} đơn</span>
+                    <span className="shrink-0 text-[12px] font-black tabular-nums text-text-secondary">{takeawayQueue.length} đơn</span>
                 </span>
-                {roundPreview(takeawayRounds)}
+                {roundPreview(takeawayQueue)}
                 {/* shrink-0: dòng cảnh báo này quan trọng hơn danh sách đợt phía
                     trên (min-h-0 overflow-hidden ở roundPreview) — bàn/đơn có nhiều
                     đợt chưa ra thì roundPreview bị cắt bớt trước, KHÔNG được để cắt

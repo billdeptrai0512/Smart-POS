@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ArrowLeft, Check, Printer, ArrowRightLeft, Trash2, Loader } from 'lucide-react'
 import { useCart } from '../../contexts/CartContext'
 import { useHistory } from '../../contexts/HistoryContext'
@@ -64,7 +64,7 @@ export default function TakeawayListModal({ orders, tableNames, onClose, onPick 
                     <ArrowLeft size={18} />
                 </button>
                 <p className="min-w-0 flex-1 text-text font-black text-base leading-none uppercase tracking-wide truncate">Mang đi</p>
-                <span className="shrink-0 text-[13px] font-bold text-text-secondary">{orders.length} đơn</span>
+                <span className="shrink-0 text-[13px] font-bold text-text-secondary">{orders.filter(o => !o.servedAt).length} đơn</span>
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
@@ -111,6 +111,16 @@ function TakeawayRow({ order, onToggleServed, onMove, onEdit, onDelete }) {
         ...priceLineFor(it, products, productExtras),
     }))
     const createdAt = new Date(order.createdAt)
+
+    // Ra món → giữ dòng + tick 1,5s rồi ẩn (poll kế tiếp gỡ hẳn); nhớ mốc servedAt đã ẩn
+    // thay vì cờ bool để hủy/ra món lại tự hiện.
+    const [hiddenAt, setHiddenAt] = useState(null)
+    useEffect(() => {
+        if (!order.servedAt) return
+        const t = setTimeout(() => setHiddenAt(order.servedAt), 1500)
+        return () => clearTimeout(t)
+    }, [order.servedAt])
+    if (order.servedAt && hiddenAt === order.servedAt) return null
 
     return (
         <div className="rounded-[16px] border border-border/40 bg-surface-light/40 px-4 py-3">
