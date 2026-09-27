@@ -19,22 +19,31 @@ import { onTabReturn } from '../utils/tabVisibility'
 //   Lỗi trả `undefined` (≠ false "đã đọc, đang tắt") và KHÔNG cache promise hỏng:
 //   1 lần đọc lỗi mà cache lại thì cả phiên chạy như monetization tắt — badge gói
 //   biến mất trên mọi card và sort địa chỉ theo gói sai, tới khi user tự reload.
+//   Cache gắn với hasSession lúc đọc: guest đọc bằng anon key → RLS trả [] → false. Guest
+//   đăng ký/đăng nhập ngay trong tab (không reload) mà dùng lại cache đó thì badge gói biến
+//   mất khỏi mọi card tới khi F5 → đổi trạng thái đăng nhập là bỏ cache, đọc lại.
 let _serverFlag
 let _serverFlagPromise = null
-function loadServerFlag() {
-    if (_serverFlagPromise) return _serverFlagPromise
-    _serverFlagPromise = supabase
+let _serverFlagAuthed
+export function loadServerFlag(authed) {
+    if (_serverFlagPromise && _serverFlagAuthed === authed) return _serverFlagPromise
+    if (_serverFlagAuthed !== authed) _serverFlag = undefined
+    _serverFlagAuthed = authed
+    const p = supabase
         .from('app_config')
         .select('value')
         .eq('key', 'monetization_enabled')
         .maybeSingle()
         .then(({ data, error }) => {
             if (error) throw error
-            _serverFlag = data?.value === 'true'
-            return _serverFlag
+            const v = data?.value === 'true'
+            // Lần đọc cũ (trạng thái đăng nhập trước) về muộn không được đè giá trị mới.
+            if (_serverFlagPromise === p) _serverFlag = v
+            return v
         })
-        .catch(() => { _serverFlagPromise = null; return undefined })
-    return _serverFlagPromise
+        .catch(() => { if (_serverFlagPromise === p) _serverFlagPromise = null; return undefined })
+    _serverFlagPromise = p
+    return p
 }
 
 /**
@@ -59,16 +68,16 @@ export function useMonetizationEnabled() {
             // undefined = đọc lỗi → thử lại ĐÚNG 1 lần (promise hỏng đã bỏ cache ở trên).
             // Mạng chết hẳn thì dừng ở đây, không quay vòng gọi DB.
             if (v === undefined) {
-                if (retry) retryId = setTimeout(() => loadServerFlag().then(apply(false)), 2000)
+                if (retry) retryId = setTimeout(() => loadServerFlag(hasSession).then(apply(false)), 2000)
             } else setFlag(v)
         }
-        loadServerFlag().then(apply(true))
+        loadServerFlag(hasSession).then(apply(true))
         // "Thử lại đúng 1 lần" ở trên chỉ cứu lần đọc đầu — hook này gắn ở các Provider
         // mount 1 lần cho cả phiên (vd AddressStatsProvider bọc mọi route sau login),
         // nên nếu cả 2 lần đó đều rớt mạng thì flag kẹt undefined/false SUỐT PHIÊN, không
         // gì tự sửa (badge gói biến mất khỏi mọi card). Thêm onTabReturn để mỗi lần quay
         // lại app là 1 cơ hội đọc lại, không cần đợi F5.
-        const offTabReturn = onTabReturn(() => loadServerFlag().then(apply(true)))
+        const offTabReturn = onTabReturn(() => loadServerFlag(hasSession).then(apply(true)))
         return () => { cancelled = true; clearTimeout(retryId); offTabReturn() }
     }, [hasSession, isGuest])
 
