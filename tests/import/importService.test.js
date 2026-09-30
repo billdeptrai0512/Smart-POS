@@ -2,7 +2,7 @@
 // Nguồn: src/services/importService.ts
 
 import { describe, it, expect } from 'vitest'
-import { resolveImportPlan } from '../../src/services/importService'
+import { resolveImportPlan, buildBulkPayload } from '../../src/services/importService'
 
 const EMPTY_EXISTING = { products: [], toppings: [], ingredientCosts: {}, extras: [] }
 
@@ -86,5 +86,77 @@ describe('resolveImportPlan', () => {
             ],
         }), EMPTY_EXISTING)
         expect(plan.ingredients.map(i => i.category)).toEqual(['packaging', 'packaging', 'main'])
+    })
+})
+
+describe('buildBulkPayload', () => {
+    it('đổi tên → id: món/topping/tùy chọn mới có id sinh sẵn, dòng công thức trỏ đúng id', () => {
+        const existing = { products: [{ id: 'p-old', name: 'Trà Đá' }], toppings: [], ingredientCosts: {}, extras: [{ id: 'x-old', productName: 'Trà Đá', name: 'Ít đá' }] }
+        const { plan } = resolveImportPlan(parsed({
+            products: [{ 'Tên món': 'Cà Phê', 'Giá bán': 20000 }],
+            toppings: [{ 'Tên topping': 'Trân châu', 'Giá bán': 5000, 'Đơn vị': 'g' }],
+            toppingLinks: [{ 'Tên topping': 'Trân châu', 'Tên món': 'Cà Phê' }, { 'Tên topping': 'Trân châu', 'Tên món': 'Trà Đá' }],
+            extras: [{ 'Tên món': 'Trà Đá', 'Tên tùy chọn': 'Ít đá', 'Giá': 0 }, { 'Tên món': 'Cà Phê', 'Tên tùy chọn': 'Ít đường', 'Giá': 0 }],
+        }), existing)
+        const p = buildBulkPayload(plan, existing)
+        const cf = p.products[0].id
+        expect(cf).toMatch(/^[0-9a-f-]{36}$/)
+        expect(p.toppingLinks[0].productIds.sort()).toEqual([cf, 'p-old'].sort())
+        expect(p.toppingLinks[0].toppingId).toBe(p.toppings[0].id)
+        expect(p.extras[0].productId).toBe(cf)
+        expect(p.extraUpdates.map(e => e.id)).toContain('x-old')
+    })
+})
+
+describe('Danh mục + thứ tự menu', () => {
+    const existing = {
+        products: [{ id: 'd-old', name: 'Trà', is_divider: true }, { id: 'p1', name: 'Trà Đá' }],
+        toppings: [], ingredientCosts: {}, extras: [],
+    }
+    const sp = (name, cat) => ({ 'Tên món': name, 'Giá bán': 10000, 'Danh mục': cat })
+
+    it('nhóm theo danh mục (mới + đã có), món không danh mục đứng đầu, thứ tự theo dòng', () => {
+        const { plan } = resolveImportPlan(parsed({
+            products: [sp('Trà Đá', 'Trà'), sp('Cà Phê', 'Cà phê'), sp('Nước lọc', ''), sp('Trà Sữa', 'Trà')],
+        }), existing)
+        expect(plan.dividers).toEqual(['Cà phê']) // "Trà" đã có
+        expect(plan.layout.map(l => l.name)).toEqual(['Nước lọc', 'Trà', 'Trà Đá', 'Trà Sữa', 'Cà phê', 'Cà Phê'])
+        const p = buildBulkPayload(plan, existing)
+        expect(p.layout[1]).toBe('d-old')
+        expect(p.layout[2]).toBe('p1')
+        expect(p.dividers[0].id).toBe(p.layout[4])
+    })
+
+    it('không cột Danh mục → không đổi thứ tự', () => {
+        const { plan } = resolveImportPlan(parsed({ products: [{ 'Tên món': 'A', 'Giá bán': 1 }] }), existing)
+        expect(plan.layout).toEqual([])
+        expect(plan.dividers).toEqual([])
+    })
+})
+
+describe('Ghi đè theo sheet có trong file', () => {
+    const existing = {
+        products: [{ id: 'p1', name: 'Trà Đá' }, { id: 'p2', name: 'Trà Nóng' }, { id: 'd1', name: 'Cacao', is_divider: true }],
+        toppings: [{ id: 't1', name: 'Trân châu' }], ingredientCosts: {},
+        extras: [{ id: 'x1', productName: 'Trà Nóng', name: 'Ít đá' }],
+    }
+
+    it('sheet có mặt → liệt kê món/danh mục/topping/tùy chọn sẽ xoá; công thức trỏ món ngoài file bị bỏ qua', () => {
+        const { plan, warnings } = resolveImportPlan(parsed({
+            sheets: ['Sản phẩm', 'Topping', 'Tùy chọn thêm', 'Công thức'],
+            products: [{ 'Tên món': 'Trà Đá', 'Giá bán': 5000, 'Danh mục': 'TRÀ' }],
+            recipes: [{ 'Tên món': 'Trà Nóng', 'Tên nguyên liệu': 'Trà', 'Số lượng': 1 }],
+        }), existing)
+        expect(plan.replace.products).toBe(true)
+        expect(plan.replace.extraIngredients).toBe(false)
+        expect(plan.removals).toEqual({ products: ['Trà Nóng'], dividers: ['Cacao'], toppings: ['Trân châu'], extras: ['Trà Nóng / Ít đá'] })
+        expect(plan.recipes).toEqual([])
+        expect(warnings).toHaveLength(1)
+    })
+
+    it('không có danh sách sheet (file cũ / thiếu sheet) → không xoá gì', () => {
+        const { plan } = resolveImportPlan(parsed({ products: [{ 'Tên món': 'Trà Đá', 'Giá bán': 5000 }] }), existing)
+        expect(Object.values(plan.replace).some(Boolean)).toBe(false)
+        expect(plan.removals).toEqual({ products: [], dividers: [], toppings: [], extras: [] })
     })
 })

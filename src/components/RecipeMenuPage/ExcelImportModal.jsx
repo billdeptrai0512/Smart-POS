@@ -90,6 +90,8 @@ export default function ExcelImportModal({ onClose }) {
     }
 
     const summary = result && [
+        [result.plan.dividers.length, 'danh mục mới'],
+        [result.plan.layout.filter(l => !l.divider).length, 'món được xếp theo danh mục'],
         [result.plan.products.length, 'sản phẩm mới'],
         [result.plan.productUpdates.length, 'sản phẩm cập nhật giá'],
         [result.plan.ingredients.length, 'nguyên liệu mới'],
@@ -104,10 +106,12 @@ export default function ExcelImportModal({ onClose }) {
         [result.plan.toppingLinks.reduce((s, l) => s + l.productNames.length, 0), 'liên kết topping-món'],
     ].filter(([n]) => n > 0)
 
-    const hasFieldUpdates = result && (result.plan.productUpdates.length > 0 || result.plan.ingredientUpdates.length > 0 ||
-        result.plan.toppingUpdates.length > 0 || result.plan.extraUpdates.length > 0)
-    const hasRecipeUpdates = result && (result.plan.recipes.length > 0 || result.plan.toppingIngredients.length > 0 || result.plan.extraIngredients.length > 0)
-    const hasToppingLinks = result && result.plan.toppingLinks.length > 0
+    const removals = result ? [
+        [result.plan.removals.products, 'món'],
+        [result.plan.removals.dividers, 'danh mục'],
+        [result.plan.removals.toppings, 'topping'],
+        [result.plan.removals.extras, 'tùy chọn thêm'],
+    ].filter(([items]) => items.length > 0) : []
 
     return (
         <Dialog onClose={() => !committing && onClose()} panelClassName="w-full max-w-xl mx-4 max-h-[85dvh] flex flex-col bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
@@ -162,18 +166,15 @@ export default function ExcelImportModal({ onClose }) {
                             </div>
                         )}
 
-                        {(hasFieldUpdates || hasRecipeUpdates || hasToppingLinks) && (
-                            <div className="space-y-1 bg-warning-soft border border-warning/20 rounded-[12px] p-3">
-                                <p className="text-[12px] font-black text-warning uppercase">Lưu ý ghi đè</p>
-                                {hasFieldUpdates && (
-                                    <p className="text-[12px] text-warning">Sản phẩm/Nguyên liệu/Topping/Tùy chọn thêm trùng tên đã có: giá bán (và đơn vị với Nguyên liệu) sẽ bị ghi đè theo file, không hỏi lại.</p>
-                                )}
-                                {hasRecipeUpdates && (
-                                    <p className="text-[12px] text-warning">Công thức/Công thức Topping/Công thức tùy chọn: dòng trùng đúng nguyên liệu đã có trong công thức sẽ bị ghi đè số lượng, không hỏi lại.</p>
-                                )}
-                                {hasToppingLinks && (
-                                    <p className="text-[12px] text-warning">Topping áp dụng món: ghi đè TOÀN BỘ danh sách món của mỗi topping trong file — món cũ không có trong file sẽ bị gỡ liên kết.</p>
-                                )}
+                        {Object.values(result.plan.replace).some(Boolean) && (
+                            <div className="space-y-1 bg-danger-soft border border-danger/20 rounded-[12px] p-3">
+                                <p className="text-[12px] font-black text-danger uppercase">Ghi đè toàn bộ theo file</p>
+                                <p className="text-[12px] text-danger">Món, danh mục, topping, tùy chọn, công thức và liên kết topping-món không có trong file sẽ bị xoá khỏi địa chỉ này. Sheet không có trong file thì giữ nguyên. Nguyên liệu không bị xoá.</p>
+                                {removals.map(([items, label]) => (
+                                    <p key={label} className="text-[12px] text-danger font-bold">
+                                        Xoá {items.length} {label}: {items.join(', ')}
+                                    </p>
+                                ))}
                             </div>
                         )}
 
@@ -204,7 +205,7 @@ export default function ExcelImportModal({ onClose }) {
                             disabled={result.blockingErrors.length > 0 || summary.length === 0 || committing}
                             className="w-full py-3 rounded-[12px] bg-primary text-bg text-[14px] font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 uppercase"
                         >
-                            {committing ? 'Đang nhập...' : 'Xác nhận nhập liệu'}
+                            {committing ? `Đang ghi ${summary.reduce((n, [c]) => n + c, 0)} mục lên máy chủ...` : 'Xác nhận nhập liệu'}
                         </button>
                     </div>
                 )}

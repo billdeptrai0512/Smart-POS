@@ -9,7 +9,7 @@ import type { UUID } from '../types/domain'
 
 interface ExportInput {
     addressName?: string | null
-    products: Array<{ id: UUID; name: string; price: number }>
+    products: Array<{ id: UUID; name: string; price: number; is_divider?: boolean; sort_order?: number | null }>
     toppings: Array<{ id: UUID; name: string; price: number }>
     ingredientConfigs: Array<{ ingredient: string; unit: string; unit_cost: number; category: string | null }>
     ingredientUnits: Record<string, string>
@@ -28,7 +28,14 @@ export async function downloadCurrentDataExcel(input: ExportInput) {
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), name)
     }
 
-    addSheet('Sản phẩm', input.products.map(p => ({ 'Tên món': p.name, 'Giá bán': p.price })))
+    // Dòng "mục" (is_divider) không phải món: thành cột Danh mục của các món đứng sau nó (theo sort_order).
+    let category = ''
+    const sellable: Record<string, unknown>[] = []
+    for (const p of [...input.products].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))) {
+        if (p.is_divider) category = p.name
+        else sellable.push({ 'Tên món': p.name, 'Giá bán': p.price, 'Danh mục': category })
+    }
+    addSheet('Sản phẩm', sellable)
 
     addSheet('Nguyên liệu', input.ingredientConfigs.map(c => ({
         'Tên nguyên liệu': ingredientLabel(c.ingredient),

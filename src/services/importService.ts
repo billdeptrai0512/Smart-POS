@@ -4,6 +4,8 @@ import { insertProduct, upsertProductPrice, insertProductExtra, updateProductExt
 import { upsertIngredientCost } from './ingredientCostService'
 import { insertTopping, updateToppingPrice, upsertToppingIngredient, setToppingProductLinks } from './toppingService'
 import { upsertRecipes } from './recipeService'
+import { supabase } from '../lib/supabaseClient'
+import * as localRepo from './localRepository'
 import type { UUID } from '../types/domain'
 
 // Nhập liệu hàng loạt từ 1 file Excel (.xlsx) do CHÚNG TA thiết kế layout — khách chỉ điền
@@ -20,6 +22,7 @@ interface ParsedWorkbook {
     toppingLinks: Record<string, unknown>[]
     extras: Record<string, unknown>[]
     extraIngredients: Record<string, unknown>[]
+    sheets?: string[] // tên các sheet CÓ trong file — sheet có mặt = ghi đè toàn bộ phần đó
 }
 
 export function parseWorkbook(arrayBuffer: ArrayBuffer): ParsedWorkbook {
@@ -37,6 +40,7 @@ export function parseWorkbook(arrayBuffer: ArrayBuffer): ParsedWorkbook {
         toppingLinks: sheet('Topping áp dụng món'),
         extras: sheet('Tùy chọn thêm'),
         extraIngredients: sheet('Công thức tùy chọn'),
+        sheets: wb.SheetNames,
     }
 }
 
@@ -71,7 +75,19 @@ function mapCategory(raw: unknown): 'main' | 'packaging' {
     return 'main'
 }
 
+// Ghi đè: sheet nào CÓ trong file thì phần đó trên địa chỉ được thay hoàn toàn bằng nội dung file
+// (kể cả sheet rỗng = xoá hết). Sheet KHÔNG có trong file → giữ nguyên, để 1 file thiếu sheet không
+// vô tình xoá sạch. Nguyên liệu không bao giờ bị xoá (gắn với tồn kho / lịch sử nhập hàng).
+interface ReplaceFlags {
+    products: boolean; toppings: boolean; extras: boolean
+    recipes: boolean; toppingIngredients: boolean; extraIngredients: boolean; toppingLinks: boolean
+}
+
 interface ImportPlan {
+    replace: ReplaceFlags
+    removals: { products: string[]; dividers: string[]; toppings: string[]; extras: string[] } // chỉ để xem trước
+    dividers: string[] // danh mục MỚI (dòng "mục" is_divider) — tạo trước khi xếp thứ tự
+    layout: Array<{ name: string; divider: boolean }> // thứ tự mới của món + danh mục; rỗng = không đổi thứ tự
     products: Array<{ name: string; price: number }>
     productUpdates: Array<{ name: string; price: number }>
     ingredients: Array<{ key: string; unitCost: number; unit: string; category: 'main' | 'packaging' }>
@@ -87,7 +103,7 @@ interface ImportPlan {
 }
 
 interface ExistingData {
-    products: Array<{ id: UUID; name: string }>
+    products: Array<{ id: UUID; name: string; is_divider?: boolean }>
     toppings: Array<{ id: UUID; name: string }>
     ingredientCosts: Record<string, unknown>
     extras: Array<{ id: UUID; productName: string; name: string }>
@@ -106,7 +122,15 @@ export function resolveImportPlan(parsed: ParsedWorkbook, existing: ExistingData
     const blockingErrors: string[] = []
     const warnings: string[] = []
 
-    const existingProductNames = new Set(existing.products.map(p => normKey(p.name)))
+    // Dòng "mục" (is_divider) không phải món bán → không khớp tên với dòng Sản phẩm.
+    const has = (name: string) => parsed.sheets?.includes(name) ?? false
+    const replace: ReplaceFlags = {
+        products: has('Sản phẩm'), toppings: has('Topping'), extras: has('Tùy chọn thêm'),
+        recipes: has('Công thức'), toppingIngredients: has('Công thức Topping'),
+        extraIngredients: has('Công thức tùy chọn'), toppingLinks: has('Topping áp dụng món'),
+    }
+    const existingProductNames = new Set(existing.products.filter(p => !p.is_divider).map(p => normKey(p.name)))
+    const existingDividerNames = new Set(existing.products.filter(p => p.is_divider).map(p => normKey(p.name)))
     const existingToppingNames = new Set(existing.toppings.map(t => normKey(t.name)))
     const existingIngredientKeys = new Set(Object.keys(existing.ingredientCosts))
 
@@ -121,7 +145,9 @@ export function resolveImportPlan(parsed: ParsedWorkbook, existing: ExistingData
     const products: ImportPlan['products'] = []
     const productUpdates: ImportPlan['productUpdates'] = []
     const seenProductNames = new Set<string>()
-    const allProductNames = new Set(existingProductNames) // existing ∪ sẽ-tạo, dùng để resolve Công thức/Topping áp dụng món
+    const productRows: Array<{ name: string; category: string }> = [] // thứ tự dòng trong file
+    // existing ∪ sẽ-tạo, dùng để resolve Công thức/Topping áp dụng món. Ghi đè → chỉ món trong file.
+    const allProductNames = new Set(replace.products ? [] : existingProductNames)
     parsed.products.forEach((row, i) => {
         const name = normName(row['Tên món'])
         const price = toNumber(row['Giá bán'])
@@ -134,7 +160,29 @@ export function resolveImportPlan(parsed: ParsedWorkbook, existing: ExistingData
         allProductNames.add(key)
         if (existingProductNames.has(key)) productUpdates.push({ name, price })
         else products.push({ name, price })
+        productRows.push({ name, category: normName(row['Danh mục']) })
     })
+
+    // Cột "Danh mục" (tuỳ chọn): có ít nhất 1 ô điền → xếp lại menu theo file: món không danh mục
+    // đứng đầu, rồi từng danh mục (theo thứ tự xuất hiện đầu tiên) kèm món của nó theo thứ tự dòng.
+    const dividers: string[] = []
+    const layout: ImportPlan['layout'] = []
+    if (replace.products || productRows.some(r => r.category)) {
+        const groups = new Map<string, { name: string; items: string[] }>()
+        for (const r of productRows) {
+            const k = r.category ? normKey(r.category) : ''
+            if (!groups.has(k)) groups.set(k, { name: r.category, items: [] })
+            groups.get(k)!.items.push(r.name)
+        }
+        const uncategorized = groups.get('')
+        groups.delete('')
+        for (const name of uncategorized?.items ?? []) layout.push({ name, divider: false })
+        for (const [k, g] of groups) {
+            if (!existingDividerNames.has(k)) dividers.push(g.name)
+            layout.push({ name: g.name, divider: true })
+            for (const name of g.items) layout.push({ name, divider: false })
+        }
+    }
 
     // ---- Nguyên liệu ---- (trùng tên → cập nhật giá vốn + đơn vị)
     const ingredients: ImportPlan['ingredients'] = []
@@ -161,7 +209,7 @@ export function resolveImportPlan(parsed: ParsedWorkbook, existing: ExistingData
     const toppings: ImportPlan['toppings'] = []
     const toppingUpdates: ImportPlan['toppingUpdates'] = []
     const seenToppingNames = new Set<string>()
-    const allToppingNames = new Set(existingToppingNames)
+    const allToppingNames = new Set(replace.toppings ? [] : existingToppingNames)
     parsed.toppings.forEach((row, i) => {
         const name = normName(row['Tên topping'])
         const price = toNumber(row['Giá bán'])
@@ -181,7 +229,7 @@ export function resolveImportPlan(parsed: ParsedWorkbook, existing: ExistingData
     const extraUpdates: ImportPlan['extraUpdates'] = []
     const seenExtraKeys = new Set<string>()
     const existingExtraKeys = new Set(existing.extras.map(e => `${normKey(e.productName)}|${normKey(e.name)}`))
-    const allExtraKeys = new Set(existingExtraKeys) // existing ∪ sẽ-tạo, dùng để resolve Công thức tùy chọn
+    const allExtraKeys = new Set(replace.extras ? [] : existingExtraKeys) // existing ∪ sẽ-tạo, dùng để resolve Công thức tùy chọn
     parsed.extras.forEach((row, i) => {
         const productName = normName(row['Tên món'])
         const name = normName(row['Tên tùy chọn'])
@@ -280,8 +328,17 @@ export function resolveImportPlan(parsed: ParsedWorkbook, existing: ExistingData
         linksByTopping.get(key)!.productNames.push(productName)
     })
 
+    const categoryKeys = new Set(layout.filter(l => l.divider).map(l => normKey(l.name)))
+    const removals = {
+        products: replace.products ? existing.products.filter(p => !p.is_divider && !seenProductNames.has(normKey(p.name))).map(p => p.name) : [],
+        dividers: replace.products ? existing.products.filter(p => p.is_divider && !categoryKeys.has(normKey(p.name))).map(p => p.name) : [],
+        toppings: replace.toppings ? existing.toppings.filter(t => !seenToppingNames.has(normKey(t.name))).map(t => t.name) : [],
+        extras: replace.extras ? existing.extras.filter(e => !seenExtraKeys.has(`${normKey(e.productName)}|${normKey(e.name)}`)).map(e => `${e.productName} / ${e.name}`) : [],
+    }
+
     return {
         plan: {
+            replace, removals,
             products, productUpdates,
             ingredients, ingredientUpdates,
             toppings, toppingUpdates,
@@ -289,6 +346,7 @@ export function resolveImportPlan(parsed: ParsedWorkbook, existing: ExistingData
             toppingLinks: [...linksByTopping.values()],
             extras, extraUpdates,
             extraIngredients: extraIngredientsPlan,
+            dividers, layout,
         },
         blockingErrors,
         warnings,
@@ -310,7 +368,7 @@ const CONCURRENCY = 8
 // guest/local mode. Sheet trùng tên (Sản phẩm/Nguyên liệu/Topping/Tùy chọn thêm) đi theo nhánh
 // update riêng — cùng map tên→id với nhánh tạo mới nên bước sau (Công thức...) không cần biết
 // dòng nào mới/cũ. Mọi so khớp tên dùng chung normKey (NFC + lowercase) với resolveImportPlan.
-export async function commitImportPlan(plan: ImportPlan, addressId: UUID | null, existing: ExistingData) {
+async function commitImportPlanSequential(plan: ImportPlan, addressId: UUID | null, existing: ExistingData) {
     const productByName = new Map(existing.products.map(p => [normKey(p.name), p.id]))
     const toppingByName = new Map(existing.toppings.map(t => [normKey(t.name), t.id]))
 
@@ -384,4 +442,62 @@ export async function commitImportPlan(plan: ImportPlan, addressId: UUID | null,
         const productIds = link.productNames.map(n => productByName.get(normKey(n))!)
         await setToppingProductLinks(toppingId, productIds)
     })
+}
+
+// Thuần — đổi plan (theo TÊN) sang payload theo ID cho RPC bulk_import_menu. Id món/topping/tùy
+// chọn mới sinh ở client để SQL không phải khớp tên (tránh lệch NFC/lowercase giữa JS và Postgres).
+export function buildBulkPayload(plan: ImportPlan, existing: ExistingData) {
+    const productId = new Map(existing.products.filter(p => !p.is_divider).map(p => [normKey(p.name), p.id as string]))
+    const dividerId = new Map(existing.products.filter(p => p.is_divider).map(p => [normKey(p.name), p.id as string]))
+    const newDividers = plan.dividers.map(name => {
+        const id = crypto.randomUUID()
+        dividerId.set(normKey(name), id)
+        return { id, name }
+    })
+    const toppingId = new Map(existing.toppings.map(t => [normKey(t.name), t.id as string]))
+    const newProducts = plan.products.map(p => {
+        const id = crypto.randomUUID()
+        productId.set(normKey(p.name), id)
+        return { id, name: p.name, price: p.price }
+    })
+    const newToppings = plan.toppings.map(t => {
+        const id = crypto.randomUUID()
+        toppingId.set(normKey(t.name), id)
+        return { id, name: t.name, price: t.price, unit: t.unit, ingredientKey: normalizeIngredientKey(t.name) }
+    })
+    const extraId = new Map<string, string>() // `${productId}|${normKey(tên)}`
+    for (const ex of existing.extras) {
+        const pid = productId.get(normKey(ex.productName))
+        if (pid) extraId.set(`${pid}|${normKey(ex.name)}`, ex.id)
+    }
+    const extraKey = (productName: string, name: string) => `${productId.get(normKey(productName))}|${normKey(name)}`
+    const newExtras = plan.extras.map(ex => {
+        const id = crypto.randomUUID()
+        extraId.set(extraKey(ex.productName, ex.name), id)
+        return { id, productId: productId.get(normKey(ex.productName)), name: ex.name, price: ex.price, sticky: ex.sticky }
+    })
+    return {
+        replace: plan.replace,
+        products: newProducts,
+        dividers: newDividers,
+        layout: plan.layout.map(l => (l.divider ? dividerId : productId).get(normKey(l.name))),
+        productUpdates: plan.productUpdates.map(p => ({ id: productId.get(normKey(p.name)), price: p.price })),
+        ingredients: [...plan.ingredients, ...plan.ingredientUpdates].map(i => ({ key: i.key, unitCost: i.unitCost, unit: i.unit, category: i.category })),
+        toppings: newToppings,
+        toppingUpdates: plan.toppingUpdates.map(t => ({ id: toppingId.get(normKey(t.name)), price: t.price })),
+        extras: newExtras,
+        extraUpdates: plan.extraUpdates.map(ex => ({ id: extraId.get(extraKey(ex.productName, ex.name)), price: ex.price, sticky: ex.sticky })),
+        recipes: plan.recipes.map(r => ({ productId: productId.get(normKey(r.productName)), ingredient: r.ingredient, amount: r.amount, unit: r.unit })),
+        toppingIngredients: plan.toppingIngredients.map(t => ({ toppingId: toppingId.get(normKey(t.toppingName)), ingredient: t.ingredient, amount: t.amount, unit: t.unit })),
+        extraIngredients: plan.extraIngredients.map(e => ({ extraId: extraId.get(extraKey(e.productName, e.extraName)), ingredient: e.ingredient, amount: e.amount, unit: e.unit })),
+        toppingLinks: plan.toppingLinks.map(l => ({ toppingId: toppingId.get(normKey(l.toppingName)), productIds: l.productNames.map(n => productId.get(normKey(n))) })),
+    }
+}
+
+// Ghi cả plan bằng 1 RPC (1 transaction — lỗi thì không ghi gì, khác bản tuần tự cũ). Guest mode
+// (localStorage, không có mạng) vẫn đi đường tuần tự cũ.
+export async function commitImportPlan(plan: ImportPlan, addressId: UUID | null, existing: ExistingData) {
+    if (localRepo.isGuest()) return commitImportPlanSequential(plan, addressId, existing)
+    const { error } = await supabase.rpc('bulk_import_menu', { p_address_id: addressId, p_plan: buildBulkPayload(plan, existing) })
+    if (error) throw error
 }

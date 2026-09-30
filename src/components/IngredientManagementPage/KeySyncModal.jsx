@@ -174,6 +174,7 @@ export default function KeySyncModal({
             }
             setSummary(agg)
             setDone(true)
+            Promise.resolve(onComplete?.()).catch(() => { }) // làm mới NGAY (không đợi đóng modal) để banner cảnh báo tắt cùng lúc
         } catch (err) {
             setError(err?.message || 'Đồng bộ thất bại')
         } finally {
@@ -183,7 +184,7 @@ export default function KeySyncModal({
 
     const handleClose = () => {
         if (syncing || creatingOrphans) return
-        if (done || orphansCreated > 0) onComplete?.()
+        setDone(false); setSummary(null) // mở lại modal không còn màn "thành công" của lần trước
         onClose()
     }
 
