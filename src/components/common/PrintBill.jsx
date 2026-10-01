@@ -21,7 +21,7 @@ const MUTED = { fontSize: 11 }
 // ponytail: tài khoản nhận chuyển khoản hardcode cùng chỗ với logo/địa chỉ/SĐT (xem comment
 // ngay dưới) — đổi tài khoản chỉ cần sửa 2 hằng này; QR tự sinh theo tổng hoá đơn.
 const BANK_BIN = '970407' // mã NAPAS của Techcombank (TCB)
-const BANK_ACCOUNT = '2274868686'
+const BANK_ACCOUNT = 'M99900003951129' // TK ảo Loa Ting Ting (9Pay) — tiền về là loa báo; chuỗi khớp mã tĩnh in sẵn, xem vietqr.test.js
 
 const fullLabel = (d) => `${timeStringVN(d)} ${dateShortVN(d)}`
 
@@ -168,12 +168,11 @@ const PrintBill = forwardRef(function PrintBill(
                 {staffName && <Row label="Nhân viên">{staffName}</Row>}
                 <Row label="In lần"><span ref={printCountLabelRef}>{initialPrintCount}</span></Row>
             </div>
-            <div style={BILL_RULE} />
             {/* Bảng kẻ ô: mỗi món 1 hàng (giá GỐC của món, chưa cộng topping), mỗi topping/tùy
                 chọn 1 hàng "+tên" riêng kèm giá — khách thấy rõ từng khoản. Tùy chọn 0đ (Ít đá)
                 chỉ in tên. Giảm giá riêng dòng = 1 hàng âm ngay dưới món đó, nên tổng cột T.Tiền
                 = TIỀN HÀNG (khớp billFooter, utils/billLines.js). Số không kèm "đ" cho vừa cột 80mm. */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', marginBottom: 10 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', margin: '10px 0' }}>
                 <colgroup>
                     <col style={{ width: 20 }} /><col /><col style={{ width: 24 }} /><col style={{ width: 50 }} /><col style={{ width: 62 }} />
                 </colgroup>
@@ -227,9 +226,9 @@ const PrintBill = forwardRef(function PrintBill(
                     <QRCodeSVG value={vietQrPayload({ bin: BANK_BIN, account: BANK_ACCOUNT, amount: total })} size={140} />
                 </div>
             </div>
-            <div style={{ ...CENTER, ...MUTED, marginTop: 6 }}>Techcombank - {BANK_ACCOUNT}</div>
-            <div style={{ ...CENTER, ...MUTED }}>Số tiền: {formatVND(total)}</div>
-            <div style={{ ...CENTER, marginTop: 10, fontWeight: 700, whiteSpace: 'nowrap' }}>
+            <div style={{ ...CENTER, ...MUTED, marginTop: 6 }}>Quét mã QR để thanh toán</div>
+            <div style={BILL_RULE} />
+            <div style={{ ...CENTER, fontWeight: 700, whiteSpace: 'nowrap' }}>
                 Xin cảm ơn và hẹn gặp lại quý khách!
             </div>
             <div style={{ ...CENTER, ...MUTED, fontStyle: 'italic' }}>Powered by KOPOS</div>
