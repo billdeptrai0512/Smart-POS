@@ -1,7 +1,7 @@
 import { forwardRef, useImperativeHandle, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
-import { formatVND } from '../../utils'
+import { formatVND, formatVNDInput as num } from '../../utils'
 import { vietQrPayload } from '../../utils/vietqr'
 import { timeStringVN, dateShortVN, dateFullVN } from '../../utils/dateVN'
 import { captureOffscreen, OFFSCREEN_FRAME_CSS } from '../../lib/escposBitmap'
@@ -13,7 +13,8 @@ import { billFooter } from '../../utils/billLines'
 // Bố cục theo phong cách mẫu VietQR compact2: căn giữa, thoáng, đường kẻ mảnh liền thay cho
 // gạch đứt, thông tin dạng nhãn trái — giá trị phải, QR đóng khung mảnh + STK/số tiền bên dưới.
 const BILL_RULE = { borderTop: '1px solid #000', margin: '10px 0' }
-const BILL_COLS = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 58px 26px 58px', gap: 6 }
+const CELL = { border: '1px solid #000', padding: '2px 3px' }
+const NUM = { textAlign: 'right', whiteSpace: 'nowrap' }
 const CENTER = { textAlign: 'center' }
 const MUTED = { fontSize: 11 }
 
@@ -168,43 +169,53 @@ const PrintBill = forwardRef(function PrintBill(
                 <Row label="In lần"><span ref={printCountLabelRef}>{initialPrintCount}</span></Row>
             </div>
             <div style={BILL_RULE} />
-            <div style={{ ...BILL_COLS, fontWeight: 700, marginBottom: 2 }}>
-                <span style={{ whiteSpace: 'nowrap' }}>Tên hàng</span>
-                <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Đơn giá</span>
-                <span style={{ textAlign: 'right' }}>SL</span>
-                <span style={{ textAlign: 'center' }}>TT</span>
-            </div>
-            {lines.map(l => {
-                // Dòng có giảm giá riêng → cột Đơn giá tách 2 tầng: giá gốc gạch ngang ở
-                // trên, giá thực khách trả (đã trừ phần giảm của riêng dòng này, chia đều
-                // cho SL) ở dưới. TT = thành tiền THỰC (đã trừ giảm giá dòng) — TIỀN HÀNG/
-                // GIẢM GIÁ/TỔNG THANH TOÁN ở cuối bill khớp theo TT — xem billFooter (utils/billLines.js).
-                const discounted = l.discountAmount > 0
-                const netUnit = discounted ? Math.round((l.unitPrice * l.qty - l.discountAmount) / l.qty) : l.unitPrice
-                return (
-                    <div key={l.key} style={BILL_COLS}>
-                        {/* Tên món + extras gộp chung 1 cột — extras bám sát ngay dưới tên, không
-                            phụ thuộc chiều cao cột Đơn giá (2 dòng khi có giảm giá riêng dòng). */}
-                        <div>
-                            <div style={{ wordBreak: 'break-word' }}>{l.name}</div>
-                            {l.extras.map(e => (
-                                <div key={e.id} style={{ fontStyle: 'italic', fontSize: 10, whiteSpace: 'nowrap' }}>• {e.name}</div>
-                            ))}
-                        </div>
-                        <span style={{ textAlign: 'right' }}>
-                            {discounted ? (
-                                <>
-                                    <span style={{ display: 'block', textDecoration: 'line-through', fontSize: 9, opacity: 0.65 }}>{formatVND(l.unitPrice)}</span>
-                                    <span style={{ display: 'block' }}>{formatVND(netUnit)}</span>
-                                </>
-                            ) : formatVND(l.unitPrice)}
-                        </span>
-                        <span style={{ textAlign: 'right' }}>{l.qty}</span>
-                        <span style={{ textAlign: 'right' }}>{formatVND(l.unitPrice * l.qty - l.discountAmount)}</span>
-                    </div>
-                )
-            })}
-            <div style={BILL_RULE} />
+            {/* Bảng kẻ ô: mỗi món 1 hàng (giá GỐC của món, chưa cộng topping), mỗi topping/tùy
+                chọn 1 hàng "+tên" riêng kèm giá — khách thấy rõ từng khoản. Tùy chọn 0đ (Ít đá)
+                chỉ in tên. Giảm giá riêng dòng = 1 hàng âm ngay dưới món đó, nên tổng cột T.Tiền
+                = TIỀN HÀNG (khớp billFooter, utils/billLines.js). Số không kèm "đ" cho vừa cột 80mm. */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', marginBottom: 10 }}>
+                <colgroup>
+                    <col style={{ width: 20 }} /><col /><col style={{ width: 24 }} /><col style={{ width: 50 }} /><col style={{ width: 62 }} />
+                </colgroup>
+                <thead>
+                    <tr style={{ fontWeight: 700, textAlign: 'center' }}>
+                        <td style={CELL}>TT</td>
+                        <td style={CELL}>Tên món</td>
+                        <td style={CELL}>SL</td>
+                        <td style={CELL}>Đ.Giá</td>
+                        <td style={CELL}>T.Tiền</td>
+                    </tr>
+                </thead>
+                <tbody>
+                    {lines.map((l, i) => {
+                        const base = l.unitPrice - l.extras.reduce((s, e) => s + (e.price || 0), 0)
+                        const span = 1 + l.extras.length + (l.discountAmount > 0 ? 1 : 0)
+                        return [
+                            <tr key={l.key}>
+                                <td rowSpan={span} style={{ ...CELL, textAlign: 'center', verticalAlign: 'top' }}>{i + 1}</td>
+                                <td style={{ ...CELL, wordBreak: 'break-word' }}>{l.name}</td>
+                                <td style={{ ...CELL, ...NUM }}>{l.qty}</td>
+                                <td style={{ ...CELL, ...NUM }}>{num(base)}</td>
+                                <td style={{ ...CELL, ...NUM }}>{num(base * l.qty)}</td>
+                            </tr>,
+                            ...l.extras.map(e => (
+                                <tr key={`${l.key}:${e.id}`}>
+                                    <td style={{ ...CELL, paddingLeft: 8, wordBreak: 'break-word' }}>+{e.name}</td>
+                                    <td style={{ ...CELL, ...NUM }}>{e.price ? l.qty : ''}</td>
+                                    <td style={{ ...CELL, ...NUM }}>{e.price ? num(e.price) : ''}</td>
+                                    <td style={{ ...CELL, ...NUM }}>{e.price ? num(e.price * l.qty) : ''}</td>
+                                </tr>
+                            )),
+                            l.discountAmount > 0 && (
+                                <tr key={`${l.key}:discount`}>
+                                    <td colSpan={3} style={{ ...CELL, paddingLeft: 8, fontStyle: 'italic' }}>Giảm giá</td>
+                                    <td style={{ ...CELL, ...NUM }}>-{num(l.discountAmount)}</td>
+                                </tr>
+                            ),
+                        ]
+                    })}
+                </tbody>
+            </table>
             <Row label="TIỀN HÀNG">{formatVND(goods)}</Row>
             {orderDiscount > 0 && <Row label={discountLabel}>-{formatVND(orderDiscount)}</Row>}
             <Row label="TỔNG THANH TOÁN" style={{ fontWeight: 800, fontSize: 14, marginTop: 4 }}>{formatVND(total)}</Row>

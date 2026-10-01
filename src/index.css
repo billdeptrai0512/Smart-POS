@@ -459,7 +459,7 @@ body.pwa-banner-open .address-scroll-list {
     /* KHÔNG ép width cứng (từng thử 300px theo chuẩn 80mm@96dpi của captureImage — sai:
        khổ in thật của máy/driver hẹp hơn giả định đó, ép cứng làm nội dung tràn ra ngoài
        khổ giấy thật và bị cắt còn nặng hơn). Để width tự co đúng theo @page thật — cột 1fr
-       trong BILL_COLS (PrintBill.jsx) có thể lệch chưa tới 1px do làm tròn của trình duyệt,
+       trong bảng món (PrintBill.jsx) có thể lệch chưa tới 1px do làm tròn của trình duyệt,
        bù bằng padding phải rộng hơn một chút thay vì đoán số px tuyệt đối. */
     margin: 0;
     padding: 8px 14px;
