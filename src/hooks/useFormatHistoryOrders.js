@@ -22,6 +22,7 @@ function groupItems(rawItems) {
         quantity: i.quantity,
         productId: i.productId,
         extraIds: i.extraIds,
+        toppingIds: i.toppingIds,
         note: i.note || null,
     }))
 }
@@ -58,6 +59,7 @@ export function useFormatHistoryOrders({ baseOrders, pendingOrders, productById,
                 quantity: i.quantity,
                 productId: i.product_id,
                 extraIds: i.extra_ids || [],
+                toppingIds: i.topping_ids || [],
                 discountAmount: i.discount_amount || 0,
                 note: i.note || null,
             }
@@ -98,6 +100,7 @@ export function useFormatHistoryOrders({ baseOrders, pendingOrders, productById,
                             quantity: i.quantity,
                             productId: i.productId,
                             extraIds: extras.map(e => e.id).filter(Boolean),
+                            toppingIds: (i.toppings || []).map(t => t.id).filter(Boolean),
                         }
                     }))
                     : o.orderItems ? groupItems(o.orderItems.map(i => {
@@ -108,6 +111,7 @@ export function useFormatHistoryOrders({ baseOrders, pendingOrders, productById,
                             quantity: i.quantity,
                             productId: i.productId,
                             extraIds: (i.extras || []).map(e => e.id).filter(Boolean),
+                            toppingIds: i.toppingIds || (i.toppings || []).map(t => t.id).filter(Boolean),
                             note: i.note || null,
                         }
                     })) : []

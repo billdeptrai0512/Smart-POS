@@ -3,12 +3,15 @@ import { discountToPercent } from './money'
 // Đơn giá 1 dòng bill in: order_items không lưu giá theo dòng, nên tự tính lại từ giá
 // món/topping ĐANG hiệu lực trong menu (products/productExtras) — đúng cho đơn vừa tạo
 // trong ca này, giá chưa kịp đổi. Dùng chung cho bill theo bàn (TableDetailModal) và bill
-// đơn mang đi lẻ (OrdersList). it: { productId, extraIds }.
-export function priceLineFor(it, products, productExtras) {
+// đơn mang đi lẻ (OrdersList). it: { productId, extraIds, toppingIds }. Topping (thực thể
+// toàn cục, tra theo danh sách `toppings` của ProductContext) gộp chung vào `extras` — bill
+// in/tính giá y như tùy chọn riêng của món.
+export function priceLineFor(it, products, productExtras, toppings = []) {
     const product = products.find(p => p.id === it.productId)
-    const extras = (it.extraIds || [])
-        .map(id => (productExtras[it.productId] || []).find(e => e.id === id))
-        .filter(Boolean)
+    const extras = [
+        ...(it.extraIds || []).map(id => (productExtras[it.productId] || []).find(e => e.id === id)),
+        ...(it.toppingIds || []).map(id => toppings.find(t => t.id === id)),
+    ].filter(Boolean)
     const unitPrice = (product?.price || 0) + extras.reduce((s, e) => s + (e.price || 0), 0)
     return { name: product?.name || 'Món đã xoá', extras, unitPrice }
 }
@@ -34,11 +37,11 @@ export function billFooter(lines, subtotal, discountTotal) {
 // thành 2 ly "nửa giá" trên bill, sai với thực tế). extras giữ riêng mảng (không nhét vào
 // chuỗi tên như tableLineName) — bill in mỗi topping xuống một dòng "* tên" riêng, gộp
 // trùng phải tính theo tổ hợp món+topping.
-export function tablePriceLines(rounds, products, productExtras) {
+export function tablePriceLines(rounds, products, productExtras, toppings) {
     const out = []
     for (const round of rounds) {
         for (const it of round.items) {
-            const { name, extras, unitPrice } = priceLineFor(it, products, productExtras)
+            const { name, extras, unitPrice } = priceLineFor(it, products, productExtras, toppings)
             const discountAmount = it.discountAmount || 0
             const baseKey = `${name}::${extras.map(e => e.id).sort().join(',')}`
             const hit = discountAmount === 0 ? out.find(l => l.key === baseKey) : null

@@ -29,7 +29,7 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
     const confirm = useConfirm()
     const { handleCloseTable, reopenRoundIntoCart, toggleMark, orderCount, showError, reportError } = useCart()
     const { handleDeleteOrder } = useHistory()
-    const { products, productExtras } = useProducts()
+    const { products, productExtras, toppings } = useProducts()
     const { selectedAddress } = useAddress()
     const billRef = useRef(null)
     // Gộp bàn (chuyển hết đợt) và tách bàn (chuyển một đợt) dùng chung một màn hình
@@ -70,8 +70,8 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
     // nên tự tính lại từ giá món/topping ĐANG hiệu lực trong menu. useMemo vì vòng poll
     // ~888ms re-render modal đều đặn dù rounds/menu thường không đổi giữa 2 lần bấm.
     const lines = useMemo(
-        () => tablePriceLines(table.rounds, products, productExtras),
-        [table.rounds, products, productExtras]
+        () => tablePriceLines(table.rounds, products, productExtras, toppings),
+        [table.rounds, products, productExtras, toppings]
     )
 
     async function handleEditRound(round) {

@@ -93,7 +93,7 @@ export default function TakeawayListModal({ orders, tableNames, onClose, onPick 
 }
 
 function TakeawayRow({ order, onToggleServed, onMove, onEdit, onDelete }) {
-    const { products, productExtras } = useProducts()
+    const { products, productExtras, toppings } = useProducts()
     const { showError } = useCart()
     const { selectedAddress } = useAddress()
     // Trước đây gọi usePrintArmed() không tham số — thiếu cả printerIp (đơn mang đi không
@@ -108,7 +108,7 @@ function TakeawayRow({ order, onToggleServed, onMove, onEdit, onDelete }) {
     const subtotal = order.total + discountAmount
     const billLines = order.items.map((it, idx) => ({
         key: `${it.productId}:${idx}`, qty: it.qty, discountAmount: it.discountAmount || 0,
-        ...priceLineFor(it, products, productExtras),
+        ...priceLineFor(it, products, productExtras, toppings),
     }))
     const createdAt = new Date(order.createdAt)
 
@@ -144,10 +144,19 @@ function TakeawayRow({ order, onToggleServed, onMove, onEdit, onDelete }) {
                 <span className="text-[13px] font-black tabular-nums text-text">{formatVND(order.total)}</span>
             </div>
             <div className="flex flex-col gap-0.5 border-t border-border/40 pt-2 pb-2 pl-1">
+                {/* Topping/option + ghi chú xuống dòng riêng, y như TableDetailModal/Nhật ký. */}
                 {order.lines.map(l => (
-                    <span key={l.name} className="text-[13px] font-bold text-text leading-snug">
-                        {l.qty > 1 && <span className="tabular-nums text-text-secondary">{l.qty} </span>}{l.name}
-                    </span>
+                    <div key={l.name} className="flex flex-col gap-0.5">
+                        <span className="text-[13px] font-bold text-text leading-snug">
+                            {l.qty > 1 && <span className="tabular-nums text-text-secondary">{l.qty} </span>}{l.dish}
+                        </span>
+                        {l.opts.map(o => (
+                            <span key={o} className="pl-2.5 text-[12px] leading-snug text-text-secondary/70">• {o}</span>
+                        ))}
+                        {l.note && (
+                            <span className="pl-2.5 text-[12px] leading-snug italic text-text-secondary break-words">Ghi chú: {l.note}</span>
+                        )}
+                    </div>
                 ))}
             </div>
             <div className="flex items-center gap-2 border-t border-border/40 pt-2">

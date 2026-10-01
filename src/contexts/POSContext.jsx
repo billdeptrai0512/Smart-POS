@@ -610,14 +610,22 @@ export function POSProvider() {
         // số cũ vì đơn mang đi được cấp số MỚI khi sửa (bàn thì giữ số). Đơn cũ không có số
         // (offline chưa đồng bộ) thì bếp không dò theo số được → "HỦY PHIẾU CŨ".
         const edit = cartItems.find(it => it.edit)?.edit
-        const printKitchen = (id) => {
+        const printKitchen = (orderNo) => {
             if (!kitchenIp) return
-            ;(id ? fetchOrderNo(id).catch(() => null) : Promise.resolve(null))
-                .then(orderNo => printKitchenTicket(kitchenIp, {
-                    orderNo, tableName: tableNameArg, lines: addLines,
-                    tag: edit && (edit.orderNo != null ? `HỦY #${edit.orderNo}` : 'HỦY PHIẾU CŨ'),
-                }))
-                .catch(err => showError(err, 'In phiếu bếp'))
+            printKitchenTicket(kitchenIp, {
+                orderNo, tableName: tableNameArg, lines: addLines,
+                tag: edit && (edit.orderNo != null ? `HỦY #${edit.orderNo}` : 'HỦY PHIẾU CŨ'),
+            }).catch(err => showError(err, 'In phiếu bếp'))
+        }
+        // Hàng lạc quan (bàn + Nhật ký) dựng trước khi server cấp order_no, mà vòng poll chỉ vá
+        // tiền/cờ bàn (diffOrderHeads) chứ không vá order_no → bill in ngay sau đó thiếu "Số:"
+        // tới lần refreshTables kế. Đọc số 1 lần sau khi ghi xong rồi vá vào cả 2 chỗ.
+        const patchOrderNo = (orderNo) => {
+            if (orderNo == null) return
+            setOpenTables(prev => prev.map(t => t.rounds.some(r => r.id === orderId)
+                ? { ...t, rounds: t.rounds.map(r => r.id === orderId ? { ...r, orderNo } : r) }
+                : t))
+            setTodayOrders(prev => prev.map(o => o.id === orderId ? { ...o, order_no: orderNo } : o))
         }
         // Bàn cộng dồn ngay, cùng kiểu lạc quan như doanh thu ở trên — nhân viên phải
         // thấy tổng bàn nhảy lên trong cùng cú chạm, không đợi vòng fetch. Đơn mang đi
@@ -685,7 +693,8 @@ export function POSProvider() {
             }
             setTodayOrders(prev => [optimisticOrder, ...prev])
             submitOrder(cartItems, netTotal, null, addressId, cartCost, costPerItem, profile?.name, discountApplied, orderId, tableNameArg, programDiscount)
-                .then(() => printKitchen(orderId))
+                .then(() => fetchOrderNo(orderId).catch(() => null))
+                .then(orderNo => { patchOrderNo(orderNo); printKitchen(orderNo) })
                 .catch(err => {
                     if (isNetworkError(err)) {
                         // Reuse orderId already sent to the RPC above — if the server actually

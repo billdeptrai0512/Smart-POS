@@ -102,7 +102,7 @@ export default function OrdersList({
 const OrderCard = memo(function OrderCard({ order, isDeleting, setDeletingId, onDeleteOrder, onUpdateDiscount, onDeleteOffline, isNew }) {
     const navigate = useNavigate()
     const confirm = useConfirm()
-    const { products, productExtras, productDiscounts } = useProducts()
+    const { products, productExtras, productDiscounts, toppings } = useProducts()
     const { selectedAddress } = useAddress()
     const { toast, showError } = useToast()
     // Cùng pattern CartListModal (giỏ hàng chưa gửi), áp cho đơn ĐÃ CHỐT.
@@ -124,12 +124,12 @@ const OrderCard = memo(function OrderCard({ order, isDeleting, setDeletingId, on
     // ĐANG hiệu lực trong menu (giống bill in) — dùng chung cho hiển thị lẫn sửa giảm
     // giá theo dòng ở dưới.
     function lineSubtotal(item) {
-        return priceLineFor(item, products, productExtras).unitPrice * item.quantity
+        return priceLineFor(item, products, productExtras, toppings).unitPrice * item.quantity
     }
 
     // Giá + trạng thái giảm giá hiển thị của 1 dòng trong danh sách món.
     function deriveItem(item) {
-        const { name: itemName, extras: itemExtras, unitPrice } = priceLineFor(item, products, productExtras)
+        const { name: itemName, extras: itemExtras, unitPrice } = priceLineFor(item, products, productExtras, toppings)
         const itemSubtotal = unitPrice * item.quantity
         const committedAmount = item.discountAmount || 0
         const { pct: itemPct, exact: itemPctExact } = discountToPercent(itemSubtotal, committedAmount)
@@ -328,7 +328,7 @@ const OrderCard = memo(function OrderCard({ order, isDeleting, setDeletingId, on
                     staffName={order.staffName}
                     lines={(order.items || []).map(it => ({
                         key: it.id ?? it.text, qty: it.quantity, discountAmount: it.discountAmount || 0,
-                        ...priceLineFor(it, products, productExtras),
+                        ...priceLineFor(it, products, productExtras, toppings),
                     }))}
                     subtotal={subtotal}
                     discountTotal={discountAmount}
