@@ -3,6 +3,7 @@ import { Check, Info, Trash2 } from 'lucide-react'
 import { formatPackedQty } from '../../utils/inventory'
 import { INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 import { onboardingHintClass } from '../../utils/onboardingHint'
+import Dropdown from '../common/Dropdown'
 
 // All "tap-to-edit" state lives inside this component. The page only hands in
 // current values + one save callback per field — keeps the page's state
@@ -11,7 +12,7 @@ import { onboardingHintClass } from '../../utils/onboardingHint'
 // Save callbacks are async-friendly: parent decides what to do on success/failure
 // (we just close the edit affordance optimistically before awaiting).
 export default function IngredientDetailsTab({
-    nameLabel, unit, category, packSize, packUnit, minStock, tareWeight,
+    nameLabel, unit, category, groupId = null, groups = null, packSize, packUnit, minStock, tareWeight,
     countInAudit, onToggleAudit,   // toggle "báo cáo tồn quầy" — rút gọn từ panel Kiểm kê cũ thành 1 row
     hintPack = false, hintMinStock = false, hintTare = false,
     canEdit, saving,
@@ -19,7 +20,7 @@ export default function IngredientDetailsTab({
     onSaveUnit,         // (newUnit: string)       => Promise
     onSaveMinStock,     // (newMin: number)        => Promise
     onSaveTareWeight,   // (newTare: number)       => Promise  (0 = xoá bì)
-    onChangeCategory,   // (newCat: string)        => Promise (still controlled — single tap)
+    onChangeCategory,   // (newCat: string, groupId: string|null) => Promise (single tap)
     onConfigurePack,    // ()                      => void   (opens modal)
 }) {
     const hasPack = !!(packSize && packUnit)
@@ -30,7 +31,7 @@ export default function IngredientDetailsTab({
         <div className="flex flex-col gap-4">
             {/* Thuộc tính NVL/bao bì (không phải số tồn) — số tồn/kiểm kê nằm ở tab Nhật ký. */}
             <Panel >
-                <CategoryRow value={category} canEdit={canEdit} saving={saving} onChange={onChangeCategory} />
+                <CategoryRow value={category} groupId={groupId} groups={groups} canEdit={canEdit} saving={saving} onChange={onChangeCategory} />
                 <NameRow value={nameLabel} canEdit={canEdit} onSave={onSaveName} />
                 <UnitRow value={unit} canEdit={canEdit} onSave={onSaveUnit} />
                 {tareApplies && (tareWeight != null || canEdit) && (
@@ -376,24 +377,32 @@ function UnitRow({ value, canEdit, onSave }) {
 
 
 // ── Category (single-tap select; no edit toggle) ────────────────────────────
-function CategoryRow({ value, canEdit, saving, onChange }) {
+// Dropdown chỉ liệt kê nhóm cùng tab với món (value = groupId, '' = chưa phân nhóm); đổi tab
+// (Nguyên liệu ↔ Bao bì) là dòng hành động cuối. groups = null → địa chỉ không hỗ trợ nhóm
+// (guest/template): dòng '' mang tên tab thay cho "Chưa phân nhóm". Tạo/sửa nhóm ở sheet 'Sửa nhóm'.
+function CategoryRow({ value, groupId, groups, canEdit, saving, onChange }) {
+    const groupName = groups?.find(g => g.id === groupId)?.name
+    const sectionLabel = INGREDIENT_CATEGORIES.find(c => c.key === value)?.label || 'Nguyên liệu chính'
+    const noGroupLabel = groups ? 'Chưa phân nhóm' : sectionLabel
+    const other = INGREDIENT_CATEGORIES.find(c => c.key !== value)
     return (
         <Row label="Nhóm">
             {canEdit ? (
-                <select
-                    value={value}
+                <Dropdown
+                    value={groupId || ''}
                     disabled={saving}
-                    onChange={e => onChange?.(e.target.value)}
-                    className="bg-transparent border-0 text-[13px] font-bold text-text text-right focus:outline-none cursor-pointer"
-                >
-                    {INGREDIENT_CATEGORIES.map(c => (
-                        <option key={c.key} value={c.key}>{c.label}</option>
-                    ))}
-                </select>
+                    triggerLabel={groupName || noGroupLabel}
+                    onChange={id => onChange?.(value, id || null)}
+                    items={[
+                        { value: '', label: noGroupLabel },
+                        ...(groups || []).filter(g => g.section === value).map(g => ({ value: g.id, label: g.name })),
+                        { action: 'move', label: `Chuyển sang ${other.label}`, onClick: () => onChange?.(other.key, null) },
+                    ]}
+                    className="max-w-[200px]"
+                    triggerClassName="text-[13px]"
+                />
             ) : (
-                <span className="text-[13px] font-bold text-text">
-                    {INGREDIENT_CATEGORIES.find(c => c.key === value)?.label || 'Nguyên liệu chính'}
-                </span>
+                <span className="text-[13px] font-bold text-text">{groupName || sectionLabel}</span>
             )}
         </Row>
     )

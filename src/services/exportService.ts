@@ -11,7 +11,8 @@ interface ExportInput {
     addressName?: string | null
     products: Array<{ id: UUID; name: string; price: number; is_divider?: boolean; sort_order?: number | null }>
     toppings: Array<{ id: UUID; name: string; price: number }>
-    ingredientConfigs: Array<{ ingredient: string; unit: string; unit_cost: number; category: string | null }>
+    ingredientConfigs: Array<{ ingredient: string; unit: string; unit_cost: number; category: string | null; group_id?: UUID | null }>
+    ingredientGroups?: Array<{ id: UUID; name: string }>
     ingredientUnits: Record<string, string>
     recipes: Array<{ product_id: UUID; ingredient: string; amount: number; unit: string | null }>
     productToppings: Record<UUID, Array<{ id: UUID; name: string }>>
@@ -42,6 +43,7 @@ export async function downloadCurrentDataExcel(input: ExportInput) {
         'Đơn vị': c.unit,
         'Giá vốn/đơn vị': c.unit_cost,
         'Loại': c.category === 'packaging' ? 'bao bì' : 'chính',
+        'Nhóm': (c.group_id && input.ingredientGroups?.find(g => g.id === c.group_id)?.name) || '',
     })))
 
     addSheet('Công thức', input.recipes.map(r => ({

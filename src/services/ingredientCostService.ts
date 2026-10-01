@@ -13,7 +13,8 @@ export async function fetchIngredientCostsAndUnits(addressId: UUID | null) {
             costs[r.ingredient] = r.unit_cost
             units[r.ingredient] = r.unit
         })
-        return { costs, units, rows }
+        // ponytail: guest không có nhóm nguyên liệu (groups null = không hỗ trợ) — thêm khi guest cần chia nhóm.
+        return { costs, units, rows, groups: null }
     }
     // ingredient_costs is now per-address (like products/recipes). Default rows
     // (address_id IS NULL) are a one-time seed/template — copied to each new
@@ -34,15 +35,18 @@ export async function fetchIngredientCostsAndUnits(addressId: UUID | null) {
     // Try newest schema first, degrade column-by-column on undefined_column (42703)
     // so the page still loads if tare_weight / count_in_audit / category migrations
     // aren't deployed.
-    let { data, error } = await runQuery(`${BASE}, category, count_in_audit, tare_weight`)
+    const groupsPromise = fetchIngredientGroups(addressId)
+    let { data, error } = await runQuery(`${BASE}, category, count_in_audit, tare_weight, group_id`)
+    if (error?.code === '42703') ({ data, error } = await runQuery(`${BASE}, category, count_in_audit, tare_weight`))
     if (error?.code === '42703') ({ data, error } = await runQuery(`${BASE}, category, count_in_audit`))
     if (error?.code === '42703') ({ data, error } = await runQuery(`${BASE}, category`))
     if (error?.code === '42703') ({ data, error } = await runQuery(BASE))
+    const groups = await groupsPromise
     if (error) {
         console.error('fetchIngredientCostsAndUnits error:', error)
-        return { costs: {}, units: {}, rows: [] }
+        return { costs: {}, units: {}, rows: [], groups }
     }
-    if (!data || data.length === 0) return { costs: {}, units: {}, rows: [] }
+    if (!data || data.length === 0) return { costs: {}, units: {}, rows: [], groups }
 
     const costs: Row = {}
     const units: Row = {}
@@ -50,9 +54,60 @@ export async function fetchIngredientCostsAndUnits(addressId: UUID | null) {
     for (const d of data) {
         costs[d.ingredient] = d.unit_cost
         units[d.ingredient] = d.unit || 'đv'
-        rows.push({ ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, min_stock: d.min_stock, category: d.category || null, count_in_audit: d.count_in_audit ?? true, tare_weight: d.tare_weight ?? null })
+        rows.push({ ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, min_stock: d.min_stock, category: d.category || null, count_in_audit: d.count_in_audit ?? true, tare_weight: d.tare_weight ?? null, group_id: d.group_id ?? null })
     }
-    return { costs, units, rows }
+    return { costs, units, rows, groups }
+}
+
+// Nhóm nguyên liệu (danh mục con trong tab Nguyên liệu / Bao bì) — migration 20261003_ingredient_groups.
+// null = địa chỉ không hỗ trợ nhóm (template address null / bảng chưa migrate) → UI ẩn phần nhóm.
+export async function fetchIngredientGroups(addressId: UUID | null): Promise<Row[] | null> {
+    if (!addressId) return null
+    const { data, error } = await supabase
+        .from('ingredient_groups')
+        .select('id, name, section, sort_order')
+        .eq('address_id', addressId)
+        .order('sort_order')
+        .order('created_at')
+    if (error) {
+        console.error('fetchIngredientGroups error:', error)
+        return null
+    }
+    return data || []
+}
+
+export async function createIngredientGroup(addressId: UUID, name: string, section: 'main' | 'packaging', sortOrder: number) {
+    const { data, error } = await supabase
+        .from('ingredient_groups')
+        .insert({ address_id: addressId, name: name.trim(), section, sort_order: sortOrder })
+        .select('id, name, section, sort_order')
+        .single()
+    if (error) throw error
+    return data
+}
+
+export async function renameIngredientGroup(id: UUID, name: string) {
+    const { error } = await supabase.from('ingredient_groups').update({ name: name.trim() }).eq('id', id)
+    if (error) throw error
+}
+
+// Nguyên liệu trong nhóm rơi về "Chưa phân nhóm" (FK ON DELETE SET NULL).
+export async function deleteIngredientGroup(id: UUID) {
+    const { error } = await supabase.from('ingredient_groups').delete().eq('id', id)
+    if (error) throw error
+}
+
+// Gán nhóm + tab cho 1 hay nhiều nguyên liệu bằng 1 lệnh UPDATE (trigger sync_ingredient_group_category
+// ép category = section khi có nhóm; category vẫn gửi cho groupId null = 'chưa phân nhóm' của tab đó).
+// UPDATE thay vì upsert để không phải mang theo unit_cost — nguyên liệu đã có dòng ingredient_costs.
+export async function setIngredientsGroup(ingredients: string[], addressId: UUID, groupId: UUID | null, category: 'main' | 'packaging') {
+    if (ingredients.length === 0) return
+    const { error } = await supabase
+        .from('ingredient_costs')
+        .update({ group_id: groupId, category })
+        .eq('address_id', addressId)
+        .in('ingredient', ingredients)
+    if (error) throw error
 }
 
 // Kept for backward-compat — delegates to fetchIngredientCostsAndUnits

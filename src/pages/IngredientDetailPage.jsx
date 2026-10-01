@@ -9,7 +9,7 @@ import {
     deleteIngredientCost, upsertIngredientCost, renameIngredient,
     adjustIngredientStock, setCounterStock, recordInvoicePayment, cancelRestock,
     editIngredientRestock, mergeShiftClosingInventory, fetchIngredientDailyContext,
-    processIngredientRestock,
+    processIngredientRestock, setIngredientsGroup,
 } from '../services/orderService'
 import { fetchCashClosedToday } from '../services/reportService'
 import { formatVND } from '../utils'
@@ -39,7 +39,7 @@ export default function IngredientDetailPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const { ingredientKey } = useParams()
-    const { ingredientCosts, ingredientUnits, ingredientConfigs, refreshProducts } = useProducts()
+    const { ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, refreshProducts } = useProducts()
     const { selectedAddress, siblingsByAddress } = useAddress()
     const warehouseSiblings = selectedAddress ? siblingsByAddress[selectedAddress.id] : null
     const warehouseGroupNote = warehouseSiblings?.length
@@ -206,9 +206,11 @@ export default function IngredientDetailPage() {
     }, [history, fromDate, toDate])
 
     // ── Save callbacks for child rows ───────────────────────────────────────
-    async function saveCategory(newCat) {
+    // ingredientGroups null = địa chỉ không hỗ trợ nhóm (guest/template) → chỉ đổi tab như cũ.
+    async function saveCategory(newCat, groupId = null) {
         await withSaving('Lưu nhóm nguyên liệu', async () => {
-            await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, unit, { category: newCat })
+            if (ingredientGroups) await setIngredientsGroup([ingredientKey], selectedAddress.id, groupId, newCat)
+            else await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, unit, { category: newCat })
             refreshProducts?.()
         })
     }
@@ -506,6 +508,8 @@ export default function IngredientDetailPage() {
                             nameLabel={titleLabel}
                             unit={unit}
                             category={category}
+                            groupId={config.group_id ?? null}
+                            groups={ingredientGroups}
                             packSize={packSize}
                             packUnit={packUnit}
                             minStock={minStock}

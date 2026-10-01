@@ -14,7 +14,7 @@ import { downloadCurrentDataExcel } from '../../services/exportService'
 // sau khi chọn file, xác nhận mới thật sự ghi (commitImportPlan).
 export default function ExcelImportModal({ onClose }) {
     const {
-        products, toppings, ingredientCosts, ingredientUnits, ingredientConfigs,
+        products, toppings, ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups,
         recipes, productToppings, productExtras, extraIngredients, refreshProducts,
     } = useProducts()
     const { selectedAddress } = useAddress()
@@ -79,7 +79,7 @@ export default function ExcelImportModal({ onClose }) {
         try {
             await downloadCurrentDataExcel({
                 addressName: selectedAddress?.name,
-                products, toppings, ingredientConfigs, ingredientUnits,
+                products, toppings, ingredientConfigs, ingredientGroups, ingredientUnits,
                 recipes, productToppings, productExtras, extraIngredients,
             })
         } catch (err) {

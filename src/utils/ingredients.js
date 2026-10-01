@@ -37,6 +37,11 @@ export function normalizeIngredientKey(raw) {
     return String(raw || '').trim().normalize('NFC').toLowerCase().replace(/\s+/g, '_')
 }
 
+// Chuẩn hoá để search không phân biệt hoa/thường & dấu tiếng Việt.
+export function normalizeSearchText(s = '') {
+    return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd')
+}
+
 export function ingredientLabel(key) {
     if (INGREDIENT_NAMES[key]) return INGREDIENT_NAMES[key]
     const name = key.replace(/_/g, ' ')

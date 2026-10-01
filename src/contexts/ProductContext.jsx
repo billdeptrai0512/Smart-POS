@@ -98,6 +98,7 @@ export function ProductProvider() {
     const [ingredientCosts, setIngredientCosts] = useState(() => readCache('costs', {}))
     const [ingredientUnits, setIngredientUnits] = useState(() => readCache('units', {}))
     const [ingredientConfigs, setIngredientConfigs] = useState(() => readCache('configs', []))
+    const [ingredientGroups, setIngredientGroups] = useState(() => readCache('ingredient_groups', null)) // null = địa chỉ không hỗ trợ nhóm
     const [productExtras, setProductExtras] = useState(() => readCache('extras', {}))
     const [extraIngredients, setExtraIngredients] = useState(() => readCache('extra_ingredients', {}))
     const [toppings, setToppings] = useState(() => readCache('toppings', []))
@@ -109,12 +110,13 @@ export function ProductProvider() {
     const loadGenRef = useRef(0) // bumped each effect run so a stale retry can no-op instead of writing over a newer address's data
 
     const applyData = useCallback((prods, recs, costsResult, extras, extraIngs, addressId, toppingsList, productToppingsMap, discountProgramsList, productDiscountsMap) => {
-        const { costs, units, rows } = costsResult
+        const { costs, units, rows, groups } = costsResult
         setProducts(prods)
         setRecipes(recs)
         setIngredientCosts(costs)
         setIngredientUnits(units)
         setIngredientConfigs(rows || [])
+        setIngredientGroups(groups ?? null)
         setProductExtras(extras)
         setExtraIngredients(extraIngs)
         setToppings(toppingsList)
@@ -128,6 +130,7 @@ export function ProductProvider() {
             localStorage.setItem(key('costs'), JSON.stringify(costs))
             localStorage.setItem(key('units'), JSON.stringify(units))
             localStorage.setItem(key('configs'), JSON.stringify(rows || []))
+            localStorage.setItem(key('ingredient_groups'), JSON.stringify(groups ?? null))
             localStorage.setItem(key('extras'), JSON.stringify(extras))
             localStorage.setItem(key('extra_ingredients'), JSON.stringify(extraIngs))
             localStorage.setItem(key('toppings'), JSON.stringify(toppingsList))
@@ -151,6 +154,7 @@ export function ProductProvider() {
         setIngredientCosts(readCache('costs', {}))
         setIngredientUnits(readCache('units', {}))
         setIngredientConfigs(readCache('configs', []))
+        setIngredientGroups(readCache('ingredient_groups', null))
         setProductExtras(readCache('extras', {}))
         setExtraIngredients(readCache('extra_ingredients', {}))
         setToppings(readCache('toppings', []))
@@ -240,6 +244,7 @@ export function ProductProvider() {
         ingredientCosts,
         ingredientUnits,
         ingredientConfigs,
+        ingredientGroups,
         productExtras,
         extraIngredients,
         toppings,
@@ -249,7 +254,7 @@ export function ProductProvider() {
         refreshProducts,
         loading,
         loadError
-    }), [products, recipes, ingredientCosts, ingredientUnits, ingredientConfigs, productExtras, extraIngredients, toppings, productToppings, discountPrograms, productDiscounts, refreshProducts, loading, loadError])
+    }), [products, recipes, ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, productExtras, extraIngredients, toppings, productToppings, discountPrograms, productDiscounts, refreshProducts, loading, loadError])
 
     return (
         <ProductContext.Provider value={value}>

@@ -89,6 +89,25 @@ describe('resolveImportPlan', () => {
     })
 })
 
+describe('cột Nhóm (sheet Nguyên liệu)', () => {
+    it('có cột → gửi group (ô trống = bỏ nhóm); không có cột → không gửi key group (giữ nhóm cũ)', () => {
+        const { plan } = resolveImportPlan(parsed({
+            ingredients: [
+                { 'Tên nguyên liệu': 'Sữa tươi', 'Đơn vị': 'ml', 'Giá vốn/đơn vị': 30, 'Loại': 'chính', 'Nhóm': ' Sữa ' },
+                { 'Tên nguyên liệu': 'Ly 500', 'Đơn vị': 'cái', 'Giá vốn/đơn vị': 900, 'Loại': 'bao bì', 'Nhóm': 'Ly' },
+                { 'Tên nguyên liệu': 'Đường', 'Đơn vị': 'g', 'Giá vốn/đơn vị': 20, 'Loại': 'chính', 'Nhóm': '' },
+            ],
+        }), EMPTY_EXISTING)
+        const p = buildBulkPayload(plan, EMPTY_EXISTING)
+        expect(p.ingredients.map(i => i.group)).toEqual(['Sữa', 'Ly', ''])
+
+        const { plan: noCol } = resolveImportPlan(parsed({
+            ingredients: [{ 'Tên nguyên liệu': 'Sữa tươi', 'Đơn vị': 'ml', 'Giá vốn/đơn vị': 30, 'Loại': 'chính' }],
+        }), EMPTY_EXISTING)
+        expect(JSON.parse(JSON.stringify(buildBulkPayload(noCol, EMPTY_EXISTING))).ingredients[0]).not.toHaveProperty('group')
+    })
+})
+
 describe('buildBulkPayload', () => {
     it('đổi tên → id: món/topping/tùy chọn mới có id sinh sẵn, dòng công thức trỏ đúng id', () => {
         const existing = { products: [{ id: 'p-old', name: 'Trà Đá' }], toppings: [], ingredientCosts: {}, extras: [{ id: 'x-old', productName: 'Trà Đá', name: 'Ít đá' }] }

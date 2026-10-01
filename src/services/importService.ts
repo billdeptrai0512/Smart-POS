@@ -90,8 +90,9 @@ interface ImportPlan {
     layout: Array<{ name: string; divider: boolean }> // thứ tự mới của món + danh mục; rỗng = không đổi thứ tự
     products: Array<{ name: string; price: number }>
     productUpdates: Array<{ name: string; price: number }>
-    ingredients: Array<{ key: string; unitCost: number; unit: string; category: 'main' | 'packaging' }>
-    ingredientUpdates: Array<{ key: string; unitCost: number; unit: string; category: 'main' | 'packaging' }>
+    // group: có khi sheet có cột "Nhóm" ('' = bỏ nhóm); undefined = giữ nhóm hiện tại
+    ingredients: Array<{ key: string; unitCost: number; unit: string; category: 'main' | 'packaging'; group?: string }>
+    ingredientUpdates: Array<{ key: string; unitCost: number; unit: string; category: 'main' | 'packaging'; group?: string }>
     toppings: Array<{ name: string; price: number; unit: string }>
     toppingUpdates: Array<{ name: string; price: number }>
     recipes: Array<{ productName: string; ingredient: string; amount: number; unit: string | null }>
@@ -199,7 +200,8 @@ export function resolveImportPlan(parsed: ParsedWorkbook, existing: ExistingData
         const costRaw = row['Giá vốn/đơn vị']
         const cost = costRaw === '' || costRaw == null ? 0 : toNumber(costRaw)
         if (cost == null) { blockingErrors.push(`${line} ("${name}"): Giá vốn/đơn vị không hợp lệ`); return }
-        const entry = { key, unitCost: cost, unit: normName(row['Đơn vị']) || 'đv', category: mapCategory(row['Loại']) }
+        const entry: ImportPlan['ingredients'][number] = { key, unitCost: cost, unit: normName(row['Đơn vị']) || 'đv', category: mapCategory(row['Loại']) }
+        if ('Nhóm' in row) entry.group = normName(row['Nhóm'])
         allIngredientKeys.add(key)
         if (existingIngredientKeys.has(key)) ingredientUpdates.push(entry)
         else ingredients.push(entry)
@@ -482,7 +484,7 @@ export function buildBulkPayload(plan: ImportPlan, existing: ExistingData) {
         dividers: newDividers,
         layout: plan.layout.map(l => (l.divider ? dividerId : productId).get(normKey(l.name))),
         productUpdates: plan.productUpdates.map(p => ({ id: productId.get(normKey(p.name)), price: p.price })),
-        ingredients: [...plan.ingredients, ...plan.ingredientUpdates].map(i => ({ key: i.key, unitCost: i.unitCost, unit: i.unit, category: i.category })),
+        ingredients: [...plan.ingredients, ...plan.ingredientUpdates].map(i => ({ key: i.key, unitCost: i.unitCost, unit: i.unit, category: i.category, group: i.group })), // group undefined → JSON bỏ key → RPC giữ nhóm cũ
         toppings: newToppings,
         toppingUpdates: plan.toppingUpdates.map(t => ({ id: toppingId.get(normKey(t.name)), price: t.price })),
         extras: newExtras,

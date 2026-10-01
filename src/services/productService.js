@@ -291,16 +291,21 @@ export async function fetchExtraIngredients(extraIds = null) {
     if (localRepo.isGuest()) return localRepo.fetchLocalExtraIngredients(extraIds)
     if (Array.isArray(extraIds) && extraIds.length === 0) return {}
 
-    let query = supabase.from('extra_ingredients').select('id, extra_id, ingredient, amount, unit')
-    if (extraIds?.length) query = query.in('extra_id', extraIds)
+    const select = () => supabase.from('extra_ingredients').select('id, extra_id, ingredient, amount, unit')
+    // Chia lô: 254 id trong 1 `in.(...)` ≈ 9KB URL → request treo (không lỗi), kẹt cả lượt nạp menu.
+    const CHUNK = 100
+    const queries = extraIds?.length
+        ? Array.from({ length: Math.ceil(extraIds.length / CHUNK) }, (_, i) => select().in('extra_id', extraIds.slice(i * CHUNK, (i + 1) * CHUNK)))
+        : [select()]
 
-    const { data, error } = await query
+    const results = await Promise.all(queries)
+    const error = results.find(r => r.error)?.error
     if (error) {
         console.error('fetchExtraIngredients error:', error)
         return {}
     }
     const extrasMap = {}
-    for (const row of data || []) {
+    for (const row of results.flatMap(r => r.data || [])) {
         if (!extrasMap[row.extra_id]) extrasMap[row.extra_id] = []
         extrasMap[row.extra_id].push(row)
     }

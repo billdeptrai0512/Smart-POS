@@ -10,14 +10,16 @@ import {
     syncIngredientKey,
     fetchIngredientStocks, fetchIngredientDeficits, fetchIngredientDailyContext,
 } from '../services/orderService'
-import { sortIngredients, ingredientLabel, getIngredientUnit, normalizeIngredientCategory, normalizeIngredientKey } from '../utils/ingredients'
+import { sortIngredients, ingredientLabel, normalizeSearchText, getIngredientUnit, normalizeIngredientCategory, normalizeIngredientKey } from '../utils/ingredients'
 import { readJSON } from '../utils/storage'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
 import StockDeficitBanner from '../components/IngredientManagementPage/StockDeficitBanner'
 import KeyMismatchBanner from '../components/IngredientManagementPage/KeyMismatchBanner'
 import MenuPageHeader from '../components/common/MenuPageHeader'
+import Dropdown from '../components/common/Dropdown'
 import CreateIngredientForm from '../components/IngredientManagementPage/CreateIngredientForm'
+import IngredientGroupsSheet from '../components/IngredientManagementPage/IngredientGroupsSheet'
 import { detectKeyMismatches } from '../utils/ingredientKeySync'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../contexts/ConfirmContext'
@@ -27,11 +29,6 @@ import { goToMenuStep } from '../utils/menuSequence'
 import { findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
 import { isRecipeProgressDone } from '../utils/onboardingStorage'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
-
-// Chuẩn hoá để search không phân biệt hoa/thường & dấu tiếng Việt.
-function normalizeText(s = '') {
-    return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd')
-}
 
 // Module-level scroll cache. Set when user opens a card to drill into
 // /ingredients/:key; consumed once on next mount of /ingredients (back nav).
@@ -46,7 +43,7 @@ export default function IngredientManagementPage() {
         ingredientCosts: contextCosts, ingredientUnits: contextUnits,
         recipes: contextRecipes, products: contextProducts, ingredientConfigs,
         productExtras: contextProductExtras, extraIngredients: contextExtraIngs,
-        refreshProducts,
+        ingredientGroups, refreshProducts,
     } = useProducts()
     const { selectedAddress, siblingsByAddress } = useAddress()
     const warehouseSiblings = selectedAddress ? siblingsByAddress[selectedAddress.id] : null
@@ -77,6 +74,11 @@ export default function IngredientManagementPage() {
 
     // Search theo tên — không phân biệt hoa/thường & dấu tiếng Việt.
     const [search, setSearch] = useState('')
+
+    // Chip lọc nhóm con trong tab: 'all' | 'none' (chưa phân nhóm) | group id. Đổi tab → về 'all'.
+    // Id lạ (nhóm của tab khác / đã xoá) tự rơi về 'all' qua effectiveFilter — không cần reset khi đổi tab.
+    const [groupFilter, setGroupFilter] = useState('all')
+    const [showGroupsSheet, setShowGroupsSheet] = useState(false)
 
     const mainRef = useRef(null)
 
@@ -293,24 +295,48 @@ export default function IngredientManagementPage() {
 
     // Card grid shows only the active category tab. Uncategorized (null) → 'main';
     // legacy 'tools' → 'packaging' (see normalizeIngredientCategory). Keeps no NVL hidden.
+    const getStockPriority = useCallback((ing) => {
+        const stock = stockByIngredient.get(ing)?.current_stock ?? null
+        const minStock = configByIngredient.get(ing)?.min_stock || 0
+        if (stock !== null && stock <= 0) return 0        // hết
+        if (stock !== null && stock > 0 && stock < minStock) return 1  // sắp hết
+        return 2                                          // bình thường
+    }, [stockByIngredient, configByIngredient])
+
+    // Nguyên liệu của tab đang xem + chip nhóm của tab. Trigger sync_ingredient_group_category giữ
+    // group_id luôn cùng section với tab, nên group_id null ⇔ chưa phân nhóm.
+    const gidOf = useCallback(ing => configByIngredient.get(ing)?.group_id || 'none', [configByIngredient])
+    const { tabIngredients, groupChips, countByGroup } = useMemo(() => {
+        const tabGroups = (ingredientGroups || []).filter(g => g.section === viewMode)
+        const tabIngredients = allIngredients.filter(ing => normalizeIngredientCategory(configByIngredient.get(ing)?.category) === viewMode)
+        const countByGroup = new Map()
+        const alertByGroup = new Map()
+        for (const ing of tabIngredients) {
+            const gid = gidOf(ing)
+            countByGroup.set(gid, (countByGroup.get(gid) || 0) + 1)
+            if (getStockPriority(ing) < 2) alertByGroup.set(gid, true)
+        }
+        const groupChips = tabGroups.length === 0 ? [] : [
+            ...tabGroups.map(g => ({ id: g.id, label: g.name, count: countByGroup.get(g.id) || 0, alert: !!alertByGroup.get(g.id) })),
+            ...(countByGroup.get('none') ? [{ id: 'none', label: 'Chưa phân nhóm', count: countByGroup.get('none'), alert: !!alertByGroup.get('none') }] : []),
+        ]
+        return { tabIngredients, groupChips, countByGroup }
+    }, [ingredientGroups, viewMode, allIngredients, configByIngredient, gidOf, getStockPriority])
+
+    // Đang tìm kiếm → 'all' (tìm trong cả tab — người dùng thường không nhớ món nằm nhóm nào).
+    const effectiveFilter = !search.trim() && groupChips.some(c => c.id === groupFilter) ? groupFilter : 'all'
+
     const visibleIngredients = useMemo(() => {
-        const q = normalizeText(search.trim())
-        const filtered = allIngredients.filter(ing => {
-            if (normalizeIngredientCategory(configByIngredient.get(ing)?.category) !== viewMode) return false
-            return !q || normalizeText(ingredientLabel(ing)).includes(q)
+        const q = normalizeSearchText(search.trim())
+        const filtered = tabIngredients.filter(ing => {
+            if (q) return normalizeSearchText(ingredientLabel(ing)).includes(q)
+            return effectiveFilter === 'all' || gidOf(ing) === effectiveFilter
         })
         // Sort: hết (out) → sắp hết (low) → bình thường. Skip if no alerts.
-        const getStockPriority = (ing) => {
-            const stock = stockByIngredient.get(ing)?.current_stock ?? null
-            const minStock = configByIngredient.get(ing)?.min_stock || 0
-            if (stock !== null && stock <= 0) return 0        // hết
-            if (stock !== null && stock > 0 && stock < minStock) return 1  // sắp hết
-            return 2                                          // bình thường
-        }
         const hasAlerts = filtered.some(ing => getStockPriority(ing) < 2)
         if (!hasAlerts) return filtered
         return [...filtered].sort((a, b) => getStockPriority(a) - getStockPriority(b))
-    }, [allIngredients, configByIngredient, viewMode, stockByIngredient, search])
+    }, [tabIngredients, effectiveFilter, gidOf, getStockPriority, search])
 
     // ─── Action handlers ───────────────────────────────────────────────
     async function saveCost(ingredient, newCostVal) {
@@ -392,6 +418,21 @@ export default function IngredientManagementPage() {
                         placeholder={viewMode === 'packaging' ? 'Tìm bao bì…' : 'Tìm nguyên liệu…'}
                         className="flex-1 min-w-0 px-3 rounded-[12px] bg-surface border border-border/60 text-text text-[14px] placeholder:text-text-dim focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
                     />
+                    {(groupChips.length > 0 || (canEdit && ingredientGroups)) && (
+                        <Dropdown
+                            ariaLabel="Lọc theo nhóm"
+                            value={effectiveFilter}
+                            triggerLabel={groupChips.find(c => c.id === effectiveFilter)?.label || 'Tất cả'}
+                            onChange={(id) => { setGroupFilter(id); setSearch('') }}
+                            items={[
+                                { value: 'all', label: 'Tất cả', count: tabIngredients.length },
+                                ...groupChips.map(c => ({ value: c.id, label: c.label, count: c.count, alert: c.alert })),
+                                ...(canEdit && ingredientGroups ? [{ action: 'edit', label: groupChips.length > 0 ? 'Sửa nhóm…' : '＋ Chia nhóm…', onClick: () => setShowGroupsSheet(true) }] : []),
+                            ]}
+                            className="shrink-0 w-[34%] max-w-[170px]"
+                            triggerClassName="h-full px-3 rounded-[12px] bg-surface border border-border/60 text-[14px] hover:border-primary/40"
+                        />
+                    )}
                     {canEdit && (
                         <button
                             onClick={() => { setNewCategory(viewMode); setShowCreateModal(true) }}
@@ -473,6 +514,20 @@ export default function IngredientManagementPage() {
                             onSubmit={handleCreateIngredient}
                         />
                 </BottomSheet>
+            )}
+
+            {showGroupsSheet && (
+                <IngredientGroupsSheet
+                    section={viewMode}
+                    groups={ingredientGroups}
+                    countByGroup={countByGroup}
+                    ingredients={tabIngredients}
+                    groupOf={gidOf}
+                    addressId={selectedAddress.id}
+                    onChanged={() => refreshProducts?.()}
+                    onError={showError}
+                    onClose={() => setShowGroupsSheet(false)}
+                />
             )}
 
             {saving && (
