@@ -82,8 +82,11 @@ export function AuthProvider({ children }) {
             // extrasMap is keyed by product_id (fetchProductExtras groups by it for direct
             // POS lookup use, so each item omits the now-redundant field) — re-attach it here
             // before flattening, or every seeded guest extra loses its product association.
+            // sort_order = vị trí trong list (đã sort theo DB) — fetchProductExtras không trả
+            // sort_order, thiếu nó thì fetchLocalProductExtras rơi về sort theo tên ("hơi Ngọt"
+            // đứng trước "Lớn" dù mẫu mặc định xếp ngược lại).
             const extras = Object.entries(extrasMap).flatMap(([productId, list]) =>
-                list.map(e => ({ ...e, product_id: productId }))
+                list.map((e, i) => ({ ...e, product_id: productId, sort_order: i }))
             )
             const extraIds = extras.map(e => e.id)
             const extraIngsMap = extraIds.length ? await fetchExtraIngredients(extraIds) : {}
@@ -108,7 +111,7 @@ export function AuthProvider({ children }) {
             // (when the restoration branch in the auth useEffect sets it).
             setLocalIsGuest(true)
             setIsGuestState(true)
-            setProfile({ id: 'guest', name: 'Khách Ghé Thăm', role: 'manager', email: 'guest@demo.local' })
+            setProfile({ id: 'guest', name: 'Nhân viên A', role: 'manager', email: 'guest@demo.local' })
             // Phễu onboarding: mốc 0 "Vào dùng thử". Chỉ chạy khi user thật sự bấm "Dùng thử
             // miễn phí" (initGuestMode), không chạy ở nhánh khôi phục sau khi refresh trang —
             // đúng ngữ nghĩa "có bao nhiêu người vào dùng thử". Fire-and-forget, không chặn.
@@ -188,7 +191,7 @@ export function AuthProvider({ children }) {
             } else if (getLocalIsGuest()) {
                 // Returning guest (page refresh) — restore guest profile without fetching
                 setIsGuestState(true)
-                setProfile({ id: 'guest', name: 'Khách Ghé Thăm', role: 'manager', email: 'guest@demo.local' })
+                setProfile({ id: 'guest', name: 'Nhân viên A', role: 'manager', email: 'guest@demo.local' })
                 setLoading(false)
             } else if (readJSON(STORAGE_KEYS.AUTH_USER, null)) {
                 // We had a real session but getSession came back empty (or too slow) —
