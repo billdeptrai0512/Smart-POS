@@ -49,7 +49,7 @@ export default function POSPage() {
     }, [])
 
     const { hintProductId, hintExtraName, showCheckoutHint, showHistoryHint } = useOrderOnboardingProgress({
-        isGuest, addressId, products, activeItem, enterKey,
+        isGuest, addressId, products, cart, enterKey,
     })
 
     // Prefetch the lazy History chunk on mount so "go next" doesn't flash the Suspense

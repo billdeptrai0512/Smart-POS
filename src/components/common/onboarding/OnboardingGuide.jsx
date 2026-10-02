@@ -74,7 +74,7 @@ export default function OnboardingGuide() {
     return (
         <div className={`${bar} bg-primary/15 text-text`}>
             <span className="shrink-0 rounded-full bg-primary text-bg text-[11px] font-black uppercase px-2 py-0.5 tabular-nums">
-                Bước {idx + 1}/{STEPS.length}
+                Bước {idx + 1}: {STEPS[idx].title}
             </span>
             <span className="flex-1 truncate">{items.find(i => !i.done)?.label}</span>
             <span className="text-primary tabular-nums shrink-0">{doneCount}/{items.length}</span>

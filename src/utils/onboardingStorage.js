@@ -6,8 +6,8 @@ import { readJSON, writeJSON } from './storage'
 
 export const ONBOARDING_STORAGE_PREFIX = 'onboarding_v4_'
 
-// orderProgress tracks bước 1 "Tạo đơn": 3 món tick ngay lúc chọn + submitted khi bấm Tạo đơn
-// thật (xem useOrderOnboardingProgress.js); viewedHistory là mốc chuyển sang Nhật ký.
+// orderProgress tracks bước 1 "Tạo đơn": `sent` = số đơn đã gửi thật (0..2, xem
+// useOrderOnboardingProgress.js); viewedHistory là mốc chuyển sang Nhật ký.
 // journalProgress tracks phase 2 "Nhật ký"'s 3 tab-visit flags on /history (Thu nhập/Chi
 // phí/Báo cáo — xem HistoryTabsBar.jsx), viewedIncome tick ngay vì đó là tab mặc định —
 // written from HistoryPage.jsx (see onboarding/steps.js).
@@ -18,7 +18,7 @@ export const ONBOARDING_STORAGE_PREFIX = 'onboarding_v4_'
 // recipeProgress (phase 5) tracked from RecipeIngredientPage.jsx khi user điền định lượng +
 // tạo tùy chọn thêm cho công thức "Cà phê đen" — xem onboarding/steps.js.
 export const DEFAULT_ONBOARDING_STATE = {
-    orderProgress: { cafeSua: false, cacaoCaPheLon: false, matcha: false, submitted: false, viewedHistory: false },
+    orderProgress: { sent: 0, viewedHistory: false },
     journalProgress: { viewedIncome: false, viewedExpense: false, viewedReport: false },
     cashFlowProgress: { scrolled: false, cash: false, transfer: false },
     inventoryProgress: { coffee: false, cacao: false },

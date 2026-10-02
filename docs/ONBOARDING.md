@@ -88,7 +88,7 @@ thật (gõ/chuyển tab/giữ item) chứ không phải bước submit sau đó
 
 | # | Phase | File | Điều kiện done | Trigger ghi cờ |
 |---|---|---|---|---|
-| 1 | Tạo đơn | `orderStep.jsx` | `orderProgress`: giữ Cà phê sữa + giữ Cacao Cà Phê (Lớn) + giữ Matcha Cà Phê. `viewedHistory` không còn gate bước này (chỉ lái hint sang phase 2), tránh cảm giác kẹt 2/2 khi user chưa ghé `/history` | [useOrderOnboardingProgress.js](../src/hooks/useOrderOnboardingProgress.js), viết từ `POSPage.jsx` |
+| 1 | Tạo đơn | `orderStep.jsx` | `orderProgress.sent` (số đơn đã gửi thật, 0–2): **đơn 1** = Cà phê sữa; **đơn 2** = Bạc xỉu (Ít ngọt) + Cacao Cà Phê (Lớn) + Matcha Cà Phê (Lớn + Hơi ngọt). Dòng 1 done khi `sent > 0`, 3 dòng sau done khi `sent > 1`. Chỉ `sent` được lưu — "đơn hiện tại đủ món chưa" suy thẳng từ giỏ (bảng `ORDERS` trong hook, cũng là nguồn của hint); gửi đơn thiếu món thì không tăng `sent`. `viewedHistory` không gate bước này (chỉ lái hint sang phase 2) | [useOrderOnboardingProgress.js](../src/hooks/useOrderOnboardingProgress.js), viết từ `POSPage.jsx` |
 | 2 | Nhật ký | `journalStep.jsx` | `journalProgress`: xem tab Thu nhập + Chi phí + Báo cáo (tab bar `/history`) | `HistoryPage.jsx`, viết khi đổi tab |
 | 3 | Báo cáo dòng tiền | `cashReportStep.jsx` | `cashFlowProgress`: đã **lưu** "Thực thu" với ô Tiền mặt VÀ ô Chuyển khoản đều có gõ gì đó (độc lập, không theo thứ tự) | `DailyReportPage.jsx`, viết trong `handleSaveCashflow` sau khi lưu thành công |
 | 4 | Báo cáo tồn kho | `inventoryStep.jsx` | `inventoryProgress`: đã **lưu** kiểm kê tồn kho với Cuối kỳ có gõ gì đó cho nguyên liệu "Cà phê" và "Cacao" (match theo label, không hardcode key), mỗi cái tính riêng | `DailyReportPage.jsx`, viết trong callback sau khi lưu kiểm kê thành công |

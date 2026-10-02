@@ -12,15 +12,17 @@ export const RECIPE_TARGET_PRODUCT = 'cà phê đen'
 export const isRecipeStepActive = (inventoryDone, recipeProgress) =>
     inventoryDone && !isRecipeProgressDone(recipeProgress)
 
-// Bước 1 "Tạo đơn" — món tick ngay lúc chọn đúng món, "Bấm Tạo đơn" tick khi gửi đơn thật (cả
-// hai ghi bởi useOrderOnboardingProgress.js). Không đòi viewedHistory — đó là việc của bước 2.
-// Export riêng vì HistoryPage.jsx cần biết bước này xong chưa.
+// Bước 1 "Tạo đơn" — 2 đơn: cà phê sữa; rồi bạc xỉu ít ngọt + cacao lớn + matcha lớn hơi ngọt.
+// Mỗi dòng done theo `sent` (số đơn đã gửi thật, ghi bởi useOrderOnboardingProgress.js). Không
+// đòi viewedHistory — đó là việc của bước 2. Export riêng vì HistoryPage.jsx cần biết bước này
+// xong chưa.
 export const orderStep = {
-    items: (ctx) => [
-        { label: 'Chọn 1 ly cà phê sữa', done: ctx.orderProgress.cafeSua },
-        { label: 'Chọn 1 ly cacao cà phê lớn', done: ctx.orderProgress.cacaoCaPheLon },
-        { label: 'Chọn 1 ly matcha cà phê', done: ctx.orderProgress.matcha },
-        { label: 'Bấm tạo đơn', done: ctx.orderProgress.submitted },
+    title: 'Tạo đơn',
+    items: ({ orderProgress: { sent } }) => [
+        { label: 'Khách gọi 1 cà phê sữa', done: sent > 0 },
+        { label: '1 ly bạc xỉu ít ngọt', done: sent > 1 },
+        { label: '1 ly cacao cà phê lớn', done: sent > 1 },
+        { label: 'và 1 ly matcha cà phê lớn và hơi ngọt chút nha', done: sent > 1 },
     ],
 }
 
@@ -35,8 +37,9 @@ export const STEPS = [
     // /history (Doanh thu là tab mặc định) nên nhãn là "Vào nhật ký" — lúc này user còn đứng ở
     // POS. Chi phí/Báo cáo tick khi user tự bấm — ghi từ HistoryPage.jsx.
     {
+        title: 'Nhật ký',
         items: (ctx) => [
-            { label: 'Vào nhật ký', done: ctx.journalProgress.viewedIncome },
+            { label: 'Xem nhật ký doanh thu', done: ctx.journalProgress.viewedIncome },
             { label: 'Xem chi phí', done: ctx.journalProgress.viewedExpense },
             { label: 'Xem báo cáo', done: ctx.journalProgress.viewedReport },
         ],
@@ -44,6 +47,7 @@ export const STEPS = [
     // 3-4. Kết ca thực thu / tồn quầy — ghi từ DailyReportPage.jsx. Thẻ Thực thu nằm dưới mép
     // màn hình lúc vừa vào /daily-report nên việc đầu là kéo xuống cho thẻ hiện trọn.
     {
+        title: 'Kết ca',
         items: (ctx) => [
             { label: 'Kéo xuống', done: reachedCashCard(ctx.cashFlowProgress) },
             { label: 'Nhập tiền mặt', done: ctx.cashFlowProgress.cash },
@@ -51,6 +55,7 @@ export const STEPS = [
         ],
     },
     {
+        title: 'Tồn kho',
         items: (ctx) => [
             { label: 'Nhập tồn cuối kỳ cà phê', done: ctx.inventoryProgress.coffee },
             { label: 'Nhập tồn cuối kỳ cacao', done: ctx.inventoryProgress.cacao },
@@ -60,6 +65,7 @@ export const STEPS = [
     // /daily-report dẫn tới /recipes (hintGoToRecipes, menuSequence.js), rồi card Cà phê đen →
     // input định lượng → "+ Thêm tùy chọn" (RecipeMenuPage.jsx/RecipeIngredientPage.jsx).
     {
+        title: 'Công thức',
         items: (ctx) => [
             { label: 'Thêm định lượng', done: ctx.recipeProgress.filledAmount },
             { label: 'Tạo tùy chọn thêm', done: ctx.recipeProgress.addedExtra },
@@ -68,6 +74,7 @@ export const STEPS = [
     // 6. (CUỐI CÙNG) Cài đặt 1 nguyên liệu mẫu (Cà phê) — tab "Nguyên liệu" trên MenuTabsBar tự
     // sáng hint (hintIngredientsTab). Chưa có ingredient "Cà phê" → [] = vacuously done.
     {
+        title: 'Nguyên liệu',
         items: ({ coffeeConfig, stockProgress }) => coffeeConfig
             ? INGREDIENT_SETUP_FIELDS.map(f => ({ label: f.label, done: f.done(coffeeConfig, stockProgress.coffeeWarehouseSet) }))
             : [],
