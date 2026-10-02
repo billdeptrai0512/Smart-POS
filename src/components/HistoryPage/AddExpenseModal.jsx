@@ -98,35 +98,6 @@ export default function AddExpenseModal({
         >
                 <SheetHeader title={isEditing ? 'Sửa chi phí' : 'Thêm chi phí'} onClose={onClose} />
 
-                {/* Ngày chi — lên đầu modal, full-width. Mặc định hôm nay; chọn ngày quá khứ để ghi lùi. */}
-                <div className="flex flex-col gap-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Ngày chi</span>
-                    <DatePicker
-                        value={expenseDate || today}
-                        max={today}
-                        onChange={onDateChange}
-                        presets={false}
-                        align="start"
-                        trigger={(label, toggle) => (
-                            <button
-                                type="button"
-                                onClick={toggle}
-                                className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[14px] font-bold text-text text-left hover:border-primary/40 transition-all"
-                            >
-                                {formatIsoDisplay(expenseDate || today)}
-                            </button>
-                        )}
-                    />
-                </div>
-
-                {/* Thời điểm — toggle full-width dưới nhãn */}
-                <SegmentToggle
-                    label="Thời điểm"
-                    value={isAfterShift}
-                    onChange={onAfterShiftChange}
-                    options={[{ value: false, label: 'Trong ca' }, { value: true, label: 'Sau ca' }]}
-                />
-
                 {/* Phân loại — dropdown chọn nhóm */}
                 <div className="flex flex-col gap-1.5">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Phân loại</span>
@@ -194,6 +165,9 @@ export default function AddExpenseModal({
                     </SelectRow>
                 </div>
 
+                {/* Phân loại + nhãn ở trên, chi tiết khoản chi ở dưới */}
+                <div className="h-px bg-border/40" />
+
                 <input
                     ref={nameRef}
                     type="text"
@@ -218,6 +192,35 @@ export default function AddExpenseModal({
                     align="left"
                     weight="medium"
                     placeholder="Số tiền..."
+                />
+
+                {/* Ngày chi — full-width. Mặc định hôm nay; chọn ngày quá khứ để ghi lùi. */}
+                <div className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Ngày chi</span>
+                    <DatePicker
+                        value={expenseDate || today}
+                        max={today}
+                        onChange={onDateChange}
+                        presets={false}
+                        align="start"
+                        trigger={(label, toggle) => (
+                            <button
+                                type="button"
+                                onClick={toggle}
+                                className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[14px] font-bold text-text text-left hover:border-primary/40 transition-all"
+                            >
+                                {formatIsoDisplay(expenseDate || today)}
+                            </button>
+                        )}
+                    />
+                </div>
+
+                {/* Thời điểm — toggle full-width dưới nhãn */}
+                <SegmentToggle
+                    label="Thời điểm"
+                    value={isAfterShift}
+                    onChange={onAfterShiftChange}
+                    options={[{ value: false, label: 'Trong ca' }, { value: true, label: 'Sau ca' }]}
                 />
 
                 {/* Phương thức — toggle full-width dưới nhãn */}
