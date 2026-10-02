@@ -90,7 +90,7 @@ export default function CheckoutBar({
                 <button
                     onClick={() => onConfirm(discountAmount, tableName)}
                     disabled={disabled}
-                    className={`flex-1 py-2.5 rounded-[12px] bg-primary text-bg text-[14px] font-black uppercase tracking-wider hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${onboardingHintClass(showOnboardingHint, 'light')}`}
+                    className={`flex-1 py-2.5 rounded-[12px] bg-primary text-bg text-[14px] font-black uppercase tracking-wider hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${onboardingHintClass(showOnboardingHint, 'solid')}`}
                 >
                     Tạo đơn
                 </button>

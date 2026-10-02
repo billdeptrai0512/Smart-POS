@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { ArrowRight } from 'lucide-react'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 
 // Types the draft text out left→right. Keyed by the newest cart line's id (in render)
@@ -16,7 +15,7 @@ function Typewriter({ text }) {
 }
 
 export default function Header({ dayName, dateOnly, onOpenHistory, addressName, onAddressClick, recentOrders = [], draftOrder, enterKey, showOnboardingHint = false, takeawaySlotRef }) {
-    const hintClass = onboardingHintClass(showOnboardingHint, 'light')
+    const hintClass = onboardingHintClass(showOnboardingHint, 'solid')
     // Draft (cart not yet sent) line on top, then saved orders. Cap at 3 rows.
     // key 'draft' is stable so extras overwrite it in place; typeKey = the newest
     // cart line's id so the typewriter restarts only on a new tap. isNew matches only the
@@ -62,14 +61,11 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                     onClick={onOpenHistory}
                     role="button"
                     tabIndex={0}
-                    className={`dine-split:col-span-2 cursor-pointer bg-linear-to-b from-primary to-primary-dark rounded-[20px] p-3 sm:p-3.5 border border-primary shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full hover:brightness-105 active:brightness-95 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 ${hintClass}`}
+                    className={`dine-split:col-span-2 cursor-pointer bg-primary/5 rounded-[20px] p-3 sm:p-3.5 border border-primary/40 hover:border-primary/60 shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${hintClass}`}
                 >
                     <div className="flex flex-col justify-between items-start relative z-10 w-full">
                         <div className="flex items-center justify-between w-full">
-                            <span className="text-[12px] sm:text-[13px] text-white font-black uppercase tracking-wider">Nhật ký</span>
-                            <span className="shrink-0 w-6 h-6 rounded-full bg-white shadow-sm flex items-center justify-center">
-                                <ArrowRight size={16} strokeWidth={3.125} className="text-bg" />
-                            </span>
+                            <span className="text-[12px] sm:text-[13px] text-primary font-black uppercase tracking-wider">Nhật ký</span>
                         </div>
                         <div className="w-full">
                             {rows.length > 0 ? (
@@ -87,11 +83,10 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                                     ))}
                                 </div>
                             ) : (
-                                <span className="text-[13px] font-bold text-white/70">Chưa có đơn</span>
+                                <span className="text-[13px] font-bold text-text-secondary">Chưa có đơn</span>
                             )}
                         </div>
                     </div>
-                    <div className="absolute bottom-0 right-0 w-24 h-24 bg-white/15 rounded-full blur-2xl -mr-10 -mb-10 pointer-events-none" />
                 </div>
 
                 {/* Cột 4 (tablet): thẻ Mang đi — TableModal inline portal vào đây, state

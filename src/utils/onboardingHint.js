@@ -5,11 +5,11 @@ import { ingredientLabel } from './ingredients'
 // same pattern as ProductCard's .tap-pulse) loops forever, stopped by the CALLER removing the
 // class — no JS timer/state needed. Plain function (not a hook — safe to call per-item inside
 // a .map(), e.g. once per extra button) despite being React-render-time logic.
-// variant 'light' (.onboarding-hint-light, also in index.css) is the same animation in white,
-// for targets that are themselves primary-colored (vd. Header's Nhật ký card).
+// variant 'solid' (.onboarding-hint-solid, also in index.css) is a detached ring + glow, for targets
+// that are themselves primary-colored (Tạo đơn).
 export function onboardingHintClass(active, variant = 'default') {
     if (!active) return ''
-    return variant === 'light' ? 'onboarding-hint-light' : 'onboarding-hint'
+    return variant === 'solid' ? 'onboarding-hint-solid' : 'onboarding-hint'
 }
 
 // Shared by every onboarding step that matches a target by name (product/extra names) —

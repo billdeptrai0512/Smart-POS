@@ -111,9 +111,9 @@ export default function LoginPage() {
                             type="button"
                             onClick={handleGuest}
                             disabled={guestLoading}
-                            className="w-full py-3.5 rounded-[14px] bg-primary uppercase border border-border/60 text-bg font-black text-sm hover:bg-primary-hover active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_4px_12px_rgba(244,119,75,0.15)]"
+                            className="w-full py-3.5 rounded-[14px] bg-primary/5 uppercase border border-primary/40 text-primary font-black text-sm hover:bg-primary/10 hover:border-primary/60 focus-visible:outline-2 focus-visible:outline-primary/50 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {guestLoading ? 'Đang tải...' : 'Sử dụng thử'}
+                            {guestLoading ? 'Đang tải...' : 'Hướng dẫn sử dụng'}
                         </button>
                     </div>
                 </div>
