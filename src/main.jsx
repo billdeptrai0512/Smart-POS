@@ -34,12 +34,15 @@ if (import.meta.env.PROD) {
       tracesSampleRate: 0,
       release: __APP_UPDATE_LOG__,
       // ponytail: chặn noise không phải lỗi app — script Zalo in-app browser tiêm vào trang,
-      // và cơ chế tự phục hồi lock đa-tab của Supabase auth (không ảnh hưởng đăng nhập)
+      // và cơ chế tự phục hồi lock đa-tab của Supabase auth (không ảnh hưởng đăng nhập),
+      // và script iabjs:// của in-app browser Facebook/Instagram (postMessage sang Java)
       ignoreErrors: [
         'isReCreate is not defined',
         'zaloJSV2 is not defined',
         'Lock was stolen by another request',
+        'Java exception was raised during method invocation',
       ],
+      denyUrls: [/^iabjs:\/\//],
     })
   })
 }
