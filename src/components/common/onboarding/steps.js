@@ -18,12 +18,17 @@ export const isRecipeStepActive = (inventoryDone, recipeProgress) =>
 // xong chưa.
 export const orderStep = {
     title: 'Tạo đơn',
-    items: ({ orderProgress: { sent } }) => [
-        { label: 'Khách gọi 1 cà phê sữa', done: sent > 0 },
-        { label: '1 ly bạc xỉu ít ngọt', done: sent > 1 },
-        { label: '1 ly cacao cà phê lớn', done: sent > 1 },
-        { label: 'và 1 ly matcha cà phê lớn và hơi ngọt chút nha', done: sent > 1 },
-    ],
+    // n = số dòng đã xong: dòng 1 khi gửi đơn 1; dòng 2-3 ngay lúc chọn đủ món (`picked`, tối đa
+    // 2 dù matcha cũng đã chọn); dòng 4 (matcha) chỉ khi gửi đơn 2 = bấm Tạo đơn → xong bước 1.
+    items: ({ orderProgress: { sent, picked = 0 } }) => {
+        const n = sent >= 2 ? 4 : sent === 1 ? 1 + Math.min(picked, 2) : 0
+        return [
+            'Khách gọi 1 cà phê sữa',
+            '1 ly bạc xỉu ít ngọt',
+            '1 ly cacao cà phê lớn',
+            'và 1 ly matcha cà phê lớn và hơi ngọt chút nha',
+        ].map((label, i) => ({ label, done: i < n }))
+    },
 }
 
 // 6 bước onboarding khách dùng thử — mỗi bước là items(ctx) → [{ label, done }], xong khi mọi

@@ -22,6 +22,7 @@ export default function MoneyInput({
     size = 'md',           // 'sm' (history row) | 'md' (default) | 'lg' (hero amount)
     align = 'right',       // 'right' (default) | 'left' | 'center'
     weight = 'bold',       // 'bold' (default) | 'medium' — đồng bộ với input text thường
+    alwaysUnit = false,    // hiện 'đ' cả khi còn trống (mặc định chỉ hiện khi đã gõ)
     className = '',
 }) {
     const sizeCls = {
@@ -48,7 +49,7 @@ export default function MoneyInput({
                 autoFocus={autoFocus}
                 className={`w-full bg-transparent ${sizeCls} ${alignCls} ${weightCls} text-text tabular-nums placeholder:text-text-secondary/40 focus:outline-none disabled:opacity-50`}
             />
-            {value && (
+            {(value || alwaysUnit) && (
                 <span className="text-[12px] font-bold text-text-secondary pr-2.5 shrink-0 pointer-events-none">đ</span>
             )}
         </div>

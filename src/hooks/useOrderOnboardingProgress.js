@@ -21,7 +21,7 @@ const hasExtra = (item, name) => (item.extras || []).some(e => norm(e.name) === 
 // renders for non-guests anyway, so any of this running for them was pure waste (worse, a
 // real shop routinely has a product literally named "Cà phê sữa").
 //
-// Chỉ `sent` (số đơn đã gửi thật, 0..2) được lưu; "đơn hiện tại đủ món chưa" suy thẳng từ giỏ.
+// Lưu `sent` (số đơn đã gửi thật, 0..2) + `picked` (tiến độ đơn 2); "đơn hiện tại đủ món chưa" suy từ giỏ.
 export function useOrderOnboardingProgress({ isGuest, addressId, products, cart, enterKey }) {
     // products is a stable ProductContext reference that rarely changes, but POSPage
     // re-renders on every tap (cart state) — memoized so guest sessions don't re-scan the
@@ -40,8 +40,14 @@ export function useOrderOnboardingProgress({ isGuest, addressId, products, cart,
     const sent = orderProgress.sent || 0
     const allSent = sent >= 2
 
-    const pending = (orders[sent] || []).find(r =>
-        !cart.some(i => i.productId === r.id && r.x.every(e => hasExtra(i, e))))
+    const rows = orders[sent] || []
+    const pending = rows.find(r => !cart.some(i => i.productId === r.id && r.x.every(e => hasExtra(i, e))))
+    // Số món đã chọn đủ liền từ đầu của đơn hiện tại — chốt (latch) vào `picked` để thanh guide
+    // (đọc từ storage, không thấy giỏ) tick từng dòng ngay lúc chọn, không đợi gửi đơn.
+    const leading = pending ? rows.indexOf(pending) : rows.length
+    if (isGuest && sent === 1 && leading > (orderProgress.picked || 0)) {
+        setOrderProgress(prev => ({ ...prev, picked: leading }))
+    }
     const orderReady = isGuest && !allSent && !!orders[sent] && !pending
 
     // enterKey đổi mỗi lần gửi đơn thật — lúc đó giỏ đã bị dọn, nên đếm theo `ready` của lần

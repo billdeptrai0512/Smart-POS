@@ -98,9 +98,10 @@ export default function AddExpenseModal({
         >
                 <SheetHeader title={isEditing ? 'Sửa chi phí' : 'Thêm chi phí'} onClose={onClose} />
 
+                <Divider />
+
                 {/* Phân loại — dropdown chọn nhóm */}
-                <div className="flex flex-col gap-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Phân loại</span>
+                <Field label="Phân loại">
                     <SelectRow
                         valueLabel={groupMeta(activeGroup).label}
                         valueDot={groupMeta(activeGroup).dotCls}
@@ -119,7 +120,7 @@ export default function AddExpenseModal({
                             />
                         ))}
                     </SelectRow>
-                </div>
+                </Field>
 
                 {/* Nhãn — dropdown chọn nhãn thuộc nhóm đang chọn + quản lý nhãn */}
                 <div className="flex flex-col gap-1.5">
@@ -165,38 +166,10 @@ export default function AddExpenseModal({
                     </SelectRow>
                 </div>
 
-                {/* Phân loại + nhãn ở trên, chi tiết khoản chi ở dưới */}
-                <div className="h-px bg-border/40" />
-
-                <input
-                    ref={nameRef}
-                    type="text"
-                    placeholder="Tên chi phí..."
-                    value={costName}
-                    onChange={e => onNameChange(e.target.value)}
-                    onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === 'Tab') {
-                            e.preventDefault()
-                            amountRef.current?.focus()
-                        }
-                    }}
-                    className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[16px] font-medium text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary/50"
-                />
-
-                <MoneyInput
-                    value={costAmount}
-                    onChange={onAmountChange}
-                    onKeyDown={e => { if (e.key === 'Enter') canSubmit && onSubmit() }}
-                    inputRef={amountRef}
-                    size="lg"
-                    align="left"
-                    weight="medium"
-                    placeholder="Số tiền..."
-                />
+                <Divider />
 
                 {/* Ngày chi — full-width. Mặc định hôm nay; chọn ngày quá khứ để ghi lùi. */}
-                <div className="flex flex-col gap-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">Ngày chi</span>
+                <Field label="Ngày chi">
                     <DatePicker
                         value={expenseDate || today}
                         max={today}
@@ -213,9 +186,15 @@ export default function AddExpenseModal({
                             </button>
                         )}
                     />
-                </div>
+                </Field>
 
-                {/* Thời điểm — toggle full-width dưới nhãn */}
+                <SegmentToggle
+                    label="Sử dụng"
+                    value={paymentMethod}
+                    onChange={onPaymentMethodChange}
+                    options={[{ value: 'cash', label: 'Tiền mặt' }, { value: 'transfer', label: 'Bank' }]}
+                />
+
                 <SegmentToggle
                     label="Thời điểm"
                     value={isAfterShift}
@@ -223,13 +202,40 @@ export default function AddExpenseModal({
                     options={[{ value: false, label: 'Trong ca' }, { value: true, label: 'Sau ca' }]}
                 />
 
-                {/* Phương thức — toggle full-width dưới nhãn */}
-                <SegmentToggle
-                    label="Phương thức"
-                    value={paymentMethod}
-                    onChange={onPaymentMethodChange}
-                    options={[{ value: 'cash', label: 'Tiền mặt' }, { value: 'transfer', label: 'Bank' }]}
-                />
+                <Divider />
+
+                <Field label="Tên chi phí">
+                    <input
+                        ref={nameRef}
+                        type="text"
+                        placeholder="Tên chi phí..."
+                        value={costName}
+                        onChange={e => onNameChange(e.target.value)}
+                        onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === 'Tab') {
+                                e.preventDefault()
+                                amountRef.current?.focus()
+                            }
+                        }}
+                        className="w-full bg-surface-light border border-border/60 rounded-[12px] px-4 py-3 text-[16px] font-medium text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary/50"
+                    />
+                </Field>
+
+                <Field label="Số tiền">
+                    <MoneyInput
+                        value={costAmount}
+                        onChange={onAmountChange}
+                        onKeyDown={e => { if (e.key === 'Enter') canSubmit && onSubmit() }}
+                        inputRef={amountRef}
+                        size="lg"
+                        align="left"
+                        weight="medium"
+                        placeholder="Số tiền..."
+                        alwaysUnit
+                    />
+                </Field>
+
+                <Divider />
 
                 <button
                     onClick={() => canSubmit && onSubmit()}
@@ -273,8 +279,20 @@ export default function AddExpenseModal({
     )
 }
 
+// Nhãn + control xếp dọc — dùng chung cho mọi dòng form.
+function Field({ label, children }) {
+    return (
+        <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">{label}</span>
+            {children}
+        </div>
+    )
+}
+
+const Divider = () => <div className="h-px bg-border/40" />
+
 // Dropdown select dùng chung cho Phân loại + Nhãn. Trigger hiện giá trị (chấm màu
-// + tên); panel mở LÊN trên (modal neo đáy màn hình) chứa các option (children).
+// + tên); panel mở XUỐNG (2 dropdown ở đầu sheet, mở lên bị cắt) chứa các option (children).
 // Click ra ngoài (trigger + panel) → đóng (onClose). ref bọc cả trigger nên bấm
 // lại trigger không bị listener đóng trước rồi onToggle mở lại.
 function SelectRow({ valueLabel, valueDot, placeholder = 'Chọn…', disabled, open, onToggle, onClose, children }) {
@@ -299,7 +317,7 @@ function SelectRow({ valueLabel, valueDot, placeholder = 'Chọn…', disabled, 
                 <ChevronDown size={16} className={`text-text-secondary shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
             </button>
             {open && (
-                <div className="absolute bottom-full left-0 right-0 mb-1.5 z-10 bg-surface border border-border/60 rounded-[12px] shadow-xl p-2 flex flex-col gap-1 max-h-[50vh] overflow-y-auto hide-scrollbar">
+                <div className="absolute top-full left-0 right-0 mt-1.5 z-10 bg-surface border border-border/60 rounded-[12px] shadow-xl p-2 flex flex-col gap-1 max-h-[50vh] overflow-y-auto hide-scrollbar">
                     {children}
                 </div>
             )}
