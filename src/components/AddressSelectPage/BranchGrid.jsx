@@ -264,7 +264,7 @@ export default function BranchGrid({
                                                             />
                                                             <ActionPill
                                                                 icon={<Boxes size={16} />}
-                                                                label="Tồn quầy"
+                                                                label="Kiểm kê"
                                                                 tone="warning"
                                                                 onClick={() => { onSelectReport?.(addr, 'inventory'); setExpandedActionsId(null) }}
                                                             />

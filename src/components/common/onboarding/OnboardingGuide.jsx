@@ -77,7 +77,6 @@ export default function OnboardingGuide() {
                 Bước {idx + 1}: {STEPS[idx].title}
             </span>
             <span className="flex-1 truncate">{items.find(i => !i.done)?.label}</span>
-            <span className="text-primary tabular-nums shrink-0">{doneCount}/{items.length}</span>
             <span className="absolute inset-x-0 bottom-0 h-[3px] bg-primary/20">
                 <span className="block h-full bg-primary transition-[width] duration-500" style={{ width: `${overallPct}%` }} />
             </span>

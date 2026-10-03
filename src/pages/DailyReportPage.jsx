@@ -1471,7 +1471,7 @@ export default function DailyReportPage() {
                             disabled={isSavingShift}
                             className="bg-primary text-black rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider hover:bg-primary/90 active:scale-95 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                            {isSavingShift ? 'Đang lưu...' : 'Lưu báo cáo'}
+                            {isSavingShift ? 'Đang lưu...' : 'Lưu'}
                         </button>
                     </div>
                 </div>

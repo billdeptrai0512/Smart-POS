@@ -26,7 +26,7 @@ export const orderStep = {
             'Khách gọi 1 cà phê sữa',
             '1 ly bạc xỉu ít ngọt',
             '1 ly cacao cà phê lớn',
-            'và 1 ly matcha cà phê lớn và hơi ngọt chút nha',
+            '1 ly matcha cà phê lớn, hơi ngọt nha',
         ].map((label, i) => ({ label, done: i < n }))
     },
 }
@@ -55,8 +55,8 @@ export const STEPS = [
         title: 'Kết ca',
         items: (ctx) => [
             { label: 'Kéo xuống', done: reachedCashCard(ctx.cashFlowProgress) },
-            { label: 'Nhập tiền mặt', done: ctx.cashFlowProgress.cash },
-            { label: 'Nhập chuyển khoản', done: ctx.cashFlowProgress.transfer },
+            { label: 'Nhập 60.000đ tiền mặt', done: ctx.cashFlowProgress.cash },
+            { label: 'Nhập 40.000đ chuyển khoản', done: ctx.cashFlowProgress.transfer },
         ],
     },
     {
