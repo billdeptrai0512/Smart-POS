@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react'
 import { fetchIngredientStocks } from '../services/orderService'
 import { fetchYesterdayShiftClosing } from '../services/reportService'
+import { parseInventoryReport } from '../utils/inventory'
 
 // Kho tổng (warehouse_stock, hiện tại) + tồn quầy ĐẦU KỲ suy ra từ phiếu chốt
 // hôm qua (counter_stock = remaining của hôm qua). Tách khỏi useShiftInventoryState
 // vì phần fetch/tính toán này không cần đọc baseline — chỉ TRẢ dữ liệu, caller
-// (useShiftInventoryState) tự quyết seed openingInputs/baseline từ `openings`.
+// (useShiftInventoryState) tự quyết seed openingInputs/baseline từ `counters`.
 //
 // `seedReady`/`seedYesterdayClosing` (từ DailyReportPage, xem useShiftInventoryState)
 // — khi cha đã fetch sẵn phiếu chốt hôm qua rồi thì dùng thẳng, khỏi tự query trùng.
@@ -29,25 +30,12 @@ export function useWarehouseStockSync(addressId, { seedReady, isDayScope, seedYe
             })
             setWarehouseStocks(warehouses)
 
-            let yesterdayReport = []
-            if (yesterdayClosing && yesterdayClosing.inventory_report) {
-                yesterdayReport = yesterdayClosing.inventory_report
-                if (typeof yesterdayReport === 'string') {
-                    try { yesterdayReport = JSON.parse(yesterdayReport) } catch { yesterdayReport = [] }
-                }
-            }
-
-            const counters = {}, openings = {}
-            if (Array.isArray(yesterdayReport)) {
-                yesterdayReport.forEach(item => {
-                    if (item && item.ingredient && typeof item.remaining === 'number') {
-                        counters[item.ingredient] = item.remaining
-                        openings[item.ingredient] = String(item.remaining)
-                    }
-                })
-            }
+            const counters = {}
+            ;(parseInventoryReport(yesterdayClosing?.inventory_report) || []).forEach(item => {
+                if (item && item.ingredient && typeof item.remaining === 'number') counters[item.ingredient] = item.remaining
+            })
             setOpeningStock(counters)
-            return { openings }
+            return { counters }
         })
     }, [addressId, seedReady, seedYesterdayClosing, isDayScope])
 

@@ -418,21 +418,27 @@ export function buildIngredientToProduct({ orderItems = [], recipes = [], produc
 // tự định nghĩa lại rồi lệch epsilon nhau.
 export const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
 
+// inventory_report từ DB có thể là mảng hoặc chuỗi JSON → mảng; null nếu hỏng/không phải mảng
+// (caller tự quyết bỏ qua hay coi là rỗng — remote rỗng ≠ remote hỏng).
+export function parseInventoryReport(v) {
+    if (typeof v === 'string') { try { v = JSON.parse(v) } catch { return null } }
+    return Array.isArray(v) ? v : null
+}
+
 // Hao hụt = Thực tế − Lý thuyết cho 1 nguyên liệu. null = chưa nhập Cuối kỳ (pending),
 // caller phải tự phân biệt null với 0 (đã kiểm và khớp). Nguồn dùng chung giữa
 // InventoryReportCard (audit UI) và findMissingCupCandidates bên dưới — tránh 2 nơi
 // tính hao hụt lệch công thức nhau.
-export function computeHaoHut({ inventoryValue, restockValue, openingValue, openingFallback, used }) {
-    const hasActual = inventoryValue !== undefined && inventoryValue !== ''
-    if (!hasActual) return null
+export function computeBalance({ inventoryValue, restockValue, openingValue, openingFallback, used }) {
+    const openingNum = r1(openingValue ?? openingFallback)
     const restockNum = r1(restockValue)
-    const openingDisplay = openingValue ?? (openingFallback !== undefined && openingFallback !== null ? String(openingFallback) : '')
-    const openingNum = r1(openingDisplay)
     const usedNum = r1(used)
-    const thucTe = r1(inventoryValue)
     const lyThuyet = r1(openingNum + restockNum - usedNum)
-    return r1(thucTe - lyThuyet)
+    const hasActual = inventoryValue !== undefined && inventoryValue !== ''
+    return { openingNum, restockNum, usedNum, lyThuyet, haoHut: hasActual ? r1(r1(inventoryValue) - lyThuyet) : null }
 }
+
+export const computeHaoHut = (args) => computeBalance(args).haoHut
 
 /**
  * PROTOTYPE — dò nghi vấn "pha bán nhưng không bấm bill".

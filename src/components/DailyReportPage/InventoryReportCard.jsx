@@ -1,7 +1,7 @@
 import { Fragment, memo, useMemo, useState } from 'react'
 import { AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Info } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit, lookupByLabel } from '../../utils/ingredients'
-import { formatPackedQty, computeHaoHut, r1 } from '../../utils/inventory'
+import { formatPackedQty, computeBalance, computeHaoHut, r1 } from '../../utils/inventory'
 import { formatVND } from '../../utils'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import CollapsibleCard from './CollapsibleCard'
@@ -214,12 +214,8 @@ const IngredientRow = memo(function IngredientRow({
     //   Hao hụt   = Thực tế − Lý thuyết
     //               (âm = thiếu → mất hàng / công thức sai;
     //                dương = dư → nhập vượt / công thức trừ thiếu)
-    const openingNum = r1(openingDisplay)
-    const usedNum = r1(used)
-    const hasActual = inventoryValue !== undefined && inventoryValue !== ''
-    const cuoiKyNum = hasActual ? r1(inventoryValue) : null
-    const lyThuyet = r1(openingNum + restockNum - usedNum)
-    const haoHut = cuoiKyNum != null ? r1(cuoiKyNum - lyThuyet) : null
+    const { openingNum, usedNum, lyThuyet, haoHut } = computeBalance({ inventoryValue, restockValue, openingValue, openingFallback, used })
+    const hasActual = haoHut != null
     const haoHutTone = haoHut == null
         ? 'neutral'
         : haoHut === 0 ? 'good' : haoHut < 0 ? 'bad' : 'warn'
@@ -416,15 +412,18 @@ const IngredientRow = memo(function IngredientRow({
     )
 })
 
-function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRight, overflow, tone = 'neutral', onBoxClick, hint = false }) {
+// tone → wrapper classes (no border-width, callers add `border`) + text color classes.
+// ColumnInput's neutral tone is intentionally empty so locked/overflow styling shows through;
+// TextCell falls back to a grey box instead.
+const TONE = {
+    good: { wrap: 'bg-success/8 border-success/30', text: 'text-success', unit: 'text-success/70' },
+    bad: { wrap: 'bg-danger/8 border-danger/30', text: 'text-danger', unit: 'text-danger/70' },
+    warn: { wrap: 'bg-warning/8 border-warning/30', text: 'text-warning', unit: 'text-warning/70' },
+}
+
+function ColumnInput({ label, value, unit, disabled, locked, onChange, overflow, tone = 'neutral', onBoxClick, hint = false }) {
     // tone overrides the default disabled coloring for read-only diff cells.
-    const toneMap = {
-        good: { wrap: 'bg-success/8 border border-success/30', input: 'text-success', unit: 'text-success/70' },
-        bad: { wrap: 'bg-danger/8 border border-danger/30', input: 'text-danger', unit: 'text-danger/70' },
-        warn: { wrap: 'bg-warning/8 border border-warning/30', input: 'text-warning', unit: 'text-warning/70' },
-        neutral: { wrap: '', input: '', unit: '' },
-    }
-    const t = toneMap[tone] || toneMap.neutral
+    const t = TONE[tone] ? { wrap: `border ${TONE[tone].wrap}`, input: TONE[tone].text, unit: TONE[tone].unit } : { wrap: '', input: '', unit: '' }
 
     const wrapCls = overflow
         ? 'bg-danger/5 border border-danger/40 focus-within:border-danger'
@@ -441,7 +440,6 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRig
         <div className="flex flex-col">
             <div className="flex items-center justify-center gap-1 mb-1">
                 <span className="text-[9px] font-black uppercase text-text-dim">{label}</span>
-                {headerRight}
             </div>
             {/* <label> để bấm chỗ nào trong ô cũng focus vào input — input tự co theo số
                 (width tính bằng ch) nên đơn vị luôn nằm sát ngay sau số, cả cụm canh giữa.
@@ -470,13 +468,7 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, headerRig
 // Read-only text cell that visually matches ColumnInput (same label+box rhythm) but
 // renders a string instead of a number input. Used for "Tương đương N ly <product>".
 function TextCell({ label, text, tone = 'neutral', onClick, expanded = false }) {
-    const toneMap = {
-        good: { wrap: 'bg-success/8 border-success/30', text: 'text-success' },
-        bad: { wrap: 'bg-danger/8 border-danger/30', text: 'text-danger' },
-        warn: { wrap: 'bg-warning/8 border-warning/30', text: 'text-warning' },
-        neutral: { wrap: 'bg-surface-light border-border/60', text: 'text-text-secondary' },
-    }
-    const t = toneMap[tone] || toneMap.neutral
+    const t = TONE[tone] || { wrap: 'bg-surface-light border-border/60', text: 'text-text-secondary' }
     const interactive = typeof onClick === 'function'
     const boxClasses = `w-full rounded-[10px] py-1.5 px-2 text-[13px] text-center font-bold border ${t.wrap} ${t.text}${interactive ? ' relative flex items-center justify-center hover:brightness-110 active:scale-[0.99] transition' : ''}`
     return (

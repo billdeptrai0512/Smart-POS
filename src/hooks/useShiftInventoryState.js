@@ -4,6 +4,7 @@ import { mergeShiftClosingInventory } from '../services/reportService'
 import { supabase } from '../lib/supabaseClient'
 import { isGuest } from '../services/localRepository'
 import { lookupByLabel } from '../utils/ingredients'
+import { parseInventoryReport } from '../utils/inventory'
 import { dateStringVN } from '../utils/dateVN'
 import { onTabReturn } from '../utils/tabVisibility'
 import { norm, strField, boolField, mergeField } from '../utils/fieldSync'
@@ -33,6 +34,12 @@ import { useWarehouseStockSync } from './useWarehouseStockSync'
 //    đây là thứ làm merge race-free giữa 2 thiết bị, đừng đổi thành gửi
 //    nguyên mảng.
 //
+// Keys whose value differs between a live input map and its baseline. Empty string,
+// null and undefined all mean "no input" (norm) — so a load that hydrates "" never
+// sees a phantom diff against an undefined baseline key.
+const diffKeys = (cur = {}, base = {}) =>
+    [...new Set([...Object.keys(cur), ...Object.keys(base)])].filter(k => norm(cur[k]) !== norm(base[k]))
+
 // Realtime channel is named after the address (same as before) so devices
 // editing the same shift converge regardless of which page they're on.
 // `dateKey` (e.g. todayISO from caller) is part of the effect deps so an overnight
@@ -94,11 +101,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
 
     // Mirror refs of the live input maps so reconcileFromRemote can merge synchronously
     // (without putting side-effects inside state updaters). Refreshed every render.
-    const openingInputsRef = useRef(openingInputs); openingInputsRef.current = openingInputs
-    const openingLockedRef = useRef(openingLocked); openingLockedRef.current = openingLocked
-    const restockInputsRef = useRef(restockInputs); restockInputsRef.current = restockInputs
-    const inventoryInputsRef = useRef(inventoryInputs); inventoryInputsRef.current = inventoryInputs
-    const skippedRef = useRef(skipped); skippedRef.current = skipped
+    const inventoryStateRef = useRef(inventoryState); inventoryStateRef.current = inventoryState
 
     // Timestamps of this device's own recent pushes, per ingredient — used only to tell
     // "remote just overwrote MY edit" (→ conflict toast) apart from a normal one-way
@@ -126,11 +129,8 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
             if (!isToday) return
             setExistingClosing(data)
 
-            let parsed = data.inventory_report
-            if (typeof parsed === 'string') {
-                try { parsed = JSON.parse(parsed) } catch { console.warn('Could not parse inventory_report JSON, ignoring') }
-            }
-            if (!Array.isArray(parsed)) return
+            const parsed = parseInventoryReport(data.inventory_report)
+            if (!parsed) return
 
             const inputs = {}, restocks = {}, openings = {}, locked = {}, skips = {}
             parsed.forEach(item => {
@@ -180,10 +180,11 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     const { warehouseStocks, openingStock, reload: reloadWarehouseStock } = useWarehouseStockSync(addressId, { seedReady, isDayScope, seedYesterdayClosing })
     const reloadStocks = useCallback(() => {
         if (addressId === undefined) return Promise.resolve()
-        return reloadWarehouseStock().then(({ openings }) => {
+        return reloadWarehouseStock().then(({ counters }) => {
             // Seed openingInputs only if today's closing hasn't set them yet.
             // When seeding kicks in, also fold the seed into baseline.opening so
             // a fresh tab doesn't read as "dirty" before any user edit.
+            const openings = Object.fromEntries(Object.entries(counters).map(([k, v]) => [k, String(v)]))
             setInventoryState(prev => {
                 if (Object.keys(prev.opening).length > 0) return prev
                 baselineRef.current = { ...baselineRef.current, opening: { ...openings } }
@@ -212,9 +213,8 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     // và đẩy baseline theo → isDirty hết true (không lặp autosave). Hàng DB là mảng đầy đủ
     // nên "vắng mặt" nghĩa thật là thiết bị khác đã xoá/clear nguyên liệu đó.
     const reconcileFromRemote = useCallback((remoteReport) => {
-        let parsed = remoteReport
-        if (typeof parsed === 'string') { try { parsed = JSON.parse(parsed) } catch { return } }
-        if (!Array.isArray(parsed)) return
+        const parsed = parseInventoryReport(remoteReport)
+        if (!parsed) return
         const rOpening = {}, rLocked = {}, rRestock = {}, rInventory = {}, rSkipped = {}
         parsed.forEach(item => {
             if (!item || !item.ingredient) return
@@ -224,12 +224,12 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
             if (typeof item.remaining === 'number') rInventory[item.ingredient] = String(item.remaining)
             if (item.skipped) rSkipped[item.ingredient] = true
         })
-        const b = baselineRef.current
-        const [oOut, oNb] = mergeField(openingInputsRef.current, b.opening, rOpening, strField)
-        const [lOut, lNb] = mergeField(openingLockedRef.current, b.openingLocked, rLocked, boolField)
-        const [rOut, rNb, rAdopted] = mergeField(restockInputsRef.current, b.restock, rRestock, strField)
-        const [iOut, iNb] = mergeField(inventoryInputsRef.current, b.inventory, rInventory, strField)
-        const [sOut, sNb, sAdopted] = mergeField(skippedRef.current, b.skipped, rSkipped, boolField)
+        const b = baselineRef.current, cur = inventoryStateRef.current
+        const [oOut, oNb] = mergeField(cur.opening, b.opening, rOpening, strField)
+        const [lOut, lNb] = mergeField(cur.openingLocked, b.openingLocked, rLocked, boolField)
+        const [rOut, rNb, rAdopted] = mergeField(cur.restock, b.restock, rRestock, strField)
+        const [iOut, iNb] = mergeField(cur.inventory, b.inventory, rInventory, strField)
+        const [sOut, sNb, sAdopted] = mergeField(cur.skipped, b.skipped, rSkipped, boolField)
         setInventoryState({ opening: oOut, openingLocked: lOut, restock: rOut, inventory: iOut, skipped: sOut })
         baselineRef.current = { opening: oNb, openingLocked: lNb, restock: rNb, inventory: iNb, skipped: sNb }
         setBaselineVersion(v => v + 1)
@@ -303,29 +303,10 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
         })
     }, [])
 
-    // ── Derived: isDirty (compare inputs vs baseline) ────────────────────────
-    // Empty string and undefined both mean "no input" — normalize so a load that
-    // hydrates "" → never sees a phantom diff against undefined baseline keys.
-    const isDirty = useMemo(() => {
-        const mapEq = (a, b) => {
-            const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})])
-            for (const k of keys) if (norm(a?.[k]) !== norm(b?.[k])) return false
-            return true
-        }
-        const b = baselineRef.current
-        return !(
-            mapEq(openingInputs, b.opening)
-            && mapEq(openingLocked, b.openingLocked)
-            && mapEq(restockInputs, b.restock)
-            && mapEq(inventoryInputs, b.inventory)
-            && mapEq(skipped, b.skipped)
-        )
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [openingInputs, openingLocked, restockInputs, inventoryInputs, skipped, baselineVersion])
-
+    // ── Derived: dirtySummary / isDirty (compare inputs vs baseline) ─────────
     // Danh sách field đã đổi so với baseline, dạng người-đọc-được — để confirm "rời trang"
     // chú thích cụ thể thay đổi nào sắp mất (thay vì câu chung chung gây mơ hồ khi user
-    // nghĩ mình chưa đổi gì). Mỗi dòng: "Nguyên liệu · Loại: cũ → mới".
+    // nghĩ mình chưa đổi gì). Mỗi dòng: "Nguyên liệu · Loại: cũ → mới". isDirty = có dòng nào.
     const dirtySummary = useMemo(() => {
         const fmt = (v) => (v == null ? '(trống)' : v)
         const b = baselineRef.current
@@ -336,32 +317,25 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
             ['Lấy ra', restockInputs, b.restock],
         ]
         for (const [label, cur, base] of fields) {
-            for (const ing of new Set([...Object.keys(cur || {}), ...Object.keys(base || {})])) {
-                if (norm(cur[ing]) !== norm(base[ing]))
-                    lines.push(`${ing} · ${label}: ${fmt(norm(base[ing]))} → ${fmt(norm(cur[ing]))}`)
-            }
+            for (const ing of diffKeys(cur, base))
+                lines.push(`${ing} · ${label}: ${fmt(norm(base[ing]))} → ${fmt(norm(cur[ing]))}`)
         }
-        for (const ing of new Set([...Object.keys(openingLocked || {}), ...Object.keys(b.openingLocked || {})])) {
-            if (!!openingLocked[ing] !== !!b.openingLocked[ing])
-                lines.push(`${ing} · Khoá đầu kỳ: ${openingLocked[ing] ? 'bật' : 'tắt'}`)
-        }
-        for (const ing of new Set([...Object.keys(skipped || {}), ...Object.keys(b.skipped || {})])) {
-            if (!!skipped[ing] !== !!b.skipped[ing])
-                lines.push(`${ing} · Bỏ qua: ${skipped[ing] ? 'bật' : 'tắt'}`)
-        }
+        for (const ing of diffKeys(openingLocked, b.openingLocked))
+            lines.push(`${ing} · Khoá đầu kỳ: ${openingLocked[ing] ? 'bật' : 'tắt'}`)
+        for (const ing of diffKeys(skipped, b.skipped))
+            lines.push(`${ing} · Bỏ qua: ${skipped[ing] ? 'bật' : 'tắt'}`)
         return lines
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [openingInputs, inventoryInputs, restockInputs, openingLocked, skipped, baselineVersion])
+    const isDirty = dirtySummary.length > 0
 
     // Restock có đổi so với baseline không. Lưu có restock thay đổi = chuyển kho ra quầy
     // (trừ kho tổng server-side) → cần confirm; lưu chỉ-đếm (Đầu/Cuối kỳ) thì không.
-    const restockDirty = useMemo(() => {
-        const a = restockInputs, b = baselineRef.current.restock || {}
-        const keys = new Set([...Object.keys(a || {}), ...Object.keys(b)])
-        for (const k of keys) if (norm(a?.[k]) !== norm(b[k])) return true
-        return false
+    const restockDirty = useMemo(
+        () => diffKeys(restockInputs, baselineRef.current.restock).length > 0,
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [restockInputs, baselineVersion])
+        [restockInputs, baselineVersion],
+    )
 
     // ── Derived: effective warehouse stocks ──────────────────────────────────
     // When editing an already-saved shift, `warehouseStocks` from fetchIngredientStocks
@@ -370,11 +344,8 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     // restock — otherwise a no-op edit triggers a false "Vượt kho".
     const effectiveWarehouseStocks = useMemo(() => {
         if (!existingClosing) return warehouseStocks
-        let parsed = existingClosing.inventory_report
-        if (typeof parsed === 'string') {
-            try { parsed = JSON.parse(parsed) } catch { return warehouseStocks }
-        }
-        if (!Array.isArray(parsed)) return warehouseStocks
+        const parsed = parseInventoryReport(existingClosing.inventory_report)
+        if (!parsed) return warehouseStocks
         const adjusted = { ...warehouseStocks }
         parsed.forEach(item => {
             if (typeof item.restock === 'number' && item.ingredient) {
@@ -415,21 +386,12 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
         const unitOf = {}
         ingredientsList.forEach(i => { unitOf[i.ingredient] = i.unit || 'đv' })
         const b = baselineRef.current
-        const keys = new Set([
-            ...Object.keys(openingInputs), ...Object.keys(inventoryInputs),
-            ...Object.keys(restockInputs), ...Object.keys(openingLocked), ...Object.keys(skipped),
-            ...Object.keys(b.opening), ...Object.keys(b.inventory),
-            ...Object.keys(b.restock), ...Object.keys(b.openingLocked), ...Object.keys(b.skipped),
-        ])
+        const changed = new Set([
+            [openingInputs, b.opening], [inventoryInputs, b.inventory], [restockInputs, b.restock],
+            [openingLocked, b.openingLocked], [skipped, b.skipped],
+        ].flatMap(([cur, base]) => diffKeys(cur, base)))
         const patches = []
-        for (const ing of keys) {
-            const changed =
-                norm(openingInputs[ing]) !== norm(b.opening[ing])
-                || norm(inventoryInputs[ing]) !== norm(b.inventory[ing])
-                || norm(restockInputs[ing]) !== norm(b.restock[ing])
-                || !!openingLocked[ing] !== !!b.openingLocked[ing]
-                || !!skipped[ing] !== !!b.skipped[ing]
-            if (!changed) continue
+        for (const ing of changed) {
             patches.push({
                 ingredient: ing,
                 unit: unitOf[ing] || 'đv',
