@@ -14,6 +14,9 @@
 function createCache(ttlMs) {
     // Map<string, { data, t }>
     const store = new Map()
+    // Map<string, Promise> — lần đọc đang bay, dùng chung cho mọi caller cùng key (StrictMode
+    // chạy effect 2 lần, 2 hook mount cùng lúc…) thay vì mỗi caller 1 round-trip.
+    const inflight = new Map()
 
     const keyOf = (parts) => parts.map(p => p == null ? '' : String(p)).join('|')
 
@@ -38,21 +41,33 @@ function createCache(ttlMs) {
     function invalidatePrefix(parts) {
         const prefix = keyOf(parts) + '|'
         const exact = keyOf(parts)
-        for (const k of store.keys()) {
-            if (k === exact || k.startsWith(prefix)) store.delete(k)
+        // Bỏ cả lần đọc đang bay: caller SAU invalidate (vd refetch ngay sau khi ghi) không được
+        // nhập vào request khởi chạy trước lúc ghi → trả dữ liệu cũ.
+        for (const m of [store, inflight]) {
+            for (const k of m.keys()) {
+                if (k === exact || k.startsWith(prefix)) m.delete(k)
+            }
         }
     }
 
-    function clear() { store.clear() }
+    function clear() { store.clear(); inflight.clear() }
 
     // Read-through: returns cached value if fresh, else awaits fn() and caches the resolved value.
-    // Rejections are NOT cached.
+    // Concurrent callers with the same key share one fn() call. Rejections are NOT cached.
+    // Kết quả chỉ được ghi vào cache nếu lần đọc này chưa bị invalidate trong lúc bay.
     async function through(parts, fn) {
         const cached = get(parts)
         if (cached !== undefined) return cached
-        const data = await fn()
-        set(parts, data)
-        return data
+        const k = keyOf(parts)
+        let p = inflight.get(k)
+        if (!p) {
+            p = fn().then(
+                (data) => { if (inflight.get(k) === p) { inflight.delete(k); set(parts, data) } return data },
+                (err) => { if (inflight.get(k) === p) inflight.delete(k); throw err },
+            )
+            inflight.set(k, p)
+        }
+        return p
     }
 
     return { invalidatePrefix, clear, through }
