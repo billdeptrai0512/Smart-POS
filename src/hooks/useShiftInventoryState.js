@@ -37,7 +37,7 @@ import { useWarehouseStockSync } from './useWarehouseStockSync'
 // Keys whose value differs between a live input map and its baseline. Empty string,
 // null and undefined all mean "no input" (norm) — so a load that hydrates "" never
 // sees a phantom diff against an undefined baseline key.
-const diffKeys = (cur = {}, base = {}) =>
+const diffKeys = (cur, base) =>
     [...new Set([...Object.keys(cur), ...Object.keys(base)])].filter(k => norm(cur[k]) !== norm(base[k]))
 
 // Realtime channel is named after the address (same as before) so devices
@@ -331,11 +331,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
 
     // Restock có đổi so với baseline không. Lưu có restock thay đổi = chuyển kho ra quầy
     // (trừ kho tổng server-side) → cần confirm; lưu chỉ-đếm (Đầu/Cuối kỳ) thì không.
-    const restockDirty = useMemo(
-        () => diffKeys(restockInputs, baselineRef.current.restock).length > 0,
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [restockInputs, baselineVersion],
-    )
+    const restockDirty = diffKeys(restockInputs, baselineRef.current.restock).length > 0
 
     // ── Derived: effective warehouse stocks ──────────────────────────────────
     // When editing an already-saved shift, `warehouseStocks` from fetchIngredientStocks

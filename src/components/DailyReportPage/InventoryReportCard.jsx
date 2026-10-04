@@ -423,16 +423,16 @@ const TONE = {
 
 function ColumnInput({ label, value, unit, disabled, locked, onChange, overflow, tone = 'neutral', onBoxClick, hint = false }) {
     // tone overrides the default disabled coloring for read-only diff cells.
-    const t = TONE[tone] ? { wrap: `border ${TONE[tone].wrap}`, input: TONE[tone].text, unit: TONE[tone].unit } : { wrap: '', input: '', unit: '' }
+    const t = TONE[tone] || {}
 
     const wrapCls = overflow
         ? 'bg-danger/5 border border-danger/40 focus-within:border-danger'
         : t.wrap
-            ? t.wrap
+            ? `border ${t.wrap}`
             : locked
                 ? 'bg-primary/8 border border-primary/30'
                 : 'bg-surface-light border border-border/60 focus-within:border-primary/40'
-    const inputCls = overflow ? 'text-danger' : t.input || (locked ? 'text-primary cursor-not-allowed' : 'text-text')
+    const inputCls = overflow ? 'text-danger' : t.text || (locked ? 'text-primary cursor-not-allowed' : 'text-text')
     const unitCls = overflow ? 'text-danger/70' : t.unit || (locked ? 'text-primary/70' : 'text-text-dim')
     const Box = onBoxClick ? 'div' : 'label'
 

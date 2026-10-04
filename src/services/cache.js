@@ -61,10 +61,9 @@ function createCache(ttlMs) {
         const k = keyOf(parts)
         let p = inflight.get(k)
         if (!p) {
-            p = fn().then(
-                (data) => { if (inflight.get(k) === p) { inflight.delete(k); set(parts, data) } return data },
-                (err) => { if (inflight.get(k) === p) inflight.delete(k); throw err },
-            )
+            p = fn()
+                .then((data) => { if (inflight.get(k) === p) set(parts, data); return data })
+                .finally(() => { if (inflight.get(k) === p) inflight.delete(k) })
             inflight.set(k, p)
         }
         return p

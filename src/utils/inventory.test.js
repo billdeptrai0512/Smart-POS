@@ -4,7 +4,7 @@ import { computeBalance, computeHaoHut, parseInventoryReport } from './inventory
 describe('computeBalance / computeHaoHut', () => {
     it('hao hụt = Cuối kỳ − (Đầu kỳ + Nhập thêm − Sử dụng)', () => {
         const args = { inventoryValue: '8', restockValue: '5', openingValue: '10', used: 6.04 }
-        expect(computeBalance(args)).toEqual({ openingNum: 10, restockNum: 5, usedNum: 6, lyThuyet: 9, haoHut: -1 })
+        expect(computeBalance(args)).toEqual({ openingNum: 10, usedNum: 6, lyThuyet: 9, haoHut: -1 })
         expect(computeHaoHut(args)).toBe(-1)
     })
     it('chưa nhập Cuối kỳ → null (không phải 0)', () => {

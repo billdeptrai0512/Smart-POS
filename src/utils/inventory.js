@@ -435,7 +435,7 @@ export function computeBalance({ inventoryValue, restockValue, openingValue, ope
     const usedNum = r1(used)
     const lyThuyet = r1(openingNum + restockNum - usedNum)
     const hasActual = inventoryValue !== undefined && inventoryValue !== ''
-    return { openingNum, restockNum, usedNum, lyThuyet, haoHut: hasActual ? r1(r1(inventoryValue) - lyThuyet) : null }
+    return { openingNum, usedNum, lyThuyet, haoHut: hasActual ? r1(r1(inventoryValue) - lyThuyet) : null }
 }
 
 export const computeHaoHut = (args) => computeBalance(args).haoHut
