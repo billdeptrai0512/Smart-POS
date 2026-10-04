@@ -3,7 +3,9 @@
 // useOrdersPoll); fetch thẳng trong handler là vòng lặp chỉ bị ghìm bởi RTT.
 // Trả về hàm huỷ đăng ký, dùng thẳng làm cleanup của useEffect.
 export function onTabReturn(cb) {
-    let lastHidden = 0
+    // Mốc khởi tạo = lúc đăng ký (không phải 0): 'visible' đầu tiên mà chưa từng 'hidden'
+    // (trang tải ở nền / webview) không được tính là "đã đi vắng" → khỏi refetch cả loạt.
+    let lastHidden = Date.now()
     const handler = () => {
         if (document.visibilityState === 'hidden') { lastHidden = Date.now(); return }
         if (Date.now() - lastHidden <= 30_000) return
