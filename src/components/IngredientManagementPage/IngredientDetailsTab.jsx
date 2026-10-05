@@ -20,7 +20,7 @@ export default function IngredientDetailsTab({
     onSaveUnit,         // (newUnit: string)       => Promise
     onSaveMinStock,     // (newMin: number)        => Promise
     onSaveTareWeight,   // (newTare: number)       => Promise  (0 = xoá bì)
-    onChangeCategory,   // (newCat: string, groupId: string|null) => Promise (single tap)
+    onChangeGroup,      // (groupId: string|null) => Promise (single tap)
     onConfigurePack,    // ()                      => void   (opens modal)
 }) {
     const hasPack = !!(packSize && packUnit)
@@ -31,7 +31,7 @@ export default function IngredientDetailsTab({
         <div className="flex flex-col gap-4">
             {/* Thuộc tính NVL/bao bì (không phải số tồn) — số tồn/kiểm kê nằm ở tab Nhật ký. */}
             <Panel >
-                <CategoryRow value={category} groupId={groupId} groups={groups} canEdit={canEdit} saving={saving} onChange={onChangeCategory} />
+                <CategoryRow value={category} groupId={groupId} groups={groups} canEdit={canEdit} saving={saving} onChange={onChangeGroup} />
                 <NameRow value={nameLabel} canEdit={canEdit} onSave={onSaveName} />
                 <UnitRow value={unit} canEdit={canEdit} onSave={onSaveUnit} />
                 {tareApplies && (tareWeight != null || canEdit) && (
@@ -377,14 +377,13 @@ function UnitRow({ value, canEdit, onSave }) {
 
 
 // ── Category (single-tap select; no edit toggle) ────────────────────────────
-// Dropdown chỉ liệt kê nhóm cùng tab với món (value = groupId, '' = chưa phân nhóm); đổi tab
-// (Nguyên liệu ↔ Bao bì) là dòng hành động cuối. groups = null → địa chỉ không hỗ trợ nhóm
-// (guest/template): dòng '' mang tên tab thay cho "Chưa phân nhóm". Tạo/sửa nhóm ở sheet 'Sửa nhóm'.
+// Dropdown liệt kê mọi nhóm (value = groupId, '' = chưa phân nhóm); category của món đi theo section của nhóm
+// (trigger DB ép), bỏ nhóm thì giữ category cũ. groups = null → địa chỉ không hỗ trợ nhóm (guest/template).
+// Tạo/sửa nhóm ở sheet 'Quản lý'.
 function CategoryRow({ value, groupId, groups, canEdit, saving, onChange }) {
     const groupName = groups?.find(g => g.id === groupId)?.name
     const sectionLabel = INGREDIENT_CATEGORIES.find(c => c.key === value)?.label || 'Nguyên liệu chính'
     const noGroupLabel = groups ? 'Chưa phân nhóm' : sectionLabel
-    const other = INGREDIENT_CATEGORIES.find(c => c.key !== value)
     return (
         <Row label="Nhóm">
             {canEdit ? (
@@ -392,11 +391,10 @@ function CategoryRow({ value, groupId, groups, canEdit, saving, onChange }) {
                     value={groupId || ''}
                     disabled={saving}
                     triggerLabel={groupName || noGroupLabel}
-                    onChange={id => onChange?.(value, id || null)}
+                    onChange={id => onChange?.(id || null)}
                     items={[
                         { value: '', label: noGroupLabel },
-                        ...(groups || []).filter(g => g.section === value).map(g => ({ value: g.id, label: g.name })),
-                        { action: 'move', label: `Chuyển sang ${other.label}`, onClick: () => onChange?.(other.key, null) },
+                        ...(groups || []).map(g => ({ value: g.id, label: g.name })),
                     ]}
                     className="max-w-[200px]"
                     triggerClassName="text-[13px]"

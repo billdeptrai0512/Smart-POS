@@ -39,8 +39,9 @@ export default function IngredientCostItem({
     const isOutStock = currentStock !== null && currentStock <= 0
     const isLowStock = currentStock !== null && currentStock > 0 && currentStock < (minStock || 0)
 
-    const borderClass = isOutStock ? 'border-danger/40' : isLowStock ? 'border-danger/40' : 'border-border/60'
-    const textClass = isOutStock ? 'text-danger' : isLowStock ? 'text-danger' : 'text-text'
+    const warn = isOutStock || isLowStock
+    const borderClass = warn ? 'border-danger/40' : 'border-border/60'
+    const textClass = warn ? 'text-danger' : 'text-text'
 
     return (
         <div
@@ -62,6 +63,7 @@ export default function IngredientCostItem({
 
             {/* Row 2: hero — tồn kho number + unit + pack breakdown */}
             <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 min-w-0 -mt-0.5">
+                <span className="text-[11px] font-bold uppercase tracking-wide text-text-dim leading-none">Tổng</span>
                 <span className={`text-[19px] font-black tabular-nums leading-none ${textClass}`}>
                     {currentStock !== null ? Math.round(currentStock * 10) / 10 : '—'}
                 </span>
@@ -94,9 +96,10 @@ export default function IngredientCostItem({
                     }
                     return (
                         <>
-                            <Row label="Tồn kho đầu ngày" value={fmt(warehouseStart)} />
-                            <Row label="Lấy ra" value={fmt(todayRestock)} sign="-" accent={todayRestock > 0 ? 'text-warning' : ''} />
-                            <Row label="Nhập mới" value={fmt(todayRefill)} sign="+" accent={todayRefill > 0 ? 'text-success' : ''} />
+                            {/* Ngày chưa có biến động → đầu = cuối, chỉ cần 1 dòng. */}
+                            {(todayRestock > 0 || todayRefill > 0) && <Row label="Tồn kho đầu ngày" value={fmt(warehouseStart)} />}
+                            {todayRestock > 0 && <Row label="Lấy ra" value={fmt(todayRestock)} sign="-" accent="text-warning" />}
+                            {todayRefill > 0 && <Row label="Nhập mới" value={fmt(todayRefill)} sign="+" accent="text-success" />}
                             <Row label="Tồn kho cuối ngày" value={fmt(warehouseNow)} bold />
                         </>
                     )

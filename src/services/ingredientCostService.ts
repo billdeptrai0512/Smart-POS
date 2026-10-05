@@ -98,13 +98,13 @@ export async function deleteIngredientGroup(id: UUID) {
 }
 
 // Gán nhóm + tab cho 1 hay nhiều nguyên liệu bằng 1 lệnh UPDATE (trigger sync_ingredient_group_category
-// ép category = section khi có nhóm; category vẫn gửi cho groupId null = 'chưa phân nhóm' của tab đó).
+// ép category = section khi có nhóm; bỏ món khỏi nhóm (groupId null) thì category giữ nguyên).
 // UPDATE thay vì upsert để không phải mang theo unit_cost — nguyên liệu đã có dòng ingredient_costs.
-export async function setIngredientsGroup(ingredients: string[], addressId: UUID, groupId: UUID | null, category: 'main' | 'packaging') {
+export async function setIngredientsGroup(ingredients: string[], addressId: UUID, groupId: UUID | null) {
     if (ingredients.length === 0) return
     const { error } = await supabase
         .from('ingredient_costs')
-        .update({ group_id: groupId, category })
+        .update({ group_id: groupId })
         .eq('address_id', addressId)
         .in('ingredient', ingredients)
     if (error) throw error

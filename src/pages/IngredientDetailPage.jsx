@@ -206,11 +206,10 @@ export default function IngredientDetailPage() {
     }, [history, fromDate, toDate])
 
     // ── Save callbacks for child rows ───────────────────────────────────────
-    // ingredientGroups null = địa chỉ không hỗ trợ nhóm (guest/template) → chỉ đổi tab như cũ.
-    async function saveCategory(newCat, groupId = null) {
+    // category đi theo section của nhóm (trigger DB ép) — client chỉ gán group_id.
+    async function saveGroup(groupId) {
         await withSaving('Lưu nhóm nguyên liệu', async () => {
-            if (ingredientGroups) await setIngredientsGroup([ingredientKey], selectedAddress.id, groupId, newCat)
-            else await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, unit, { category: newCat })
+            await setIngredientsGroup([ingredientKey], selectedAddress.id, groupId)
             refreshProducts?.()
         })
     }
@@ -525,7 +524,7 @@ export default function IngredientDetailPage() {
                             onSaveUnit={saveUnit}
                             onSaveMinStock={saveMinStock}
                             onSaveTareWeight={saveTareWeight}
-                            onChangeCategory={saveCategory}
+                            onChangeGroup={saveGroup}
                             onConfigurePack={() => setPackModalOpen(true)}
                         />
                         <IngredientStockPanel

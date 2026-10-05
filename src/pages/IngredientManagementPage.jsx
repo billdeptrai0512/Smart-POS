@@ -7,10 +7,10 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import {
     upsertIngredientCost, deleteIngredientCost, updateIngredientUnitCost,
-    syncIngredientKey,
+    syncIngredientKey, setIngredientsGroup,
     fetchIngredientStocks, fetchIngredientDeficits, fetchIngredientDailyContext,
 } from '../services/orderService'
-import { sortIngredients, ingredientLabel, normalizeSearchText, getIngredientUnit, normalizeIngredientCategory, normalizeIngredientKey, INGREDIENT_CATEGORIES } from '../utils/ingredients'
+import { sortIngredients, ingredientLabel, normalizeSearchText, getIngredientUnit, normalizeIngredientKey } from '../utils/ingredients'
 import { readJSON } from '../utils/storage'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
@@ -67,7 +67,7 @@ export default function IngredientManagementPage() {
     const [newName, setNewName] = useState('')
     const [newUnit, setNewUnit] = useState('')
 
-    const [newCategory, setNewCategory] = useState('main')
+    const [newGroupId, setNewGroupId] = useState('')
     const [showCreateModal, setShowCreateModal] = useState(false)
 
     // Search theo tên — không phân biệt hoa/thường & dấu tiếng Việt.
@@ -301,30 +301,21 @@ export default function IngredientManagementPage() {
 
     // Một danh sách chung cho cả nguyên liệu chính và bao bì; nhóm của cả hai section nằm chung dropdown.
     // Trigger sync_ingredient_group_category giữ group_id luôn cùng section với category, nên group_id null ⇔ chưa phân nhóm.
+    const canManage = canEdit && ingredientGroups
     const gidOf = useCallback(ing => configByIngredient.get(ing)?.group_id || 'none', [configByIngredient])
-    const { groupChips, countByGroup, ingredientsBySection } = useMemo(() => {
+    const { groupChips, countByGroup } = useMemo(() => {
         const countByGroup = new Map()
-        const alertByGroup = new Map()
         for (const ing of allIngredients) {
             const gid = gidOf(ing)
             countByGroup.set(gid, (countByGroup.get(gid) || 0) + 1)
-            if (getStockPriority(ing) < 2) alertByGroup.set(gid, true)
         }
-        // Server chỉ sort theo sort_order (mỗi section đếm từ 1) → xếp theo section trước để 2 loại không xen kẽ;
-        // tên trùng giữa 2 section (vd "Khác") thì ghi kèm tên section để phân biệt trong dropdown.
-        const sectionIdx = key => INGREDIENT_CATEGORIES.findIndex(c => c.key === key)
-        const groups = [...(ingredientGroups || [])].sort((a, b) => sectionIdx(a.section) - sectionIdx(b.section) || a.sort_order - b.sort_order)
-        const dupNames = new Set(groups.filter((g, i) => groups.findIndex(o => o.name === g.name) !== i).map(g => g.name))
-        const groupLabel = g => dupNames.has(g.name) ? `${INGREDIENT_CATEGORIES[sectionIdx(g.section)]?.label} · ${g.name}` : g.name
+        const groups = ingredientGroups || [] // server đã sort theo sort_order, created_at
         const groupChips = groups.length === 0 ? [] : [
-            ...groups.map(g => ({ id: g.id, label: groupLabel(g), count: countByGroup.get(g.id) || 0, alert: !!alertByGroup.get(g.id) })),
-            ...(countByGroup.get('none') ? [{ id: 'none', label: 'Chưa phân nhóm', count: countByGroup.get('none'), alert: !!alertByGroup.get('none') }] : []),
+            ...groups.map(g => ({ id: g.id, label: g.name, count: countByGroup.get(g.id) || 0 })),
+            ...(countByGroup.get('none') ? [{ id: 'none', label: 'Chưa phân nhóm', count: countByGroup.get('none') }] : []),
         ]
-        const ingredientsBySection = Object.fromEntries(INGREDIENT_CATEGORIES.map(c => [
-            c.key, allIngredients.filter(ing => normalizeIngredientCategory(configByIngredient.get(ing)?.category) === c.key),
-        ]))
-        return { groupChips, countByGroup, ingredientsBySection }
-    }, [ingredientGroups, allIngredients, configByIngredient, gidOf, getStockPriority])
+        return { groupChips, countByGroup }
+    }, [ingredientGroups, allIngredients, gidOf])
 
     // Đang tìm kiếm → 'all' (tìm trong cả tab — người dùng thường không nhớ món nằm nhóm nào).
     const effectiveFilter = !search.trim() && groupChips.some(c => c.id === groupFilter) ? groupFilter : 'all'
@@ -361,13 +352,15 @@ export default function IngredientManagementPage() {
         const unit = newUnit || 'đv'
         setSaving(true)
         try {
-            await upsertIngredientCost(key, 0, selectedAddress?.id, unit, { category: newCategory })
+            await upsertIngredientCost(key, 0, selectedAddress?.id, unit)
+            // category (báo cáo "Mua bao bì" vs "Mua nguyên liệu") đi theo section của nhóm — trigger DB ép.
+            if (newGroupId) await setIngredientsGroup([key], selectedAddress.id, newGroupId)
             setIngredientUnits(prev => ({ ...prev, [key]: unit }))
             // Refresh configs so the new ingredient picks up its category in `configByIngredient`.
             refreshProducts?.()
-            setNewName(''); setNewUnit(''); setNewCategory('main')
+            setNewName(''); setNewUnit(''); setNewGroupId('')
             setShowCreateModal(false)
-            showToast(newCategory === 'packaging' ? 'Đã tạo bao bì' : 'Đã tạo nguyên liệu', 'success')
+            showToast('Đã tạo nguyên liệu', 'success')
         } catch (err) {
             showError(err, 'Tạo nguyên liệu mới')
         } finally {
@@ -413,37 +406,40 @@ export default function IngredientManagementPage() {
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-8 bg-bg">
                 <div className="mb-3 flex items-stretch gap-2 h-11">
-                    <input
-                        type="text"
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        placeholder="Tìm nguyên liệu, bao bì…"
-                        className="flex-1 min-w-0 px-3 rounded-[12px] bg-surface border border-border/60 text-text text-[14px] placeholder:text-text-dim focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
-                    />
-                    {(groupChips.length > 0 || (canEdit && ingredientGroups)) && (
+                    {(groupChips.length > 0 || canManage) && (
                         <Dropdown
                             ariaLabel="Lọc theo nhóm"
                             value={effectiveFilter}
-                            triggerLabel={groupChips.find(c => c.id === effectiveFilter)?.label || 'Tất cả'}
+                            triggerLabel={groupChips.find(c => c.id === effectiveFilter)?.label || 'Phân loại'}
                             onChange={(id) => { setGroupFilter(id); setSearch('') }}
                             items={[
-                                { value: 'all', label: 'Tất cả', count: allIngredients.length },
-                                ...groupChips.map(c => ({ value: c.id, label: c.label, count: c.count, alert: c.alert })),
-                                ...(canEdit && ingredientGroups ? [{ action: 'edit', label: groupChips.length > 0 ? 'Sửa nhóm…' : '＋ Chia nhóm…', onClick: () => setShowGroupsSheet(true) }] : []),
+                                ...groupChips.map(c => ({ value: c.id, label: c.label, count: c.count })),
+                                ...(canManage ? [{ action: 'edit', label: groupChips.length > 0 ? 'Quản lý' : '＋ Chia nhóm…', onClick: () => setShowGroupsSheet(true) }] : []),
+                                { value: 'all', label: 'Tổng cộng', count: allIngredients.length, divider: true },
                             ]}
+                            align="left"
                             className="shrink-0 w-[34%] max-w-[170px]"
                             triggerClassName="h-full px-3 rounded-[12px] bg-surface border border-border/60 text-[14px] hover:border-primary/40"
                         />
                     )}
-                    {canEdit && (
-                        <button
-                            onClick={() => setShowCreateModal(true)}
-                            aria-label="Tạo nguyên liệu"
-                            className="shrink-0 px-3 rounded-[12px] flex items-center justify-center text-[13px] font-bold active:scale-95 transition-all border bg-primary border-primary text-bg hover:bg-primary/90"
-                        >
-                            <Plus size={18} />
-                        </button>
-                    )}
+                    <div className="relative flex-1 min-w-0">
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            placeholder="Tìm nguyên liệu…"
+                            className={`w-full h-full pl-3 ${canEdit ? 'pr-12' : 'pr-3'} rounded-[12px] bg-surface border border-border/60 text-text text-[14px] placeholder:text-text-dim focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20`}
+                        />
+                        {canEdit && (
+                            <button
+                                onClick={() => setShowCreateModal(true)}
+                                aria-label="Tạo nguyên liệu"
+                                className="absolute right-1 top-1 bottom-1 w-9 rounded-[8px] flex items-center justify-center active:scale-95 transition-all bg-primary text-bg hover:bg-primary/90"
+                            >
+                                <Plus size={18} />
+                            </button>
+                        )}
+                    </div>
                 </div>
                 {canEdit && stockDeficits.length > 0 && (
                     <StockDeficitBanner
@@ -510,11 +506,12 @@ export default function IngredientManagementPage() {
                         <CreateIngredientForm
                             name={newName}
                             unit={newUnit}
-                            category={newCategory}
+                            groupId={newGroupId}
+                            groups={ingredientGroups}
                             saving={saving}
                             onNameChange={setNewName}
                             onUnitChange={setNewUnit}
-                            onCategoryChange={setNewCategory}
+                            onGroupChange={setNewGroupId}
                             onSubmit={handleCreateIngredient}
                         />
                 </BottomSheet>
@@ -524,7 +521,7 @@ export default function IngredientManagementPage() {
                 <IngredientGroupsSheet
                     groups={ingredientGroups}
                     countByGroup={countByGroup}
-                    ingredientsBySection={ingredientsBySection}
+                    ingredients={allIngredients}
                     groupOf={gidOf}
                     addressId={selectedAddress.id}
                     onChanged={() => refreshProducts?.()}

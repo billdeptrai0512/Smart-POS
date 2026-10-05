@@ -4,14 +4,14 @@ import { BottomSheet, SheetHeader } from '../common/ModalShell'
 import { createIngredientGroup, renameIngredientGroup, deleteIngredientGroup, setIngredientsGroup } from '../../services/orderService'
 import { useConfirm } from '../../contexts/ConfirmContext'
 import { useSavingAction } from '../../hooks/useSavingAction'
-import { INGREDIENT_CATEGORIES, ingredientLabel, normalizeSearchText } from '../../utils/ingredients'
+import { ingredientLabel, normalizeSearchText } from '../../utils/ingredients'
 
-// Quản lý nhóm con của cả 2 section (nguyên liệu chính / bao bì): đổi tên (lưu khi rời ô), xoá, thêm mới, và bấm "N món ›"
+// Quản lý nhóm nguyên liệu (một tầng duy nhất): đổi tên (lưu khi rời ô), xoá, thêm mới, và bấm "N món ›"
 // để tick chọn nguyên liệu vào nhóm. Nhóm vừa tạo mở thẳng màn tick chọn.
 // ponytail: chưa có kéo-thả sắp xếp — thứ tự = thứ tự tạo (hoặc thứ tự trong file Excel).
-export default function IngredientGroupsSheet({ groups, countByGroup, ingredientsBySection, groupOf, addressId, onChanged, onError, onClose }) {
+export default function IngredientGroupsSheet({ groups, countByGroup, ingredients, groupOf, addressId, onChanged, onError, onClose }) {
     const confirm = useConfirm()
-    const [newNames, setNewNames] = useState({}) // section → tên nhóm đang gõ
+    const [newName, setNewName] = useState('')
     const [picking, setPicking] = useState(null) // nhóm đang tick chọn món
     const { saving: busy, withSaving } = useSavingAction(onError)
 
@@ -33,13 +33,14 @@ export default function IngredientGroupsSheet({ groups, countByGroup, ingredient
         run('Xóa nhóm', () => deleteIngredientGroup(g.id))
     }
 
-    const add = (section) => {
-        const name = (newNames[section] || '').trim()
+    // ponytail: nhóm mới luôn section 'main'; nhóm bao bì cũ giữ section 'packaging' (quyết định dòng "Mua bao bì" ở dòng tiền).
+    const add = () => {
+        const name = newName.trim()
         if (!name) return
-        const maxSort = Math.max(0, ...groups.filter(g => g.section === section).map(g => g.sort_order))
+        const maxSort = Math.max(0, ...groups.map(g => g.sort_order))
         run('Tạo nhóm', async () => {
-            setPicking(await createIngredientGroup(addressId, name, section, maxSort + 1))
-            setNewNames(prev => ({ ...prev, [section]: '' }))
+            setPicking(await createIngredientGroup(addressId, name, 'main', maxSort + 1))
+            setNewName('')
         })
     }
 
@@ -53,7 +54,7 @@ export default function IngredientGroupsSheet({ groups, countByGroup, ingredient
             {picking ? (
                 <GroupPicker
                     group={picking}
-                    ingredients={ingredientsBySection[picking.section] || []}
+                    ingredients={ingredients}
                     groupOf={groupOf}
                     busy={busy}
                     inputClass={inputClass}
@@ -62,8 +63,8 @@ export default function IngredientGroupsSheet({ groups, countByGroup, ingredient
                         let saved = false
                         await run('Gán nguyên liệu vào nhóm', async () => {
                             await Promise.all([
-                                setIngredientsGroup(added, addressId, picking.id, picking.section),
-                                setIngredientsGroup(removed, addressId, null, picking.section),
+                                setIngredientsGroup(added, addressId, picking.id),
+                                setIngredientsGroup(removed, addressId, null),
                             ])
                             saved = true
                         })
@@ -74,58 +75,50 @@ export default function IngredientGroupsSheet({ groups, countByGroup, ingredient
             ) : (
                 <>
                     <SheetHeader title="Nhóm nguyên liệu" onClose={onClose} closeDisabled={busy} />
-                    {INGREDIENT_CATEGORIES.map(({ key: section, label }) => {
-                        const list = groups.filter(g => g.section === section)
-                        return (
-                            <div key={section} className="flex flex-col gap-3">
-                                <p className="text-[11px] font-black uppercase tracking-wider text-text-secondary">{label}</p>
-                                {list.length === 0 && <p className="text-text-dim text-[13px]">Chưa có nhóm nào.</p>}
-                                {list.map(g => (
-                                    <div key={g.id} className="flex items-center gap-2">
-                                        <input
-                                            defaultValue={g.name}
-                                            disabled={busy}
-                                            onBlur={e => rename(g, e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()}
-                                            className={inputClass}
-                                        />
-                                        <button
-                                            onClick={() => setPicking(g)}
-                                            disabled={busy}
-                                            className="shrink-0 h-10 pl-3 pr-2 rounded-[10px] border border-border/60 text-[13px] font-bold text-text-secondary flex items-center gap-0.5 tabular-nums"
-                                        >
-                                            {countByGroup.get(g.id) || 0} món <ChevronRight size={15} />
-                                        </button>
-                                        <button
-                                            onClick={() => remove(g)}
-                                            disabled={busy}
-                                            aria-label={`Xóa nhóm ${g.name}`}
-                                            className="shrink-0 w-10 h-10 flex items-center justify-center rounded-[10px] text-danger hover:bg-danger/10"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </div>
-                                ))}
-                                <div className="flex items-center gap-2 pb-2 border-b border-border/40 last:border-0">
-                                    <input
-                                        value={newNames[section] || ''}
-                                        disabled={busy}
-                                        onChange={e => setNewNames(prev => ({ ...prev, [section]: e.target.value }))}
-                                        onKeyDown={e => e.key === 'Enter' && add(section)}
-                                        placeholder="Tên nhóm mới"
-                                        className={inputClass}
-                                    />
-                                    <button
-                                        onClick={() => add(section)}
-                                        disabled={busy || !(newNames[section] || '').trim()}
-                                        className="shrink-0 h-10 px-4 rounded-[10px] bg-primary text-bg text-[13px] font-bold disabled:opacity-40"
-                                    >
-                                        Thêm
-                                    </button>
-                                </div>
-                            </div>
-                        )
-                    })}
+                    {groups.length === 0 && <p className="text-text-dim text-[13px]">Chưa có nhóm nào.</p>}
+                    {groups.map(g => (
+                        <div key={g.id} className="flex items-center gap-2">
+                            <input
+                                defaultValue={g.name}
+                                disabled={busy}
+                                onBlur={e => rename(g, e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()}
+                                className={inputClass}
+                            />
+                            <button
+                                onClick={() => setPicking(g)}
+                                disabled={busy}
+                                className="shrink-0 h-10 pl-3 pr-2 rounded-[10px] border border-border/60 text-[13px] font-bold text-text-secondary flex items-center gap-0.5 tabular-nums"
+                            >
+                                {countByGroup.get(g.id) || 0} món <ChevronRight size={15} />
+                            </button>
+                            <button
+                                onClick={() => remove(g)}
+                                disabled={busy}
+                                aria-label={`Xóa nhóm ${g.name}`}
+                                className="shrink-0 w-10 h-10 flex items-center justify-center rounded-[10px] text-danger hover:bg-danger/10"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        </div>
+                    ))}
+                    <div className="flex items-center gap-2">
+                        <input
+                            value={newName}
+                            disabled={busy}
+                            onChange={e => setNewName(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && add()}
+                            placeholder="Tên nhóm mới"
+                            className={inputClass}
+                        />
+                        <button
+                            onClick={add}
+                            disabled={busy || !newName.trim()}
+                            className="shrink-0 h-10 px-4 rounded-[10px] bg-primary text-bg text-[13px] font-bold disabled:opacity-40"
+                        >
+                            Thêm
+                        </button>
+                    </div>
                 </>
             )}
         </BottomSheet>
