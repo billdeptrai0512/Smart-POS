@@ -31,7 +31,7 @@ function Notice({ onRestocked }) {
     const { profile } = useAuth()
     const { ingredientUnits, refreshProducts } = useProducts()
     const { refreshTodayExpenses } = useHistory()
-    const { items, ingredientsList, warehouseStocks, reload, toast } = useWarehousePrep()
+    const { items, ready, ingredientsList, warehouseStocks, reload, toast } = useWarehousePrep()
     const pendingCount = items.length
     const [open, setOpen] = useState(false)
     const [restock, setRestock] = useState(null) // { ingredient, qty }
@@ -55,7 +55,7 @@ function Notice({ onRestocked }) {
                     icon={<Package size={15} className="text-primary shrink-0" />}
                     label="Bổ sung tồn kho"
                     count={pendingCount}
-                    onClick={() => setOpen(true)}
+                    onClick={ready ? () => setOpen(true) : undefined} // số từ ảnh chụp: chờ tính xong mới mở form nhập kho
                 />
             )}
             <Toast toast={toast} />

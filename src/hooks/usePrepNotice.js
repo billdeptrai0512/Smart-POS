@@ -20,10 +20,28 @@ import { isSameDayVN, dateStringVN } from '../utils/dateVN'
 // pushInventory — merge RPC theo delta, Realtime) nên 2 máy không đè nhau. Mỗi hook chỉ mount ở trang
 // của mình — cùng lúc không bao giờ có 2 instance (3 trang là 3 route khác nhau).
 
+// Ảnh chụp kết quả tính gần nhất theo (loại, địa chỉ, ngày). Vào lại trang thì dải hiện NGAY từ ảnh chụp
+// (stale-while-revalidate) thay vì đợi ~8 request mới có số — dải khỏi nháy vào/ra và khỏi đẩy nội dung trang xuống
+// muộn; tính xong (`ready`) thì thay bằng số thật. Chỉ để HIỂN THỊ: thao tác ghi vẫn chờ `ready`.
+// ponytail: Map module-level, không persist qua reload; quá hạn thì bỏ — nâng lên localStorage nếu cần cả lúc mở app.
+const SNAPSHOT_TTL_MS = 10 * 60_000
+const snapshots = new Map()
+function useSnapshot(kind, live, ready) {
+    const { selectedAddress } = useAddress()
+    const key = `${kind}|${selectedAddress.id}|${dateStringVN()}`
+    useEffect(() => { if (ready) snapshots.set(key, { live, t: Date.now() }) })
+    // Chỉ đọc ảnh chụp lúc mount (đó là lúc cần nó); đổi địa chỉ/ngày giữa chừng (key khác) thì không dùng ảnh của key cũ.
+    const [seed] = useState(() => {
+        const s = snapshots.get(key)
+        return s && Date.now() - s.t <= SNAPSHOT_TTL_MS ? { key, live: s.live } : null
+    })
+    return ready || seed?.key !== key ? live : seed.live
+}
+
 // Phần chung: nạp đơn hôm nay + dự báo cùng thứ 3 tuần trước + trạng thái kiểm kê, và báo `ready`.
 function useShiftPrepBase(offsets) {
     const { selectedAddress } = useAddress()
-    const { recipes, extraIngredients } = useProducts()
+    const { recipes, extraIngredients, ingredientConfigs } = useProducts()
     const { todayOrders, todayExpenses, handleLoadHistory } = useHistory()
     const { toast, showToast, showError } = useToast()
     const todayISO = dateStringVN()
@@ -31,7 +49,8 @@ function useShiftPrepBase(offsets) {
     const onConflict = useCallback((ingredient) => {
         showToast(`${ingredientLabel(ingredient)}: vừa được cập nhật từ máy khác, kiểm tra lại`, 'warning')
     }, [showToast])
-    const inventory = useShiftInventoryState(selectedAddress.id, selectedAddress.ingredient_sort_order, todayISO, onConflict)
+    // Danh mục NVL lấy từ ProductContext (đã nạp sẵn) — khỏi fetch lại ingredient_costs/ingredient_groups mỗi lần vào trang.
+    const inventory = useShiftInventoryState(selectedAddress.id, selectedAddress.ingredient_sort_order, todayISO, onConflict, undefined, { ingredientRows: ingredientConfigs })
 
     // Các trang này KHÔNG tự nạp đơn hôm nay (chỉ /history, /daily-report nạp) — không nạp thì usedMap
     // thiếu cả đơn đã bán trước khi mở máy ⇒ Lý thuyết sai, và systemTotalRevenue (chụp vào phiếu chốt khi
@@ -104,6 +123,7 @@ export function usePrepNotice() {
         () => Object.fromEntries(items.map(it => [it.ingredient, isPrepDone(it, restockInputs, skipped)])),
         [items, restockInputs, skipped])
     const pendingCount = items.filter(it => !checked[it.ingredient]).length
+    const view = useSnapshot('pos', { items, checked, skipped, pendingCount }, ready)
 
     // Autosave debounce — cùng kiểu triggerAutoSave của /daily-report: gom nhiều tick thành 1 lần đẩy,
     // ref luôn trỏ bản mới nhất để timer đọc đúng state hiện tại.
@@ -160,7 +180,7 @@ export function usePrepNotice() {
         schedulePush()
     }, [skipped, restockInputs, inventory, schedulePush])
 
-    return { items, checked, skipped, pendingCount, confirmPrep, toggleSkip, toast }
+    return { ...view, ready, confirmPrep, toggleSkip, toast }
 }
 
 // /ingredients — "Bổ sung tồn kho": NVL cần MUA thêm cho ngày mai. Mua qua RestockModal của caller (không
@@ -183,5 +203,7 @@ export function useWarehousePrep() {
         () => Promise.all([inventory.reloadStocks?.(), inventory.reloadIngredients?.(), handleLoadHistory()]),
         [inventory, handleLoadHistory])
 
-    return { items, ingredientsList: inventory.ingredientsList, warehouseStocks: inventory.warehouseStocks, reload, toast }
+    const view = useSnapshot('warehouse', { items }, ready)
+
+    return { items: view.items, ready, ingredientsList: inventory.ingredientsList, warehouseStocks: inventory.warehouseStocks, reload, toast }
 }

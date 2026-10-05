@@ -68,7 +68,7 @@ const diffKeys = (cur, base) =>
 // seedReady=false mà isDayScope vẫn đợi (không tự bắn fetch trùng với fetch đang chạy của
 // cha). isDayScope=false (range tuần/tháng/custom nhiều ngày) → giữ hành vi tự fetch cũ.
 export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, onFieldConflict, onRemoteCash, seed = {}) {
-    const { seedReady = false, isDayScope = false, todayClosing: seedTodayClosing, yesterdayClosing: seedYesterdayClosing } = seed
+    const { seedReady = false, isDayScope = false, todayClosing: seedTodayClosing, yesterdayClosing: seedYesterdayClosing, ingredientRows } = seed
     // ── Inputs (staff-typed) ──────────────────────────────────────────────────
     // One state object, not 5 separate useState — every write site below either resets/
     // hydrates/reconciles ALL 5 maps together, or (the onXChange handlers) touches exactly
@@ -80,7 +80,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     const { opening: openingInputs, openingLocked, restock: restockInputs, inventory: inventoryInputs, skipped } = inventoryState
 
     // ── Derived / fetched ─────────────────────────────────────────────────────
-    const { ingredientsList, isLoadingIngredients, reloadIngredients } = useIngredientCatalog(addressId, ingredientSortOrder)
+    const { ingredientsList, isLoadingIngredients, reloadIngredients } = useIngredientCatalog(addressId, ingredientSortOrder, ingredientRows)
     const [existingClosing, setExistingClosing] = useState(null)
     // Phiếu chốt hôm nay + tồn kho/quầy đã về chưa — caller chỉ-đọc (dải notice /pos) cần chờ cả hai,
     // nếu không các map rỗng làm mọi NVL trông như "chưa soạn" trong cửa sổ đang tải.

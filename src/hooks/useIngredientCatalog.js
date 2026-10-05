@@ -6,19 +6,25 @@ import { sortIngredients } from '../utils/ingredients'
 // Tách khỏi useShiftInventoryState vì đây là dữ liệu MASTER, không liên quan gì
 // tới state kiểm kê/baseline/đồng bộ đa thiết bị của 1 ca — reload độc lập,
 // không đọc/ghi baseline.
-export function useIngredientCatalog(addressId, ingredientSortOrder) {
-    const [rawList, setRawList] = useState([])
-    const [isLoadingIngredients, setIsLoadingIngredients] = useState(true)
+//
+// `seedRows` (tuỳ chọn) = ingredientConfigs của ProductContext — đúng bộ `rows` mà hàm fetch dưới đây trả, đã được
+// context nạp sẵn (và cache localStorage nên có ngay lúc mở app). Có seed → dùng thẳng, KHÔNG tự fetch (2 request
+// thừa mỗi lần vào trang: ingredient_costs + ingredient_groups); đổi dữ liệu thì context tự refresh nên reload là no-op.
+export function useIngredientCatalog(addressId, ingredientSortOrder, seedRows) {
+    const seeded = !!seedRows
+    const [fetched, setFetched] = useState([])
+    const [isLoading, setIsLoading] = useState(!seeded)
 
     const reloadIngredients = useCallback(() => {
-        if (addressId === undefined) { setIsLoadingIngredients(false); return Promise.resolve() }
-        setIsLoadingIngredients(true)
-        return fetchIngredientCostsWithUnits(addressId).then(list => {
-            // Loại nguyên liệu được tắt "kiểm kê hao hụt" (count_in_audit === false).
-            // Thiếu cờ (phiếu cũ / chưa migrate) → mặc định hiện.
-            setRawList(list.filter(r => r.count_in_audit !== false))
-        }).finally(() => setIsLoadingIngredients(false))
-    }, [addressId])
+        if (seeded) return Promise.resolve()
+        if (addressId === undefined) { setIsLoading(false); return Promise.resolve() }
+        setIsLoading(true)
+        return fetchIngredientCostsWithUnits(addressId).then(setFetched).finally(() => setIsLoading(false))
+    }, [addressId, seeded])
+
+    // Loại nguyên liệu được tắt "kiểm kê hao hụt" (count_in_audit === false).
+    // Thiếu cờ (phiếu cũ / chưa migrate) → mặc định hiện.
+    const rawList = useMemo(() => (seeded ? seedRows : fetched).filter(r => r.count_in_audit !== false), [seeded, seedRows, fetched])
 
     // Sắp xếp tách khỏi fetch: ingredient_sort_order đi kèm object địa chỉ, mà AddressContext
     // thay object đó sau khi fetch addresses xong (cold start seed từ localStorage trước) —
@@ -34,5 +40,5 @@ export function useIngredientCatalog(addressId, ingredientSortOrder) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     useEffect(() => { reloadIngredients() }, [reloadIngredients])
 
-    return { ingredientsList, isLoadingIngredients, reloadIngredients }
+    return { ingredientsList, isLoadingIngredients: !seeded && isLoading, reloadIngredients }
 }

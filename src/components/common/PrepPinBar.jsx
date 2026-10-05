@@ -28,7 +28,7 @@ export default function PrepPinBar() {
 
 function PinBar() {
     const { selectedAddress } = useAddress()
-    const { items, checked, skipped, pendingCount, confirmPrep, toggleSkip, toast } = usePrepNotice()
+    const { items, checked, skipped, pendingCount, ready, confirmPrep, toggleSkip, toast } = usePrepNotice()
     const [open, setOpen] = useState(false)
 
     // Ca đã chốt xong (cờ do /daily-report ghi) → hết nhắc, kẻo cuối ngày bán hết hàng vẫn bị nhắc mãi.
@@ -43,7 +43,7 @@ function PinBar() {
                 icon={<Truck size={15} className="text-primary shrink-0" />}
                 label="Chuẩn bị hôm nay"
                 count={`${doneCount}/${items.length}`}
-                onClick={() => setOpen(true)}
+                onClick={ready ? () => setOpen(true) : undefined} // số từ ảnh chụp: chờ tính xong mới cho thao tác
             />
             <Toast toast={toast} />
 

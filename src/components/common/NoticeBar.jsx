@@ -7,6 +7,7 @@ export default function NoticeBar({ icon, label, count, onClick }) {
         <button
             type="button"
             onClick={onClick}
+            disabled={!onClick}
             className="shrink-0 w-full max-w-lg mx-auto dine-split:max-w-none flex items-center gap-2.5 h-10 px-4 text-[14px] font-bold bg-primary/15 text-text text-left"
         >
             {icon}
