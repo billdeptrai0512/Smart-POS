@@ -6,7 +6,7 @@ import { useClickOutside } from '../../hooks/useClickOutside'
 // căn lệch). Cùng phong cách SelectRow/OptionRow ở AddExpenseModal, panel mở XUỐNG dưới.
 // align: panel bám mép phải ('right', mặc định) hay mép trái ('left') của nút — nút đứng sát lề trái thì dùng 'left',
 // kẻo panel rộng hơn nút tràn ra ngoài màn hình.
-// items: { value, label, count?, divider? } = lựa chọn (divider = vạch ngăn phía trên) | { action, label, onClick } = dòng hành động (vd. "Quản lý"), đặt ở vị trí tuỳ ý trong items.
+// items: { value, label, count?, divider? } = lựa chọn (divider = vạch ngăn phía trên) | { action, label, onClick, icon? } = dòng hành động (vd. "Quản lý"), đặt ở vị trí tuỳ ý trong items.
 export default function Dropdown({ value, items, onChange, triggerLabel, disabled, className = '', triggerClassName = '', ariaLabel, align = 'right' }) {
     const [open, setOpen] = useState(false)
     const ref = useRef(null)
@@ -34,8 +34,9 @@ export default function Dropdown({ value, items, onChange, triggerLabel, disable
                             key={it.action}
                             type="button"
                             onClick={() => pick(it.onClick)}
-                            className="py-2 px-2.5 text-left text-[13px] font-bold text-primary"
+                            className="flex items-center gap-2 py-2 px-2.5 text-left text-[13px] font-bold text-primary"
                         >
+                            {it.icon}
                             {it.label}
                         </button>
                     ) : (

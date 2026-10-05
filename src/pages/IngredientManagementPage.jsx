@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { Plus, Settings2 } from 'lucide-react'
 import { BottomSheet, SheetHeader } from '../components/common/ModalShell'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
@@ -413,8 +413,8 @@ export default function IngredientManagementPage() {
                             triggerLabel={groupChips.find(c => c.id === effectiveFilter)?.label || 'Phân loại'}
                             onChange={(id) => { setGroupFilter(id); setSearch('') }}
                             items={[
-                                ...groupChips.map(c => ({ value: c.id, label: c.label, count: c.count })),
-                                ...(canManage ? [{ action: 'edit', label: groupChips.length > 0 ? 'Quản lý' : '＋ Chia nhóm…', onClick: () => setShowGroupsSheet(true) }] : []),
+                                ...(canManage ? [{ action: 'edit', icon: <Settings2 size={14} />, label: groupChips.length > 0 ? 'Quản lý' : 'Chia nhóm…', onClick: () => setShowGroupsSheet(true) }] : []),
+                                ...groupChips.map((c, i) => ({ value: c.id, label: c.label, count: c.count, divider: canManage && i === 0 })),
                                 { value: 'all', label: 'Tổng cộng', count: allIngredients.length, divider: true },
                             ]}
                             align="left"
