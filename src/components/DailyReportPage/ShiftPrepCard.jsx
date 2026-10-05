@@ -1,13 +1,12 @@
 import { Check, Plus, X, RotateCcw } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
-import CollapsibleCard from './CollapsibleCard'
 
-// Checklist card dùng chung cho khu Tồn kho — dùng cho cả "Soạn cho hôm nay"
-// (đưa hàng ra quầy) và "Chuẩn bị tồn kho" (đi chợ đắp kho). Mỗi dòng có ô tick
-// + so sánh "Còn" (tồn hiện có) vs "Cần" (lượng cần thêm) + quy đổi ra bịch.
+// Danh sách checklist dùng chung cho 2 dải notice: "Chuẩn bị hôm nay" (/pos — đưa hàng ra quầy) và
+// "Bổ sung tồn kho" (/ingredients — đi chợ đắp kho). Mỗi dòng có ô tick (hoặc nút + nhập kho)
+// + so sánh "Còn" (tồn hiện có) vs "Cần" (lượng cần thêm) + quy đổi ra bịch. Chỉ vẽ phần danh sách —
+// header/khung do caller (NoticeSheet) lo; tick/bỏ qua do parent giữ.
 //
 // items: [{ ingredient, have, need, needPacks, unit, packUnit }]
-// Tick (checked/onToggle) + thu gọn (open/onToggleOpen) đều do parent (DailyReportPage) giữ.
 export default function ShiftPrepCard({
     items = [],
     checked = {},
@@ -19,8 +18,6 @@ export default function ShiftPrepCard({
     // lấy" để vẫn hoàn tất ca; bấm lại (↩) để hủy. skipped: { [ingredient]: true }.
     skipped = {},
     onSkip,
-    title,
-    icon,
     // Nhãn cho số tồn ở dòng phụ: card Soạn = tồn quầy đầu ca ("Quầy"),
     // card Chuẩn bị kho = tổng tồn cho mai ("Tồn kho").
     haveLabel,
@@ -29,22 +26,12 @@ export default function ShiftPrepCard({
     // Động từ CTA: "Lấy" (soạn ra quầy) / "Mua" (đi chợ). Dòng lớn = "<packVerb> N bịch"
     // nếu có pack_size, không thì "<packVerb> X <đơn vị>".
     packVerb,
-    open = true,
-    onToggleOpen,
 }) {
     const restockMode = typeof onRestock === 'function'
     const skipMode = typeof onSkip === 'function'
-    const doneCount = items.reduce((n, it) => n + ((checked[it.ingredient] || skipped[it.ingredient]) ? 1 : 0), 0)
 
     return (
-        <CollapsibleCard
-            icon={icon}
-            title={title}
-            count={items.length > 0 ? (restockMode ? String(items.length) : `${doneCount}/${items.length}`) : null}
-            open={open}
-            onToggle={onToggleOpen}
-        >
-            {items.length === 0 ? (
+            items.length === 0 ? (
                 <div className="py-3 text-center flex flex-col items-center gap-1">
                     <span className="text-[13px] font-bold text-success">{emptyTitle}</span>
                     {emptyHint && <span className="text-[11px] text-text-secondary">{emptyHint}</span>}
@@ -120,6 +107,7 @@ export default function ShiftPrepCard({
                                             <span className={`text-[14px] font-bold leading-tight ${muted ? 'text-text-dim line-through' : 'text-text'}`}>
                                                 {ingredientLabel(it.ingredient)}
                                             </span>
+                                            {it.kind === 'depleted' && <span className="text-[10px] font-black uppercase tracking-wide text-danger">Hết ở quầy</span>}
                                             <span
                                                 onClick={(e) => { e.stopPropagation(); onSkip(it.ingredient) }}
                                                 title={isSkipped ? 'Hoàn tác bỏ qua' : 'Bỏ qua — không cần lấy'}
@@ -135,7 +123,7 @@ export default function ShiftPrepCard({
                                                 </span>
                                             )}
                                             <span className="block">
-                                                {haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{it.have} {it.unit}
+                                                {it.haveLabel || haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{it.have} {it.unit}
                                             </span>
                                         </div>
                                     </div>
@@ -164,7 +152,6 @@ export default function ShiftPrepCard({
                         )
                     })}
                 </div>
-            )}
-        </CollapsibleCard>
+            )
     )
 }

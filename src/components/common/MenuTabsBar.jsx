@@ -1,10 +1,9 @@
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import { MENU_TABS } from '../../constants/menuTabs'
 
-// Shared tab bar for the Menu/Ingredients dashboard. Three tabs span both
-// /recipes (Công thức) and /ingredients (Nguyên liệu / Bao bì sub-views).
-// The parent owns active selection: pass 'recipes' on Recipe pages, or the
-// ingredient viewMode ('main' / 'packaging') on the Ingredients page.
+// Shared tab bar for the Menu/Ingredients dashboard. Two tabs span
+// /recipes (Công thức) and /ingredients (Nguyên liệu, gồm cả bao bì).
+// The parent owns active selection: 'recipes' on Recipe pages, 'main' on the Ingredients page.
 
 // hintTab: key của tab đang được onboarding phase 6 "Cài đặt nguyên liệu" gợi ý bấm tiếp — xem
 // RecipeMenuPage.jsx/IngredientManagementPage.jsx (hintIngredientsTab) + onboarding/steps.js.

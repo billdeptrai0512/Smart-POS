@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, useId } from 'react'
 import { fetchTodayShiftClosing } from '../services/orderService'
 import { mergeShiftClosingInventory } from '../services/reportService'
 import { supabase } from '../lib/supabaseClient'
@@ -82,6 +82,10 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     // ── Derived / fetched ─────────────────────────────────────────────────────
     const { ingredientsList, isLoadingIngredients, reloadIngredients } = useIngredientCatalog(addressId, ingredientSortOrder)
     const [existingClosing, setExistingClosing] = useState(null)
+    // Phiếu chốt hôm nay + tồn kho/quầy đã về chưa — caller chỉ-đọc (dải notice /pos) cần chờ cả hai,
+    // nếu không các map rỗng làm mọi NVL trông như "chưa soạn" trong cửa sổ đang tải.
+    const [closingLoaded, setClosingLoaded] = useState(false)
+    const [stocksLoaded, setStocksLoaded] = useState(false)
 
     // Dirty is DERIVED from a baseline snapshot (last loaded / last saved values).
     // The old boolean flag stuck at true after a revert because nothing knew
@@ -116,6 +120,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
         if (addressId === undefined) return
         // Clear pre-existing input state so a new day starts blank if no closing exists yet.
         setExistingClosing(null)
+        setClosingLoaded(false)
         setInventoryState({ opening: {}, openingLocked: {}, restock: {}, inventory: {}, skipped: {} })
         commitBaseline({}, {}, {}, {}, {})
 
@@ -159,6 +164,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
         if (seedReady) {
             // Cha đã fetch xong (get_daily_report_context / get_report_by_date) — dùng thẳng.
             applyTodayClosing(seedTodayClosing)
+            setClosingLoaded(true)
             return
         }
         if (isDayScope) {
@@ -166,7 +172,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
             // không tự bắn fetch trùng với fetch cha đang chạy.
             return
         }
-        fetchTodayShiftClosing(addressId).then(applyTodayClosing)
+        fetchTodayShiftClosing(addressId).then(data => { applyTodayClosing(data); setClosingLoaded(true) })
     }, [addressId, dateKey, commitBaseline, seedReady, seedTodayClosing, isDayScope])
 
     // ── Canonical stock reader: warehouse + counter snapshots ────────────────
@@ -181,6 +187,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     const reloadStocks = useCallback(() => {
         if (addressId === undefined) return Promise.resolve()
         return reloadWarehouseStock().then(({ counters }) => {
+            setStocksLoaded(true)
             // Seed openingInputs only if today's closing hasn't set them yet.
             // When seeding kicks in, also fold the seed into baseline.opening so
             // a fresh tab doesn't read as "dirty" before any user edit.
@@ -262,10 +269,14 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     // (đúng ca dùng phổ biến nhất) chỉ sinh một dòng → đếm ra 1 → kênh chưa từng mở ngày nào.
     // Đổi lại là mỗi máy đang ở màn báo cáo giữ một websocket; hook này chỉ sống trong
     // DailyReportPage nên kênh chỉ mở vài phút/ngày/máy, không phải cả ngày như orders.
+    // Tên kênh có id riêng mỗi instance: supabase.channel() trả LẠI kênh cùng tên nếu còn trong danh sách, mà
+    // kênh chỉ rời danh sách sau khi server báo hủy xong — đi nhanh /pos → /daily-report → /ingredients (cùng
+    // hook, instance khác) thì instance mới dính kênh đang hủy, rồi bị lần hủy đó cắt mất.
+    const instanceId = useId()
     useEffect(() => {
         if (!addressId || isGuest()) return
         const channel = supabase
-            .channel(`shift-closing-db-${addressId}`)
+            .channel(`shift-closing-db-${addressId}-${instanceId}`)
             .on('postgres_changes',
                 { event: '*', schema: 'public', table: 'shift_closings', filter: `address_id=eq.${addressId}` },
                 (payload) => {
@@ -278,7 +289,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
                 })
             .subscribe()
         return () => { supabase.removeChannel(channel) }
-    }, [addressId, dateKey, reconcileFromRemote])
+    }, [addressId, dateKey, reconcileFromRemote, instanceId])
 
     // ── Mutation handlers (plain setState; dirty is derived, autosave pushes) ─
     const onOpeningChange = useCallback((ingredient, value) => {
@@ -358,11 +369,12 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
         const list = []
         for (const ing of ingredientsList) {
             const r = Number(restockInputs[ing.ingredient] || 0)
-            // Tra kèm fallback theo label (giống warehousePrepList) — nếu chỉ tra key trực tiếp,
-            // NVL lưu key biến thể sẽ ra undefined → bỏ qua guard → restock vượt kho lọt qua,
-            // server clamp warehouse về 0. Dùng undefined làm "không theo dõi kho" (bỏ kiểm).
-            const avail = lookupByLabel(ing.ingredient, effectiveWarehouseStocks, undefined)
-            if (avail !== undefined && r > Number(avail || 0)) list.push(ing.ingredient)
+            // Tra kèm fallback theo label (giống buildWarehousePrepList) — nếu chỉ tra key trực tiếp,
+            // NVL lưu key biến thể sẽ ra null → bỏ qua guard → restock vượt kho lọt qua,
+            // server clamp warehouse về 0. null = "không theo dõi kho" (bỏ kiểm). KHÔNG truyền undefined:
+            // tham số mặc định của lookupByLabel biến nó thành 0 → NVL không có dòng kho bị báo vượt kho oan.
+            const avail = lookupByLabel(ing.ingredient, effectiveWarehouseStocks, null)
+            if (avail != null && r > Number(avail || 0)) list.push(ing.ingredient)
         }
         return list
     }, [ingredientsList, restockInputs, effectiveWarehouseStocks])
@@ -459,7 +471,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
         // fetched / derived
         ingredientsList, isLoadingIngredients,
         openingStock, warehouseStocks, effectiveWarehouseStocks, reloadStocks, reloadIngredients,
-        existingClosing, setExistingClosing,
+        existingClosing, setExistingClosing, closingLoaded, stocksLoaded,
         restockOverflowIngredients,
         // dirty tracking (derived from baseline comparison; baseline advances on push/remote merge)
         isDirty, restockDirty, dirtySummary,

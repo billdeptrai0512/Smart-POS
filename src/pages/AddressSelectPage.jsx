@@ -199,9 +199,9 @@ export default function AddressSelectPage() {
         navigate('/history', { state: { from: '/addresses', tab } })
     }
 
-    function handleSelectIngredients(addr, viewMode) {
+    function handleSelectIngredients(addr) {
         setSelectedAddress(addr)
-        navigate('/ingredients', { state: { from: '/addresses', viewMode } })
+        navigate('/ingredients', { state: { from: '/addresses' } })
     }
 
     function handleSelectRecipes(addr) {

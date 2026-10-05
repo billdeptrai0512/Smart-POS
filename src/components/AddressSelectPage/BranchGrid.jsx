@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
     Pencil, Trash2, ClipboardCopy, MoreVertical, X,
     Coffee, FileText, Package, ChevronRight, Eraser,
-    Banknote, Receipt, Wallet, Boxes, TrendingUp, ChefHat, Box, Warehouse, Printer,
+    Banknote, Receipt, Wallet, Boxes, TrendingUp, ChefHat, Warehouse, Printer,
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
@@ -290,12 +290,6 @@ export default function BranchGrid({
                                                                 label="Nguyên liệu"
                                                                 tone="primary"
                                                                 onClick={() => { onSelectIngredients?.(addr); setExpandedActionsId(null) }}
-                                                            />
-                                                            <ActionPill
-                                                                icon={<Box size={16} />}
-                                                                label="Bao bì"
-                                                                tone="warning"
-                                                                onClick={() => { onSelectIngredients?.(addr, 'packaging'); setExpandedActionsId(null) }}
                                                             />
                                                         </div>
                                                     </div>

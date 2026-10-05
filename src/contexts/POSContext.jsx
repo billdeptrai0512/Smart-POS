@@ -873,8 +873,10 @@ export function POSProvider() {
             // no duplicates, no extra query, no waiting on the insert.
             setTodayOrders(prev => mergeFetchedOrders(prev, orders))
             setTodayExpenses(expenses)
+            return true
         } catch (err) {
             showError(err, 'Tải lịch sử đơn hàng')
+            return false // caller cần dữ liệu đủ (vd usePrepNotice) phân biệt được "tải hỏng" với "không có đơn"
         } finally {
             setIsLoadingHistory(false)
         }

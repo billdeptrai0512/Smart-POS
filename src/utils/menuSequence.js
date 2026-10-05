@@ -1,22 +1,21 @@
 // The ordered list of dashboard destinations the header ‹ › arrows walk through.
-// "Next/prev tab, not next route": the first three are tabs (two of them share
-// the /history route), the last three are the recipes/ingredients views (two
-// share the /ingredients route). The arrows step through THIS list in order;
+// "Next/prev page, not next tab": Nhật ký (/history), Báo cáo (/daily-report),
+// Tồn kho (/ingredients; its Công thức sub-tab /recipes resolves to the same stop).
+// The arrows step through THIS list in order;
 // stepping off either end exits to /pos (it's a bounded line, not a loop).
 //
-// stop shape: { key, route, tab?, viewMode? }
+// stop shape: { key, route, tab?, dated? }
 //   tab      — HistoryPage activeTab ('orders' | 'expense')
-//   viewMode — IngredientManagementPage viewMode ('main' | 'packaging')
+//   dated    — trang có khoảng ngày: nhận scopeState khi bước sang
 export const MENU_SEQUENCE = [
-    { key: 'orders', route: '/history', tab: 'orders' },     // Thu nhập
-    { key: 'recipes', route: '/recipes', viewMode: 'main' },  // Nguyên liệu
+    { key: 'orders', route: '/history', tab: 'orders', dated: true },   // Nhật ký
+    { key: 'report', route: '/daily-report', dated: true },             // Báo cáo
+    { key: 'main', route: '/ingredients' },                   // Tồn kho
 ]
 
 const KEY_MAP = {
     expense: 'orders',
-    report: 'orders',
-    main: 'recipes',
-    packaging: 'recipes',
+    recipes: 'main',
 }
 
 const resolveKey = (key) => KEY_MAP[key] || key
@@ -39,18 +38,16 @@ export function menuStep(currentKey, dir) {
 
 // Apply a sequence step from the page identified by `currentKey`. Same-route
 // stops switch local tab/view state (no navigation); cross-route stops navigate,
-// carrying viewMode / report-tab intent via location state. Stepping off either
+// carrying report-tab intent via location state. Stepping off either
 // end exits to /pos (the dashboard's natural entry point).
 //   ctx.navigate      — react-router navigate
 //   ctx.backTo        — preserved as `from` in nav state
 //   ctx.setActiveTab  — HistoryPage: switch orders/expense in place
-//   ctx.setViewMode   — IngredientManagementPage: switch main/packaging in place
-//   ctx.goReport      — HistoryPage: scope-aware /daily-report nav (handleReportNav)
-//   ctx.scopeState    — { scope, offset, customRange } carried into /history so the
-//                       date window survives the Báo cáo → Thu nhập/Chi phí jump
+//   ctx.scopeState    — { scope, offset, customRange } carried into /history and
+//                       /daily-report so the date window survives the Nhật ký ↔ Báo cáo jump
 export function goToMenuStep(currentKey, dir, ctx) {
     const target = menuStep(currentKey, dir)
-    const { navigate, backTo, setActiveTab, setViewMode, scopeState, wizard } = ctx
+    const { navigate, backTo, setActiveTab, scopeState, wizard } = ctx
 
     // If not in wizard mode and going back, return directly to the entry point (backTo).
     if (dir === -1 && !wizard) {
@@ -69,17 +66,9 @@ export function goToMenuStep(currentKey, dir, ctx) {
     // Same route → flip local state, no navigation.
     if (cur && target.route === cur.route) {
         if (target.tab && setActiveTab) { setActiveTab(target.tab); return }
-        if (target.viewMode && setViewMode) { setViewMode(target.viewMode); return }
     }
 
-    switch (target.route) {
-        case '/history':
-            navigate('/history', { state: { from: backTo, tab: target.tab, wizard: true, ...scopeState } })
-            break
-        case '/recipes':
-            navigate('/recipes', { state: { from: backTo, wizard: true } })
-            break
-        default:
-            navigate(target.route, { state: { from: backTo, wizard: true } })
-    }
+    navigate(target.route, {
+        state: { from: backTo, wizard: true, ...(target.tab && { tab: target.tab }), ...(target.dated && scopeState) },
+    })
 }

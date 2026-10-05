@@ -10,13 +10,14 @@ import {
     syncIngredientKey,
     fetchIngredientStocks, fetchIngredientDeficits, fetchIngredientDailyContext,
 } from '../services/orderService'
-import { sortIngredients, ingredientLabel, normalizeSearchText, getIngredientUnit, normalizeIngredientCategory, normalizeIngredientKey } from '../utils/ingredients'
+import { sortIngredients, ingredientLabel, normalizeSearchText, getIngredientUnit, normalizeIngredientCategory, normalizeIngredientKey, INGREDIENT_CATEGORIES } from '../utils/ingredients'
 import { readJSON } from '../utils/storage'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
 import StockDeficitBanner from '../components/IngredientManagementPage/StockDeficitBanner'
 import KeyMismatchBanner from '../components/IngredientManagementPage/KeyMismatchBanner'
 import MenuPageHeader from '../components/common/MenuPageHeader'
+import WarehousePrepNotice from '../components/IngredientManagementPage/WarehousePrepNotice'
 import Dropdown from '../components/common/Dropdown'
 import CreateIngredientForm from '../components/IngredientManagementPage/CreateIngredientForm'
 import IngredientGroupsSheet from '../components/IngredientManagementPage/IngredientGroupsSheet'
@@ -27,7 +28,8 @@ import Toast from '../components/POSPage/Toast'
 import { keySyncDismissedKey, orphanIgnoredKey } from '../constants/storageKeys'
 import { goToMenuStep } from '../utils/menuSequence'
 import { findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
-import { isRecipeProgressDone } from '../utils/onboardingStorage'
+import { isRecipeProgressDone, isInventoryProgressDone } from '../utils/onboardingStorage'
+import { isRecipeStepActive } from '../components/common/onboarding/steps'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 
 // Module-level scroll cache. Set when user opens a card to drill into
@@ -65,18 +67,13 @@ export default function IngredientManagementPage() {
     const [newName, setNewName] = useState('')
     const [newUnit, setNewUnit] = useState('')
 
-    const [newCategory, setNewCategory] = useState(null)
+    const [newCategory, setNewCategory] = useState('main')
     const [showCreateModal, setShowCreateModal] = useState(false)
-
-    // View mode = active category tab. Uncategorized NVL (category=null) shown under 'main'.
-    // Seed from location.state so deep-links from /recipes' tabbar land on the right view.
-    const [viewMode, setViewMode] = useState(location.state?.viewMode || 'main')
 
     // Search theo tên — không phân biệt hoa/thường & dấu tiếng Việt.
     const [search, setSearch] = useState('')
 
-    // Chip lọc nhóm con trong tab: 'all' | 'none' (chưa phân nhóm) | group id. Đổi tab → về 'all'.
-    // Id lạ (nhóm của tab khác / đã xoá) tự rơi về 'all' qua effectiveFilter — không cần reset khi đổi tab.
+    // Lọc theo nhóm: 'all' | 'none' (chưa phân nhóm) | group id. Id lạ (nhóm đã xoá) tự rơi về 'all' qua effectiveFilter.
     const [groupFilter, setGroupFilter] = useState('all')
     const [showGroupsSheet, setShowGroupsSheet] = useState(false)
 
@@ -92,9 +89,7 @@ export default function IngredientManagementPage() {
 
     const openIngredient = (ingredient) => {
         savedScroll = mainRef.current?.scrollTop ?? 0
-        // Carry viewMode forward so the detail page can hand it back on goBack,
-        // restoring the same tab (Bao bì vs Nguyên liệu) the user opened from.
-        navigate(`/ingredients/${ingredient}`, { state: { ...location.state, viewMode } })
+        navigate(`/ingredients/${ingredient}`, { state: location.state })
     }
 
     // Stock & modals
@@ -245,6 +240,9 @@ export default function IngredientManagementPage() {
     // thiểu/khối lượng bì) — xem nextIngredientSetupField trong onboardingHint.js.
     const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId: selectedAddress?.id })
     const recipeDone = isRecipeProgressDone(recipeProgress)
+    // Phase 5 (công thức) — từ /history mũi tên "tiến" giờ rơi vào Kiểm kê trước, nên sáng tab Công thức ở đây.
+    const inventoryProgress = useOnboardingProgress('inventoryProgress', { isGuest, addressId: selectedAddress?.id })
+    const hintRecipesTab = isGuest && isRecipeStepActive(isInventoryProgressDone(inventoryProgress), recipeProgress)
     const coffeeConfig = useMemo(() => findCoffeeIngredient(ingredientConfigs) ?? null, [ingredientConfigs])
     const coffeeKey = coffeeConfig?.ingredient ?? null
     const hintCoffee = isGuest && recipeDone && !!coffeeKey
@@ -293,9 +291,7 @@ export default function IngredientManagementPage() {
         return map
     }, [contextRecipes])
 
-    // Card grid shows only the active category tab. Uncategorized (null) → 'main';
-    // legacy 'tools' → 'packaging' (see normalizeIngredientCategory). Keeps no NVL hidden.
-    const getStockPriority = useCallback((ing) => {
+        const getStockPriority = useCallback((ing) => {
         const stock = stockByIngredient.get(ing)?.current_stock ?? null
         const minStock = configByIngredient.get(ing)?.min_stock || 0
         if (stock !== null && stock <= 0) return 0        // hết
@@ -303,32 +299,39 @@ export default function IngredientManagementPage() {
         return 2                                          // bình thường
     }, [stockByIngredient, configByIngredient])
 
-    // Nguyên liệu của tab đang xem + chip nhóm của tab. Trigger sync_ingredient_group_category giữ
-    // group_id luôn cùng section với tab, nên group_id null ⇔ chưa phân nhóm.
+    // Một danh sách chung cho cả nguyên liệu chính và bao bì; nhóm của cả hai section nằm chung dropdown.
+    // Trigger sync_ingredient_group_category giữ group_id luôn cùng section với category, nên group_id null ⇔ chưa phân nhóm.
     const gidOf = useCallback(ing => configByIngredient.get(ing)?.group_id || 'none', [configByIngredient])
-    const { tabIngredients, groupChips, countByGroup } = useMemo(() => {
-        const tabGroups = (ingredientGroups || []).filter(g => g.section === viewMode)
-        const tabIngredients = allIngredients.filter(ing => normalizeIngredientCategory(configByIngredient.get(ing)?.category) === viewMode)
+    const { groupChips, countByGroup, ingredientsBySection } = useMemo(() => {
         const countByGroup = new Map()
         const alertByGroup = new Map()
-        for (const ing of tabIngredients) {
+        for (const ing of allIngredients) {
             const gid = gidOf(ing)
             countByGroup.set(gid, (countByGroup.get(gid) || 0) + 1)
             if (getStockPriority(ing) < 2) alertByGroup.set(gid, true)
         }
-        const groupChips = tabGroups.length === 0 ? [] : [
-            ...tabGroups.map(g => ({ id: g.id, label: g.name, count: countByGroup.get(g.id) || 0, alert: !!alertByGroup.get(g.id) })),
+        // Server chỉ sort theo sort_order (mỗi section đếm từ 1) → xếp theo section trước để 2 loại không xen kẽ;
+        // tên trùng giữa 2 section (vd "Khác") thì ghi kèm tên section để phân biệt trong dropdown.
+        const sectionIdx = key => INGREDIENT_CATEGORIES.findIndex(c => c.key === key)
+        const groups = [...(ingredientGroups || [])].sort((a, b) => sectionIdx(a.section) - sectionIdx(b.section) || a.sort_order - b.sort_order)
+        const dupNames = new Set(groups.filter((g, i) => groups.findIndex(o => o.name === g.name) !== i).map(g => g.name))
+        const groupLabel = g => dupNames.has(g.name) ? `${INGREDIENT_CATEGORIES[sectionIdx(g.section)]?.label} · ${g.name}` : g.name
+        const groupChips = groups.length === 0 ? [] : [
+            ...groups.map(g => ({ id: g.id, label: groupLabel(g), count: countByGroup.get(g.id) || 0, alert: !!alertByGroup.get(g.id) })),
             ...(countByGroup.get('none') ? [{ id: 'none', label: 'Chưa phân nhóm', count: countByGroup.get('none'), alert: !!alertByGroup.get('none') }] : []),
         ]
-        return { tabIngredients, groupChips, countByGroup }
-    }, [ingredientGroups, viewMode, allIngredients, configByIngredient, gidOf, getStockPriority])
+        const ingredientsBySection = Object.fromEntries(INGREDIENT_CATEGORIES.map(c => [
+            c.key, allIngredients.filter(ing => normalizeIngredientCategory(configByIngredient.get(ing)?.category) === c.key),
+        ]))
+        return { groupChips, countByGroup, ingredientsBySection }
+    }, [ingredientGroups, allIngredients, configByIngredient, gidOf, getStockPriority])
 
     // Đang tìm kiếm → 'all' (tìm trong cả tab — người dùng thường không nhớ món nằm nhóm nào).
     const effectiveFilter = !search.trim() && groupChips.some(c => c.id === groupFilter) ? groupFilter : 'all'
 
     const visibleIngredients = useMemo(() => {
         const q = normalizeSearchText(search.trim())
-        const filtered = tabIngredients.filter(ing => {
+        const filtered = allIngredients.filter(ing => {
             if (q) return normalizeSearchText(ingredientLabel(ing)).includes(q)
             return effectiveFilter === 'all' || gidOf(ing) === effectiveFilter
         })
@@ -336,7 +339,7 @@ export default function IngredientManagementPage() {
         const hasAlerts = filtered.some(ing => getStockPriority(ing) < 2)
         if (!hasAlerts) return filtered
         return [...filtered].sort((a, b) => getStockPriority(a) - getStockPriority(b))
-    }, [tabIngredients, effectiveFilter, gidOf, getStockPriority, search])
+    }, [allIngredients, effectiveFilter, gidOf, getStockPriority, search])
 
     // ─── Action handlers ───────────────────────────────────────────────
     async function saveCost(ingredient, newCostVal) {
@@ -362,9 +365,9 @@ export default function IngredientManagementPage() {
             setIngredientUnits(prev => ({ ...prev, [key]: unit }))
             // Refresh configs so the new ingredient picks up its category in `configByIngredient`.
             refreshProducts?.()
-            setNewName(''); setNewUnit(''); setNewCategory(null)
+            setNewName(''); setNewUnit(''); setNewCategory('main')
             setShowCreateModal(false)
-            showToast('Đã tạo nguyên liệu', 'success')
+            showToast(newCategory === 'packaging' ? 'Đã tạo bao bì' : 'Đã tạo nguyên liệu', 'success')
         } catch (err) {
             showError(err, 'Tạo nguyên liệu mới')
         } finally {
@@ -396,17 +399,16 @@ export default function IngredientManagementPage() {
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
 
+            <WarehousePrepNotice onRestocked={loadStocks} />
+
             <MenuPageHeader
                 count={visibleIngredients.length}
                 unitLabel="loại"
-                onBack={() => goToMenuStep(viewMode, -1, { navigate, backTo: location.state?.from || '/history', setViewMode, wizard: location.state?.wizard })}
-                onForward={() => goToMenuStep(viewMode, +1, { navigate, backTo: location.state?.from || '/history', setViewMode, wizard: location.state?.wizard })}
-                activeTab={viewMode}
-                hintTab={hintCoffee && viewMode !== 'main' ? 'main' : null}
-                onTabSelect={(key) => {
-                    if (key === 'recipes') navigate('/recipes', { state: location.state, replace: true })
-                    else setViewMode(key)
-                }}
+                onBack={() => goToMenuStep('main', -1, { navigate, backTo: location.state?.from || '/history', wizard: location.state?.wizard })}
+                onForward={() => goToMenuStep('main', +1, { navigate, backTo: location.state?.from || '/history', wizard: location.state?.wizard })}
+                activeTab="main"
+                hintTab={hintRecipesTab ? 'recipes' : null}
+                onTabSelect={(key) => { if (key === 'recipes') navigate('/recipes', { state: location.state, replace: true }) }}
             />
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-8 bg-bg">
@@ -415,7 +417,7 @@ export default function IngredientManagementPage() {
                         type="text"
                         value={search}
                         onChange={e => setSearch(e.target.value)}
-                        placeholder={viewMode === 'packaging' ? 'Tìm bao bì…' : 'Tìm nguyên liệu…'}
+                        placeholder="Tìm nguyên liệu, bao bì…"
                         className="flex-1 min-w-0 px-3 rounded-[12px] bg-surface border border-border/60 text-text text-[14px] placeholder:text-text-dim focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
                     />
                     {(groupChips.length > 0 || (canEdit && ingredientGroups)) && (
@@ -425,7 +427,7 @@ export default function IngredientManagementPage() {
                             triggerLabel={groupChips.find(c => c.id === effectiveFilter)?.label || 'Tất cả'}
                             onChange={(id) => { setGroupFilter(id); setSearch('') }}
                             items={[
-                                { value: 'all', label: 'Tất cả', count: tabIngredients.length },
+                                { value: 'all', label: 'Tất cả', count: allIngredients.length },
                                 ...groupChips.map(c => ({ value: c.id, label: c.label, count: c.count, alert: c.alert })),
                                 ...(canEdit && ingredientGroups ? [{ action: 'edit', label: groupChips.length > 0 ? 'Sửa nhóm…' : '＋ Chia nhóm…', onClick: () => setShowGroupsSheet(true) }] : []),
                             ]}
@@ -435,8 +437,8 @@ export default function IngredientManagementPage() {
                     )}
                     {canEdit && (
                         <button
-                            onClick={() => { setNewCategory(viewMode); setShowCreateModal(true) }}
-                            aria-label={viewMode === 'packaging' ? 'Tạo bao bì' : 'Tạo nguyên liệu'}
+                            onClick={() => setShowCreateModal(true)}
+                            aria-label="Tạo nguyên liệu"
                             className="shrink-0 px-3 rounded-[12px] flex items-center justify-center text-[13px] font-bold active:scale-95 transition-all border bg-primary border-primary text-bg hover:bg-primary/90"
                         >
                             <Plus size={18} />
@@ -504,13 +506,15 @@ export default function IngredientManagementPage() {
                     onClose={() => !saving && setShowCreateModal(false)}
                     panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
                 >
-                        <SheetHeader title={newCategory === 'packaging' ? 'Tạo bao bì mới' : 'Tạo nguyên liệu mới'} onClose={() => setShowCreateModal(false)} closeDisabled={saving} />
+                        <SheetHeader title="Tạo nguyên liệu mới" onClose={() => setShowCreateModal(false)} closeDisabled={saving} />
                         <CreateIngredientForm
                             name={newName}
                             unit={newUnit}
+                            category={newCategory}
                             saving={saving}
                             onNameChange={setNewName}
                             onUnitChange={setNewUnit}
+                            onCategoryChange={setNewCategory}
                             onSubmit={handleCreateIngredient}
                         />
                 </BottomSheet>
@@ -518,10 +522,9 @@ export default function IngredientManagementPage() {
 
             {showGroupsSheet && (
                 <IngredientGroupsSheet
-                    section={viewMode}
                     groups={ingredientGroups}
                     countByGroup={countByGroup}
-                    ingredients={tabIngredients}
+                    ingredientsBySection={ingredientsBySection}
                     groupOf={gidOf}
                     addressId={selectedAddress.id}
                     onChanged={() => refreshProducts?.()}

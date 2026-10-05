@@ -285,10 +285,9 @@ export async function fetchLastWeekSameDayOrderItems(addressId: UUID, daysAgo = 
         if (addressId) query = query.eq('address_id', addressId)
 
         const { data, error } = await query
-        if (error) {
-            console.error('fetchLastWeekSameDayOrderItems error:', error)
-            return []
-        }
+        // Ném (không trả []) — [] là "lịch sử trống" nên caller không phân biệt được với tải hỏng, và
+        // historicalCache còn nhớ luôn kết quả rỗng giả đó cả ngày. through() không cache lời ném.
+        if (error) throw error
 
         const allItems: Row[] = []
         data.forEach((o: Row) => {

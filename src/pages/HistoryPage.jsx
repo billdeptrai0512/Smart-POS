@@ -86,11 +86,8 @@ export default function HistoryPage() {
         setJournalProgress(prev => ({ ...prev, viewedExpense: true }))
     }
     useOnboardingProgressPersist('journalProgress', journalProgress, { isGuest, addressId: selectedAddress?.id })
-    // Hint tuần tự: Chi phí trước, Báo cáo sau khi Chi phí đã xong.
-    const journalHintTab = !isGuest ? null
-        : !journalProgress.viewedExpense ? 'expense'
-            : !journalProgress.viewedReport ? 'report'
-                : null
+    // Hint tuần tự: tab Chi phí trước, rồi mũi tên "tiến" sang trang Báo cáo (Báo cáo là trang riêng).
+    const journalHint = !isGuest ? null : !journalProgress.viewedExpense ? 'expense' : !journalProgress.viewedReport ? 'report' : null
 
     // Phase 5 "Điều chỉnh công thức" không còn nút riêng trong guide — hint thẳng vào mũi tên
     // "tiến" ở header (như DailyReportPage.jsx), cho user quay lại /history rồi đi tiếp tới
@@ -387,18 +384,15 @@ export default function HistoryPage() {
         if (wasInventoryRefill) await refreshProducts?.()
     }
 
-    const handleReportNav = () => {
-        // Phase 2 "Nhật ký" hoàn tất khi user tự bấm sang tab Báo cáo (điều hướng đi luôn nên
-        // không có activeTab==='report' để bắt qua effect như 2 tab kia — ghi thẳng ở đây).
-        if (isGuest && selectedAddress?.id && !journalProgress.viewedReport) {
-            const next = { ...journalProgress, viewedReport: true }
-            writeOnboardingState(selectedAddress.id, { journalProgress: next })
-        }
-        // Tab-switch within the Nhật-ký/Báo-cáo dashboard: use replace so the back button
-        // returns to the entry point (e.g. /addresses) instead of cycling through tab toggles.
+    const handleForward = () => {
+        // Phase 2 "Nhật ký" hoàn tất khi user tự bấm mũi tên sang trang Báo cáo (điều hướng đi
+        // luôn nên không có effect nào bắt được như 2 tab kia — ghi thẳng ở đây).
         // dateNavState ({ scope, offset, customRange }) carries the full window so
         // /daily-report opens on the same selection instead of resetting to "hôm nay".
-        navigate('/daily-report', { replace: true, state: { from: backTo, ...dateNavState } })
+        if (isGuest && selectedAddress?.id && !journalProgress.viewedReport) {
+            writeOnboardingState(selectedAddress.id, { journalProgress: { ...journalProgress, viewedReport: true } })
+        }
+        goToMenuStep(activeTab, +1, { navigate, backTo, setActiveTab, scopeState: dateNavState, wizard: location.state?.wizard })
     }
 
     // ─── Render ───────────────────────────────────────────────────────
@@ -410,15 +404,12 @@ export default function HistoryPage() {
                 scope={scope}
                 isReadOnly={isReadOnly}
                 canGoForward={canGoForwardPeriod}
-                onBack={() => goToMenuStep(activeTab, -1, { navigate, backTo, setActiveTab, goReport: handleReportNav, wizard: location.state?.wizard })}
-                onForward={() => goToMenuStep(activeTab, +1, { navigate, backTo, setActiveTab, goReport: handleReportNav, wizard: location.state?.wizard })}
-                hintForward={hintGoToRecipes}
+                onBack={() => goToMenuStep(activeTab, -1, { navigate, backTo, setActiveTab, wizard: location.state?.wizard })}
+                onForward={handleForward}
+                hintForward={journalHint === 'report' || hintGoToRecipes}
                 activeTab={activeTab}
-                hintTab={journalHintTab}
-                onTabSelect={(tab) => {
-                    if (tab === 'report') handleReportNav()
-                    else setActiveTab(tab)
-                }}
+                hintTab={journalHint === 'expense' ? 'expense' : null}
+                onTabSelect={setActiveTab}
                 onOffsetPrev={goOffsetPrev}
                 onOffsetNext={goOffsetNext}
                 rangeStartISO={rangeStart ? getLocalISO(rangeStart) : undefined}

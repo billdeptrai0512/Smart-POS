@@ -8,38 +8,38 @@ import {
 } from '../../src/utils/menuSequence'
 
 describe('MENU_SEQUENCE shape', () => {
-    it('is the 2-stop dashboard line in order', () => {
+    it('is the 3-stop dashboard line in order (Nhật ký → Báo cáo → Tồn kho)', () => {
         expect(MENU_SEQUENCE.map(s => s.key)).toEqual([
-            'orders', 'recipes',
+            'orders', 'report', 'main',
         ])
     })
 })
 
 describe('menuStep (bounded line, not a loop)', () => {
     it('steps forward through adjacent stops', () => {
-        expect(menuStep('orders', +1).key).toBe('recipes')
+        expect(menuStep('orders', +1).key).toBe('report')
+        expect(menuStep('report', +1).key).toBe('main')
     })
     it('steps backward through adjacent stops', () => {
-        expect(menuStep('recipes', -1).key).toBe('orders')
+        expect(menuStep('main', -1).key).toBe('report')
+        expect(menuStep('report', -1).key).toBe('orders')
     })
-    it('returns null past the last stop (goNext from Nguyên liệu)', () => {
-        expect(menuStep('recipes', +1)).toBeNull()
+    it('returns null past the last stop (goNext from Tồn kho)', () => {
+        expect(menuStep('main', +1)).toBeNull()
     })
-    it('returns null before the first stop (goBack from Thu nhập)', () => {
+    it('returns null before the first stop (goBack from Nhật ký)', () => {
         expect(menuStep('orders', -1)).toBeNull()
     })
     it('falls back to the first stop for an unknown key', () => {
         expect(menuStep('nope', +1).key).toBe('orders')
         expect(menuStep(undefined, -1).key).toBe('orders')
     })
-    it('resolves legacy or non-wizard keys to their closest stops', () => {
-        expect(menuStep('expense', +1).key).toBe('recipes')
+    it('resolves sub-tab keys to their page stop', () => {
+        expect(menuStep('expense', +1).key).toBe('report')
         expect(menuStep('expense', -1)).toBeNull()
-        expect(menuStep('report', +1).key).toBe('recipes')
-        expect(menuStep('main', +1)).toBeNull()
-        expect(menuStep('main', -1).key).toBe('orders')
-        expect(menuStep('packaging', +1)).toBeNull()
-        expect(menuStep('packaging', -1).key).toBe('orders')
+        // Công thức là sub-tab của Tồn kho
+        expect(menuStep('recipes', +1)).toBeNull()
+        expect(menuStep('recipes', -1).key).toBe('report')
     })
 })
 
@@ -48,8 +48,6 @@ describe('goToMenuStep', () => {
         navigate: vi.fn(),
         backTo: '/pos',
         setActiveTab: vi.fn(),
-        setViewMode: vi.fn(),
-        goReport: vi.fn(),
         ...over,
     })
 
@@ -65,17 +63,26 @@ describe('goToMenuStep', () => {
         expect(ctx.navigate).toHaveBeenCalledWith(MENU_BOUNDARY_ROUTE)
     })
 
-    it('cross-route to /recipes navigates with from state', () => {
+    it('orders › goes to /daily-report carrying the date window', () => {
+        const scopeState = { scope: 'week', offset: -1 }
+        const ctx = makeCtx({ scopeState })
+        goToMenuStep('orders', +1, ctx)
+        expect(ctx.navigate).toHaveBeenCalledWith('/daily-report', {
+            state: { from: '/pos', wizard: true, ...scopeState },
+        })
+    })
+
+    it('report › goes to /ingredients with from state', () => {
         const ctx = makeCtx()
-        goToMenuStep('orders', +1, ctx) // orders → recipes
-        expect(ctx.navigate).toHaveBeenCalledWith('/recipes', {
+        goToMenuStep('report', +1, ctx)
+        expect(ctx.navigate).toHaveBeenCalledWith('/ingredients', {
             state: { from: '/pos', wizard: true },
         })
     })
 
-    it('cross-route back to /history from main navigates with state', () => {
+    it('cross-route back to /history from report navigates with state', () => {
         const ctx = makeCtx({ wizard: true })
-        goToMenuStep('main', -1, ctx) // main → orders
+        goToMenuStep('report', -1, ctx)
         expect(ctx.navigate).toHaveBeenCalledWith('/history', {
             state: { from: '/pos', tab: 'orders', wizard: true },
         })

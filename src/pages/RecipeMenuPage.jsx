@@ -235,8 +235,8 @@ export default function RecipeMenuPage() {
                 activeTab="recipes"
                 hintTab={hintIngredientsTab ? 'main' : null}
                 onTabSelect={(key) => {
-                    if (key === 'main' || key === 'packaging') {
-                        navigate('/ingredients', { state: { ...location.state, viewMode: key }, replace: true })
+                    if (key === 'main') {
+                        navigate('/ingredients', { state: location.state, replace: true })
                     }
                 }}
             />

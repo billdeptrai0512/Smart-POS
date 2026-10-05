@@ -1,11 +1,24 @@
+import { INGREDIENT_CATEGORIES } from '../../utils/ingredients'
+
 export default function CreateIngredientForm({
-    name, unit, saving,
-    onNameChange, onUnitChange, onSubmit,
+    name, unit, category, saving,
+    onNameChange, onUnitChange, onCategoryChange, onSubmit,
 }) {
     const canSubmit = name.trim() && !saving
 
     return (
         <div className="flex flex-col gap-3">
+            <div className="flex gap-2 p-1 rounded-[12px] bg-surface-light border border-border/60">
+                {INGREDIENT_CATEGORIES.map(c => (
+                    <button
+                        key={c.key}
+                        onClick={() => onCategoryChange(c.key)}
+                        className={`flex-1 py-2 rounded-[8px] text-[12px] font-black uppercase tracking-wider transition-colors ${category === c.key ? 'bg-primary text-bg' : 'text-text-secondary'}`}
+                    >
+                        {c.label}
+                    </button>
+                ))}
+            </div>
             <div className="flex gap-2">
                 <input
                     type="text"

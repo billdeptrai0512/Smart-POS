@@ -8,6 +8,7 @@ import { POSProvider } from './contexts/POSContext'
 import { ConfirmProvider } from './contexts/ConfirmContext'
 import ErrorBoundary from './components/common/ErrorBoundary'
 import OnboardingGuide from './components/common/onboarding/OnboardingGuide'
+import PrepPinBar from './components/common/PrepPinBar'
 import './index.css'
 
 // Pages — lazy-loaded for route-level code splitting
@@ -92,6 +93,7 @@ function OnboardingLayout() {
   return (
     <div className="flex flex-col h-full">
       <OnboardingGuide />
+      <PrepPinBar />
       <div className="flex-1 min-h-0">
         <Outlet />
       </div>

@@ -3,7 +3,6 @@ import { onboardingHintClass } from '../../utils/onboardingHint'
 const TABS = [
     { key: 'orders', label: 'Doanh thu', activeColor: 'bg-primary' },
     { key: 'expense', label: 'Chi phí', activeColor: 'bg-danger' },
-    { key: 'report', label: 'Báo cáo', activeColor: 'bg-success' },
 ]
 
 // hintTab: key của tab đang được onboarding phase 2 "Nhật ký" gợi ý bấm tiếp — xem

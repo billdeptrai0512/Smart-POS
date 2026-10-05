@@ -6,9 +6,9 @@ import { formatIsoShort, formatIsoDisplay } from '../common/datePickerUtils'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 
 export default function HistoryHeader({
-    rangeLabel, totalCups, scope, isReadOnly,
+    title = 'Nhật ký', rangeLabel, totalCups, scope, isReadOnly,
     onBack, onForward, hintForward = false,
-    // Tabs row (moved from footer)
+    // Tabs row (moved from footer) — bỏ qua khi không truyền activeTab (trang Báo cáo dùng belowTabs thay thế)
     activeTab, onTabSelect, hintTab,
     // Week/month mode — chevrons step by one period; the calendar still renders
     // with the active period highlighted + its preset chip selected.
@@ -25,7 +25,7 @@ export default function HistoryHeader({
     // Page maps preset.scope back to its own scope state.
     onPresetSelect,
     // Optional slot: extra row rendered below the tabs bar inside the sticky
-    // header (e.g. DailyReportPage's Dòng tiền / Tồn kho / Lợi nhuận filter).
+    // header (DailyReportPage's Dòng tiền / Kiểm kê / Lợi nhuận filter).
     belowTabs,
 }) {
     return (
@@ -39,7 +39,7 @@ export default function HistoryHeader({
                 </button>
 
                 <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
-                    <span className="text-[12px] font-black text-primary uppercase line-clamp-1">Nhật ký</span>
+                    <span className="text-[12px] font-black text-primary uppercase line-clamp-1">{title}</span>
                     {!isReadOnly ? (
                         <DateRangePicker
                             scope={scope}
@@ -73,7 +73,7 @@ export default function HistoryHeader({
                 </button>
             </div>
 
-            <HistoryTabsBar activeTab={activeTab} onSelect={onTabSelect} hintTab={hintTab} />
+            {activeTab && <HistoryTabsBar activeTab={activeTab} onSelect={onTabSelect} hintTab={hintTab} />}
             {belowTabs}
         </header>
     )
