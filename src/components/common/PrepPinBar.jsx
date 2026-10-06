@@ -9,8 +9,6 @@ import NoticeSheet from './NoticeSheet'
 import NoticeBar from './NoticeBar'
 import ShiftPrepCard from '../DailyReportPage/ShiftPrepCard'
 import Toast from '../POSPage/Toast'
-import { shiftFinalizedKey } from '../../constants/storageKeys'
-import { dateStringVN } from '../../utils/dateVN'
 
 // Dải notice "Chuẩn bị hôm nay" ở đỉnh /pos — đúng chỗ OnboardingGuide (App.jsx OnboardingLayout).
 // BẮT BUỘC hiện khi còn NVL cần lấy từ kho dự trữ ra quầy (soạn sáng nay chưa xong, hoặc Lý thuyết ở
@@ -27,13 +25,10 @@ export default function PrepPinBar() {
 }
 
 function PinBar() {
-    const { selectedAddress } = useAddress()
     const { items, checked, skipped, pendingCount, ready, confirmPrep, toggleSkip, toast } = usePrepNotice()
     const [open, setOpen] = useState(false)
 
-    // Ca đã chốt xong (cờ do /daily-report ghi) → hết nhắc, kẻo cuối ngày bán hết hàng vẫn bị nhắc mãi.
-    const finalized = !!localStorage.getItem(shiftFinalizedKey(selectedAddress.id, dateStringVN()))
-    if (finalized || (!open && pendingCount === 0)) return null
+    if (!open && pendingCount === 0) return null
 
     const doneCount = items.length - pendingCount
 

@@ -11,10 +11,19 @@ describe('buildDepletedList', () => {
     it('Lý thuyết = Đầu kỳ + Nhập thêm − Sử dụng ≤ 0 → hết, lấy 1 bịch', () => {
         const out = buildDepletedList({ ...base, restockInputs: { cà_phê: '1000' }, usedMap: { cà_phê: 1100 } })
         expect(out).toHaveLength(1)
-        expect(out[0]).toMatchObject({ kind: 'depleted', needPacks: 1, fillQty: 1000, have: 0 })
+        expect(out[0]).toMatchObject({ kind: 'depleted', needPacks: 1, fillQty: 1000, have: 0, haveLabel: 'Lý thuyết' })
     })
     it('còn hàng ở quầy (Lý thuyết > 0) → không báo', () => {
         expect(buildDepletedList({ ...base, restockInputs: { cà_phê: '1000' }, usedMap: { cà_phê: 1099 } })).toEqual([])
+    })
+    it('Lý thuyết âm nhưng đã đếm Cuối kỳ > 0 → tin số đếm, không báo hết', () => {
+        const args = { ...base, restockInputs: { cà_phê: '1000' }, usedMap: { cà_phê: 1200 } }
+        expect(buildDepletedList({ ...args, inventoryInputs: { cà_phê: '30' } })).toEqual([])
+        expect(buildDepletedList({ ...args, inventoryInputs: { cà_phê: '0' } })).toHaveLength(1)
+    })
+    it('Lý thuyết âm → hiện đúng số âm, không ép về 0', () => {
+        const out = buildDepletedList({ ...base, restockInputs: { cà_phê: '1000' }, usedMap: { cà_phê: 1106 } })
+        expect(out[0].have).toBe(-6)
     })
     it('chưa bán gì (used = 0) → không báo dù đầu kỳ = 0', () => {
         expect(buildDepletedList({ ...base, openingStock: {}, usedMap: {} })).toEqual([])

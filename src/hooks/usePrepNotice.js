@@ -113,11 +113,11 @@ export function usePrepNotice() {
         if (!ready) return []
         return mergePrepItems(
             buildPrepTodayList({ ...common, lastWeekUsedMap: forecastMap }),
-            buildDepletedList({ ...common, restockInputs, skipped, effectiveWarehouseStocks: inventory.effectiveWarehouseStocks }),
+            buildDepletedList({ ...common, restockInputs, inventoryInputs: inventory.inventoryInputs, skipped, effectiveWarehouseStocks: inventory.effectiveWarehouseStocks }),
             restockInputs)
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ready, common.ingredientsList, common.openingInputs, common.openingStock, common.warehouseStocks, common.usedMap,
-        inventory.effectiveWarehouseStocks, forecastMap, restockInputs, skipped])
+        inventory.effectiveWarehouseStocks, inventory.inventoryInputs, forecastMap, restockInputs, skipped])
 
     const checked = useMemo(
         () => Object.fromEntries(items.map(it => [it.ingredient, isPrepDone(it, restockInputs, skipped)])),

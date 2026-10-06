@@ -64,12 +64,12 @@ export function buildPrepTodayList({ ingredientsList, openingInputs, openingStoc
 }
 
 // NVL ĐÃ HẾT ở quầy giữa ca: có bán (used > 0) mà Lý thuyết (Đầu kỳ + Nhập thêm − Sử dụng, trừ bì)
-// ≤ 0 — kể cả món sáng nay đã soạn. Cần lấy thêm từ kho dự trữ; bấm xác nhận = cộng thêm 1 lần
+// ≤ 0 (đã đếm Cuối kỳ thì lấy số đếm thay Lý thuyết — đếm thực tế đúng hơn) — kể cả món sáng nay đã soạn. Cần lấy thêm từ kho dự trữ; bấm xác nhận = cộng thêm 1 lần
 // vào Nhập thêm, nên Lý thuyết > 0 lại thì tự rớt khỏi danh sách. Món đã "bỏ qua" thì thôi.
 // effectiveWarehouseStocks = kho TRƯỚC khi trừ restock ca này (xem useShiftInventoryState).
 // ponytail: NVL không có quy cách bịch thì lấy 25% lượng đã dùng (tối thiểu 1) — chưa có cấu hình
 // "lượng lấy mỗi lần"; thêm cột cấu hình nếu 25% không hợp.
-export function buildDepletedList({ ingredientsList, openingInputs, openingStock, restockInputs, skipped, usedMap, warehouseStocks, effectiveWarehouseStocks }) {
+export function buildDepletedList({ ingredientsList, openingInputs, openingStock, restockInputs, inventoryInputs = {}, skipped, usedMap, warehouseStocks, effectiveWarehouseStocks }) {
     const out = []
     for (const ing of ingredientsList || []) {
         const used = r1(lookupByLabel(ing.ingredient, usedMap))
@@ -81,8 +81,10 @@ export function buildDepletedList({ ingredientsList, openingInputs, openingStock
             openingFallback: openingStock[ing.ingredient] ?? 0,
             used,
         })
+        const counted = inventoryInputs[ing.ingredient]
+        const balance = counted !== undefined && counted !== '' ? r1(counted) : lyThuyet
         const tare = r1(ing.tare_weight)
-        if (lyThuyet - tare > 0) continue
+        if (balance - tare > 0) continue
 
         const packSize = Number(ing.pack_size) || 0
         const need = packSize > 0 ? packSize : Math.max(1, r1(used * 0.25))
@@ -92,15 +94,15 @@ export function buildDepletedList({ ingredientsList, openingInputs, openingStock
         out.push({
             ingredient: ing.ingredient,
             kind: 'depleted',
-            have: 0, // đã hết — không hiện số âm
-            haveLabel: 'Còn ở quầy',
+            have: balance, // số thật (có thể âm) — thấy được mức lệch so với số đếm
+            haveLabel: 'Lý thuyết',
             need,
             needPacks: packSize > 0 ? 1 : 0,
             unit: ing.unit,
             packUnit: ing.pack_unit,
             fillQty: Math.max(0, Math.min(need, left)), // 0 = kho dự trữ cũng hết, không lấy thêm được
             warehouse: wh != null ? r1(wh) : null,
-            tare: 0, // have đã là 0 — không hiện "bì X + 0"
+            tare: 0, // balance đã gồm bì — không hiện "bì X + …"
         })
     }
     return out
