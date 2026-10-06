@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
     Pencil, Trash2, ClipboardCopy, MoreVertical, X,
     Coffee, FileText, Package, ChevronRight, Eraser,
-    Banknote, Receipt, Wallet, Boxes, TrendingUp, ChefHat, Warehouse, Printer,
+    Banknote, Receipt, Wallet, TrendingUp, ChefHat, Warehouse, Printer,
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
@@ -253,7 +253,6 @@ export default function BranchGrid({
                                                                 icon={<Wallet size={16} />}
                                                                 label="Dòng tiền"
                                                                 tone="success"
-                                                                className="col-span-2"
                                                                 onClick={() => { onSelectReport?.(addr, 'cashflow'); setExpandedActionsId(null) }}
                                                             />
                                                             <ActionPill
@@ -262,22 +261,16 @@ export default function BranchGrid({
                                                                 tone="success"
                                                                 onClick={() => { onSelectReport?.(addr, 'profit'); setExpandedActionsId(null) }}
                                                             />
-                                                            <ActionPill
-                                                                icon={<Boxes size={16} />}
-                                                                label="Kiểm kê"
-                                                                tone="warning"
-                                                                onClick={() => { onSelectReport?.(addr, 'inventory'); setExpandedActionsId(null) }}
-                                                            />
                                                         </div>
                                                     </div>
                                                     <div>
-                                                        <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Nguyên vật liệu</p>
+                                                        <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Tồn kho</p>
                                                         <div className="grid grid-cols-2 gap-2">
                                                             <ActionPill
-                                                                icon={<Warehouse size={16} />}
-                                                                label="Kho chung"
-                                                                tone="warning"
-                                                                onClick={() => setSubModal({ type: 'group', addressId: addr.id })}
+                                                                icon={<Package size={16} />}
+                                                                label="Kiểm kê"
+                                                                tone="primary"
+                                                                onClick={() => { onSelectIngredients?.(addr); setExpandedActionsId(null) }}
                                                             />
                                                             <ActionPill
                                                                 icon={<ChefHat size={16} />}
@@ -286,10 +279,11 @@ export default function BranchGrid({
                                                                 onClick={() => { onSelectRecipes?.(addr); setExpandedActionsId(null) }}
                                                             />
                                                             <ActionPill
-                                                                icon={<Package size={16} />}
-                                                                label="Nguyên liệu"
-                                                                tone="primary"
-                                                                onClick={() => { onSelectIngredients?.(addr); setExpandedActionsId(null) }}
+                                                                icon={<Warehouse size={16} />}
+                                                                label="Kho chung"
+                                                                tone="warning"
+                                                                className="col-span-2"
+                                                                onClick={() => setSubModal({ type: 'group', addressId: addr.id })}
                                                             />
                                                         </div>
                                                     </div>
