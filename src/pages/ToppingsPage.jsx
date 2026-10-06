@@ -34,9 +34,9 @@ export default function ToppingsPage() {
             await insertTopping(name.trim(), parseVNDInput(price), selectedAddress?.id, unit.trim() || 'đv')
             await refreshProducts()
             setName(''); setPrice(''); setUnit(''); setShowCreate(false)
-            showToast('Đã tạo topping', 'success')
+            showToast('Đã tạo đồ ăn thêm', 'success')
         } catch (err) {
-            showError(err, 'Tạo topping')
+            showError(err, 'Tạo đồ ăn thêm')
         } finally {
             setSaving(false)
         }
@@ -47,7 +47,7 @@ export default function ToppingsPage() {
             <Toast toast={toast} />
 
             <IngredientDetailHeader
-                title="Topping"
+                title="Đồ ăn thêm"
                 subtitle={`${toppings.length} loại`}
                 onBack={() => navigate('/category/recipes', { state: location.state })}
             />
@@ -55,7 +55,7 @@ export default function ToppingsPage() {
             <main className="flex-1 overflow-y-auto px-4 py-4 pb-8 space-y-3">
                 {toppings.length === 0 && !showCreate && (
                     <p className="text-text-secondary text-[13px] text-center py-8 bg-surface-light/50 rounded-[16px] border border-border/40">
-                        Chưa có topping nào (ví dụ: Trân châu, Kem muối...)
+                        Chưa có đồ ăn thêm nào (ví dụ: Trân châu, Kem muối...)
                     </p>
                 )}
 
@@ -76,7 +76,7 @@ export default function ToppingsPage() {
                             <input
                                 type="text"
                                 autoCapitalize="words"
-                                placeholder="Tên topping"
+                                placeholder="Tên đồ ăn thêm"
                                 value={name}
                                 onChange={e => setName(capitalizeWords(e.target.value))}
                                 className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
@@ -118,7 +118,7 @@ export default function ToppingsPage() {
                         onClick={() => setShowCreate(true)}
                         className="w-full text-[13px] text-primary/70 hover:text-primary font-medium transition-colors bg-surface border border-border/60 rounded-[16px] px-4 py-4 text-center"
                     >
-                        + Tạo topping mới
+                        + Tạo đồ ăn thêm mới
                     </button>
                 ))}
             </main>

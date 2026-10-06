@@ -63,14 +63,14 @@ export default function ToppingDetailPage() {
 
     async function saveName(name) {
         if (!name.trim()) return
-        await withSaving('Lưu tên topping', async () => {
+        await withSaving('Lưu tên đồ ăn thêm', async () => {
             await updateToppingName(toppingId, name.trim())
             await refreshProducts()
         })
     }
 
     async function savePrice(price) {
-        await withSaving('Lưu giá topping', async () => {
+        await withSaving('Lưu giá đồ ăn thêm', async () => {
             await updateToppingPrice(toppingId, price)
             await refreshProducts()
         })
@@ -78,7 +78,7 @@ export default function ToppingDetailPage() {
 
     // ─── Công thức topping (mirrors RecipeIngredientPage's base-recipe handlers) ───
     async function setIngredientAmount(ingredient, amount, unit) {
-        await withSaving('Lưu công thức topping', async () => {
+        await withSaving('Lưu công thức đồ ăn thêm', async () => {
             await upsertToppingIngredient(toppingId, ingredient, amount, unit)
             setToppingIngs(prev => {
                 const exists = prev.some(r => r.ingredient === ingredient)
@@ -129,14 +129,14 @@ export default function ToppingDetailPage() {
     if (!topping) {
         return (
             <div className="flex flex-col h-full bg-bg items-center justify-center gap-3 px-6">
-                <p className="text-text-secondary text-[13px] text-center">Không tìm thấy topping này (có thể đã bị xoá).</p>
-                <button onClick={() => navigate('/category/toppings')} className="text-primary text-[13px] font-bold">Về danh sách topping</button>
+                <p className="text-text-secondary text-[13px] text-center">Không tìm thấy đồ ăn thêm này (có thể đã bị xoá).</p>
+                <button onClick={() => navigate('/category/toppings')} className="text-primary text-[13px] font-bold">Về danh sách đồ ăn thêm</button>
             </div>
         )
     }
 
     async function saveLinks() {
-        await withSaving('Lưu danh sách món dùng topping', async () => {
+        await withSaving('Lưu danh sách món dùng đồ ăn thêm', async () => {
             await setToppingProductLinks(toppingId, [...selectedProductIds])
             setSavedProductIds(new Set(selectedProductIds))
             await refreshProducts()
@@ -145,8 +145,8 @@ export default function ToppingDetailPage() {
     }
 
     async function handleDelete() {
-        if (!await confirm({ title: `Xoá topping "${topping.name}"?`, danger: true, confirmLabel: 'Xoá' })) return
-        await withSaving('Xoá topping', async () => {
+        if (!await confirm({ title: `Xoá đồ ăn thêm "${topping.name}"?`, danger: true, confirmLabel: 'Xoá' })) return
+        await withSaving('Xoá đồ ăn thêm', async () => {
             await deleteTopping(toppingId)
             await refreshProducts()
             navigate('/category/toppings')
@@ -172,7 +172,7 @@ export default function ToppingDetailPage() {
                     <button
                         onClick={handleDelete}
                         className="w-10 h-10 flex items-center justify-center rounded-[14px] border border-danger/20 text-danger hover:bg-danger/10 active:scale-95 transition-all shadow-sm focus:outline-none shrink-0"
-                        title="Xoá topping"
+                        title="Xoá đồ ăn thêm"
                     >
                         <Trash2 size={20} strokeWidth={2.5} />
                     </button>

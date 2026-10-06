@@ -488,7 +488,7 @@ export default function RecipeMenuPage() {
                             onChange={e => setDividerName(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter') saveDivider() }}
                             disabled={saving}
-                            placeholder="Tên danh mục (vd: Cà phê, Trà, Topping)"
+                            placeholder="Tên danh mục (vd: Cà phê, Trà, Đồ ăn thêm)"
                             className="w-full px-4 py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50"
                         />
                         <div className="flex gap-2">
