@@ -76,8 +76,8 @@ export const STEPS = [
             { label: 'Tạo tùy chọn thêm', done: ctx.recipeProgress.addedExtra },
         ],
     },
-    // 6. (CUỐI CÙNG) Cài đặt 1 nguyên liệu mẫu (Cà phê) — tab "Nguyên liệu" trên MenuTabsBar tự
-    // sáng hint (hintIngredientsTab). Chưa có ingredient "Cà phê" → [] = vacuously done.
+    // 6. (CUỐI CÙNG) Cài đặt 1 nguyên liệu mẫu (Cà phê) — mũi tên "trở về" ở header /recipes tự
+    // sáng hint (hintIngredientsTab) để dẫn về Tồn kho. Chưa có ingredient "Cà phê" → [] = vacuously done.
     {
         title: 'Nguyên liệu',
         items: ({ coffeeConfig, stockProgress }) => coffeeConfig

@@ -1,26 +1,19 @@
-import { onboardingHintClass } from '../../utils/onboardingHint'
-
 export const VIEW_ALL = 'all'
 export const VIEW_PROFIT = 'profit'
 export const VIEW_CASHFLOW = 'cashflow'
-export const VIEW_INVENTORY = 'inventory'
 
 const MENU = [
     { key: VIEW_CASHFLOW, label: 'Dòng tiền' },
-    { key: VIEW_INVENTORY, label: 'Kiểm kê' },
     { key: VIEW_PROFIT, label: 'Lợi nhuận' },
 ]
 
-// hintView: key của view đang được onboarding phase 3→4 gợi ý bấm tiếp — xem
-// DailyReportPage.jsx (hintInventoryTab) + onboarding/steps.js.
 // Card-style segmented control — visually part of the main panel family.
-export default function ReportViewFilter({ value, onChange, isStaff, hintView }) {
+export default function ReportViewFilter({ value, onChange, isStaff }) {
     const menu = MENU.filter(item => !(isStaff && item.key === VIEW_PROFIT))
     return (
         <div className="bg-surface border border-border/60 rounded-[14px] p-1 shadow-sm flex gap-1">
             {menu.map(item => {
                 const active = value === item.key
-                const hintClass = onboardingHintClass(hintView === item.key)
                 return (
                     <button
                         key={item.key}
@@ -30,7 +23,7 @@ export default function ReportViewFilter({ value, onChange, isStaff, hintView })
                             ${active
                                 ? 'bg-primary text-bg shadow-sm'
                                 : 'text-text-secondary hover:text-text hover:bg-border/30'
-                            } ${hintClass}`}
+                            }`}
                     >
                         {item.label}
                     </button>

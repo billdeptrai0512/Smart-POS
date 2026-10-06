@@ -101,7 +101,7 @@ function chipTrigger({ labelOverride } = {}) {
 //              "Tuần này" preset chip shown active.
 //   • month  → same as week but ±1 month, "Tháng này" active.
 //   • custom → chip dd/mm–dd/mm, chevrons shift the window by its own width.
-function DateRangePicker({
+export function DateRangePicker({
     scope, rangeLabel, rangeStartISO, rangeEndISO,
     dayInputValue, customRange, todayISO,
     canGoForwardDay, canGoForward, canShiftRangeForward,

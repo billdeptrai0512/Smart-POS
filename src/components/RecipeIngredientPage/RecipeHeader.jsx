@@ -1,11 +1,10 @@
 import { Copy } from 'lucide-react'
 import { capitalizeWords } from '../../utils'
 import EditableEntityHeader from '../common/EditableEntityHeader'
-import MenuTabsBar from '../common/MenuTabsBar'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 
 export default function RecipeHeader({
-    product, canEdit, onBack, onSavePrice, onSaveName, onCopyFrom, onTabSelect, hintBack,
+    product, canEdit, onBack, onSavePrice, onSaveName, onCopyFrom, hintBack,
 }) {
     return (
         <EditableEntityHeader
@@ -27,8 +26,6 @@ export default function RecipeHeader({
                     <Copy size={20} strokeWidth={2.5} />
                 </button>
             )}
-        >
-            {onTabSelect && <MenuTabsBar activeTab="recipes" onSelect={onTabSelect} />}
-        </EditableEntityHeader>
+        />
     )
 }

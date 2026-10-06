@@ -1,8 +1,11 @@
-// Hai tab dùng chung dashboard Menu/Nguyên liệu — /recipes (Công thức) và /ingredients
-// (Kiểm kê = nguyên liệu + bao bì, phân biệt bằng nhóm). Tách khỏi MenuTabsBar.jsx vì file component chỉ được export
-// component (react-refresh/only-export-components) — MenuPageHeader cũng cần đọc
-// nhãn tab nên không thể khai cục bộ trong MenuTabsBar.jsx.
-export const MENU_TABS = [
+// Tab của 2 trang trong dashboard: Tồn kho (/ingredients) và Công thức (/recipes). Tách khỏi
+// MenuTabsBar.jsx vì file component chỉ được export component (react-refresh/only-export-components).
+export const INGREDIENT_TABS = [
     { key: 'main',      label: 'Kiểm kê' },
-    { key: 'recipes',   label: 'Công thức' },
+    { key: 'warehouse', label: 'Lưu trữ' },
+]
+
+export const RECIPE_TABS = [
+    { key: 'overview', label: 'Tổng quát' },
+    { key: 'recipes',  label: 'Công thức' },
 ]

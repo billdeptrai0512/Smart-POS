@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { Plus, BadgePercent } from 'lucide-react'
 import {
     DndContext, DragOverlay, PointerSensor, KeyboardSensor,
     closestCenter, useSensor, useSensors,
@@ -9,6 +9,9 @@ import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates } fro
 import { restrictToFirstScrollableAncestor } from '@dnd-kit/modifiers'
 import { BottomSheet, SheetHeader } from '../components/common/ModalShell'
 import MenuDivider from '../components/common/MenuDivider'
+import Dropdown from '../components/common/Dropdown'
+import NoticeBar from '../components/common/NoticeBar'
+import { normalizeSearchText } from '../utils/ingredients'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -22,6 +25,7 @@ import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
 import ExcelImportModal from '../components/RecipeMenuPage/ExcelImportModal'
 import { goToMenuStep } from '../utils/menuSequence'
+import { RECIPE_TABS } from '../constants/menuTabs'
 import { norm, findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
 import { isRecipeProgressDone } from '../utils/onboardingStorage'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
@@ -49,7 +53,7 @@ export default function RecipeMenuPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const backTo = location.state?.from || '/history'
-    const { products, recipes, ingredientCosts, ingredientUnits, ingredientConfigs, refreshProducts } = useProducts()
+    const { products, recipes, ingredientCosts, ingredientUnits, ingredientConfigs, discountPrograms, refreshProducts } = useProducts()
     const { selectedAddress } = useAddress()
     const { isManager, isAdmin, isGuest } = useAuth()
     const canEdit = isManager || isAdmin
@@ -66,8 +70,8 @@ export default function RecipeMenuPage() {
     // `hintCafeDen && product.id === cafeDenProduct?.id` ở từng chỗ.
     const hintCafeDenId = hintCafeDen ? cafeDenProduct.id : null
 
-    // Onboarding phase 6 (CUỐI CÙNG, "Cài đặt nguyên liệu") — sau khi phase 5 xong, hint tab
-    // "Nguyên liệu" trên header (dùng chung với /ingredients) để dẫn qua đó. Chỉ xét 3/4 việc
+    // Onboarding phase 6 (CUỐI CÙNG, "Cài đặt nguyên liệu") — sau khi phase 5 xong, hint mũi tên
+    // "trở về" trên header (về Tồn kho khi đi theo wizard) để dẫn qua đó. Chỉ xét 3/4 việc
     // đọc được từ ingredientConfigs (bỏ qua warehouse_stock_set — cần RPC riêng, không đáng fetch
     // thêm chỉ để tắt 1 hint trang trí) — vì warehouse luôn được hint TRƯỚC theo đúng thứ tự
     // nextIngredientSetupField, tới lúc cả 3 field còn lại xong thì warehouse chắc chắn cũng đã
@@ -90,6 +94,13 @@ export default function RecipeMenuPage() {
     // Bản sao local để phản hồi ngay khi thả tay, trước khi round-trip lưu server xong.
     const [orderedProducts, setOrderedProducts] = useState(products)
     useEffect(() => { setOrderedProducts(products) }, [products])
+    // 'overview' = Tổng quát (menu chia theo danh mục, lọc theo danh mục, kéo-thả sắp xếp), 'recipes' = Công thức
+    // (chi tiết từng món, tìm kiếm, thêm công thức, topping).
+    // Quay về từ chi tiết công thức / Đồ ăn thêm (state.recipesView) thì mở đúng tab Công thức.
+    const [view, setView] = useState(location.state?.recipesView || (isGuest ? 'recipes' : 'overview'))
+    // Lọc danh mục ở tab Tổng quát: 'all' | 'none' (món chưa thuộc mục nào) | id của mục (divider). Id lạ (mục đã xoá) rơi về 'all'.
+    const [categoryFilter, setCategoryFilter] = useState('all')
+    const [search, setSearch] = useState('')
     const [showCreateModal, setShowCreateModal] = useState(false)
     const [showImportModal, setShowImportModal] = useState(false)
     // {mode:'create'} | {mode:'edit', id} — modal tạo/sửa mục (divider phân nhóm menu)
@@ -216,63 +227,131 @@ export default function RecipeMenuPage() {
 
     const activeProduct = activeId ? orderedProducts.find(p => p.id === activeId) : null
     const sections = useMemo(() => groupBySections(orderedProducts), [orderedProducts])
+    const realProducts = useMemo(() => orderedProducts.filter(p => !p.is_divider), [orderedProducts])
+    // Chip lọc theo mục: mỗi divider 1 chip; món đứng trước mục đầu tiên gom vào 'none'. Không có mục nào → ẩn dropdown.
+    const categoryChips = useMemo(() => {
+        if (!sections.some(s => s.divider)) return []
+        return sections
+            .filter(s => s.divider || s.items.length > 0)
+            .map(s => s.divider
+                ? { id: s.divider.id, label: s.divider.name, count: s.items.length }
+                : { id: 'none', label: 'Chưa phân danh mục', count: s.items.length })
+    }, [sections])
+    const effectiveFilter = categoryChips.some(c => c.id === categoryFilter) ? categoryFilter : 'all'
+    // Lọc danh mục nào thì hiện divider danh mục đó kèm các món thuộc nó.
+    const visibleSections = useMemo(
+        () => effectiveFilter === 'all' ? sections : sections.filter(s => (s.divider?.id ?? 'none') === effectiveFilter),
+        [sections, effectiveFilter]
+    )
+    // Tab Công thức: tìm theo tên món (không phân biệt hoa/thường & dấu).
+    const searchedProducts = useMemo(() => {
+        const q = normalizeSearchText(search.trim())
+        return q ? realProducts.filter(p => normalizeSearchText(p.name).includes(q)) : realProducts
+    }, [realProducts, search])
     // Card và mục kéo trong 2 SortableContext riêng — mỗi context chỉ chứa item
     // cùng cỡ nên animate "nhường chỗ" không còn phải né kích thước lẫn nhau.
     // handleDragEnd vẫn tính từ danh sách phẳng orderedProducts nên món vẫn đổi
     // được qua mục khác bình thường (over có thể là id của mục hoặc card khác).
-    const cardIds = useMemo(() => orderedProducts.filter(p => !p.is_divider).map(p => p.id), [orderedProducts])
-    const dividerIds = useMemo(() => orderedProducts.filter(p => p.is_divider).map(p => p.id), [orderedProducts])
+    const cardIds = useMemo(() => visibleSections.flatMap(s => s.items.map(p => p.id)), [visibleSections])
+    const dividerIds = useMemo(() => visibleSections.filter(s => s.divider).map(s => s.divider.id), [visibleSections])
 
     return (
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
 
+            {canEdit && (
+                <NoticeBar
+                    icon={<BadgePercent size={15} className="text-primary shrink-0" />}
+                    label="Khuyến mãi"
+                    count={(discountPrograms || []).filter(p => p.enabled).length}
+                    onClick={() => navigate('/discounts', { state: location.state })}
+                />
+            )}
+
             <MenuPageHeader
+                title="Danh mục"
                 count={products.filter(p => !p.is_divider).length}
                 unitLabel="món"
+                subtitle={(view === 'overview' && (categoryChips.length > 0 || canEdit)) ? (
+                    <Dropdown
+                        ariaLabel="Lọc theo danh mục"
+                        value={effectiveFilter}
+                        triggerLabel={effectiveFilter === 'all' ? `${realProducts.length} công thức` : categoryChips.find(c => c.id === effectiveFilter)?.label}
+                        onChange={setCategoryFilter}
+                        items={[
+                            // Đang xem tất cả thì nút đã ghi "Tổng cộng …" — không lặp lại trong danh sách.
+                            ...(effectiveFilter === 'all' ? [] : [{ value: 'all', label: 'Tổng cộng', count: `${realProducts.length} công thức`, divider: false }]),
+                            ...categoryChips.map(c => ({ value: c.id, label: c.label, count: `${c.count} công thức` })),
+                            ...(canEdit ? [{ action: 'create', icon: <Plus size={14} />, label: 'Tạo danh mục', divider: true, onClick: () => { setDividerName(''); setDividerModal({ mode: 'create' }) } }] : []),
+                        ]}
+                        align="center"
+                        className="max-w-full"
+                        triggerClassName="mt-1 gap-1 pl-5 text-[12px] leading-none text-text/80 uppercase tabular-nums"
+                    />
+                ) : undefined}
                 onBack={() => goToMenuStep('recipes', -1, { navigate, backTo, wizard: location.state?.wizard })}
                 onForward={() => goToMenuStep('recipes', +1, { navigate, backTo, wizard: location.state?.wizard })}
-                activeTab="recipes"
-                hintTab={hintIngredientsTab ? 'main' : null}
-                onTabSelect={(key) => {
-                    if (key === 'main') {
-                        navigate('/ingredients', { state: location.state, replace: true })
-                    }
-                }}
+                tabs={RECIPE_TABS}
+                activeTab={view}
+                onTabSelect={setView}
+                hintBack={hintIngredientsTab}
             />
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-8 space-y-3 bg-bg">
-                {canEdit && (
+                {view === 'recipes' && (
                     <div className="flex items-stretch gap-2 h-11">
-                        <button
-                            onClick={() => { setDividerName(''); setDividerModal({ mode: 'create' }) }}
-                            className="flex-1 flex items-center justify-center gap-1.5 rounded-[12px] bg-surface border border-dashed border-border text-text-secondary text-[12px] font-black uppercase tracking-widest hover:bg-surface-light active:scale-[0.98] transition-all"
-                        >
-                            Tạo danh mục
-                        </button>
-                        <button
-                            onClick={() => navigate('/toppings', { state: location.state })}
-                            className="shrink-0 px-3 rounded-[12px] flex items-center justify-center bg-surface border border-border/60 text-text-secondary text-[12px] font-black uppercase tracking-widest hover:bg-surface-light active:scale-[0.98] transition-all"
-                        >
-                            Topping
-                        </button>
-                        <button
-                            onClick={() => navigate('/discounts', { state: location.state })}
-                            className="shrink-0 px-3 rounded-[12px] flex items-center justify-center bg-surface border border-border/60 text-text-secondary text-[12px] font-black uppercase tracking-widest hover:bg-surface-light active:scale-[0.98] transition-all"
-                        >
-                            Giảm giá
-                        </button>
-                        <button
-                            onClick={() => setShowCreateModal(true)}
-                            aria-label="Tạo công thức"
-                            className="shrink-0 px-3 rounded-[12px] flex items-center justify-center bg-primary text-bg hover:bg-primary/90 active:scale-95 transition-all"
-                        >
-                            <Plus size={18} />
-                        </button>
+                        <div className="relative flex-1 min-w-0">
+                            <input
+                                type="text"
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                placeholder="Tìm công thức…"
+                                className={`w-full h-full pl-3 ${canEdit ? 'pr-12' : 'pr-3'} rounded-[12px] bg-surface border border-border/60 text-text text-[14px] placeholder:text-text-dim focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20`}
+                            />
+                            {canEdit && (
+                                <button
+                                    onClick={() => setShowCreateModal(true)}
+                                    aria-label="Tạo công thức"
+                                    className="absolute right-1 top-1 bottom-1 w-9 rounded-[8px] flex items-center justify-center active:scale-95 transition-all bg-primary text-bg hover:bg-primary/90"
+                                >
+                                    <Plus size={18} />
+                                </button>
+                            )}
+                        </div>
+                        {canEdit && (
+                            <button
+                                onClick={() => navigate('/toppings', { state: location.state })}
+                                className="shrink-0 px-3 rounded-[12px] flex items-center justify-center bg-surface border border-border/60 text-text-secondary text-[12px] font-black uppercase tracking-widest hover:bg-surface-light active:scale-[0.98] transition-all"
+                            >
+                                Đồ ăn thêm
+                            </button>
+                        )}
                     </div>
                 )}
 
-                {canSort ? (
+                {view === 'recipes' ? (
+                    <div className="grid grid-cols-2 gap-3">
+                        {searchedProducts.map(product => (
+                            <ProductCard
+                                key={product.id}
+                                product={product}
+                                prodRecipes={recipesByProduct.get(product.id) || []}
+                                cost={costByProduct.get(product.id) || 0}
+                                ingredientUnits={ingredientUnits}
+                                onClick={() => {
+                                    savedScroll = mainRef.current?.scrollTop ?? 0
+                                    navigate(`/recipes/${product.id}`, { state: location.state })
+                                }}
+                                hint={product.id === hintCafeDenId}
+                            />
+                        ))}
+                        {searchedProducts.length === 0 && (
+                            <p className="col-span-2 text-text-secondary text-[13px] text-center py-6">
+                                {search.trim() ? 'Không tìm thấy công thức nào.' : 'Chưa có công thức nào.'}
+                            </p>
+                        )}
+                    </div>
+                ) : canSort ? (
                     <DndContext
                         sensors={sensors}
                         collisionDetection={closestCenter}
@@ -282,7 +361,7 @@ export default function RecipeMenuPage() {
                         onDragEnd={handleDragEnd}
                     >
                         <div className="flex flex-col gap-3">
-                            {sections.map((section, si) => (
+                            {visibleSections.map((section, si) => (
                                 <Fragment key={section.divider?.id ?? `_first_${si}`}>
                                     {section.divider && (
                                         <SortableContext items={dividerIds} strategy={rectSortingStrategy}>
@@ -302,18 +381,14 @@ export default function RecipeMenuPage() {
                                             <div className="grid grid-cols-2 gap-3">
                                                 {section.items.map(product => (
                                                     <SortableItem key={product.id} id={product.id}>
-                                                        {({ handle, isDragging: itemDragging }) => (
+                                                        {({ handle }) => (
                                                             <ProductCard
                                                                 product={product}
                                                                 prodRecipes={recipesByProduct.get(product.id) || []}
                                                                 cost={costByProduct.get(product.id) || 0}
                                                                 ingredientUnits={ingredientUnits}
-                                                                onClick={itemDragging ? undefined : () => {
-                                                                    savedScroll = mainRef.current?.scrollTop ?? 0
-                                                                    navigate(`/recipes/${product.id}`, { state: location.state })
-                                                                }}
                                                                 dragHandle={handle}
-                                                                hint={product.id === hintCafeDenId}
+                                                                sortMode
                                                             />
                                                         )}
                                                     </SortableItem>
@@ -338,6 +413,7 @@ export default function RecipeMenuPage() {
                                         prodRecipes={recipesByProduct.get(activeProduct.id) || []}
                                         cost={costByProduct.get(activeProduct.id) || 0}
                                         ingredientUnits={ingredientUnits}
+                                        sortMode
                                     />
                                 </div>
                             ))}
@@ -345,7 +421,7 @@ export default function RecipeMenuPage() {
                     </DndContext>
                 ) : (
                     <div className="flex flex-col gap-3">
-                        {sections.map((section, si) => (
+                        {visibleSections.map((section, si) => (
                             <Fragment key={section.divider?.id ?? `_first_${si}`}>
                                 {section.divider && (
                                     <MenuDivider
@@ -362,11 +438,7 @@ export default function RecipeMenuPage() {
                                                 prodRecipes={recipesByProduct.get(product.id) || []}
                                                 cost={costByProduct.get(product.id) || 0}
                                                 ingredientUnits={ingredientUnits}
-                                                onClick={() => {
-                                                    savedScroll = mainRef.current?.scrollTop ?? 0
-                                                    navigate(`/recipes/${product.id}`, { state: location.state })
-                                                }}
-                                                hint={product.id === hintCafeDenId}
+                                                sortMode
                                             />
                                         ))}
                                     </div>

@@ -8,9 +8,9 @@ import {
 } from '../../src/utils/menuSequence'
 
 describe('MENU_SEQUENCE shape', () => {
-    it('is the 3-stop dashboard line in order (Nhật ký → Báo cáo → Tồn kho)', () => {
+    it('is the 4-stop dashboard line in order (Nhật ký → Báo cáo → Tồn kho → Công thức)', () => {
         expect(MENU_SEQUENCE.map(s => s.key)).toEqual([
-            'orders', 'report', 'main',
+            'orders', 'report', 'main', 'recipes',
         ])
     })
 })
@@ -19,13 +19,15 @@ describe('menuStep (bounded line, not a loop)', () => {
     it('steps forward through adjacent stops', () => {
         expect(menuStep('orders', +1).key).toBe('report')
         expect(menuStep('report', +1).key).toBe('main')
+        expect(menuStep('main', +1).key).toBe('recipes')
     })
     it('steps backward through adjacent stops', () => {
+        expect(menuStep('recipes', -1).key).toBe('main')
         expect(menuStep('main', -1).key).toBe('report')
         expect(menuStep('report', -1).key).toBe('orders')
     })
-    it('returns null past the last stop (goNext from Tồn kho)', () => {
-        expect(menuStep('main', +1)).toBeNull()
+    it('returns null past the last stop (goNext from Công thức)', () => {
+        expect(menuStep('recipes', +1)).toBeNull()
     })
     it('returns null before the first stop (goBack from Nhật ký)', () => {
         expect(menuStep('orders', -1)).toBeNull()
@@ -37,9 +39,6 @@ describe('menuStep (bounded line, not a loop)', () => {
     it('resolves sub-tab keys to their page stop', () => {
         expect(menuStep('expense', +1).key).toBe('report')
         expect(menuStep('expense', -1)).toBeNull()
-        // Công thức là sub-tab của Tồn kho
-        expect(menuStep('recipes', +1)).toBeNull()
-        expect(menuStep('recipes', -1).key).toBe('report')
     })
 })
 
@@ -57,9 +56,9 @@ describe('goToMenuStep', () => {
         expect(ctx.navigate).toHaveBeenCalledWith('/address')
     })
 
-    it('exits to /pos stepping off the end (main › fwd)', () => {
+    it('exits to /pos stepping off the end (recipes › fwd)', () => {
         const ctx = makeCtx({ backTo: '/address' })
-        goToMenuStep('main', +1, ctx)
+        goToMenuStep('recipes', +1, ctx)
         expect(ctx.navigate).toHaveBeenCalledWith(MENU_BOUNDARY_ROUTE)
     })
 

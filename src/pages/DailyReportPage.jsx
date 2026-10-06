@@ -10,15 +10,13 @@ import { buildCashPayload } from '../services/reportService'
 import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
 import { useDailyReportData } from '../hooks/useDailyReportData'
 import { onTabReturn } from '../utils/tabVisibility'
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, buildIngredientToProduct, orderItemsOf, isLiveOrder } from '../utils/inventory'
+import { calculateEstimatedConsumption, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, isLiveOrder } from '../utils/inventory'
 import { ingredientLabel, getIngredientUnit } from '../utils/ingredients'
-import { findCoffeeIngredient, findIngredientByLabel } from '../utils/onboardingHint'
 import { readOnboardingState, DEFAULT_ONBOARDING_STATE, isCashFlowProgressDone, isInventoryProgressDone, reachedCashCard } from '../utils/onboardingStorage'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
 import { isRecipeStepActive } from '../components/common/onboarding/steps'
 import { dateStringVN, timeStringVN, isSameDayVN, dateShortVN, dateFullVN } from '../utils/dateVN'
 import { useDateScope } from '../hooks/useDateScope'
-import { useVisualViewportBox } from '../hooks/useVisualViewportBox'
 import { goToMenuStep } from '../utils/menuSequence'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import SalesCard from '../components/DailyReportPage/SalesCard'
@@ -26,21 +24,16 @@ import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import ExpenseEditorModal from '../components/DailyReportPage/ExpenseEditorModal'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
 import { fetchExpenseCategories } from '../services/expenseService'
-import PastInventoryEditor from '../components/DailyReportPage/PastInventoryEditor'
-import InventoryReportCard from '../components/DailyReportPage/InventoryReportCard'
-import MissingCupSuspicionCard from '../components/DailyReportPage/MissingCupSuspicionCard'
-import { useMissingCupSuspicion } from '../hooks/useMissingCupSuspicion'
-import RangeLossCard from '../components/DailyReportPage/RangeLossCard'
 import SupportModal from '../components/common/SupportModal'
-import { Loader2 } from 'lucide-react'
-import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY } from '../components/DailyReportPage/ReportViewFilter'
+import ReportViewFilter, { VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW } from '../components/DailyReportPage/ReportViewFilter'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useEntitlement } from '../hooks/useEntitlement'
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../contexts/ConfirmContext'
-import { shiftFinalizedKey, cashClosedKey } from '../constants/storageKeys'
+import { cashClosedKey } from '../constants/storageKeys'
+import { useShiftFinalized } from '../hooks/useShiftFinalized'
 import DayPerformanceChart from '../components/DailyReportPage/DayPerformanceChart'
 
 // Pill cuối trang (Hỗ trợ / góp ý · In báo cáo).
@@ -58,7 +51,7 @@ export default function DailyReportPage() {
     const confirm = useConfirm()
 
     // ── All hooks unconditional (Rules of Hooks) ──────────────────────────────
-    const initialView = [VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW, VIEW_INVENTORY].includes(location.state?.initialView)
+    const initialView = [VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW].includes(location.state?.initialView)
         ? location.state.initialView : VIEW_CASHFLOW
     const [view, setView] = useState(initialView)
     // Mỗi view là 1 "trang" riêng → đổi view thì cuộn lại đầu (cùng 1 <main> nên scroll bị dính).
@@ -142,9 +135,9 @@ export default function DailyReportPage() {
         isGuest && selectedAddress?.id ? readOnboardingState(selectedAddress.id) : DEFAULT_ONBOARDING_STATE
     )
     const [cashFlowProgress, setCashFlowProgress] = useState(initialOnboardingState.cashFlowProgress)
-    const [inventoryProgress, setInventoryProgress] = useState(initialOnboardingState.inventoryProgress)
+    // inventoryProgress do tab Kiểm kê của /ingredients ghi — ở đây chỉ đọc để biết lúc nào hint mũi tên "tiến".
+    const { inventoryProgress } = initialOnboardingState
     useOnboardingProgressPersist('cashFlowProgress', cashFlowProgress, { isGuest, addressId: selectedAddress?.id })
-    useOnboardingProgressPersist('inventoryProgress', inventoryProgress, { isGuest, addressId: selectedAddress?.id })
 
     // Cảnh báo khi tick/bỏ-qua của MÁY NÀY vừa bị máy khác ghi đè (race giữa 2 lượt merge
     // gần như đồng thời trên cùng nguyên liệu) — xem onFieldConflict trong useShiftInventoryState.
@@ -263,19 +256,7 @@ export default function DailyReportPage() {
         })
     }, [isTodayScope, selectedAddress?.id, todayISO, onRemoteCash])
 
-    // Onboarding phase 4 "Kiểm kê tồn kho": trigger khi user bấm Lưu kiểm kê (không phải lúc
-    // gõ Cuối kỳ) — xem handleSaveInventory. Match theo LABEL (không hardcode key) vì shop
-    // có thể đổi tên nguyên liệu.
-    const coffeeIngredient = useMemo(() => (
-        isGuest ? findCoffeeIngredient(inventory.ingredientsList) : null
-    ), [isGuest, inventory.ingredientsList])
-    const cacaoIngredient = useMemo(() => (
-        isGuest ? findIngredientByLabel(inventory.ingredientsList, 'cacao') : null
-    ), [isGuest, inventory.ingredientsList])
-    const coffeeInputValue = coffeeIngredient ? inventory.inventoryInputs[coffeeIngredient.ingredient] : undefined
-    const cacaoInputValue = cacaoIngredient ? inventory.inventoryInputs[cacaoIngredient.ingredient] : undefined
-
-    // Hint spotlight cho phase 3/4 — xem CashFlowCard/InventoryReportCard/ReportViewFilter.
+    // Hint spotlight cho phase 3 — xem CashFlowCard. Phase 4 (Kiểm kê) nằm ở /ingredients.
     const showOnboardingHints = isGuest && !!selectedAddress?.id
     // Bước 3: chưa kéo tới thì sáng cả thẻ Thực thu; thẻ hiện trọn rồi (CashFlowCard tự đo, gọi
     // markCashCardSeen) thì chỉ sáng ô còn thiếu.
@@ -286,11 +267,8 @@ export default function DailyReportPage() {
     const markCashCardSeen = useCallback(() => setCashFlowProgress(prev => ({ ...prev, scrolled: true })), [])
     const cashFlowDone = isCashFlowProgressDone(cashFlowProgress)
     const inventoryDone = isInventoryProgressDone(inventoryProgress)
-    const hintInventoryTab = showOnboardingHints && cashFlowDone && !inventoryDone
-    // Cà phê trước, Cacao sau — cùng thứ tự với 2 dòng checklist (onboarding/steps.js).
-    const hintInventoryIngredient = hintInventoryTab
-        ? (!inventoryProgress.coffee ? coffeeIngredient?.ingredient : cacaoIngredient?.ingredient) ?? null
-        : null
+    // Xong dòng tiền → mũi tên "tiến" dẫn sang Tồn kho (tab Kiểm kê) để đếm tồn.
+    const hintGoToInventory = showOnboardingHints && cashFlowDone && !inventoryDone
 
     // Phase 5 "Điều chỉnh công thức" không còn nút riêng trong guide — hint thẳng vào mũi tên
     // "tiến" ở header, đi xuyên page tới /recipes qua menuSequence.js (xem onboarding/steps.js).
@@ -298,27 +276,10 @@ export default function DailyReportPage() {
     // đọc localStorage 1 lần ở trên cho cashFlowProgress/inventoryProgress rồi, khỏi đọc thêm).
     const hintGoToRecipes = showOnboardingHints && isRecipeStepActive(inventoryDone, initialOnboardingState.recipeProgress)
 
-    // Base chốt-ca: persisted shift_closing có cash + transfer VÀ mọi NVL đã đếm Cuối kỳ.
-    const cashAndCountDone = useMemo(() => {
-        if (!isTodaysClosing) return false
-        if (shiftClosing.actual_cash == null || shiftClosing.actual_transfer == null) return false
-        const report = shiftClosing.inventory_report
-        if (!Array.isArray(report) || report.length === 0) return false
-        const list = inventory.ingredientsList || []
-        if (list.length === 0) return false
-        const remainingByIng = {}
-        for (const row of report) remainingByIng[row.ingredient] = row.remaining
-        return list.every(ing => remainingByIng[ing.ingredient] != null)
-    }, [isTodaysClosing, shiftClosing?.actual_cash, shiftClosing?.actual_transfer, shiftClosing?.inventory_report, inventory.ingredientsList])
-
     // Week/month scopes show the per-day/per-week bar chart instead of the hourly line.
     // "Range" = khoảng NHIỀU NGÀY. Biểu đồ đường cộng dồn theo GIỜ chỉ có nghĩa cho 1
     // ngày (dòng tiền trong ngày); week/month/custom-nhiều-ngày phải dùng biểu đồ cột.
     // Trước đây bỏ sót custom range nhiều ngày → vẫn hiện line chart sai.
-    // Tab đang hiện khu Tồn kho. Dùng chung cho điều kiện render card lẫn cờ `enabled`
-    // của useMissingCupSuspicion — 2 chỗ viết tay cùng 1 predicate là cách card bị
-    // render ra mà hook đã tắt (rỗng vĩnh viễn).
-    const showsInventoryTab = view === VIEW_ALL || view === VIEW_INVENTORY
     const isRangeScope = scope === 'week' || scope === 'month'
         || (scope === 'custom' && !isSameDayVN(rangeStart, rangeEnd))
 
@@ -616,54 +577,12 @@ export default function DailyReportPage() {
         return calculateSyncedCashFlow(scope === 'day', shiftClosing, apiShiftClosings, displayOrders, offlineToday)
     }, [scope, shiftClosing, apiShiftClosings, displayOrders, offlineToday])
 
-    // Inventory audit support: estimated consumption per ingredient + cups-equivalent
-    // product map + per-product breakdown for expand-on-tap.
-    const todayOrderItems = useMemo(() => {
-        if (!isTodayScope) return []
-        const items = []
-        todayOrders.filter(isLiveOrder).forEach(o => { items.push(...orderItemsOf(o)) })
-        offlineToday.forEach(o => {
-            (o.cart || o.orderItems || []).forEach(i => items.push({
-                productId: i.productId,
-                qty: i.quantity || 1,
-                extras: i.extras || []
-            }))
-        })
-        return items
-    }, [isTodayScope, todayOrders, offlineToday])
-
-    const usedMap = useMemo(
-        () => calculateEstimatedConsumption(todayOrderItems, recipes, extraIngredients),
-        [todayOrderItems, recipes, extraIngredients]
-    )
-
-    // Chốt ca đầy đủ = cash + counted. ("Chuẩn bị hôm nay" ở dải notice /pos, "Bổ sung tồn kho" ở dải
-    // notice /ingredients — cả hai không còn gate chốt ca vì không còn hiển thị ở trang này.)
-    const isShiftFinalized = cashAndCountDone
-
-    // Latch: một khi ca đã hoàn tất trong ngày thì KHÓA lại — forecast nhích lên do đơn
-    // muộn sẽ không "mở lại" ca nữa. Cờ lưu localStorage theo địa chỉ+ngày (đúng key
-    // HistoryPage đọc để phân loại "Sau ca"). Sang ngày mới → key mới → tự reset.
-    const finalizedKey = isTodayScope && selectedAddress?.id ? shiftFinalizedKey(selectedAddress.id, todayISO) : null
-    const [finalizedLatched, setFinalizedLatched] = useState(() => !!(finalizedKey && localStorage.getItem(finalizedKey)))
-    const [seenFinalizedKey, setSeenFinalizedKey] = useState(finalizedKey)
-    if (finalizedKey !== seenFinalizedKey) {
-        setSeenFinalizedKey(finalizedKey)
-        setFinalizedLatched(!!(finalizedKey && localStorage.getItem(finalizedKey)))
-    }
-    const shiftDone = isShiftFinalized || finalizedLatched
-
-    // Card Kiểm kê tồn quầy: mặc định mở. openCards[id] = đang mở.
-    const [openCards, setOpenCards] = useState({ audit: true })
-    const toggleCard = (id) => setOpenCards(s => ({ ...s, [id]: !s[id] }))
-
-    // Đạt điều kiện hoàn tất LẦN ĐẦU → ghi cờ + khóa, KHÔNG tự gỡ (đơn muộn không mở lại ca).
-    // HistoryPage đọc cờ này để phân loại chi phí phát sinh sau là "Sau ca".
-    useEffect(() => {
-        if (!finalizedKey || finalizedLatched || !isShiftFinalized) return
-        localStorage.setItem(finalizedKey, Date.now().toString())
-        setFinalizedLatched(true)
-    }, [isShiftFinalized, finalizedKey, finalizedLatched])
+    // Chốt ca đầy đủ = cash + counted → ghi cờ "Sau ca" cho HistoryPage (xem useShiftFinalized). Tab
+    // Kiểm kê ở /ingredients cũng chạy hook này: đếm xong trước/sau thực thu đều ghi đúng lúc.
+    useShiftFinalized({
+        shiftClosing, isTodaysClosing, ingredientsList: inventory.ingredientsList,
+        isTodayScope, addressId: selectedAddress?.id, todayISO,
+    })
 
     // Sync cờ chốt ca tiền → localStorage để HistoryPage nhận diện đã chốt két.
     useEffect(() => {
@@ -677,37 +596,6 @@ export default function DailyReportPage() {
         }
     }, [isTodaysClosing, shiftClosing?.cash_closed_at, isTodayScope, selectedAddress, todayISO])
 
-    const consumptionBreakdown = useMemo(
-        () => calculateConsumptionBreakdown(todayOrderItems, recipes, extraIngredients, products, productExtras),
-        [todayOrderItems, recipes, extraIngredients, products, productExtras]
-    )
-
-    // "≈ N ly <món>" cạnh mỗi dòng hao hụt — xem buildIngredientToProduct.
-    const ingredientToProduct = useMemo(
-        () => buildIngredientToProduct({ orderItems: todayOrderItems, recipes, products }),
-        [recipes, products, todayOrderItems],
-    )
-
-    // PROTOTYPE — nghi vấn "pha bán nhưng chưa bấm bill" (MissingCupSuspicionCard).
-    // Chỉ chạy khi xem HÔM NAY, ở tab có card, và không phải staff — lý do gate nằm
-    // trong useMissingCupSuspicion.
-    const missingCupCandidates = useMissingCupSuspicion({
-        enabled: isTodayScope && !isStaff && showsInventoryTab,
-        addressId: selectedAddress?.id,
-        ingredientsList: inventory.ingredientsList,
-        inventoryInputs: inventory.inventoryInputs,
-        restockInputs: inventory.restockInputs,
-        openingInputs: inventory.openingInputs,
-        openingStock: inventory.openingStock,
-        usedMap, recipes, extraIngredients, products,
-    })
-
-    // Stable ingredient→unit map so InventoryReportCard's memoized rows don't all
-    // re-render on every keystroke (was rebuilt inline each render).
-    const inventoryRowUnits = useMemo(
-        () => Object.fromEntries(inventory.ingredientsList.map(i => [i.ingredient, i.unit])),
-        [inventory.ingredientsList]
-    )
 
     // Sum today's orders (online + offline) for the system_total_revenue snapshot we send
     // when creating a new shift_closing. Mirrors /shift-closing's calculation.
@@ -719,111 +607,33 @@ export default function DailyReportPage() {
         return sum
     }, [isTodayScope, todayOrders, offlineToday])
 
-    // Sửa Cuối kỳ ngày cũ (PastInventoryEditor) chưa lưu — lift lên để guard rời trang.
-    const [pastInvDirty, setPastInvDirty] = useState({ dirty: false, lines: [] })
-    const handlePastInvDirty = useCallback((dirty, lines) => setPastInvDirty({ dirty, lines }), [])
-
-    // Có thay đổi chưa lưu ở khu Tồn kho / Thực thu (today scope) → cảnh báo trước khi rời,
-    // chống mất tick/soạn (chỉ bền sau khi Lưu, không còn localStorage).
-    const hasUnsaved = isTodayScope
-        ? (inventory.isDirty || cashDirty)
-        : (scope === 'day' && pastInvDirty.dirty)
+    // Có thay đổi chưa lưu ở ô Thực thu → cảnh báo trước khi rời, chống mất số đang gõ dở.
+    const hasUnsaved = isTodayScope && cashDirty
     useEffect(() => {
         if (!hasUnsaved) return
         const handler = (e) => { e.preventDefault(); e.returnValue = '' }
         window.addEventListener('beforeunload', handler)
         return () => window.removeEventListener('beforeunload', handler)
     }, [hasUnsaved])
-    // Bọc các thao tác rời trang (back / đổi tab) — xác nhận nếu còn thay đổi chưa lưu.
-    // Liệt kê cụ thể field nào sắp mất (tối đa 5 dòng) để confirm rõ nghĩa, không mơ hồ.
+    // Bọc các thao tác rời trang (back / đổi ngày) — xác nhận nếu còn thay đổi chưa lưu.
+    // Liệt kê cụ thể field nào sắp mất để confirm rõ nghĩa, không mơ hồ.
     const guardLeave = async (proceed) => {
         if (hasUnsaved) {
-            const cashLines = []
+            const lines = []
             if (cashChanges?.actual_cash !== undefined)
-                cashLines.push(`Thực thu · Tiền mặt: ${formatVNDInput(persistedCash)} → ${formatVNDInput(cashChanges.actual_cash)}`)
+                lines.push(`Thực thu · Tiền mặt: ${formatVNDInput(persistedCash)} → ${formatVNDInput(cashChanges.actual_cash)}`)
             if (cashChanges?.actual_transfer !== undefined)
-                cashLines.push(`Thực thu · Chuyển khoản: ${formatVNDInput(persistedTransfer)} → ${formatVNDInput(cashChanges.actual_transfer)}`)
-            const lines = isTodayScope ? [...inventory.dirtySummary, ...cashLines] : pastInvDirty.lines
-            const list = lines.slice(0, 5).map(l => `• ${l}`).join('\n')
-            const more = lines.length > 5 ? `\nvà ${lines.length - 5} mục khác…` : ''
-            const detail = lines.length
-                ? `${list}${more}\n\nRời trang và bỏ các thay đổi?`
-                : 'Rời trang và bỏ các thay đổi?'
+                lines.push(`Thực thu · Chuyển khoản: ${formatVNDInput(persistedTransfer)} → ${formatVNDInput(cashChanges.actual_transfer)}`)
+            const detail = `${lines.map(l => `• ${l}`).join('\n')}\n\nRời trang và bỏ các thay đổi?`
             if (!await confirm({ title: 'Còn thay đổi chưa lưu trong báo cáo.', detail, danger: true, confirmLabel: 'Rời trang' })) return
         }
         proceed()
-    }
-
-    const handleSaveInventory = async () => {
-        if (!selectedAddress) return
-        if (inventory.restockOverflowIngredients.length > 0) {
-            window.alert(`Không thể lưu: ${inventory.restockOverflowIngredients.length} nguyên liệu có "Lấy ra" vượt quá kho tổng. Vào /ingredients → + Nhập kho trước, hoặc giảm số "Lấy ra".`)
-            return
-        }
-        // Confirm khi lưu có CHUYỂN KHO (restock đổi).
-        if (inventory.restockDirty
-            && !await confirm({ title: inventory.existingClosing?.id ? 'Cập nhật báo cáo (có chuyển kho ra quầy)?' : 'Lưu báo cáo (có chuyển kho ra quầy)?' })) return
-
-        try {
-            // Đẩy NHẸ: chỉ field đã đổi, merge race-free server-side. Hook tự dời baseline +
-            // fold thay đổi của máy kia (từ row trả về). Không refetch ở đường này.
-            const row = await inventory.pushInventory(profile?.id, systemTotalRevenue)
-            if (!row) return // không có gì đổi (hoặc đang có push khác chạy) → isDirty giữ để thử lại
-            showToast('Đã lưu báo cáo tồn kho', 'success')
-            // Onboarding phase 4 — tick sau khi bấm Lưu (không phải lúc gõ Cuối kỳ), chỉ khi
-            // giá trị vẫn còn tại thời điểm lưu thành công.
-            if (isGuest) {
-                if (coffeeInputValue !== undefined && coffeeInputValue !== '' && !inventoryProgress.coffee) {
-                    setInventoryProgress(prev => ({ ...prev, coffee: true }))
-                }
-                if (cacaoInputValue !== undefined && cacaoInputValue !== '' && !inventoryProgress.cacao) {
-                    setInventoryProgress(prev => ({ ...prev, cacao: true }))
-                }
-            }
-            // Thường kèm chuyển kho: refresh kho tổng + context để Giá trị/tồn đầu tươi.
-            const [fresh] = await Promise.all([
-                fetchDailyReportContext(selectedAddress.id),
-                inventory.reloadStocks(),
-            ])
-            setShiftClosing(fresh?.shift_closing || row)
-            if (fresh?.shift_closing) inventory.setExistingClosing(fresh.shift_closing)
-        } catch (err) {
-            showError(err, 'Lưu báo cáo tồn kho')
-        }
-    }
-
-    // Sửa "Tồn kho" (remaining) cuối ca của 1 NGÀY QUÁ KHỨ — fix khi kết ca nhập sai làm
-    // hao hụt/lợi nhuận ngày đó sai. Ghi thẳng inventory_report vào đúng phiếu của ngày đó
-    // (UPDATE theo id, KHÔNG qua merge RPC vì merge khoá cứng phiếu hôm nay). Tồn được tính
-    // lúc đọc nên setShiftClosing là audit + lossValue + lợi nhuận tự tính lại; đầu kỳ ngày
-    // kế cascade theo openingMap. Không đụng kho tổng (chỉ sửa remaining, không sửa restock).
-    const handleSavePastInventory = async (newReport) => {
-        if (!selectedAddress || !shiftClosing?.id) return false
-        if (!await confirm({ title: 'Cập nhật tồn cuối ca của ngày này?', detail: 'Hao hụt và lợi nhuận của ngày sẽ được tính lại.' })) return false
-        try {
-            const saved = await saveShiftClosing(
-                { address_id: selectedAddress.id, inventory_report: newReport },
-                { existingId: shiftClosing.id },
-            )
-            setShiftClosing(saved || { ...shiftClosing, inventory_report: newReport })
-            showToast('Đã cập nhật tồn cuối ca', 'success')
-            return true
-        } catch (err) {
-            showError(err, 'Cập nhật tồn cuối ca')
-            return false
-        }
     }
 
     // isSavingShift (cờ của hook) chỉ true trong lúc GHI, nhả ngay khi save() xong — nhưng
     // cashDirty phụ thuộc shiftClosing chỉ cập nhật SAU refetch. Cờ riêng này phủ cả refetch
     // → lượt lưu kế tiếp tính payload trên shiftClosing mới, không INSERT/gửi trùng.
     const [savingCashflow, setSavingCashflow] = useState(false)
-
-    // Bàn phím ảo trên điện thoại KHÔNG đẩy `position: fixed` lên — nó chỉ co
-    // visualViewport, nên FAB "Lưu báo cáo" nằm lọt dưới bàn phím ngay sau khi
-    // gõ xong số. Nhấc FAB lên đúng phần bị che.
-    const vvBox = useVisualViewportBox()
-    const kbInset = vvBox ? Math.max(0, window.innerHeight - vvBox.height - vvBox.top) : 0
 
     // Tự lưu khi rời ô Tiền mặt/Chuyển khoản. Blur trúng lúc đang ghi (ô kia vừa blur, hoặc
     // kiểm kê đang lưu — save() của hook bỏ qua lượt chồng) → đánh dấu chờ, effect bên dưới
@@ -893,7 +703,7 @@ export default function DailyReportPage() {
     // Gate: 1 gói all-access mở CẢ 3 view báo cáo. View nào trong nhóm báo cáo
     // (Dòng tiền / Lợi nhuận / Tồn kho) mà address chưa có sub active → early-return
     // NGUYÊN trang đăng ký gói (chrome riêng, back về /pos). Cùng UI với /subscription.
-    const needsAccess = view === VIEW_CASHFLOW || view === VIEW_INVENTORY || view === VIEW_PROFIT || view === VIEW_ALL
+    const needsAccess = view === VIEW_CASHFLOW || view === VIEW_PROFIT || view === VIEW_ALL
     if (monetizationEnabled && !entitlementLoading && needsAccess && !hasAccess) {
         return (
             <Navigate
@@ -915,7 +725,7 @@ export default function DailyReportPage() {
                 scope={scope}
                 onBack={() => guardLeave(() => goToMenuStep('report', -1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard }))}
                 onForward={() => goToMenuStep('report', +1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard })}
-                hintForward={hintGoToRecipes}
+                hintForward={hintGoToInventory || hintGoToRecipes}
                 canGoForward={canGoForwardPeriod}
                 onOffsetPrev={() => guardLeave(goOffsetPrev)}
                 onOffsetNext={() => guardLeave(goOffsetNext)}
@@ -931,7 +741,7 @@ export default function DailyReportPage() {
                 onShiftRange={(d) => guardLeave(() => shiftRange(d))}
                 canShiftRangeForward={canShiftRangeForward}
                 onPresetSelect={(p) => guardLeave(() => applyPreset(p))}
-                belowTabs={<ReportViewFilter value={view} onChange={setView} isStaff={isStaff} hintView={hintInventoryTab ? VIEW_INVENTORY : null} />}
+                belowTabs={<ReportViewFilter value={view} onChange={setView} isStaff={isStaff} />}
             />
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-6 pb-6 space-y-4 bg-bg">
@@ -1014,98 +824,6 @@ export default function DailyReportPage() {
                             </CashFlowCard>
                         )}
 
-                        {showsInventoryTab && (
-                            <>
-                                {view === VIEW_ALL && (
-                                    <div className="flex items-center gap-3 py-1 my-1 px-4">
-                                        <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                                        <span className="text-[11px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap opacity-80">Tồn kho</span>
-                                        <div className="flex-1 h-[1px] bg-border/80 rounded-full" />
-                                    </div>
-                                )}
-
-                                {/* Today: editable inventory report — hao hụt + refill ("Bổ sung mai") merged per row. */}
-                                {/* Past date: cùng editor, read-only khi không có quyền/không có phiếu. */}
-                                {isTodayScope ? (
-                                    <div className="flex flex-col gap-3">
-                                        {/* Pill chỉ hiện "Đang lưu" (spinner) trong lúc GHI (isSavingShift) — tắt
-                                            đúng lúc toast "Đã lưu" hiện. Trạng thái khác không cần pill. */}
-                                        {isSavingShift && (
-                                            <div className="flex justify-end -mb-1">
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide border bg-primary/10 text-primary border-primary/30">
-                                                    <Loader2 size={11} className="animate-spin" />
-                                                    Đang lưu
-                                                </span>
-                                            </div>
-                                        )}
-                                        {/* Kiểm kê cuối ca. "Chuẩn bị hôm nay" ở dải notice /pos, "Bổ sung tồn kho" ở dải notice /ingredients. */}
-                                        <InventoryReportCard
-                                            ingredientsList={inventory.ingredientsList}
-                                            isLoading={inventory.isLoadingIngredients}
-                                            openingStock={inventory.openingStock}
-                                            openingInputs={inventory.openingInputs}
-                                            openingLocked={inventory.openingLocked}
-                                            restockInputs={inventory.restockInputs}
-                                            inventoryInputs={inventory.inventoryInputs}
-                                            warehouseStocks={inventory.effectiveWarehouseStocks}
-                                            ingredientUnits={inventoryRowUnits}
-                                            usedMap={usedMap}
-                                            consumptionBreakdown={consumptionBreakdown}
-                                            ingredientToProduct={ingredientToProduct}
-                                            isSubmitting={isSavingShift}
-                                            baselineInputs={inventory.baselineSnapshot}
-                                            baselineVersion={inventory.baselineVersion}
-                                            onOpeningChange={inventory.onOpeningChange}
-                                            onRestockChange={inventory.onRestockChange}
-                                            onInventoryChange={inventory.onInventoryChange}
-                                            open={!!openCards.audit}
-                                            onToggleOpen={() => toggleCard('audit')}
-                                            hintIngredient={hintInventoryIngredient}
-                                        />
-
-                                        {!isStaff && <MissingCupSuspicionCard candidates={missingCupCandidates} />}
-
-                                        {shiftDone && (
-                                            <div className="flex items-center justify-center gap-2 bg-success/10 border border-success/30 px-3 py-2 rounded-[10px] text-success">
-                                                <span className="text-[12px] font-bold uppercase tracking-wide">✓ Đã hoàn tất ca hôm nay</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : scope === 'day' ? (
-                                    // Ngày cũ: CHÍNH editor của hôm nay. Chủ/quản lý + có phiếu chốt (có id
-                                    // để UPDATE) → truyền onSave, sửa được Cuối kỳ để fix kết ca sai. Staff
-                                    // hoặc ngày không có phiếu → onSave={null} = editor tự khoá read-only.
-                                    <PastInventoryEditor
-                                        shiftClosing={shiftClosing}
-                                        yesterdayClosing={yesterdayClosing}
-                                        dayOrders={displayOrders}
-                                        recipes={recipes}
-                                        extraIngredients={extraIngredients}
-                                        products={products}
-                                        productExtras={productExtras}
-                                        ingredientUnits={ingredientUnits}
-                                        ingredientsList={inventory.ingredientsList}
-                                        isLoading={inventory.isLoadingIngredients}
-                                        isSaving={isSavingShift}
-                                        onSave={!isStaff && shiftClosing?.id ? handleSavePastInventory : null}
-                                        onDirtyChange={handlePastInvDirty}
-                                    />
-                                ) : (
-                                    // Range scopes (week/month/custom): aggregate loss across all
-                                    // closings in the period — mirrors what /range-report shows.
-                                    // Hao hụt thuộc module 'inventory' → đã mở khoá khi tới được đây.
-                                    <RangeLossCard
-                                        orders={apiOrders}
-                                        shiftClosings={apiShiftClosings}
-                                        prevShiftClosings={prevShiftClosings}
-                                        recipes={recipes}
-                                        extraIngredients={extraIngredients}
-                                        ingredientUnits={ingredientUnits}
-                                    />
-                                )}
-                            </>
-                        )}
-
                         <div className="flex items-center justify-center gap-2 p-3">
                             <button onClick={() => setShowSupportModal(true)} className={FOOT_BTN}>Hỗ trợ / góp ý</button>
                             {/* In báo cáo dòng tiền cuối ca — tờ in dựng trong CashFlowCard nên
@@ -1117,26 +835,6 @@ export default function DailyReportPage() {
                     </div>
                 )}
             </main>
-
-            {/* FAB Lưu báo cáo — floating bottom-right, auto-hidden until inventory is dirty.
-                Thực thu không có FAB: rời ô là tự lưu (handleSaveCashflow). */}
-            {isTodayScope && (view === VIEW_ALL || view === VIEW_INVENTORY) && inventory.isDirty && (
-                <div
-                    className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40"
-                    style={kbInset ? { transform: `translateY(-${kbInset}px)` } : undefined}
-                >
-                    {/* Bàn phím mở thì thanh nav dưới cũng bị che luôn → không cần chừa 72px nữa. */}
-                    <div className={`flex justify-end px-4 pointer-events-auto ${kbInset ? 'mb-3' : 'mb-[72px]'}`}>
-                        <button
-                            onClick={() => handleSaveInventory()}
-                            disabled={isSavingShift}
-                            className="bg-primary text-black rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider hover:bg-primary/90 active:scale-95 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                            {isSavingShift ? 'Đang lưu...' : 'Lưu'}
-                        </button>
-                    </div>
-                </div>
-            )}
 
             <Toast toast={toast} />
 

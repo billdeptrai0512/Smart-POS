@@ -127,7 +127,7 @@ export default function InventoryReportCard({
     return (
         <CollapsibleCard
             icon={<ClipboardList size={15} className="text-primary shrink-0" />}
-            title="Kiểm kê tồn quầy"
+            title="Nguyên liệu đã sử dụng"
             count={`${countedCount}/${sortedList.length}`}
             open={open}
             onToggle={onToggleOpen}

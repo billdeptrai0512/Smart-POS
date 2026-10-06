@@ -250,7 +250,7 @@ export default function RecipeIngredientPage() {
         await withSaving('Xóa món khỏi menu', async () => {
             await removeProductFromAddress(productId, addrId)
             refreshProducts?.()
-            navigate('/recipes', { state: location.state })
+            navigate('/recipes', { state: { ...location.state, recipesView: 'recipes' } })
         })
     }
 
@@ -375,7 +375,7 @@ export default function RecipeIngredientPage() {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-6 gap-4">
                 <span className="text-text-secondary text-[14px]">Không tìm thấy món này.</span>
-                <button onClick={() => navigate('/recipes', { state: location.state })} className="text-primary font-bold text-[14px] underline">
+                <button onClick={() => navigate('/recipes', { state: { ...location.state, recipesView: 'recipes' } })} className="text-primary font-bold text-[14px] underline">
                     ← Quay lại
                 </button>
             </div>
@@ -400,7 +400,7 @@ export default function RecipeIngredientPage() {
             <RecipeHeader
                 product={product}
                 canEdit={canEdit}
-                onBack={() => navigate('/recipes', { state: location.state })}
+                onBack={() => navigate('/recipes', { state: { ...location.state, recipesView: 'recipes' } })}
                 hintBack={hintBack}
                 onSavePrice={saveProductPrice}
                 onSaveName={saveProductName}

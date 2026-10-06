@@ -126,7 +126,7 @@ export default function App() {
                         <Route element={<OnboardingLayout />}>
                           <Route path="/pos" element={<POSPage />} />
                           <Route path="/history" element={<HistoryPage />} />
-                          <Route path="/shift-closing" element={<Navigate to="/daily-report" replace state={{ initialView: 'inventory' }} />} />
+                          <Route path="/shift-closing" element={<Navigate to="/ingredients" replace />} />
                           <Route path="/daily-report" element={<DailyReportPage />} />
                           <Route path="/range-report" element={<RangeReportRedirect />} />
                           <Route path="/expenses" element={<Navigate to="/history" replace />} />

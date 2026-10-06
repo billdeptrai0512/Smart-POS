@@ -4,9 +4,9 @@ import { useClickOutside } from '../../hooks/useClickOutside'
 
 // Dropdown tự vẽ thay <select> native (option/optgroup native không style được — nền trắng,
 // căn lệch). Cùng phong cách SelectRow/OptionRow ở AddExpenseModal, panel mở XUỐNG dưới.
-// align: panel bám mép phải ('right', mặc định) hay mép trái ('left') của nút — nút đứng sát lề trái thì dùng 'left',
+// align: panel bám mép phải ('right', mặc định), mép trái ('left') hay canh giữa ('center') của nút — nút đứng sát lề trái thì dùng 'left',
 // kẻo panel rộng hơn nút tràn ra ngoài màn hình.
-// items: { value, label, count?, divider? } = lựa chọn (divider = vạch ngăn phía trên) | { action, label, onClick, icon? } = dòng hành động (vd. "Quản lý"), đặt ở vị trí tuỳ ý trong items.
+// items: { value, label, count?, divider? } = lựa chọn (divider = vạch ngăn phía trên) | { action, label, onClick, icon?, divider? } = dòng hành động (vd. "Quản lý"), đặt ở vị trí tuỳ ý trong items.
 export default function Dropdown({ value, items, onChange, triggerLabel, disabled, className = '', triggerClassName = '', ariaLabel, align = 'right' }) {
     const [open, setOpen] = useState(false)
     const ref = useRef(null)
@@ -28,10 +28,11 @@ export default function Dropdown({ value, items, onChange, triggerLabel, disable
                 <ChevronDown size={16} className={`text-text-secondary shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
             </button>
             {open && (
-                <div className={`absolute top-full ${align === 'left' ? 'left-0' : 'right-0'} mt-1.5 z-30 min-w-full w-max max-w-[80vw] bg-surface border border-border/60 rounded-[12px] shadow-xl p-1.5 flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto hide-scrollbar`}>
+                <div className={`absolute top-full ${align === 'left' ? 'left-0' : align === 'center' ? 'left-1/2 -translate-x-1/2' : 'right-0'} mt-1.5 z-30 min-w-full w-max max-w-[80vw] bg-surface border border-border/60 rounded-[12px] shadow-xl p-1.5 flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto hide-scrollbar`}>
                     {items.map(it => it.action ? (
+                        <Fragment key={it.action}>
+                        {it.divider && <div className="my-1 border-t border-border/40" />}
                         <button
-                            key={it.action}
                             type="button"
                             onClick={() => pick(it.onClick)}
                             className="flex items-center gap-2 py-2 px-2.5 text-left text-[13px] font-bold text-primary"
@@ -39,6 +40,7 @@ export default function Dropdown({ value, items, onChange, triggerLabel, disable
                             {it.icon}
                             {it.label}
                         </button>
+                        </Fragment>
                     ) : (
                         <Fragment key={it.value}>
                         {it.divider && <div className="my-1 border-t border-border/40" />}

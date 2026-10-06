@@ -27,6 +27,14 @@ import { useConfirm } from '../contexts/ConfirmContext'
 import Toast from '../components/POSPage/Toast'
 import { keySyncDismissedKey, orphanIgnoredKey } from '../constants/storageKeys'
 import { goToMenuStep } from '../utils/menuSequence'
+import { INGREDIENT_TABS } from '../constants/menuTabs'
+import InventoryAuditTab from '../components/IngredientManagementPage/InventoryAuditTab'
+import { useEntitlement } from '../hooks/useEntitlement'
+import { useDateScope } from '../hooks/useDateScope'
+import { calcRangeWithPrev } from '../utils/rangeCalc'
+import { dateStringVN, dateShortVN, dateFullVN } from '../utils/dateVN'
+import { DateRangePicker } from '../components/HistoryPage/HistoryHeader'
+import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
 import { findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
 import { isRecipeProgressDone, isInventoryProgressDone } from '../utils/onboardingStorage'
 import { isRecipeStepActive } from '../components/common/onboarding/steps'
@@ -76,6 +84,20 @@ export default function IngredientManagementPage() {
     // Lọc theo nhóm: 'all' | 'none' (chưa phân nhóm) | group id. Id lạ (nhóm đã xoá) tự rơi về 'all' qua effectiveFilter.
     const [groupFilter, setGroupFilter] = useState('all')
     const [showGroupsSheet, setShowGroupsSheet] = useState(false)
+
+    // 'main' = Kiểm kê (hôm nay / ngày cũ / hao hụt theo kỳ), 'warehouse' = Lưu trữ (danh sách nguyên liệu).
+    const [view, setView] = useState('main')
+    // Kiểm kê thuộc gói báo cáo (cùng gate với Báo cáo trước đây): chưa có gói thì rơi về Tồn lưu trữ,
+    // bấm tab Kiểm kê mới dẫn tới trang đăng ký.
+    const { hasAccess, loading: entitlementLoading, enabled: monetizationEnabled } = useEntitlement()
+    const auditLocked = monetizationEnabled && !entitlementLoading && !hasAccess
+    const activeView = auditLocked ? 'warehouse' : view
+    // Mô tả thay đổi Kiểm kê chưa lưu (null = sạch) — InventoryAuditTab báo lên để chặn rời trang.
+    const [unsavedKey, setUnsavedKey] = useState(null)
+    // Chọn ngày của Kiểm kê (hôm nay / ngày cũ / tuần / tháng / tuỳ chọn) nằm ở header như trang Báo cáo.
+    const dateScope = useDateScope()
+    const { scope: dScope, offset: dOffset, customRange: dCustom } = dateScope
+    const dateRange = useMemo(() => calcRangeWithPrev(dScope, dOffset, dCustom), [dScope, dOffset, dCustom])
 
     const mainRef = useRef(null)
 
@@ -240,8 +262,11 @@ export default function IngredientManagementPage() {
     // thiểu/khối lượng bì) — xem nextIngredientSetupField trong onboardingHint.js.
     const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId: selectedAddress?.id })
     const recipeDone = isRecipeProgressDone(recipeProgress)
-    // Phase 5 (công thức) — từ /history mũi tên "tiến" giờ rơi vào Kiểm kê trước, nên sáng tab Công thức ở đây.
-    const inventoryProgress = useOnboardingProgress('inventoryProgress', { isGuest, addressId: selectedAddress?.id })
+    // Phase 5 (công thức) — từ /history mũi tên "tiến" giờ rơi vào Kiểm kê trước, nên sáng mũi tên "tiến" ở đây.
+    // State (không chỉ đọc): InventoryAuditTab tick coffee/cacao khi bấm Lưu, hint mũi tên "tiến" phải tươi ngay.
+    const storedInventoryProgress = useOnboardingProgress('inventoryProgress', { isGuest, addressId: selectedAddress?.id })
+    const [inventoryProgress, setInventoryProgress] = useState(storedInventoryProgress)
+    useOnboardingProgressPersist('inventoryProgress', inventoryProgress, { isGuest, addressId: selectedAddress?.id })
     const hintRecipesTab = isGuest && isRecipeStepActive(isInventoryProgressDone(inventoryProgress), recipeProgress)
     const coffeeConfig = useMemo(() => findCoffeeIngredient(ingredientConfigs) ?? null, [ingredientConfigs])
     const coffeeKey = coffeeConfig?.ingredient ?? null
@@ -388,6 +413,18 @@ export default function IngredientManagementPage() {
         }
     }
 
+    // Còn Kiểm kê chưa lưu → xác nhận trước khi rời tab/trang (liệt kê tối đa 5 dòng sắp mất).
+    const guardLeave = async (proceed) => {
+        if (unsavedKey !== null) {
+            const lines = unsavedKey.split('\n').filter(Boolean)
+            const list = lines.slice(0, 5).map(l => `• ${l}`).join('\n')
+            const more = lines.length > 5 ? `\nvà ${lines.length - 5} mục khác…` : ''
+            const detail = lines.length ? `${list}${more}\n\nRời trang và bỏ các thay đổi?` : 'Rời trang và bỏ các thay đổi?'
+            if (!await confirm({ title: 'Còn thay đổi chưa lưu trong kiểm kê.', detail, danger: true, confirmLabel: 'Rời trang' })) return
+        }
+        proceed()
+    }
+
     return (
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
@@ -395,16 +432,52 @@ export default function IngredientManagementPage() {
             <WarehousePrepNotice onRestocked={loadStocks} />
 
             <MenuPageHeader
+                title="Tồn kho"
                 count={visibleIngredients.length}
                 unitLabel="loại"
-                onBack={() => goToMenuStep('main', -1, { navigate, backTo: location.state?.from || '/history', wizard: location.state?.wizard })}
-                onForward={() => goToMenuStep('main', +1, { navigate, backTo: location.state?.from || '/history', wizard: location.state?.wizard })}
-                activeTab="main"
-                hintTab={hintRecipesTab ? 'recipes' : null}
-                onTabSelect={(key) => { if (key === 'recipes') navigate('/recipes', { state: location.state, replace: true }) }}
+                subtitle={activeView === 'main' ? (
+                    <DateRangePicker
+                        scope={dScope}
+                        rangeLabel={dScope === 'week' || dScope === 'month' ? `${dateShortVN(dateRange.start)} – ${dateShortVN(dateRange.end)}` : dateFullVN(dateRange.start)}
+                        rangeStartISO={dateStringVN(dateRange.start)}
+                        rangeEndISO={dateStringVN(dateRange.end)}
+                        dayInputValue={dateScope.dayInputValue}
+                        customRange={dCustom}
+                        todayISO={dateScope.todayISO}
+                        canGoForwardDay={dateScope.canGoForwardDay}
+                        canGoForward={dateScope.canGoForwardPeriod}
+                        onPrevDay={() => guardLeave(dateScope.goPrevDay)}
+                        onNextDay={() => guardLeave(dateScope.goNextDay)}
+                        onOffsetPrev={() => guardLeave(dateScope.goOffsetPrev)}
+                        onOffsetNext={() => guardLeave(dateScope.goOffsetNext)}
+                        onRangeChange={(r) => guardLeave(() => dateScope.applyRange(r))}
+                        onShiftRange={(d) => guardLeave(() => dateScope.shiftRange(d))}
+                        canShiftRangeForward={dateScope.canShiftRangeForward}
+                        onPresetSelect={(p) => guardLeave(() => dateScope.applyPreset(p))}
+                    />
+                ) : undefined}
+                onBack={() => guardLeave(() => goToMenuStep('main', -1, { navigate, backTo: location.state?.from || '/history', wizard: location.state?.wizard }))}
+                onForward={() => guardLeave(() => goToMenuStep('main', +1, { navigate, backTo: location.state?.from || '/history', wizard: location.state?.wizard }))}
+                tabs={INGREDIENT_TABS}
+                activeTab={activeView}
+                onTabSelect={(key) => {
+                    if (key === 'main' && auditLocked) { navigate('/subscription', { state: { preselectAddressId: selectedAddress?.id, from: '/ingredients' } }); return }
+                    guardLeave(() => setView(key))
+                }}
+                hintForward={hintRecipesTab}
             />
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-8 bg-bg">
+                {activeView === 'main' ? (
+                    <InventoryAuditTab
+                        dateScope={dateScope}
+                        inventoryProgress={inventoryProgress}
+                        setInventoryProgress={setInventoryProgress}
+                        onUnsavedChange={setUnsavedKey}
+                        showToast={showToast}
+                        showError={showError}
+                    />
+                ) : (<>
                 <div className="mb-3 flex items-stretch gap-2 h-11">
                     {(groupChips.length > 0 || canManage) && (
                         <Dropdown
@@ -495,6 +568,7 @@ export default function IngredientManagementPage() {
                         </p>
                     )}
                 </div>
+                </>)}
             </main>
 
             {showCreateModal && (

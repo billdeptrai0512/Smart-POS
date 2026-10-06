@@ -49,7 +49,7 @@ export default function ToppingsPage() {
             <IngredientDetailHeader
                 title="Topping"
                 subtitle={`${toppings.length} loại`}
-                onBack={() => navigate('/recipes', { state: location.state })}
+                onBack={() => navigate('/recipes', { state: { ...location.state, recipesView: 'recipes' } })}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-4 pb-8 space-y-3">

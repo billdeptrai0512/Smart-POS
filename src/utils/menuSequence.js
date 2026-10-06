@@ -1,6 +1,6 @@
 // The ordered list of dashboard destinations the header ‹ › arrows walk through.
 // "Next/prev page, not next tab": Nhật ký (/history), Báo cáo (/daily-report),
-// Tồn kho (/ingredients; its Công thức sub-tab /recipes resolves to the same stop).
+// Tồn kho (/ingredients), Công thức (/recipes).
 // The arrows step through THIS list in order;
 // stepping off either end exits to /pos (it's a bounded line, not a loop).
 //
@@ -11,11 +11,11 @@ export const MENU_SEQUENCE = [
     { key: 'orders', route: '/history', tab: 'orders', dated: true },   // Nhật ký
     { key: 'report', route: '/daily-report', dated: true },             // Báo cáo
     { key: 'main', route: '/ingredients' },                   // Tồn kho
+    { key: 'recipes', route: '/recipes' },                    // Công thức
 ]
 
 const KEY_MAP = {
     expense: 'orders',
-    recipes: 'main',
 }
 
 const resolveKey = (key) => KEY_MAP[key] || key
