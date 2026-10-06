@@ -215,13 +215,15 @@ export default function IngredientManagementPage() {
     // ponytail: mount-only refresh — refreshProducts already refetches on address
     // change via its own effect in ProductContext; adding it here would double-fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { refreshProducts?.() }, [])
+    useEffect(() => { refreshProducts?.({ maxAgeMs: 30_000 }) }, [])
 
     const loadStocks = useCallback(async () => {
         // selectedAddress.id may be null for the default template — fetchIngredientStocks
         // handles that (queries rows with address_id IS NULL) so admins can manage stock on
         // the playground template too.
-        if (!selectedAddress) return
+        // Tab Kiểm kê không dùng kết quả (tự tải tồn qua useShiftInventoryState) — chỉ tải khi ở Lưu trữ;
+        // activeView trong deps nên chuyển sang tab Lưu trữ sẽ tự tải lại (cũng là bản tươi sau khi Kiểm kê lưu).
+        if (!selectedAddress || activeView !== 'stocking') return
         const siblingIds = groupAddressIds.filter(id => id !== (selectedAddress.id ?? null))
         const [stocks, deficits, daily, ...siblingResults] = await Promise.all([
             fetchIngredientStocks(selectedAddress.id ?? null),
@@ -239,7 +241,7 @@ export default function IngredientManagementPage() {
         // gets a new reference on every context refetch even when nothing relevant changed
         // (e.g. ingredient_sort_order edits), which would refire this on every such update.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedAddress?.id, selectedAddress?.name, groupAddressIds])
+    }, [selectedAddress?.id, selectedAddress?.name, groupAddressIds, activeView])
     useEffect(() => { loadStocks() }, [loadStocks])
 
     useEffect(() => { setIngredientCosts(contextCosts) }, [contextCosts])

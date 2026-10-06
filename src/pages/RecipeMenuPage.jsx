@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
+import { useState, useEffect, useMemo, useRef, Fragment, lazy, Suspense } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Plus, BadgePercent } from 'lucide-react'
 import {
@@ -23,7 +23,6 @@ import SortableItem from '../components/RecipeMenuPage/SortableItem'
 import MenuPageHeader from '../components/common/MenuPageHeader'
 import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
-import ExcelImportModal from '../components/RecipeMenuPage/ExcelImportModal'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
 import { RECIPE_TABS } from '../constants/menuTabs'
@@ -31,6 +30,9 @@ import { norm, findCoffeeIngredient, nextIngredientSetupField } from '../utils/o
 import { isRecipeProgressDone } from '../utils/onboardingStorage'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps'
+
+// ponytail: kéo theo xlsx (~430 kB) — chỉ tải khi bấm "Nhập Excel", không phải lúc mở /category.
+const ExcelImportModal = lazy(() => import('../components/RecipeMenuPage/ExcelImportModal'))
 
 // Module-level scroll cache. Set when user clicks a product card to drill into
 // /category/recipes/:productId; consumed once on next mount of /category (back nav).
@@ -113,7 +115,7 @@ export default function RecipeMenuPage() {
     // ponytail: mount-only — refreshProducts already refetches on address change via
     // its own effect in ProductContext; adding it here would double-fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { refreshProducts?.() }, [])
+    useEffect(() => { refreshProducts?.({ maxAgeMs: 30_000 }) }, [])
 
     // Restore scroll on back nav from /category/recipes/:productId; clear cache after use
     useEffect(() => {
@@ -473,7 +475,7 @@ export default function RecipeMenuPage() {
                 </BottomSheet>
             )}
 
-            {showImportModal && <ExcelImportModal onClose={() => setShowImportModal(false)} />}
+            {showImportModal && <Suspense fallback={null}><ExcelImportModal onClose={() => setShowImportModal(false)} /></Suspense>}
 
             {dividerModal && (
                 <BottomSheet

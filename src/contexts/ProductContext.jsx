@@ -108,6 +108,7 @@ export function ProductProvider() {
     const [loading, setLoading] = useState(true)
     const [loadError, setLoadError] = useState(null)
     const loadGenRef = useRef(0) // bumped each effect run so a stale retry can no-op instead of writing over a newer address's data
+    const freshAtRef = useRef(0) // lúc bắt đầu lần tải mạng gần nhất (0 = chưa có / vừa thất bại) — cho refreshProducts({ maxAgeMs })
 
     const applyData = useCallback((prods, recs, costsResult, extras, extraIngs, addressId, toppingsList, productToppingsMap, discountProgramsList, productDiscountsMap) => {
         const { costs, units, rows, groups } = costsResult
@@ -166,6 +167,7 @@ export function ProductProvider() {
             try {
                 setLoading(true)
                 setLoadError(null)
+                freshAtRef.current = Date.now()
                 const {
                     prods, recs, costsResult, extras, extraIngs, toppings: toppingsList, productToppings: productToppingsMap,
                     discountPrograms: discountProgramsList, productDiscounts: productDiscountsMap,
@@ -179,6 +181,7 @@ export function ProductProvider() {
                 // instead of going blank. loadError only drives the UI copy ("offline,
                 // will sync" vs "no menu yet") — see MenuGrid.
                 console.error('Failed to load product data', error)
+                freshAtRef.current = 0
                 setLoadError(error)
             } finally {
                 setLoading(false)
@@ -187,7 +190,11 @@ export function ProductProvider() {
         load()
     }, [activeManagerId, selectedAddress?.id, applyData, readCache])
 
-    const refreshProducts = useCallback(async () => {
+    // maxAgeMs: dành cho refresh lúc mount trang — bỏ qua nếu vừa tải xong (9 request, 2 đợt nối
+    // tiếp). Không truyền = luôn tải, như mọi nơi gọi sau khi sửa dữ liệu.
+    const refreshProducts = useCallback(async ({ maxAgeMs } = {}) => {
+        if (maxAgeMs && Date.now() - freshAtRef.current < maxAgeMs) return
+        freshAtRef.current = Date.now()
         const addressId = selectedAddress?.id
         // Snapshot the generation so a slow refresh (e.g. the online-retry below,
         // which can be in flight for a while on a bad connection) can't clobber a
