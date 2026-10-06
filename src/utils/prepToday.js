@@ -102,7 +102,6 @@ export function buildDepletedList({ ingredientsList, openingInputs, openingStock
             packUnit: ing.pack_unit,
             fillQty: Math.max(0, Math.min(need, left)), // 0 = kho dự trữ cũng hết, không lấy thêm được
             warehouse: wh != null ? r1(wh) : null,
-            tare: 0, // balance đã gồm bì — không hiện "bì X + …"
         })
     }
     return out
