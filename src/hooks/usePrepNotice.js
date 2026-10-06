@@ -15,8 +15,8 @@ import {
 import { ingredientLabel } from '../utils/ingredients'
 import { isSameDayVN, dateStringVN } from '../utils/dateVN'
 
-// Notice dữ liệu ở đỉnh /pos ("Chuẩn bị hôm nay") và /ingredients ("Bổ sung tồn kho"): danh sách tính
-// TRỰC TIẾP theo đơn đang bán, ghi xuống qua đúng đường của /daily-report (useShiftInventoryState.
+// Notice dữ liệu ở đỉnh /pos ("Chuẩn bị hôm nay") và /inventory ("Bổ sung tồn kho"): danh sách tính
+// TRỰC TIẾP theo đơn đang bán, ghi xuống qua đúng đường của /report (useShiftInventoryState.
 // pushInventory — merge RPC theo delta, Realtime) nên 2 máy không đè nhau. Mỗi hook chỉ mount ở trang
 // của mình — cùng lúc không bao giờ có 2 instance (3 trang là 3 route khác nhau).
 
@@ -52,7 +52,7 @@ function useShiftPrepBase(offsets) {
     // Danh mục NVL lấy từ ProductContext (đã nạp sẵn) — khỏi fetch lại ingredient_costs/ingredient_groups mỗi lần vào trang.
     const inventory = useShiftInventoryState(selectedAddress.id, selectedAddress.ingredient_sort_order, todayISO, onConflict, undefined, { ingredientRows: ingredientConfigs })
 
-    // Các trang này KHÔNG tự nạp đơn hôm nay (chỉ /history, /daily-report nạp) — không nạp thì usedMap
+    // Các trang này KHÔNG tự nạp đơn hôm nay (chỉ /history, /report nạp) — không nạp thì usedMap
     // thiếu cả đơn đã bán trước khi mở máy ⇒ Lý thuyết sai, và systemTotalRevenue (chụp vào phiếu chốt khi
     // push tạo phiếu mới) thiếu. Nạp hỏng ⇒ không tính gì (ready=false) thay vì tính trên dữ liệu thiếu.
     const [historyOk, setHistoryOk] = useState(false)
@@ -125,7 +125,7 @@ export function usePrepNotice() {
     const pendingCount = items.filter(it => !checked[it.ingredient]).length
     const view = useSnapshot('pos', { items, checked, skipped, pendingCount }, ready)
 
-    // Autosave debounce — cùng kiểu triggerAutoSave của /daily-report: gom nhiều tick thành 1 lần đẩy,
+    // Autosave debounce — cùng kiểu triggerAutoSave của /report: gom nhiều tick thành 1 lần đẩy,
     // ref luôn trỏ bản mới nhất để timer đọc đúng state hiện tại.
     const pushRef = useRef(null)
     const timerRef = useRef(null)
@@ -151,7 +151,7 @@ export function usePrepNotice() {
         if (timerRef.current) { clearTimeout(timerRef.current); pushRef.current?.() }
     }, [])
 
-    // Xác nhận "đã lấy từ kho ra quầy". Món sáng nay: tick/untick như /daily-report (đổ số quy đổi nguyên
+    // Xác nhận "đã lấy từ kho ra quầy". Món sáng nay: tick/untick như /report (đổ số quy đổi nguyên
     // bịch, kẹp theo kho). Món đã hết giữa ca: CỘNG THÊM 1 lần vào Nhập thêm (không bỏ tick — Lý thuyết
     // > 0 lại thì tự rớt khỏi danh sách).
     const confirmPrep = useCallback((ingredient) => {
@@ -183,7 +183,7 @@ export function usePrepNotice() {
     return { ...view, ready, confirmPrep, toggleSkip, toast }
 }
 
-// /ingredients — "Bổ sung tồn kho": NVL cần MUA thêm cho ngày mai. Mua qua RestockModal của caller (không
+// /inventory — "Bổ sung tồn kho": NVL cần MUA thêm cho ngày mai. Mua qua RestockModal của caller (không
 // ghi restock ở đây) nên chỉ trả danh sách + hàm tươi lại sau khi mua.
 export function useWarehousePrep() {
     const { inventory, ready, common, forecastMap, todayExpenses, toast, handleLoadHistory } = useShiftPrepBase(HISTORY_OFFSETS_TOMORROW)

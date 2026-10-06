@@ -5,6 +5,7 @@ import { getPendingOrders, removePendingOrder } from '../hooks/useOfflineSync'
 import { dateStringVN } from '../utils/dateVN'
 import { calcRangeWithLabel } from '../utils/rangeCalc'
 import { goToMenuStep } from '../utils/menuSequence'
+import { useTabRoute } from '../hooks/useTabRoute'
 import { useDateScope } from '../hooks/useDateScope'
 import { useHistoryRangeFetch } from '../hooks/useHistoryRangeFetch'
 import { useFormatHistoryOrders } from '../hooks/useFormatHistoryOrders'
@@ -63,13 +64,15 @@ export default function HistoryPage() {
     }, [isGuest, selectedAddress?.id])
 
     // ─── Navigation state ─────────────────────────────────────────────
-    const initialTab = location.state?.tab === 'expense' ? 'expense' : 'orders'
     const expensesToView = location.state?.expensesToView  // read-only past date list
     const isReadOnly = location.state?.isReadOnly || false
     const backTo = location.state?.from || '/pos'
 
     // ─── UI state ─────────────────────────────────────────────────────
-    const [activeTab, setActiveTab] = useState(initialTab)
+    // Tab nằm trên URL: /history/sales (key nội bộ 'orders') · /history/expense.
+    const [tabSlug, setTabSlug] = useTabRoute('/history')
+    const activeTab = tabSlug === 'expense' ? 'expense' : 'orders'
+    const setActiveTab = (key) => setTabSlug(key === 'orders' ? 'sales' : key)
     const [showAddModal, setShowAddModal] = useState(false)
 
     // Onboarding phase 2 "Nhật ký" — tick theo tab /history user tự bấm qua (Thu nhập/Chi
@@ -80,7 +83,7 @@ export default function HistoryPage() {
     // useOnboardingProgressPersist với orderProgress.
     const [journalProgress, setJournalProgress] = useState(() => {
         const stored = isGuest && selectedAddress?.id ? readOnboardingState(selectedAddress.id).journalProgress : DEFAULT_ONBOARDING_STATE.journalProgress
-        return initialTab === 'orders' && !stored.viewedIncome ? { ...stored, viewedIncome: true } : stored
+        return activeTab === 'orders' && !stored.viewedIncome ? { ...stored, viewedIncome: true } : stored
     })
     if (isGuest && activeTab === 'expense' && !journalProgress.viewedExpense) {
         setJournalProgress(prev => ({ ...prev, viewedExpense: true }))
@@ -91,14 +94,14 @@ export default function HistoryPage() {
 
     // Phase 5 "Điều chỉnh công thức" không còn nút riêng trong guide — hint thẳng vào mũi tên
     // "tiến" ở header (như DailyReportPage.jsx), cho user quay lại /history rồi đi tiếp tới
-    // /recipes qua menuSequence.js. inventoryProgress/recipeProgress không thuộc trang này —
+    // /category qua menuSequence.js. inventoryProgress/recipeProgress không thuộc trang này —
     // đọc read-only qua useOnboardingProgress (xem onboarding/steps.js).
     const inventoryProgress = useOnboardingProgress('inventoryProgress', { isGuest, addressId: selectedAddress?.id })
     const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId: selectedAddress?.id })
     const hintGoToRecipes = isGuest && isRecipeStepActive(isInventoryProgressDone(inventoryProgress), recipeProgress)
 
     // Date selection (scope/offset/customRange + handlers) lives in the shared
-    // hook so /history and /daily-report stay in lock-step. Seeded from nav state
+    // hook so /history and /report stay in lock-step. Seeded from nav state
     // so a window survives the Nhật ký ↔ Báo cáo tab switch.
     const date = useDateScope(location.state)
     const {
@@ -388,11 +391,11 @@ export default function HistoryPage() {
         // Phase 2 "Nhật ký" hoàn tất khi user tự bấm mũi tên sang trang Báo cáo (điều hướng đi
         // luôn nên không có effect nào bắt được như 2 tab kia — ghi thẳng ở đây).
         // dateNavState ({ scope, offset, customRange }) carries the full window so
-        // /daily-report opens on the same selection instead of resetting to "hôm nay".
+        // /report opens on the same selection instead of resetting to "hôm nay".
         if (isGuest && selectedAddress?.id && !journalProgress.viewedReport) {
             writeOnboardingState(selectedAddress.id, { journalProgress: { ...journalProgress, viewedReport: true } })
         }
-        goToMenuStep(activeTab, +1, { navigate, backTo, setActiveTab, scopeState: dateNavState, wizard: location.state?.wizard })
+        goToMenuStep(activeTab, +1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard })
     }
 
     // ─── Render ───────────────────────────────────────────────────────
@@ -404,7 +407,7 @@ export default function HistoryPage() {
                 scope={scope}
                 isReadOnly={isReadOnly}
                 canGoForward={canGoForwardPeriod}
-                onBack={() => goToMenuStep(activeTab, -1, { navigate, backTo, setActiveTab, wizard: location.state?.wizard })}
+                onBack={() => goToMenuStep(activeTab, -1, { navigate, backTo, wizard: location.state?.wizard })}
                 onForward={handleForward}
                 hintForward={journalHint === 'report' || hintGoToRecipes}
                 activeTab={activeTab}
@@ -455,7 +458,7 @@ export default function HistoryPage() {
                 />
             )}
 
-            {/* FAB: Add expense — floating bottom-right, matching the /recipes & /ingredients
+            {/* FAB: Add expense — floating bottom-right, matching the /category & /inventory
                 FAB position (the date-picker footer is gone, so it sits flush to the bottom). */}
             {activeTab === 'expense' && !isReadOnly && (
                 <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-50">

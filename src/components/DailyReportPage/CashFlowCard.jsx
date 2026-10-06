@@ -31,7 +31,7 @@ export default function CashFlowCard({
     expenseCategories = [],  // nhãn chi phí — nhóm section Vận hành theo tên nhãn
     // Khối doanh thu (SalesCard + biểu đồ) render phía trên panel Thực thu.
     children,
-    // Inline-edit props (today scope on /daily-report). When `editable` is true the
+    // Inline-edit props (today scope on /report). When `editable` is true the
     // Tiền mặt / Chuyển khoản rows become text inputs; rời ô (blur) là tự lưu.
     editable = false,
     cashInput = '',

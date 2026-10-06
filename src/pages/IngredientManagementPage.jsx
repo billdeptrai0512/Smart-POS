@@ -31,6 +31,7 @@ import { INGREDIENT_TABS } from '../constants/menuTabs'
 import InventoryAuditTab from '../components/IngredientManagementPage/InventoryAuditTab'
 import { useEntitlement } from '../hooks/useEntitlement'
 import { useDateScope } from '../hooks/useDateScope'
+import { useTabRoute } from '../hooks/useTabRoute'
 import { calcRangeWithPrev } from '../utils/rangeCalc'
 import { dateStringVN, dateShortVN, dateFullVN } from '../utils/dateVN'
 import { DateRangePicker } from '../components/HistoryPage/HistoryHeader'
@@ -41,8 +42,8 @@ import { isRecipeStepActive } from '../components/common/onboarding/steps'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 
 // Module-level scroll cache. Set when user opens a card to drill into
-// /ingredients/:key; consumed once on next mount of /ingredients (back nav).
-// Mirrors the /recipes pattern so back-from-detail lands at the same scroll
+// /inventory/stocking/:key; consumed once on next mount of /inventory (back nav).
+// Mirrors the /category pattern so back-from-detail lands at the same scroll
 // position the user left.
 let savedScroll = null
 
@@ -85,13 +86,13 @@ export default function IngredientManagementPage() {
     const [groupFilter, setGroupFilter] = useState('all')
     const [showGroupsSheet, setShowGroupsSheet] = useState(false)
 
-    // 'main' = Kiểm kê (hôm nay / ngày cũ / hao hụt theo kỳ), 'warehouse' = Lưu trữ (danh sách nguyên liệu).
-    const [view, setView] = useState('main')
+    // Tab nằm trên URL: /inventory/management = Kiểm kê (hôm nay / ngày cũ / hao hụt theo kỳ), /inventory/stocking = Lưu trữ.
+    const [view, setView] = useTabRoute('/inventory')
     // Kiểm kê thuộc gói báo cáo (cùng gate với Báo cáo trước đây): chưa có gói thì rơi về Tồn lưu trữ,
     // bấm tab Kiểm kê mới dẫn tới trang đăng ký.
     const { hasAccess, loading: entitlementLoading, enabled: monetizationEnabled } = useEntitlement()
     const auditLocked = monetizationEnabled && !entitlementLoading && !hasAccess
-    const activeView = auditLocked ? 'warehouse' : view
+    const activeView = auditLocked ? 'stocking' : view
     // Mô tả thay đổi Kiểm kê chưa lưu (null = sạch) — InventoryAuditTab báo lên để chặn rời trang.
     const [unsavedKey, setUnsavedKey] = useState(null)
     // Chọn ngày của Kiểm kê (hôm nay / ngày cũ / tuần / tháng / tuỳ chọn) nằm ở header như trang Báo cáo.
@@ -101,7 +102,7 @@ export default function IngredientManagementPage() {
 
     const mainRef = useRef(null)
 
-    // Restore scroll on back nav from /ingredients/:key; clear cache after use.
+    // Restore scroll on back nav from /inventory/stocking/:key; clear cache after use.
     useEffect(() => {
         if (savedScroll !== null && mainRef.current) {
             mainRef.current.scrollTop = savedScroll
@@ -111,7 +112,7 @@ export default function IngredientManagementPage() {
 
     const openIngredient = (ingredient) => {
         savedScroll = mainRef.current?.scrollTop ?? 0
-        navigate(`/ingredients/${ingredient}`, { state: location.state })
+        navigate(`/inventory/stocking/${ingredient}`, { state: location.state })
     }
 
     // Stock & modals
@@ -435,7 +436,7 @@ export default function IngredientManagementPage() {
                 title="Tồn kho"
                 count={visibleIngredients.length}
                 unitLabel="loại"
-                subtitle={activeView === 'main' ? (
+                subtitle={activeView === 'management' ? (
                     <DateRangePicker
                         scope={dScope}
                         rangeLabel={dScope === 'week' || dScope === 'month' ? `${dateShortVN(dateRange.start)} – ${dateShortVN(dateRange.end)}` : dateFullVN(dateRange.start)}
@@ -456,19 +457,19 @@ export default function IngredientManagementPage() {
                         onPresetSelect={(p) => guardLeave(() => dateScope.applyPreset(p))}
                     />
                 ) : undefined}
-                onBack={() => guardLeave(() => goToMenuStep('main', -1, { navigate, backTo: location.state?.from || '/history', wizard: location.state?.wizard }))}
-                onForward={() => guardLeave(() => goToMenuStep('main', +1, { navigate, backTo: location.state?.from || '/history', wizard: location.state?.wizard }))}
+                onBack={() => guardLeave(() => goToMenuStep('main', -1, { navigate, backTo: location.state?.from || '/history/sales', wizard: location.state?.wizard }))}
+                onForward={() => guardLeave(() => goToMenuStep('main', +1, { navigate, backTo: location.state?.from || '/history/sales', wizard: location.state?.wizard }))}
                 tabs={INGREDIENT_TABS}
                 activeTab={activeView}
                 onTabSelect={(key) => {
-                    if (key === 'main' && auditLocked) { navigate('/subscription', { state: { preselectAddressId: selectedAddress?.id, from: '/ingredients' } }); return }
+                    if (key === 'management' && auditLocked) { navigate('/subscription', { state: { preselectAddressId: selectedAddress?.id, from: '/inventory/management' } }); return }
                     guardLeave(() => setView(key))
                 }}
                 hintForward={hintRecipesTab}
             />
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-8 bg-bg">
-                {activeView === 'main' ? (
+                {activeView === 'management' ? (
                     <InventoryAuditTab
                         dateScope={dateScope}
                         inventoryProgress={inventoryProgress}

@@ -130,7 +130,7 @@ export default function ToppingDetailPage() {
         return (
             <div className="flex flex-col h-full bg-bg items-center justify-center gap-3 px-6">
                 <p className="text-text-secondary text-[13px] text-center">Không tìm thấy topping này (có thể đã bị xoá).</p>
-                <button onClick={() => navigate('/toppings')} className="text-primary text-[13px] font-bold">Về danh sách topping</button>
+                <button onClick={() => navigate('/category/toppings')} className="text-primary text-[13px] font-bold">Về danh sách topping</button>
             </div>
         )
     }
@@ -149,7 +149,7 @@ export default function ToppingDetailPage() {
         await withSaving('Xoá topping', async () => {
             await deleteTopping(toppingId)
             await refreshProducts()
-            navigate('/toppings')
+            navigate('/category/toppings')
         })
     }
 
@@ -163,7 +163,7 @@ export default function ToppingDetailPage() {
                 name={topping.name}
                 nameTransform={capitalizeWords}
                 canEdit={canEdit}
-                onBack={() => navigate('/toppings')}
+                onBack={() => navigate('/category/toppings')}
                 onSaveName={saveName}
                 price={topping.price}
                 priceLabel="Giá cộng thêm:"

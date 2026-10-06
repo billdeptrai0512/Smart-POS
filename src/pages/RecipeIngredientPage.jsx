@@ -71,7 +71,7 @@ export default function RecipeIngredientPage() {
     const isCafeDen = isGuest && norm(product?.name) === RECIPE_TARGET_PRODUCT
 
     // Phase 5 xong nhưng user vẫn đứng ở trang chi tiết công thức — tab "Nguyên liệu" của
-    // phase 6 chỉ có ở /recipes (trang này không render MenuTabsBar), nên hint nút trở về
+    // phase 6 chỉ có ở /category (trang này không render MenuTabsBar), nên hint nút trở về
     // trước, rồi RecipeMenuPage.jsx (hintIngredientsTab) tiếp quản. Cùng điều kiện với nó,
     // kể cả guard coffeeConfig: không còn NVL "Cà phê" thì phase 6 tự done (bước 6, onboarding/steps.js)
     // → không được hint nữa, nếu không nút trở về nhấp nháy vĩnh viễn.
@@ -250,7 +250,7 @@ export default function RecipeIngredientPage() {
         await withSaving('Xóa món khỏi menu', async () => {
             await removeProductFromAddress(productId, addrId)
             refreshProducts?.()
-            navigate('/recipes', { state: { ...location.state, recipesView: 'recipes' } })
+            navigate('/category/recipes', { state: location.state })
         })
     }
 
@@ -328,7 +328,7 @@ export default function RecipeIngredientPage() {
                     await upsertExtraIngredient(extraId, key, 0, unit)
                 }
                 // A brand-new ingredient created here must exist in ingredient_costs (with its
-                // category) too, else it won't show in /ingredients or the chip list.
+                // category) too, else it won't show in /inventory or the chip list.
                 if (unit !== null && !(key in ingredientCosts)) {
                     await upsertIngredientCost(key, 0, selectedAddress?.id, unit, category ? { category } : {})
                 }
@@ -375,7 +375,7 @@ export default function RecipeIngredientPage() {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-6 gap-4">
                 <span className="text-text-secondary text-[14px]">Không tìm thấy món này.</span>
-                <button onClick={() => navigate('/recipes', { state: { ...location.state, recipesView: 'recipes' } })} className="text-primary font-bold text-[14px] underline">
+                <button onClick={() => navigate('/category/recipes', { state: location.state })} className="text-primary font-bold text-[14px] underline">
                     ← Quay lại
                 </button>
             </div>
@@ -400,7 +400,7 @@ export default function RecipeIngredientPage() {
             <RecipeHeader
                 product={product}
                 canEdit={canEdit}
-                onBack={() => navigate('/recipes', { state: { ...location.state, recipesView: 'recipes' } })}
+                onBack={() => navigate('/category/recipes', { state: location.state })}
                 hintBack={hintBack}
                 onSavePrice={saveProductPrice}
                 onSaveName={saveProductName}

@@ -200,7 +200,7 @@ export async function fetchIngredientStocks(addressId: UUID | null) {
     })
 }
 
-// Per-ingredient daily metrics for /ingredients expand-on-click context (Task 3.8).
+// Per-ingredient daily metrics for /inventory expand-on-click context (Task 3.8).
 // Returns map ingredient → { today_refill, today_restock }. Combine with current
 // warehouse_stock (from fetchIngredientStocks) to derive:
 //   warehouse_end_of_today   = current warehouse_stock

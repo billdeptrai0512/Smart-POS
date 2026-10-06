@@ -312,7 +312,7 @@ export default function KeySyncModal({
                                 <div className="bg-bg border border-border/40 rounded-[14px] p-3 space-y-3">
                                     <p className="text-[11px] font-black text-text-secondary uppercase tracking-wider">Nguyên liệu chưa khai báo</p>
                                     <p className="text-[11px] text-text-secondary">
-                                        {allOrphanKeys.length} key đang được tham chiếu nhưng chưa có trong /ingredients (giá vốn = 0). Chỉnh đơn vị rồi bấm "Tạo nguyên liệu thiếu" — giá vốn sẽ về 0 và bạn có thể cập nhật sau trong /ingredients.
+                                        {allOrphanKeys.length} key đang được tham chiếu nhưng chưa có trong /inventory (giá vốn = 0). Chỉnh đơn vị rồi bấm "Tạo nguyên liệu thiếu" — giá vốn sẽ về 0 và bạn có thể cập nhật sau trong /inventory.
                                     </p>
 
                                     {orphansCreated > 0 && (

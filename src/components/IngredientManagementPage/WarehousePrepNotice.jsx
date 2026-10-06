@@ -15,7 +15,7 @@ import ShiftPrepCard from '../DailyReportPage/ShiftPrepCard'
 import RestockModal from './RestockModal'
 import Toast from '../POSPage/Toast'
 
-// Dải notice "Bổ sung tồn kho" ở đỉnh /ingredients (Tồn kho): NVL/bao bì cần MUA thêm để đủ bán ngày
+// Dải notice "Bổ sung tồn kho" ở đỉnh /inventory (Tồn kho): NVL/bao bì cần MUA thêm để đủ bán ngày
 // mai (target = max(dự báo mai, tồn tối thiểu) − tổng tồn kho + quầy). Bấm → danh sách "Mua N …", bấm
 // dòng mở RestockModal (cùng form Nhập kho của trang chi tiết). Mua đủ thì món tự rớt khỏi danh sách.
 // Chỉ chủ/quản lý (nhập kho là thao tác ghi chi phí + kho); guest/offline ẩn như dải ở /pos.

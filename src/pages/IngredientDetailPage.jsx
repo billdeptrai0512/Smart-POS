@@ -74,7 +74,7 @@ export default function IngredientDetailPage() {
     const [editingEntry, setEditingEntry] = useState(null)
     const [restockOpen, setRestockOpen] = useState(false)
     // Đã chốt ca tiền hôm nay chưa → default phân loại tiền mặt khi nhập kho. Fetch khi
-    // mở modal nhập kho để luôn tươi (user có thể vừa chốt ở /daily-report).
+    // mở modal nhập kho để luôn tươi (user có thể vừa chốt ở /report).
     const [cashClosedToday, setCashClosedToday] = useState(false)
     useEffect(() => {
         if (!restockOpen) return
@@ -120,7 +120,7 @@ export default function IngredientDetailPage() {
             .then(stocks => setStockData(stocks.find(s => s.ingredient === ingredientKey)))
     }, [selectedAddress, ingredientKey])
 
-    // Đầu ngày/Lấy ra/Nhập mới cho panel Kiểm kê — cùng nguồn dữ liệu với card ở /ingredients.
+    // Đầu ngày/Lấy ra/Nhập mới cho panel Kiểm kê — cùng nguồn dữ liệu với card ở /inventory.
     useEffect(() => {
         if (!selectedAddress || !ingredientKey) return
         fetchIngredientDailyContext(selectedAddress.id ?? null)
@@ -288,7 +288,7 @@ export default function IngredientDetailPage() {
             refreshProducts?.()
             // URL param drives every fetch on this page — repoint at the new key
             // so the page keeps showing the same ingredient under its new name.
-            navigate(`/ingredients/${newKey}`, { replace: true, state: location.state })
+            navigate(`/inventory/stocking/${newKey}`, { replace: true, state: location.state })
         })
     }
 
@@ -454,7 +454,7 @@ export default function IngredientDetailPage() {
         try {
             await deleteIngredientCost(ingredientKey, selectedAddress?.id)
             refreshProducts?.()
-            navigate('/ingredients')
+            navigate('/inventory/stocking')
         } catch (err) { showError(err, 'Xóa nguyên liệu') }
     }
 
@@ -494,7 +494,7 @@ export default function IngredientDetailPage() {
             <IngredientDetailHeader
                 title={titleLabel}
                 subtitle={costSubtitle}
-                onBack={() => navigate('/ingredients', { state: location.state })}
+                onBack={() => navigate('/inventory/stocking', { state: location.state })}
                 viewMode={viewMode}
                 onViewModeChange={setViewMode}
                 onRestock={canEdit ? () => setRestockOpen(true) : null}

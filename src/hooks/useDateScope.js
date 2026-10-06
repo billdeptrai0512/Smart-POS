@@ -39,7 +39,7 @@ export function readParamsSeed(sp) {
 }
 
 // Single owner of the dashboard's date selection, shared by /history and
-// /daily-report so the two pages can never drift out of sync again (which is the
+// /report so the two pages can never drift out of sync again (which is the
 // bug class this hook exists to kill). Owns scope + offset +
 // customRange, plus every derived value and every transition handler the
 // header date control needs.

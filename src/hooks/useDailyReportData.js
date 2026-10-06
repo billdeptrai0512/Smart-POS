@@ -7,7 +7,7 @@ import { dedupeShiftClosingsByDay } from '../utils/reportStats'
 /**
  * useDailyReportData
  * ------------------
- * Owns all server-data state for /daily-report and dispatches the right
+ * Owns all server-data state for /report and dispatches the right
  * fetcher per scope:
  *   - today              → fetchDailyReportContext
  *   - past single day    → fetchReportByDate

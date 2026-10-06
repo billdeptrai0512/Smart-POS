@@ -189,24 +189,24 @@ export default function AddressSelectPage() {
         navigate('/pos', { replace: true })
     }
 
-    function handleSelectReport(addr, initialView) {
+    function handleSelectReport(addr, view) {
         setSelectedAddress(addr)
-        navigate('/daily-report', { state: { from: '/addresses', initialView } })
+        navigate(`/report/${view}`, { state: { from: '/addresses' } })
     }
 
     function handleSelectHistory(addr, tab) {
         setSelectedAddress(addr)
-        navigate('/history', { state: { from: '/addresses', tab } })
+        navigate(`/history/${tab}`, { state: { from: '/addresses' } })
     }
 
     function handleSelectIngredients(addr) {
         setSelectedAddress(addr)
-        navigate('/ingredients', { state: { from: '/addresses' } })
+        navigate('/inventory/management', { state: { from: '/addresses' } })
     }
 
     function handleSelectRecipes(addr) {
         setSelectedAddress(addr)
-        navigate('/recipes', { state: { from: '/addresses' } })
+        navigate('/category/overall', { state: { from: '/addresses' } })
     }
 
 
@@ -334,10 +334,10 @@ export default function AddressSelectPage() {
                         onSetAddressGroup={setAddressGroup}
                         onSupportClick={() => setShowSupportModal(true)}
                         onDefaultTemplate={async () => {
-                            // Load persisted ingredient sort so /ingredients respects admin's saved order.
+                            // Load persisted ingredient sort so /inventory respects admin's saved order.
                             const ingredient_sort_order = await fetchDefaultIngredientSort()
                             setSelectedAddress({ id: null, name: 'Mẫu mặc định', ingredient_sort_order })
-                            navigate('/recipes')
+                            navigate('/category/overall')
                         }}
                     />
                 )}

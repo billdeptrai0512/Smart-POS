@@ -1,6 +1,6 @@
 import { INGREDIENT_NAMES } from '../constants/products'
 
-// Display order matters: used as the tab order in /ingredients.
+// Display order matters: used as the tab order in /inventory.
 // `null` (chưa phân loại) folds into 'main' per UX rule.
 // `tools` is a legacy value (kept for old DB rows) — folded into 'packaging' everywhere.
 export const INGREDIENT_CATEGORIES = [

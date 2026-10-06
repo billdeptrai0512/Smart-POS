@@ -59,7 +59,7 @@ export default function POSPage() {
     const today = new Date()
 
     function handleOpenHistory() {
-        navigate('/history')
+        navigate('/history/sales')
         handleLoadHistory()
     }
 

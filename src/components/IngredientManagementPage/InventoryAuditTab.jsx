@@ -23,7 +23,7 @@ import PastInventoryEditor from '../DailyReportPage/PastInventoryEditor'
 import RangeLossCard from '../DailyReportPage/RangeLossCard'
 import MissingCupSuspicionCard from '../DailyReportPage/MissingCupSuspicionCard'
 
-// Tab "Kiểm kê" của /ingredients — chuyển từ tab Kiểm kê của /daily-report sang đây. Hôm nay:
+// Tab "Kiểm kê" của /inventory — chuyển từ tab Kiểm kê của /report sang đây. Hôm nay:
 // đếm Cuối kỳ + nhập thêm rồi "Lưu"; ngày cũ: sửa Cuối kỳ của phiếu đã chốt; tuần/tháng/tuỳ
 // chọn: tổng hao hụt cả kỳ. Chọn ngày nằm ở header trang cha (dateScope truyền xuống).
 //

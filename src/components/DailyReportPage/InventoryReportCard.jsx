@@ -403,7 +403,7 @@ const IngredientRow = memo(function IngredientRow({
                         <AlertTriangle size={11} className="mt-[1px] shrink-0" />
                         <span>
                             Vượt kho tổng {fmt(overBy)}.
-                            Nếu hàng được mua mới, vào <span className="underline">/ingredients → + Nhập kho</span> trước.
+                            Nếu hàng được mua mới, vào <span className="underline">Tồn kho → Lưu trữ → + Nhập kho</span> trước.
                         </span>
                     </div>
                 )}

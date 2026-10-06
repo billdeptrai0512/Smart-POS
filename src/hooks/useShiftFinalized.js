@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { shiftFinalizedKey } from '../constants/storageKeys'
 
 // Ca hôm nay "hoàn tất" = phiếu chốt có thực thu (tiền mặt + chuyển khoản) VÀ mọi NVL đã đếm
-// Cuối kỳ. Dùng chung /daily-report (nhập thực thu) và /ingredients tab Kiểm kê (đếm tồn):
+// Cuối kỳ. Dùng chung /report (nhập thực thu) và /inventory tab Kiểm kê (đếm tồn):
 // hoàn tất ở trang nào thì trang đó ghi cờ.
 //
 // Latch: một khi ca đã hoàn tất trong ngày thì KHÓA lại — forecast nhích lên do đơn muộn (hoặc

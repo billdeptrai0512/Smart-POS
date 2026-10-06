@@ -1,9 +1,9 @@
 // Dòng tiêu đề phân nhóm menu: ------{name}------
 // Là một product row với is_divider=true (dùng chung sort_order per-address),
-// render full-width (col-span-2) trong grid 2 cột của /pos và /recipes.
+// render full-width (col-span-2) trong grid 2 cột của /pos và /category.
 // `dragHandleProps` (tùy chọn) = {handleRef, attributes, listeners} từ dnd-kit useSortable —
 // khi có, 2 đường kẻ đổi thành nét đứt và CHÍNH LÀ bề mặt kéo-thả (không cần icon
-// riêng nữa) để sắp xếp trực tiếp trên /recipes. Tên mục vẫn là nơi bấm để sửa/xoá,
+// riêng nữa) để sắp xếp trực tiếp trên /category. Tên mục vẫn là nơi bấm để sửa/xoá,
 // tách khỏi 2 đường kẻ nên không tranh chấp gesture kéo vs tap.
 // ponytail: handleRef là callback ref THƯỜNG của dnd-kit (setActivatorNodeRef), truyền
 // qua render-prop children (SortableItem) rồi qua prop object xuống đây — react-hooks/refs

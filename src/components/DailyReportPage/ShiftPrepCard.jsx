@@ -2,7 +2,7 @@ import { Check, Plus, X, RotateCcw } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
 
 // Danh sách checklist dùng chung cho 2 dải notice: "Chuẩn bị hôm nay" (/pos — đưa hàng ra quầy) và
-// "Bổ sung tồn kho" (/ingredients — đi chợ đắp kho). Mỗi dòng có ô tick (hoặc nút + nhập kho)
+// "Bổ sung tồn kho" (/inventory — đi chợ đắp kho). Mỗi dòng có ô tick (hoặc nút + nhập kho)
 // + so sánh "Còn" (tồn hiện có) vs "Cần" (lượng cần thêm) + quy đổi ra bịch. Chỉ vẽ phần danh sách —
 // header/khung do caller (NoticeSheet) lo; tick/bỏ qua do parent giữ.
 //

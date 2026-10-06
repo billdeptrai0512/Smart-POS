@@ -49,7 +49,7 @@ export default function ToppingsPage() {
             <IngredientDetailHeader
                 title="Topping"
                 subtitle={`${toppings.length} loại`}
-                onBack={() => navigate('/recipes', { state: { ...location.state, recipesView: 'recipes' } })}
+                onBack={() => navigate('/category/recipes', { state: location.state })}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-4 pb-8 space-y-3">
@@ -62,7 +62,7 @@ export default function ToppingsPage() {
                 {toppings.map(t => (
                     <div
                         key={t.id}
-                        onClick={() => navigate(`/toppings/${t.id}`)}
+                        onClick={() => navigate(`/category/toppings/${t.id}`)}
                         className="bg-surface border border-border/60 rounded-[16px] p-4 flex items-center justify-between gap-2 cursor-pointer transition-all shadow-sm hover:border-text/30 hover:shadow-md active:scale-[0.98]"
                     >
                         <h3 className="font-black text-[15px] text-text">{t.name}</h3>

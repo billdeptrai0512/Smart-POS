@@ -50,7 +50,7 @@ export const STEPS = [
         ],
     },
     // 3-4. Kết ca thực thu / tồn quầy — ghi từ DailyReportPage.jsx. Thẻ Thực thu nằm dưới mép
-    // màn hình lúc vừa vào /daily-report nên việc đầu là kéo xuống cho thẻ hiện trọn.
+    // màn hình lúc vừa vào /report nên việc đầu là kéo xuống cho thẻ hiện trọn.
     {
         title: 'Kết ca',
         items: (ctx) => [
@@ -67,7 +67,7 @@ export const STEPS = [
         ],
     },
     // 5. Công thức "Cà phê đen" — không có nút riêng: hint mũi tên "tiến" ở header /history +
-    // /daily-report dẫn tới /recipes (hintGoToRecipes, menuSequence.js), rồi card Cà phê đen →
+    // /report dẫn tới /category (hintGoToRecipes, menuSequence.js), rồi card Cà phê đen →
     // input định lượng → "+ Thêm tùy chọn" (RecipeMenuPage.jsx/RecipeIngredientPage.jsx).
     {
         title: 'Công thức',
@@ -76,7 +76,7 @@ export const STEPS = [
             { label: 'Tạo tùy chọn thêm', done: ctx.recipeProgress.addedExtra },
         ],
     },
-    // 6. (CUỐI CÙNG) Cài đặt 1 nguyên liệu mẫu (Cà phê) — mũi tên "trở về" ở header /recipes tự
+    // 6. (CUỐI CÙNG) Cài đặt 1 nguyên liệu mẫu (Cà phê) — mũi tên "trở về" ở header /category tự
     // sáng hint (hintIngredientsTab) để dẫn về Tồn kho. Chưa có ingredient "Cà phê" → [] = vacuously done.
     {
         title: 'Nguyên liệu',

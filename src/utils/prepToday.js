@@ -1,7 +1,7 @@
 import { r1, computeBalance } from './inventory'
 import { lookupByLabel } from './ingredients'
 
-// Danh sách "Chuẩn bị hôm nay" (đưa NVL từ kho dự trữ ra quầy) — dùng chung cho /daily-report
+// Danh sách "Chuẩn bị hôm nay" (đưa NVL từ kho dự trữ ra quầy) — dùng chung cho /report
 // (card Chuẩn bị hôm nay) và /pos (dải notice + modal xác nhận). Hàm thuần, không đọc state.
 
 // Mốc lịch sử cho dự báo Soạn — 3 tuần gần nhất cùng thứ HÔM NAY, trung bình hoá (xem

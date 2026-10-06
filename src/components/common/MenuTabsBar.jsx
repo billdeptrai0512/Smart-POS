@@ -1,6 +1,8 @@
-// Tab bar dùng chung cho /ingredients (Kiểm kê | Tồn lưu trữ) và /recipes (Bao quát | Danh mục) —
-// danh sách tab nằm ở constants/menuTabs.js, trang cha giữ tab đang chọn.
-export default function MenuTabsBar({ tabs, activeTab, onSelect }) {
+import { onboardingHintClass } from '../../utils/onboardingHint'
+
+// Tab bar dùng chung cho /inventory (Kiểm kê | Tồn lưu trữ) và /category (Bao quát | Danh mục) —
+// danh sách tab nằm ở constants/menuTabs.js, tab đang chọn nằm trên URL. hintTab: tab onboarding gợi ý bấm.
+export default function MenuTabsBar({ tabs, activeTab, onSelect, hintTab }) {
     return (
         <div className="bg-surface-light border border-border/50 rounded-[14px] flex p-1 gap-1 shadow-sm">
             {tabs.map(tab => {
@@ -9,7 +11,7 @@ export default function MenuTabsBar({ tabs, activeTab, onSelect }) {
                     <button
                         key={tab.key}
                         onClick={() => onSelect?.(tab.key)}
-                        className={`flex-1 flex items-center justify-center py-2 rounded-[10px] transition-all duration-200 ${active ? 'bg-primary shadow-sm' : 'hover:bg-border/30'}`}
+                        className={`flex-1 flex items-center justify-center py-2 rounded-[10px] transition-all duration-200 ${active ? 'bg-primary shadow-sm' : 'hover:bg-border/30'} ${onboardingHintClass(hintTab === tab.key)}`}
                     >
                         <span className={`text-[11px] font-black uppercase tracking-wider transition-colors ${active ? 'text-bg' : 'text-text-secondary'}`}>
                             {tab.label}

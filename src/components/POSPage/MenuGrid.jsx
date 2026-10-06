@@ -235,7 +235,7 @@ export default function MenuGrid({ products, cart, activeItem, onAddItem, onRemo
                     )}
                     {!isLoading && !hasError && canSetup && (
                         <button
-                            onClick={() => navigate('/recipes', { state: { from: '/pos' } })}
+                            onClick={() => navigate('/category/overall', { state: { from: '/pos' } })}
                             className="w-full py-3 rounded-[12px] bg-primary text-bg font-black text-[14px] hover:bg-primary/90 active:bg-primary/80 transition-colors uppercase"
                         >
                             Thiết lập menu

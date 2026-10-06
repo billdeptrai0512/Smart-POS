@@ -2,10 +2,10 @@ import { ArrowLeft, ArrowRight } from 'lucide-react'
 import MenuTabsBar from './MenuTabsBar'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 
-// Header dùng chung cho /ingredients (Tồn kho) và /recipes (Công thức) — chỉ khác tiêu đề,
+// Header dùng chung cho /inventory (Tồn kho) và /category (Công thức) — chỉ khác tiêu đề,
 // đơn vị đếm ("loại" vs "món") và bộ tab. subtitle (tuỳ chọn) thay dòng đếm — vd. chọn ngày của Kiểm kê. hintBack/hintForward: onboarding gợi ý bấm mũi tên
 // tới trang kế (Công thức sau Tồn kho; Tồn kho sau Công thức) — xem onboarding/steps.js.
-export default function MenuPageHeader({ title, count, unitLabel, subtitle, onBack, onForward, tabs, activeTab, onTabSelect, hintBack, hintForward }) {
+export default function MenuPageHeader({ title, count, unitLabel, subtitle, onBack, onForward, tabs, activeTab, onTabSelect, hintTab, hintBack, hintForward }) {
     return (
         <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
             <div className="flex items-center gap-3">
@@ -33,7 +33,7 @@ export default function MenuPageHeader({ title, count, unitLabel, subtitle, onBa
                 )}
             </div>
 
-            <MenuTabsBar tabs={tabs} activeTab={activeTab} onSelect={onTabSelect} />
+            <MenuTabsBar tabs={tabs} activeTab={activeTab} onSelect={onTabSelect} hintTab={hintTab} />
         </header>
     )
 }

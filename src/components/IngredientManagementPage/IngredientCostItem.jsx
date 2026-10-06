@@ -12,7 +12,7 @@ import { onboardingHintClass } from '../../utils/onboardingHint'
  *   └──────────────────────────┘
  *
  * All edit affordances (name, stock, unit, pack, category, min-stock, cost,
- * nhập kho, xóa) live inside the /ingredients/[key] detail page — card body
+ * nhập kho, xóa) live inside the /inventory/stocking/[key] detail page — card body
  * is a single click target that navigates there.
  */
 export default function IngredientCostItem({

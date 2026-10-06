@@ -7,9 +7,8 @@ import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpense
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import { fetchDailyReportContext, invalidateDailyContext, editIngredientRestock, fetchIngredientRestockHistory, insertShiftClosing, updateShiftClosing } from '../services/orderService'
 import { buildCashPayload } from '../services/reportService'
-import { useShiftInventoryState } from '../hooks/useShiftInventoryState'
+import { useIngredientCatalog } from '../hooks/useIngredientCatalog'
 import { useDailyReportData } from '../hooks/useDailyReportData'
-import { onTabReturn } from '../utils/tabVisibility'
 import { calculateEstimatedConsumption, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, isLiveOrder } from '../utils/inventory'
 import { ingredientLabel, getIngredientUnit } from '../utils/ingredients'
 import { readOnboardingState, DEFAULT_ONBOARDING_STATE, isCashFlowProgressDone, isInventoryProgressDone, reachedCashCard } from '../utils/onboardingStorage'
@@ -18,6 +17,7 @@ import { isRecipeStepActive } from '../components/common/onboarding/steps'
 import { dateStringVN, timeStringVN, isSameDayVN, dateShortVN, dateFullVN } from '../utils/dateVN'
 import { useDateScope } from '../hooks/useDateScope'
 import { goToMenuStep } from '../utils/menuSequence'
+import { useTabRoute } from '../hooks/useTabRoute'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import SalesCard from '../components/DailyReportPage/SalesCard'
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
@@ -42,7 +42,7 @@ const FOOT_BTN = 'px-5 py-2.5 rounded-full bg-surface-light border border-border
 export default function DailyReportPage() {
     const navigate = useNavigate()
     const location = useLocation()
-    const backTo = location.state?.from || '/history'
+    const backTo = location.state?.from || '/history/sales'
     const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits, ingredientConfigs, refreshProducts } = useProducts()
     const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, refreshTodayExpenses } = useHistory()
     const { isStaff, profile, isGuest } = useAuth()
@@ -51,9 +51,9 @@ export default function DailyReportPage() {
     const confirm = useConfirm()
 
     // ── All hooks unconditional (Rules of Hooks) ──────────────────────────────
-    const initialView = [VIEW_ALL, VIEW_PROFIT, VIEW_CASHFLOW].includes(location.state?.initialView)
-        ? location.state.initialView : VIEW_CASHFLOW
-    const [view, setView] = useState(initialView)
+    // Tab nằm trên URL: /report/cashflow · /report/revenue (Lợi nhuận — staff không xem được).
+    const [tabParam, setView] = useTabRoute('/report')
+    const view = isStaff && tabParam === VIEW_PROFIT ? VIEW_CASHFLOW : tabParam
     // Mỗi view là 1 "trang" riêng → đổi view thì cuộn lại đầu (cùng 1 <main> nên scroll bị dính).
     const mainRef = useRef(null)
     useEffect(() => { mainRef.current?.scrollTo(0, 0) }, [view])
@@ -62,7 +62,7 @@ export default function DailyReportPage() {
     const initialDate = location.state?.initialDate || null
 
     // Date selection (scope/offset/customRange + every transition handler) lives in
-    // the shared hook so /daily-report and /history stay in lock-step. Seeded from
+    // the shared hook so /report and /history stay in lock-step. Seeded from
     // nav state so a week/month/custom window survives the Nhật ký ↔ Báo cáo switch.
     const {
         scope, offset, customRange,
@@ -135,53 +135,14 @@ export default function DailyReportPage() {
         isGuest && selectedAddress?.id ? readOnboardingState(selectedAddress.id) : DEFAULT_ONBOARDING_STATE
     )
     const [cashFlowProgress, setCashFlowProgress] = useState(initialOnboardingState.cashFlowProgress)
-    // inventoryProgress do tab Kiểm kê của /ingredients ghi — ở đây chỉ đọc để biết lúc nào hint mũi tên "tiến".
+    // inventoryProgress do tab Kiểm kê của /inventory ghi — ở đây chỉ đọc để biết lúc nào hint mũi tên "tiến".
     const { inventoryProgress } = initialOnboardingState
     useOnboardingProgressPersist('cashFlowProgress', cashFlowProgress, { isGuest, addressId: selectedAddress?.id })
 
-    // Cảnh báo khi tick/bỏ-qua của MÁY NÀY vừa bị máy khác ghi đè (race giữa 2 lượt merge
-    // gần như đồng thời trên cùng nguyên liệu) — xem onFieldConflict trong useShiftInventoryState.
-    const onInventoryFieldConflict = useCallback((ingredient) => {
-        showToast(`${ingredientLabel(ingredient)}: vừa được cập nhật từ máy khác, kiểm tra lại`, 'warning')
-    }, [showToast])
-
-    // Số thực thu ĐÃ LƯU của lần render gần nhất — onRemoteCash cần đọc đồng bộ để biết ô nào
-    // người dùng đang gõ dở. Gán ở dưới, ngay chỗ tính persistedCash (sau khi shiftClosing về).
-    const persistedCashRef = useRef({ cash: 0, transfer: 0 })
-
-    // Máy kia vừa lưu thực thu → nhận nguyên dòng qua kênh realtime của kiểm kê (không tốn
-    // request). Nạp lại CHỈ ô người này chưa đụng — cùng luật per-field dirty với kiểm kê, để
-    // số đang gõ dở không bị giật mất.
-    const onRemoteCash = useCallback((row) => {
-        setShiftClosing(prev => ({ ...prev, ...row }))
-        const adopt = (setInput, remote, wasPersisted) => setInput(prev => (
-            (parseVNDInput(prev) || 0) !== wasPersisted ? prev : (remote ? formatVNDInput(remote) : '')
-        ))
-        adopt(setCashInput, row.actual_cash, persistedCashRef.current.cash)
-        adopt(setTransferInput, row.actual_transfer, persistedCashRef.current.transfer)
-    }, [setShiftClosing])
-
-    // Inventory editor (today scope only). All input state + warehouse fetch live in
-    // the hook so DailyReportPage stays focused on render orchestration. todayISO
-    // drives existingClosing refetch on midnight rollover.
-    // onRemoteCash chỉ truyền ở scope Hôm nay: xem ngày cũ mà nuốt event của hôm nay sẽ
-    // ghi đè shiftClosing của ngày đang xem.
-    // seed: useDailyReportData đã fetch đúng cặp shift_closing/yesterday_closing của NGÀY ĐANG
-    // XEM rồi — cho cả "Hôm nay" LẪN 1 ngày quá khứ cụ thể (scope === 'day'), chỉ range tuần/
-    // tháng mới không có cặp này (fetch mảng nhiều phiếu thay vì 1 cặp). Truyền xuống để hook
-    // khỏi tự fetch trùng (và ở scope quá khứ, khỏi fetch NHẦM phiếu hôm nay).
+    // Báo cáo chỉ còn nhập thực thu (tiền mặt + chuyển khoản) nên không mở kênh realtime kiểm kê —
+    // realtime thuộc tab Kiểm kê của /inventory. Catalog NVL chỉ để biết ca đã đếm đủ chưa (cờ "Sau ca").
     const isDayScope = scope === 'day'
-    const inventorySeed = useMemo(
-        () => ({ isDayScope, seedReady: isDayScope && isAsyncReady, todayClosing: shiftClosing, yesterdayClosing }),
-        [isDayScope, isAsyncReady, shiftClosing, yesterdayClosing]
-    )
-    const inventory = useShiftInventoryState(selectedAddress?.id, selectedAddress?.ingredient_sort_order, todayISO, onInventoryFieldConflict, isTodayScope ? onRemoteCash : undefined, inventorySeed)
-
-    // Kiểm kê (Đầu/Cuối kỳ) KHÔNG tự lưu mỗi keystroke: autosave sẽ đẩy ngay số Cuối kỳ vừa gõ lên DB,
-    // mà get_ingredient_stocks_v2 carry-forward remaining mới nhất ⇒ Đầu kỳ bị ghi đè thành Cuối kỳ y
-    // chang. Chỉ sync khi bấm "Lưu báo cáo" (FAB) → pushInventory → merge RPC → máy kia hội tụ qua
-    // postgres_changes. ("Chuẩn bị hôm nay" — tick/bỏ qua — đã chuyển sang dải notice ở /pos, xem
-    // hooks/usePrepNotice.js.)
+    const { ingredientsList } = useIngredientCatalog(selectedAddress?.id, selectedAddress?.ingredient_sort_order, ingredientConfigs)
 
     // Expense categories — feed dynamic rows into FinanceCards. Refetched per
     // address; new tags added in /history are picked up on next mount or after
@@ -212,7 +173,6 @@ export default function DailyReportPage() {
         ? Number(shiftClosing.actual_cash) : 0
     const persistedTransfer = isTodaysClosing && shiftClosing.actual_transfer != null
         ? Number(shiftClosing.actual_transfer) : 0
-    persistedCashRef.current = { cash: persistedCash, transfer: persistedTransfer }
     // Ô nào đang lệch bản đã lưu — một chỗ tính cho cả nút "Lưu thực thu" (cashDirty),
     // confirm rời trang, và payload lúc ghi. hasExistingRow = true ở đây chỉ để lấy phép so
     // từng ô: nhánh INSERT luôn trả payload đầy đủ nên không suy ra dirty được.
@@ -226,8 +186,7 @@ export default function DailyReportPage() {
     // đứt + ăn màu chữ "đã nhập", trông như đã đếm xong. 0 và trống tính tiền y hệt nhau
     // nên để trống là an toàn.
     // Chỉ seed khi ĐỔI PHIẾU (load lần đầu / sang ngày mới / đổi scope) — cố ý KHÔNG nghe
-    // actual_cash/actual_transfer: máy kia lưu thực thu làm 2 cột đó đổi, effect này mà chạy
-    // sẽ xoá trắng số máy này đang gõ dở. Cập nhật từ xa đi qua onRemoteCash (merge từng ô).
+    // actual_cash/actual_transfer: lưu xong 2 cột đó đổi, effect này mà chạy sẽ xoá trắng số đang gõ dở.
     useEffect(() => {
         if (!isTodayScope) return
         setCashInput(isTodaysClosing && shiftClosing.actual_cash ? formatVNDInput(shiftClosing.actual_cash) : '')
@@ -235,28 +194,7 @@ export default function DailyReportPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isTodayScope, isTodaysClosing, todayISO, shiftClosing?.id, shiftClosing?.closed_at])
 
-    // Lưới an toàn cho realtime: rớt gói = mất event vĩnh viễn (điểm yếu cố hữu của kênh).
-    // Quay lại tab thì kéo phiếu chốt một lần rồi áp qua ĐÚNG đường merge per-field ở trên,
-    // rẻ hơn nhiều so với hiển thị sai số thực thu suốt cả ca.
-    //
-    // onTabReturn (không phải mỗi lần 'visible'): mỗi cú ở đây là xoá sạch reportCache của
-    // địa chỉ cộng một RPC báo cáo — chuyển app qua lại 2 giây không đáng.
-    useEffect(() => {
-        if (!isTodayScope || !selectedAddress?.id) return
-        return onTabReturn(() => {
-            invalidateDailyContext(selectedAddress.id)
-            fetchDailyReportContext(selectedAddress.id)
-                .then(d => {
-                    const row = d?.shift_closing
-                    // RPC thỉnh thoảng trả phiếu HÔM QUA (biên tz) — bỏ qua, không thì số
-                    // hôm qua nhảy vào ô thực thu hôm nay.
-                    if (row && (!row.closed_at || dateStringVN(new Date(row.closed_at)) === todayISO)) onRemoteCash(row)
-                })
-                .catch(() => { /* lưới an toàn hỏng thì im lặng — realtime vẫn là đường chính */ })
-        })
-    }, [isTodayScope, selectedAddress?.id, todayISO, onRemoteCash])
-
-    // Hint spotlight cho phase 3 — xem CashFlowCard. Phase 4 (Kiểm kê) nằm ở /ingredients.
+    // Hint spotlight cho phase 3 — xem CashFlowCard. Phase 4 (Kiểm kê) nằm ở /inventory.
     const showOnboardingHints = isGuest && !!selectedAddress?.id
     // Bước 3: chưa kéo tới thì sáng cả thẻ Thực thu; thẻ hiện trọn rồi (CashFlowCard tự đo, gọi
     // markCashCardSeen) thì chỉ sáng ô còn thiếu.
@@ -271,7 +209,7 @@ export default function DailyReportPage() {
     const hintGoToInventory = showOnboardingHints && cashFlowDone && !inventoryDone
 
     // Phase 5 "Điều chỉnh công thức" không còn nút riêng trong guide — hint thẳng vào mũi tên
-    // "tiến" ở header, đi xuyên page tới /recipes qua menuSequence.js (xem onboarding/steps.js).
+    // "tiến" ở header, đi xuyên page tới /category qua menuSequence.js (xem onboarding/steps.js).
     // recipeProgress do RecipeIngredientPage.jsx ghi — đọc lại từ initialOnboardingState (đã
     // đọc localStorage 1 lần ở trên cho cashFlowProgress/inventoryProgress rồi, khỏi đọc thêm).
     const hintGoToRecipes = showOnboardingHints && isRecipeStepActive(inventoryDone, initialOnboardingState.recipeProgress)
@@ -329,7 +267,7 @@ export default function DailyReportPage() {
             })
             await Promise.all([
                 refetchReport(),
-                inventory.reloadStocks?.(), inventory.reloadIngredients?.(), refreshProducts?.(), refreshTodayExpenses?.(),
+                refreshProducts?.(), refreshTodayExpenses?.(),
             ])
             showToast('Đã lưu phiếu nhập kho', 'success')
         } catch (err) { showError(err, 'Sửa phiếu nhập kho') }
@@ -578,9 +516,9 @@ export default function DailyReportPage() {
     }, [scope, shiftClosing, apiShiftClosings, displayOrders, offlineToday])
 
     // Chốt ca đầy đủ = cash + counted → ghi cờ "Sau ca" cho HistoryPage (xem useShiftFinalized). Tab
-    // Kiểm kê ở /ingredients cũng chạy hook này: đếm xong trước/sau thực thu đều ghi đúng lúc.
+    // Kiểm kê ở /inventory cũng chạy hook này: đếm xong trước/sau thực thu đều ghi đúng lúc.
     useShiftFinalized({
-        shiftClosing, isTodaysClosing, ingredientsList: inventory.ingredientsList,
+        shiftClosing, isTodaysClosing, ingredientsList,
         isTodayScope, addressId: selectedAddress?.id, todayISO,
     })
 
@@ -770,7 +708,7 @@ export default function DailyReportPage() {
                                 cogsByCategory={cogsByCategory}
                                 lossValue={lossValue}
                                 nonRecipeUsageLines={nonRecipeUsageLines}
-                                onRecipesClick={() => guardLeave(() => navigate('/recipes', { state: { from: '/daily-report' } }))}
+                                onRecipesClick={() => guardLeave(() => navigate('/category/recipes', { state: { from: '/report/cashflow' } }))}
                             />
                         )}
 
@@ -848,10 +786,10 @@ export default function DailyReportPage() {
             )}
 
             {/* Sửa phiếu nhập kho (bấm 1 dòng "Mua nguyên liệu/bao bì" trong panel Thực chi) —
-                tái dùng RestockModal của /ingredients, xem handleEditRestockPayment. */}
+                tái dùng RestockModal của /inventory, xem handleEditRestockPayment. */}
             {editingRestock && (() => {
                 const { entry, ingredient } = editingRestock
-                const cfg = (inventory.ingredientsList || []).find(i => i.ingredient === ingredient)
+                const cfg = (ingredientsList || []).find(i => i.ingredient === ingredient)
                 return (
                     <RestockModal
                         ingredient={ingredient}

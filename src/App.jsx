@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { Routes, Route, Navigate, Outlet, useSearchParams, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, Outlet, useSearchParams, useLocation, useParams, generatePath } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AddressProvider, useAddress } from './contexts/AddressContext'
 import { AddressStatsProvider } from './contexts/AddressStatsContext'
@@ -44,13 +44,28 @@ function PageLoading() {
   )
 }
 
-// Legacy /range-report entry — folded into /daily-report's range mode. Preserve
+// Legacy /range-report entry — folded into /report's range mode. Preserve
 // the requested range (and any nav state) by seeding scope on the redirect.
 function RangeReportRedirect() {
   const [params] = useSearchParams()
   const { state } = useLocation()
   const scope = params.get('range') === 'month' ? 'month' : 'week'
-  return <Navigate to="/daily-report" replace state={{ ...state, scope }} />
+  return <Navigate to="/report/cashflow" replace state={{ ...state, scope }} />
+}
+
+// Đường dẫn cũ (/ingredients, /recipes, /daily-report…) → đường mới, giữ param/query/state — để bookmark,
+// PWA đã cài và trang đang mở trước lúc đổi route không rơi vào "*".
+function LegacyRedirect({ to }) {
+  const params = useParams()
+  const { search, state } = useLocation()
+  return <Navigate to={{ pathname: generatePath(to, params), search }} replace state={state} />
+}
+
+// Trang có tab trên URL: tab lạ → về tab đầu (tabs[0]).
+function TabGuard({ base, tabs, children }) {
+  const { tab } = useParams()
+  const { search, state } = useLocation()
+  return tabs.includes(tab) ? children : <Navigate to={{ pathname: `${base}/${tabs[0]}`, search }} replace state={state} />
 }
 
 // Capture a ?clone=CODE share link the moment the app loads (before any auth
@@ -125,20 +140,36 @@ export default function App() {
                       <Route element={<POSProvider />}>
                         <Route element={<OnboardingLayout />}>
                           <Route path="/pos" element={<POSPage />} />
-                          <Route path="/history" element={<HistoryPage />} />
-                          <Route path="/shift-closing" element={<Navigate to="/ingredients" replace />} />
-                          <Route path="/daily-report" element={<DailyReportPage />} />
-                          <Route path="/range-report" element={<RangeReportRedirect />} />
-                          <Route path="/expenses" element={<Navigate to="/history" replace />} />
+                          {/* Nhật ký · Báo cáo · Tồn kho · Danh mục: 4 điểm dừng của mũi tên ‹ › (utils/menuSequence.js), mỗi trang 2 tab trên URL */}
+                          <Route path="/history" element={<Navigate to="/history/sales" replace />} />
+                          <Route path="/history/:tab" element={<TabGuard base="/history" tabs={['sales', 'expense']}><HistoryPage /></TabGuard>} />
+                          <Route path="/report" element={<Navigate to="/report/cashflow" replace />} />
+                          <Route path="/report/:tab" element={<TabGuard base="/report" tabs={['cashflow', 'revenue']}><DailyReportPage /></TabGuard>} />
                           {/* Feature-level permission routes (anyone can view, managers can edit) */}
-                          <Route path="/recipes" element={<RecipeMenuPage />} />
-                          <Route path="/recipes/:productId" element={<RecipeIngredientPage />} />
-                          <Route path="/ingredients" element={<IngredientManagementPage />} />
-                          <Route path="/ingredients/:ingredientKey" element={<IngredientDetailPage />} />
-                          <Route path="/toppings" element={<ToppingsPage />} />
-                          <Route path="/toppings/:toppingId" element={<ToppingDetailPage />} />
-                          <Route path="/discounts" element={<DiscountProgramsPage />} />
-                          <Route path="/discounts/:id" element={<DiscountProgramDetailPage />} />
+                          <Route path="/inventory" element={<Navigate to="/inventory/management" replace />} />
+                          <Route path="/inventory/:tab" element={<TabGuard base="/inventory" tabs={['management', 'stocking']}><IngredientManagementPage /></TabGuard>} />
+                          <Route path="/inventory/stocking/:ingredientKey" element={<IngredientDetailPage />} />
+                          <Route path="/category" element={<Navigate to="/category/overall" replace />} />
+                          <Route path="/category/:tab" element={<TabGuard base="/category" tabs={['overall', 'recipes']}><RecipeMenuPage /></TabGuard>} />
+                          <Route path="/category/recipes/:productId" element={<RecipeIngredientPage />} />
+                          <Route path="/category/toppings" element={<ToppingsPage />} />
+                          <Route path="/category/toppings/:toppingId" element={<ToppingDetailPage />} />
+                          <Route path="/category/discounts" element={<DiscountProgramsPage />} />
+                          <Route path="/category/discounts/:id" element={<DiscountProgramDetailPage />} />
+
+                          {/* Đường dẫn cũ */}
+                          <Route path="/shift-closing" element={<Navigate to="/inventory/management" replace />} />
+                          <Route path="/range-report" element={<RangeReportRedirect />} />
+                          <Route path="/expenses" element={<Navigate to="/history/expense" replace />} />
+                          <Route path="/daily-report" element={<LegacyRedirect to="/report/cashflow" />} />
+                          <Route path="/ingredients" element={<LegacyRedirect to="/inventory/management" />} />
+                          <Route path="/ingredients/:ingredientKey" element={<LegacyRedirect to="/inventory/stocking/:ingredientKey" />} />
+                          <Route path="/recipes" element={<LegacyRedirect to="/category/overall" />} />
+                          <Route path="/recipes/:productId" element={<LegacyRedirect to="/category/recipes/:productId" />} />
+                          <Route path="/toppings" element={<LegacyRedirect to="/category/toppings" />} />
+                          <Route path="/toppings/:toppingId" element={<LegacyRedirect to="/category/toppings/:toppingId" />} />
+                          <Route path="/discounts" element={<LegacyRedirect to="/category/discounts" />} />
+                          <Route path="/discounts/:id" element={<LegacyRedirect to="/category/discounts/:id" />} />
                         </Route>
                       </Route>
                     </Route>

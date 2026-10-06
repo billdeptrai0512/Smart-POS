@@ -1,4 +1,4 @@
-// Bọc 1 ô trong lưới /recipes để kéo-thả trực tiếp trên màn hình chính — không có
+// Bọc 1 ô trong lưới /category để kéo-thả trực tiếp trên màn hình chính — không có
 // nút "vào chế độ sắp xếp" riêng: nhấn giữ + kéo là bắt đầu, thả tay là commit
 // (RecipeMenuPage lưu ngay khi onDragEnd).
 //

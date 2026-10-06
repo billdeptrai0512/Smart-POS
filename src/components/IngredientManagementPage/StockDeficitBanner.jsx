@@ -6,7 +6,7 @@ import { BottomSheet } from '../common/ModalShell'
 
 /**
  * Surface raw-balance deficits (Σ refill < Σ restock) caused by:
- *   1) Staff buying ingredients outside the /ingredients flow
+ *   1) Staff buying ingredients outside the /inventory flow
  *   2) Over-reporting restock during /shift-closing
  *
  * The `max(0, ...)` clamp in fetchIngredientStocks hides these; this banner exposes
@@ -122,7 +122,7 @@ function KiemKeModal({ deficits, ingredientUnits, configByIngredient, addressId,
                 if (!Number.isFinite(delta) || Math.abs(delta) < 0.0001) continue
                 // Pass the RAW (unclamped) warehouse as beforeStock so the audit
                 // entry shows "Tồn -5 → 50" — the honest "sheet was broken at -5,
-                // physical count is 50" story. The displayed warehouse on /ingredients
+                // physical count is 50" story. The displayed warehouse on /inventory
                 // is max(0, raw), but for the kiểm kê log the raw value is what
                 // the manager needs to see.
                 await adjustIngredientStock(addressId ?? null, d.ingredient, delta, staffName || 'Kiểm kê', {

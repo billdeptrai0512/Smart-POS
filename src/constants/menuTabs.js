@@ -1,11 +1,11 @@
-// Tab của 2 trang trong dashboard: Tồn kho (/ingredients) và Công thức (/recipes). Tách khỏi
+// Tab của 2 trang trong dashboard: Tồn kho (/inventory/:tab) và Danh mục (/category/:tab). key = đoạn cuối URL. Tách khỏi
 // MenuTabsBar.jsx vì file component chỉ được export component (react-refresh/only-export-components).
 export const INGREDIENT_TABS = [
-    { key: 'main',      label: 'Kiểm kê' },
-    { key: 'warehouse', label: 'Lưu trữ' },
+    { key: 'management', label: 'Kiểm kê' },
+    { key: 'stocking',   label: 'Lưu trữ' },
 ]
 
 export const RECIPE_TABS = [
-    { key: 'overview', label: 'Tổng quát' },
-    { key: 'recipes',  label: 'Công thức' },
+    { key: 'overall', label: 'Tổng quát' },
+    { key: 'recipes', label: 'Công thức' },
 ]

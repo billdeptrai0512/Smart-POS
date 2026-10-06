@@ -45,7 +45,7 @@ export function POSProvider() {
     const { selectedAddress } = useAddress()
     const { profile, isGuest, hasSession } = useAuth()
     const addressId = selectedAddress?.id
-    // POSProvider bọc chung /pos, /history, /daily-report, /recipes, /ingredients (App.jsx) —
+    // POSProvider bọc chung /pos, /history, /report, /category, /inventory (App.jsx) —
     // nhưng revenue/cupsSold/recentOrders/openTables chỉ mỗi /pos render. Trước đây 2 effect
     // dưới (thống kê hôm nay + mở bàn) chạy ngay khi addressId có, bất kể trang nào đang mở:
     // vào thẳng /history qua "Lối tắt" ở /addresses (không qua /pos) vẫn kéo fetchTodayStats +

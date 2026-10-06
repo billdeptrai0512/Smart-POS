@@ -62,28 +62,28 @@ describe('goToMenuStep', () => {
         expect(ctx.navigate).toHaveBeenCalledWith(MENU_BOUNDARY_ROUTE)
     })
 
-    it('orders › goes to /daily-report carrying the date window', () => {
+    it('orders › goes to /report/cashflow carrying the date window', () => {
         const scopeState = { scope: 'week', offset: -1 }
         const ctx = makeCtx({ scopeState })
         goToMenuStep('orders', +1, ctx)
-        expect(ctx.navigate).toHaveBeenCalledWith('/daily-report', {
+        expect(ctx.navigate).toHaveBeenCalledWith('/report/cashflow', {
             state: { from: '/pos', wizard: true, ...scopeState },
         })
     })
 
-    it('report › goes to /ingredients with from state', () => {
+    it('report › goes to /inventory/management with from state', () => {
         const ctx = makeCtx()
         goToMenuStep('report', +1, ctx)
-        expect(ctx.navigate).toHaveBeenCalledWith('/ingredients', {
+        expect(ctx.navigate).toHaveBeenCalledWith('/inventory/management', {
             state: { from: '/pos', wizard: true },
         })
     })
 
-    it('cross-route back to /history from report navigates with state', () => {
+    it('back to /history/sales from report navigates with state', () => {
         const ctx = makeCtx({ wizard: true })
         goToMenuStep('report', -1, ctx)
-        expect(ctx.navigate).toHaveBeenCalledWith('/history', {
-            state: { from: '/pos', tab: 'orders', wizard: true },
+        expect(ctx.navigate).toHaveBeenCalledWith('/history/sales', {
+            state: { from: '/pos', wizard: true },
         })
     })
 })

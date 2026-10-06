@@ -64,7 +64,7 @@ export function isIsoAfter(a, b) { return !!(a && b && a > b) }
 export function isIsoEqual(a, b) { return !!(a && b && a === b) }
 
 // Preset range builders. Returns "YYYY-MM-DD" strings keyed for the scope system
-// already in place on /history + /daily-report (day, week, month, custom).
+// already in place on /history + /report (day, week, month, custom).
 //
 // `today` is always derived from dateStringVN() at call time so a session that
 // crosses midnight VN doesn't return yesterday's date.

@@ -1,5 +1,5 @@
 export const VIEW_ALL = 'all'
-export const VIEW_PROFIT = 'profit'
+export const VIEW_PROFIT = 'revenue' // = đoạn URL /report/revenue (tab Lợi nhuận)
 export const VIEW_CASHFLOW = 'cashflow'
 
 const MENU = [

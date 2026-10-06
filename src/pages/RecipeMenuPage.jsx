@@ -25,6 +25,7 @@ import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
 import ExcelImportModal from '../components/RecipeMenuPage/ExcelImportModal'
 import { goToMenuStep } from '../utils/menuSequence'
+import { useTabRoute } from '../hooks/useTabRoute'
 import { RECIPE_TABS } from '../constants/menuTabs'
 import { norm, findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
 import { isRecipeProgressDone } from '../utils/onboardingStorage'
@@ -32,7 +33,7 @@ import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps'
 
 // Module-level scroll cache. Set when user clicks a product card to drill into
-// /recipes/:productId; consumed once on next mount of /recipes (back nav).
+// /category/recipes/:productId; consumed once on next mount of /category (back nav).
 // Cleared after restore so a fresh visit from another route starts at top.
 let savedScroll = null
 
@@ -52,7 +53,7 @@ function groupBySections(products) {
 export default function RecipeMenuPage() {
     const navigate = useNavigate()
     const location = useLocation()
-    const backTo = location.state?.from || '/history'
+    const backTo = location.state?.from || '/history/sales'
     const { products, recipes, ingredientCosts, ingredientUnits, ingredientConfigs, discountPrograms, refreshProducts } = useProducts()
     const { selectedAddress } = useAddress()
     const { isManager, isAdmin, isGuest } = useAuth()
@@ -94,10 +95,9 @@ export default function RecipeMenuPage() {
     // Bản sao local để phản hồi ngay khi thả tay, trước khi round-trip lưu server xong.
     const [orderedProducts, setOrderedProducts] = useState(products)
     useEffect(() => { setOrderedProducts(products) }, [products])
-    // 'overview' = Tổng quát (menu chia theo danh mục, lọc theo danh mục, kéo-thả sắp xếp), 'recipes' = Công thức
-    // (chi tiết từng món, tìm kiếm, thêm công thức, topping).
-    // Quay về từ chi tiết công thức / Đồ ăn thêm (state.recipesView) thì mở đúng tab Công thức.
-    const [view, setView] = useState(location.state?.recipesView || (isGuest ? 'recipes' : 'overview'))
+    // Tab nằm trên URL: /category/overall = Tổng quát (menu chia theo danh mục, lọc theo danh mục, kéo-thả sắp xếp),
+    // /category/recipes = Công thức (chi tiết từng món, tìm kiếm, thêm công thức, đồ ăn thêm).
+    const [view, setView] = useTabRoute('/category')
     // Lọc danh mục ở tab Tổng quát: 'all' | 'none' (món chưa thuộc mục nào) | id của mục (divider). Id lạ (mục đã xoá) rơi về 'all'.
     const [categoryFilter, setCategoryFilter] = useState('all')
     const [search, setSearch] = useState('')
@@ -115,7 +115,7 @@ export default function RecipeMenuPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { refreshProducts?.() }, [])
 
-    // Restore scroll on back nav from /recipes/:productId; clear cache after use
+    // Restore scroll on back nav from /category/recipes/:productId; clear cache after use
     useEffect(() => {
         if (savedScroll !== null && mainRef.current) {
             mainRef.current.scrollTop = savedScroll
@@ -264,7 +264,7 @@ export default function RecipeMenuPage() {
                     icon={<BadgePercent size={15} className="text-primary shrink-0" />}
                     label="Khuyến mãi"
                     count={(discountPrograms || []).filter(p => p.enabled).length}
-                    onClick={() => navigate('/discounts', { state: location.state })}
+                    onClick={() => navigate('/category/discounts', { state: location.state })}
                 />
             )}
 
@@ -272,7 +272,7 @@ export default function RecipeMenuPage() {
                 title="Danh mục"
                 count={products.filter(p => !p.is_divider).length}
                 unitLabel="món"
-                subtitle={(view === 'overview' && (categoryChips.length > 0 || canEdit)) ? (
+                subtitle={(view === 'overall' && (categoryChips.length > 0 || canEdit)) ? (
                     <Dropdown
                         ariaLabel="Lọc theo danh mục"
                         value={effectiveFilter}
@@ -294,6 +294,7 @@ export default function RecipeMenuPage() {
                 tabs={RECIPE_TABS}
                 activeTab={view}
                 onTabSelect={setView}
+                hintTab={hintCafeDen && view !== 'recipes' ? 'recipes' : undefined}
                 hintBack={hintIngredientsTab}
             />
 
@@ -320,7 +321,7 @@ export default function RecipeMenuPage() {
                         </div>
                         {canEdit && (
                             <button
-                                onClick={() => navigate('/toppings', { state: location.state })}
+                                onClick={() => navigate('/category/toppings', { state: location.state })}
                                 className="shrink-0 px-3 rounded-[12px] flex items-center justify-center bg-surface border border-border/60 text-text-secondary text-[12px] font-black uppercase tracking-widest hover:bg-surface-light active:scale-[0.98] transition-all"
                             >
                                 Đồ ăn thêm
@@ -340,7 +341,7 @@ export default function RecipeMenuPage() {
                                 ingredientUnits={ingredientUnits}
                                 onClick={() => {
                                     savedScroll = mainRef.current?.scrollTop ?? 0
-                                    navigate(`/recipes/${product.id}`, { state: location.state })
+                                    navigate(`/category/recipes/${product.id}`, { state: location.state })
                                 }}
                                 hint={product.id === hintCafeDenId}
                             />

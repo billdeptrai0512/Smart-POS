@@ -236,7 +236,7 @@ export default function BranchGrid({
                                                                 icon={<Banknote size={16} />}
                                                                 label="Doanh thu"
                                                                 tone="primary"
-                                                                onClick={() => { onSelectHistory?.(addr, 'orders'); setExpandedActionsId(null) }}
+                                                                onClick={() => { onSelectHistory?.(addr, 'sales'); setExpandedActionsId(null) }}
                                                             />
                                                             <ActionPill
                                                                 icon={<Receipt size={16} />}
@@ -259,7 +259,7 @@ export default function BranchGrid({
                                                                 icon={<TrendingUp size={16} />}
                                                                 label="Lợi nhuận"
                                                                 tone="success"
-                                                                onClick={() => { onSelectReport?.(addr, 'profit'); setExpandedActionsId(null) }}
+                                                                onClick={() => { onSelectReport?.(addr, 'revenue'); setExpandedActionsId(null) }}
                                                             />
                                                         </div>
                                                     </div>

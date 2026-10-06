@@ -179,9 +179,9 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     // counter_stock seeds "Đầu kỳ" (= previous shift's remaining).
     // warehouse_stock is shown alongside each row and used to validate restock
     // input against the available kho tổng.
-    // Refetches on tab visibility regain so a /ingredients → + Nhập kho mid-shift
+    // Refetches on tab visibility regain so a /inventory → + Nhập kho mid-shift
     // reflects here without manual refresh.
-    // Exposed so callers can refresh after writing stock (e.g. Nhập kho từ /daily-report)
+    // Exposed so callers can refresh after writing stock (e.g. Nhập kho từ /report)
     // — the warehouse balances then reflect the new purchase without a tab switch.
     const { warehouseStocks, openingStock, reload: reloadWarehouseStock } = useWarehouseStockSync(addressId, { seedReady, isDayScope, seedYesterdayClosing })
     const reloadStocks = useCallback(() => {
@@ -270,7 +270,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     // Đổi lại là mỗi máy đang ở màn báo cáo giữ một websocket; hook này chỉ sống trong
     // DailyReportPage nên kênh chỉ mở vài phút/ngày/máy, không phải cả ngày như orders.
     // Tên kênh có id riêng mỗi instance: supabase.channel() trả LẠI kênh cùng tên nếu còn trong danh sách, mà
-    // kênh chỉ rời danh sách sau khi server báo hủy xong — đi nhanh /pos → /daily-report → /ingredients (cùng
+    // kênh chỉ rời danh sách sau khi server báo hủy xong — đi nhanh /pos → /report → /inventory (cùng
     // hook, instance khác) thì instance mới dính kênh đang hủy, rồi bị lần hủy đó cắt mất.
     const instanceId = useId()
     useEffect(() => {
@@ -364,7 +364,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
 
     // ── Derived: restock-overflow detection ──────────────────────────────────
     // Any row where typed restock > kho tổng available. Submitting through this would
-    // clamp warehouse_stock to 0 on the server and corrupt /ingredients tồn đầu math.
+    // clamp warehouse_stock to 0 on the server and corrupt /inventory tồn đầu math.
     const restockOverflowIngredients = useMemo(() => {
         const list = []
         for (const ing of ingredientsList) {

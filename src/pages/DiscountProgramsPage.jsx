@@ -72,7 +72,7 @@ export default function DiscountProgramsPage() {
             <IngredientDetailHeader
                 title="Giảm giá"
                 subtitle={`${discountPrograms.length} chương trình`}
-                onBack={() => navigate('/recipes', { state: location.state })}
+                onBack={() => navigate('/category/overall', { state: location.state })}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-4 pb-8 space-y-3">
@@ -91,7 +91,7 @@ export default function DiscountProgramsPage() {
                 {discountPrograms.map(p => (
                     <div
                         key={p.id}
-                        onClick={() => navigate(`/discounts/${p.id}`)}
+                        onClick={() => navigate(`/category/discounts/${p.id}`)}
                         className="bg-surface border border-border/60 rounded-[16px] p-4 flex items-center justify-between gap-2 cursor-pointer transition-all shadow-sm hover:border-text/30 hover:shadow-md active:scale-[0.98]"
                     >
                         <div className="min-w-0">

@@ -35,7 +35,7 @@ export async function adjustIngredientStock(addressId: UUID | null, ingredient: 
 
 // Đặt tồn QUẦY (counter) = số đếm tuyệt đối, bằng cách ghi `remaining` của NVL vào
 // phiếu chốt ca MỚI NHẤT — cùng nguồn dữ liệu mà card Hao hụt đọc/ghi, nên số ở
-// /ingredients và số chốt ca luôn khớp nhau. Trả null nếu chưa có phiếu chốt nào.
+// /inventory và số chốt ca luôn khớp nhau. Trả null nếu chưa có phiếu chốt nào.
 export async function setCounterStock(addressId: UUID | null, ingredient: string, newRemaining: number) {
     if (!ingredient) return null
     if (!Number.isFinite(newRemaining) || newRemaining < 0) return null
@@ -70,7 +70,7 @@ export async function setCounterStock(addressId: UUID | null, ingredient: string
     if (error) throw error
 
     if (!latest) {
-        // Mẫu mặc định chưa từng chốt ca — không bắt admin đi qua /daily-report trước,
+        // Mẫu mặc định chưa từng chốt ca — không bắt admin đi qua /report trước,
         // tự tạo phiếu chốt ca đầu tiên để làm "Đầu kỳ" cho template.
         if (addressId !== null) return null
         const { data: created, error: insErr } = await supabase

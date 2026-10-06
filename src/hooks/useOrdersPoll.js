@@ -125,7 +125,7 @@ export function useOrdersPoll({ addressId, isGuest, localOrdersRef, onChange, on
     // query nào để tính và không bao giờ trả lời sai — khác hẳn cổng đếm phiên nó thay thế.
     // Chỉ chặn VÒNG POLL; onResume vẫn chạy ở mọi màn, vì mấy thứ nó kéo về (chi phí,
     // tổng ngày) là của trang Báo cáo — trước đây nằm trong effect realtime không gác màn.
-    const polling = active && (pathname === '/pos' || pathname === '/history')
+    const polling = active && (pathname === '/pos' || pathname.startsWith('/history'))
 
     // Callback dựng inline ở POSContext nên đổi định danh mỗi render; đi qua ref để vòng
     // poll không bị dựng lại (và mất nhịp) sau mỗi lần gõ phím.
