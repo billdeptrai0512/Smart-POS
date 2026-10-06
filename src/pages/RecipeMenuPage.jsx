@@ -262,7 +262,7 @@ export default function RecipeMenuPage() {
             {canEdit && (
                 <NoticeBar
                     icon={<BadgePercent size={15} className="text-primary shrink-0" />}
-                    label="Khuyến mãi"
+                    label="Chương trình khuyến mãi"
                     count={(discountPrograms || []).filter(p => p.enabled).length}
                     onClick={() => navigate('/category/discounts', { state: location.state })}
                 />
