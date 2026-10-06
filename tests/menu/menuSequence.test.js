@@ -10,31 +10,31 @@ import {
 describe('MENU_SEQUENCE shape', () => {
     it('is the 4-stop dashboard line in order (Nhật ký → Báo cáo → Tồn kho → Công thức)', () => {
         expect(MENU_SEQUENCE.map(s => s.key)).toEqual([
-            'orders', 'report', 'main', 'recipes',
+            'sales', 'report', 'main', 'recipes',
         ])
     })
 })
 
 describe('menuStep (bounded line, not a loop)', () => {
     it('steps forward through adjacent stops', () => {
-        expect(menuStep('orders', +1).key).toBe('report')
+        expect(menuStep('sales', +1).key).toBe('report')
         expect(menuStep('report', +1).key).toBe('main')
         expect(menuStep('main', +1).key).toBe('recipes')
     })
     it('steps backward through adjacent stops', () => {
         expect(menuStep('recipes', -1).key).toBe('main')
         expect(menuStep('main', -1).key).toBe('report')
-        expect(menuStep('report', -1).key).toBe('orders')
+        expect(menuStep('report', -1).key).toBe('sales')
     })
     it('returns null past the last stop (goNext from Công thức)', () => {
         expect(menuStep('recipes', +1)).toBeNull()
     })
     it('returns null before the first stop (goBack from Nhật ký)', () => {
-        expect(menuStep('orders', -1)).toBeNull()
+        expect(menuStep('sales', -1)).toBeNull()
     })
     it('falls back to the first stop for an unknown key', () => {
-        expect(menuStep('nope', +1).key).toBe('orders')
-        expect(menuStep(undefined, -1).key).toBe('orders')
+        expect(menuStep('nope', +1).key).toBe('sales')
+        expect(menuStep(undefined, -1).key).toBe('sales')
     })
     it('resolves sub-tab keys to their page stop', () => {
         expect(menuStep('expense', +1).key).toBe('report')
@@ -52,7 +52,7 @@ describe('goToMenuStep', () => {
 
     it('exits to backTo stepping off the start (orders ‹ back)', () => {
         const ctx = makeCtx({ backTo: '/address' })
-        goToMenuStep('orders', -1, ctx)
+        goToMenuStep('sales', -1, ctx)
         expect(ctx.navigate).toHaveBeenCalledWith('/address')
     })
 
@@ -65,7 +65,7 @@ describe('goToMenuStep', () => {
     it('orders › goes to /report/cashflow carrying the date window', () => {
         const scopeState = { scope: 'week', offset: -1 }
         const ctx = makeCtx({ scopeState })
-        goToMenuStep('orders', +1, ctx)
+        goToMenuStep('sales', +1, ctx)
         expect(ctx.navigate).toHaveBeenCalledWith('/report/cashflow', {
             state: { from: '/pos', wizard: true, ...scopeState },
         })

@@ -12,7 +12,7 @@ export default function NoticeBar({ icon, label, count, onClick }) {
         >
             {icon}
             <span className="flex-1 truncate uppercase tracking-wider text-[12px] font-black">{label}</span>
-            <span className="text-[12px] font-bold text-text-secondary tabular-nums">{count}</span>
+            {count > 0 && <span className="text-[12px] font-bold text-text-secondary tabular-nums">{count}</span>}
             <ChevronRight size={16} className="text-text-dim shrink-0" />
         </button>
     )

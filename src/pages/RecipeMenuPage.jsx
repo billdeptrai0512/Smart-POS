@@ -270,7 +270,7 @@ export default function RecipeMenuPage() {
 
             <MenuPageHeader
                 title="Danh mục"
-                count={products.filter(p => !p.is_divider).length}
+                count={realProducts.length}
                 unitLabel="món"
                 subtitle={(view === 'overall' && (categoryChips.length > 0 || canEdit)) ? (
                     <Dropdown

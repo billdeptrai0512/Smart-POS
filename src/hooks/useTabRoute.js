@@ -1,4 +1,3 @@
-import { useCallback } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 
 // Tab của trang nằm trên URL (/history/sales, /report/cashflow, /inventory/stocking, /category/recipes…):
@@ -8,9 +7,6 @@ export function useTabRoute(base) {
     const { tab } = useParams()
     const navigate = useNavigate()
     const { search, state } = useLocation()
-    const setTab = useCallback(
-        (key) => navigate({ pathname: `${base}/${key}`, search }, { replace: true, state }),
-        [navigate, base, search, state],
-    )
+    const setTab = (key) => navigate({ pathname: `${base}/${key}`, search }, { replace: true, state })
     return [tab, setTab]
 }

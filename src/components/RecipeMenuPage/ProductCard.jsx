@@ -16,9 +16,7 @@ export default function ProductCard({ product, prodRecipes, cost, ingredientUnit
             className={`bg-surface border ${isOrphan ? 'border-danger/30 bg-danger/5' : 'border-border/60'} rounded-[1.5rem] p-4 flex flex-col justify-between gap-2 transition-all shadow-sm ${sortMode ? '' : 'cursor-pointer hover:border-text/30 hover:shadow-md active:scale-[0.98]'} ${onboardingHintClass(hint)}`}
         >
             <div className="flex flex-col gap-1.5">
-                <div className="flex items-start justify-between gap-1.5">
-                    <h3 className="font-black text-[15px] leading-tight text-text break-words line-clamp-2 flex-1 min-w-0">{product.name}</h3>
-                </div>
+                <h3 className="font-black text-[15px] leading-tight text-text break-words line-clamp-2">{product.name}</h3>
 
                 {(prodRecipes.length > 0 || notCup) && (
                     <div className="flex flex-col items-left gap-y-1">
@@ -42,7 +40,7 @@ export default function ProductCard({ product, prodRecipes, cost, ingredientUnit
                 )}
 
                 {!sortMode && (
-                    <div className="flex flex-col gap-0.5 text-[12px] text-text-secondary mt-0.5">
+                    <div className="flex flex-col gap-0.5 text-[12px] text-text-secondary mt-1 pt-2 border-t border-border/40">
                         {!isStaff && <span>Giá vốn: <span className="text-primary font-bold">{formatVND(cost)}</span></span>}
                         <span>Giá bán: <span className="text-success font-bold">{formatVND(product.price)}</span></span>
                     </div>

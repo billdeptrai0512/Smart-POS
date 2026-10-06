@@ -8,14 +8,14 @@
 //   route    — điểm vào của trang (tab đầu tiên); tab trong trang nằm trên URL (/history/sales|expense…)
 //   dated    — trang có khoảng ngày: nhận scopeState khi bước sang
 export const MENU_SEQUENCE = [
-    { key: 'orders', route: '/history/sales', dated: true },   // Nhật ký
+    { key: 'sales', route: '/history/sales', dated: true },   // Nhật ký
     { key: 'report', route: '/report/cashflow', dated: true },        // Báo cáo
     { key: 'main', route: '/inventory/management' },             // Tồn kho
     { key: 'recipes', route: '/category/overall' },               // Danh mục
 ]
 
 const KEY_MAP = {
-    expense: 'orders',
+    expense: 'sales',
 }
 
 const resolveKey = (key) => KEY_MAP[key] || key

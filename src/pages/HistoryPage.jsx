@@ -69,10 +69,8 @@ export default function HistoryPage() {
     const backTo = location.state?.from || '/pos'
 
     // ─── UI state ─────────────────────────────────────────────────────
-    // Tab nằm trên URL: /history/sales (key nội bộ 'orders') · /history/expense.
-    const [tabSlug, setTabSlug] = useTabRoute('/history')
-    const activeTab = tabSlug === 'expense' ? 'expense' : 'orders'
-    const setActiveTab = (key) => setTabSlug(key === 'orders' ? 'sales' : key)
+    // Tab nằm trên URL: /history/sales · /history/expense.
+    const [activeTab, setActiveTab] = useTabRoute('/history')
     const [showAddModal, setShowAddModal] = useState(false)
 
     // Onboarding phase 2 "Nhật ký" — tick theo tab /history user tự bấm qua (Thu nhập/Chi
@@ -83,7 +81,7 @@ export default function HistoryPage() {
     // useOnboardingProgressPersist với orderProgress.
     const [journalProgress, setJournalProgress] = useState(() => {
         const stored = isGuest && selectedAddress?.id ? readOnboardingState(selectedAddress.id).journalProgress : DEFAULT_ONBOARDING_STATE.journalProgress
-        return activeTab === 'orders' && !stored.viewedIncome ? { ...stored, viewedIncome: true } : stored
+        return activeTab === 'sales' && !stored.viewedIncome ? { ...stored, viewedIncome: true } : stored
     })
     if (isGuest && activeTab === 'expense' && !journalProgress.viewedExpense) {
         setJournalProgress(prev => ({ ...prev, viewedExpense: true }))
@@ -429,7 +427,7 @@ export default function HistoryPage() {
                 onPresetSelect={applyPreset}
             />
 
-            {activeTab === 'orders' && (
+            {activeTab === 'sales' && (
                 <OrdersList
                     orders={allOrders}
                     totalCups={totalCups}
