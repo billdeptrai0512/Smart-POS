@@ -3,13 +3,18 @@ import { Routes, Route, Navigate, Outlet, useSearchParams, useLocation, useParam
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AddressProvider, useAddress } from './contexts/AddressContext'
 import { AddressStatsProvider } from './contexts/AddressStatsContext'
-import { ProductProvider } from './contexts/ProductContext'
-import { POSProvider } from './contexts/POSContext'
 import { ConfirmProvider } from './contexts/ConfirmContext'
 import ErrorBoundary from './components/common/ErrorBoundary'
-import OnboardingGuide from './components/common/onboarding/OnboardingGuide'
-import PrepPinBar from './components/common/PrepPinBar'
 import './index.css'
+
+// Vùng POS (providers + khung onboarding) nằm trong 1 chunk lazy — xem posShell.jsx. 3 lazy dùng
+// chung 1 import() nên chỉ 1 request; ProtectedRoute gọi loadPosShell sớm để chunk về trong lúc
+// còn auth/chọn địa chỉ, không thành thêm 1 round-trip trước khi /pos render.
+const loadPosShell = () => import('./posShell')
+const lazyShell = (name) => lazy(() => loadPosShell().then(m => ({ default: m[name] })))
+const ProductProvider = lazyShell('ProductProvider')
+const POSProvider = lazyShell('POSProvider')
+const OnboardingLayout = lazyShell('OnboardingLayout')
 
 // Pages — lazy-loaded for route-level code splitting
 const LoginPage = lazy(() => import('./pages/LoginPage'))
@@ -81,6 +86,7 @@ function CloneCapture() {
 // Protected route: allows both authenticated users and active guest sessions
 function ProtectedRoute() {
   const { user, isGuest, loading } = useAuth()
+  useEffect(() => { loadPosShell() }, [])
   if (loading) return <PageLoading />
   if (!user && !isGuest) return <Navigate to="/login" replace />
   return <Outlet />
@@ -92,20 +98,6 @@ function RequireAddress() {
   if (loading) return <PageLoading />
   if (!selectedAddress) return <Navigate to="/addresses" replace />
   return <Outlet />
-}
-
-// Mounts the "Bắt đầu bán hàng" onboarding guide once for every page inside
-// RequireAddress/ProductProvider, instead of each page wiring it in individually.
-function OnboardingLayout() {
-  return (
-    <div className="flex flex-col h-full">
-      <OnboardingGuide />
-      <PrepPinBar />
-      <div className="flex-1 min-h-0">
-        <Outlet />
-      </div>
-    </div>
-  )
 }
 
 export default function App() {

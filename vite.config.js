@@ -36,6 +36,8 @@ export default defineConfig({
           // accident and drags it into the always-eager vendor-react chunk.
           if (id.includes('@sentry')) return
           if (id.includes('@supabase')) return 'vendor-supabase'
+          // Tên cố định để workbox.globIgnores bên dưới loại khỏi precache.
+          if (id.includes('/xlsx/')) return 'vendor-xlsx'
           if (id.includes('react-router') || id.includes('react-dom') || id.includes('/react/') || id.includes('scheduler')) return 'vendor-react'
         },
       },
@@ -79,7 +81,11 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // iOS splash screens load via <link> tags, not the SW — keep them out of precache.
-        globIgnores: ['**/splash/*'],
+        // ponytail: vendor-xlsx (Nhập Excel, ~500 kB) và html2canvas (chỉ in bitmap native — web in
+        // bằng window.print, xem printBillJob) là chunk lazy hiếm dùng: precache chỉ bắt mọi máy tải
+        // ~700 kB lúc cài SW. Lần dùng đầu tải qua mạng; cache HTTP của hash-asset lo các lần sau.
+        // Muốn Nhập Excel chạy offline thì thêm runtimeCaching CacheFirst cho /vendor-xlsx-*.
+        globIgnores: ['**/splash/*', '**/vendor-xlsx-*.js', '**/html2canvas-*.js'],
         // Don't cache Auth/Storage/Realtime endpoints — they are stateful and
         // serving stale tokens or websocket frames is worse than failing fast.
         navigateFallbackDenylist: [/^\/api\//, /^\/auth\//],
