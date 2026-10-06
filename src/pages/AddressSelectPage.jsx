@@ -199,14 +199,14 @@ export default function AddressSelectPage() {
         navigate(`/history/${tab}`, { state: { from: '/addresses' } })
     }
 
-    function handleSelectIngredients(addr) {
+    function handleSelectIngredients(addr, tab) {
         setSelectedAddress(addr)
-        navigate('/inventory/management', { state: { from: '/addresses' } })
+        navigate(`/inventory/${tab}`, { state: { from: '/addresses' } })
     }
 
-    function handleSelectRecipes(addr) {
+    function handleSelectRecipes(addr, tab) {
         setSelectedAddress(addr)
-        navigate('/category/overall', { state: { from: '/addresses' } })
+        navigate(`/category/${tab}`, { state: { from: '/addresses' } })
     }
 
 

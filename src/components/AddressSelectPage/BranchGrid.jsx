@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
     Pencil, Trash2, ClipboardCopy, MoreVertical, X,
     Coffee, FileText, Package, ChevronRight, Eraser,
-    Banknote, Receipt, Wallet, TrendingUp, ChefHat, Warehouse, Printer,
+    Banknote, Receipt, Wallet, TrendingUp, ChefHat, Warehouse, Printer, Archive, LayoutGrid,
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
@@ -234,7 +234,7 @@ export default function BranchGrid({
                                                         <div className="grid grid-cols-2 gap-2">
                                                             <ActionPill
                                                                 icon={<Banknote size={16} />}
-                                                                label="Doanh thu"
+                                                                label="Bán hàng"
                                                                 tone="primary"
                                                                 onClick={() => { onSelectHistory?.(addr, 'sales'); setExpandedActionsId(null) }}
                                                             />
@@ -270,13 +270,13 @@ export default function BranchGrid({
                                                                 icon={<Package size={16} />}
                                                                 label="Kiểm kê"
                                                                 tone="primary"
-                                                                onClick={() => { onSelectIngredients?.(addr); setExpandedActionsId(null) }}
+                                                                onClick={() => { onSelectIngredients?.(addr, 'management'); setExpandedActionsId(null) }}
                                                             />
                                                             <ActionPill
-                                                                icon={<ChefHat size={16} />}
-                                                                label="Công thức"
+                                                                icon={<Archive size={16} />}
+                                                                label="Lưu trữ"
                                                                 tone="primary"
-                                                                onClick={() => { onSelectRecipes?.(addr); setExpandedActionsId(null) }}
+                                                                onClick={() => { onSelectIngredients?.(addr, 'stocking'); setExpandedActionsId(null) }}
                                                             />
                                                             <ActionPill
                                                                 icon={<Warehouse size={16} />}
@@ -284,6 +284,23 @@ export default function BranchGrid({
                                                                 tone="warning"
                                                                 className="col-span-2"
                                                                 onClick={() => setSubModal({ type: 'group', addressId: addr.id })}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Danh mục</p>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <ActionPill
+                                                                icon={<LayoutGrid size={16} />}
+                                                                label="Tổng quát"
+                                                                tone="primary"
+                                                                onClick={() => { onSelectRecipes?.(addr, 'overall'); setExpandedActionsId(null) }}
+                                                            />
+                                                            <ActionPill
+                                                                icon={<ChefHat size={16} />}
+                                                                label="Công thức"
+                                                                tone="primary"
+                                                                onClick={() => { onSelectRecipes?.(addr, 'recipes'); setExpandedActionsId(null) }}
                                                             />
                                                         </div>
                                                     </div>
