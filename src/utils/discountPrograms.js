@@ -13,7 +13,7 @@ function todayDowVN() {
 // days_of_week rỗng = không lọc theo thứ; start/end_date null = không giới hạn phía đó —
 // mirror đúng điều kiện SQL. So sánh chuỗi 'YYYY-MM-DD' theo thứ tự từ điển vẫn đúng thứ tự
 // thời gian.
-function activePrograms(programsForProduct) {
+export function activePrograms(programsForProduct) {
     const dow = todayDowVN()
     const today = dateStringVN()
     return (programsForProduct || []).filter(p => {

@@ -497,7 +497,7 @@ export default function IngredientDetailPage() {
                 onBack={() => navigate('/inventory/stocking', { state: location.state })}
                 viewMode={viewMode}
                 onViewModeChange={setViewMode}
-                onRestock={canEdit ? () => setRestockOpen(true) : null}
+                onAdd={canEdit ? () => setRestockOpen(true) : null}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-4 pb-48 bg-bg space-y-4">

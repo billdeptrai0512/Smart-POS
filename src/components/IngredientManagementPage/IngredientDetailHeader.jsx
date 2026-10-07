@@ -14,7 +14,8 @@ export default function IngredientDetailHeader({
     onBack,
     viewMode = 'details',
     onViewModeChange,
-    onRestock,
+    onAdd,
+    addTitle = 'Nhập kho',
 }) {
     return (
         <header className="shrink-0 pt-6 pb-3 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
@@ -34,14 +35,17 @@ export default function IngredientDetailHeader({
                     )}
                 </div>
 
-                {onRestock && (
+                {/* Không có nút thì giữ chỗ 40px để ô tiêu đề luôn cân tâm với nút Back. */}
+                {onAdd ? (
                     <button
-                        onClick={onRestock}
-                        className="w-10 h-10 flex items-center justify-center rounded-[14px] border border-primary/20 text-primary hover:bg-primary/10 active:scale-95 transition-all shadow-sm focus:outline-none shrink-0"
-                        title="Nhập kho"
+                        onClick={onAdd}
+                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-primary text-bg hover:bg-primary/90 active:scale-95 transition-all shadow-sm focus:outline-none shrink-0"
+                        title={addTitle}
                     >
                         <Plus size={20} strokeWidth={2.5} />
                     </button>
+                ) : (
+                    <div className="w-10 shrink-0" aria-hidden="true" />
                 )}
             </div>
 
