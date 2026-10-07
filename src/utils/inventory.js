@@ -368,6 +368,18 @@ export function estimateCounterRow(row, usedByDay, { today, fromDay }) {
 }
 
 /**
+ * Đầu kỳ của closing ĐẦU TIÊN trong window cho walkDailyIngredientDiff (làm `openingOverrideMap`): như mặc định của
+ * walk — remaining của phiếu hôm qua, NVL không đếm = 0 — nhưng NVL hôm qua KHÔNG đếm thì lấy số ước tính nếu có.
+ */
+export function openingSeed(yesterdayClosing, estimates = {}) {
+    const items = (parseInventoryReport(yesterdayClosing?.inventory_report) || []).filter(it => it?.ingredient)
+    const seed = Object.fromEntries(items.map(it => [it.ingredient, it.remaining ?? 0]))
+    const counted = new Set(items.filter(it => typeof it.remaining === 'number').map(it => it.ingredient))
+    for (const [ingredient, value] of Object.entries(estimates)) if (!counted.has(ingredient)) seed[ingredient] = value
+    return seed
+}
+
+/**
  * CORE — công thức audit DUY NHẤT cho "opening = tồn cuối phiên trước / restock =
  * item.restock / used = tiêu thụ ước tính / theoretical = opening+restock-used /
  * diff = actual-theoretical". Trước đây bị chép tay 3 lần (calculateLossValue,

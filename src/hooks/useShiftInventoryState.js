@@ -183,7 +183,10 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     // reflects here without manual refresh.
     // Exposed so callers can refresh after writing stock (e.g. Nhập kho từ /report)
     // — the warehouse balances then reflect the new purchase without a tab switch.
-    const { warehouseStocks, openingStock, reload: reloadWarehouseStock } = useWarehouseStockSync(addressId, { seedReady, isDayScope, seedYesterdayClosing })
+    const { warehouseStocks, openingStock, reload: reloadWarehouseStock } = useWarehouseStockSync(addressId, {
+        seedReady, isDayScope, seedYesterdayClosing, seedTodayClosing,
+        estimateOpening: isDayScope && seedReady && (!dateKey || dateKey === dateStringVN()),
+    })
     const reloadStocks = useCallback(() => {
         if (addressId === undefined) return Promise.resolve()
         return reloadWarehouseStock().then(({ counters }) => {

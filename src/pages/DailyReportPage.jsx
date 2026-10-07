@@ -5,11 +5,13 @@ import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { formatVNDInput, parseVNDInput } from '../utils'
 import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
-import { fetchDailyReportContext, invalidateDailyContext, editIngredientRestock, fetchIngredientRestockHistory, insertShiftClosing, updateShiftClosing } from '../services/orderService'
+import { fetchDailyReportContext, fetchIngredientStocks, invalidateDailyContext, editIngredientRestock, fetchIngredientRestockHistory, insertShiftClosing, updateShiftClosing } from '../services/orderService'
 import { buildCashPayload } from '../services/reportService'
 import { useIngredientCatalog } from '../hooks/useIngredientCatalog'
 import { useDailyReportData } from '../hooks/useDailyReportData'
-import { calculateEstimatedConsumption, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, isLiveOrder } from '../utils/inventory'
+import { calculateEstimatedConsumption, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, isLiveOrder, openingSeed } from '../utils/inventory'
+import { estimateOpeningStocks } from '../services/counterEstimate'
+import { useCounterCalc } from '../hooks/useCounterCalc'
 import { ingredientLabel, getIngredientUnit } from '../utils/ingredients'
 import { readOnboardingState, DEFAULT_ONBOARDING_STATE, isCashFlowProgressDone, isInventoryProgressDone, reachedCashCard } from '../utils/onboardingStorage'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
@@ -383,6 +385,22 @@ export default function DailyReportPage() {
         [displayOrders, offlineToday, recipes, extraIngredients, ingredientCosts, categoryByIngredient]
     )
 
+    // Đầu kỳ ước tính (hôm nay, NVL hôm qua không đếm) — CÙNG số với thẻ Kiểm kê (useWarehouseStockSync) để
+    // "Hao hụt / hủy" ở đây khớp với hao hụt từng dòng ở đó. Ngày khác / chưa có số → {} = như trước.
+    const counterCalc = useCounterCalc()
+    const [estimatedOpening, setEstimatedOpening] = useState({})
+    const todaysClosing = isTodaysClosing ? shiftClosing : null
+    useEffect(() => {
+        const addressId = selectedAddress?.id
+        if (!isDayScope || !isTodayScope || !isAsyncReady || !addressId) { setEstimatedOpening({}); return }
+        let cancelled = false
+        fetchIngredientStocks(addressId)
+            .then(rows => estimateOpeningStocks(rows, addressId, counterCalc.current, todaysClosing))
+            .then(estimates => { if (!cancelled) setEstimatedOpening(estimates) })
+            .catch(err => console.error('estimatedOpening', err))
+        return () => { cancelled = true }
+    }, [isDayScope, isTodayScope, isAsyncReady, selectedAddress?.id, todaysClosing, counterCalc])
+
     const lossInfo = useMemo(() => {
         // Daily scope: today's single closing + yesterday as the opening source.
         // Range scope: all closings in the period + prev-period closings.
@@ -431,6 +449,7 @@ export default function DailyReportPage() {
         const { loss, consumption } = calculateLossValue({
             shiftClosings: closings,
             prevShiftClosings: prevClosings,
+            openingOverrideMap: isDayScope && isTodayScope && Object.keys(estimatedOpening).length ? openingSeed(yesterdayClosing, estimatedOpening) : null,
             dailyConsumption,
             ingredientConfigs,
             recipeIngredients: buildRecipeIngredientSet(recipes, extraIngredients),
@@ -442,7 +461,7 @@ export default function DailyReportPage() {
             .filter(l => l.value > 0)
             .sort((a, b) => b.value - a.value)
         return { lossValue: Math.round(loss), nonRecipeUsageLines }
-    }, [isDayScope, isTodayScope, isTodaysClosing, shiftClosing, yesterdayClosing, apiShiftClosings, prevShiftClosings, apiOrders, displayOrders, offlineToday, recipes, extraIngredients, ingredientConfigs])
+    }, [isDayScope, isTodayScope, isTodaysClosing, shiftClosing, yesterdayClosing, apiShiftClosings, prevShiftClosings, apiOrders, displayOrders, offlineToday, recipes, extraIngredients, ingredientConfigs, estimatedOpening])
 
     const { lossValue, nonRecipeUsageLines } = lossInfo
     const nonRecipeUsageTotal = nonRecipeUsageLines.reduce((s, l) => s + l.value, 0)

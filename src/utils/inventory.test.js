@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { dateStringVN } from './dateVN'
-import { computeBalance, computeHaoHut, parseInventoryReport, rollIngredientDays, walkDailyIngredientDiff } from './inventory'
+import { computeBalance, computeHaoHut, parseInventoryReport, rollIngredientDays, walkDailyIngredientDiff, openingSeed } from './inventory'
 
 describe('computeBalance / computeHaoHut', () => {
     it('hao hụt = Cuối kỳ − (Đầu kỳ + Nhập thêm − Sử dụng)', () => {
@@ -178,5 +178,29 @@ describe('walkDailyIngredientDiff — song song với bản cũ', () => {
         const d3 = (fn) => fn({ shiftClosings: closings, dailyConsumption: consumption }).find(r => r.dayStr === '2026-10-03' && r.ingredient === 'ca_phe').diff
         expect(d3(walkDailyIngredientDiff)).toBe(-210)   // 700 − (1000 − 90 − 0)
         expect(d3(legacyWalk)).toBe(700)                 // opening 0 − 0 → "Dư" 700, hao hụt mất
+    })
+})
+
+describe('openingSeed', () => {
+    const yesterday = closing('2026-10-06', [
+        { ingredient: 'ca_phe', remaining: 5 },
+        { ingredient: 'sua', remaining: null },
+        { ingredient: 'nap', remaining: 0 },
+    ])
+
+    it('hôm qua đếm thì số đếm thắng (kể cả 0); không đếm thì ước tính; không có ước tính thì 0 như mặc định của walk', () => {
+        expect(openingSeed(yesterday, { ca_phe: 999, sua: 77, nap: 40, moi: 3 }))
+            .toEqual({ ca_phe: 5, sua: 77, nap: 0, moi: 3 })
+        expect(openingSeed(yesterday)).toEqual({ ca_phe: 5, sua: 0, nap: 0 })
+        expect(openingSeed(null, { sua: 7 })).toEqual({ sua: 7 })
+    })
+
+    it('đưa vào walk làm openingOverrideMap: hao hụt hôm nay tính trên Đầu kỳ ước tính chứ không phải 0', () => {
+        const today = closing('2026-10-07', [{ ingredient: 'sua', remaining: 60 }])
+        const run = (estimates) => walkDailyIngredientDiff({
+            shiftClosings: [today], dailyConsumption: { '2026-10-07': { sua: 10 } }, openingOverrideMap: openingSeed(yesterday, estimates),
+        })[0].diff
+        expect(run({})).toBe(70)         // opening 0 − dùng 10 → lý thuyết −10, thực 60 → "Dư" 70, hao hụt thật bị che
+        expect(run({ sua: 77 })).toBe(-7)   // opening 77 − dùng 10 = 67, thực 60 → hụt 7
     })
 })

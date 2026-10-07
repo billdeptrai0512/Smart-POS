@@ -4,7 +4,7 @@ vi.mock('./reportService', () => ({ fetchOrdersSince: vi.fn() }))
 vi.mock('./dailyUsageService', () => ({ fetchStoredUsage: vi.fn(), saveUsageDays: vi.fn() }))
 import { fetchOrdersSince } from './reportService'
 import { fetchStoredUsage, saveUsageDays } from './dailyUsageService'
-import { withCounterEstimate } from './counterEstimate'
+import { withCounterEstimate, estimateOpeningStocks } from './counterEstimate'
 import { dateStringVN, addDaysVN } from '../utils/dateVN'
 
 const daysAgo = (n) => dateStringVN(addDaysVN(new Date(), -n))
@@ -97,5 +97,32 @@ describe('withCounterEstimate', () => {
     it('Mẫu mặc định (không addressId) → không ước tính', async () => {
         const rows = [row()]
         expect(await withCounterEstimate(rows, null, calc)).toEqual(rows)
+    })
+})
+
+describe('estimateOpeningStocks — Đầu kỳ hôm nay = tồn quầy ước tính cuối hôm qua', () => {
+    const ordersFor = async (_addr, from) => (from === daysAgo(2) ? [order(2, 20), order(1, 10)] : [order(0, 50)])
+
+    it('bỏ tiêu hao hôm nay, trừ nhập thêm hôm nay khỏi restock_since_count', async () => {
+        fetchOrdersSince.mockImplementation(ordersFor)
+        const todayClosing = { closed_at: at(0), inventory_report: [{ ingredient: 'ca_phe', restock: 100 }] }
+        // đếm 1000 cách đây 3 ngày; nhập thêm từ đó 300 (trong đó 100 là HÔM NAY); dùng ngày 2: 200, ngày 1: 100
+        const out = await estimateOpeningStocks([row({ restock_since_count: 300 })], 'addr', calc, todayClosing)
+        expect(out).toEqual({ ca_phe: 900 })   // 1000 + (300 − 100) − (200 + 100); 500 tiêu hao hôm nay KHÔNG tính
+        expect(fetchOrdersSince).toHaveBeenCalledTimes(1)   // không tải đơn hôm nay
+    })
+
+    it('chưa có phiếu hôm nay → không trừ gì; đã đếm hôm nay → không có Đầu kỳ ước tính', async () => {
+        fetchOrdersSince.mockImplementation(ordersFor)
+        expect(await estimateOpeningStocks([row({ restock_since_count: 300 })], 'addr', calc, null)).toEqual({ ca_phe: 1000 })   // 1000 + 300 − (200 + 100)
+        expect(await estimateOpeningStocks([row({ counter_counted_on: daysAgo(0) })], 'addr', calc, null)).toEqual({})
+    })
+
+    it('lỗi tải → {} (rơi về hành vi cũ), Mẫu mặc định → {}', async () => {
+        fetchOrdersSince.mockRejectedValue(new Error('network'))
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        expect(await estimateOpeningStocks([row()], 'addr', calc, null)).toEqual({})
+        spy.mockRestore()
+        expect(await estimateOpeningStocks([row()], null, calc, null)).toEqual({})
     })
 })
