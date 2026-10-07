@@ -1,33 +1,20 @@
 -- ==============================================================================================
--- daily_ingredient_usage — tiêu hao nguyên liệu TỪNG NGÀY, lưu lại sau khi ngày đã qua.
+-- daily_ingredient_usage — tiêu hao nguyên liệu TỪNG NGÀY, tính một lần sau khi ngày đã qua rồi giữ nguyên.
+-- Để ước tính tồn quầy theo lý thuyết (xem 20261005) mà không phải tải lại cả nghìn đơn mỗi lần mở trang,
+-- và để đổi công thức chỉ ảnh hưởng ngày sau. usage = { "<ingredient key>": số lượng }; ngày không có đơn
+-- vẫn có dòng {} (không thì bị coi là "chưa tính" mãi). Chỉ ghi NGÀY ĐÃ QUA.
 --
--- Vì sao: "đã dùng bao nhiêu" chỉ tính được từ đơn × công thức (client), DB không có. Ước tính tồn
--- quầy theo lý thuyết (xem 20261005_ingredient_stocks_counted_on.sql) cần tiêu hao của mọi ngày từ
--- lần đếm cuối — tải lại cả nghìn đơn mỗi lần mở trang thì chậm, và đổi công thức sẽ làm số ngày
--- cũ đổi theo. Lưu mỗi ngày một dòng: tính MỘT lần (lười — lần đầu có ai mở trang sau ngày đó), từ
--- đó ngày đã qua là số cố định.
---
--- usage = { "<ingredient key>": <số lượng theo đơn vị của NVL> }; ngày không có đơn vẫn có dòng với
--- {} (nếu không sẽ bị coi là "chưa tính" và tải lại mãi). Chỉ ghi NGÀY ĐÃ QUA — hôm nay còn chạy.
---
--- Chỉ có policy SELECT + INSERT (không UPDATE/DELETE) và client ghi bằng ON CONFLICT DO NOTHING:
---   - ngày đã lưu không ai ghi đè được từ app (đóng băng, và 2 máy cùng tính thì máy tới trước thắng);
---   - sửa một ngày sai = xoá dòng đó trong SQL editor, lần mở sau sẽ tính lại:
---       DELETE FROM daily_ingredient_usage WHERE address_id = '<id>' AND day = '<YYYY-MM-DD>';
--- Quyền theo địa chỉ: admin, hoặc địa chỉ có trong user_address_access, hoặc chủ quản lý trực tiếp
--- (addresses.manager_id) — cùng 3 nhánh với ownership guard của get_ingredient_stocks_v2. Nhân viên
--- cũng phải ghi được (ai mở trang tồn kho đều có thể là người kích hoạt việc tính).
--- Số do client tự tính nên người có quyền ghi được số sai; nó chỉ ảnh hưởng ước tính tồn quầy,
--- không đụng sổ tiền.
+-- Chỉ policy SELECT + INSERT (không UPDATE/DELETE), client ghi bằng ON CONFLICT DO NOTHING → ngày đã
+-- lưu không ghi đè được từ app. Sửa một ngày sai = xoá dòng trong SQL editor, lần mở sau tự tính lại:
+--   DELETE FROM daily_ingredient_usage WHERE address_id = '<id>' AND day = '<YYYY-MM-DD>';
+-- Quyền theo địa chỉ: admin | user_address_access | addresses.manager_id (cùng 3 nhánh với
+-- get_ingredient_stocks_v2); nhân viên cũng ghi được.
 -- ==============================================================================================
 
-BEGIN;
-
 CREATE TABLE IF NOT EXISTS public.daily_ingredient_usage (
-    address_id  uuid        NOT NULL REFERENCES public.addresses(id) ON DELETE CASCADE,
-    day         date        NOT NULL,   -- ngày VN
-    usage       jsonb       NOT NULL CHECK (jsonb_typeof(usage) = 'object'),
-    computed_at timestamptz NOT NULL DEFAULT now(),
+    address_id  uuid  NOT NULL REFERENCES public.addresses(id) ON DELETE CASCADE,
+    day         date  NOT NULL,   -- ngày VN
+    usage       jsonb NOT NULL CHECK (jsonb_typeof(usage) = 'object'),
     PRIMARY KEY (address_id, day)
 );
 
@@ -54,5 +41,3 @@ CREATE POLICY "daily_usage_insert" ON public.daily_ingredient_usage
 
 REVOKE ALL ON public.daily_ingredient_usage FROM PUBLIC, anon;
 GRANT SELECT, INSERT ON public.daily_ingredient_usage TO authenticated;
-
-COMMIT;
