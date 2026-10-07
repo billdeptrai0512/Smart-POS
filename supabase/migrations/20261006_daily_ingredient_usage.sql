@@ -7,8 +7,9 @@
 -- Chỉ policy SELECT + INSERT (không UPDATE/DELETE), client ghi bằng ON CONFLICT DO NOTHING → ngày đã
 -- lưu không ghi đè được từ app. Sửa một ngày sai = xoá dòng trong SQL editor, lần mở sau tự tính lại:
 --   DELETE FROM daily_ingredient_usage WHERE address_id = '<id>' AND day = '<YYYY-MM-DD>';
--- Quyền theo địa chỉ: admin | user_address_access | addresses.manager_id (cùng 3 nhánh với
--- get_ingredient_stocks_v2); nhân viên cũng ghi được.
+-- Quyền theo địa chỉ: admin | user_address_access (như ingredient_groups). KHÔNG có nhánh addresses.manager_id:
+-- auth_owner_id() của nhân viên trả về id manager của họ → nhánh đó cho nhân viên ghi cả chi nhánh đã bị
+-- thu hồi (user_address_revoked). Nhân viên cũng ghi được.
 -- ==============================================================================================
 
 CREATE TABLE IF NOT EXISTS public.daily_ingredient_usage (
@@ -27,7 +28,6 @@ CREATE POLICY "daily_usage_read" ON public.daily_ingredient_usage
     USING (
         (SELECT public.is_admin_auth(auth.uid()))
         OR address_id IN (SELECT address_id FROM public.user_address_access WHERE auth_id = (SELECT auth.uid()))
-        OR address_id IN (SELECT id FROM public.addresses WHERE manager_id = (SELECT public.auth_owner_id(auth.uid())))
     );
 
 DROP POLICY IF EXISTS "daily_usage_insert" ON public.daily_ingredient_usage;
@@ -36,7 +36,6 @@ CREATE POLICY "daily_usage_insert" ON public.daily_ingredient_usage
     WITH CHECK (
         (SELECT public.is_admin_auth(auth.uid()))
         OR address_id IN (SELECT address_id FROM public.user_address_access WHERE auth_id = (SELECT auth.uid()))
-        OR address_id IN (SELECT id FROM public.addresses WHERE manager_id = (SELECT public.auth_owner_id(auth.uid())))
     );
 
 REVOKE ALL ON public.daily_ingredient_usage FROM PUBLIC, anon;
