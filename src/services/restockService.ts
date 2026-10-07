@@ -4,7 +4,7 @@ import { insertExpense } from './expenseService'
 import { invalidateReportCache } from './cache'
 import { upsertIngredientCost } from './ingredientCostService'
 import { roundStock } from './ingredientStockService'
-import { fetchTodayShiftClosing, mergeShiftClosingInventory } from './reportService'
+import { fetchTodayShiftClosing, fetchYesterdayShiftClosing, mergeShiftClosingInventory } from './reportService'
 import type { UUID, Row } from '../types/domain'
 
 // Manual stock adjustment (kiểm kê / hao hụt / seed initial).
@@ -67,16 +67,8 @@ export async function setCounterStock(addressId: UUID | null, ingredient: string
             if (error) throw error
             return data
         }
-        let hasAny: boolean
-        if (localRepo.isGuest()) {
-            hasAny = localRepo.fetchAllLocalShiftClosings(addressId).some((c: Row) => c.inventory_report != null)
-        } else {
-            const { data, error } = await supabase.from('shift_closings').select('id')
-                .eq('address_id', addressId).not('inventory_report', 'is', null).limit(1).maybeSingle()
-            if (error) throw error
-            hasAny = !!data
-        }
-        if (!hasAny) return null
+        // Không có phiếu hôm nay ⇒ phiếu nào còn lại đều là phiếu cũ.
+        if (!(await fetchYesterdayShiftClosing(addressId))) return null
         // Chưa có phiếu hôm nay → RPC tạo mới. Phiếu chưa tồn tại nên không có "Nhập thêm" nào để giữ.
         return mergeShiftClosingInventory(addressId, [
             { ingredient, remaining, opening: null, opening_locked: false, restock: null, skipped: false },

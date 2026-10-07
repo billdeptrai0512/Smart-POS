@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { dateStringVN } from './dateVN'
-import { computeBalance, computeHaoHut, parseInventoryReport, rollIngredientDays, estimateCounterStocks, walkDailyIngredientDiff } from './inventory'
+import { computeBalance, computeHaoHut, parseInventoryReport, rollIngredientDays, walkDailyIngredientDiff } from './inventory'
 
 describe('computeBalance / computeHaoHut', () => {
     it('hao hụt = Cuối kỳ − (Đầu kỳ + Nhập thêm − Sử dụng)', () => {
@@ -31,7 +31,10 @@ describe('parseInventoryReport', () => {
 // Phiếu chốt ngày `day` (giờ VN) — closed_at 20:00 cùng ngày.
 const closing = (day, report) => ({ closed_at: `${day}T20:00:00+07:00`, inventory_report: report })
 
-describe('estimateCounterStocks — tồn quầy theo lý thuyết tới khi đếm lại', () => {
+// ingredient → tồn cuối ngày throughDay (row cuối của mỗi NVL)
+const estimateCounterStocks = (args) => Object.fromEntries(rollIngredientDays(args).map(r => [r.ingredient, r.end]))
+
+describe('rollIngredientDays — tồn quầy theo lý thuyết tới khi đếm lại', () => {
     const used = { '2026-10-02': { ca_phe: 200 }, '2026-10-03': { ca_phe: 300 }, '2026-10-04': { ca_phe: 100 } }
 
     it('đếm hôm 1, không phiếu hôm 2-3 → cuối ngày 3 = số đếm − tiêu hao hôm 2, 3', () => {

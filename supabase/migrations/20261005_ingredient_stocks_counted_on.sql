@@ -1,22 +1,10 @@
 -- ==============================================================================================
--- get_ingredient_stocks_v2 — trả thêm MỐC ĐẾM CUỐI để client ước tính tồn quầy theo lý thuyết.
---
--- Tồn quầy (counter_stock) vẫn là remaining khác-null gần nhất như cũ — KHÔNG đổi. Quán nhiều NVL
--- không kiểm kê hằng ngày cần biết số đó ĐẾM TỪ NGÀY NÀO + đã nhập thêm bao nhiêu kể từ đó, để
--- client tính: ước tính = counter_stock + restock_since_count − Σ tiêu hao từ counter_counted_on.
--- (Tiêu hao = đơn × công thức, chỉ client có — DB không nhân bản logic đó.)
---
--- Hai cột MỚI (cuối bảng kết quả):
---   counter_counted_on   DATE    — ngày VN của phiếu chứa remaining mà counter_stock đang lấy.
---                                  NULL khi counter chỉ đến từ opening (nhập lúc setup) hoặc chưa có
---                                  số nào → client KHÔNG nối tiêu hao, hiển thị số thô như trước.
---   restock_since_count  NUMERIC — Σ restock của CHÍNH địa chỉ này ở các phiếu có ngày VN > ngày đếm
---                                  (restock cùng ngày đã nằm trong số đếm cuối ngày). 0 nếu không có.
---
--- Mọi công thức cũ (counter/today/refill/restock/anchor/warehouse/current_stock) giữ nguyên 100%.
--- RETURNS TABLE đổi → bắt buộc DROP + CREATE (cùng cách 20260720). Theo CLAUDE.md: khai lại
--- SET search_path = public, giữ nguyên ownership guard, REVOKE PUBLIC/anon + GRANT authenticated.
--- Client cũ (chưa biết 2 cột mới) bỏ qua cột thừa — apply migration TRƯỚC khi deploy client mới.
+-- get_ingredient_stocks_v2 — trả thêm mốc đếm cuối để client ước tính tồn quầy theo lý thuyết.
+--   counter_counted_on  DATE    — ngày VN của phiếu chứa remaining mà counter_stock đang lấy
+--                                 (NULL nếu counter chỉ từ opening/setup → client không nối tiêu hao).
+--   restock_since_count NUMERIC — Σ restock của địa chỉ này ở phiếu có ngày VN > ngày đếm.
+-- Mọi công thức cũ giữ nguyên 100%. RETURNS TABLE đổi → DROP + CREATE (như 20260720); khai lại
+-- search_path, ownership guard, REVOKE/GRANT. Apply TRƯỚC khi deploy client mới.
 -- ==============================================================================================
 
 BEGIN;

@@ -289,6 +289,7 @@ const nextDayStr = (d) => new Date(Date.parse(`${d}T00:00:00Z`) + 86400000).toIS
  * `seed`: ingredient → tồn cuối ngày NGAY TRƯỚC ngày phiếu đầu tiên (không biết tiêu hao của các
  * ngày trước đó, nên không nối ngược).
  * Mỗi ngày tối đa 1 phiếu (uniq_shift_closings_address_vn_day); trùng thì lấy cái chốt muộn nhất.
+ * throughDay: ngày cuối (gồm) cần nối; bỏ trống = ngày của phiếu cuối cùng.
  *
  * @returns {Array<{dayStr, ingredient, opening, restock, used, theoretical, remaining, end, closingIdx}>}
  *   remaining = null nếu hôm đó không đếm; closingIdx = vị trí phiếu trong danh sách đã sort
@@ -302,14 +303,15 @@ export function rollIngredientDays({ shiftClosings = [], dailyConsumption = {}, 
     sorted.forEach((c, idx) => {
         if (!c.inventory_report) return
         const dayStr = dateStringVN(new Date(c.closed_at || c.created_at))
-        if (dayStr <= throughDay) closingOfDay.set(dayStr, { c, idx })   // sort tăng dần → cái sau ghi đè
+        closingOfDay.set(dayStr, { c, idx })   // sort tăng dần → cái sau ghi đè
     })
     if (!closingOfDay.size) return []
 
     const state = { ...seed }
     const out = []
-    const firstDay = [...closingOfDay.keys()].sort()[0]
-    for (let dayStr = firstDay; dayStr <= throughDay; dayStr = nextDayStr(dayStr)) {
+    const days = [...closingOfDay.keys()].sort()
+    const lastDay = throughDay ?? days.at(-1)
+    for (let dayStr = days[0]; dayStr <= lastDay; dayStr = nextDayStr(dayStr)) {
         const entry = closingOfDay.get(dayStr)
         const items = new Map()
         for (const it of entry?.c.inventory_report || []) if (it?.ingredient) items.set(it.ingredient, it)
@@ -327,19 +329,6 @@ export function rollIngredientDays({ shiftClosings = [], dailyConsumption = {}, 
         }
     }
     return out
-}
-
-/**
- * Tồn quầy ước tính CUỐI ngày `throughDay` cho từng nguyên liệu (ingredient → số, đã kẹp ≥ 0).
- * Truyền throughDay = hôm qua → Đầu kỳ của hôm nay; = hôm nay → tồn quầy hiện tại
- * (= Lý thuyết, hoặc số đã đếm nếu hôm nay đã nhập Cuối kỳ). Xem rollIngredientDays.
- */
-export function estimateCounterStocks({ shiftClosings, dailyConsumption, throughDay, seed }) {
-    const result = {}
-    for (const row of rollIngredientDays({ shiftClosings, dailyConsumption, throughDay, seed })) {
-        result[row.ingredient] = row.end   // ngày tăng dần → row cuối của mỗi NVL thắng
-    }
-    return result
 }
 
 /**
@@ -371,15 +360,9 @@ export function walkDailyIngredientDiff({ shiftClosings = [], dailyConsumption =
         }
     }
 
-    const closingDays = shiftClosings
-        .filter(c => c.inventory_report)
-        .map(c => dateStringVN(new Date(c.closed_at || c.created_at)))
-    if (!closingDays.length) return []
-    const throughDay = closingDays.reduce((a, b) => (a > b ? a : b))
-
     // Đi theo ngày lịch qua rollIngredientDays: ngày không đếm / không có phiếu vẫn nối lý thuyết
     // → khi đếm lại sau vài ngày, hao hụt là so với tồn ước tính CHỨ KHÔNG phải 0 hay số đếm cũ.
-    return rollIngredientDays({ shiftClosings, dailyConsumption, throughDay, seed: firstOpeningMap })
+    return rollIngredientDays({ shiftClosings, dailyConsumption, seed: firstOpeningMap })
         .filter(r => r.remaining != null)
         .map(r => ({ dayStr: r.dayStr, ingredient: r.ingredient, diff: r1(r.remaining - r.theoretical), idx: r.closingIdx }))
 }
