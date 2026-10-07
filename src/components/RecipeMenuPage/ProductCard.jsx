@@ -13,12 +13,15 @@ export default function ProductCard({ product, prodRecipes, cost, ingredientUnit
     return (
         <div
             onClick={onClick}
-            className={`bg-surface border ${isOrphan ? 'border-danger/30 bg-danger/5' : 'border-border/60'} rounded-[1.5rem] p-4 flex flex-col justify-between gap-2 transition-all shadow-sm ${sortMode ? '' : 'cursor-pointer hover:border-text/30 hover:shadow-md active:scale-[0.98]'} ${onboardingHintClass(hint)}`}
+            className={`bg-surface border ${isOrphan && !sortMode ? 'border-danger/30 bg-danger/5' : 'border-border/60'} rounded-[1.5rem] transition-all shadow-sm ${sortMode ? 'px-4 py-3 min-h-16 flex items-center justify-between gap-2' : 'p-4 flex flex-col justify-between gap-2 cursor-pointer hover:border-text/30 hover:shadow-md active:scale-[0.98]'} ${onboardingHintClass(hint)}`}
         >
-            <div className="flex flex-col gap-1.5">
-                <h3 className="font-black text-[15px] leading-tight text-text break-words line-clamp-2">{product.name}</h3>
+            <div className="flex flex-col gap-1.5 min-w-0">
+                <h3 className="font-black text-[15px] leading-tight text-text break-words line-clamp-2">
+                    {sortMode && isOrphan && <span title="Chưa có công thức" className="inline-block w-1.5 h-1.5 mr-1.5 align-middle rounded-full bg-danger" />}
+                    {product.name}
+                </h3>
 
-                {(prodRecipes.length > 0 || notCup) && (
+                {!sortMode && (prodRecipes.length > 0 || notCup) && (
                     <div className="flex flex-col items-left gap-y-1">
                         <div className="flex flex-col gap-0.5">
                             {prodRecipes.map(r => {
@@ -47,7 +50,7 @@ export default function ProductCard({ product, prodRecipes, cost, ingredientUnit
                 )}
             </div>
 
-            {dragHandle && <div className="flex justify-end">{dragHandle}</div>}
+            {dragHandle}
         </div>
     )
 }

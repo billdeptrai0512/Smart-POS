@@ -2,7 +2,7 @@
 // nút "vào chế độ sắp xếp" riêng: nhấn giữ + kéo là bắt đầu, thả tay là commit
 // (RecipeMenuPage lưu ngay khi onDragEnd).
 //
-// Card: `handle` (nút nổi ở góc dưới-phải card, touch-none) là bề mặt kéo DUY NHẤT — card ở chế độ
+// Card: `handle` (nút ở cuối hàng card, touch-none) là bề mặt kéo DUY NHẤT — card ở chế độ
 // sắp xếp (ProductCard sortMode) không mở món khi tap.
 //
 // Mục phân nhóm: dùng `dragHandleProps` thay vì icon riêng — MenuDivider tự áp
@@ -33,9 +33,9 @@ export default function SortableItem({ id, noAnimate, children }) {
             {...listeners}
             onClick={e => e.stopPropagation()}
             aria-label="Kéo để sắp xếp"
-            className="shrink-0 w-10 h-9 flex items-center justify-center rounded-[10px] bg-surface-light border border-border/60 text-text-secondary shadow-sm hover:bg-border/40 hover:text-text active:bg-border/60 touch-none cursor-grab active:cursor-grabbing focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="shrink-0 w-10 h-10 -mr-2 flex items-center justify-center rounded-xl text-text-secondary/80 hover:text-text active:bg-border/40 touch-none cursor-grab active:cursor-grabbing focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
-            <GripVertical size={18} />
+            <GripVertical size={16} />
         </button>
     )
     // handleRef (không đặt tên "ref") — object thường, không phải React ref; đặt tên "ref"

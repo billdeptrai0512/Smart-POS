@@ -292,7 +292,7 @@ export default function BranchGrid({
                                                         <div className="grid grid-cols-2 gap-2">
                                                             <ActionPill
                                                                 icon={<LayoutGrid size={16} />}
-                                                                label="Tổng quát"
+                                                                label="Menu"
                                                                 tone="primary"
                                                                 onClick={() => { onSelectRecipes?.(addr, 'overall'); setExpandedActionsId(null) }}
                                                             />

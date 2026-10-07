@@ -6,6 +6,6 @@ export const INGREDIENT_TABS = [
 ]
 
 export const RECIPE_TABS = [
-    { key: 'overall', label: 'Tổng quát' },
+    { key: 'overall', label: 'Menu' },
     { key: 'recipes', label: 'Công thức' },
 ]

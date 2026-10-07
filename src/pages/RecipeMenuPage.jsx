@@ -288,7 +288,7 @@ export default function RecipeMenuPage() {
                         ]}
                         align="center"
                         className="max-w-full"
-                        triggerClassName="mt-1 gap-1 pl-5 text-[12px] leading-none text-text/80 uppercase tabular-nums"
+                        triggerClassName="mt-1 gap-1 pl-5 text-[11px] leading-4 text-text/80 uppercase tabular-nums"
                     />
                 ) : undefined}
                 onBack={() => goToMenuStep('recipes', -1, { navigate, backTo, wizard: location.state?.wizard })}
