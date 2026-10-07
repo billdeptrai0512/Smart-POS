@@ -1,8 +1,8 @@
 import { fetchOrdersSince } from './reportService'
 import { fetchStoredUsage, saveUsageDays } from './dailyUsageService'
-import { estimateCounterRow, nextDayStr } from '../utils/inventory'
+import { estimateCounterRow } from '../utils/inventory'
 import { missingUsageDays, usageByDay } from '../utils/dailyUsage'
-import { dateStringVN, addDaysVN } from '../utils/dateVN'
+import { dateStringVN, addDaysVN, nextDayStr } from '../utils/dateVN'
 
 // Xa hơn số ngày này thì giữ số đếm thô: tải cả chục nghìn đơn chỉ để ước tính một NVL bỏ quên là không đáng.
 const MAX_DAYS = 60
@@ -33,7 +33,9 @@ export async function withCounterEstimate(rows, addressId, { recipes, extraIngre
         const missing = missingUsageDays(stored, fromDay, today)
         let computed = {}
         if (missing.length) {
-            computed = usageByDay(await fetchOrdersSince(addressId, missing[0]), missing, recipes, extraIngredients)
+            // Chỉ tải đúng khoảng ngày thiếu: hôm nay đã có ở trên, các ngày đã lưu ngoài khoảng khỏi tải lại.
+            const window = await fetchOrdersSince(addressId, missing[0], nextDayStr(missing.at(-1)))
+            computed = usageByDay(window, missing, recipes, extraIngredients)
             const recipesAreThisAddress = recipes.length > 0 && recipes.every(r => r.address_id === addressId)
             if (canPersist && recipesAreThisAddress) saveUsageDays(addressId, computed)
         }

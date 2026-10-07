@@ -301,26 +301,27 @@ export async function fetchLastWeekSameDayOrderItems(addressId: UUID, daysAgo = 
     })
 }
 
-// Đơn chưa xoá từ 00:00 VN của `fromDay` ('YYYY-MM-DD') tới nay, kèm món — để ước tính tiêu hao từ
+// Đơn chưa xoá từ 00:00 VN của `fromDay` ('YYYY-MM-DD') tới `toDay` (loại trừ; bỏ trống = tới nay), kèm món — để ước tính tiêu hao từ
 // lần đếm cuối. Phân trang vì PostgREST cắt ở 1000 dòng: cắt âm thầm = thiếu tiêu hao = tồn cao giả.
-export async function fetchOrdersSince(addressId: UUID, fromDay: string) {
-    return reportCache.through([addressId, 'ordersSince', fromDay], async () => {
+export async function fetchOrdersSince(addressId: UUID, fromDay: string, toDay?: string) {
+    return reportCache.through([addressId, 'ordersSince', fromDay, toDay], async () => {
         const start = new Date(`${fromDay}T00:00:00+07:00`)
+        const end = toDay ? new Date(`${toDay}T00:00:00+07:00`) : null
         if (localRepo.isGuest()) {
             return localRepo.fetchAllLocalOrders(addressId)
-                .filter((o: Row) => !o.deleted_at && new Date(o.created_at) >= start)
+                .filter((o: Row) => !o.deleted_at && new Date(o.created_at) >= start && (!end || new Date(o.created_at) < end))
         }
         const PAGE = 1000
         const out: Row[] = []
         for (let from = 0; ; from += PAGE) {
-            const { data, error } = await supabase
+            let q = supabase
                 .from('orders')
                 .select('id, created_at, order_items(quantity, product_id, extra_ids)')
                 .eq('address_id', addressId)
                 .is('deleted_at', null)
                 .gte('created_at', start.toISOString())
-                .order('created_at').order('id')
-                .range(from, from + PAGE - 1)
+            if (end) q = q.lt('created_at', end.toISOString())
+            const { data, error } = await q.order('created_at').order('id').range(from, from + PAGE - 1)
             if (error) throw error
             out.push(...(data as Row[]))
             if (data.length < PAGE) return out

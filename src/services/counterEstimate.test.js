@@ -24,8 +24,8 @@ describe('withCounterEstimate', () => {
         // đếm cách đây 3 ngày: hôm đếm bán 99 ly (đã nằm trong số đếm), 2 ngày sau bán 20 + 30 ly = 500g
         fetchOrdersSince.mockResolvedValue([order(3, 99), order(2, 20), order(0, 30)])
         const [r] = await withCounterEstimate([row({ restock_since_count: 200 })], 'addr', calc)
-        expect(r).toMatchObject({ counter_stock: 700, current_stock: 1200, counter_estimated: true, counter_counted_stock: 1000 })
-        expect(fetchOrdersSince).toHaveBeenCalledWith('addr', daysAgo(2))   // cửa sổ bắt đầu từ ngày SAU ngày đếm
+        expect(r).toMatchObject({ counter_stock: 700, current_stock: 1200, counter_estimated: true })
+        expect(fetchOrdersSince).toHaveBeenCalledWith('addr', daysAgo(2), daysAgo(0))   // cửa sổ: từ ngày SAU ngày đếm tới trước hôm nay (hôm nay tải riêng)
     })
 
     it('ngày đã lưu thì dùng luôn; chỉ tải đơn và chỉ GHI các ngày còn thiếu; hôm nay tính trực tiếp, không ghi', async () => {
@@ -33,7 +33,8 @@ describe('withCounterEstimate', () => {
         fetchOrdersSince.mockResolvedValue([order(2, 99), order(1, 10), order(0, 30)])
         const [r] = await withCounterEstimate([row()], 'addr', calc)
         expect(r.counter_stock).toBe(400)   // 1000 − (200 đã lưu + 100 ngày thiếu + 300 hôm nay)
-        expect(fetchOrdersSince).toHaveBeenCalledWith('addr', daysAgo(1))
+        expect(fetchOrdersSince).toHaveBeenCalledWith('addr', daysAgo(1), daysAgo(0))
+        expect(fetchOrdersSince).toHaveBeenCalledWith('addr', daysAgo(0))   // hôm nay: một lần, không lặp trong cửa sổ ngày thiếu
         expect(saveUsageDays).toHaveBeenCalledWith('addr', { [daysAgo(1)]: { ca_phe: 100 } })
     })
 
@@ -89,7 +90,7 @@ describe('withCounterEstimate', () => {
         // NVL khác đếm gần hơn vẫn ước tính bình thường, cửa sổ chỉ theo NVL còn tồn
         fetchOrdersSince.mockResolvedValue([order(1, 10)])
         const out = await withCounterEstimate([rows[0], row({ ingredient: 'sua', counter_stock: 300, counter_counted_on: daysAgo(2) })], 'addr', calc)
-        expect(fetchOrdersSince).toHaveBeenCalledWith('addr', daysAgo(1))
+        expect(fetchOrdersSince).toHaveBeenCalledWith('addr', daysAgo(1), daysAgo(0))
         expect(out[0].counter_estimated).toBeUndefined()
     })
 

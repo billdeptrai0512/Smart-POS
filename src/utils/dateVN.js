@@ -86,6 +86,11 @@ export function addDaysVN(date, days) {
     return new Date(start.getTime() + days * 86_400_000)
 }
 
+// Ngày kế tiếp của một chuỗi 'YYYY-MM-DD' (thuần chuỗi, UTC — không dính timezone máy).
+export function nextDayStr(day) {
+    return new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)
+}
+
 // Start of "this week in VN" — Monday 00:00:00.000 VN.
 export function startOfWeekVN(date = new Date()) {
     const todayVN = startOfDayVN(date)

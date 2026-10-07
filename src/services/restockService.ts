@@ -84,9 +84,9 @@ export async function setCounterStock(addressId: UUID | null, ingredient: string
         return localRepo.upsertLocalShiftClosing({ ...latest, inventory_report: applyToReport(latest.inventory_report) })
     }
 
-    let latestQ = supabase.from('shift_closings').select('id, inventory_report')
-    latestQ = addressId ? latestQ.eq('address_id', addressId) : latestQ.is('address_id', null)
-    const { data: latest, error } = await latestQ
+    // Từ đây chỉ còn Mẫu mặc định (address null) — địa chỉ thật đã return ở nhánh trên.
+    const { data: latest, error } = await supabase.from('shift_closings').select('id, inventory_report')
+        .is('address_id', null)
         .not('inventory_report', 'is', null)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -96,7 +96,6 @@ export async function setCounterStock(addressId: UUID | null, ingredient: string
     if (!latest) {
         // Mẫu mặc định chưa từng chốt ca — không bắt admin đi qua /report trước,
         // tự tạo phiếu chốt ca đầu tiên để làm "Đầu kỳ" cho template.
-        if (addressId !== null) return null
         const { data: created, error: insErr } = await supabase
             .from('shift_closings')
             .insert({ address_id: null, inventory_report: applyToReport(null) })

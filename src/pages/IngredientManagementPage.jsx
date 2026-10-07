@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
 import { withCounterEstimate } from '../services/counterEstimate'
+import { useCounterCalc } from '../hooks/useCounterCalc'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Plus, Settings2 } from 'lucide-react'
 import { BottomSheet, SheetHeader } from '../components/common/ModalShell'
@@ -57,7 +58,7 @@ export default function IngredientManagementPage() {
         ingredientCosts: contextCosts, ingredientUnits: contextUnits,
         recipes: contextRecipes, products: contextProducts, ingredientConfigs,
         productExtras: contextProductExtras, extraIngredients: contextExtraIngs,
-        ingredientGroups, refreshProducts, loading: productsLoading,
+        ingredientGroups, refreshProducts,
     } = useProducts()
     const { selectedAddress, siblingsByAddress } = useAddress()
     const warehouseSiblings = selectedAddress ? siblingsByAddress[selectedAddress.id] : null
@@ -224,10 +225,7 @@ export default function IngredientManagementPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { refreshProducts?.({ ifStale: true }) }, [])
 
-    // Công thức mới nhất cho withCounterEstimate mà không đưa vào deps của loadStocks (refreshProducts đổi
-    // identity recipes sẽ kéo theo tải lại cả danh sách tồn).
-    const calcRef = useRef()
-    calcRef.current = { recipes: contextRecipes, extraIngredients: contextExtraIngs, canPersist: !productsLoading }
+    const calcRef = useCounterCalc()
 
     const loadStocks = useCallback(async () => {
         // selectedAddress.id may be null for the default template — fetchIngredientStocks

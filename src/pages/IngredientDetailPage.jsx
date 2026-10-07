@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { withCounterEstimate } from '../services/counterEstimate'
+import { useCounterCalc } from '../hooks/useCounterCalc'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
@@ -40,9 +41,8 @@ export default function IngredientDetailPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const { ingredientKey } = useParams()
-    const { ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, refreshProducts, recipes, extraIngredients, loading: productsLoading } = useProducts()
-    const calcRef = useRef()
-    calcRef.current = { recipes, extraIngredients, canPersist: !productsLoading }
+    const { ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, refreshProducts } = useProducts()
+    const calcRef = useCounterCalc()
     const { selectedAddress, siblingsByAddress } = useAddress()
     const warehouseSiblings = selectedAddress ? siblingsByAddress[selectedAddress.id] : null
     const warehouseGroupNote = warehouseSiblings?.length
@@ -121,7 +121,7 @@ export default function IngredientDetailPage() {
     const fetchStockRow = useCallback(async (addressId) => {
         const row = (await fetchIngredientStocks(addressId)).find(s => s.ingredient === ingredientKey)
         return row ? (await withCounterEstimate([row], addressId, calcRef.current))[0] : row
-    }, [ingredientKey])
+    }, [ingredientKey, calcRef])
 
     useEffect(() => {
         if (!selectedAddress || !ingredientKey) return
