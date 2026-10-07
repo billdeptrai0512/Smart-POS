@@ -1,9 +1,10 @@
-import { Fragment, memo, useMemo, useState } from 'react'
-import { AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Info } from 'lucide-react'
+import { Fragment, memo, useCallback, useMemo, useState } from 'react'
+import { AlertTriangle, Check, ChevronDown, ChevronUp, ClipboardList, Info } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit, lookupByLabel } from '../../utils/ingredients'
 import { formatPackedQty, computeBalance, computeHaoHut, r1 } from '../../utils/inventory'
 import { formatVND } from '../../utils'
 import { onboardingHintClass } from '../../utils/onboardingHint'
+import { useProducts } from '../../contexts/ProductContext'
 import CollapsibleCard from './CollapsibleCard'
 
 // Status priority for sorting collapsed list. Lower = render earlier.
@@ -68,28 +69,37 @@ export default function InventoryReportCard({
     const sortOpening = baselineInputs?.opening ?? openingInputs
     const sortRestock = baselineInputs?.restock ?? restockInputs
     const sortInventory = baselineInputs?.inventory ?? inventoryInputs
+    const baseStatus = useCallback(ing => computeRowStatus({
+        inventoryValue: sortInventory[ing.ingredient],
+        restockValue: sortRestock[ing.ingredient],
+        warehouseAvailable: warehouseStocks[ing.ingredient],
+        openingValue: sortOpening[ing.ingredient],
+        openingFallback: openingStock[ing.ingredient],
+        used: lookupByLabel(ing.ingredient, usedMap),
+    }), [sortOpening, sortRestock, sortInventory, warehouseStocks, openingStock, usedMap])
     const sortedList = useMemo(() => [...ingredientsList].sort((a, b) => {
-        const sa = computeRowStatus({
-            inventoryValue: sortInventory[a.ingredient],
-            restockValue: sortRestock[a.ingredient],
-            warehouseAvailable: warehouseStocks[a.ingredient],
-            openingValue: sortOpening[a.ingredient],
-            openingFallback: openingStock[a.ingredient],
-            used: lookupByLabel(a.ingredient, usedMap),
-        })
-        const sb = computeRowStatus({
-            inventoryValue: sortInventory[b.ingredient],
-            restockValue: sortRestock[b.ingredient],
-            warehouseAvailable: warehouseStocks[b.ingredient],
-            openingValue: sortOpening[b.ingredient],
-            openingFallback: openingStock[b.ingredient],
-            used: lookupByLabel(b.ingredient, usedMap),
-        })
-        const pa = STATUS_PRIORITY[sa]
-        const pb = STATUS_PRIORITY[sb]
+        const pa = STATUS_PRIORITY[baseStatus(a)]
+        const pb = STATUS_PRIORITY[baseStatus(b)]
         if (pa !== pb) return pa - pb
         return ingredientLabel(a.ingredient).localeCompare(ingredientLabel(b.ingredient))
-    }), [ingredientsList, sortOpening, sortRestock, sortInventory, warehouseStocks, openingStock, usedMap])
+    }), [ingredientsList, baseStatus])
+
+    // Chia section theo nhóm nguyên liệu (ingredient_groups). Địa chỉ chưa chia nhóm → sections null = danh sách phẳng như cũ.
+    // Mặc định chỉ mở 1 section (nhân viên đếm theo từng kệ): section chứa NVL onboarding đang gợi ý, không thì
+    // section đầu tiên còn "Chưa nhập". Tính theo baseline nên gõ số không làm section tự đóng giữa chừng;
+    // lưu xong baseline đổi → mở sang section kế. `toggled` là phần người dùng bấm tay, đè mặc định.
+    const { ingredientGroups } = useProducts()
+    const [toggled, setToggled] = useState({})
+    const { sections, defaultOpenId } = useMemo(() => {
+        if (!ingredientGroups?.length) return { sections: null, defaultOpenId: null }
+        const byId = new Map(ingredientGroups.map(g => [g.id, { id: g.id, name: g.name, items: [] }]))
+        const none = { id: 'none', name: 'Chưa phân nhóm', items: [] }
+        for (const ing of sortedList) (byId.get(ing.group_id) || none).items.push(ing)
+        const sections = [...byId.values(), none].filter(sec => sec.items.length)
+        const target = (hintIngredient && sections.find(sec => sec.items.some(i => i.ingredient === hintIngredient)))
+            || sections.find(sec => sec.items.some(i => baseStatus(i) === 'pending'))
+        return { sections, defaultOpenId: target?.id ?? null }
+    }, [ingredientGroups, sortedList, baseStatus, hintIngredient])
 
     // Tổng giá trị hao hụt — sum |Hao hụt × unit_cost| over rows that came up short,
     // computed against LIVE inputs so the header summary tracks what staff is counting now.
@@ -124,6 +134,65 @@ export default function InventoryReportCard({
     }
     if (!ingredientsList.length) return null
 
+    const renderRow = ing => (
+        <IngredientRow
+            key={`${ing.ingredient}-${baselineVersion}`}
+            ing={ing}
+            ingredientUnits={ingredientUnits}
+            openingValue={openingInputs[ing.ingredient]}
+            openingFallback={openingStock[ing.ingredient]}
+            isLocked={openingLocked[ing.ingredient]}
+            restockValue={restockInputs[ing.ingredient]}
+            inventoryValue={inventoryInputs[ing.ingredient]}
+            warehouseAvailable={warehouseStocks[ing.ingredient]}
+            used={lookupByLabel(ing.ingredient, usedMap)}
+            breakdown={lookupByLabel(ing.ingredient, consumptionBreakdown) || null}
+            productRef={ingredientToProduct[ing.ingredient]}
+            isSubmitting={isSubmitting}
+            lockWarehouseInputs={lockWarehouseInputs}
+            readOnly={readOnly}
+            onOpeningChange={onOpeningChange}
+            onRestockChange={onRestockChange}
+            onInventoryChange={onInventoryChange}
+            hint={ing.ingredient === hintIngredient}
+        />
+    )
+
+    // Footer tổng — tiền hao hụt cộng dồn, chỉ hiện khi đã kiểm ít nhất 1 NVL.
+    const totalRow = countedCount > 0 && (
+        <div className="flex items-center justify-between">
+            <span className="text-[14px] font-black text-text">Tổng cộng</span>
+            <span className={`text-[14px] font-black tabular-nums ${totalLossValue > 0 ? 'text-danger' : 'text-text-secondary'}`}>
+                {totalLossValue > 0 ? '-' : ''}{formatVND(Math.round(totalLossValue))}
+            </span>
+        </div>
+    )
+
+    // Có nhóm → mỗi nhóm là 1 card riêng (không còn card bọc "Nguyên liệu đã sử dụng"); open/onToggleOpen của cha bỏ qua.
+    if (sections) {
+        return (
+            <>
+                {sections.map(sec => {
+                    const done = sec.items.filter(i => { const v = inventoryInputs[i.ingredient]; return v !== undefined && v !== '' }).length
+                    const secOpen = toggled[sec.id] ?? sec.id === defaultOpenId
+                    return (
+                        <CollapsibleCard
+                            key={sec.id}
+                            title={sec.name}
+                            titleExtra={done === sec.items.length && <Check size={13} className="text-success" />}
+                            count={`${done}/${sec.items.length}`}
+                            open={secOpen}
+                            onToggle={() => setToggled(t => ({ ...t, [sec.id]: !secOpen }))}
+                        >
+                            <div className="flex flex-col">{sec.items.map(renderRow)}</div>
+                        </CollapsibleCard>
+                    )
+                })}
+                {totalRow && <div className="bg-surface rounded-[20px] px-3 py-3 border border-border/60 shadow-sm">{totalRow}</div>}
+            </>
+        )
+    }
+
     return (
         <CollapsibleCard
             icon={<ClipboardList size={15} className="text-primary shrink-0" />}
@@ -132,41 +201,8 @@ export default function InventoryReportCard({
             open={open}
             onToggle={onToggleOpen}
         >
-            <div className="flex flex-col">
-            {sortedList.map(ing => (
-                <IngredientRow
-                    key={`${ing.ingredient}-${baselineVersion}`}
-                    ing={ing}
-                    ingredientUnits={ingredientUnits}
-                    openingValue={openingInputs[ing.ingredient]}
-                    openingFallback={openingStock[ing.ingredient]}
-                    isLocked={openingLocked[ing.ingredient]}
-                    restockValue={restockInputs[ing.ingredient]}
-                    inventoryValue={inventoryInputs[ing.ingredient]}
-                    warehouseAvailable={warehouseStocks[ing.ingredient]}
-                    used={lookupByLabel(ing.ingredient, usedMap)}
-                    breakdown={lookupByLabel(ing.ingredient, consumptionBreakdown) || null}
-                    productRef={ingredientToProduct[ing.ingredient]}
-                    isSubmitting={isSubmitting}
-                    lockWarehouseInputs={lockWarehouseInputs}
-                    readOnly={readOnly}
-                    onOpeningChange={onOpeningChange}
-                    onRestockChange={onRestockChange}
-                    onInventoryChange={onInventoryChange}
-                    hint={ing.ingredient === hintIngredient}
-                />
-            ))}
-            </div>
-
-            {/* Footer tổng — tiền hao hụt cộng dồn, chỉ hiện khi đã kiểm ít nhất 1 NVL. */}
-            {countedCount > 0 && (
-                <div className="flex items-center justify-between pt-3 mt-1 border-t border-border/40">
-                    <span className="text-[14px] font-black text-text">Tổng cộng</span>
-                    <span className={`text-[14px] font-black tabular-nums ${totalLossValue > 0 ? 'text-danger' : 'text-text-secondary'}`}>
-                        {totalLossValue > 0 ? '-' : ''}{formatVND(Math.round(totalLossValue))}
-                    </span>
-                </div>
-            )}
+            <div className="flex flex-col">{sortedList.map(renderRow)}</div>
+            {totalRow && <div className="pt-3 mt-1 border-t border-border/40">{totalRow}</div>}
         </CollapsibleCard>
     )
 }
