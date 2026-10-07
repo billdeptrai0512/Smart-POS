@@ -326,7 +326,7 @@ export default function RecipeMenuPage() {
                                 onClick={() => navigate('/category/toppings', { state: location.state })}
                                 className="shrink-0 px-3 rounded-[12px] flex items-center justify-center bg-surface border border-border/60 text-text-secondary text-[12px] font-black uppercase tracking-widest hover:bg-surface-light active:scale-[0.98] transition-all"
                             >
-                                Đồ ăn thêm
+                                Topping
                             </button>
                         )}
                     </div>

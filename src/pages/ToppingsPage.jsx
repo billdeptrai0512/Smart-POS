@@ -8,6 +8,7 @@ import Toast from '../components/POSPage/Toast'
 import IngredientDetailHeader from '../components/IngredientManagementPage/IngredientDetailHeader'
 import MoneyInput from '../components/common/MoneyInput'
 import { formatVND, parseVNDInput, capitalizeWords } from '../utils'
+import { Dialog, ModalHeader, ModalActions, MODAL_PANEL } from '../components/common/ModalShell'
 import { insertTopping } from '../services/toppingService'
 
 export default function ToppingsPage() {
@@ -27,16 +28,20 @@ export default function ToppingsPage() {
 
     const canSubmit = name.trim() && parseVNDInput(price) >= 0 && !saving
 
+    function resetForm() {
+        setName(''); setPrice(''); setUnit(''); setShowCreate(false)
+    }
+
     async function handleCreate() {
         if (!canSubmit) return
         setSaving(true)
         try {
             await insertTopping(name.trim(), parseVNDInput(price), selectedAddress?.id, unit.trim() || 'đv')
             await refreshProducts()
-            setName(''); setPrice(''); setUnit(''); setShowCreate(false)
-            showToast('Đã tạo đồ ăn thêm', 'success')
+            resetForm()
+            showToast('Đã tạo topping', 'success')
         } catch (err) {
-            showError(err, 'Tạo đồ ăn thêm')
+            showError(err, 'Tạo topping')
         } finally {
             setSaving(false)
         }
@@ -47,15 +52,17 @@ export default function ToppingsPage() {
             <Toast toast={toast} />
 
             <IngredientDetailHeader
-                title="Đồ ăn thêm"
+                title="Topping"
                 subtitle={`${toppings.length} loại`}
                 onBack={() => navigate('/category/recipes', { state: location.state })}
+                onAdd={canEdit ? () => setShowCreate(true) : null}
+                addTitle="Tạo topping mới"
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-4 pb-8 space-y-3">
-                {toppings.length === 0 && !showCreate && (
+                {toppings.length === 0 && (
                     <p className="text-text-secondary text-[13px] text-center py-8 bg-surface-light/50 rounded-[16px] border border-border/40">
-                        Chưa có đồ ăn thêm nào (ví dụ: Trân châu, Kem muối...)
+                        Chưa có topping nào (ví dụ: Trân châu, Kem muối...)
                     </p>
                 )}
 
@@ -70,57 +77,42 @@ export default function ToppingsPage() {
                     </div>
                 ))}
 
-                {canEdit && (showCreate ? (
-                    <div className="bg-surface border border-border/60 rounded-[16px] p-4 flex flex-col gap-3">
-                        <div className="flex gap-2">
+                {showCreate && (
+                    <Dialog onClose={() => !saving && resetForm()} panelClassName={MODAL_PANEL}>
+                        <ModalHeader title="Tạo topping mới" onClose={resetForm} hideClose={saving} />
+                        <div className="overflow-y-auto p-5 flex flex-col gap-3">
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    autoCapitalize="words"
+                                    placeholder="Tên topping"
+                                    value={name}
+                                    onChange={e => setName(capitalizeWords(e.target.value))}
+                                    className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
+                                />
+                                <MoneyInput
+                                    value={price}
+                                    onChange={setPrice}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
+                                    placeholder="Giá cộng thêm"
+                                    className="shrink-0 w-[140px]"
+                                />
+                            </div>
                             <input
                                 type="text"
-                                autoCapitalize="words"
-                                placeholder="Tên đồ ăn thêm"
-                                value={name}
-                                onChange={e => setName(capitalizeWords(e.target.value))}
-                                className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
-                            />
-                            <MoneyInput
-                                value={price}
-                                onChange={setPrice}
+                                placeholder="Đơn vị tồn kho (VD: ml, phần...)"
+                                value={unit}
+                                onChange={e => setUnit(e.target.value)}
                                 onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
-                                placeholder="Giá cộng thêm"
-                                className="shrink-0 w-[140px]"
+                                className="bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
                             />
                         </div>
-                        <input
-                            type="text"
-                            placeholder="Đơn vị tồn kho (VD: ml, phần...)"
-                            value={unit}
-                            onChange={e => setUnit(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
-                            className="bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
-                        />
-                        <div className="flex gap-2">
-                            <button
-                                onClick={handleCreate}
-                                disabled={!canSubmit}
-                                className="flex-1 py-3 rounded-[12px] bg-primary text-bg text-[14px] font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 uppercase"
-                            >
-                                {saving ? 'Đang...' : 'Tạo'}
-                            </button>
-                            <button
-                                onClick={() => { setShowCreate(false); setName(''); setPrice(''); setUnit('') }}
-                                className="px-4 py-3 rounded-[12px] bg-surface-light border border-border/60 text-text text-[14px] font-bold"
-                            >
-                                Hủy
-                            </button>
+
+                        <div className="p-5 pt-3 border-t border-border/40">
+                            <ModalActions confirmLabel="Tạo" onCancel={resetForm} onConfirm={handleCreate} loading={saving} confirmDisabled={!canSubmit} />
                         </div>
-                    </div>
-                ) : (
-                    <button
-                        onClick={() => setShowCreate(true)}
-                        className="w-full text-[13px] text-primary/70 hover:text-primary font-medium transition-colors bg-surface border border-border/60 rounded-[16px] px-4 py-4 text-center"
-                    >
-                        + Tạo đồ ăn thêm mới
-                    </button>
-                ))}
+                    </Dialog>
+                )}
             </main>
         </div>
     )
