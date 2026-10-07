@@ -418,6 +418,16 @@ export function buildIngredientToProduct({ orderItems = [], recipes = [], produc
 // tự định nghĩa lại rồi lệch epsilon nhau.
 export const r1 = (n) => Math.round((Number(n) || 0) * 10) / 10
 
+// Tổng tồn thật = kho + quầy − bì. Tồn quầy lưu là số cân gồm bì nên bì chỉ trừ khi đo được (g/ml/kg/l).
+// Dùng chung cho hiển thị tổng và nhãn Hết/Sắp hết để hai nơi không lệch nhau. null = chưa có số tồn.
+export function netStockOf(stock, tareWeight, unit) {
+    const total = stock?.current_stock ?? null
+    if (total === null) return null
+    const counter = stock.counter_stock
+    const tareCut = ['g', 'ml', 'kg', 'l'].includes(unit) && tareWeight > 0 && counter != null ? Math.min(counter, tareWeight) : 0
+    return r1(total - tareCut)
+}
+
 // inventory_report từ DB có thể là mảng hoặc chuỗi JSON → mảng; null nếu hỏng/không phải mảng
 // (caller tự quyết bỏ qua hay coi là rỗng — remote rỗng ≠ remote hỏng).
 export function parseInventoryReport(v) {

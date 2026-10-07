@@ -1,4 +1,4 @@
-import { formatPackedQty } from '../../utils/inventory'
+import { formatPackedQty, netStockOf } from '../../utils/inventory'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 
 /**
@@ -36,14 +36,9 @@ export default function IngredientCostItem({
 }) {
     const displayUnit = getIngredientUnit(ingredient, storedUnit)
 
-    const currentStock = stockData?.current_stock ?? null
-    // Tồn quầy lưu là số cân gồm bì → số hiển thị trừ bì (cùng cách tính với trang chi tiết).
-    const counter = stockData?.counter_stock ?? null
-    const tareCut = ['g', 'ml', 'kg', 'l'].includes(displayUnit) && tareWeight > 0 && counter != null
-        ? Math.min(counter, tareWeight) : 0
-    const shownStock = currentStock !== null ? Math.round((currentStock - tareCut) * 10) / 10 : null
-    const isOutStock = currentStock !== null && currentStock <= 0
-    const isLowStock = currentStock !== null && currentStock > 0 && currentStock < (minStock || 0)
+    const shownStock = netStockOf(stockData, tareWeight, displayUnit)
+    const isOutStock = shownStock !== null && shownStock <= 0
+    const isLowStock = shownStock !== null && shownStock > 0 && shownStock < (minStock || 0)
 
     const warn = isOutStock || isLowStock
     const borderClass = warn ? 'border-danger/40' : 'border-border/60'

@@ -11,6 +11,7 @@ import {
     fetchIngredientStocks, fetchIngredientDeficits, fetchIngredientDailyContext,
 } from '../services/orderService'
 import { sortIngredients, ingredientLabel, normalizeSearchText, getIngredientUnit, normalizeIngredientKey } from '../utils/ingredients'
+import { netStockOf } from '../utils/inventory'
 import { readJSON } from '../utils/storage'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
@@ -325,12 +326,13 @@ export default function IngredientManagementPage() {
     }, [contextRecipes])
 
         const getStockPriority = useCallback((ing) => {
-        const stock = stockByIngredient.get(ing)?.current_stock ?? null
-        const minStock = configByIngredient.get(ing)?.min_stock || 0
+        const cfg = configByIngredient.get(ing)
+        const stock = netStockOf(stockByIngredient.get(ing), cfg?.tare_weight, getIngredientUnit(ing, ingredientUnits[ing]))
+        const minStock = cfg?.min_stock || 0
         if (stock !== null && stock <= 0) return 0        // hết
         if (stock !== null && stock > 0 && stock < minStock) return 1  // sắp hết
         return 2                                          // bình thường
-    }, [stockByIngredient, configByIngredient])
+    }, [stockByIngredient, configByIngredient, ingredientUnits])
 
     // Một danh sách chung cho cả nguyên liệu chính và bao bì; nhóm của cả hai section nằm chung dropdown.
     // Trigger sync_ingredient_group_category giữ group_id luôn cùng section với category, nên group_id null ⇔ chưa phân nhóm.
