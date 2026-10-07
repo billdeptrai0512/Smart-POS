@@ -118,6 +118,13 @@ describe('estimateOpeningStocks — Đầu kỳ hôm nay = tồn quầy ước t
         expect(fetchOrdersSince).toHaveBeenCalledTimes(1)   // không tải đơn hôm nay
     })
 
+    it('đếm đúng HÔM QUA → Đầu kỳ ước tính = số đếm (nhập thêm hôm nay đã bị trừ, không tải đơn nào)', async () => {
+        const todayClosing = { closed_at: at(0), inventory_report: [{ ingredient: 'ca_phe', restock: 100 }] }
+        const out = await estimateOpeningStocks([row({ counter_stock: 500, counter_counted_on: daysAgo(1), restock_since_count: 100 })], 'addr', calc, todayClosing)
+        expect(out).toEqual({ ca_phe: 500 })
+        expect(fetchOrdersSince).not.toHaveBeenCalled()
+    })
+
     it('chưa có phiếu hôm nay → không trừ gì; đã đếm hôm nay → không có Đầu kỳ ước tính', async () => {
         fetchOrdersSince.mockImplementation(ordersFor)
         expect(await estimateOpeningStocks([row({ restock_since_count: 300 })], 'addr', calc, null)).toEqual({ ca_phe: 1000 })   // 1000 + 300 − (200 + 100)

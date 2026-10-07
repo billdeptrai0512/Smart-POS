@@ -369,14 +369,12 @@ export function estimateCounterRow(row, usedByDay, { today, fromDay }) {
 
 /**
  * Đầu kỳ của closing ĐẦU TIÊN trong window cho walkDailyIngredientDiff (làm `openingOverrideMap`): như mặc định của
- * walk — remaining của phiếu hôm qua, NVL không đếm = 0 — nhưng NVL hôm qua KHÔNG đếm thì lấy số ước tính nếu có.
+ * walk — remaining của phiếu gần nhất trước đó, NVL không đếm = 0 — nhưng số ƯỚC TÍNH (estimateOpeningStocks) thắng
+ * khi có: nó tính từ lần đếm thật cuối + nhập thêm − tiêu hao các ngày đã qua, nên đúng cả khi phiếu cách vài ngày.
  */
 export function openingSeed(yesterdayClosing, estimates = {}) {
     const items = (parseInventoryReport(yesterdayClosing?.inventory_report) || []).filter(it => it?.ingredient)
-    const seed = Object.fromEntries(items.map(it => [it.ingredient, it.remaining ?? 0]))
-    const counted = new Set(items.filter(it => typeof it.remaining === 'number').map(it => it.ingredient))
-    for (const [ingredient, value] of Object.entries(estimates)) if (!counted.has(ingredient)) seed[ingredient] = value
-    return seed
+    return { ...Object.fromEntries(items.map(it => [it.ingredient, it.remaining ?? 0])), ...estimates }
 }
 
 /**

@@ -188,9 +188,9 @@ describe('openingSeed', () => {
         { ingredient: 'nap', remaining: 0 },
     ])
 
-    it('hôm qua đếm thì số đếm thắng (kể cả 0); không đếm thì ước tính; không có ước tính thì 0 như mặc định của walk', () => {
+    it('số ước tính thắng số trong phiếu (kể cả NVL đã đếm); không có ước tính thì như mặc định của walk (không đếm = 0)', () => {
         expect(openingSeed(yesterday, { ca_phe: 999, sua: 77, nap: 40, moi: 3 }))
-            .toEqual({ ca_phe: 5, sua: 77, nap: 0, moi: 3 })
+            .toEqual({ ca_phe: 999, sua: 77, nap: 40, moi: 3 })
         expect(openingSeed(yesterday)).toEqual({ ca_phe: 5, sua: 0, nap: 0 })
         expect(openingSeed(null, { sua: 7 })).toEqual({ sua: 7 })
     })

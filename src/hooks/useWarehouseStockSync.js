@@ -14,8 +14,8 @@ import { parseInventoryReport } from '../utils/inventory'
 // `seedReady`/`seedYesterdayClosing` (từ DailyReportPage, xem useShiftInventoryState)
 // — khi cha đã fetch sẵn phiếu chốt hôm qua rồi thì dùng thẳng, khỏi tự query trùng.
 //
-// `estimateOpening` (chỉ xem HÔM NAY): NVL hôm qua không có số đếm thì Đầu kỳ = tồn quầy ước tính theo lý thuyết
-// (estimateOpeningStocks) thay vì 0. `seedTodayClosing` để trừ phần nhập thêm hôm nay khỏi ước tính — đi qua ref
+// `estimateOpening` (chỉ xem HÔM NAY): Đầu kỳ = tồn quầy ước tính theo lý thuyết (estimateOpeningStocks) thay vì số
+// remaining của phiếu gần nhất (có thể là 0 nếu NVL không đếm, hoặc số cũ nếu phiếu cách vài ngày). `seedTodayClosing` để trừ phần nhập thêm hôm nay khỏi ước tính — đi qua ref
 // để reload không đổi identity mỗi lần phiếu hôm nay đổi (kéo theo tải lại tồn kho).
 export function useWarehouseStockSync(addressId, { seedReady, isDayScope, seedYesterdayClosing, seedTodayClosing, estimateOpening }) {
     const [warehouseStocks, setWarehouseStocks] = useState({})
@@ -49,7 +49,9 @@ export function useWarehouseStockSync(addressId, { seedReady, isDayScope, seedYe
                 const today = todayClosingRef.current !== undefined ? todayClosingRef.current : await fetchTodayShiftClosing(addressId)
                 const isToday = today?.closed_at && dateStringVN(new Date(today.closed_at)) === dateStringVN()
                 const estimates = await estimateOpeningStocks(rows, addressId, calcRef.current, isToday ? today : null)
-                for (const [ingredient, value] of Object.entries(estimates)) if (!(ingredient in counters)) counters[ingredient] = value
+                // Ước tính thắng số trong phiếu: "phiếu hôm qua" là phiếu GẦN NHẤT trước hôm nay (có thể cách vài ngày), còn
+                // ước tính tính từ lần đếm thật cuối + nhập thêm − tiêu hao các ngày đã qua; đếm hôm qua thì hai số trùng nhau.
+                Object.assign(counters, estimates)
             }
             setOpeningStock(counters)
             return { counters }

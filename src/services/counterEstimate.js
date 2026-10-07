@@ -58,7 +58,7 @@ export async function withCounterEstimate(rows, addressId, calc) {
 
 // Đầu kỳ HÔM NAY = tồn quầy ước tính cuối hôm qua. Cùng công thức, nhưng bỏ tiêu hao hôm nay và trừ phần nhập thêm
 // hôm nay (restock_since_count có cả phiếu hôm nay) — todayClosing phải là phiếu của ĐÚNG hôm nay (hoặc null).
-// Trả mọi NVL ước tính được; caller chỉ dùng cho NVL mà hôm qua KHÔNG có số đếm. → { ingredient: số }
+// Trả mọi NVL ước tính được (caller cho nó thắng số trong phiếu gần nhất). → { ingredient: số }
 export async function estimateOpeningStocks(rows, addressId, calc, todayClosing) {
     if (!addressId || !rows?.length) return {}
     try {
