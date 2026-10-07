@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Plus, Settings2 } from 'lucide-react'
 import { BottomSheet, SheetHeader } from '../components/common/ModalShell'
@@ -19,6 +19,7 @@ import KeyMismatchBanner from '../components/IngredientManagementPage/KeyMismatc
 import MenuPageHeader from '../components/common/MenuPageHeader'
 import WarehousePrepNotice from '../components/IngredientManagementPage/WarehousePrepNotice'
 import Dropdown from '../components/common/Dropdown'
+import Skeleton from '../components/common/Skeleton'
 import CreateIngredientForm from '../components/IngredientManagementPage/CreateIngredientForm'
 import IngredientGroupsSheet from '../components/IngredientManagementPage/IngredientGroupsSheet'
 import { detectKeyMismatches } from '../utils/ingredientKeySync'
@@ -103,12 +104,9 @@ export default function IngredientManagementPage() {
     const mainRef = useRef(null)
 
     // Restore scroll on back nav from /inventory/stocking/:key; clear cache after use.
-    useEffect(() => {
-        if (savedScroll !== null && mainRef.current) {
-            mainRef.current.scrollTop = savedScroll
-            savedScroll = null
-        }
-    }, [])
+    // Chỉ áp khi danh sách đã vẽ thật (stocksLoaded) — lúc mount mới chỉ có skeleton, scroll bị kẹp về 0.
+    const restoreScrollRef = useRef(savedScroll)
+    useEffect(() => { savedScroll = null }, [])
 
     const openIngredient = (ingredient) => {
         savedScroll = mainRef.current?.scrollTop ?? 0
@@ -117,6 +115,13 @@ export default function IngredientManagementPage() {
 
     // Stock & modals
     const [ingredientStocks, setIngredientStocks] = useState([])
+    // Chưa có số tồn thì chưa vẽ danh sách — vẽ sớm rồi sắp xếp lại (hết/sắp hết lên đầu) làm người dùng rối.
+    const [stocksLoaded, setStocksLoaded] = useState(false)
+    useLayoutEffect(() => {
+        if (!stocksLoaded || restoreScrollRef.current === null || !mainRef.current) return
+        mainRef.current.scrollTop = restoreScrollRef.current
+        restoreScrollRef.current = null
+    }, [stocksLoaded])
     const [showKeySync, setShowKeySync] = useState(false)
     const [dismissedSig, setDismissedSig] = useState('')
     const [stockDeficits, setStockDeficits] = useState([])
@@ -242,7 +247,7 @@ export default function IngredientManagementPage() {
         // (e.g. ingredient_sort_order edits), which would refire this on every such update.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedAddress?.id, selectedAddress?.name, groupAddressIds, activeView])
-    useEffect(() => { loadStocks() }, [loadStocks])
+    useEffect(() => { loadStocks().finally(() => { if (activeView === 'stocking') setStocksLoaded(true) }) }, [loadStocks])
 
     useEffect(() => { setIngredientCosts(contextCosts) }, [contextCosts])
     useEffect(() => { setIngredientUnits(contextUnits || {}) }, [contextUnits])
@@ -536,7 +541,8 @@ export default function IngredientManagementPage() {
                 )}
 
                 <div className="flex flex-col gap-2.5">
-                    {visibleIngredients.map(ingredient => {
+                    {!stocksLoaded && [0, 1, 2, 3, 4].map(i => <Skeleton key={i} className="h-[120px] rounded-[14px]" />)}
+                    {stocksLoaded && visibleIngredients.map(ingredient => {
                         const cfg = configByIngredient.get(ingredient)
                         return (
                             <IngredientCostItem
@@ -554,6 +560,7 @@ export default function IngredientManagementPage() {
                                 canEdit={canEdit}
                                 packSize={cfg?.pack_size}
                                 packUnit={cfg?.pack_unit}
+                                tareWeight={cfg?.tare_weight}
                                 minStock={cfg?.min_stock}
                                 stockData={stockByIngredient.get(ingredient)}
                                 siblingCounterStocks={counterStocksByIngredient?.get(ingredient)}
@@ -563,7 +570,7 @@ export default function IngredientManagementPage() {
                             />
                         )
                     })}
-                    {visibleIngredients.length === 0 && (
+                    {stocksLoaded && visibleIngredients.length === 0 && (
                         <p className="text-text-secondary text-[13px] text-center py-6">
                             {search.trim()
                                 ? 'Không tìm thấy nguyên liệu nào.'

@@ -23,6 +23,7 @@ export default function IngredientCostItem({
     // Pack config (quy cách đóng gói) — edit moved to detail page;
     // packSize/packUnit kept for the inline "= X bịch + Y g" display.
     packSize, packUnit,
+    tareWeight,
     // Stock display
     stockData,
     // Daily context (always inline)
@@ -36,6 +37,11 @@ export default function IngredientCostItem({
     const displayUnit = getIngredientUnit(ingredient, storedUnit)
 
     const currentStock = stockData?.current_stock ?? null
+    // Tồn quầy lưu là số cân gồm bì → số hiển thị trừ bì (cùng cách tính với trang chi tiết).
+    const counter = stockData?.counter_stock ?? null
+    const tareCut = ['g', 'ml', 'kg', 'l'].includes(displayUnit) && tareWeight > 0 && counter != null
+        ? Math.min(counter, tareWeight) : 0
+    const shownStock = currentStock !== null ? Math.round((currentStock - tareCut) * 10) / 10 : null
     const isOutStock = currentStock !== null && currentStock <= 0
     const isLowStock = currentStock !== null && currentStock > 0 && currentStock < (minStock || 0)
 
@@ -65,16 +71,16 @@ export default function IngredientCostItem({
             <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 min-w-0 -mt-0.5">
                 <span className="text-[11px] font-bold uppercase tracking-wide text-text-dim leading-none">Tổng</span>
                 <span className={`text-[19px] font-black tabular-nums leading-none ${textClass}`}>
-                    {currentStock !== null ? Math.round(currentStock * 10) / 10 : '—'}
+                    {shownStock ?? '—'}
                 </span>
                 <span className="text-[13.5px] font-bold text-text-secondary leading-none mr-0.5">
                     {displayUnit}
                 </span>
 
                 {/* Pack breakdown inline (if pack configured & stock meets pack size) */}
-                {currentStock !== null && packSize && packUnit && currentStock >= packSize && (
+                {shownStock !== null && packSize && packUnit && shownStock >= packSize && (
                     <span className="text-[12.5px] font-semibold text-text-dim tabular-nums leading-none">
-                        = {formatPackedQty(currentStock, packSize, packUnit, displayUnit, { compact: true })}
+                        = {formatPackedQty(shownStock, packSize, packUnit, displayUnit, { compact: true })}
                     </span>
                 )}
             </div>

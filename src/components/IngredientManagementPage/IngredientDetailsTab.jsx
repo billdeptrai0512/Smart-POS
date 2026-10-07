@@ -171,7 +171,7 @@ export function IngredientCounterPanel({
                     canEdit={false} editable={false}
                 />
             ))}
-            <QtyRow label="Tổng cộng" value={currentStock} unit={unit} hasPack={hasPack} packSize={packSize} packUnit={packUnit} canEdit={false} editable={false} />
+            <QtyRow label="Tổng cộng" value={hasTare && counterStock != null && currentStock != null ? Math.round((currentStock - Math.min(counterStock, tareWeight)) * 10) / 10 : currentStock} unit={unit} hasPack={hasPack} packSize={packSize} packUnit={packUnit} canEdit={false} editable={false} />
         </Panel>
     )
 }
