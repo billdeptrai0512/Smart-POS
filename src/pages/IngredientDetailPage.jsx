@@ -40,9 +40,9 @@ export default function IngredientDetailPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const { ingredientKey } = useParams()
-    const { ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, refreshProducts, recipes, extraIngredients } = useProducts()
+    const { ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, refreshProducts, recipes, extraIngredients, loading: productsLoading } = useProducts()
     const calcRef = useRef()
-    calcRef.current = { recipes, extraIngredients }
+    calcRef.current = { recipes, extraIngredients, canPersist: !productsLoading }
     const { selectedAddress, siblingsByAddress } = useAddress()
     const warehouseSiblings = selectedAddress ? siblingsByAddress[selectedAddress.id] : null
     const warehouseGroupNote = warehouseSiblings?.length

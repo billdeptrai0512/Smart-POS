@@ -57,7 +57,7 @@ export default function IngredientManagementPage() {
         ingredientCosts: contextCosts, ingredientUnits: contextUnits,
         recipes: contextRecipes, products: contextProducts, ingredientConfigs,
         productExtras: contextProductExtras, extraIngredients: contextExtraIngs,
-        ingredientGroups, refreshProducts,
+        ingredientGroups, refreshProducts, loading: productsLoading,
     } = useProducts()
     const { selectedAddress, siblingsByAddress } = useAddress()
     const warehouseSiblings = selectedAddress ? siblingsByAddress[selectedAddress.id] : null
@@ -227,7 +227,7 @@ export default function IngredientManagementPage() {
     // Công thức mới nhất cho withCounterEstimate mà không đưa vào deps của loadStocks (refreshProducts đổi
     // identity recipes sẽ kéo theo tải lại cả danh sách tồn).
     const calcRef = useRef()
-    calcRef.current = { recipes: contextRecipes, extraIngredients: contextExtraIngs }
+    calcRef.current = { recipes: contextRecipes, extraIngredients: contextExtraIngs, canPersist: !productsLoading }
 
     const loadStocks = useCallback(async () => {
         // selectedAddress.id may be null for the default template — fetchIngredientStocks

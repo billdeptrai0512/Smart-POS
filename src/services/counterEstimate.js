@@ -1,14 +1,18 @@
 import { fetchOrdersSince } from './reportService'
-import { calculateEstimatedConsumption, estimateCounterRow, orderItemsOf, nextDayStr } from '../utils/inventory'
+import { fetchStoredUsage, saveUsageDays } from './dailyUsageService'
+import { estimateCounterRow, nextDayStr } from '../utils/inventory'
+import { missingUsageDays, usageByDay } from '../utils/dailyUsage'
 import { dateStringVN, addDaysVN } from '../utils/dateVN'
 
 // Xa hơn số ngày này thì giữ số đếm thô: tải cả chục nghìn đơn chỉ để ước tính một NVL bỏ quên là không đáng.
 const MAX_DAYS = 60
 
 // rows = kết quả fetchIngredientStocks của MỘT địa chỉ. NVL chưa đếm hôm nay thì tồn quầy được nối theo
-// lý thuyết (estimateCounterRow). Tiêu hao dùng công thức của địa chỉ đang chọn — chỉ gọi cho địa chỉ đó.
-// Lỗi tải đơn → trả số thô (như trước đây), không làm hỏng trang tồn kho.
-export async function withCounterEstimate(rows, addressId, { recipes, extraIngredients }) {
+// lý thuyết (estimateCounterRow). Tiêu hao các ngày ĐÃ QUA đọc từ daily_ingredient_usage; ngày nào chưa có
+// thì tính từ đơn rồi ghi lại (đóng băng — lần sau khỏi tải đơn); HÔM NAY luôn tính trực tiếp.
+// Công thức là của địa chỉ đang chọn — chỉ gọi cho địa chỉ đó. `canPersist` = context công thức đã tải xong
+// (không thì có thể đang là công thức cũ/rỗng và sẽ bị đóng băng sai). Lỗi → trả số thô, không làm hỏng trang.
+export async function withCounterEstimate(rows, addressId, { recipes, extraIngredients, canPersist }) {
     if (!addressId || !rows?.length) return rows
     const today = dateStringVN()
     const floor = dateStringVN(addDaysVN(new Date(), -MAX_DAYS))
@@ -22,13 +26,19 @@ export async function withCounterEstimate(rows, addressId, { recipes, extraIngre
     if (!oldest) return rows
     const fromDay = nextDayStr(oldest)
     try {
-        const orders = await fetchOrdersSince(addressId, fromDay)
-        const itemsByDay = {}
-        for (const o of orders) (itemsByDay[dateStringVN(new Date(o.created_at))] ??= []).push(...orderItemsOf(o))
-        const usedByDay = Object.fromEntries(
-            Object.entries(itemsByDay).map(([day, items]) => [day, calculateEstimatedConsumption(items, recipes, extraIngredients)])
-        )
-        return rows.map(r => estimateCounterRow(r, usedByDay, { today, fromDay }))
+        const [stored, todayOrders] = await Promise.all([
+            fetchStoredUsage(addressId, fromDay, today),
+            fetchOrdersSince(addressId, today),
+        ])
+        const missing = missingUsageDays(stored, fromDay, today)
+        let computed = {}
+        if (missing.length) {
+            computed = usageByDay(await fetchOrdersSince(addressId, missing[0]), missing, recipes, extraIngredients)
+            const recipesAreThisAddress = recipes.length > 0 && recipes.every(r => r.address_id === addressId)
+            if (canPersist && recipesAreThisAddress) saveUsageDays(addressId, computed)
+        }
+        const used = { ...stored, ...computed, ...usageByDay(todayOrders, [today], recipes, extraIngredients) }
+        return rows.map(r => estimateCounterRow(r, used, { today, fromDay }))
     } catch (err) {
         console.error('withCounterEstimate', err)
         return rows
