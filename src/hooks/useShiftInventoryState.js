@@ -184,7 +184,7 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     // Exposed so callers can refresh after writing stock (e.g. Nhập kho từ /report)
     // — the warehouse balances then reflect the new purchase without a tab switch.
     const { warehouseStocks, openingStock, reload: reloadWarehouseStock } = useWarehouseStockSync(addressId, {
-        seedReady, isDayScope, seedYesterdayClosing, seedTodayClosing,
+        seedReady, isDayScope, seedYesterdayClosing,
         // Chỉ xem HÔM NAY; scope ngày thì đợi seed của cha, không seed (dải notice /pos) thì chạy luôn.
         estimateOpening: (!dateKey || dateKey === dateStringVN()) && (!isDayScope || seedReady),
     })

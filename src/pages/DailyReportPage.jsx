@@ -10,7 +10,7 @@ import { buildCashPayload } from '../services/reportService'
 import { useIngredientCatalog } from '../hooks/useIngredientCatalog'
 import { useDailyReportData } from '../hooks/useDailyReportData'
 import { calculateEstimatedConsumption, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, isLiveOrder, openingSeed } from '../utils/inventory'
-import { estimateOpeningStocks } from '../services/counterEstimate'
+import { estimateOpeningStocks, recipesBelongTo } from '../services/counterEstimate'
 import { useCounterCalc } from '../hooks/useCounterCalc'
 import { ingredientLabel, getIngredientUnit } from '../utils/ingredients'
 import { readOnboardingState, DEFAULT_ONBOARDING_STATE, isCashFlowProgressDone, isInventoryProgressDone, reachedCashCard } from '../utils/onboardingStorage'
@@ -385,21 +385,22 @@ export default function DailyReportPage() {
         [displayOrders, offlineToday, recipes, extraIngredients, ingredientCosts, categoryByIngredient]
     )
 
-    // Đầu kỳ ước tính (hôm nay, NVL hôm qua không đếm) — CÙNG số với thẻ Kiểm kê (useWarehouseStockSync) để
-    // "Hao hụt / hủy" ở đây khớp với hao hụt từng dòng ở đó. Ngày khác / chưa có số → {} = như trước.
+    // Đầu kỳ ước tính (hôm nay) — CÙNG số với thẻ Kiểm kê (useWarehouseStockSync) để "Hao hụt / hủy" ở đây khớp với
+    // hao hụt từng dòng ở đó. Chỉ phụ thuộc địa chỉ + công thức (không phụ thuộc phiếu hôm nay nên không gọi lại RPC
+    // mỗi lần lưu). Ngày khác / chưa có số → {} = như trước.
     const counterCalc = useCounterCalc()
     const [estimatedOpening, setEstimatedOpening] = useState({})
-    const todaysClosing = isTodaysClosing ? shiftClosing : null
+    const recipesReady = recipesBelongTo(recipes, selectedAddress?.id)
     useEffect(() => {
         const addressId = selectedAddress?.id
         if (!isDayScope || !isTodayScope || !isAsyncReady || !addressId) { setEstimatedOpening({}); return }
         let cancelled = false
         fetchIngredientStocks(addressId)
-            .then(rows => estimateOpeningStocks(rows, addressId, counterCalc.current, todaysClosing))
+            .then(rows => estimateOpeningStocks(rows, addressId, counterCalc.current))
             .then(estimates => { if (!cancelled) setEstimatedOpening(estimates) })
             .catch(err => console.error('estimatedOpening', err))
         return () => { cancelled = true }
-    }, [isDayScope, isTodayScope, isAsyncReady, selectedAddress?.id, todaysClosing, counterCalc])
+    }, [isDayScope, isTodayScope, isAsyncReady, selectedAddress?.id, counterCalc, recipesReady])
 
     const lossInfo = useMemo(() => {
         // Daily scope: today's single closing + yesterday as the opening source.

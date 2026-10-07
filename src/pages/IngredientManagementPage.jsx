@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
-import { withCounterEstimate } from '../services/counterEstimate'
+import { withCounterEstimate, recipesBelongTo } from '../services/counterEstimate'
 import { useCounterCalc } from '../hooks/useCounterCalc'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Plus, Settings2 } from 'lucide-react'
@@ -226,6 +226,8 @@ export default function IngredientManagementPage() {
     useEffect(() => { refreshProducts?.({ ifStale: true }) }, [])
 
     const calcRef = useCounterCalc()
+    // Công thức tải xong sau lần loadStocks đầu → tải lại một lần để số ước tính hiện ra (xem recipesBelongTo).
+    const recipesReady = recipesBelongTo(contextRecipes, selectedAddress?.id)
 
     const loadStocks = useCallback(async () => {
         // selectedAddress.id may be null for the default template — fetchIngredientStocks
@@ -253,7 +255,7 @@ export default function IngredientManagementPage() {
         // gets a new reference on every context refetch even when nothing relevant changed
         // (e.g. ingredient_sort_order edits), which would refire this on every such update.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedAddress?.id, selectedAddress?.name, groupAddressIds, activeView, canEdit])
+    }, [selectedAddress?.id, selectedAddress?.name, groupAddressIds, activeView, canEdit, recipesReady])
     useEffect(() => { loadStocks().finally(() => { if (activeView === 'stocking') setStocksLoaded(true) }) }, [loadStocks])
 
     useEffect(() => { setIngredientCosts(contextCosts) }, [contextCosts])

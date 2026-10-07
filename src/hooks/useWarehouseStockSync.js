@@ -1,8 +1,8 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
-import { fetchIngredientStocks, fetchTodayShiftClosing } from '../services/orderService'
-import { estimateOpeningStocks } from '../services/counterEstimate'
+import { useState, useCallback } from 'react'
+import { fetchIngredientStocks } from '../services/orderService'
+import { estimateOpeningStocks, recipesBelongTo } from '../services/counterEstimate'
 import { useCounterCalc } from './useCounterCalc'
-import { dateStringVN } from '../utils/dateVN'
+import { useProducts } from '../contexts/ProductContext'
 import { fetchYesterdayShiftClosing } from '../services/reportService'
 import { parseInventoryReport } from '../utils/inventory'
 
@@ -15,14 +15,13 @@ import { parseInventoryReport } from '../utils/inventory'
 // — khi cha đã fetch sẵn phiếu chốt hôm qua rồi thì dùng thẳng, khỏi tự query trùng.
 //
 // `estimateOpening` (chỉ xem HÔM NAY): Đầu kỳ = tồn quầy ước tính theo lý thuyết (estimateOpeningStocks) thay vì số
-// remaining của phiếu gần nhất (có thể là 0 nếu NVL không đếm, hoặc số cũ nếu phiếu cách vài ngày). `seedTodayClosing` để trừ phần nhập thêm hôm nay khỏi ước tính — đi qua ref
-// để reload không đổi identity mỗi lần phiếu hôm nay đổi (kéo theo tải lại tồn kho).
-export function useWarehouseStockSync(addressId, { seedReady, isDayScope, seedYesterdayClosing, seedTodayClosing, estimateOpening }) {
+// remaining của phiếu gần nhất (có thể là 0 nếu NVL không đếm, hoặc số cũ nếu phiếu cách vài ngày).
+export function useWarehouseStockSync(addressId, { seedReady, isDayScope, seedYesterdayClosing, estimateOpening }) {
     const [warehouseStocks, setWarehouseStocks] = useState({})
     const [openingStock, setOpeningStock] = useState({})
     const calcRef = useCounterCalc()
-    const todayClosingRef = useRef(seedTodayClosing)
-    useEffect(() => { todayClosingRef.current = seedTodayClosing })
+    // Công thức tải xong sau lần reload đầu → reload đổi identity để tính lại Đầu kỳ ước tính (xem recipesBelongTo).
+    const recipesReady = recipesBelongTo(useProducts().recipes, addressId)
 
     // addressId === undefined guarded by the sole caller (useShiftInventoryState.reloadStocks)
     // before this is ever invoked — no guard duplicated here.
@@ -44,19 +43,13 @@ export function useWarehouseStockSync(addressId, { seedReady, isDayScope, seedYe
             ;(parseInventoryReport(yesterdayClosing?.inventory_report) || []).forEach(item => {
                 if (item && item.ingredient && typeof item.remaining === 'number') counters[item.ingredient] = item.remaining
             })
-            if (estimateOpening) {
-                // undefined = không có seed (dải notice /pos) → tự tải; null = đã seed và hôm nay chưa có phiếu.
-                const today = todayClosingRef.current !== undefined ? todayClosingRef.current : await fetchTodayShiftClosing(addressId)
-                const isToday = today?.closed_at && dateStringVN(new Date(today.closed_at)) === dateStringVN()
-                const estimates = await estimateOpeningStocks(rows, addressId, calcRef.current, isToday ? today : null)
-                // Ước tính thắng số trong phiếu: "phiếu hôm qua" là phiếu GẦN NHẤT trước hôm nay (có thể cách vài ngày), còn
-                // ước tính tính từ lần đếm thật cuối + nhập thêm − tiêu hao các ngày đã qua; đếm hôm qua thì hai số trùng nhau.
-                Object.assign(counters, estimates)
-            }
+            // Ước tính thắng số trong phiếu: "phiếu hôm qua" là phiếu GẦN NHẤT trước hôm nay (có thể cách vài ngày); ước tính
+            // tính từ lần đếm thật cuối + nhập thêm − tiêu hao các ngày đã qua, và đếm hôm qua thì hai số trùng nhau.
+            if (estimateOpening && recipesReady) Object.assign(counters, await estimateOpeningStocks(rows, addressId, calcRef.current))
             setOpeningStock(counters)
             return { counters }
         })
-    }, [addressId, seedReady, seedYesterdayClosing, isDayScope, estimateOpening, calcRef])
+    }, [addressId, seedReady, seedYesterdayClosing, isDayScope, estimateOpening, calcRef, recipesReady])
 
     return { warehouseStocks, openingStock, reload }
 }

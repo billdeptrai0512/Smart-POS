@@ -4,7 +4,7 @@ vi.mock('./reportService', () => ({ fetchOrdersSince: vi.fn() }))
 vi.mock('./dailyUsageService', () => ({ fetchStoredUsage: vi.fn(), saveUsageDays: vi.fn() }))
 import { fetchOrdersSince } from './reportService'
 import { fetchStoredUsage, saveUsageDays } from './dailyUsageService'
-import { withCounterEstimate, estimateOpeningStocks } from './counterEstimate'
+import { withCounterEstimate, estimateOpeningStocks, recipesBelongTo } from './counterEstimate'
 import { dateStringVN, addDaysVN } from '../utils/dateVN'
 
 const daysAgo = (n) => dateStringVN(addDaysVN(new Date(), -n))
@@ -58,7 +58,7 @@ describe('withCounterEstimate', () => {
         const rows = [row()]
         expect(await withCounterEstimate(rows, 'addr', { ...calc, recipes: [] })).toEqual(rows)
         expect(await withCounterEstimate(rows, 'addr', { ...calc, recipes: [{ ...calc.recipes[0], address_id: 'khac' }] })).toEqual(rows)
-        expect(await estimateOpeningStocks(rows, 'addr', { ...calc, recipes: [] }, null)).toEqual({})
+        expect(await estimateOpeningStocks(rows, 'addr', { ...calc, recipes: [] })).toEqual({})
         expect(fetchOrdersSince).not.toHaveBeenCalled()
         expect(fetchStoredUsage).not.toHaveBeenCalled()
     })
@@ -106,36 +106,49 @@ describe('withCounterEstimate', () => {
     })
 })
 
-describe('estimateOpeningStocks — Đầu kỳ hôm nay = tồn quầy ước tính cuối hôm qua', () => {
-    const ordersFor = async (_addr, from) => (from === daysAgo(2) ? [order(2, 20), order(1, 10)] : [order(0, 50)])
+describe('recipesBelongTo', () => {
+    it('rỗng hoặc có dòng của địa chỉ khác → false; toàn dòng của địa chỉ này → true', () => {
+        expect(recipesBelongTo([], 'a')).toBe(false)
+        expect(recipesBelongTo([{ address_id: 'a' }, { address_id: 'b' }], 'a')).toBe(false)
+        expect(recipesBelongTo([{ address_id: 'a' }], 'a')).toBe(true)
+    })
+})
 
-    it('bỏ tiêu hao hôm nay, trừ nhập thêm hôm nay khỏi restock_since_count', async () => {
+describe('estimateOpeningStocks — Đầu kỳ hôm nay từ lần đếm gần nhất TRƯỚC hôm nay', () => {
+    const ordersFor = async (_addr, from) => (from === daysAgo(2) ? [order(2, 20), order(1, 10)] : [order(0, 50)])
+    // prior_* = lần đếm cuối trước hôm nay; các cột counter_* thường có thể đã là của HÔM NAY
+    const prior = (over) => row({ prior_counter_stock: 1000, prior_counted_on: daysAgo(3), prior_restock_since: 200, ...over })
+
+    it('đếm 1000 cách 3 ngày + nhập thêm giữa chừng 200 − tiêu hao hôm kia 200 và hôm qua 100; KHÔNG tính hôm nay', async () => {
         fetchOrdersSince.mockImplementation(ordersFor)
-        const todayClosing = { closed_at: at(0), inventory_report: [{ ingredient: 'ca_phe', restock: 100 }] }
-        // đếm 1000 cách đây 3 ngày; nhập thêm từ đó 300 (trong đó 100 là HÔM NAY); dùng ngày 2: 200, ngày 1: 100
-        const out = await estimateOpeningStocks([row({ restock_since_count: 300 })], 'addr', calc, todayClosing)
-        expect(out).toEqual({ ca_phe: 900 })   // 1000 + (300 − 100) − (200 + 100); 500 tiêu hao hôm nay KHÔNG tính
+        expect(await estimateOpeningStocks([prior()], 'addr', calc)).toEqual({ ca_phe: 900 })
         expect(fetchOrdersSince).toHaveBeenCalledTimes(1)   // không tải đơn hôm nay
+        expect(fetchOrdersSince).toHaveBeenCalledWith('addr', daysAgo(2), daysAgo(0))
     })
 
-    it('đếm đúng HÔM QUA → Đầu kỳ ước tính = số đếm (nhập thêm hôm nay đã bị trừ, không tải đơn nào)', async () => {
-        const todayClosing = { closed_at: at(0), inventory_report: [{ ingredient: 'ca_phe', restock: 100 }] }
-        const out = await estimateOpeningStocks([row({ counter_stock: 500, counter_counted_on: daysAgo(1), restock_since_count: 100 })], 'addr', calc, todayClosing)
+    it('NVL vừa được ĐẾM HÔM NAY (counter_* đã là hôm nay) vẫn ra Đầu kỳ đúng — không rơi về số cũ trong phiếu', async () => {
+        fetchOrdersSince.mockImplementation(ordersFor)
+        const counted = prior({ counter_stock: 460, counter_counted_on: daysAgo(0), restock_since_count: 999 })
+        expect(await estimateOpeningStocks([counted], 'addr', calc)).toEqual({ ca_phe: 900 })
+    })
+
+    it('đếm đúng HÔM QUA → Đầu kỳ ước tính = số đếm, không tải đơn nào', async () => {
+        const out = await estimateOpeningStocks([prior({ prior_counter_stock: 500, prior_counted_on: daysAgo(1), prior_restock_since: 0 })], 'addr', calc)
         expect(out).toEqual({ ca_phe: 500 })
         expect(fetchOrdersSince).not.toHaveBeenCalled()
     })
 
-    it('chưa có phiếu hôm nay → không trừ gì; đã đếm hôm nay → không có Đầu kỳ ước tính', async () => {
-        fetchOrdersSince.mockImplementation(ordersFor)
-        expect(await estimateOpeningStocks([row({ restock_since_count: 300 })], 'addr', calc, null)).toEqual({ ca_phe: 1000 })   // 1000 + 300 − (200 + 100)
-        expect(await estimateOpeningStocks([row({ counter_counted_on: daysAgo(0) })], 'addr', calc, null)).toEqual({})
+    it('chưa từng có lần đếm trước hôm nay (prior_counted_on null) → không có ước tính', async () => {
+        expect(await estimateOpeningStocks([row({ prior_counted_on: null })], 'addr', calc)).toEqual({})
+        expect(await estimateOpeningStocks([row()], 'addr', calc)).toEqual({})   // cột chưa có (RPC cũ / đường fallback)
+        expect(fetchOrdersSince).not.toHaveBeenCalled()
     })
 
     it('lỗi tải → {} (rơi về hành vi cũ), Mẫu mặc định → {}', async () => {
         fetchOrdersSince.mockRejectedValue(new Error('network'))
         const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-        expect(await estimateOpeningStocks([row()], 'addr', calc, null)).toEqual({})
+        expect(await estimateOpeningStocks([prior()], 'addr', calc)).toEqual({})
         spy.mockRestore()
-        expect(await estimateOpeningStocks([row()], null, calc, null)).toEqual({})
+        expect(await estimateOpeningStocks([prior()], null, calc)).toEqual({})
     })
 })

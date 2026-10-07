@@ -51,7 +51,11 @@ async function fetchIngredientStocksUncached(addressId: UUID | null) {
             counter_stock_set: row.counter_stock_set ?? (counter_stock > 0),
             // Mốc đếm cuối (migration 20261005); path không có cột này (default template, fallback JS) → null = không ước tính.
             counter_counted_on: (row.counter_counted_on ?? null) as string | null,
-            restock_since_count: Number(row.restock_since_count) || 0
+            restock_since_count: Number(row.restock_since_count) || 0,
+            // Lần đếm gần nhất TRƯỚC hôm nay (migration 20261007) — để Đầu kỳ hôm nay tính lại được kể cả khi NVL vừa được đếm hôm nay.
+            prior_counter_stock: row.prior_counter_stock == null ? null : Number(row.prior_counter_stock),
+            prior_counted_on: (row.prior_counted_on ?? null) as string | null,
+            prior_restock_since: Number(row.prior_restock_since) || 0
         }
     }
 

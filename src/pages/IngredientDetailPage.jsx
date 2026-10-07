@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { withCounterEstimate } from '../services/counterEstimate'
+import { withCounterEstimate, recipesBelongTo } from '../services/counterEstimate'
 import { useCounterCalc } from '../hooks/useCounterCalc'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
@@ -41,7 +41,7 @@ export default function IngredientDetailPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const { ingredientKey } = useParams()
-    const { ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, refreshProducts } = useProducts()
+    const { ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, refreshProducts, recipes } = useProducts()
     const calcRef = useCounterCalc()
     const { selectedAddress, siblingsByAddress } = useAddress()
     const warehouseSiblings = selectedAddress ? siblingsByAddress[selectedAddress.id] : null
@@ -118,6 +118,7 @@ export default function IngredientDetailPage() {
     // Stocks only depend on address+key — refetching on month-arrow taps would
     // burn one extra round-trip per nav.
     // Tồn quầy NVL chưa đếm hôm nay = ước tính theo lý thuyết (withCounterEstimate; chỉ dòng của NVL này).
+    const recipesReady = recipesBelongTo(recipes, selectedAddress?.id)   // công thức tải xong sau lần đọc đầu → đọc lại để có ước tính
     const fetchStockRow = useCallback(async (addressId) => {
         const row = (await fetchIngredientStocks(addressId)).find(s => s.ingredient === ingredientKey)
         return row ? (await withCounterEstimate([row], addressId, calcRef.current))[0] : row
@@ -126,7 +127,7 @@ export default function IngredientDetailPage() {
     useEffect(() => {
         if (!selectedAddress || !ingredientKey) return
         fetchStockRow(selectedAddress.id).then(setStockData)
-    }, [selectedAddress, ingredientKey, fetchStockRow])
+    }, [selectedAddress, ingredientKey, fetchStockRow, recipesReady])
 
     // Đầu ngày/Lấy ra/Nhập mới cho panel Kiểm kê — cùng nguồn dữ liệu với card ở /inventory.
     useEffect(() => {

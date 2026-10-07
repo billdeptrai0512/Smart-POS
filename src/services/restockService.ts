@@ -4,7 +4,9 @@ import { insertExpense } from './expenseService'
 import { invalidateReportCache } from './cache'
 import { upsertIngredientCost } from './ingredientCostService'
 import { roundStock } from './ingredientStockService'
-import { fetchTodayShiftClosing, fetchYesterdayShiftClosing, mergeShiftClosingInventory } from './reportService'
+import { mergeShiftClosingInventory } from './reportService'
+import { parseInventoryReport } from '../utils/inventory'
+import { startOfDayVN } from '../utils/dateVN'
 import type { UUID, Row } from '../types/domain'
 
 // Manual stock adjustment (kiểm kê / hao hụt / seed initial).
@@ -57,22 +59,41 @@ export async function setCounterStock(addressId: UUID | null, ingredient: string
     }
 
     if (addressId) {
-        const today = await fetchTodayShiftClosing(addressId)
-        if (today) {
-            invalidateReportCache(addressId)
-            const inventory_report = applyToReport(today.inventory_report)
-            if (localRepo.isGuest()) return localRepo.upsertLocalShiftClosing({ ...today, inventory_report })
-            const { data, error } = await supabase.from('shift_closings')
-                .update({ inventory_report }).eq('id', today.id).select().single()
-            if (error) throw error
-            return data
+        // Đọc phiếu hôm nay + (nếu chưa có) xem địa chỉ đã từng có phiếu nào chưa. NÉM khi lỗi: đọc hỏng mà vẫn ghi sẽ
+        // làm mất restock/opening của entry, hoặc rơi nhầm sang nhánh setup (ghi Đầu kỳ khoá thay vì số đếm).
+        let todayReport: unknown = null
+        let hasToday = false
+        let hasAny = false
+        if (localRepo.isGuest()) {
+            const today = localRepo.fetchLocalShiftClosing(addressId, new Date().toISOString())
+            hasToday = !!today
+            todayReport = today?.inventory_report
+            hasAny = hasToday || localRepo.fetchAllLocalShiftClosings(addressId).some((c: Row) => c.inventory_report != null)
+        } else {
+            const { data: today, error: todayErr } = await supabase.from('shift_closings').select('inventory_report')
+                .eq('address_id', addressId).gte('closed_at', startOfDayVN().toISOString())
+                .order('closed_at', { ascending: false }).limit(1).maybeSingle()
+            if (todayErr) throw todayErr
+            hasToday = !!today
+            todayReport = today?.inventory_report
+            if (hasToday) {
+                hasAny = true
+            } else {
+                const { data: any, error: anyErr } = await supabase.from('shift_closings').select('id')
+                    .eq('address_id', addressId).not('inventory_report', 'is', null).limit(1).maybeSingle()
+                if (anyErr) throw anyErr
+                hasAny = !!any
+            }
         }
-        // Không có phiếu hôm nay ⇒ phiếu nào còn lại đều là phiếu cũ.
-        if (!(await fetchYesterdayShiftClosing(addressId))) return null
-        // Chưa có phiếu hôm nay → RPC tạo mới. Phiếu chưa tồn tại nên không có "Nhập thêm" nào để giữ.
-        return mergeShiftClosingInventory(addressId, [
-            { ingredient, remaining, opening: null, opening_locked: false, restock: null, skipped: false },
-        ], null)
+        if (!hasAny) return null
+        // Ghi qua merge RPC (khoá theo NVL, race-free với autosave của máy khác; tạo phiếu hôm nay nếu chưa có) thay vì
+        // UPDATE cả mảng. Entry của NVL phải GIỮ đủ trường: RPC thay cả entry và tính delta rút theo restock cũ.
+        const item = (parseInventoryReport(todayReport) || []).find((i: Row) => i?.ingredient === ingredient)
+        return mergeShiftClosingInventory(addressId, [{
+            ingredient, unit: item?.unit, remaining,
+            opening: item?.opening ?? null, opening_locked: !!item?.opening_locked,
+            restock: item?.restock ?? null, skipped: !!item?.skipped,
+        }], null)
     }
 
     if (localRepo.isGuest()) {
