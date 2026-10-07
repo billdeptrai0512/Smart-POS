@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { computeBalance, computeHaoHut, parseInventoryReport, rollIngredientDays, estimateCounterStocks } from './inventory'
+import { dateStringVN } from './dateVN'
+import { computeBalance, computeHaoHut, parseInventoryReport, rollIngredientDays, estimateCounterStocks, walkDailyIngredientDiff } from './inventory'
 
 describe('computeBalance / computeHaoHut', () => {
     it('hao hụt = Cuối kỳ − (Đầu kỳ + Nhập thêm − Sử dụng)', () => {
@@ -93,3 +94,86 @@ describe('estimateCounterStocks — tồn quầy theo lý thuyết tới khi đ�
     })
 })
 
+// Bản walkDailyIngredientDiff TRƯỚC khi nối qua ngày không đếm — chép nguyên để chứng minh
+// địa chỉ đếm hằng ngày ra đúng từng dòng như cũ (số này đổ vào P&L "Hao hụt / hủy").
+function legacyWalk({ shiftClosings = [], dailyConsumption = {}, prevShiftClosings = [], openingOverrideMap = null }) {
+    if (!shiftClosings.length) return []
+    const sorted = [...shiftClosings].sort((a, b) => new Date(a.closed_at || a.created_at) - new Date(b.closed_at || b.created_at))
+    let firstOpeningMap = openingOverrideMap
+    if (!firstOpeningMap) {
+        firstOpeningMap = {}
+        for (const it of prevShiftClosings?.[0]?.inventory_report || []) firstOpeningMap[it.ingredient] = it.remaining ?? 0
+    }
+    const out = []
+    sorted.forEach((c, idx) => {
+        if (!c.inventory_report) return
+        const dayStr = dateStringVN(new Date(c.closed_at || c.created_at))
+        const used = dailyConsumption[dayStr] || {}
+        for (const item of c.inventory_report) {
+            if (item.remaining == null) continue
+            let opening
+            if (item.opening != null) opening = item.opening
+            else if (idx === 0) opening = firstOpeningMap[item.ingredient] ?? 0
+            else opening = (sorted[idx - 1]?.inventory_report || []).find(i => i.ingredient === item.ingredient)?.remaining ?? 0
+            const usedNum = Math.round((used[item.ingredient] || 0) * 10) / 10
+            const theoretical = Math.round((opening + (item.restock || 0) - usedNum) * 10) / 10
+            out.push({ dayStr, ingredient: item.ingredient, diff: Math.round((item.remaining - theoretical) * 10) / 10, idx })
+        }
+    })
+    return out
+}
+
+describe('walkDailyIngredientDiff — song song với bản cũ', () => {
+    const consumption = {
+        '2026-10-01': { ca_phe: 120.04, sua: 30 }, '2026-10-02': { ca_phe: 90, sua: 25.5 },
+        '2026-10-03': { ca_phe: 0, sua: 40 }, '2026-10-04': { ca_phe: 75 },
+    }
+    const norm = (rows) => [...rows].sort((a, b) => a.dayStr.localeCompare(b.dayStr) || a.ingredient.localeCompare(b.ingredient))
+
+    it('đếm đủ mọi NVL mọi ngày liên tiếp (kể cả opening đã lưu, restock) → trùng khít bản cũ', () => {
+        const closings = [
+            closing('2026-10-01', [{ ingredient: 'ca_phe', remaining: 800, restock: 100 }, { ingredient: 'sua', remaining: 50, opening: 90 }]),
+            closing('2026-10-02', [{ ingredient: 'ca_phe', remaining: 700 }, { ingredient: 'sua', remaining: 20, restock: 10 }]),
+            closing('2026-10-03', [{ ingredient: 'ca_phe', remaining: 700, opening: 700 }, { ingredient: 'sua', remaining: 0 }]),
+            closing('2026-10-04', [{ ingredient: 'ca_phe', remaining: 600 }]),
+        ]
+        const prev = [closing('2026-09-30', [{ ingredient: 'ca_phe', remaining: 900 }])]
+        for (const args of [
+            { shiftClosings: closings, dailyConsumption: consumption, prevShiftClosings: prev },
+            { shiftClosings: closings, dailyConsumption: consumption, openingOverrideMap: { ca_phe: 850, sua: 95 } },
+            { shiftClosings: [...closings].reverse(), dailyConsumption: consumption },
+        ]) {
+            expect(norm(walkDailyIngredientDiff(args))).toEqual(norm(legacyWalk(args)))
+        }
+    })
+
+    it('1 phiếu / không phiếu / phiếu thiếu inventory_report → như cũ', () => {
+        const one = { shiftClosings: [closing('2026-10-02', [{ ingredient: 'ca_phe', remaining: 5 }])], dailyConsumption: consumption }
+        expect(walkDailyIngredientDiff(one)).toEqual(legacyWalk(one))
+        expect(walkDailyIngredientDiff({ shiftClosings: [], dailyConsumption: consumption })).toEqual([])
+        const noReport = { shiftClosings: [{ closed_at: '2026-10-02T20:00:00+07:00', inventory_report: null }], dailyConsumption: consumption }
+        expect(walkDailyIngredientDiff(noReport)).toEqual(legacyWalk(noReport))
+    })
+
+    it('KHÁC bản cũ có chủ đích: đếm lại sau nhiều ngày → hao hụt tính trên cả khoảng, không phải 0/số cũ', () => {
+        // Đếm 1000 hôm 1; hôm 2-3 không phiếu (dùng 90 và 0); hôm 4 dùng 75, đếm 540.
+        const closings = [
+            closing('2026-10-01', [{ ingredient: 'ca_phe', remaining: 1000 }]),
+            closing('2026-10-04', [{ ingredient: 'ca_phe', remaining: 540 }]),
+        ]
+        const diff = (fn) => fn({ shiftClosings: closings, dailyConsumption: consumption }).find(r => r.dayStr === '2026-10-04').diff
+        expect(diff(walkDailyIngredientDiff)).toBe(-295)  // 540 − (1000 − 90 − 0 − 75)
+        expect(diff(legacyWalk)).toBe(-385)               // 540 − (1000 − 75): tính cả 90 của hôm 2 thành hao hụt giả
+    })
+
+    it('hôm qua có phiếu nhưng không đếm NVL → bản mới không còn opening=0 (bản cũ bỏ sót hao hụt)', () => {
+        const closings = [
+            closing('2026-10-01', [{ ingredient: 'ca_phe', remaining: 1000 }]),
+            closing('2026-10-02', [{ ingredient: 'sua', remaining: 5 }]),
+            closing('2026-10-03', [{ ingredient: 'ca_phe', remaining: 700 }]),
+        ]
+        const d3 = (fn) => fn({ shiftClosings: closings, dailyConsumption: consumption }).find(r => r.dayStr === '2026-10-03' && r.ingredient === 'ca_phe').diff
+        expect(d3(walkDailyIngredientDiff)).toBe(-210)   // 700 − (1000 − 90 − 0)
+        expect(d3(legacyWalk)).toBe(700)                 // opening 0 − 0 → "Dư" 700, hao hụt mất
+    })
+})

@@ -362,9 +362,6 @@ export function estimateCounterStocks({ shiftClosings, dailyConsumption, through
  */
 export function walkDailyIngredientDiff({ shiftClosings = [], dailyConsumption = {}, prevShiftClosings = [], openingOverrideMap = null }) {
     if (!shiftClosings.length) return []
-    const sorted = [...shiftClosings].sort((a, b) =>
-        new Date(a.closed_at || a.created_at) - new Date(b.closed_at || b.created_at)
-    )
 
     let firstOpeningMap = openingOverrideMap
     if (!firstOpeningMap) {
@@ -374,30 +371,17 @@ export function walkDailyIngredientDiff({ shiftClosings = [], dailyConsumption =
         }
     }
 
-    const out = []
-    sorted.forEach((closing, idx) => {
-        if (!closing.inventory_report) return
-        const dayStr = dateStringVN(new Date(closing.closed_at || closing.created_at))
-        const used = dailyConsumption[dayStr] || {}
-        for (const item of closing.inventory_report) {
-            if (item.remaining == null) continue
-            let opening
-            if (item.opening != null) {
-                opening = item.opening
-            } else if (idx === 0) {
-                opening = firstOpeningMap[item.ingredient] ?? 0
-            } else {
-                const prevItem = (sorted[idx - 1]?.inventory_report || []).find(i => i.ingredient === item.ingredient)
-                opening = prevItem?.remaining ?? 0
-            }
-            const restock = item.restock || 0
-            const usedNum = Math.round((used[item.ingredient] || 0) * 10) / 10
-            const theoretical = Math.round((opening + restock - usedNum) * 10) / 10
-            const diff = Math.round((item.remaining - theoretical) * 10) / 10
-            out.push({ dayStr, ingredient: item.ingredient, diff, idx })
-        }
-    })
-    return out
+    const closingDays = shiftClosings
+        .filter(c => c.inventory_report)
+        .map(c => dateStringVN(new Date(c.closed_at || c.created_at)))
+    if (!closingDays.length) return []
+    const throughDay = closingDays.reduce((a, b) => (a > b ? a : b))
+
+    // Đi theo ngày lịch qua rollIngredientDays: ngày không đếm / không có phiếu vẫn nối lý thuyết
+    // → khi đếm lại sau vài ngày, hao hụt là so với tồn ước tính CHỨ KHÔNG phải 0 hay số đếm cũ.
+    return rollIngredientDays({ shiftClosings, dailyConsumption, throughDay, seed: firstOpeningMap })
+        .filter(r => r.remaining != null)
+        .map(r => ({ dayStr: r.dayStr, ingredient: r.ingredient, diff: r1(r.remaining - r.theoretical), idx: r.closingIdx }))
 }
 
 export function calculateLossValue({
