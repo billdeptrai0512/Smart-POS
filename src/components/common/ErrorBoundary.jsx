@@ -1,4 +1,5 @@
 import { Component } from 'react'
+import { isStaleChunkError, reloadForNewVersion } from '../../utils/staleChunk'
 
 export default class ErrorBoundary extends Component {
     constructor(props) {
@@ -12,6 +13,8 @@ export default class ErrorBoundary extends Component {
 
     componentDidCatch(error, errorInfo) {
         console.error('ErrorBoundary caught:', error, errorInfo)
+        // Lưới an toàn cho import() lỗi không đi qua vite:preloadError (vd React.lazy).
+        if (isStaleChunkError(error)) reloadForNewVersion()
     }
 
     handleGoBack = () => {

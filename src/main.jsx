@@ -6,6 +6,13 @@ import { Capacitor } from '@capacitor/core'
 import App from './App.jsx'
 import PWAUpdatePrompt from './components/common/PWAUpdatePrompt.jsx'
 import PWAInstallPrompt from './components/common/PWAInstallPrompt.jsx'
+import { reloadForNewVersion } from './utils/staleChunk.js'
+
+// Vite bắn event này khi import() chunk lỗi (chunk cũ đã bị deploy mới xoá) — tải lại bản mới
+// thay vì để ErrorBoundary hiện màn lỗi. preventDefault để không ném lỗi nữa nếu đang reload.
+window.addEventListener('vite:preloadError', (e) => {
+  if (reloadForNewVersion()) e.preventDefault()
+})
 
 // App native (Capacitor) không cần service worker/banner cài PWA/Analytics web —
 // 3 thứ này chỉ có ý nghĩa khi chạy trong trình duyệt.
