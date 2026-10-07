@@ -116,7 +116,7 @@ export default function IngredientCostItem({
                             <Row key={s.addressId ?? 'default'} label={`Tồn quầy · ${s.addressName}`} value={`${fmtRound(s.counterStock)} ${displayUnit}`} />
                         ))
                     ) : (
-                        <Row label="Tồn quầy hiện có" value={`${fmtRound(stockData?.counter_stock)} ${displayUnit}`} />
+                        <Row label={stockData?.counter_estimated ? 'Tồn quầy hiện có (ước tính)' : 'Tồn quầy hiện có'} value={`${fmtRound(stockData?.counter_stock)} ${displayUnit}`} />
                     )}
                 </div>
             )}

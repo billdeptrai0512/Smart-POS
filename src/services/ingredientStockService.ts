@@ -48,7 +48,10 @@ async function fetchIngredientStocksUncached(addressId: UUID | null) {
             warehouse_stock,
             counter_stock,
             warehouse_stock_set: row.warehouse_stock_set ?? (warehouse_stock > 0),
-            counter_stock_set: row.counter_stock_set ?? (counter_stock > 0)
+            counter_stock_set: row.counter_stock_set ?? (counter_stock > 0),
+            // Mốc đếm cuối (migration 20261005); path không có cột này (default template, fallback JS) → null = không ước tính.
+            counter_counted_on: (row.counter_counted_on ?? null) as string | null,
+            restock_since_count: Number(row.restock_since_count) || 0
         }
     }
 

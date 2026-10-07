@@ -274,7 +274,7 @@ export function buildRecipeIngredientSet(recipes = [], extraIngredients = {}) {
     return set
 }
 
-const nextDayStr = (d) => new Date(Date.parse(`${d}T00:00:00Z`) + 86400000).toISOString().slice(0, 10)
+export const nextDayStr = (d) => new Date(Date.parse(`${d}T00:00:00Z`) + 86400000).toISOString().slice(0, 10)
 
 /**
  * Đi TỪNG NGÀY LỊCH (kể cả ngày không có phiếu chốt) và nối tồn quầy qua các ngày không đếm:
@@ -329,6 +329,25 @@ export function rollIngredientDays({ shiftClosings = [], dailyConsumption = {}, 
         }
     }
     return out
+}
+
+/**
+ * Tồn quầy ƯỚC TÍNH của 1 dòng get_ingredient_stocks_v2 (xem 20261005_ingredient_stocks_counted_on.sql):
+ *   quầy = max(0, số đếm cuối + Σ nhập thêm sau ngày đếm − Σ tiêu hao từ sau ngày đếm tới nay)
+ * Không nối khi: không có ngày đếm (chỉ từ Đầu kỳ/setup), đã đếm hôm nay, hoặc `usedByDay` (từ
+ * `fromDay`) không phủ hết khoảng từ ngày đếm — thiếu tiêu hao thì tồn ra cao giả, thà giữ số thô.
+ * current_stock = kho + quầy ước tính (kho tổng giữ nguyên: nhập thêm đã trừ khỏi kho từ trước).
+ * usedByDay: { 'YYYY-MM-DD': { ingredient: usedAmount } }
+ */
+export function estimateCounterRow(row, usedByDay, { today, fromDay }) {
+    const on = row.counter_counted_on
+    if (!on || on >= today || nextDayStr(on) < fromDay) return row
+    let used = 0
+    for (const [day, map] of Object.entries(usedByDay)) {
+        if (day > on) used += lookupByLabel(row.ingredient, map)
+    }
+    const counter = Math.max(0, r1(row.counter_stock + (row.restock_since_count || 0) - used))
+    return { ...row, counter_stock: counter, current_stock: r1((row.warehouse_stock || 0) + counter), counter_estimated: true, counter_counted_stock: row.counter_stock }
 }
 
 /**

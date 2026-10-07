@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
+import { withCounterEstimate } from '../services/counterEstimate'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Plus, Settings2 } from 'lucide-react'
 import { BottomSheet, SheetHeader } from '../components/common/ModalShell'
@@ -223,6 +224,11 @@ export default function IngredientManagementPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { refreshProducts?.({ ifStale: true }) }, [])
 
+    // Công thức mới nhất cho withCounterEstimate mà không đưa vào deps của loadStocks (refreshProducts đổi
+    // identity recipes sẽ kéo theo tải lại cả danh sách tồn).
+    const calcRef = useRef()
+    calcRef.current = { recipes: contextRecipes, extraIngredients: contextExtraIngs }
+
     const loadStocks = useCallback(async () => {
         // selectedAddress.id may be null for the default template — fetchIngredientStocks
         // handles that (queries rows with address_id IS NULL) so admins can manage stock on
@@ -235,7 +241,8 @@ export default function IngredientManagementPage() {
         // → không chặn danh sách: banner hiện sau, nhân viên thì khỏi tải.
         if (canEdit) fetchIngredientDeficits(groupAddressIds).then(setStockDeficits).catch(err => console.error('fetchIngredientDeficits', err))
         const [stocks, daily, ...siblingResults] = await Promise.all([
-            fetchIngredientStocks(selectedAddress.id ?? null),
+            // Tồn quầy NVL chưa đếm hôm nay = ước tính theo lý thuyết (withCounterEstimate).
+            fetchIngredientStocks(selectedAddress.id ?? null).then(s => withCounterEstimate(s, selectedAddress.id, calcRef.current)),
             fetchIngredientDailyContext(selectedAddress.id ?? null),
             ...siblingIds.map(id => fetchIngredientStocks(id)),
         ])

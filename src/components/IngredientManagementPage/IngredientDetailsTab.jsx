@@ -143,6 +143,7 @@ export function IngredientStockPanel({
 export function IngredientCounterPanel({
     unit, packSize, packUnit, tareWeight,
     counterStock, currentStock,
+    counterEstimated,       // true = Tồn quầy đang là số ƯỚC TÍNH theo lý thuyết (chưa đếm hôm nay)
     siblingCounterStocks,   // [{ addressId, addressName, counterStock }] | null — tồn quầy các địa chỉ khác dùng chung kho
     canEdit,
     onSaveCounter,      // (newCounter: number)    => Promise  (Tồn quầy → ghi remaining ca mới nhất)
@@ -161,7 +162,10 @@ export function IngredientCounterPanel({
                 value={counterStock} unit={unit}
                 hasPack={hasPack} packSize={packSize} packUnit={packUnit}
                 canEdit={canEdit} editable onSave={onSaveCounter}
-                note={counterReal != null ? `− bì ${tareWeight} → ${counterReal} ${unit} thật` : null}
+                note={[
+                    counterEstimated && 'ước tính theo lý thuyết — nhập số đếm để xác nhận',
+                    counterReal != null && `− bì ${tareWeight} → ${counterReal} ${unit} thật`,
+                ].filter(Boolean).join(' · ') || null}
             />
             {siblingCounterStocks?.map(s => (
                 <QtyRow

@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { withCounterEstimate } from '../services/counterEstimate'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
@@ -39,7 +40,9 @@ export default function IngredientDetailPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const { ingredientKey } = useParams()
-    const { ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, refreshProducts } = useProducts()
+    const { ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, refreshProducts, recipes, extraIngredients } = useProducts()
+    const calcRef = useRef()
+    calcRef.current = { recipes, extraIngredients }
     const { selectedAddress, siblingsByAddress } = useAddress()
     const warehouseSiblings = selectedAddress ? siblingsByAddress[selectedAddress.id] : null
     const warehouseGroupNote = warehouseSiblings?.length
@@ -114,11 +117,16 @@ export default function IngredientDetailPage() {
 
     // Stocks only depend on address+key — refetching on month-arrow taps would
     // burn one extra round-trip per nav.
+    // Tồn quầy NVL chưa đếm hôm nay = ước tính theo lý thuyết (withCounterEstimate; chỉ dòng của NVL này).
+    const fetchStockRow = useCallback(async (addressId) => {
+        const row = (await fetchIngredientStocks(addressId)).find(s => s.ingredient === ingredientKey)
+        return row ? (await withCounterEstimate([row], addressId, calcRef.current))[0] : row
+    }, [ingredientKey])
+
     useEffect(() => {
         if (!selectedAddress || !ingredientKey) return
-        fetchIngredientStocks(selectedAddress.id)
-            .then(stocks => setStockData(stocks.find(s => s.ingredient === ingredientKey)))
-    }, [selectedAddress, ingredientKey])
+        fetchStockRow(selectedAddress.id).then(setStockData)
+    }, [selectedAddress, ingredientKey, fetchStockRow])
 
     // Đầu ngày/Lấy ra/Nhập mới cho panel Kiểm kê — cùng nguồn dữ liệu với card ở /inventory.
     useEffect(() => {
@@ -163,9 +171,8 @@ export default function IngredientDetailPage() {
 
     const reloadStock = useCallback(async () => {
         if (!selectedAddress) return
-        const stocks = await fetchIngredientStocks(selectedAddress.id)
-        setStockData(stocks.find(s => s.ingredient === ingredientKey))
-    }, [selectedAddress, ingredientKey])
+        setStockData(await fetchStockRow(selectedAddress.id))
+    }, [selectedAddress, fetchStockRow])
 
     const reloadHistory = useCallback(async () => {
         if (!selectedAddress) return
@@ -253,7 +260,8 @@ export default function IngredientDetailPage() {
     // thay vì báo lỗi, để nhập tồn quầy lúc setup ban đầu vẫn hoạt động; chốt ca đầu
     // tiên sẽ tự tính hao hụt dựa trên Đầu kỳ này.
     async function saveCounter(newCounter) {
-        if (newCounter === (stockData?.counter_stock ?? 0)) return
+        // Đang hiện số ƯỚC TÍNH: nhập đúng số đó vẫn là một lần xác nhận đếm — không được bỏ qua.
+        if (!stockData?.counter_estimated && newCounter === (stockData?.counter_stock ?? 0)) return
         await withSaving('Sửa tồn quầy', async () => {
             const res = await setCounterStock(selectedAddress?.id, ingredientKey, newCounter)
             if (!res) {
@@ -544,6 +552,7 @@ export default function IngredientDetailPage() {
                             packUnit={packUnit}
                             tareWeight={tareWeight}
                             counterStock={stockData?.counter_stock ?? null}
+                            counterEstimated={!!stockData?.counter_estimated}
                             currentStock={currentStock}
                             siblingCounterStocks={siblingCounterStocks}
                             canEdit={canEdit}
