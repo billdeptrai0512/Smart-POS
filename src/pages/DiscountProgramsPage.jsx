@@ -9,10 +9,11 @@ import IngredientDetailHeader from '../components/IngredientManagementPage/Ingre
 import MoneyInput from '../components/common/MoneyInput'
 import DiscountTypePicker from '../components/common/DiscountTypePicker'
 import DayOfWeekPicker from '../components/common/DayOfWeekPicker'
-import { Dialog, ModalHeader, ModalActions, MODAL_PANEL } from '../components/common/ModalShell'
+import { FormDialog } from '../components/common/ModalShell'
 import { formatVND, parseVNDInput } from '../utils'
 import { insertDiscountProgram } from '../services/discountService'
 import { activePrograms, clampPercentInput } from '../utils/discountPrograms'
+import { DISCOUNT_TAB } from '../constants/menuTabs'
 
 const initialForm = { name: '', type: 'fixed', value: '', days: [], startDate: '', endDate: '' }
 
@@ -70,7 +71,7 @@ export default function DiscountProgramsPage() {
             <Toast toast={toast} />
 
             <IngredientDetailHeader
-                title="Chương trình khuyến mãi"
+                title={DISCOUNT_TAB.label}
                 subtitle={`${activePrograms(discountPrograms).length} đang chạy`}
                 onBack={() => navigate('/category/overall', { state: location.state })}
                 onAdd={canEdit && selectedAddress?.id ? () => setShowCreate(true) : null}
@@ -84,7 +85,7 @@ export default function DiscountProgramsPage() {
                     </p>
                 )}
 
-                {discountPrograms.length === 0 && !showCreate && (
+                {discountPrograms.length === 0 && (
                     <p className="text-text-secondary text-[13px] text-center py-8 bg-surface-light/50 rounded-[16px] border border-border/40">
                         Chưa có chương trình nào (VD: Đồng giá 10k thứ Hai...)
                     </p>
@@ -107,66 +108,59 @@ export default function DiscountProgramsPage() {
                 ))}
 
                 {showCreate && (
-                    <Dialog onClose={() => !saving && resetForm()} panelClassName={MODAL_PANEL}>
-                        <ModalHeader title="Tạo chương trình mới" onClose={resetForm} hideClose={saving} />
-                        <div className="overflow-y-auto p-5 flex flex-col gap-3">
+                    <FormDialog title="Tạo chương trình mới" saving={saving} canSubmit={canSubmit} onClose={resetForm} onConfirm={handleCreate}>
+                        <input
+                            type="text"
+                            placeholder="Tên chương trình (VD: Đồng giá thứ Hai)"
+                            value={form.name}
+                            onChange={e => setField({ name: e.target.value })}
+                            className="bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
+                        />
+                        <DiscountTypePicker value={form.type} onChange={t => setField({ type: t, value: '' })} />
+                        {form.type === 'percent' ? (
                             <input
                                 type="text"
-                                placeholder="Tên chương trình (VD: Đồng giá thứ Hai)"
-                                value={form.name}
-                                onChange={e => setField({ name: e.target.value })}
-                                className="bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
+                                inputMode="numeric"
+                                placeholder="% giảm (VD: 20)"
+                                value={form.value}
+                                onChange={e => setField({ value: clampPercentInput(e.target.value) })}
+                                className="bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-bold text-text text-right tabular-nums placeholder:text-text-secondary/50 placeholder:font-normal focus:outline-none focus:border-primary/40 transition-colors"
                             />
-                            <DiscountTypePicker value={form.type} onChange={t => setField({ type: t, value: '' })} />
-                            {form.type === 'percent' ? (
-                                <input
-                                    type="text"
-                                    inputMode="numeric"
-                                    placeholder="% giảm (VD: 20)"
-                                    value={form.value}
-                                    onChange={e => setField({ value: clampPercentInput(e.target.value) })}
-                                    className="bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-bold text-text text-right tabular-nums placeholder:text-text-secondary/50 placeholder:font-normal focus:outline-none focus:border-primary/40 transition-colors"
-                                />
-                            ) : (
-                                <MoneyInput
-                                    value={form.value}
-                                    onChange={v => setField({ value: v })}
-                                    onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
-                                    placeholder={form.type === 'fixed' ? 'Giá bán mới' : 'Số tiền giảm'}
-                                />
-                            )}
+                        ) : (
+                            <MoneyInput
+                                value={form.value}
+                                onChange={v => setField({ value: v })}
+                                onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
+                                placeholder={form.type === 'fixed' ? 'Giá bán mới' : 'Số tiền giảm'}
+                            />
+                        )}
 
-                            <div className="pt-2 border-t border-border/40">
-                                <span className="block text-[11px] font-black text-text-secondary uppercase tracking-wide mb-1">Lịch áp dụng</span>
-                                <p className="text-[11px] text-text-secondary mb-2">Không chọn thứ nào = mọi ngày. Để trống ngày = không giới hạn.</p>
-                                <DayOfWeekPicker value={form.days} onChange={days => setField({ days })} />
-                                <div className="flex gap-2 mt-2">
-                                    <div className="flex-1">
-                                        <span className="block text-[11px] font-bold text-text-secondary mb-1">Từ ngày</span>
-                                        <input
-                                            type="date"
-                                            value={form.startDate}
-                                            onChange={e => setField({ startDate: e.target.value })}
-                                            className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[13px] font-medium text-text focus:outline-none focus:border-primary/40 transition-colors"
-                                        />
-                                    </div>
-                                    <div className="flex-1">
-                                        <span className="block text-[11px] font-bold text-text-secondary mb-1">Đến ngày</span>
-                                        <input
-                                            type="date"
-                                            value={form.endDate}
-                                            onChange={e => setField({ endDate: e.target.value })}
-                                            className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[13px] font-medium text-text focus:outline-none focus:border-primary/40 transition-colors"
-                                        />
-                                    </div>
+                        <div className="pt-2 border-t border-border/40">
+                            <span className="block text-[11px] font-black text-text-secondary uppercase tracking-wide mb-1">Lịch áp dụng</span>
+                            <p className="text-[11px] text-text-secondary mb-2">Không chọn thứ nào = mọi ngày. Để trống ngày = không giới hạn.</p>
+                            <DayOfWeekPicker value={form.days} onChange={days => setField({ days })} />
+                            <div className="flex gap-2 mt-2">
+                                <div className="flex-1">
+                                    <span className="block text-[11px] font-bold text-text-secondary mb-1">Từ ngày</span>
+                                    <input
+                                        type="date"
+                                        value={form.startDate}
+                                        onChange={e => setField({ startDate: e.target.value })}
+                                        className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[13px] font-medium text-text focus:outline-none focus:border-primary/40 transition-colors"
+                                    />
+                                </div>
+                                <div className="flex-1">
+                                    <span className="block text-[11px] font-bold text-text-secondary mb-1">Đến ngày</span>
+                                    <input
+                                        type="date"
+                                        value={form.endDate}
+                                        onChange={e => setField({ endDate: e.target.value })}
+                                        className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[13px] font-medium text-text focus:outline-none focus:border-primary/40 transition-colors"
+                                    />
                                 </div>
                             </div>
                         </div>
-
-                        <div className="p-5 pt-3 border-t border-border/40">
-                            <ModalActions confirmLabel="Tạo" onCancel={resetForm} onConfirm={handleCreate} loading={saving} confirmDisabled={!canSubmit} />
-                        </div>
-                    </Dialog>
+                    </FormDialog>
                 )}
             </main>
         </div>

@@ -12,6 +12,11 @@ const getLatestCommitMessage = () => {
   }
 }
 
+// Thư viện nặng chỉ dùng qua dynamic import (Nhập Excel, in bitmap native): ghim tên chunk
+// `vendor-<tên>` ở manualChunks và loại khỏi SW precache ở globIgnores — một danh sách cho cả hai
+// nơi để đổi tên/thêm thư viện không làm lệch pattern (lệch = ~700 kB lọt lại vào precache).
+const LAZY_VENDORS = ['xlsx', 'html2canvas']
+
 export default defineConfig({
   test: {
     exclude: ['**/node_modules/**', '**/.claude/worktrees/**', '**/dist/**'],
@@ -36,8 +41,8 @@ export default defineConfig({
           // accident and drags it into the always-eager vendor-react chunk.
           if (id.includes('@sentry')) return
           if (id.includes('@supabase')) return 'vendor-supabase'
-          // Tên cố định để workbox.globIgnores bên dưới loại khỏi precache.
-          if (id.includes('/xlsx/')) return 'vendor-xlsx'
+          const lazyVendor = LAZY_VENDORS.find(name => id.includes(`/${name}/`))
+          if (lazyVendor) return `vendor-${lazyVendor}`
           if (id.includes('react-router') || id.includes('react-dom') || id.includes('/react/') || id.includes('scheduler')) return 'vendor-react'
         },
       },
@@ -85,7 +90,7 @@ export default defineConfig({
         // bằng window.print, xem printBillJob) là chunk lazy hiếm dùng: precache chỉ bắt mọi máy tải
         // ~700 kB lúc cài SW. Lần dùng đầu tải qua mạng; cache HTTP của hash-asset lo các lần sau.
         // Muốn Nhập Excel chạy offline thì thêm runtimeCaching CacheFirst cho /vendor-xlsx-*.
-        globIgnores: ['**/splash/*', '**/vendor-xlsx-*.js', '**/html2canvas-*.js'],
+        globIgnores: ['**/splash/*', ...LAZY_VENDORS.map(name => `**/vendor-${name}-*.js`)],
         // Don't cache Auth/Storage/Realtime endpoints — they are stateful and
         // serving stale tokens or websocket frames is worse than failing fast.
         navigateFallbackDenylist: [/^\/api\//, /^\/auth\//],

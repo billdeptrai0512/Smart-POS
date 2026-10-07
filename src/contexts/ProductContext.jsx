@@ -10,6 +10,7 @@ import { onTabReturn } from '../utils/tabVisibility'
 import { readJSON } from '../utils/storage'
 
 const ProductContext = createContext(null)
+const FRESH_MS = 30_000 // cửa sổ "vừa tải xong" cho refreshProducts({ ifStale })
 
 // A quán-wifi blip during the one-shot product fetch used to require reopening
 // the app (remounting ProductProvider) to recover — nothing else retried it.
@@ -108,7 +109,7 @@ export function ProductProvider() {
     const [loading, setLoading] = useState(true)
     const [loadError, setLoadError] = useState(null)
     const loadGenRef = useRef(0) // bumped each effect run so a stale retry can no-op instead of writing over a newer address's data
-    const freshAtRef = useRef(0) // lúc bắt đầu lần tải mạng gần nhất (0 = chưa có / vừa thất bại) — cho refreshProducts({ maxAgeMs })
+    const freshAtRef = useRef(0) // lúc bắt đầu lần tải mạng gần nhất (0 = chưa có / vừa thất bại) — cho refreshProducts({ ifStale })
 
     const applyData = useCallback((prods, recs, costsResult, extras, extraIngs, addressId, toppingsList, productToppingsMap, discountProgramsList, productDiscountsMap) => {
         const { costs, units, rows, groups } = costsResult
@@ -190,10 +191,10 @@ export function ProductProvider() {
         load()
     }, [activeManagerId, selectedAddress?.id, applyData, readCache])
 
-    // maxAgeMs: dành cho refresh lúc mount trang — bỏ qua nếu vừa tải xong (9 request, 2 đợt nối
+    // ifStale: dành cho refresh lúc mount trang — bỏ qua nếu vừa tải xong (9 request, 2 đợt nối
     // tiếp). Không truyền = luôn tải, như mọi nơi gọi sau khi sửa dữ liệu.
-    const refreshProducts = useCallback(async ({ maxAgeMs } = {}) => {
-        if (maxAgeMs && Date.now() - freshAtRef.current < maxAgeMs) return
+    const refreshProducts = useCallback(async ({ ifStale } = {}) => {
+        if (ifStale && Date.now() - freshAtRef.current < FRESH_MS) return
         freshAtRef.current = Date.now()
         const addressId = selectedAddress?.id
         // Snapshot the generation so a slow refresh (e.g. the online-retry below,

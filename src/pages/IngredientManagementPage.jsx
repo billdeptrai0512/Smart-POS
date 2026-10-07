@@ -215,7 +215,7 @@ export default function IngredientManagementPage() {
     // ponytail: mount-only refresh — refreshProducts already refetches on address
     // change via its own effect in ProductContext; adding it here would double-fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { refreshProducts?.({ maxAgeMs: 30_000 }) }, [])
+    useEffect(() => { refreshProducts?.({ ifStale: true }) }, [])
 
     const loadStocks = useCallback(async () => {
         // selectedAddress.id may be null for the default template — fetchIngredientStocks

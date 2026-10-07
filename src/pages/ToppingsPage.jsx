@@ -8,7 +8,7 @@ import Toast from '../components/POSPage/Toast'
 import IngredientDetailHeader from '../components/IngredientManagementPage/IngredientDetailHeader'
 import MoneyInput from '../components/common/MoneyInput'
 import { formatVND, parseVNDInput, capitalizeWords } from '../utils'
-import { Dialog, ModalHeader, ModalActions, MODAL_PANEL } from '../components/common/ModalShell'
+import { FormDialog } from '../components/common/ModalShell'
 import { insertTopping } from '../services/toppingService'
 
 export default function ToppingsPage() {
@@ -78,40 +78,33 @@ export default function ToppingsPage() {
                 ))}
 
                 {showCreate && (
-                    <Dialog onClose={() => !saving && resetForm()} panelClassName={MODAL_PANEL}>
-                        <ModalHeader title="Tạo topping mới" onClose={resetForm} hideClose={saving} />
-                        <div className="overflow-y-auto p-5 flex flex-col gap-3">
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    autoCapitalize="words"
-                                    placeholder="Tên topping"
-                                    value={name}
-                                    onChange={e => setName(capitalizeWords(e.target.value))}
-                                    className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
-                                />
-                                <MoneyInput
-                                    value={price}
-                                    onChange={setPrice}
-                                    onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
-                                    placeholder="Giá cộng thêm"
-                                    className="shrink-0 w-[140px]"
-                                />
-                            </div>
+                    <FormDialog title="Tạo topping mới" saving={saving} canSubmit={canSubmit} onClose={resetForm} onConfirm={handleCreate}>
+                        <div className="flex gap-2">
                             <input
                                 type="text"
-                                placeholder="Đơn vị tồn kho (VD: ml, phần...)"
-                                value={unit}
-                                onChange={e => setUnit(e.target.value)}
+                                autoCapitalize="words"
+                                placeholder="Tên topping"
+                                value={name}
+                                onChange={e => setName(capitalizeWords(e.target.value))}
+                                className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
+                            />
+                            <MoneyInput
+                                value={price}
+                                onChange={setPrice}
                                 onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
-                                className="bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
+                                placeholder="Giá cộng thêm"
+                                className="shrink-0 w-[140px]"
                             />
                         </div>
-
-                        <div className="p-5 pt-3 border-t border-border/40">
-                            <ModalActions confirmLabel="Tạo" onCancel={resetForm} onConfirm={handleCreate} loading={saving} confirmDisabled={!canSubmit} />
-                        </div>
-                    </Dialog>
+                        <input
+                            type="text"
+                            placeholder="Đơn vị tồn kho (VD: ml, phần...)"
+                            value={unit}
+                            onChange={e => setUnit(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
+                            className="bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
+                        />
+                    </FormDialog>
                 )}
             </main>
         </div>

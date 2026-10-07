@@ -16,6 +16,9 @@ import PrinterIpModal from './PrinterIpModal'
 import WarehouseGroupModal from './WarehouseGroupModal'
 import ConfirmByNameModal from './ConfirmByNameModal'
 import { Dialog } from '../common/ModalShell'
+import { RECIPE_TABS, DISCOUNT_TAB } from '../../constants/menuTabs'
+
+const [OVERALL_TAB, RECIPES_TAB] = RECIPE_TABS
 
 const isManagerRole = (role) => (role === 'manager' || role === 'co-manager') ? 1 : 0
 
@@ -292,22 +295,22 @@ export default function BranchGrid({
                                                         <div className="grid grid-cols-2 gap-2">
                                                             <ActionPill
                                                                 icon={<LayoutGrid size={16} />}
-                                                                label="Menu"
+                                                                label={OVERALL_TAB.label}
                                                                 tone="primary"
-                                                                onClick={() => { onSelectRecipes?.(addr, 'overall'); setExpandedActionsId(null) }}
+                                                                onClick={() => { onSelectRecipes?.(addr, OVERALL_TAB.key); setExpandedActionsId(null) }}
                                                             />
                                                             <ActionPill
                                                                 icon={<ChefHat size={16} />}
-                                                                label="Công thức"
+                                                                label={RECIPES_TAB.label}
                                                                 tone="primary"
-                                                                onClick={() => { onSelectRecipes?.(addr, 'recipes'); setExpandedActionsId(null) }}
+                                                                onClick={() => { onSelectRecipes?.(addr, RECIPES_TAB.key); setExpandedActionsId(null) }}
                                                             />
                                                             <ActionPill
                                                                 icon={<BadgePercent size={16} />}
-                                                                label="Chương trình khuyến mãi"
+                                                                label={DISCOUNT_TAB.label}
                                                                 tone="primary"
                                                                 className="col-span-2"
-                                                                onClick={() => { onSelectRecipes?.(addr, 'discounts'); setExpandedActionsId(null) }}
+                                                                onClick={() => { onSelectRecipes?.(addr, DISCOUNT_TAB.key); setExpandedActionsId(null) }}
                                                             />
                                                         </div>
                                                     </div>

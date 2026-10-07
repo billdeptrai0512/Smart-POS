@@ -86,7 +86,8 @@ function CloneCapture() {
 // Protected route: allows both authenticated users and active guest sessions
 function ProtectedRoute() {
   const { user, isGuest, loading } = useAuth()
-  useEffect(() => { loadPosShell() }, [])
+  // Chỉ preload khi đã đăng nhập — khách chưa login bị đẩy sang /login không phải tải chunk POS.
+  useEffect(() => { if (user || isGuest) loadPosShell() }, [user, isGuest])
   if (loading) return <PageLoading />
   if (!user && !isGuest) return <Navigate to="/login" replace />
   return <Outlet />

@@ -25,7 +25,7 @@ import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
-import { RECIPE_TABS } from '../constants/menuTabs'
+import { RECIPE_TABS, DISCOUNT_TAB } from '../constants/menuTabs'
 import { norm, findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
 import { isRecipeProgressDone } from '../utils/onboardingStorage'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
@@ -97,10 +97,10 @@ export default function RecipeMenuPage() {
     // Bản sao local để phản hồi ngay khi thả tay, trước khi round-trip lưu server xong.
     const [orderedProducts, setOrderedProducts] = useState(products)
     useEffect(() => { setOrderedProducts(products) }, [products])
-    // Tab nằm trên URL: /category/overall = Tổng quát (menu chia theo danh mục, lọc theo danh mục, kéo-thả sắp xếp),
-    // /category/recipes = Công thức (chi tiết từng món, tìm kiếm, thêm công thức, đồ ăn thêm).
+    // Tab nằm trên URL: /category/overall = Menu (menu chia theo danh mục, lọc theo danh mục, kéo-thả sắp xếp),
+    // /category/recipes = Công thức (chi tiết từng món, tìm kiếm, thêm công thức, topping).
     const [view, setView] = useTabRoute('/category')
-    // Lọc danh mục ở tab Tổng quát: 'all' | 'none' (món chưa thuộc mục nào) | id của mục (divider). Id lạ (mục đã xoá) rơi về 'all'.
+    // Lọc danh mục ở tab Menu: 'all' | 'none' (món chưa thuộc mục nào) | id của mục (divider). Id lạ (mục đã xoá) rơi về 'all'.
     const [categoryFilter, setCategoryFilter] = useState('all')
     const [search, setSearch] = useState('')
     const [showCreateModal, setShowCreateModal] = useState(false)
@@ -115,7 +115,7 @@ export default function RecipeMenuPage() {
     // ponytail: mount-only — refreshProducts already refetches on address change via
     // its own effect in ProductContext; adding it here would double-fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { refreshProducts?.({ maxAgeMs: 30_000 }) }, [])
+    useEffect(() => { refreshProducts?.({ ifStale: true }) }, [])
 
     // Restore scroll on back nav from /category/recipes/:productId; clear cache after use
     useEffect(() => {
@@ -264,9 +264,9 @@ export default function RecipeMenuPage() {
             {canEdit && (
                 <NoticeBar
                     icon={<BadgePercent size={15} className="text-primary shrink-0" />}
-                    label="Chương trình khuyến mãi"
+                    label={DISCOUNT_TAB.label}
                     count={(discountPrograms || []).filter(p => p.enabled).length}
-                    onClick={() => navigate('/category/discounts', { state: location.state })}
+                    onClick={() => navigate(`/category/${DISCOUNT_TAB.key}`, { state: location.state })}
                 />
             )}
 
