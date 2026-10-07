@@ -48,13 +48,19 @@ describe('withCounterEstimate', () => {
         expect(saveUsageDays).not.toHaveBeenCalled()
     })
 
-    it('không ghi khi context chưa tải xong / công thức rỗng / không phải của địa chỉ này — vẫn ước tính để hiển thị', async () => {
+    it('không ghi khi context chưa tải xong (canPersist=false) — vẫn ước tính để hiển thị', async () => {
         fetchOrdersSince.mockResolvedValue([order(1, 10)])
-        const run = (c) => withCounterEstimate([row()], 'addr', c)
-        expect((await run({ ...calc, canPersist: false }))[0].counter_estimated).toBe(true)
-        await run({ ...calc, recipes: [] })
-        await run({ ...calc, recipes: [{ ...calc.recipes[0], address_id: 'khac' }] })
+        expect((await withCounterEstimate([row()], 'addr', { ...calc, canPersist: false }))[0].counter_estimated).toBe(true)
         expect(saveUsageDays).not.toHaveBeenCalled()
+    })
+
+    it('công thức rỗng hoặc của địa chỉ khác (vừa đổi địa chỉ) → giữ số thô, không gọi mạng', async () => {
+        const rows = [row()]
+        expect(await withCounterEstimate(rows, 'addr', { ...calc, recipes: [] })).toEqual(rows)
+        expect(await withCounterEstimate(rows, 'addr', { ...calc, recipes: [{ ...calc.recipes[0], address_id: 'khac' }] })).toEqual(rows)
+        expect(await estimateOpeningStocks(rows, 'addr', { ...calc, recipes: [] }, null)).toEqual({})
+        expect(fetchOrdersSince).not.toHaveBeenCalled()
+        expect(fetchStoredUsage).not.toHaveBeenCalled()
     })
 
     it('đã đếm hôm nay / không có ngày đếm → giữ nguyên, KHÔNG gọi mạng', async () => {

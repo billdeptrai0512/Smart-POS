@@ -9,9 +9,11 @@ const MAX_DAYS = 60
 
 // Tiêu hao cho các dòng cần ước tính. Ngày ĐÃ QUA đọc từ daily_ingredient_usage; ngày nào chưa có thì tính từ đơn
 // rồi ghi lại (đóng băng — lần sau khỏi tải đơn); HÔM NAY tính trực tiếp từ đơn (bỏ qua khi !includeToday).
-// `canPersist` = context công thức đã tải xong (không thì có thể đang là công thức cũ/rỗng và sẽ bị đóng băng sai).
-// → null nếu không dòng nào cần ước tính. Có thể ném lỗi — caller bắt.
+// Công thức của địa chỉ = các dòng recipes có address_id đúng địa chỉ đó: context còn rỗng hoặc đang là của địa chỉ
+// trước (vừa đổi địa chỉ) thì KHÔNG ước tính — số tính từ công thức sai còn tệ hơn số thô. `canPersist` = context
+// đã tải xong, mới được ghi số đóng băng. → null nếu không có gì để ước tính. Có thể ném lỗi — caller bắt.
 async function loadUsage(rows, addressId, { recipes, extraIngredients, canPersist }, includeToday) {
+    if (!recipes.length || !recipes.every(r => r.address_id === addressId)) return null
     const today = dateStringVN()
     const floor = dateStringVN(addDaysVN(new Date(), -MAX_DAYS))
     let oldest = null
@@ -33,8 +35,7 @@ async function loadUsage(rows, addressId, { recipes, extraIngredients, canPersis
         // Chỉ tải đúng khoảng ngày thiếu: hôm nay đã có ở trên, các ngày đã lưu ngoài khoảng khỏi tải lại.
         const window = await fetchOrdersSince(addressId, missing[0], nextDayStr(missing.at(-1)))
         computed = usageByDay(window, missing, recipes, extraIngredients)
-        const recipesAreThisAddress = recipes.length > 0 && recipes.every(r => r.address_id === addressId)
-        if (canPersist && recipesAreThisAddress) saveUsageDays(addressId, computed)
+        if (canPersist) saveUsageDays(addressId, computed)
     }
     const used = { ...stored, ...computed }
     if (includeToday) Object.assign(used, usageByDay(todayOrders, [today], recipes, extraIngredients))

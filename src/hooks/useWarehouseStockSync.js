@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { fetchIngredientStocks } from '../services/orderService'
+import { fetchIngredientStocks, fetchTodayShiftClosing } from '../services/orderService'
 import { estimateOpeningStocks } from '../services/counterEstimate'
 import { useCounterCalc } from './useCounterCalc'
 import { dateStringVN } from '../utils/dateVN'
@@ -45,7 +45,8 @@ export function useWarehouseStockSync(addressId, { seedReady, isDayScope, seedYe
                 if (item && item.ingredient && typeof item.remaining === 'number') counters[item.ingredient] = item.remaining
             })
             if (estimateOpening) {
-                const today = todayClosingRef.current
+                // undefined = không có seed (dải notice /pos) → tự tải; null = đã seed và hôm nay chưa có phiếu.
+                const today = todayClosingRef.current !== undefined ? todayClosingRef.current : await fetchTodayShiftClosing(addressId)
                 const isToday = today?.closed_at && dateStringVN(new Date(today.closed_at)) === dateStringVN()
                 const estimates = await estimateOpeningStocks(rows, addressId, calcRef.current, isToday ? today : null)
                 for (const [ingredient, value] of Object.entries(estimates)) if (!(ingredient in counters)) counters[ingredient] = value

@@ -185,7 +185,8 @@ export function useShiftInventoryState(addressId, ingredientSortOrder, dateKey, 
     // — the warehouse balances then reflect the new purchase without a tab switch.
     const { warehouseStocks, openingStock, reload: reloadWarehouseStock } = useWarehouseStockSync(addressId, {
         seedReady, isDayScope, seedYesterdayClosing, seedTodayClosing,
-        estimateOpening: isDayScope && seedReady && (!dateKey || dateKey === dateStringVN()),
+        // Chỉ xem HÔM NAY; scope ngày thì đợi seed của cha, không seed (dải notice /pos) thì chạy luôn.
+        estimateOpening: (!dateKey || dateKey === dateStringVN()) && (!isDayScope || seedReady),
     })
     const reloadStocks = useCallback(() => {
         if (addressId === undefined) return Promise.resolve()
