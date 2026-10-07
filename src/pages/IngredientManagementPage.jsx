@@ -14,7 +14,7 @@ import {
 } from '../services/orderService'
 import { sortIngredients, ingredientLabel, normalizeSearchText, getIngredientUnit, normalizeIngredientKey } from '../utils/ingredients'
 import { netStockOf } from '../utils/inventory'
-import { readJSON } from '../utils/storage'
+import { readJSON, writeJSON } from '../utils/storage'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
 import StockDeficitBanner from '../components/IngredientManagementPage/StockDeficitBanner'
@@ -168,8 +168,7 @@ export default function IngredientManagementPage() {
         setIgnoredOrphans(prev => {
             const next = new Set(prev)
             next.add(key)
-            try { localStorage.setItem(orphanIgnoredKey(selectedAddress.id), JSON.stringify([...next])) }
-            catch { /* localStorage full or disabled — keep in-memory only */ }
+            writeJSON(orphanIgnoredKey(selectedAddress.id), [...next]) // full/disabled storage → in-memory only
             return next
         })
     }

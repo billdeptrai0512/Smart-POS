@@ -7,16 +7,8 @@ import * as localRepo from './localRepository'
 export async function fetchProducts(addressId) {
     if (localRepo.isGuest()) return localRepo.fetchLocalProducts(addressId)
 
-    const run = (cols) => {
-        let q = supabase.from('products').select(cols).eq('is_active', true)
-        return addressId ? q.eq('owner_address_id', addressId) : q.is('owner_address_id', null)
-    }
-
-    let { data: prods, error } = await run('id, name, price, is_active, owner_address_id, sort_order, count_as_cup, is_divider')
-    // 42703: cột is_divider chưa có (migration 20260703_menu_divider chưa chạy) → fetch không có nó
-    if (error?.code === '42703') {
-        ({ data: prods, error } = await run('id, name, price, is_active, owner_address_id, sort_order, count_as_cup'))
-    }
+    const q = supabase.from('products').select('id, name, price, is_active, owner_address_id, sort_order, count_as_cup, is_divider').eq('is_active', true)
+    const { data: prods, error } = await (addressId ? q.eq('owner_address_id', addressId) : q.is('owner_address_id', null))
 
     if (error) {
         console.error('fetchProducts error:', error)
@@ -115,25 +107,13 @@ export async function removeProductFromAddress(productId, _addressId) {
 
 // Update sort order for products at an address.
 // Single RPC writes all rows in one statement — N parallel UPDATEs would each pay
-// PostgREST overhead (auth + RLS + lock). Falls back to legacy parallel updates
-// if the RPC isn't deployed yet.
+// PostgREST overhead (auth + RLS + lock).
 export async function updateProductSortOrder(addressId, orderedProductIds) {
     if (localRepo.isGuest()) return localRepo.updateLocalProductSortOrder(orderedProductIds)
     if (!orderedProductIds?.length) return
 
     const { error } = await supabase.rpc('update_products_sort_order', { p_ids: orderedProductIds })
-    if (!error) return
-    // Fall back on:
-    //   PGRST202/42883: function not deployed
-    //   42703: bad column reference (legacy RPC pre-fix migration 20260517_default_sort_and_rpc_fix.sql)
-    // Anything else (RLS, auth) → rethrow.
-    if (!['PGRST202', '42883', '42703'].includes(error.code)) throw error
-
-    // Fallback: parallel per-row updates
-    const updates = orderedProductIds.map((productId, index) =>
-        supabase.from('products').update({ sort_order: index }).eq('id', productId)
-    )
-    await Promise.all(updates)
+    if (error) throw error
 }
 
 // ---- Product Extras CRUD ----
@@ -252,17 +232,7 @@ export async function updateExtrasSortOrder(orderedExtraIds) {
     if (!orderedExtraIds?.length) return
 
     const { error } = await supabase.rpc('update_extras_sort_order', { p_ids: orderedExtraIds })
-    if (!error) return
-    if (error.code !== 'PGRST202' && error.code !== '42883') throw error
-
-    // Fallback: parallel per-row updates (pre-migration codepath)
-    const results = await Promise.all(
-        orderedExtraIds.map((id, index) =>
-            supabase.from('product_extras').update({ sort_order: index }).eq('id', id)
-        )
-    )
-    const failed = results.find(r => r.error)
-    if (failed) throw new Error(failed.error.message)
+    if (error) throw error
 }
 
 export async function updateProductExtraSticky(extraId, isSticky) {

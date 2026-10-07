@@ -21,26 +21,12 @@ export async function fetchIngredientCostsAndUnits(addressId: UUID | null) {
     // address via the seed_address_ingredient_costs trigger and the backfill in
     // migration 20260518_decouple_ingredient_costs.sql. Admin edits to default
     // rows DO NOT propagate to existing active addresses.
-    // Try with category first; fall back to legacy SELECT if migration
-    // 20260523_add_ingredient_category.sql isn't deployed yet (Postgres 42703).
-    const BASE = 'ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock'
-    const runQuery = async (cols: string) => {
-        let q = supabase.from('ingredient_costs').select(cols)
-        q = addressId ? q.eq('address_id', addressId) : q.is('address_id', null)
-        // .select(cols) with a dynamic column string (not a literal) makes supabase-js
-        // fall back to its GenericStringError type — cast to the real loose shape.
-        return await q as unknown as { data: Row[] | null; error: SupabaseError }
-    }
-
-    // Try newest schema first, degrade column-by-column on undefined_column (42703)
-    // so the page still loads if tare_weight / count_in_audit / category migrations
-    // aren't deployed.
     const groupsPromise = fetchIngredientGroups(addressId)
-    let { data, error } = await runQuery(`${BASE}, category, count_in_audit, tare_weight, group_id`)
-    if (error?.code === '42703') ({ data, error } = await runQuery(`${BASE}, category, count_in_audit, tare_weight`))
-    if (error?.code === '42703') ({ data, error } = await runQuery(`${BASE}, category, count_in_audit`))
-    if (error?.code === '42703') ({ data, error } = await runQuery(`${BASE}, category`))
-    if (error?.code === '42703') ({ data, error } = await runQuery(BASE))
+    const cols = 'ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock, category, count_in_audit, tare_weight, group_id'
+    const q = supabase.from('ingredient_costs').select(cols)
+    // .select(cols) with a dynamic column string (not a literal) makes supabase-js
+    // fall back to its GenericStringError type — cast to the real loose shape.
+    const { data, error } = await (addressId ? q.eq('address_id', addressId) : q.is('address_id', null)) as unknown as { data: Row[] | null; error: SupabaseError }
     const groups = await groupsPromise
     if (error) {
         console.error('fetchIngredientCostsAndUnits error:', error)
@@ -61,7 +47,7 @@ export async function fetchIngredientCostsAndUnits(addressId: UUID | null) {
 
 // Nhóm nguyên liệu (danh mục con trong tab Nguyên liệu / Bao bì) — migration 20261003_ingredient_groups.
 // null = địa chỉ không hỗ trợ nhóm (template address null / bảng chưa migrate) → UI ẩn phần nhóm.
-export async function fetchIngredientGroups(addressId: UUID | null): Promise<Row[] | null> {
+async function fetchIngredientGroups(addressId: UUID | null): Promise<Row[] | null> {
     if (!addressId) return null
     const { data, error } = await supabase
         .from('ingredient_groups')

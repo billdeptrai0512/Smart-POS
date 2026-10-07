@@ -7,7 +7,7 @@ import { useAddress } from './AddressContext'
 import { Outlet } from 'react-router-dom'
 import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 import { onTabReturn } from '../utils/tabVisibility'
-import { readJSON } from '../utils/storage'
+import { readJSON, writeJSON } from '../utils/storage'
 
 const ProductContext = createContext(null)
 const FRESH_MS = 30_000 // cửa sổ "vừa tải xong" cho refreshProducts({ ifStale })
@@ -125,21 +125,21 @@ export function ProductProvider() {
         setProductToppings(productToppingsMap)
         setDiscountPrograms(discountProgramsList)
         setProductDiscounts(productDiscountsMap)
-        try {
-            const key = (name) => buildCacheKey(addressId || 'default', name)
-            localStorage.setItem(key('products'), JSON.stringify(prods))
-            localStorage.setItem(key('recipes'), JSON.stringify(recs))
-            localStorage.setItem(key('costs'), JSON.stringify(costs))
-            localStorage.setItem(key('units'), JSON.stringify(units))
-            localStorage.setItem(key('configs'), JSON.stringify(rows || []))
-            localStorage.setItem(key('ingredient_groups'), JSON.stringify(groups ?? null))
-            localStorage.setItem(key('extras'), JSON.stringify(extras))
-            localStorage.setItem(key('extra_ingredients'), JSON.stringify(extraIngs))
-            localStorage.setItem(key('toppings'), JSON.stringify(toppingsList))
-            localStorage.setItem(key('product_toppings'), JSON.stringify(productToppingsMap))
-            localStorage.setItem(key('discount_programs'), JSON.stringify(discountProgramsList))
-            localStorage.setItem(key('product_discounts'), JSON.stringify(productDiscountsMap))
-        } catch { /* ignore quota errors */ }
+        // writeJSON nuốt lỗi quota
+        Object.entries({
+            products: prods,
+            recipes: recs,
+            costs,
+            units,
+            configs: rows || [],
+            ingredient_groups: groups ?? null,
+            extras,
+            extra_ingredients: extraIngs,
+            toppings: toppingsList,
+            product_toppings: productToppingsMap,
+            discount_programs: discountProgramsList,
+            product_discounts: productDiscountsMap,
+        }).forEach(([name, val]) => writeJSON(buildCacheKey(addressId || 'default', name), val))
     }, [])
 
     useEffect(() => {

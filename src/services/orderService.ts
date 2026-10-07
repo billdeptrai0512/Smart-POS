@@ -29,7 +29,7 @@ import type { UUID, CartItem, CostPerItem, OrderPayload, TodayStats } from '../t
 
 // Fetch today's revenue + cups (cups excludes products with count_as_cup=false).
 // Uses the get_today_stats RPC which aggregates in Postgres — payload is a
-// single row, no N+1 product join over the wire. Legacy fallback below.
+// single row, no N+1 product join over the wire.
 export async function fetchTodayStats(addressId: UUID | null): Promise<TodayStats> {
     if (localRepo.isGuest()) {
         const orders = localRepo.fetchLocalOrders(addressId)
@@ -57,28 +57,8 @@ export async function fetchTodayStats(addressId: UUID | null): Promise<TodayStat
         }
     }
 
-    // Fallback: function not deployed (PGRST202 / 42883). Use legacy query.
-    if (error && error.code !== 'PGRST202' && error.code !== '42883') {
-        console.error('fetchTodayStats RPC error:', error)
-    }
-
-    const from = startOfDayVN()
-    const { data: legacyData, error: legacyError } = await supabase
-        .from('orders')
-        .select('total, order_items(quantity, products(count_as_cup))')
-        .eq('address_id', addressId)
-        .gte('created_at', from.toISOString())
-
-    if (legacyError) { console.error('fetchTodayStats legacy error:', legacyError); return { revenue: 0, cups: 0 } }
-
-    let revenue = 0, cups = 0
-    ;(legacyData || []).forEach((o: any) => {
-        revenue += Number(o.total || 0)
-        ;(o.order_items || []).forEach((i: any) => {
-            if (i.products?.count_as_cup !== false) cups += Number(i.quantity || 0)
-        })
-    })
-    return { revenue, cups }
+    console.error('fetchTodayStats RPC error:', error)
+    return { revenue: 0, cups: 0 }
 }
 
 // Fetch all orders for today, newest first (optionally scoped by address)

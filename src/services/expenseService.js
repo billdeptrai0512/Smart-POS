@@ -190,10 +190,6 @@ export async function fetchIngredientRestockHistory(addressIds, ingredient, from
         .map(e => ({ ...e, payments: e.expense_payments || [] }))
 }
 
-// ---- Fixed Costs CRUD removed ----
-// Under the "thực chi" model fixed_costs templates are not created or auto-injected.
-// Legacy table + column remain in the DB for audit; drop in a future migration.
-
 // ---- Expense Categories CRUD ----
 // Tags that group expenses on the profit report. Manager-managed inline through
 // the expense form. NVL refills intentionally don't get a category — they're

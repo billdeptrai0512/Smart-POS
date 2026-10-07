@@ -16,6 +16,7 @@ import CreateStaffModal from '../components/AddressSelectPage/CreateStaffModal'
 import SupportModal from '../components/common/SupportModal'
 import { BottomSheet, SheetHeader } from '../components/common/ModalShell'
 import { cacheKey as buildCacheKey, STORAGE_KEYS } from '../constants/storageKeys'
+import { writeJSON } from '../utils/storage'
 import { computeSubscriptionStatus } from '../utils/subscriptionStatus'
 import { dateFullVN } from '../utils/dateVN'
 
@@ -126,15 +127,8 @@ export default function AddressSelectPage() {
                 const extraIds = Object.values(extras).flat().map(e => e.id)
                 const extraIngs = await fetchExtraIngredients(extraIds)
                 const { costs, units } = costsResult
-                const key = name => buildCacheKey(addr.id, name)
-                try {
-                    localStorage.setItem(key('products'), JSON.stringify(prods))
-                    localStorage.setItem(key('recipes'), JSON.stringify(recs))
-                    localStorage.setItem(key('costs'), JSON.stringify(costs))
-                    localStorage.setItem(key('units'), JSON.stringify(units))
-                    localStorage.setItem(key('extras'), JSON.stringify(extras))
-                    localStorage.setItem(key('extra_ingredients'), JSON.stringify(extraIngs))
-                } catch { /* ignore quota */ }
+                Object.entries({ products: prods, recipes: recs, costs, units, extras, extra_ingredients: extraIngs })
+                    .forEach(([name, val]) => writeJSON(buildCacheKey(addr.id, name), val))
             } catch {
                 prefetchedIds.delete(addr.id) // cho phép thử lại lần vào sau
             }

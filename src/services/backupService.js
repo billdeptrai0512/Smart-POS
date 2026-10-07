@@ -30,33 +30,22 @@ import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 //     costs:[{ingredient,unit_cost,unit}],
 //     ingredientSortOrder:[...] }
 
-// products query có fallback riêng (cột is_divider có thể chưa migrate) nên tách thành
-// hàm async độc lập để chạy song song với các query còn lại qua Promise.all bên dưới.
+// Tách thành hàm async độc lập để chạy song song với các query còn lại qua Promise.all bên dưới.
 async function fetchSnapshotProducts(sourceAddressId) {
-    let { data: products, error: e1 } = await supabase
+    const { data: products, error } = await supabase
         .from('products')
         .select('id, name, price, sort_order, count_as_cup, is_divider')
         .eq('owner_address_id', sourceAddressId)
         .eq('is_active', true)
-    // 42703: cột is_divider chưa có (migration 20260703_menu_divider chưa chạy)
-    let hasDividerColumn = true
-    if (e1?.code === '42703') {
-        hasDividerColumn = false;
-        ({ data: products, error: e1 } = await supabase
-            .from('products')
-            .select('id, name, price, sort_order, count_as_cup')
-            .eq('owner_address_id', sourceAddressId)
-            .eq('is_active', true))
-    }
-    if (e1) throw new Error('Lỗi khi đọc menu nguồn: ' + e1.message)
-    return { products: products || [], hasDividerColumn }
+    if (error) throw new Error('Lỗi khi đọc menu nguồn: ' + error.message)
+    return { products: products || [] }
 }
 
 // Read a source address (RLS-scoped to current user) into a snapshot.
 async function readSnapshot(sourceAddressId) {
     // 4 query độc lập chạy song song (chỉ extraIngredients cần đợi extras xong để lấy id).
     const [
-        { products, hasDividerColumn },
+        { products },
         { data: recipes, error: e2 },
         { data: extras, error: e3 },
         { data: costs, error: e5 },
@@ -91,7 +80,6 @@ async function readSnapshot(sourceAddressId) {
         extraIngredients,
         costs: costs || [],
         ingredientSortOrder: srcAddr?.ingredient_sort_order || [],
-        hasDividerColumn,
     }
 }
 
@@ -136,8 +124,7 @@ async function applySnapshot(targetAddressId, snapshot, options, onProgress) {
             // Cột is_divider phải nhất quán trên MỌI row: PostgREST dựng câu INSERT theo
             // union các key trong mảng, row nào thiếu key sẽ nhận NULL (không fallback
             // default false) → vi phạm NOT NULL nếu chỉ vài row có divider (xem lỗi
-            // "null value in column is_divider"). Nên gửi cho tất cả hoặc không gửi cho ai.
-            const hasDivider = snapshot.hasDividerColumn !== false
+            // "null value in column is_divider"). Nên luôn gửi cho tất cả.
             const rows = list.map(p => {
                 const newId = crypto.randomUUID()
                 productIdMap.set(p.id, newId)
@@ -149,7 +136,7 @@ async function applySnapshot(targetAddressId, snapshot, options, onProgress) {
                     count_as_cup: p.count_as_cup ?? true,
                     is_active: true,
                     owner_address_id: targetAddressId,
-                    ...(hasDivider ? { is_divider: p.is_divider ?? false } : {}),
+                    is_divider: p.is_divider ?? false,
                 }
             })
             const { error: insErr } = await supabase.from('products').insert(rows)

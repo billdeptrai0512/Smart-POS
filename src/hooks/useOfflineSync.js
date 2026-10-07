@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { bulkSubmitOrders, closeTable } from '../services/orderService'
 import { STORAGE_KEYS } from '../constants/storageKeys'
-import { readJSON } from '../utils/storage'
+import { readJSON, writeJSON } from '../utils/storage'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -17,7 +17,7 @@ export function getPendingOrders() {
 }
 
 function savePendingOrders(orders) {
-    localStorage.setItem(PENDING_ORDERS_KEY, JSON.stringify(orders))
+    writeJSON(PENDING_ORDERS_KEY, orders)
 }
 
 export function removePendingOrder(createdAt) {
@@ -56,7 +56,7 @@ function getPendingTableCloses() {
 }
 
 function savePendingTableCloses(list) {
-    localStorage.setItem(PENDING_CLOSES_KEY, JSON.stringify(list))
+    writeJSON(PENDING_CLOSES_KEY, list)
 }
 
 export function addPendingTableClose(addressId, tableName, closedAt) {

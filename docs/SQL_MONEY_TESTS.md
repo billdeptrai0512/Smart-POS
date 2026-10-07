@@ -36,7 +36,10 @@ lên production (không có staging) — mỗi lần DROP/CREATE function là m�
   1. Nhập kho lần đầu → WAC = amountDue/qty, tồn warehouse đúng.
   2. Nhập lần 2 giá khác → WAC moving-average đúng công thức process.
   3. Sửa phiếu cũ (đổi qty + tiền) → WAC **full re-average** (mô hình cancel_restock,
-     KHÔNG phải moving-average — xem chú thích trong task.md về 2 mô hình WAC).
+     KHÔNG phải moving-average. Có 2 mô hình WAC khác nhau trong code: `process_ingredient_restock`
+     = moving-average `(stock*old_cost + amount)/(stock+qty)`; `cancel_restock` / `edit_ingredient_restock`
+     = `Σamount / Σqty` trên phiếu mua thật còn sống (is_refill, không adjustment, không cancelled,
+     amount>0) — tất định, không phụ thuộc thứ tự sửa; moving-average sẽ sai khi sửa phiếu cũ).
   4. Sửa phiếu → cascade `before_stock`/`after_stock` các phiếu SAU nó đổi đúng delta.
   5. Hủy phiếu giữa chuỗi → tồn + WAC + hoàn tiền đúng.
   6. Nhập backdate (purchaseDate quá khứ, kèm giờ) → `created_at`/`paid_at` khớp,

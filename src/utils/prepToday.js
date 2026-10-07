@@ -13,12 +13,12 @@ export const HISTORY_OFFSETS_TOMORROW = [6, 13, 20]  // cùng thứ NGÀY MAI
 export const isPrepFilled = (v) => v !== undefined && v !== null && v !== '' && Number(v) !== 0
 
 // Dự báo = max(tiêu thụ hôm nay tới giờ, cùng thứ tuần trước).
-export const forecastFor = (ingredient, usedMap, lastWeekMap) =>
+const forecastFor = (ingredient, usedMap, lastWeekMap) =>
     Math.max(r1(lookupByLabel(ingredient, usedMap)), r1(lookupByLabel(ingredient, lastWeekMap)))
 
 // Item chung: { ingredient, have, need, needPacks, unit, packUnit, fillQty }.
 //   have = tồn hiện có ("Còn"); need = target − have ("Cần"); needPacks = quy đổi ra bịch.
-export const toPrepItem = (ing, have, target) => {
+const toPrepItem = (ing, have, target) => {
     const need = r1(target - have)
     if (need <= 0) return null
     const packSize = Number(ing.pack_size) || 0

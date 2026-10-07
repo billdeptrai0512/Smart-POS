@@ -234,14 +234,7 @@ export async function processIngredientRestock(addressId: UUID | null, ingredien
                 params.p_created_at = purchaseDate
                 params.p_paid_at = purchaseDate
             }
-            let { data, error } = await supabase.rpc('process_ingredient_restock', params)
-            // Pre-migration: RPC chưa có p_cash_phase → PostgREST không khớp overload
-            // (PGRST202). Retry bỏ param để nhập kho vẫn chạy (phiếu sẽ thiếu cờ → sau chốt).
-            if (error && (error.code === 'PGRST202' || /cash_phase/i.test(error.message || ''))) {
-                const retry = { ...params }
-                delete retry.p_cash_phase
-                ;({ data, error } = await supabase.rpc('process_ingredient_restock', retry))
-            }
+            const { data, error } = await supabase.rpc('process_ingredient_restock', params)
             if (error) throw error
             result = data
         } else {
@@ -404,12 +397,7 @@ export async function editIngredientRestock(addressId: UUID, expenseId: UUID, op
             p_staff_name: staffName
         }
 
-        let { data, error } = await supabase.rpc('edit_ingredient_restock', params)
-        if (error && (error.code === 'PGRST202' || /cash_phase/i.test(error.message || ''))) {
-            const retry = { ...params }
-            delete retry.p_cash_phase
-            ;({ data, error } = await supabase.rpc('edit_ingredient_restock', retry))
-        }
+        const { data, error } = await supabase.rpc('edit_ingredient_restock', params)
         if (error) throw error
         result = data
     }

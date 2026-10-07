@@ -10,7 +10,7 @@ import { dateStringVN } from '../utils/dateVN'
 import { resolveDiscountedPrice } from '../utils/discountPrograms'
 import { calculateItemCost, computeDiscount, discountToPercent, cartLineSubtotal, NO_DISCOUNT } from '../utils'
 import { cartBelongsToAddress, shouldRestoreCartOnFailure } from '../utils/posCartGuards'
-import { readJSON } from '../utils/storage'
+import { readJSON, writeJSON } from '../utils/storage'
 import { useProducts } from './ProductContext'
 import { useAddress } from './AddressContext'
 import { useAuth } from './AuthContext'
@@ -468,7 +468,7 @@ export function POSProvider() {
     // a single write per quiet period.
     useEffect(() => {
         const t = setTimeout(() => {
-            localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(cart))
+            writeJSON(STORAGE_KEYS.CART, cart)
             if (addressId) localStorage.setItem(STORAGE_KEYS.CART_ADDRESS, addressId)
             localStorage.setItem(STORAGE_KEYS.REVENUE, revenue.toString())
             localStorage.setItem(STORAGE_KEYS.TOTAL_COST, totalCost.toString())
@@ -480,7 +480,7 @@ export function POSProvider() {
     // Save absolute latest states synchronously on unmount
     useEffect(() => {
         return () => {
-            localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(cartRef.current))
+            writeJSON(STORAGE_KEYS.CART, cartRef.current)
             if (addressIdRef.current) localStorage.setItem(STORAGE_KEYS.CART_ADDRESS, addressIdRef.current)
             localStorage.setItem(STORAGE_KEYS.REVENUE, revenueRef.current.toString())
             localStorage.setItem(STORAGE_KEYS.TOTAL_COST, totalCostRef.current.toString())

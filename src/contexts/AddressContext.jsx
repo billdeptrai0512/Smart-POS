@@ -10,7 +10,7 @@ import {
 } from '../services/authService'
 import { getDemoAddress } from '../services/localRepository'
 import { STORAGE_KEYS } from '../constants/storageKeys'
-import { readJSON } from '../utils/storage'
+import { readJSON, writeJSON } from '../utils/storage'
 import { Outlet } from 'react-router-dom'
 
 const AddressContext = createContext(null)
@@ -117,12 +117,12 @@ export function AddressProvider() {
             const saved = addrs.find(a => a.id === savedId)
             if (saved) {
                 setSelectedAddressState(saved)
-                localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, JSON.stringify(saved))
+                writeJSON(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, saved)
             } else if (addrs.length === 1) {
                 // Auto-select if only one address
                 setSelectedAddressState(addrs[0])
                 localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS, addrs[0].id)
-                localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, JSON.stringify(addrs[0]))
+                writeJSON(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, addrs[0])
             } else if (!saved && addrs.length) {
                 // Saved address genuinely no longer exists for this account → drop the
                 // stale selection + cache so RequireAddress sends the user to pick a
@@ -155,7 +155,7 @@ export function AddressProvider() {
             // real address, so skip the id-lookup cache key and session tracking for it.
             if (addr.id) localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS, addr.id)
             else localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS)
-            localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, JSON.stringify(addr))
+            writeJSON(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, addr)
             if (profile?.id && addr.id) {
                 upsertSession(profile.id, addr.id)
                 localStorage.setItem(STORAGE_KEYS.ACTIVE_USER_ID, profile.id)
@@ -192,7 +192,7 @@ export function AddressProvider() {
         setSelectedAddressState(prev => {
             if (!prev || prev.id !== addressId) return prev
             const updated = { ...prev, ...patch }
-            localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, JSON.stringify(updated))
+            writeJSON(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, updated)
             return updated
         })
     }, [])
