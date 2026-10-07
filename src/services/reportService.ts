@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
 import { startOfDayVN, endOfDayVN, dateStringVN } from '../utils/dateVN'
-import { reportCache, historicalCache, invalidateReportCache } from './cache'
+import { reportCache, historicalCache, invalidateReportCache, invalidateInflight } from './cache'
 import type { UUID, Row } from '../types/domain'
 
 type SupabaseError = { code?: string; message?: string } | null
@@ -183,6 +183,8 @@ export async function mergeShiftClosingInventory(addressId: UUID, patches: Row[]
         p_system_total_revenue: systemTotalRevenue || 0,
     })
     if (error) throw error
+    // Đọc tồn kho đang bay lúc RPC chạy có thể là số TRƯỚC khi ghi — đừng để reload ngay sau đó nhập vào nó.
+    invalidateInflight(addressId)
     // RETURNS shift_closings (composite) → PostgREST may give the object or a 1-element array.
     return Array.isArray(data) ? data[0] : data
 }

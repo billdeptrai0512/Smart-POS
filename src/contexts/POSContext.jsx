@@ -105,6 +105,7 @@ export function POSProvider() {
     const todayOrdersRef = useRef([])
     todayOrdersRef.current = todayOrders
     const historyFetchedRef = useRef({ addressId: null, at: 0 }) // last successful handleLoadHistory fetch
+    const historyInflightRef = useRef(null) // { addressId, promise } — lượt handleLoadHistory đang bay
     const [todayExpenses, setTodayExpenses] = useState([])
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
     // Order ids that just arrived from ANOTHER device (set by the sync poll below),
@@ -860,6 +861,17 @@ export function POSProvider() {
         // đường vòng poll (useOrdersPoll), nên vài giây là đủ.
         const last = historyFetchedRef.current
         if (last.addressId === addressId && Date.now() - last.at < 4000) return
+        // Đang có lượt nạp cho địa chỉ này (dải notice + tab Kiểm kê + StrictMode mount cùng lúc) → dùng chung
+        // kết quả thay vì bắn thêm 1 cặp orders+expenses. `at` chỉ ghi SAU khi xong nên guard 4s ở trên không chặn được.
+        const flying = historyInflightRef.current
+        if (flying?.addressId === addressId) return flying.promise
+        const promise = loadHistoryNow()
+        historyInflightRef.current = { addressId, promise }
+        promise.finally(() => { if (historyInflightRef.current?.promise === promise) historyInflightRef.current = null })
+        return promise
+    }
+
+    async function loadHistoryNow() {
         setIsLoadingHistory(true)
         try {
             const [orders, expenses] = await Promise.all([

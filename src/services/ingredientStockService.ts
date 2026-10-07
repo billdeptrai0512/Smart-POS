@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
 import { startOfDayVN } from '../utils/dateVN'
+import { inflightCache } from './cache'
 import type { UUID, Row } from '../types/domain'
 
 // Stock numbers are stored as floats (WAC math can produce arbitrary precision).
@@ -22,7 +23,11 @@ export function roundStock(x: number) {
 // Path nhanh: RPC `get_ingredient_stocks_v2` aggregate server-side (1 round-trip).
 // Fallback: smart 2-step JS aggregate khi RPC chưa deploy (PGRST202 / 42883).
 let _warnedFetchStocksFallback = false
-export async function fetchIngredientStocks(addressId: UUID | null) {
+// Trang + dải notice + hook kiểm kê mount cùng lúc đều gọi hàm này → chung 1 round-trip (xem inflightCache).
+export const fetchIngredientStocks = (addressId: UUID | null) =>
+    inflightCache.through([addressId, 'ingredientStocks'], () => fetchIngredientStocksUncached(addressId))
+
+async function fetchIngredientStocksUncached(addressId: UUID | null) {
     if (localRepo.isGuest()) return localRepo.fetchLocalIngredientStocks(addressId)
 
     // Default address (addressId=null) = global playground template. Anon callers can't

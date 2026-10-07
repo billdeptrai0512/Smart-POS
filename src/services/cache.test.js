@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { reportCache, invalidateReportCache } from './cache'
+import { reportCache, inflightCache, invalidateReportCache } from './cache'
 
 const deferred = () => {
     let resolve, reject
@@ -39,5 +39,27 @@ describe('cache.through', () => {
         expect(await first).toBe('stale')                       // caller cũ vẫn nhận số của nó
         expect(await reportCache.through(['t-inv', 'k'], fresh)).toBe('fresh') // cache giữ bản mới
         expect(fresh).toHaveBeenCalledTimes(1)
+    })
+})
+
+describe('inflightCache (TTL 0)', () => {
+    it('chia sẻ lần đọc đang bay nhưng KHÔNG giữ kết quả; invalidateReportCache huỷ lần đang bay', async () => {
+        const d = deferred()
+        const fn = vi.fn(() => d.promise)
+        const a = inflightCache.through(['t-if', 'k'], fn)
+        const b = inflightCache.through(['t-if', 'k'], fn)
+        expect(fn).toHaveBeenCalledTimes(1)
+        d.resolve(1)
+        await Promise.all([a, b])
+        await inflightCache.through(['t-if', 'k'], fn) // đã xong → phải fetch lại (không cache)
+        expect(fn).toHaveBeenCalledTimes(2)
+
+        const slow = deferred()
+        const first = inflightCache.through(['t-if2', 'k'], () => slow.promise)
+        invalidateReportCache('t-if2')                  // vd ghi kho xong → reload không được nhập vào lần đọc cũ
+        const fresh = vi.fn().mockResolvedValue('new')
+        expect(await inflightCache.through(['t-if2', 'k'], fresh)).toBe('new')
+        slow.resolve('old')
+        expect(await first).toBe('old')
     })
 })

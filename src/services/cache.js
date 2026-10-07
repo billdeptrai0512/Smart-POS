@@ -83,8 +83,19 @@ function createCache(ttlMs) {
 export const reportCache = createCache(30_000)
 export const historicalCache = createCache(5 * 60_000)
 
+// TTL 0 = KHÔNG giữ kết quả, chỉ cho các caller đồng thời cùng key chung 1 lần fetch. Dành cho đọc
+// tồn kho: nhiều hook cùng mount (trang + dải notice + StrictMode) bắn y hệt nhau, nhưng dữ liệu
+// đổi theo từng thao tác ghi nên không được giữ lại như reportCache.
+export const inflightCache = createCache(0)
+
+export function invalidateInflight(addressId) {
+    if (addressId) inflightCache.invalidatePrefix([addressId])
+    else inflightCache.clear()
+}
+
 export function invalidateReportCache(addressId) {
     if (addressId) reportCache.invalidatePrefix([addressId])
     else reportCache.clear()
+    invalidateInflight(addressId)
 }
 
