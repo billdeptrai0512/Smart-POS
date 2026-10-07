@@ -231,14 +231,15 @@ export default function IngredientManagementPage() {
         // activeView trong deps nên chuyển sang tab Lưu trữ sẽ tự tải lại (cũng là bản tươi sau khi Kiểm kê lưu).
         if (!selectedAddress || activeView !== 'stocking') return
         const siblingIds = groupAddressIds.filter(id => id !== (selectedAddress.id ?? null))
-        const [stocks, deficits, daily, ...siblingResults] = await Promise.all([
+        // Deficits quét TOÀN BỘ lịch sử expenses + shift_closings (nặng nhất) mà chỉ phục vụ banner của quản lý
+        // → không chặn danh sách: banner hiện sau, nhân viên thì khỏi tải.
+        if (canEdit) fetchIngredientDeficits(groupAddressIds).then(setStockDeficits).catch(err => console.error('fetchIngredientDeficits', err))
+        const [stocks, daily, ...siblingResults] = await Promise.all([
             fetchIngredientStocks(selectedAddress.id ?? null),
-            fetchIngredientDeficits(groupAddressIds),
             fetchIngredientDailyContext(selectedAddress.id ?? null),
             ...siblingIds.map(id => fetchIngredientStocks(id)),
         ])
         setIngredientStocks(stocks)
-        setStockDeficits(deficits)
         setDailyContext(daily)
         const siblingMap = {}
         siblingIds.forEach((id, i) => { siblingMap[id] = siblingResults[i] })
@@ -247,7 +248,7 @@ export default function IngredientManagementPage() {
         // gets a new reference on every context refetch even when nothing relevant changed
         // (e.g. ingredient_sort_order edits), which would refire this on every such update.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedAddress?.id, selectedAddress?.name, groupAddressIds, activeView])
+    }, [selectedAddress?.id, selectedAddress?.name, groupAddressIds, activeView, canEdit])
     useEffect(() => { loadStocks().finally(() => { if (activeView === 'stocking') setStocksLoaded(true) }) }, [loadStocks])
 
     useEffect(() => { setIngredientCosts(contextCosts) }, [contextCosts])
