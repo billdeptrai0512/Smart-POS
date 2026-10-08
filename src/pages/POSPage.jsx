@@ -25,7 +25,7 @@ export default function POSPage() {
     const {
         cart,
         handleAddItem, handleRemoveItem, handleToggleExtra, handleToggleTopping,
-        toast, recentOrders, draftOrder, enterKey,
+        toast, recentOrders, enterKey,
         enabledStickyExtraIds,
         handleToggleStickyExtra,
         handleConfirm, tableName,
@@ -87,7 +87,6 @@ export default function POSPage() {
                     addressName={selectedAddress?.name}
                     onAddressClick={() => navigate(isGuest ? '/login' : '/addresses')}
                     recentOrders={recentOrders}
-                    draftOrder={draftOrder}
                     enterKey={enterKey}
                     showOnboardingHint={showHistoryHint}
                     takeawaySlotRef={setTakeawaySlot}

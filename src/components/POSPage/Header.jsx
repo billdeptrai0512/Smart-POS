@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 
-// Types the draft text out left→right. Keyed by the newest cart line's id (in render)
-// so a NEW tap retypes from scratch; toggling extras only grows the text, so the
-// suffix (e.g. " · Lớn") types on without restarting.
+// Types the committed order's text out left→right — only runs once "Tạo đơn" is pressed
+// (tapping a product no longer writes to the journal, so it can't be mistaken for "sent").
 function Typewriter({ text }) {
     const [n, setN] = useState(0)
     useEffect(() => {
@@ -14,22 +13,16 @@ function Typewriter({ text }) {
     return <>{text.slice(0, n)}{n < text.length && <span className="opacity-50">▌</span>}</>
 }
 
-export default function Header({ dayName, dateOnly, onOpenHistory, addressName, onAddressClick, recentOrders = [], draftOrder, enterKey, showOnboardingHint = false, takeawaySlotRef }) {
+export default function Header({ dayName, dateOnly, onOpenHistory, addressName, onAddressClick, recentOrders = [], enterKey, showOnboardingHint = false, takeawaySlotRef }) {
     const hintClass = onboardingHintClass(showOnboardingHint, 'solid')
-    // Draft (cart not yet sent) line on top, then saved orders. Cap at 3 rows.
-    // key 'draft' is stable so extras overwrite it in place; typeKey = the newest
-    // cart line's id so the typewriter restarts only on a new tap. isNew matches only the
-    // exact row just committed locally (enterKey) → the realtime DB echo, which
-    // remounts the row under a new server-timestamp key, can't replay the slide-in.
-    const rows = [
-        ...(draftOrder ? [{ key: 'draft', draft: true, isNew: false, typeKey: draftOrder.cartItemId, text: draftOrder.items.join(' · ') }] : []),
-        ...recentOrders.map(o => ({
-            key: o.id ?? o.createdAt, // id is collision-proof; createdAt (ms) can repeat on same-tick commits
-            draft: false,
-            isNew: o.createdAt === enterKey,
-            text: o.items.join(' · '),
-        })),
-    ].slice(0, 3)
+    // Saved orders only, newest first (max 3). isNew matches only the exact row just
+    // committed locally (enterKey) → it slides in and types out; the realtime DB echo,
+    // which remounts the row under a new server-timestamp key, can't replay it.
+    const rows = recentOrders.map(o => ({
+        key: o.id ?? o.createdAt, // id is collision-proof; createdAt (ms) can repeat on same-tick commits
+        isNew: o.createdAt === enterKey,
+        text: o.items.join(' · '),
+    })).slice(0, 3)
     return (
         <header className="shrink-0 pt-6 pb-6 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)] relative z-20">
             <div className="px-6 grid grid-cols-2 dine-split:grid-cols-4 gap-3 mb-1">
@@ -75,9 +68,9 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                                             key={r.key}
                                             className={`${r.isNew ? 'order-enter' : ''} flex items-baseline gap-2 px-1 -mx-1 rounded text-[12px] font-bold uppercase tracking-tight leading-snug text-white`}
                                         >
-                                            <span className={`shrink-0 text-[15px] leading-none ${r.draft ? 'text-white' : 'text-white/70'}`}>•</span>
+                                            <span className="shrink-0 text-[15px] leading-none text-white/70">•</span>
                                             <span className="line-clamp-1">
-                                                {r.draft ? <Typewriter key={r.typeKey} text={r.text} /> : r.text}
+                                                {r.isNew ? <Typewriter text={r.text} /> : r.text}
                                             </span>
                                         </div>
                                     ))}

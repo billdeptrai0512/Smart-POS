@@ -528,11 +528,6 @@ export function POSProvider() {
     ), 0)
     const finalTotal = Math.max(0, total - discountAmount)
 
-    // Live draft of the cart (not yet submitted) — shown as the top line of the
-    // header journal so it appears the instant you tap, and extras overwrite it in
-    // place (stable 'draft' key in Header → no remount/flash).
-    const draftOrder = useMemo(() => cart.length ? { ...buildLastOrderFromCart(cart, total), cartItemId: cart[cart.length - 1].cartItemId } : null, [cart, total])
-
     // ---- Handlers ----
 
     // ponytail: fire-and-forget submit, no isSubmitting gate — handleConfirm's sync
@@ -1101,11 +1096,11 @@ export function POSProvider() {
         enabledStickyExtraIds,
         total, orderCount, hasOrder,
         discountAmount, finalTotal,
-        recentOrders, draftOrder, enterKey,
+        recentOrders, enterKey,
         toast, showToast, showError, reportError,
         // deliberately partial deps, see comment above
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [cart, tableName, openTables, refreshTables, handleCloseTable, toggleMark, moveTableRounds, enabledStickyExtraIds, total, orderCount, hasOrder, discountAmount, finalTotal, recentOrders, draftOrder, enterKey, toast, showToast, showError, reportError])
+    }), [cart, tableName, openTables, refreshTables, handleCloseTable, toggleMark, moveTableRounds, enabledStickyExtraIds, total, orderCount, hasOrder, discountAmount, finalTotal, recentOrders, enterKey, toast, showToast, showError, reportError])
 
     const statsValue = useMemo(() => ({
         revenue, totalCost, cupsSold, isOnline,
