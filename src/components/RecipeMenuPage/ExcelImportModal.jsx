@@ -15,7 +15,7 @@ import { downloadCurrentDataExcel } from '../../services/exportService'
 export default function ExcelImportModal({ onClose }) {
     const {
         products, toppings, ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups,
-        recipes, productToppings, productExtras, extraIngredients, refreshProducts,
+        recipes, productToppings, productExtras, extraIngredients, discountPrograms, productDiscounts, refreshProducts,
     } = useProducts()
     const { selectedAddress } = useAddress()
     const { toast, showToast, showError } = useToast()
@@ -33,8 +33,8 @@ export default function ExcelImportModal({ onClose }) {
         const extras = Object.entries(productExtras).flatMap(([productId, exs]) =>
             exs.map(e => ({ id: e.id, productName: productById.get(productId) || '', name: e.name }))
         )
-        return { products, toppings, ingredientCosts, extras }
-    }, [products, toppings, ingredientCosts, productExtras])
+        return { products, toppings, ingredientCosts, extras, discountPrograms }
+    }, [products, toppings, ingredientCosts, productExtras, discountPrograms])
 
     async function handleFileChange(e) {
         const file = e.target.files?.[0]
@@ -80,7 +80,7 @@ export default function ExcelImportModal({ onClose }) {
             await downloadCurrentDataExcel({
                 addressName: selectedAddress?.name,
                 products, toppings, ingredientConfigs, ingredientGroups, ingredientUnits,
-                recipes, productToppings, productExtras, extraIngredients,
+                recipes, productToppings, productExtras, extraIngredients, discountPrograms, productDiscounts,
             })
         } catch (err) {
             showError(err, 'Xuất Excel')
@@ -104,6 +104,9 @@ export default function ExcelImportModal({ onClose }) {
         [result.plan.extraUpdates.length, 'tùy chọn thêm cập nhật'],
         [result.plan.extraIngredients.length, 'dòng công thức tùy chọn'],
         [result.plan.toppingLinks.reduce((s, l) => s + l.productNames.length, 0), 'liên kết topping-món'],
+        [result.plan.discounts.length, 'chương trình giảm giá mới'],
+        [result.plan.discountUpdates.length, 'chương trình giảm giá cập nhật'],
+        [result.plan.discountLinks.reduce((s, l) => s + l.productNames.length, 0), 'liên kết giảm giá-món'],
     ].filter(([n]) => n > 0)
 
     const removals = result ? [
@@ -111,6 +114,7 @@ export default function ExcelImportModal({ onClose }) {
         [result.plan.removals.dividers, 'danh mục'],
         [result.plan.removals.toppings, 'topping'],
         [result.plan.removals.extras, 'tùy chọn thêm'],
+        [result.plan.removals.discounts, 'chương trình giảm giá'],
     ].filter(([items]) => items.length > 0) : []
 
     return (
@@ -169,7 +173,7 @@ export default function ExcelImportModal({ onClose }) {
                         {Object.values(result.plan.replace).some(Boolean) && (
                             <div className="space-y-1 bg-danger-soft border border-danger/20 rounded-[12px] p-3">
                                 <p className="text-[12px] font-black text-danger uppercase">Ghi đè toàn bộ theo file</p>
-                                <p className="text-[12px] text-danger">Món, danh mục, topping, tùy chọn, công thức và liên kết topping-món không có trong file sẽ bị xoá khỏi địa chỉ này. Sheet không có trong file thì giữ nguyên. Nguyên liệu không bị xoá.</p>
+                                <p className="text-[12px] text-danger">Món, danh mục, topping, tùy chọn, công thức, chương trình giảm giá và các liên kết không có trong file sẽ bị xoá khỏi địa chỉ này. Sheet không có trong file thì giữ nguyên. Nguyên liệu không bị xoá.</p>
                                 {removals.map(([items, label]) => (
                                     <p key={label} className="text-[12px] text-danger font-bold">
                                         Xoá {items.length} {label}: {items.join(', ')}

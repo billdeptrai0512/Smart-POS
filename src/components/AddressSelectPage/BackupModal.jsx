@@ -5,14 +5,15 @@ import { useAddress } from '../../contexts/AddressContext'
 import { Dialog, ModalHeader } from '../common/ModalShell'
 import { copyText } from '../../utils/clipboard'
 
-const ALL_OPTIONS = { menu: true, recipes: true, extras: true, ingredients: true }
-
-// Thứ tự khớp với applySnapshot trong backupService (menu → recipes → extras → ingredients).
+// Thứ tự khớp với applySnapshot trong backupService.
 const PHASES = [
     { key: 'menu', label: 'Menu' },
     { key: 'recipes', label: 'Công thức' },
     { key: 'extras', label: 'Tùy chọn thêm' },
-    { key: 'ingredients', label: 'Nguyên liệu' },
+    { key: 'ingredients', label: 'Nguyên liệu & nhóm' },
+    { key: 'toppings', label: 'Topping' },
+    { key: 'discounts', label: 'Chương trình giảm giá' },
+    { key: 'expenseCategories', label: 'Danh mục chi phí' },
 ]
 
 // Checklist trực quan từng bước clone (thay cho progress nhồi trong nút).
@@ -109,7 +110,7 @@ export default function BackupModal({ sourceAddress, onClose, onBack }) {
         try {
             const newAddr = await createNewAddress(cleanName)
             createdAddressId = newAddr.id
-            await cloneAddressConfig(sourceAddress.id, createdAddressId, ALL_OPTIONS, setProgress)
+            await cloneAddressConfig(sourceAddress.id, createdAddressId, {}, setProgress)
             setDone(true)
         } catch (err) {
             // Best-effort cleanup: if clone failed midway, the new address is half-populated and useless.
