@@ -25,7 +25,7 @@ function json(body: Record<string, unknown>, status: number): Response {
     })
 }
 
-Deno.serve(async (req) => {
+async function handle(req: Request): Promise<Response> {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
     if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
 
@@ -115,4 +115,13 @@ Deno.serve(async (req) => {
     }
 
     return json({ ok: true, profile }, 200)
+}
+
+// Exception không bắt được → 500 KHÔNG có header CORS → trình duyệt chỉ báo mơ hồ
+// "Failed to send a request to the Edge Function". Bắt lại để thấy lỗi thật.
+Deno.serve(async (req) => {
+    try { return await handle(req) } catch (e) {
+        console.error('create-team-member', e)
+        return json({ error: e instanceof Error ? e.message : String(e) }, 500)
+    }
 })
