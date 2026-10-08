@@ -86,3 +86,11 @@ describe('buildWarehousePrepList (Bổ sung tồn kho — cho mai)', () => {
         expect(out[0].need).toBe(1000)
     })
 })
+
+describe('pack2 (quy cách cấp 2) đi theo item', () => {
+    it('item mang pack2 khi NVL có cấp 2; needPacks vẫn tính theo cấp 1', () => {
+        const milk = { ingredient: 'sữa', unit: 'ml', pack_unit: 'hộp', pack_size: 1000, pack2_unit: 'thùng', pack2_size: 12, tare_weight: 0 }
+        const out = buildDepletedList({ ...base, ingredientsList: [milk], openingStock: { sữa: 0 }, warehouseStocks: { sữa: 50000 }, effectiveWarehouseStocks: { sữa: 50000 }, usedMap: { sữa: 500 } })
+        expect(out[0]).toMatchObject({ needPacks: 1, packUnit: 'hộp', pack2: { size: 12, unit: 'thùng' } })
+    })
+})

@@ -19,7 +19,7 @@ export function useIngredientCatalog(addressId, ingredientSortOrder, seedRows) {
         if (seeded) return Promise.resolve()
         if (addressId === undefined) { setIsLoading(false); return Promise.resolve() }
         setIsLoading(true)
-        return fetchIngredientCostsWithUnits(addressId).then(setFetched).finally(() => setIsLoading(false))
+        return fetchIngredientCostsWithUnits(addressId).then(setFetched).catch(() => { /* đã log ở service; giữ danh sách cũ */ }).finally(() => setIsLoading(false))
     }, [addressId, seeded])
 
     // Loại nguyên liệu được tắt "kiểm kê hao hụt" (count_in_audit === false).

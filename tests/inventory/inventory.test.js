@@ -2,7 +2,7 @@
 // Nguồn: src/utils/inventory.js
 
 import { describe, it, expect } from 'vitest';
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateLossValue, buildRecipeIngredientSet, buildIngredientToProduct, averageIngredientMaps } from '../../src/utils/inventory';
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateLossValue, buildRecipeIngredientSet, buildIngredientToProduct, averageIngredientMaps, formatPackedQty, formatPackCount, isLowStockOf } from '../../src/utils/inventory';
 
 const recipes = [
     { product_id: 'cf_den', ingredient: 'coffee_g', amount: 18 },
@@ -367,3 +367,58 @@ describe('buildIngredientToProduct', () => {
         expect(map['condensed_milk_ml']).toBeUndefined();
     });
 });
+
+// ─── formatPackedQty (quy cách 1 cấp / 2 cấp) ────────────────────────────────
+
+describe('formatPackedQty', () => {
+    const pack2 = { size: 12, unit: 'thùng' } // 1 thùng = 12 hộp; 1 hộp = 1286 ml
+    const fmt = (q, o = { compact: true }) => formatPackedQty(q, 1286, 'hộp', 'ml', o)
+
+    it('1 cấp: giữ nguyên hành vi cũ', () => {
+        expect(fmt(2572 + 40)).toBe('2 hộp + 40 ml')
+        expect(fmt(2572)).toBe('2 hộp')
+        expect(fmt(2572, {})).toBe('2 hộp + 0 ml')
+    })
+    it('2 cấp: thùng + hộp + lẻ, bỏ phần bằng 0 khi compact', () => {
+        const thung = 1286 * 12
+        expect(fmt(thung + 2 * 1286 + 40, { compact: true, pack2 })).toBe('1 thùng + 2 hộp + 40 ml')
+        expect(fmt(thung * 2, { compact: true, pack2 })).toBe('2 thùng')
+        expect(fmt(thung + 40, { compact: true, pack2 })).toBe('1 thùng + 40 ml')
+        expect(fmt(5 * 1286, { compact: true, pack2 })).toBe('5 hộp')
+    })
+    it('2 cấp: chưa đủ 1 hộp → chỉ hiện đơn vị gốc; số âm mang dấu', () => {
+        expect(fmt(40, { compact: true, pack2 })).toBe('40 ml')
+        expect(fmt(-(1286 * 12 + 1286), { compact: true, pack2 })).toBe('-1 thùng + -1 hộp')
+    })
+})
+
+describe('formatPackCount', () => {
+    const pack2 = { size: 12, unit: 'thùng' }
+    it('không có cấp 2 → số gói thuần', () => {
+        expect(formatPackCount(15, 'hộp')).toBe('15 hộp')
+    })
+    it('có cấp 2 → thùng + hộp lẻ, bỏ phần bằng 0', () => {
+        expect(formatPackCount(15, 'hộp', pack2)).toBe('1 thùng + 3 hộp')
+        expect(formatPackCount(24, 'hộp', pack2)).toBe('2 thùng')
+        expect(formatPackCount(5, 'hộp', pack2)).toBe('5 hộp')
+    })
+})
+
+describe('isLowStockOf (tồn quầy ít nhất + tồn kho ít nhất)', () => {
+    const cfg = { tareWeight: 0, minStock: 1000, minCounterStock: 200 }
+    const st = (warehouse, counter) => ({ warehouse_stock: warehouse, counter_stock: counter, current_stock: warehouse + counter })
+    it('đủ cả kho lẫn quầy → không sắp hết', () => {
+        expect(isLowStockOf(st(1500, 300), cfg, 'g')).toBe(false)
+    })
+    it('kho < kho ít nhất hoặc quầy < quầy ít nhất → sắp hết', () => {
+        expect(isLowStockOf(st(900, 300), cfg, 'g')).toBe(true)
+        expect(isLowStockOf(st(1500, 150), cfg, 'g')).toBe(true)
+    })
+    it('quầy tính sau khi trừ bì', () => {
+        expect(isLowStockOf(st(1500, 250), { ...cfg, tareWeight: 70 }, 'g')).toBe(true)   // 250 − 70 = 180 < 200
+    })
+    it('không đặt ngưỡng / hết hàng → false', () => {
+        expect(isLowStockOf(st(5, 5), { tareWeight: 0 }, 'g')).toBe(false)
+        expect(isLowStockOf(st(0, 0), cfg, 'g')).toBe(false)
+    })
+})

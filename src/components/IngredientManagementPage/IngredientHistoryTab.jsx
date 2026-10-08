@@ -13,7 +13,7 @@ import { dateShortVN, timeStringVN } from '../../utils/dateVN'
 // the sheet via onOpenPayment). Adjustment rows are non-clickable (no $ owed).
 export default function IngredientHistoryTab({
     loading, summary, history, unit,
-    packSize, packUnit,
+    packSize, packUnit, pack2,
     monthLabel, monthOffset, onMonthChange,
     onOpenPayment, onCancelRestock, onEditRestock,
     addressNameById, // {id: name} — chỉ truyền khi địa chỉ thuộc 1 warehouse group (kho tổng chung)
@@ -30,6 +30,7 @@ export default function IngredientHistoryTab({
                 unit={unit}
                 packSize={packSize}
                 packUnit={packUnit}
+                pack2={pack2}
                 hasOwing={hasOwing}
             />
 
@@ -50,6 +51,7 @@ export default function IngredientHistoryTab({
                             unit={unit}
                             packSize={packSize}
                             packUnit={packUnit}
+                            pack2={pack2}
                             onOpenPayment={onOpenPayment}
                             onCancelRestock={onCancelRestock}
                             onEditRestock={onEditRestock}
@@ -65,7 +67,7 @@ export default function IngredientHistoryTab({
 // ── Month nav + summary (one card) ────────────────────────────────────────────
 // Nav row on top, stats below a divider. Stats keep p-4 so the left column lines
 // up with the history card titles underneath. Hàng 2 (Đã trả | Còn nợ) chỉ khi có nợ.
-function MonthSummaryCard({ monthLabel, monthOffset, onMonthChange, showStats, summary, unit, packSize, packUnit, hasOwing }) {
+function MonthSummaryCard({ monthLabel, monthOffset, onMonthChange, showStats, summary, unit, packSize, packUnit, pack2, hasOwing }) {
     return (
         <div className="bg-surface rounded-[16px] border border-border/60 overflow-hidden">
             <div className="flex items-center justify-between px-1.5 py-1.5">
@@ -88,7 +90,7 @@ function MonthSummaryCard({ monthLabel, monthOffset, onMonthChange, showStats, s
                 <>
                     <div className="h-[1px] bg-border/60" />
                     <div className="grid gap-3 grid-cols-2 p-4">
-                        <Stat label="Số lượng nhập" value={formatPackedQty(summary.totalQty, packSize, packUnit, unit, { compact: true })} align="start" />
+                        <Stat label="Số lượng nhập" value={formatPackedQty(summary.totalQty, packSize, packUnit, unit, { compact: true, pack2 })} align="start" />
                         <Stat label="Tổng tiền nhập" value={formatVND(summary.totalSpent)} align="end" />
                         {hasOwing && (
                             <>
@@ -132,7 +134,7 @@ function Stat({ label, value, tone, align = 'center' }) {
 //
 // Layout: ĐÃ HỦY badge (if cancelled) · type tag + Hủy (corner) · hero qty + money ·
 // Tồn X→Y · context pills (restock only) · staff + datetime above a hairline divider.
-function HistoryCard({ entry, unit, packSize, packUnit, onOpenPayment, onCancelRestock, onEditRestock, addressName }) {
+function HistoryCard({ entry, unit, packSize, packUnit, pack2, onOpenPayment, onCancelRestock, onEditRestock, addressName }) {
     const d = new Date(entry.created_at)
     const dateStr = dateShortVN(d)
     const timeStr = timeStringVN(d)
@@ -157,7 +159,7 @@ function HistoryCard({ entry, unit, packSize, packUnit, onOpenPayment, onCancelR
     const heroQty = isWithdrawal
         ? `${qty} ${unit}`
         : showPackAdjust
-        ? `${qty > 0 ? '+' : ''}${formatPackedQty(qty, packSize, packUnit, unit, { compact: true })} = ${qty > 0 ? '+' : ''}${qty} ${unit}`
+        ? `${qty > 0 ? '+' : ''}${formatPackedQty(qty, packSize, packUnit, unit, { compact: true, pack2 })} = ${qty > 0 ? '+' : ''}${qty} ${unit}`
         : `${qty > 0 ? '+' : ''}${qty} ${unit}`
 
     const beforeStock = entry.metadata?.before_stock

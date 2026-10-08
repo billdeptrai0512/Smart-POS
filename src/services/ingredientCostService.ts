@@ -22,15 +22,16 @@ export async function fetchIngredientCostsAndUnits(addressId: UUID | null) {
     // migration 20260518_decouple_ingredient_costs.sql. Admin edits to default
     // rows DO NOT propagate to existing active addresses.
     const groupsPromise = fetchIngredientGroups(addressId)
-    const cols = 'ingredient, unit_cost, unit, address_id, pack_size, pack_unit, min_stock, category, count_in_audit, tare_weight, group_id'
+    const cols = 'ingredient, unit_cost, unit, address_id, pack_size, pack_unit, pack2_size, pack2_unit, min_stock, min_counter_stock, category, count_in_audit, tare_weight, group_id'
     const q = supabase.from('ingredient_costs').select(cols)
     // .select(cols) with a dynamic column string (not a literal) makes supabase-js
     // fall back to its GenericStringError type — cast to the real loose shape.
     const { data, error } = await (addressId ? q.eq('address_id', addressId) : q.is('address_id', null)) as unknown as { data: Row[] | null; error: SupabaseError }
     const groups = await groupsPromise
     if (error) {
+        // Ném (không trả rỗng): ProductContext giữ cache + retry, thay vì ghi đè giá vốn/quy cách bằng {} rồi cache luôn.
         console.error('fetchIngredientCostsAndUnits error:', error)
-        return { costs: {}, units: {}, rows: [], groups }
+        throw error
     }
     if (!data || data.length === 0) return { costs: {}, units: {}, rows: [], groups }
 
@@ -40,7 +41,7 @@ export async function fetchIngredientCostsAndUnits(addressId: UUID | null) {
     for (const d of data) {
         costs[d.ingredient] = d.unit_cost
         units[d.ingredient] = d.unit || 'đv'
-        rows.push({ ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, min_stock: d.min_stock, category: d.category || null, count_in_audit: d.count_in_audit ?? true, tare_weight: d.tare_weight ?? null, group_id: d.group_id ?? null })
+        rows.push({ ingredient: d.ingredient, unit: d.unit || 'đv', unit_cost: d.unit_cost, pack_size: d.pack_size, pack_unit: d.pack_unit, pack2_size: d.pack2_size ?? null, pack2_unit: d.pack2_unit ?? null, min_stock: d.min_stock, min_counter_stock: d.min_counter_stock ?? null, category: d.category || null, count_in_audit: d.count_in_audit ?? true, tare_weight: d.tare_weight ?? null, group_id: d.group_id ?? null })
     }
     return { costs, units, rows, groups }
 }
@@ -119,7 +120,10 @@ export async function upsertIngredientCost(ingredient: string, unitCost: number,
     // Caller passes null/undefined when intentionally clearing the field.
     if (opts.packSize !== undefined) payload.pack_size = opts.packSize ?? null
     if (opts.packUnit !== undefined) payload.pack_unit = opts.packUnit ?? null
+    if (opts.pack2Size !== undefined) payload.pack2_size = opts.pack2Size ?? null
+    if (opts.pack2Unit !== undefined) payload.pack2_unit = opts.pack2Unit ?? null
     if (opts.minStock !== undefined) payload.min_stock = opts.minStock ?? null
+    if (opts.minCounterStock !== undefined) payload.min_counter_stock = opts.minCounterStock ?? null
     if (opts.category !== undefined) payload.category = opts.category ?? null
     if (opts.countInAudit !== undefined) payload.count_in_audit = !!opts.countInAudit
     if (opts.tareWeight !== undefined) payload.tare_weight = opts.tareWeight ?? null

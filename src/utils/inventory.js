@@ -443,12 +443,25 @@ export function calculateLossValue({
     return { loss: totalLoss, consumption }
 }
 
+// Cấp quy đổi 2 của 1 dòng ingredient_costs → { size, unit } (size tính theo cấp 1), hoặc null.
+// Dùng làm opts.pack2 cho formatPackedQty (không cấp 1 thì formatPackedQty bỏ qua cấp 2).
+export const pack2Of = (cfg) => cfg?.pack2_size && cfg?.pack2_unit
+    ? { size: Number(cfg.pack2_size), unit: cfg.pack2_unit } : null
+
+// Số gói nguyên (vd needPacks) → "1 thùng + 3 hộp" khi có cấp 2, không thì "15 hộp".
+export function formatPackCount(packs, packUnit, pack2) {
+    const bigs = pack2 ? Math.floor(packs / pack2.size) : 0
+    const rem = pack2 ? packs - bigs * pack2.size : packs
+    return [bigs > 0 && `${bigs} ${pack2.unit}`, (rem > 0 || bigs === 0) && `${rem} ${packUnit || ''}`.trim()].filter(Boolean).join(' + ')
+}
+
 // Format a base-unit quantity into pack-aware text. e.g. 5350 + (1000, 'bịch', 'g')
 // → "5 bịch + 350 g". Falls back to "{qty} {baseUnit}" when pack info missing.
 //   qty: number in baseUnit
 //   packSize/packUnit: optional pack config
 //   baseUnit: the small-unit label (g, ml, cái, …)
 //   { compact: true } drops the base remainder when 0 (e.g. "5 bịch" not "5 bịch + 0 g")
+//   { pack2: { size, unit } } cấp 2 tính theo CẤP 1: 1 thùng = 12 hộp → "1 thùng + 2 hộp + 40 ml"
 export function formatPackedQty(qty, packSize, packUnit, baseUnit, opts = {}) {
     const n = Math.round(Number(qty || 0) * 10) / 10
     const unit = baseUnit || 'đv'
@@ -457,13 +470,18 @@ export function formatPackedQty(qty, packSize, packUnit, baseUnit, opts = {}) {
         return `${n.toLocaleString('vi-VN')} ${unit}`.trim()
     }
     const sign = n < 0 ? -1 : 1
+    const neg = sign < 0 ? '-' : ''
     const abs = Math.abs(n)
-    const packs = Math.floor(abs / ps)
-    const rem = Math.round((abs - packs * ps) * 10) / 10
+    const bigSize = opts.pack2 ? ps * opts.pack2.size : 0
+    const bigs = bigSize ? Math.floor(abs / bigSize) : 0
+    const afterBig = abs - bigs * bigSize
+    const packs = Math.floor(afterBig / ps)
+    const rem = Math.round((afterBig - packs * ps) * 10) / 10
     const parts = []
-    if (packs > 0) parts.push(`${sign < 0 ? '-' : ''}${packs} ${packUnit}`)
-    if (rem > 0 || packs === 0 || !opts.compact) parts.push(`${(sign * rem).toLocaleString('vi-VN')} ${unit}`)
-    return parts.filter(Boolean).join(' + ')
+    if (bigs > 0) parts.push(`${neg}${bigs} ${opts.pack2.unit}`)
+    if (packs > 0) parts.push(`${neg}${packs} ${packUnit}`)
+    if (rem > 0 || parts.length === 0 || !opts.compact) parts.push(`${(sign * rem).toLocaleString('vi-VN')} ${unit}`)
+    return parts.join(' + ')
 }
 
 // Với mỗi nguyên liệu, chọn "sản phẩm đại diện" = món BÁN CHẠY NHẤT có dùng nguyên
@@ -507,6 +525,17 @@ export function netStockOf(stock, tareWeight, unit) {
     const counter = stock.counter_stock
     const tareCut = ['g', 'ml', 'kg', 'l'].includes(unit) && tareWeight > 0 && counter != null ? Math.min(counter, tareWeight) : 0
     return r1(total - tareCut)
+}
+
+// Sắp hết = (còn hàng) mà tồn QUẦY thật (đã trừ bì) < tồn quầy ít nhất, hoặc tồn KHO < tồn kho ít nhất
+// (min_stock). Ngưỡng null/0 = không đặt. Hết hàng (tổng ≤ 0) là trạng thái riêng → false ở đây.
+export function isLowStockOf(stock, { tareWeight, minStock, minCounterStock }, unit) {
+    const net = netStockOf(stock, tareWeight, unit)
+    if (net === null || net <= 0) return false
+    const counter = stock.counter_stock
+    const tareCut = ['g', 'ml', 'kg', 'l'].includes(unit) && tareWeight > 0 && counter != null ? Math.min(counter, tareWeight) : 0
+    const below = (v, min) => min > 0 && v != null && v < min
+    return below(stock.warehouse_stock, minStock) || below(counter != null ? r1(counter - tareCut) : null, minCounterStock)
 }
 
 // inventory_report từ DB có thể là mảng hoặc chuỗi JSON → mảng; null nếu hỏng/không phải mảng

@@ -1,4 +1,4 @@
-import { r1, computeBalance } from './inventory'
+import { r1, computeBalance, pack2Of } from './inventory'
 import { lookupByLabel } from './ingredients'
 
 // Danh sách "Chuẩn bị hôm nay" (đưa NVL từ kho dự trữ ra quầy) — dùng chung cho /report
@@ -16,7 +16,7 @@ export const isPrepFilled = (v) => v !== undefined && v !== null && v !== '' && 
 const forecastFor = (ingredient, usedMap, lastWeekMap) =>
     Math.max(r1(lookupByLabel(ingredient, usedMap)), r1(lookupByLabel(ingredient, lastWeekMap)))
 
-// Item chung: { ingredient, have, need, needPacks, unit, packUnit, fillQty }.
+// Item chung: { ingredient, have, need, needPacks, unit, packUnit, pack2, fillQty }.
 //   have = tồn hiện có ("Còn"); need = target − have ("Cần"); needPacks = quy đổi ra bịch.
 const toPrepItem = (ing, have, target) => {
     const need = r1(target - have)
@@ -30,6 +30,7 @@ const toPrepItem = (ing, have, target) => {
         needPacks,
         unit: ing.unit,
         packUnit: ing.pack_unit,
+        pack2: pack2Of(ing),
         // Lượng đổ vào Nhập thêm khi tick "đã soạn" = số quy đổi nguyên bịch
         // (số bịch × quy cách). Không có quy cách bịch thì dùng đúng "Cần".
         fillQty: needPacks > 0 ? r1(needPacks * packSize) : need,
@@ -100,6 +101,7 @@ export function buildDepletedList({ ingredientsList, openingInputs, openingStock
             needPacks: packSize > 0 ? 1 : 0,
             unit: ing.unit,
             packUnit: ing.pack_unit,
+            pack2: pack2Of(ing),
             fillQty: Math.max(0, Math.min(need, left)), // 0 = kho dự trữ cũng hết, không lấy thêm được
             warehouse: wh != null ? r1(wh) : null,
         })

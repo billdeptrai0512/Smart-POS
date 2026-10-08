@@ -13,7 +13,7 @@ import {
     fetchIngredientStocks, fetchIngredientDeficits, fetchIngredientDailyContext,
 } from '../services/orderService'
 import { sortIngredients, ingredientLabel, normalizeSearchText, getIngredientUnit, normalizeIngredientKey } from '../utils/ingredients'
-import { netStockOf } from '../utils/inventory'
+import { netStockOf, pack2Of, isLowStockOf } from '../utils/inventory'
 import { readJSON, writeJSON } from '../utils/storage'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
@@ -334,10 +334,11 @@ export default function IngredientManagementPage() {
 
         const getStockPriority = useCallback((ing) => {
         const cfg = configByIngredient.get(ing)
-        const stock = netStockOf(stockByIngredient.get(ing), cfg?.tare_weight, getIngredientUnit(ing, ingredientUnits[ing]))
-        const minStock = cfg?.min_stock || 0
+        const stockRow = stockByIngredient.get(ing)
+        const unit = getIngredientUnit(ing, ingredientUnits[ing])
+        const stock = netStockOf(stockRow, cfg?.tare_weight, unit)
         if (stock !== null && stock <= 0) return 0        // hết
-        if (stock !== null && stock > 0 && stock < minStock) return 1  // sắp hết
+        if (stockRow && isLowStockOf(stockRow, { tareWeight: cfg?.tare_weight, minStock: cfg?.min_stock, minCounterStock: cfg?.min_counter_stock }, unit)) return 1  // sắp hết
         return 2                                          // bình thường
     }, [stockByIngredient, configByIngredient, ingredientUnits])
 
@@ -569,8 +570,10 @@ export default function IngredientManagementPage() {
                                 canEdit={canEdit}
                                 packSize={cfg?.pack_size}
                                 packUnit={cfg?.pack_unit}
+                                pack2={pack2Of(cfg)}
                                 tareWeight={cfg?.tare_weight}
                                 minStock={cfg?.min_stock}
+                                minCounterStock={cfg?.min_counter_stock}
                                 stockData={stockByIngredient.get(ingredient)}
                                 siblingCounterStocks={counterStocksByIngredient?.get(ingredient)}
                                 dailyContext={dailyContext[ingredient]}

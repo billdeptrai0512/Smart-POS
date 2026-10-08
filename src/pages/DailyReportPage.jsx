@@ -9,7 +9,7 @@ import { fetchDailyReportContext, fetchIngredientStocks, invalidateDailyContext,
 import { buildCashPayload } from '../services/reportService'
 import { useIngredientCatalog } from '../hooks/useIngredientCatalog'
 import { useDailyReportData } from '../hooks/useDailyReportData'
-import { calculateEstimatedConsumption, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, isLiveOrder, openingSeed } from '../utils/inventory'
+import { calculateEstimatedConsumption, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, isLiveOrder, openingSeed, pack2Of } from '../utils/inventory'
 import { estimateOpeningStocks, recipesBelongTo } from '../services/counterEstimate'
 import { useCounterCalc } from '../hooks/useCounterCalc'
 import { ingredientLabel, getIngredientUnit } from '../utils/ingredients'
@@ -816,6 +816,7 @@ export default function DailyReportPage() {
                         unit={getIngredientUnit(ingredient, ingredientUnits[ingredient])}
                         packSize={cfg?.pack_size}
                         packUnit={cfg?.pack_unit}
+                        pack2={pack2Of(cfg)}
                         cashClosedToday={false}
                         mode="edit"
                         initial={{

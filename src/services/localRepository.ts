@@ -179,7 +179,10 @@ export const fetchLocalIngredientCosts = (addressId: string | null) => {
         unit_cost: item.unit_cost !== undefined ? item.unit_cost : item.unitCost,
         pack_size: item.pack_size !== undefined ? item.pack_size : item.packSize,
         pack_unit: item.pack_unit !== undefined ? item.pack_unit : item.packUnit,
+        pack2_size: item.pack2_size ?? null,
+        pack2_unit: item.pack2_unit ?? null,
         min_stock: item.min_stock !== undefined ? item.min_stock : item.minStock,
+        min_counter_stock: item.min_counter_stock ?? null,
         category: item.category,
         count_in_audit: item.count_in_audit !== undefined ? item.count_in_audit : (item.countInAudit !== undefined ? item.countInAudit : true),
         tare_weight: item.tare_weight ?? null
@@ -205,9 +208,18 @@ export const upsertLocalIngredientCost = (payload: Row) => {
     
     const packUnit = payload.pack_unit !== undefined ? payload.pack_unit : payload.packUnit;
     if (packUnit !== undefined) mapped.pack_unit = packUnit;
+
+    const pack2Size = payload.pack2_size !== undefined ? payload.pack2_size : payload.pack2Size;
+    if (pack2Size !== undefined) mapped.pack2_size = pack2Size;
+
+    const pack2Unit = payload.pack2_unit !== undefined ? payload.pack2_unit : payload.pack2Unit;
+    if (pack2Unit !== undefined) mapped.pack2_unit = pack2Unit;
     
     const minStock = payload.min_stock !== undefined ? payload.min_stock : payload.minStock;
     if (minStock !== undefined) mapped.min_stock = minStock;
+
+    const minCounterStock = payload.min_counter_stock !== undefined ? payload.min_counter_stock : payload.minCounterStock;
+    if (minCounterStock !== undefined) mapped.min_counter_stock = minCounterStock;
     
     if (payload.category !== undefined) mapped.category = payload.category;
     

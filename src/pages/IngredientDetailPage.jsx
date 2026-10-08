@@ -15,6 +15,7 @@ import {
 } from '../services/orderService'
 import { fetchCashClosedToday } from '../services/reportService'
 import { formatVND } from '../utils'
+import { pack2Of } from '../utils/inventory'
 import {
     ingredientLabel, getIngredientUnit,
     normalizeIngredientCategory, normalizeIngredientKey,
@@ -105,10 +106,12 @@ export default function IngredientDetailPage() {
     const category = normalizeIngredientCategory(config.category)
     const packSize = config.pack_size ?? null
     const packUnit = config.pack_unit ?? null
+    const pack2 = useMemo(() => pack2Of(config), [config])   // 1 thùng = 12 hộp (size tính theo cấp 1)
     // `??` so an explicit 0 round-trips faithfully (DB column NULL stays as null;
     // a stored 0 stays as 0). See ingredientCostService.upsertIngredientCost for the
     // matching write-side rule.
-    const minStock = config.min_stock ?? null
+    const minStock = config.min_stock ?? null          // tồn KHO ít nhất
+    const minCounterStock = config.min_counter_stock ?? null   // tồn QUẦY ít nhất
     // Khối lượng bì của hộp/chai đựng tại quầy — null/0 = không có bì.
     const tareWeight = config.tare_weight ?? null
     // Mặc định true (chưa migrate / phiếu cũ → vẫn kiểm kê).
@@ -227,14 +230,13 @@ export default function IngredientDetailPage() {
         await withSaving('Lưu thiết lập kiểm kê', async () => {
             await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, unit, { countInAudit: next })
             refreshProducts?.()
-            showToast(next ? 'Nguyên liệu này sẽ được kiểm kê trong báo cáo tồn kho' : 'Nguyên liệu này sẽ không phải kiểm kê trong báo cáo tồn kho', 'success')
         })
     }
 
-    async function savePackConfig({ packSize: ps, packUnit: pu }) {
+    async function savePackConfig({ packSize: ps, packUnit: pu, pack2Size: ps2, pack2Unit: pu2 }) {
         await withSaving('Lưu quy cách đóng gói', async () => {
             await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, unit, {
-                packSize: ps, packUnit: pu, minStock: config.min_stock,
+                packSize: ps, packUnit: pu, pack2Size: ps2, pack2Unit: pu2, minStock: config.min_stock,
             })
             refreshProducts?.()
         })
@@ -310,6 +312,14 @@ export default function IngredientDetailPage() {
                 packUnit: config.pack_unit,
                 minStock: newMin,
             })
+            refreshProducts?.()
+        })
+    }
+
+    async function saveMinCounter(newMin) {
+        if (newMin === (minCounterStock || 0)) return
+        await withSaving('Lưu tồn quầy tối thiểu', async () => {
+            await upsertIngredientCost(ingredientKey, cost, selectedAddress?.id, unit, { minCounterStock: newMin })
             refreshProducts?.()
         })
     }
@@ -520,19 +530,14 @@ export default function IngredientDetailPage() {
                             groups={ingredientGroups}
                             packSize={packSize}
                             packUnit={packUnit}
-                            minStock={minStock}
-                            tareWeight={tareWeight}
+                            pack2={pack2}
                             countInAudit={countInAudit}
                             onToggleAudit={saveCountInAudit}
                             hintPack={hintPack}
-                            hintMinStock={hintMinStock}
-                            hintTare={hintTare}
                             canEdit={canEdit}
                             saving={saving}
                             onSaveName={saveName}
                             onSaveUnit={saveUnit}
-                            onSaveMinStock={saveMinStock}
-                            onSaveTareWeight={saveTareWeight}
                             onChangeGroup={saveGroup}
                             onConfigurePack={() => setPackModalOpen(true)}
                         />
@@ -540,18 +545,27 @@ export default function IngredientDetailPage() {
                             unit={unit}
                             packSize={packSize}
                             packUnit={packUnit}
+                            pack2={pack2}
                             warehouseStock={stockData?.warehouse_stock ?? null}
                             warehouseGroupNote={warehouseGroupNote}
                             hintWarehouse={hintWarehouse}
+                            minStock={minStock}
+                            hintMinStock={hintMinStock}
                             dailyContext={dailyContext}
                             canEdit={canEdit}
                             onSaveWarehouse={saveWarehouse}
+                            onSaveMinStock={saveMinStock}
                         />
                         <IngredientCounterPanel
                             unit={unit}
                             packSize={packSize}
                             packUnit={packUnit}
+                            pack2={pack2}
                             tareWeight={tareWeight}
+                            hintTare={hintTare}
+                            onSaveTareWeight={saveTareWeight}
+                            minCounterStock={minCounterStock}
+                            onSaveMinCounter={saveMinCounter}
                             counterStock={stockData?.counter_stock ?? null}
                             counterEstimated={!!stockData?.counter_estimated}
                             currentStock={currentStock}
@@ -569,6 +583,7 @@ export default function IngredientDetailPage() {
                         unit={unit}
                         packSize={packSize}
                         packUnit={packUnit}
+                        pack2={pack2}
                         monthLabel={monthLabel}
                         monthOffset={monthOffset}
                         onMonthChange={setMonthOffset}
@@ -597,8 +612,9 @@ export default function IngredientDetailPage() {
                     baseUnit={unit}
                     currentPackSize={packSize}
                     currentPackUnit={packUnit}
-                    onSave={async ({ packSize: ps, packUnit: pu }) => {
-                        await savePackConfig({ packSize: ps, packUnit: pu })
+                    currentPack2={pack2}
+                    onSave={async (cfg) => {
+                        await savePackConfig(cfg)
                         setPackModalOpen(false)
                     }}
                 />
@@ -610,6 +626,7 @@ export default function IngredientDetailPage() {
                     unit={unit}
                     packSize={packSize}
                     packUnit={packUnit}
+                    pack2={pack2}
                     cashClosedToday={cashClosedToday}
                     onClose={() => setRestockOpen(false)}
                     onConfirm={handleRestock}
@@ -622,6 +639,7 @@ export default function IngredientDetailPage() {
                     unit={unit}
                     packSize={packSize}
                     packUnit={packUnit}
+                    pack2={pack2}
                     cashClosedToday={false}
                     mode="edit"
                     initial={{

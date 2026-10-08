@@ -13,6 +13,7 @@ export default function RestockModal({
     unit,
     packSize,
     packUnit,
+    pack2 = null,   // { size, unit } cấp 2 (1 thùng = 12 hộp) | null
     cashClosedToday = false,
     onConfirm,
     onClose,
@@ -24,18 +25,23 @@ export default function RestockModal({
 }) {
     const today = dateStringVN()
     const hasPack = !!(packSize && packUnit)
-    // Edit mode: auto-bật pack mode nếu qty chia hết cho packSize (user nhập theo thùng/lốc).
-    // Create mode: default theo hasPack như cũ.
-    const initPackMode = mode === 'edit' && hasPack && initial?.qty > 0
-        ? Number(initial.qty) % packSize === 0
-        : hasPack
-    const [usePackMode, setUsePackMode] = useState(initPackMode)
-    // Edit mode: nếu pack mode, hiển thị số lốc/thùng thay vì base unit.
+    // Đơn vị nhập, lớn → nhỏ: [cấp 2], cấp 1, đơn vị gốc. mult = số đơn vị gốc trong 1 đơn vị đó.
+    const units = hasPack
+        ? [...(pack2 ? [{ key: 'pack2', label: pack2.unit, mult: packSize * pack2.size }] : []),
+            { key: 'pack', label: packUnit, mult: packSize },
+            { key: 'base', label: unit, mult: 1 }]
+        : []
+    // Edit mode: auto-chọn đơn vị lớn nhất mà qty chia hết (user nhập theo thùng/lốc/hộp).
+    // Create mode: default cấp 1 (hộp) như cũ.
+    const editUnit = mode === 'edit' && hasPack && initial?.qty != null
+        ? units.find(u => u.mult > 1 && Number(initial.qty) % u.mult === 0) : null
+    const [qtyUnit, setQtyUnit] = useState(
+        !hasPack ? 'base' : mode === 'edit' && initial?.qty > 0 ? (editUnit?.key ?? 'base') : 'pack'
+    )
+    // Edit mode: hiển thị số theo đơn vị đó thay vì base unit.
     const initQty = () => {
         if (initial?.qty == null) return initialQty != null ? String(initialQty) : ''
-        if (mode === 'edit' && hasPack && Number(initial.qty) % packSize === 0) {
-            return String(Number(initial.qty) / packSize)
-        }
+        if (editUnit) return String(Number(initial.qty) / editUnit.mult)
         return String(initial.qty)
     }
     const [qty, setQty] = useState(initQty)
@@ -62,7 +68,7 @@ export default function RestockModal({
     const [userTouchedPhase, setUserTouchedPhase] = useState(mode === 'edit')
     const [submitting, setSubmitting] = useState(false)
 
-    const actualQty = usePackMode ? Number(qty) * packSize : Number(qty)
+    const actualQty = Number(qty) * (units.find(u => u.key === qtyUnit)?.mult ?? 1)
     const subtotalNum = parseVNDInput(subtotal)
     const extraCostNum = parseVNDInput(extraCostInput)
 
@@ -200,10 +206,10 @@ export default function RestockModal({
                         <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/40">
                             <span className="text-[12px] font-bold text-text-secondary uppercase tracking-wide">Số lượng</span>
                             <div className="flex flex-col items-end gap-0.5">
-                                {usePackMode && qty && Number(qty) > 0 && (
+                                {qtyUnit !== 'base' && qty && Number(qty) > 0 && (
                                     <span className="text-[10px] text-text-dim tabular-nums leading-none">= {actualQty} {unit}</span>
                                 )}
-                                <div className="flex items-center bg-surface border border-border/60 rounded-[8px] overflow-hidden focus-within:border-primary/50 transition-colors w-40">
+                                <div className={`flex items-center bg-surface border border-border/60 rounded-[8px] overflow-hidden focus-within:border-primary/50 transition-colors ${units.length > 2 ? 'w-52' : 'w-40'}`}>
                                     <input
                                         ref={qtyInputRef}
                                         type="text"
@@ -220,18 +226,15 @@ export default function RestockModal({
                                     />
                                     {hasPack ? (
                                         <div className="flex items-center gap-0.5 mr-1.5 shrink-0 bg-surface-light border border-border/60 rounded-md p-0.5">
-                                            <button
-                                                onClick={() => { if (!usePackMode) { setUsePackMode(true); setQty('') } }}
-                                                className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${usePackMode ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                                            >
-                                                {packUnit}
-                                            </button>
-                                            <button
-                                                onClick={() => { if (usePackMode) { setUsePackMode(false); setQty('') } }}
-                                                className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${!usePackMode ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                                            >
-                                                {unit}
-                                            </button>
+                                            {units.map(u => (
+                                                <button
+                                                    key={u.key}
+                                                    onClick={() => { if (qtyUnit !== u.key) { setQtyUnit(u.key); setQty('') } }}
+                                                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${qtyUnit === u.key ? 'bg-primary text-white' : 'text-text-secondary'}`}
+                                                >
+                                                    {u.label}
+                                                </button>
+                                            ))}
                                         </div>
                                     ) : (
                                         <span className="text-[11px] font-bold text-text-secondary pr-3 shrink-0 pointer-events-none">{unit}</span>

@@ -1,4 +1,4 @@
-import { formatPackedQty, netStockOf } from '../../utils/inventory'
+import { formatPackedQty, netStockOf, isLowStockOf } from '../../utils/inventory'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 
 /**
@@ -19,10 +19,10 @@ export default function IngredientCostItem({
     ingredientLabel, getIngredientUnit, ingredient,
     storedUnit,
     canEdit = true,
-    minStock,
+    minStock, minCounterStock,
     // Pack config (quy cách đóng gói) — edit moved to detail page;
     // packSize/packUnit kept for the inline "= X bịch + Y g" display.
-    packSize, packUnit,
+    packSize, packUnit, pack2,
     tareWeight,
     // Stock display
     stockData,
@@ -38,7 +38,7 @@ export default function IngredientCostItem({
 
     const shownStock = netStockOf(stockData, tareWeight, displayUnit)
     const isOutStock = shownStock !== null && shownStock <= 0
-    const isLowStock = shownStock !== null && shownStock > 0 && shownStock < (minStock || 0)
+    const isLowStock = stockData ? isLowStockOf(stockData, { tareWeight, minStock, minCounterStock }, displayUnit) : false
 
     const warn = isOutStock || isLowStock
     const borderClass = warn ? 'border-danger/40' : 'border-border/60'
@@ -75,7 +75,7 @@ export default function IngredientCostItem({
                 {/* Pack breakdown inline (if pack configured & stock meets pack size) */}
                 {shownStock !== null && packSize && packUnit && shownStock >= packSize && (
                     <span className="text-[12.5px] font-semibold text-text-dim tabular-nums leading-none">
-                        = {formatPackedQty(shownStock, packSize, packUnit, displayUnit, { compact: true })}
+                        = {formatPackedQty(shownStock, packSize, packUnit, displayUnit, { compact: true, pack2 })}
                     </span>
                 )}
             </div>
@@ -93,7 +93,7 @@ export default function IngredientCostItem({
                             const r = Math.round(n * 10) / 10
                             return `${r.toLocaleString('vi-VN')} ${displayUnit}`
                         }
-                        return formatPackedQty(n, packSize, packUnit, displayUnit, { compact: true })
+                        return formatPackedQty(n, packSize, packUnit, displayUnit, { compact: true, pack2 })
                     }
                     return (
                         <>

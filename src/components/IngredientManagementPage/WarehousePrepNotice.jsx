@@ -9,6 +9,7 @@ import { useWarehousePrep } from '../../hooks/usePrepNotice'
 import { processIngredientRestock } from '../../services/orderService'
 import { fetchCashClosedToday } from '../../services/reportService'
 import { getIngredientUnit } from '../../utils/ingredients'
+import { pack2Of } from '../../utils/inventory'
 import NoticeBar from '../common/NoticeBar'
 import NoticeSheet from '../common/NoticeSheet'
 import ShiftPrepCard from '../DailyReportPage/ShiftPrepCard'
@@ -84,6 +85,7 @@ function Notice({ onRestocked }) {
                     unit={getIngredientUnit(restock.ingredient, ingredientUnits[restock.ingredient])}
                     packSize={cfg?.pack_size}
                     packUnit={cfg?.pack_unit}
+                    pack2={pack2Of(cfg)}
                     initialQty={restock.qty}
                     cashClosedToday={cashClosedToday}
                     onClose={() => setRestock(null)}

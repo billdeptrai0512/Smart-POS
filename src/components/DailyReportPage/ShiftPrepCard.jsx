@@ -1,12 +1,13 @@
 import { Check, Plus, X, RotateCcw } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
+import { formatPackCount } from '../../utils/inventory'
 
 // Danh sách checklist dùng chung cho 2 dải notice: "Chuẩn bị hôm nay" (/pos — đưa hàng ra quầy) và
 // "Bổ sung tồn kho" (/inventory — đi chợ đắp kho). Mỗi dòng có ô tick (hoặc nút + nhập kho)
 // + so sánh "Còn" (tồn hiện có) vs "Cần" (lượng cần thêm) + quy đổi ra bịch. Chỉ vẽ phần danh sách —
 // header/khung do caller (NoticeSheet) lo; tick/bỏ qua do parent giữ.
 //
-// items: [{ ingredient, have, need, needPacks, unit, packUnit }]
+// items: [{ ingredient, have, need, needPacks, unit, packUnit, pack2 }]
 export default function ShiftPrepCard({
     items = [],
     checked = {},
@@ -86,7 +87,7 @@ export default function ShiftPrepCard({
                         const ctaText = (
                             <div className="flex flex-col items-end shrink-0">
                                 <span className={`text-[12px] font-black leading-tight text-right ${muted ? 'text-text-dim line-through' : 'text-primary'}`}>
-                                    {packVerb} {it.needPacks > 0 ? `${it.needPacks} ${it.packUnit || ''}` : `${it.need} ${it.unit}`}
+                                    {packVerb} {it.needPacks > 0 ? formatPackCount(it.needPacks, it.packUnit, it.pack2) : `${it.need} ${it.unit}`}
                                 </span>
                             </div>
                         )

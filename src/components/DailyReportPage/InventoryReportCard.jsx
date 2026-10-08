@@ -1,7 +1,7 @@
 import { Fragment, memo, useCallback, useMemo, useState } from 'react'
 import { AlertTriangle, Check, ChevronDown, ChevronUp, ClipboardList, Info } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit, lookupByLabel } from '../../utils/ingredients'
-import { formatPackedQty, computeBalance, computeHaoHut, r1 } from '../../utils/inventory'
+import { formatPackedQty, pack2Of, computeBalance, computeHaoHut, r1 } from '../../utils/inventory'
 import { formatVND } from '../../utils'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import { useProducts } from '../../contexts/ProductContext'
@@ -232,7 +232,8 @@ const IngredientRow = memo(function IngredientRow({
     const unit = getIngredientUnit(ing.ingredient, ing.unit, ingredientUnits)
     const packSize = Number(ing.pack_size || 0)
     const packUnit = ing.pack_unit
-    const fmt = (n) => formatPackedQty(n, packSize, packUnit, unit, { compact: true })
+    const pack2 = pack2Of(ing)
+    const fmt = (n) => formatPackedQty(n, packSize, packUnit, unit, { compact: true, pack2 })
     const openingDisplay = openingValue ?? (openingFallback !== undefined && openingFallback !== null ? String(openingFallback) : '')
 
     // Over-report detection: if staff types restock > kho tổng available, the difference
