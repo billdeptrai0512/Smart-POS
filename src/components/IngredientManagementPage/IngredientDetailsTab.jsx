@@ -35,6 +35,7 @@ export default function IngredientDetailsTab({
                         sub={countInAudit
                             ? 'Nguyên liệu này được liệt kê trong danh sách kiểm kê.'
                             : 'Nguyên liệu này không được liệt kê trong danh sách kiểm kê.'}
+                        centerValue
                     >
                         <button
                             type="button"
