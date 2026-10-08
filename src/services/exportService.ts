@@ -11,9 +11,15 @@ interface ExportInput {
     addressName?: string | null
     products: Array<{ id: UUID; name: string; price: number; is_divider?: boolean; sort_order?: number | null }>
     toppings: Array<{ id: UUID; name: string; price: number }>
-    ingredientConfigs: Array<{ ingredient: string; unit: string; unit_cost: number; category: string | null; group_id?: UUID | null }>
-    ingredientGroups?: Array<{ id: UUID; name: string }>
+    ingredientConfigs: Array<{
+        ingredient: string; unit: string; unit_cost: number; category: string | null; group_id?: UUID | null
+        pack_size?: number | null; pack_unit?: string | null; pack2_size?: number | null; pack2_unit?: string | null
+        min_stock?: number | null; min_counter_stock?: number | null
+    }>
+    ingredientGroups?: Array<{ id: UUID; name: string }> // đã sắp theo sort_order
     ingredientUnits: Record<string, string>
+    discountPrograms: Array<{ id: UUID; name: string; type: string; value: number; days_of_week: number[]; start_date: string | null; end_date: string | null; enabled: boolean }>
+    productDiscounts: Record<UUID, Array<{ id: UUID }>>
     recipes: Array<{ product_id: UUID; ingredient: string; amount: number; unit: string | null }>
     productToppings: Record<UUID, Array<{ id: UUID; name: string }>>
     productExtras: Record<UUID, Array<{ id: UUID; name: string; price: number; is_sticky: boolean }>>
@@ -38,12 +44,23 @@ export async function downloadCurrentDataExcel(input: ExportInput) {
     }
     addSheet('Sản phẩm', sellable)
 
-    addSheet('Nguyên liệu', input.ingredientConfigs.map(c => ({
+    // Sắp theo thứ tự nhóm (nhóm sau cùng: chưa phân nhóm) — import tạo nhóm theo thứ tự xuất hiện
+    // trong file nên làm vậy thì nạp lại giữ đúng thứ tự nhóm.
+    const groupRank = new Map((input.ingredientGroups ?? []).map((g, i) => [g.id, i]))
+    const rank = (c: ExportInput['ingredientConfigs'][number]) => (c.group_id ? groupRank.get(c.group_id) : undefined) ?? 1e9
+    const ingredientRows = [...input.ingredientConfigs].sort((a, b) => rank(a) - rank(b))
+    addSheet('Nguyên liệu', ingredientRows.map(c => ({
         'Tên nguyên liệu': ingredientLabel(c.ingredient),
         'Đơn vị': c.unit,
         'Giá vốn/đơn vị': c.unit_cost,
         'Loại': c.category === 'packaging' ? 'bao bì' : 'chính',
         'Nhóm': (c.group_id && input.ingredientGroups?.find(g => g.id === c.group_id)?.name) || '',
+        'Quy cách': c.pack_size ?? '',
+        'Đơn vị quy cách': c.pack_unit ?? '',
+        'Quy cách 2': c.pack2_size ?? '',
+        'Đơn vị quy cách 2': c.pack2_unit ?? '',
+        'Tồn kho tối thiểu': c.min_stock ?? '',
+        'Tồn quầy tối thiểu': c.min_counter_stock ?? '',
     })))
 
     addSheet('Công thức', input.recipes.map(r => ({
@@ -108,6 +125,29 @@ export async function downloadCurrentDataExcel(input: ExportInput) {
         for (const t of toppingsOfProduct) toppingLinkRows.push({ 'Tên topping': t.name, 'Tên món': productName })
     }
     addSheet('Topping áp dụng món', toppingLinkRows)
+
+    const DISCOUNT_TYPE_LABEL: Record<string, string> = { fixed: 'Đồng giá', percent: 'Giảm %', amount: 'Giảm tiền' }
+    const DOW_LABEL = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
+    addSheet('Giảm giá', input.discountPrograms.map(d => ({
+        'Tên chương trình': d.name,
+        'Kiểu': DISCOUNT_TYPE_LABEL[d.type] ?? d.type,
+        'Giá trị': d.value,
+        'Thứ áp dụng': d.days_of_week.map(n => DOW_LABEL[n]).join(', '),
+        'Từ ngày': d.start_date ?? '',
+        'Đến ngày': d.end_date ?? '',
+        'Bật': d.enabled ? 'có' : '',
+    })))
+
+    const discountLinkRows: Record<string, unknown>[] = []
+    for (const [productId, programs] of Object.entries(input.productDiscounts)) {
+        const productName = productNameById.get(productId)
+        if (!productName) continue
+        for (const p of programs) {
+            const programName = input.discountPrograms.find(d => d.id === p.id)?.name
+            if (programName) discountLinkRows.push({ 'Tên chương trình': programName, 'Tên món': productName })
+        }
+    }
+    addSheet('Giảm giá áp dụng món', discountLinkRows)
 
     const datePart = new Date().toISOString().slice(0, 10)
     const addressPart = input.addressName ? `-${input.addressName.trim().toLowerCase().replace(/\s+/g, '-')}` : ''

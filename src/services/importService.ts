@@ -4,6 +4,7 @@ import { insertProduct, upsertProductPrice, insertProductExtra, updateProductExt
 import { upsertIngredientCost } from './ingredientCostService'
 import { insertTopping, updateToppingPrice, upsertToppingIngredient, setToppingProductLinks } from './toppingService'
 import { upsertRecipes } from './recipeService'
+import { insertDiscountProgram, updateDiscountProgram, deleteDiscountProgram, setDiscountProgramProducts } from './discountService'
 import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
 import type { UUID } from '../types/domain'
@@ -22,6 +23,8 @@ interface ParsedWorkbook {
     toppingLinks: Record<string, unknown>[]
     extras: Record<string, unknown>[]
     extraIngredients: Record<string, unknown>[]
+    discounts?: Record<string, unknown>[]
+    discountLinks?: Record<string, unknown>[]
     sheets?: string[] // tên các sheet CÓ trong file — sheet có mặt = ghi đè toàn bộ phần đó
 }
 
@@ -40,6 +43,8 @@ export function parseWorkbook(arrayBuffer: ArrayBuffer): ParsedWorkbook {
         toppingLinks: sheet('Topping áp dụng món'),
         extras: sheet('Tùy chọn thêm'),
         extraIngredients: sheet('Công thức tùy chọn'),
+        discounts: sheet('Giảm giá'),
+        discountLinks: sheet('Giảm giá áp dụng món'),
         sheets: wb.SheetNames,
     }
 }
@@ -75,24 +80,88 @@ function mapCategory(raw: unknown): 'main' | 'packaging' {
     return 'main'
 }
 
+// Quy cách đóng gói + ngưỡng tồn của nguyên liệu. Key = tên opts của upsertIngredientCost. Chỉ cột nào
+// CÓ trong sheet mới vào attrs (ô trống = xoá giá trị); file không có cột nào → giữ nguyên như cũ.
+interface IngredientAttrs {
+    packSize?: number | null; packUnit?: string | null; pack2Size?: number | null; pack2Unit?: string | null
+    minStock?: number | null; minCounterStock?: number | null
+}
+const INGREDIENT_ATTR_COLUMNS: Array<{ header: string; key: keyof IngredientAttrs; col: string; text?: boolean }> = [
+    { header: 'Quy cách', key: 'packSize', col: 'pack_size' },
+    { header: 'Đơn vị quy cách', key: 'packUnit', col: 'pack_unit', text: true },
+    { header: 'Quy cách 2', key: 'pack2Size', col: 'pack2_size' },
+    { header: 'Đơn vị quy cách 2', key: 'pack2Unit', col: 'pack2_unit', text: true },
+    { header: 'Tồn kho tối thiểu', key: 'minStock', col: 'min_stock' },
+    { header: 'Tồn quầy tối thiểu', key: 'minCounterStock', col: 'min_counter_stock' },
+]
+
+// Trả cột lỗi đầu tiên (header) nếu ô số không hợp lệ.
+function parseIngredientAttrs(row: Record<string, unknown>): { attrs?: IngredientAttrs; badHeader?: string } {
+    const attrs: Record<string, number | string | null> = {}
+    for (const { header, key, text } of INGREDIENT_ATTR_COLUMNS) {
+        if (!(header in row)) continue
+        if (text) { attrs[key] = normName(row[header]) || null; continue }
+        const n = toNumber(row[header])
+        if ((n == null && normName(row[header]) !== '') || (n != null && n < 0)) return { badHeader: header }
+        attrs[key] = n
+    }
+    return Object.keys(attrs).length ? { attrs } : {}
+}
+
+// Chương trình giảm giá (discount_programs) — type/value/lịch như DiscountProgramsPage.
+interface DiscountPlan {
+    name: string; type: 'fixed' | 'percent' | 'amount'; value: number
+    days: number[]; startDate: string | null; endDate: string | null; enabled: boolean
+}
+
+const DISCOUNT_TYPE_BY_LABEL: Record<string, DiscountPlan['type']> = {
+    'đồng giá': 'fixed', 'giảm %': 'percent', 'giảm tiền': 'amount',
+}
+const DOW_BY_LABEL: Record<string, number> = { cn: 0, t2: 1, t3: 2, t4: 3, t5: 4, t6: 5, t7: 6 }
+
+// Ô "Thứ áp dụng": "T2, T3, CN" → [0,1,2] (EXTRACT(DOW), rỗng = mọi thứ). null nếu có token lạ.
+function parseDays(raw: unknown): number[] | null {
+    const out = new Set<number>()
+    for (const tok of normKey(raw).split(/[\s,;]+/).filter(Boolean)) {
+        const d = DOW_BY_LABEL[tok]
+        if (d === undefined) return null
+        out.add(d)
+    }
+    return [...out].sort()
+}
+
+// Ô ngày: "YYYY-MM-DD" hoặc số serial Excel (ô ngày gõ trong Excel). '' → null; không đọc được → undefined.
+function toIsoDate(v: unknown): string | null | undefined {
+    if (v === '' || v == null) return null
+    const fmt = (y: string | number, m: string | number, d: string | number) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    if (typeof v === 'number') {
+        const d = XLSX.SSF.parse_date_code(v)
+        return d ? fmt(d.y, d.m, d.d) : undefined
+    }
+    const s = String(v).trim()
+    const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+    return iso ? fmt(iso[1], iso[2], iso[3]) : undefined
+}
+
 // Ghi đè: sheet nào CÓ trong file thì phần đó trên địa chỉ được thay hoàn toàn bằng nội dung file
 // (kể cả sheet rỗng = xoá hết). Sheet KHÔNG có trong file → giữ nguyên, để 1 file thiếu sheet không
 // vô tình xoá sạch. Nguyên liệu không bao giờ bị xoá (gắn với tồn kho / lịch sử nhập hàng).
 interface ReplaceFlags {
     products: boolean; toppings: boolean; extras: boolean
     recipes: boolean; toppingIngredients: boolean; extraIngredients: boolean; toppingLinks: boolean
+    discounts: boolean; discountLinks: boolean
 }
 
 interface ImportPlan {
     replace: ReplaceFlags
-    removals: { products: string[]; dividers: string[]; toppings: string[]; extras: string[] } // chỉ để xem trước
+    removals: { products: string[]; dividers: string[]; toppings: string[]; extras: string[]; discounts: string[] } // chỉ để xem trước
     dividers: string[] // danh mục MỚI (dòng "mục" is_divider) — tạo trước khi xếp thứ tự
     layout: Array<{ name: string; divider: boolean }> // thứ tự mới của món + danh mục; rỗng = không đổi thứ tự
     products: Array<{ name: string; price: number }>
     productUpdates: Array<{ name: string; price: number }>
     // group: có khi sheet có cột "Nhóm" ('' = bỏ nhóm); undefined = giữ nhóm hiện tại
-    ingredients: Array<{ key: string; unitCost: number; unit: string; category: 'main' | 'packaging'; group?: string }>
-    ingredientUpdates: Array<{ key: string; unitCost: number; unit: string; category: 'main' | 'packaging'; group?: string }>
+    ingredients: Array<{ key: string; unitCost: number; unit: string; category: 'main' | 'packaging'; group?: string; attrs?: IngredientAttrs }>
+    ingredientUpdates: Array<{ key: string; unitCost: number; unit: string; category: 'main' | 'packaging'; group?: string; attrs?: IngredientAttrs }>
     toppings: Array<{ name: string; price: number; unit: string }>
     toppingUpdates: Array<{ name: string; price: number }>
     recipes: Array<{ productName: string; ingredient: string; amount: number; unit: string | null }>
@@ -101,6 +170,9 @@ interface ImportPlan {
     extras: Array<{ productName: string; name: string; price: number; sticky: boolean }>
     extraUpdates: Array<{ productName: string; name: string; price: number; sticky: boolean }>
     extraIngredients: Array<{ productName: string; extraName: string; ingredient: string; amount: number; unit: string | null }>
+    discounts: DiscountPlan[]
+    discountUpdates: DiscountPlan[]
+    discountLinks: Array<{ programName: string; productNames: string[] }>
 }
 
 interface ExistingData {
@@ -108,6 +180,7 @@ interface ExistingData {
     toppings: Array<{ id: UUID; name: string }>
     ingredientCosts: Record<string, unknown>
     extras: Array<{ id: UUID; productName: string; name: string }>
+    discountPrograms: Array<{ id: UUID; name: string }>
 }
 
 interface ResolveResult {
@@ -129,7 +202,9 @@ export function resolveImportPlan(parsed: ParsedWorkbook, existing: ExistingData
         products: has('Sản phẩm'), toppings: has('Topping'), extras: has('Tùy chọn thêm'),
         recipes: has('Công thức'), toppingIngredients: has('Công thức Topping'),
         extraIngredients: has('Công thức tùy chọn'), toppingLinks: has('Topping áp dụng món'),
+        discounts: has('Giảm giá'), discountLinks: has('Giảm giá áp dụng món'),
     }
+    const existingDiscounts = existing.discountPrograms
     const existingProductNames = new Set(existing.products.filter(p => !p.is_divider).map(p => normKey(p.name)))
     const existingDividerNames = new Set(existing.products.filter(p => p.is_divider).map(p => normKey(p.name)))
     const existingToppingNames = new Set(existing.toppings.map(t => normKey(t.name)))
@@ -202,6 +277,9 @@ export function resolveImportPlan(parsed: ParsedWorkbook, existing: ExistingData
         if (cost == null) { blockingErrors.push(`${line} ("${name}"): Giá vốn/đơn vị không hợp lệ`); return }
         const entry: ImportPlan['ingredients'][number] = { key, unitCost: cost, unit: normName(row['Đơn vị']) || 'đv', category: mapCategory(row['Loại']) }
         if ('Nhóm' in row) entry.group = normName(row['Nhóm'])
+        const { attrs, badHeader } = parseIngredientAttrs(row)
+        if (badHeader) { blockingErrors.push(`${line} ("${name}"): ${badHeader} không hợp lệ`); return }
+        if (attrs) entry.attrs = attrs
         allIngredientKeys.add(key)
         if (existingIngredientKeys.has(key)) ingredientUpdates.push(entry)
         else ingredients.push(entry)
@@ -330,12 +408,59 @@ export function resolveImportPlan(parsed: ParsedWorkbook, existing: ExistingData
         linksByTopping.get(key)!.productNames.push(productName)
     })
 
+    // ---- Giảm giá ---- (trùng tên → cập nhật; ghi đè → chương trình ngoài file bị xoá, xem commitDiscounts)
+    const discounts: DiscountPlan[] = []
+    const discountUpdates: DiscountPlan[] = []
+    const seenDiscountNames = new Set<string>()
+    const existingDiscountNames = new Set(existingDiscounts.map(d => normKey(d.name)))
+    const allDiscountNames = new Set(replace.discounts ? [] : existingDiscountNames)
+    ;(parsed.discounts ?? []).forEach((row, i) => {
+        const name = normName(row['Tên chương trình'])
+        const line = `Giảm giá dòng ${i + 2}`
+        if (!name) { blockingErrors.push(`${line}: thiếu Tên chương trình`); return }
+        const type = DISCOUNT_TYPE_BY_LABEL[normKey(row['Kiểu'])]
+        if (!type) { blockingErrors.push(`${line} ("${name}"): Kiểu phải là Đồng giá / Giảm % / Giảm tiền`); return }
+        const rawValue = toNumber(row['Giá trị'])
+        if (rawValue == null || rawValue < 0 || (type === 'percent' && rawValue > 100)) { blockingErrors.push(`${line} ("${name}"): Giá trị không hợp lệ`); return }
+        const days = parseDays(row['Thứ áp dụng'])
+        if (!days) { blockingErrors.push(`${line} ("${name}"): Thứ áp dụng chỉ nhận T2..T7, CN (cách nhau bằng dấu phẩy)`); return }
+        const startDate = toIsoDate(row['Từ ngày'])
+        const endDate = toIsoDate(row['Đến ngày'])
+        if (startDate === undefined || endDate === undefined) { blockingErrors.push(`${line} ("${name}"): Ngày phải dạng YYYY-MM-DD`); return }
+        const key = normKey(name)
+        if (seenDiscountNames.has(key)) { blockingErrors.push(`${line}: tên "${name}" bị lặp trong sheet Giảm giá`); return }
+        seenDiscountNames.add(key)
+        allDiscountNames.add(key)
+        const entry: DiscountPlan = { name, type, value: Math.round(rawValue), days, startDate, endDate, enabled: toBool(row['Bật']) }
+        if (existingDiscountNames.has(key)) discountUpdates.push(entry)
+        else discounts.push(entry)
+    })
+
+    // ---- Giảm giá áp dụng món ---- (có sheet → danh sách món của MỌI chương trình trong file bị thay hoàn toàn)
+    const linksByDiscount = new Map<string, { programName: string; productNames: string[] }>()
+    if (replace.discountLinks) {
+        for (const d of [...discounts, ...discountUpdates]) linksByDiscount.set(normKey(d.name), { programName: d.name, productNames: [] })
+    }
+    ;(parsed.discountLinks ?? []).forEach((row, i) => {
+        const programName = normName(row['Tên chương trình'])
+        const productName = normName(row['Tên món'])
+        const line = `Giảm giá áp dụng món dòng ${i + 2}`
+        if (!programName) { blockingErrors.push(`${line}: thiếu Tên chương trình`); return }
+        if (!productName) { blockingErrors.push(`${line}: thiếu Tên món`); return }
+        if (!requireName(allDiscountNames, programName, 'chương trình giảm giá', 'Giảm giá', line)) return
+        if (!requireName(allProductNames, productName, 'món', 'Sản phẩm', line)) return
+        const key = normKey(programName)
+        if (!linksByDiscount.has(key)) linksByDiscount.set(key, { programName, productNames: [] })
+        linksByDiscount.get(key)!.productNames.push(productName)
+    })
+
     const categoryKeys = new Set(layout.filter(l => l.divider).map(l => normKey(l.name)))
     const removals = {
         products: replace.products ? existing.products.filter(p => !p.is_divider && !seenProductNames.has(normKey(p.name))).map(p => p.name) : [],
         dividers: replace.products ? existing.products.filter(p => p.is_divider && !categoryKeys.has(normKey(p.name))).map(p => p.name) : [],
         toppings: replace.toppings ? existing.toppings.filter(t => !seenToppingNames.has(normKey(t.name))).map(t => t.name) : [],
         extras: replace.extras ? existing.extras.filter(e => !seenExtraKeys.has(`${normKey(e.productName)}|${normKey(e.name)}`)).map(e => `${e.productName} / ${e.name}`) : [],
+        discounts: replace.discounts ? existingDiscounts.filter(d => !seenDiscountNames.has(normKey(d.name))).map(d => d.name) : [],
     }
 
     return {
@@ -349,6 +474,7 @@ export function resolveImportPlan(parsed: ParsedWorkbook, existing: ExistingData
             extras, extraUpdates,
             extraIngredients: extraIngredientsPlan,
             dividers, layout,
+            discounts, discountUpdates, discountLinks: [...linksByDiscount.values()],
         },
         blockingErrors,
         warnings,
@@ -385,7 +511,7 @@ async function commitImportPlanSequential(plan: ImportPlan, addressId: UUID | nu
     })
 
     await runWithConcurrency([...plan.ingredients, ...plan.ingredientUpdates], CONCURRENCY, async (ing) => {
-        await upsertIngredientCost(ing.key, ing.unitCost, addressId, ing.unit, { category: ing.category })
+        await upsertIngredientCost(ing.key, ing.unitCost, addressId, ing.unit, { category: ing.category, ...ing.attrs })
     })
 
     await runWithConcurrency(plan.toppings, CONCURRENCY, async (t) => {
@@ -444,6 +570,52 @@ async function commitImportPlanSequential(plan: ImportPlan, addressId: UUID | nu
         const productIds = link.productNames.map(n => productByName.get(normKey(n))!)
         await setToppingProductLinks(toppingId, productIds)
     })
+
+    await commitDiscounts(plan, addressId, existing, plan.discountLinks.map(l => ({
+        programName: l.programName, productIds: l.productNames.map(n => productByName.get(normKey(n))!),
+    })))
+}
+
+// Quy cách / tồn tối thiểu không nằm trong RPC bulk_import_menu → 1 lệnh upsert theo lô sau khi RPC xong
+// (dòng nguyên liệu đã có nên chỉ cập nhật đúng các cột trong attrs; mọi dòng cùng bộ cột vì theo header sheet).
+async function commitIngredientAttrs(plan: ImportPlan, addressId: UUID | null) {
+    const rows = [...plan.ingredients, ...plan.ingredientUpdates].filter(i => i.attrs).map(i => {
+        const row: Record<string, unknown> = { ingredient: i.key, address_id: addressId }
+        for (const { key, col } of INGREDIENT_ATTR_COLUMNS) if (key in i.attrs!) row[col] = i.attrs![key]
+        return row
+    })
+    if (!rows.length) return
+    const { error } = await supabase.from('ingredient_costs').upsert(rows, { onConflict: 'ingredient,address_id' })
+    if (error) throw error
+}
+
+// Giảm giá ghi qua discountService (không nằm trong RPC bulk_import_menu) — chạy SAU khi món đã có
+// id thật. Idempotent theo tên: lỗi giữa chừng thì nhập lại file, phần đã ghi rơi vào nhánh cập nhật.
+// links đã resolve sang id món (RPC path lấy từ buildBulkPayload, sequential path tự dựng).
+async function commitDiscounts(
+    plan: ImportPlan, addressId: UUID | null, existing: ExistingData,
+    links: Array<{ programName: string; productIds: UUID[] }>,
+) {
+    const programByName = new Map(existing.discountPrograms.map(d => [normKey(d.name), d.id]))
+    const fields = (d: DiscountPlan) => ({
+        type: d.type, value: d.value, days_of_week: d.days, start_date: d.startDate, end_date: d.endDate, enabled: d.enabled,
+    })
+    await runWithConcurrency(plan.discounts, CONCURRENCY, async (d) => {
+        const row = await insertDiscountProgram({ name: d.name, address_id: addressId, ...fields(d) })
+        programByName.set(normKey(d.name), row.id)
+    })
+    await runWithConcurrency(plan.discountUpdates, CONCURRENCY, async (d) => {
+        await updateDiscountProgram(programByName.get(normKey(d.name))!, fields(d))
+    })
+    if (plan.replace.discounts) {
+        const keep = new Set([...plan.discounts, ...plan.discountUpdates].map(d => normKey(d.name)))
+        await runWithConcurrency(existing.discountPrograms.filter(d => !keep.has(normKey(d.name))), CONCURRENCY, async (d) => {
+            await deleteDiscountProgram(d.id)
+        })
+    }
+    await runWithConcurrency(links, CONCURRENCY, async (l) => {
+        await setDiscountProgramProducts(programByName.get(normKey(l.programName))!, l.productIds)
+    })
 }
 
 // Thuần — đổi plan (theo TÊN) sang payload theo ID cho RPC bulk_import_menu. Id món/topping/tùy
@@ -493,6 +665,8 @@ export function buildBulkPayload(plan: ImportPlan, existing: ExistingData) {
         toppingIngredients: plan.toppingIngredients.map(t => ({ toppingId: toppingId.get(normKey(t.toppingName)), ingredient: t.ingredient, amount: t.amount, unit: t.unit })),
         extraIngredients: plan.extraIngredients.map(e => ({ extraId: extraId.get(extraKey(e.productName, e.extraName)), ingredient: e.ingredient, amount: e.amount, unit: e.unit })),
         toppingLinks: plan.toppingLinks.map(l => ({ toppingId: toppingId.get(normKey(l.toppingName)), productIds: l.productNames.map(n => productId.get(normKey(n))) })),
+        // Không do RPC xử lý — commitImportPlan ghi qua commitDiscounts sau khi RPC xong (cần id món đã resolve ở đây).
+        discountLinks: plan.discountLinks.map(l => ({ programName: l.programName, productIds: l.productNames.map(n => productId.get(normKey(n))!) })),
     }
 }
 
@@ -500,6 +674,9 @@ export function buildBulkPayload(plan: ImportPlan, existing: ExistingData) {
 // (localStorage, không có mạng) vẫn đi đường tuần tự cũ.
 export async function commitImportPlan(plan: ImportPlan, addressId: UUID | null, existing: ExistingData) {
     if (localRepo.isGuest()) return commitImportPlanSequential(plan, addressId, existing)
-    const { error } = await supabase.rpc('bulk_import_menu', { p_address_id: addressId, p_plan: buildBulkPayload(plan, existing) })
+    const payload = buildBulkPayload(plan, existing)
+    const { error } = await supabase.rpc('bulk_import_menu', { p_address_id: addressId, p_plan: payload })
     if (error) throw error
+    await commitIngredientAttrs(plan, addressId)
+    await commitDiscounts(plan, addressId, existing, payload.discountLinks)
 }

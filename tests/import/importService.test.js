@@ -2,9 +2,9 @@
 // Nguồn: src/services/importService.ts
 
 import { describe, it, expect } from 'vitest'
-import { resolveImportPlan, buildBulkPayload } from '../../src/services/importService'
+import { parseWorkbook, resolveImportPlan, buildBulkPayload } from '../../src/services/importService'
 
-const EMPTY_EXISTING = { products: [], toppings: [], ingredientCosts: {}, extras: [] }
+const EMPTY_EXISTING = { products: [], toppings: [], ingredientCosts: {}, extras: [], discountPrograms: [] }
 
 function parsed(overrides = {}) {
     return {
@@ -15,7 +15,7 @@ function parsed(overrides = {}) {
 
 describe('resolveImportPlan', () => {
     it('tạo sản phẩm + nguyên liệu + công thức mới, bỏ qua sản phẩm đã tồn tại', () => {
-        const existing = { products: [{ id: 'p-existing', name: 'Trà Đá' }], toppings: [], ingredientCosts: {}, extras: [] }
+        const existing = { products: [{ id: 'p-existing', name: 'Trà Đá' }], toppings: [], ingredientCosts: {}, extras: [], discountPrograms: [] }
         const { plan, blockingErrors, warnings } = resolveImportPlan(parsed({
             products: [{ 'Tên món': 'Trà Đá', 'Giá bán': 10000 }, { 'Tên món': 'Cà Phê Sữa', 'Giá bán': 20000 }],
             ingredients: [{ 'Tên nguyên liệu': 'Sữa đặc', 'Đơn vị': 'ml', 'Giá vốn/đơn vị': 100, 'Loại': 'chính' }],
@@ -57,7 +57,7 @@ describe('resolveImportPlan', () => {
     })
 
     it('tự đăng ký nguyên liệu chỉ xuất hiện trong Công thức (chưa có ở sheet Nguyên liệu)', () => {
-        const existing = { products: [{ id: 'p1', name: 'Trà Đá' }], toppings: [], ingredientCosts: {}, extras: [] }
+        const existing = { products: [{ id: 'p1', name: 'Trà Đá' }], toppings: [], ingredientCosts: {}, extras: [], discountPrograms: [] }
         const { plan, blockingErrors } = resolveImportPlan(parsed({
             recipes: [{ 'Tên món': 'Trà Đá', 'Tên nguyên liệu': 'Đá viên', 'Số lượng': 5, 'Đơn vị': 'viên' }],
         }), existing)
@@ -66,7 +66,7 @@ describe('resolveImportPlan', () => {
     })
 
     it('gom Topping áp dụng món theo topping thay vì tạo 1 dòng/liên kết', () => {
-        const existing = { products: [{ id: 'p1', name: 'Trà Sữa' }, { id: 'p2', name: 'Cà Phê Đen' }], toppings: [{ id: 't1', name: 'Trân Châu' }], ingredientCosts: {}, extras: [] }
+        const existing = { products: [{ id: 'p1', name: 'Trà Sữa' }, { id: 'p2', name: 'Cà Phê Đen' }], toppings: [{ id: 't1', name: 'Trân Châu' }], ingredientCosts: {}, extras: [], discountPrograms: [] }
         const { plan, blockingErrors } = resolveImportPlan(parsed({
             toppingLinks: [
                 { 'Tên topping': 'Trân Châu', 'Tên món': 'Trà Sữa' },
@@ -110,7 +110,7 @@ describe('cột Nhóm (sheet Nguyên liệu)', () => {
 
 describe('buildBulkPayload', () => {
     it('đổi tên → id: món/topping/tùy chọn mới có id sinh sẵn, dòng công thức trỏ đúng id', () => {
-        const existing = { products: [{ id: 'p-old', name: 'Trà Đá' }], toppings: [], ingredientCosts: {}, extras: [{ id: 'x-old', productName: 'Trà Đá', name: 'Ít đá' }] }
+        const existing = { products: [{ id: 'p-old', name: 'Trà Đá' }], toppings: [], ingredientCosts: {}, extras: [{ id: 'x-old', productName: 'Trà Đá', name: 'Ít đá' }], discountPrograms: [] }
         const { plan } = resolveImportPlan(parsed({
             products: [{ 'Tên món': 'Cà Phê', 'Giá bán': 20000 }],
             toppings: [{ 'Tên topping': 'Trân châu', 'Giá bán': 5000, 'Đơn vị': 'g' }],
@@ -130,7 +130,7 @@ describe('buildBulkPayload', () => {
 describe('Danh mục + thứ tự menu', () => {
     const existing = {
         products: [{ id: 'd-old', name: 'Trà', is_divider: true }, { id: 'p1', name: 'Trà Đá' }],
-        toppings: [], ingredientCosts: {}, extras: [],
+        toppings: [], ingredientCosts: {}, extras: [], discountPrograms: [],
     }
     const sp = (name, cat) => ({ 'Tên món': name, 'Giá bán': 10000, 'Danh mục': cat })
 
@@ -157,7 +157,7 @@ describe('Ghi đè theo sheet có trong file', () => {
     const existing = {
         products: [{ id: 'p1', name: 'Trà Đá' }, { id: 'p2', name: 'Trà Nóng' }, { id: 'd1', name: 'Cacao', is_divider: true }],
         toppings: [{ id: 't1', name: 'Trân châu' }], ingredientCosts: {},
-        extras: [{ id: 'x1', productName: 'Trà Nóng', name: 'Ít đá' }],
+        extras: [{ id: 'x1', productName: 'Trà Nóng', name: 'Ít đá' }], discountPrograms: [],
     }
 
     it('sheet có mặt → liệt kê món/danh mục/topping/tùy chọn sẽ xoá; công thức trỏ món ngoài file bị bỏ qua', () => {
@@ -168,7 +168,7 @@ describe('Ghi đè theo sheet có trong file', () => {
         }), existing)
         expect(plan.replace.products).toBe(true)
         expect(plan.replace.extraIngredients).toBe(false)
-        expect(plan.removals).toEqual({ products: ['Trà Nóng'], dividers: ['Cacao'], toppings: ['Trân châu'], extras: ['Trà Nóng / Ít đá'] })
+        expect(plan.removals).toEqual({ products: ['Trà Nóng'], dividers: ['Cacao'], toppings: ['Trân châu'], extras: ['Trà Nóng / Ít đá'], discounts: [] })
         expect(plan.recipes).toEqual([])
         expect(warnings).toHaveLength(1)
     })
@@ -176,6 +176,84 @@ describe('Ghi đè theo sheet có trong file', () => {
     it('không có danh sách sheet (file cũ / thiếu sheet) → không xoá gì', () => {
         const { plan } = resolveImportPlan(parsed({ products: [{ 'Tên món': 'Trà Đá', 'Giá bán': 5000 }] }), existing)
         expect(Object.values(plan.replace).some(Boolean)).toBe(false)
-        expect(plan.removals).toEqual({ products: [], dividers: [], toppings: [], extras: [] })
+        expect(plan.removals).toEqual({ products: [], dividers: [], toppings: [], extras: [], discounts: [] })
+    })
+})
+
+describe('Giảm giá', () => {
+    const existing = {
+        products: [{ id: 'p1', name: 'Trà Đá' }, { id: 'p2', name: 'Cacao' }],
+        toppings: [], ingredientCosts: {}, extras: [], discountPrograms: [],
+        discountPrograms: [{ id: 'd-old', name: 'Happy hour' }, { id: 'd-gone', name: 'Cũ' }],
+    }
+
+    it('parse kiểu/thứ/ngày; trùng tên → cập nhật; ghi đè → liệt kê chương trình sẽ xoá', () => {
+        const { plan, blockingErrors } = resolveImportPlan(parsed({
+            sheets: ['Giảm giá', 'Giảm giá áp dụng món'],
+            discounts: [
+                { 'Tên chương trình': 'Happy hour', 'Kiểu': 'Giảm %', 'Giá trị': 20, 'Thứ áp dụng': 't2, CN', 'Từ ngày': '', 'Đến ngày': '2026-12-31', 'Bật': 'có' },
+                { 'Tên chương trình': 'Đồng giá 10k', 'Kiểu': 'Đồng giá', 'Giá trị': 10000, 'Thứ áp dụng': '', 'Từ ngày': 46023, 'Đến ngày': '', 'Bật': '' },
+            ],
+            discountLinks: [{ 'Tên chương trình': 'Happy hour', 'Tên món': 'Trà Đá' }],
+        }), existing)
+        expect(blockingErrors).toEqual([])
+        expect(plan.discountUpdates).toEqual([{ name: 'Happy hour', type: 'percent', value: 20, days: [0, 1], startDate: null, endDate: '2026-12-31', enabled: true }])
+        expect(plan.discounts).toEqual([{ name: 'Đồng giá 10k', type: 'fixed', value: 10000, days: [], startDate: '2026-01-01', endDate: null, enabled: false }])
+        // sheet liên kết có mặt → chương trình không có dòng nào vẫn được set rỗng
+        expect(plan.discountLinks).toEqual([
+            { programName: 'Đồng giá 10k', productNames: [] },
+            { programName: 'Happy hour', productNames: ['Trà Đá'] },
+        ])
+        expect(plan.removals.discounts).toEqual(['Cũ'])
+    })
+
+    it('chặn cứng kiểu/thứ/ngày/% sai; cảnh báo khi liên kết trỏ chương trình không có', () => {
+        const { blockingErrors, warnings } = resolveImportPlan(parsed({
+            discounts: [
+                { 'Tên chương trình': 'A', 'Kiểu': 'lạ', 'Giá trị': 1 },
+                { 'Tên chương trình': 'B', 'Kiểu': 'Giảm %', 'Giá trị': 150 },
+                { 'Tên chương trình': 'C', 'Kiểu': 'Giảm tiền', 'Giá trị': 1, 'Thứ áp dụng': 'T9' },
+                { 'Tên chương trình': 'D', 'Kiểu': 'Giảm tiền', 'Giá trị': 1, 'Từ ngày': 'mai' },
+            ],
+            discountLinks: [{ 'Tên chương trình': 'Không có', 'Tên món': 'Trà Đá' }],
+        }), existing)
+        expect(blockingErrors).toHaveLength(4)
+        expect(warnings).toHaveLength(1)
+    })
+})
+
+describe('Quy cách & tồn tối thiểu của nguyên liệu', () => {
+    const ing = (extra) => parsed({ ingredients: [{ 'Tên nguyên liệu': 'Sữa', 'Đơn vị': 'ml', 'Giá vốn/đơn vị': 1, 'Loại': 'chính', ...extra }] })
+
+    it('chỉ cột CÓ trong sheet mới vào attrs; ô trống = null (xoá)', () => {
+        const { plan, blockingErrors } = resolveImportPlan(ing({ 'Quy cách': 1286, 'Đơn vị quy cách': 'ml', 'Quy cách 2': '', 'Tồn kho tối thiểu': 2 }), EMPTY_EXISTING)
+        expect(blockingErrors).toEqual([])
+        expect(plan.ingredients[0].attrs).toEqual({ packSize: 1286, packUnit: 'ml', pack2Size: null, minStock: 2 })
+    })
+
+    it('file không có cột nào → không có attrs (giữ nguyên dữ liệu cũ)', () => {
+        expect(resolveImportPlan(ing({}), EMPTY_EXISTING).plan.ingredients[0]).not.toHaveProperty('attrs')
+    })
+
+    it('chặn cứng số âm / không phải số', () => {
+        const { blockingErrors } = resolveImportPlan(ing({ 'Tồn quầy tối thiểu': 'abc' }), EMPTY_EXISTING)
+        expect(blockingErrors[0]).toMatch(/Tồn quầy tối thiểu không hợp lệ/)
+        expect(resolveImportPlan(ing({ 'Quy cách': -1 }), EMPTY_EXISTING).blockingErrors).toHaveLength(1)
+    })
+})
+
+describe('File mẫu public/templates/mau-nhap-lieu.xlsx', () => {
+    it('đọc được hết, không lỗi cứng, có đủ nhóm / quy cách / giảm giá', async () => {
+        const { readFileSync } = await import('node:fs')
+        const buf = readFileSync('public/templates/mau-nhap-lieu.xlsx')
+        const { plan, blockingErrors, warnings } = resolveImportPlan(
+            parseWorkbook(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)),
+            { ...EMPTY_EXISTING, discountPrograms: [] },
+        )
+        expect(blockingErrors).toEqual([])
+        expect(warnings).toEqual([])
+        expect(plan.ingredients[0]).toMatchObject({ group: 'Cà phê & sữa', attrs: { packSize: 500, packUnit: 'bịch', pack2Size: 20, pack2Unit: 'thùng', minStock: 1000, minCounterStock: 200 } })
+        expect(plan.discounts).toEqual([{ name: 'Happy hour thứ 2', type: 'percent', value: 20, days: [1], startDate: null, endDate: null, enabled: false }])
+        expect(plan.discountLinks).toEqual([{ programName: 'Happy hour thứ 2', productNames: ['Cà Phê Sữa'] }])
     })
 })
