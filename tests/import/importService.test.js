@@ -183,7 +183,7 @@ describe('Ghi đè theo sheet có trong file', () => {
 describe('Giảm giá', () => {
     const existing = {
         products: [{ id: 'p1', name: 'Trà Đá' }, { id: 'p2', name: 'Cacao' }],
-        toppings: [], ingredientCosts: {}, extras: [], discountPrograms: [],
+        toppings: [], ingredientCosts: {}, extras: [],
         discountPrograms: [{ id: 'd-old', name: 'Happy hour' }, { id: 'd-gone', name: 'Cũ' }],
     }
 
