@@ -74,6 +74,7 @@ export default function ShiftPrepCard({
                                     <span className="block">
                                         {haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{it.have} {it.unit}
                                     </span>
+                                    {it.reason && <span className="block text-warning font-bold">{it.reason}</span>}
                                     {it.boughtToday > 0 && (
                                         <span className="block text-success">
                                             Đã mua hôm nay: {it.boughtToday} {it.unit}
@@ -108,7 +109,7 @@ export default function ShiftPrepCard({
                                             <span className={`text-[14px] font-bold leading-tight ${muted ? 'text-text-dim line-through' : 'text-text'}`}>
                                                 {ingredientLabel(it.ingredient)}
                                             </span>
-                                            {it.kind === 'depleted' && <span className="text-[10px] font-black uppercase tracking-wide text-danger">Hết ở quầy</span>}
+                                            {it.kind === 'depleted' && <span className="text-[10px] font-black uppercase tracking-wide text-danger">{it.low ? 'Sắp hết ở quầy' : 'Hết ở quầy'}</span>}
                                             <span
                                                 onClick={(e) => { e.stopPropagation(); onSkip(it.ingredient) }}
                                                 title={isSkipped ? 'Hoàn tác bỏ qua' : 'Bỏ qua — không cần lấy'}
@@ -123,6 +124,7 @@ export default function ShiftPrepCard({
                                                     Tồn kho: {it.warehouse} {it.unit}
                                                 </span>
                                             )}
+                                            {it.reason && <span className="block text-warning font-bold">{it.reason}</span>}
                                             <span className="block">
                                                 {it.haveLabel || haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{it.have} {it.unit}
                                             </span>

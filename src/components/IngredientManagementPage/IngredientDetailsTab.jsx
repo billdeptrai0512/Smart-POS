@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Info, Trash2 } from 'lucide-react'
+import { Check, Trash2 } from 'lucide-react'
 import { formatPackedQty, netStockOf } from '../../utils/inventory'
 import { INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 import { onboardingHintClass } from '../../utils/onboardingHint'
@@ -221,30 +221,25 @@ function Panel({ title, children, action }) {
 // ── Row container ───────────────────────────────────────────────────────────
 // `sub` = caption spanning the FULL row width (dùng cho note dài, không đoán trước được độ dài —
 // vd danh sách địa chỉ cùng nhóm kho tổng). Khác với `note` bên trong QtyRow (ngắn, nằm cạnh số).
-// `info` = chú thích ẩn, bấm icon (i) cạnh label mới bung ra — cùng kiểu với "Lý thuyết" ở
-// InventoryReportCard.jsx.
-function Row({ label, children, sub, info }) {
-    const [showInfo, setShowInfo] = useState(false)
+// `centerValue` = caption nằm dưới label (cột trái), giá trị canh giữa theo chiều dọc của cả 2 dòng.
+function Row({ label, children, sub, centerValue }) {
+    if (centerValue) {
+        return (
+            <div className="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                    <span className="block text-[12px] font-bold text-text-secondary">{label}</span>
+                    <div className="mt-1 text-[11px] font-medium text-text-dim/80">{sub}</div>
+                </div>
+                <div className="shrink-0">{children}</div>
+            </div>
+        )
+    }
     return (
         <div className="py-2.5 first:pt-0 last:pb-0">
             <div className="flex items-center justify-between gap-3">
-                {info ? (
-                    <button
-                        onClick={() => setShowInfo(s => !s)}
-                        className="flex items-center gap-1 text-[12px] font-bold text-text-secondary hover:text-text transition-colors"
-                    >
-                        {label} <Info size={10} className="text-text-dim shrink-0" />
-                    </button>
-                ) : (
-                    <span className="text-[12px] font-bold text-text-secondary">{label}</span>
-                )}
+                <span className="text-[12px] font-bold text-text-secondary">{label}</span>
                 <div>{children}</div>
             </div>
-            {showInfo && (
-                <div className="mt-1.5 px-3 py-2 bg-surface-light rounded-[10px] border border-border/40 text-[11px] text-text-secondary leading-snug">
-                    {info}
-                </div>
-            )}
             {sub && <div className="mt-1 text-[11px] font-medium text-text-dim/80">{sub}</div>}
         </div>
     )
@@ -562,8 +557,8 @@ function TareRow({ tareWeight, unit, canEdit, onSave, hint = false }) {
     return (
         <Row
             label="Bao bì"
-            info="Khối lượng của hộp/chai đựng nguyên liệu tại quầy.
- Kiểm kê cuối ca cân cả bì — số cân giữ nguyên, bì chỉ được trừ khi dự báo còn dùng được bao lâu."
+            sub="Khối lượng của hộp/chai đựng nguyên liệu tại quầy."
+            centerValue
         >
             {editing && canEdit ? (
                 <div className="flex items-center gap-1">

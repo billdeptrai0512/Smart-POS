@@ -44,6 +44,32 @@ describe('buildDepletedList', () => {
     })
 })
 
+describe('tồn quầy ít nhất (min_counter_stock)', () => {
+    const withMin = (min, extra = {}) => ({ ...base, ingredientsList: [{ ...coffee, min_counter_stock: min, ...extra }] })
+
+    it('Soạn hôm nay: dự báo thấp vẫn lấy đủ lên sàn quầy, kèm lý do', () => {
+        const out = buildPrepTodayList({ ...withMin(800), openingStock: { cà_phê: 100 }, usedMap: {}, lastWeekUsedMap: { cà_phê: 50 } })
+        expect(out[0]).toMatchObject({ need: 700, needPacks: 1, reason: 'Dưới tồn quầy ít nhất' })
+    })
+    it('Soạn hôm nay: dự báo đã vượt sàn → không có lý do', () => {
+        const out = buildPrepTodayList({ ...withMin(200), openingStock: { cà_phê: 100 }, usedMap: {}, lastWeekUsedMap: { cà_phê: 500 } })
+        expect(out[0].need).toBe(400)
+        expect(out[0].reason).toBeUndefined()
+    })
+    it('Hết giữa ca: còn hàng nhưng dưới sàn quầy → báo "sắp hết"', () => {
+        const out = buildDepletedList({ ...withMin(300), restockInputs: { cà_phê: '1000' }, usedMap: { cà_phê: 900 } })
+        expect(out[0]).toMatchObject({ kind: 'depleted', low: true, have: 200, needPacks: 1, fillQty: 1000 })
+    })
+    it('Hết giữa ca: bằng đúng sàn thì chưa báo; không đặt sàn thì chỉ báo khi ≤ 0', () => {
+        expect(buildDepletedList({ ...withMin(300), restockInputs: { cà_phê: '1000' }, usedMap: { cà_phê: 800 } })).toEqual([])
+        expect(buildDepletedList({ ...withMin(0), restockInputs: { cà_phê: '1000' }, usedMap: { cà_phê: 900 } })).toEqual([])
+    })
+    it('Hết giữa ca: 1 bịch chưa lên sàn → lấy đủ số bịch để lên sàn', () => {
+        const out = buildDepletedList({ ...withMin(2500), openingStock: { cà_phê: 0 }, restockInputs: { cà_phê: '1000' }, usedMap: { cà_phê: 900 } })
+        expect(out[0]).toMatchObject({ needPacks: 3, need: 3000 }) // thiếu 2400 → 3 bịch
+    })
+})
+
 describe('mergePrepItems / isPrepDone', () => {
     const prep = buildPrepTodayList({ ...base, openingStock: { cà_phê: 0 }, usedMap: {}, lastWeekUsedMap: { cà_phê: 500 } })
 
@@ -81,9 +107,22 @@ describe('buildWarehousePrepList (Bổ sung tồn kho — cho mai)', () => {
     it('đủ hàng cho mai (hoặc ≥ min_stock) → không vào danh sách', () => {
         expect(buildWarehousePrepList({ ...args, nextDowUsedMap: { cà_phê: 1500 } })).toEqual([])
     })
-    it('min_stock cao hơn dự báo thì lấy min_stock làm target', () => {
+    it('min_stock là hàng dự phòng của KHO: kho thấp hơn ngưỡng → mua phần thiếu, kèm lý do', () => {
         const out = buildWarehousePrepList({ ...args, ingredientsList: [{ ...coffee, min_stock: 3000 }] })
-        expect(out[0].need).toBe(1000)
+        expect(out[0]).toMatchObject({ need: 1000, reason: 'Dưới tồn kho ít nhất' })
+    })
+    it('min_stock cộng dồn với phần rút mai (không phải max)', () => {
+        // kho 2000, quầy 300, mai cần 1500 → rút 1200; dự phòng 1000 → cần kho 2200 → mua 200
+        const out = buildWarehousePrepList({ ...args, ingredientsList: [{ ...coffee, min_stock: 1000 }], inventoryInputs: { cà_phê: '300' }, nextDowUsedMap: { cà_phê: 1500 } })
+        expect(out[0]).toMatchObject({ need: 200, warehouse: 2000, have: 300, reason: 'Dưới tồn kho ít nhất' })
+    })
+    it('min_counter_stock nâng mức rút mai khi dự báo thấp', () => {
+        // quầy 100, sàn quầy 800 → rút 700; kho 500 → thiếu 200
+        const out = buildWarehousePrepList({ ...args, effectiveWarehouseStocks: { cà_phê: 500 }, ingredientsList: [{ ...coffee, min_counter_stock: 800 }], inventoryInputs: { cà_phê: '100' } })
+        expect(out[0].need).toBe(200)
+    })
+    it('kho đủ rút mai và đủ dự phòng → không vào danh sách', () => {
+        expect(buildWarehousePrepList({ ...args, ingredientsList: [{ ...coffee, min_stock: 1500 }], nextDowUsedMap: { cà_phê: 400 } })).toEqual([])
     })
 })
 
