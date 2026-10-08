@@ -150,6 +150,44 @@ export function buildTodayBoughtMap(todayExpenses) {
     return m
 }
 
+// Kho tổng hiện có của 1 NVL (kẹp ≥ 0; tra cả key biến thể theo label).
+export const poolOf = (ingredient, pool) => Math.max(0, r1(lookupByLabel(ingredient, pool || {})))
+
+// "Soạn kho nhóm" — quản lý nhìn 1 bảng cho cả nhóm kho chung: mỗi chi nhánh cần rút bao nhiêu cho mai (cùng
+// công thức `pull` của buildWarehousePrepList, tính trên tồn quầy + dự báo CỦA CHI NHÁNH ĐÓ), cộng lại so với
+// MỘT pool kho tổng. Bản 1 chi nhánh so từng nhu cầu riêng với pool nên 6 nơi cùng thấy "đủ" dù tổng vượt kho.
+//   branches: [{ id, name, ingredientsList (cấu hình NVL của chi nhánh), counterStock: {ing: số cân hộp}, forecast: {ing} }]
+//   pool: { ing: kho tổng hiện có } — số server đã trừ mọi lần rút đã ghi của cả nhóm.
+//   cần mua = min_stock + Σ rút − pool, kẹp ≥ 0. min_stock lấy MAX giữa các chi nhánh (hàng dự phòng của nhóm chỉ giữ 1 lần).
+// ponytail: chưa trừ phần "đã soạn nhưng chưa ghi" — chờ phiếu xuất kho nội bộ.
+export function buildGroupPrepPlan({ branches, pool }) {
+    const byIng = new Map()
+    for (const b of branches) {
+        for (const ing of b.ingredientsList || []) {
+            const counterReal = Math.max(0, r1(r1(lookupByLabel(ing.ingredient, b.counterStock || {})) - r1(ing.tare_weight)))
+            const forecast = r1(lookupByLabel(ing.ingredient, b.forecast || {}))
+            const item = toPrepItem(ing, counterReal, Math.max(forecast, r1(ing.min_counter_stock)))
+            const qty = item?.fillQty ?? 0
+            const packs = item?.needPacks ?? 0
+            let row = byIng.get(ing.ingredient)
+            if (!row) {
+                row = { ingredient: ing.ingredient, unit: ing.unit, minStock: 0, branches: [] }
+                byIng.set(ing.ingredient, row)
+            }
+            row.minStock = Math.max(row.minStock, r1(ing.min_stock))
+            row.branches.push({ id: b.id, name: b.name, qty, packs, packUnit: ing.pack_unit })
+        }
+    }
+    const out = []
+    for (const row of byIng.values()) {
+        const poolNow = poolOf(row.ingredient, pool)
+        const totalPull = r1(row.branches.reduce((s, x) => s + x.qty, 0))
+        const buy = Math.max(0, r1(row.minStock + totalPull - poolNow))
+        if (totalPull > 0 || buy > 0) out.push({ ...row, pool: poolNow, totalPull, buy })
+    }
+    return out.sort((a, c) => c.buy - a.buy || c.totalPull - a.totalPull)
+}
+
 // "Bổ sung tồn kho" — cho mai: sáng mai rút từ kho ra quầy phần còn thiếu, và kho vẫn phải còn ≥ min_stock.
 //   rút mai = max(forecast mai, min_counter_stock) − tồn quầy cuối ca (thật, đã trừ bì), kẹp ≥ 0.
 //   cần mua = min_stock + rút mai − (kho tổng − restock)  (min_stock là hàng dự phòng, cộng dồn chứ không max).

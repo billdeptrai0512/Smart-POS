@@ -21,6 +21,7 @@ import StockDeficitBanner from '../components/IngredientManagementPage/StockDefi
 import KeyMismatchBanner from '../components/IngredientManagementPage/KeyMismatchBanner'
 import MenuPageHeader from '../components/common/MenuPageHeader'
 import WarehousePrepNotice from '../components/IngredientManagementPage/WarehousePrepNotice'
+import GroupPrepNotice from '../components/IngredientManagementPage/GroupPrepNotice'
 import Dropdown from '../components/common/Dropdown'
 import Skeleton from '../components/common/Skeleton'
 import CreateIngredientForm from '../components/IngredientManagementPage/CreateIngredientForm'
@@ -448,6 +449,7 @@ export default function IngredientManagementPage() {
             <Toast toast={toast} />
 
             <WarehousePrepNotice onRestocked={loadStocks} />
+            <GroupPrepNotice />
 
             <MenuPageHeader
                 title="Tồn kho"

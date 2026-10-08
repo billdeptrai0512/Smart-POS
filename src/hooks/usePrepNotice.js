@@ -7,7 +7,7 @@ import { useToast } from './useToast'
 import { useShiftInventoryState } from './useShiftInventoryState'
 import { fetchLastWeekSameDayOrderItems } from '../services/reportService'
 import { getPendingOrders } from './useOfflineSync'
-import { calculateEstimatedConsumption, orderItemsOf, isLiveOrder, averageIngredientMaps, r1 } from '../utils/inventory'
+import { calculateEstimatedConsumption, orderItemsOf, isLiveOrder, forecastFromWeeks, r1 } from '../utils/inventory'
 import {
     buildPrepTodayList, buildDepletedList, mergePrepItems, isPrepDone, isPrepFilled,
     buildWarehousePrepList, buildTodayBoughtMap, HISTORY_OFFSETS_TODAY, HISTORY_OFFSETS_TOMORROW,
@@ -88,9 +88,7 @@ function useShiftPrepBase(offsets) {
         [liveOrders, recipes, extraIngredients])
     const systemTotalRevenue = useMemo(() => liveOrders.reduce((sum, o) => sum + (o.total || 0), 0), [liveOrders])
     const forecastMap = useMemo(
-        () => averageIngredientMaps((weeks || []).map(items => calculateEstimatedConsumption(
-            items.map(i => ({ productId: i.product_id, qty: i.quantity, extras: (i.extra_ids || []).map(id => ({ id })) })),
-            recipes, extraIngredients))),
+        () => forecastFromWeeks(weeks || [], recipes, extraIngredients),
         [weeks, recipes, extraIngredients])
 
     // Chưa tải xong thì mọi map rỗng ⇒ NVL nào cũng trông "chưa soạn" ⇒ notice nháy sai. Chờ đủ.
