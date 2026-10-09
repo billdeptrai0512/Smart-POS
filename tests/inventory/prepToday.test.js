@@ -49,7 +49,7 @@ describe('tồn quầy ít nhất (min_counter_stock)', () => {
 
     it('Soạn hôm nay: dự báo thấp vẫn lấy đủ lên sàn quầy, kèm lý do', () => {
         const out = buildPrepTodayList({ ...withMin(800), openingStock: { cà_phê: 100 }, usedMap: {}, lastWeekUsedMap: { cà_phê: 50 } })
-        expect(out[0]).toMatchObject({ need: 700, needPacks: 1, reason: 'Dưới tồn quầy ít nhất (800 g)' })
+        expect(out[0]).toMatchObject({ need: 700, needPacks: 1, reason: 'Tồn quầy ít nhất: 800 g' })
     })
     it('Soạn hôm nay: dự báo đã vượt sàn → không có lý do', () => {
         const out = buildPrepTodayList({ ...withMin(200), openingStock: { cà_phê: 100 }, usedMap: {}, lastWeekUsedMap: { cà_phê: 500 } })
@@ -109,12 +109,16 @@ describe('buildWarehousePrepList (Bổ sung tồn kho — cho mai)', () => {
     })
     it('min_stock là hàng dự phòng của KHO: kho thấp hơn ngưỡng → mua phần thiếu, kèm lý do', () => {
         const out = buildWarehousePrepList({ ...args, ingredientsList: [{ ...coffee, min_stock: 3000 }] })
-        expect(out[0]).toMatchObject({ need: 1000, reason: 'Dưới tồn kho ít nhất (3000 g)' })
+        expect(out[0]).toMatchObject({ need: 1000, reason: 'Tồn kho ít nhất: 3000 g' })
     })
     it('min_stock cộng dồn với phần rút mai (không phải max)', () => {
         // kho 2000, quầy 300, mai cần 1500 → rút 1200; dự phòng 1000 → cần kho 2200 → mua 200
         const out = buildWarehousePrepList({ ...args, ingredientsList: [{ ...coffee, min_stock: 1000 }], inventoryInputs: { cà_phê: '300' }, nextDowUsedMap: { cà_phê: 1500 } })
-        expect(out[0]).toMatchObject({ need: 200, warehouse: 2000, have: 300, reason: 'Dưới tồn kho ít nhất (1000 g)' })
+        expect(out[0]).toMatchObject({ need: 200, warehouse: 2000, have: 300, reason: 'Tồn kho ít nhất: 1000 g' })
+    })
+    it('kho cũng thiếu cho nhu cầu mai → vẫn ghi lý do min_stock (phần dự phòng nằm trong số mua)', () => {
+        const out = buildWarehousePrepList({ ...args, effectiveWarehouseStocks: { cà_phê: 0 }, ingredientsList: [{ ...coffee, min_stock: 100 }], inventoryInputs: { cà_phê: '300' }, nextDowUsedMap: { cà_phê: 1000 } })
+        expect(out[0]).toMatchObject({ need: 800, reason: 'Tồn kho ít nhất: 100 g' }) // rút 700 + dự phòng 100
     })
     it('min_counter_stock nâng mức rút mai khi dự báo thấp', () => {
         // quầy 100, sàn quầy 800 → rút 700; kho 500 → thiếu 200

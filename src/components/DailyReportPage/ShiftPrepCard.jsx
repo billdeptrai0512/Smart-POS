@@ -1,4 +1,4 @@
-import { Check, Plus, X, RotateCcw } from 'lucide-react'
+import { Check, X, RotateCcw } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
 import { formatPackCount } from '../../utils/inventory'
 
@@ -12,7 +12,7 @@ export default function ShiftPrepCard({
     items = [],
     checked = {},
     onToggle,
-    // Khi set → mỗi dòng đổi ô tick thành nút "+" mở phiếu Nhập kho (card "Chuẩn bị tồn
+    // Khi set → mỗi dòng đổi ô tick thành nút "Mua N …" mở phiếu Nhập kho (card "Chuẩn bị tồn
     // kho"). Bấm dòng gọi onRestock(ingredient). Không set → giữ hành vi tick như cũ.
     onRestock,
     // Chỉ dùng cùng onRestock: bấm tên nguyên liệu → onOpen(ingredient) (mở trang chi tiết).
@@ -21,8 +21,8 @@ export default function ShiftPrepCard({
     // lấy" để vẫn hoàn tất ca; bấm lại (↩) để hủy. skipped: { [ingredient]: true }.
     skipped = {},
     onSkip,
-    // Nhãn cho số tồn ở dòng phụ: card Soạn = tồn quầy đầu ca ("Quầy"),
-    // card Chuẩn bị kho = tổng tồn cho mai ("Tồn kho").
+    // Nhãn cho số tồn quầy ở dòng phụ: card Soạn = tồn quầy đầu ca ("Quầy"),
+    // card Chuẩn bị kho = tồn quầy cuối ca.
     haveLabel,
     emptyTitle,
     emptyHint = '',
@@ -30,7 +30,6 @@ export default function ShiftPrepCard({
     // nếu có pack_size, không thì "<packVerb> X <đơn vị>".
     packVerb,
 }) {
-    const restockMode = typeof onRestock === 'function'
     const skipMode = typeof onSkip === 'function'
 
     return (
@@ -50,11 +49,7 @@ export default function ShiftPrepCard({
                         // skipMode (card Soạn) bên dưới — card Chuẩn bị kho không cảnh báo kiểu này.
                         const shortfall = !muted && it.warehouse != null && it.warehouse < it.need
 
-                        const leadIcon = restockMode ? (
-                            <span className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-primary bg-primary/10" title="Nhập kho">
-                                <Plus size={16} strokeWidth={3} />
-                            </span>
-                        ) : (
+                        const leadIcon = (
                             <span className={`shrink-0 w-5 h-5 rounded-[7px] border flex items-center justify-center transition-colors ${
                                 isDone ? 'bg-primary border-primary'
                                     : isSkipped ? 'bg-border/40 border-border'
@@ -70,13 +65,16 @@ export default function ShiftPrepCard({
                                     {ingredientLabel(it.ingredient)}
                                 </span>
                                 <div className="text-[11px] text-text-dim mt-0.5">
+                                    {/* Cam = hành động (CTA "Mua"), đỏ = vấn đề (kho dưới mức tối thiểu), xám = thông tin. */}
                                     {it.warehouse != null && (
-                                        <span className="block">Tồn kho: {it.warehouse} {it.unit}</span>
+                                        <span className={`block ${it.warehouse < it.minStock ? 'text-danger font-bold' : ''}`}>
+                                            Tồn kho cuối kỳ: {it.warehouse} {it.unit}
+                                        </span>
                                     )}
+                                    {it.reason && <span className="block text-text-secondary">{it.reason}</span>}
                                     <span className="block">
                                         {haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{it.have} {it.unit}
                                     </span>
-                                    {it.reason && <span className="block text-warning font-bold">{it.reason}</span>}
                                     {it.boughtToday > 0 && (
                                         <span className="block text-success">
                                             Đã mua hôm nay: {it.boughtToday} {it.unit}
@@ -140,7 +138,7 @@ export default function ShiftPrepCard({
                             )
                         }
 
-                        // Còn lại là card "Chuẩn bị tồn kho" (restockMode): bấm "+"/CTA mở phiếu Nhập kho,
+                        // Còn lại là card "Chuẩn bị tồn kho" (không skipMode): bấm nút "Mua N …" mở phiếu Nhập kho,
                         // bấm tên mở chi tiết nguyên liệu (onOpen; không set → cũng mở phiếu Nhập kho).
                         const restock = () => onRestock(it.ingredient, it.needPacks > 0 ? it.needPacks : it.need)
                         return (
@@ -155,10 +153,10 @@ export default function ShiftPrepCard({
                                 <button
                                     type="button"
                                     onClick={restock}
-                                    className="flex flex-col items-center gap-1.5 shrink-0 active:scale-95 transition"
+                                    title="Nhập kho"
+                                    className="self-center shrink-0 min-h-[44px] px-3 flex items-center rounded-xl bg-primary/10 text-primary text-[12px] font-black active:scale-95 transition"
                                 >
-                                    {ctaText}
-                                    {leadIcon}
+                                    {packVerb} {it.needPacks > 0 ? formatPackCount(it.needPacks, it.packUnit, it.pack2) : `${it.need} ${it.unit}`}
                                 </button>
                             </div>
                         )

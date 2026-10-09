@@ -56,7 +56,7 @@ export function buildPrepTodayList({ ingredientsList, openingInputs, openingStoc
         const minCounter = r1(ing.min_counter_stock)
         const item = toPrepItem(ing, opening, Math.max(forecast, minCounter))
         if (item) {
-            if (forecast - opening <= 0) item.reason = `Dưới tồn quầy ít nhất (${minCounter} ${ing.unit})` // chỉ vì sàn quầy mới phải lấy
+            if (forecast - opening <= 0) item.reason = `Tồn quầy ít nhất: ${minCounter} ${ing.unit}` // chỉ vì sàn quầy mới phải lấy
             // Kho tổng hiện có (warehouse_stock thực tế, KHÔNG phải số đầu ca) để rút ra
             // quầy. Lookup theo key trực tiếp; null nếu NVL không theo dõi kho.
             const wh = (warehouseStocks || {})[ing.ingredient]
@@ -176,8 +176,9 @@ export function buildWarehousePrepList({ ingredientsList, effectiveWarehouseStoc
         const pull = Math.max(0, r1(Math.max(forecastFor(ing.ingredient, usedMap, nextDowUsedMap), r1(ing.min_counter_stock)) - counterReal))
         const item = toPrepItem(ing, warehouseLeft, minStock + pull)
         if (item) {
-            if (pull - warehouseLeft <= 0) item.reason = `Dưới tồn kho ít nhất (${minStock} ${ing.unit})` // đủ rút mai, chỉ thiếu phần dự phòng
+            if (minStock > 0) item.reason = `Tồn kho ít nhất: ${minStock} ${ing.unit}` // đã cộng vào số cần mua → luôn nói ra, kẻo "Mua N" có phần dự phòng mà không giải thích
             item.warehouse = warehouseLeft
+            item.minStock = minStock
             item.have = counterReal // hiển thị tồn quầy; need đã tính theo kho
             item.boughtToday = lookupByLabel(ing.ingredient, todayBoughtMap)
             out.push(item)
