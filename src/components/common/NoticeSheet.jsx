@@ -2,14 +2,14 @@ import { X } from 'lucide-react'
 import { BottomSheet } from './ModalShell'
 
 // Bottom-sheet của dải notice (PrepPinBar, WarehousePrepNotice): icon + tiêu đề bên trái, số đếm + nút X
-// bên phải, danh sách ngay bên dưới.
+// bên phải, danh sách ngay bên dưới. Header đứng yên (nút X luôn trong tầm tay), chỉ danh sách cuộn.
 export default function NoticeSheet({ icon, title, count, onClose, children }) {
     return (
         <BottomSheet
             onClose={onClose}
-            panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-1 animate-slide-up max-h-[85dvh] overflow-y-auto"
+            panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl flex flex-col animate-slide-up max-h-[85dvh] overflow-hidden"
         >
-            <div className="flex items-center gap-2 pb-3 border-b border-border/40">
+            <div className="flex items-center gap-2 px-5 pt-5 pb-3 border-b border-border/40 shrink-0">
                 {icon}
                 <span className="flex-1 min-w-0 truncate text-[16px] font-black text-text">{title}</span>
                 <span className="shrink-0 text-[13px] font-bold text-text-secondary tabular-nums">{count}</span>
@@ -21,7 +21,7 @@ export default function NoticeSheet({ icon, title, count, onClose, children }) {
                     <X size={16} />
                 </button>
             </div>
-            {children}
+            <div className="min-h-0 overflow-y-auto px-5 pt-1 pb-8">{children}</div>
         </BottomSheet>
     )
 }

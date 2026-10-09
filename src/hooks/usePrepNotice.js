@@ -112,7 +112,7 @@ export function usePrepNotice() {
     const items = useMemo(() => {
         if (!ready) return []
         return mergePrepItems(
-            buildPrepTodayList({ ...common, lastWeekUsedMap: forecastMap }),
+            buildPrepTodayList({ ...common, restockInputs, inventoryInputs: inventory.inventoryInputs, lastWeekUsedMap: forecastMap }),
             buildDepletedList({ ...common, restockInputs, inventoryInputs: inventory.inventoryInputs, skipped, effectiveWarehouseStocks: inventory.effectiveWarehouseStocks }),
             restockInputs)
         // eslint-disable-next-line react-hooks/exhaustive-deps

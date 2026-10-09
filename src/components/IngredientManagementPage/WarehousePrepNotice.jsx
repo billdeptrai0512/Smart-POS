@@ -18,7 +18,7 @@ import Toast from '../POSPage/Toast'
 
 // Dải notice "Bổ sung tồn kho" ở đỉnh /inventory (Tồn kho): NVL/bao bì cần MUA thêm để đủ bán ngày
 // mai (target = max(dự báo mai, tồn tối thiểu) − tổng tồn kho + quầy). Bấm → danh sách; nút "Mua N …"
-// mở RestockModal (cùng form Nhập kho của trang chi tiết), bấm tên → trang chi tiết. Mua đủ thì món tự rớt khỏi danh sách.
+// mở RestockModal (cùng form Nhập kho của trang chi tiết), bấm tên → trang chi tiết. Mua đủ thì món chuyển xuống đáy với viên "Đã mua N" (tiến độ x/y, vẫn hiện đến hết ngày).
 // Chỉ chủ/quản lý (nhập kho là thao tác ghi chi phí + kho); guest/offline ẩn như dải ở /pos.
 // Bấm tên nguyên liệu → sang trang chi tiết (trang cha unmount); cờ module này cho lần mount kế
 // (back về /inventory) mở lại đúng bảng — cùng kiểu cache `saved` của IngredientManagementPage.
@@ -38,7 +38,10 @@ function Notice({ onRestocked, onOpenIngredient }) {
     const { ingredientUnits, refreshProducts } = useProducts()
     const { refreshTodayExpenses } = useHistory()
     const { items, ready, ingredientsList, warehouseStocks, reload, toast } = useWarehousePrep()
-    const pendingCount = items.length
+    // Món đã mua đủ (done) vẫn nằm trong danh sách → đếm tiến độ "đã mua / tổng", mẫu số đứng yên suốt ngày.
+    const total = items.length
+    const doneCount = items.filter(it => it.done).length
+    const progress = `${doneCount}/${total}`
     const [open, setOpen] = useState(reopenSheet)
     useEffect(() => { reopenSheet = false }, [])
     const [restock, setRestock] = useState(null) // { ingredient, qty }
@@ -52,26 +55,26 @@ function Notice({ onRestocked, onOpenIngredient }) {
         return () => { alive = false }
     }, [restock, selectedAddress.id])
 
-    if (pendingCount === 0 && !open && !restock) return null
+    if (total === 0 && !open && !restock) return null
     const cfg = restock && (ingredientsList || []).find(i => i.ingredient === restock.ingredient)
 
     return (
         <>
-            {pendingCount > 0 && (
+            {total > 0 && (
                 <NoticeBar
                     icon={<Package size={15} className="text-primary shrink-0" />}
                     label="Bổ sung tồn kho"
-                    count={pendingCount}
+                    count={progress}
                     onClick={ready ? () => setOpen(true) : undefined} // số từ ảnh chụp: chờ tính xong mới mở form nhập kho
                 />
             )}
             <Toast toast={toast} />
 
-            {open && !restock && (ready || pendingCount > 0) && (
+            {open && !restock && (ready || total > 0) && (
                 <NoticeSheet
                     icon={<Package size={18} className="text-primary shrink-0" />}
                     title="Bổ sung tồn kho"
-                    count={pendingCount}
+                    count={progress}
                     onClose={() => setOpen(false)}
                 >
                     <ShiftPrepCard

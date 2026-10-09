@@ -45,7 +45,7 @@ const openingGross = (ing, openingInputs, openingStock) => {
 // "Soạn cho hôm nay" — sáng: đưa NVL ra QUẦY đủ cho dự báo bán hôm nay.
 // have = tồn quầy ĐẦU ca (opening, đã trừ bì); need = max(forecast, min_counter_stock) − opening.
 // Ngày dự báo thấp vẫn đưa ra đủ sàn quầy; min_stock (ngưỡng KHO) không chặn việc rút hàng.
-export function buildPrepTodayList({ ingredientsList, openingInputs, openingStock, warehouseStocks, usedMap, lastWeekUsedMap }) {
+export function buildPrepTodayList({ ingredientsList, openingInputs, openingStock, restockInputs = {}, inventoryInputs = {}, warehouseStocks, usedMap, lastWeekUsedMap }) {
     const out = []
     for (const ing of ingredientsList || []) {
         // Đầu kỳ = số cân hộp (gồm bì) → matcha THẬT để bán = trừ bì, kẹp 0. Bì tự khử
@@ -62,6 +62,12 @@ export function buildPrepTodayList({ ingredientsList, openingInputs, openingStoc
             const wh = (warehouseStocks || {})[ing.ingredient]
             item.warehouse = wh != null ? r1(wh) : null
             item.tare = tare // >0 → card hiện "bì X + <thật>"
+            // Hành trình trong ca (card kể "Đầu ca / Đã lấy thêm / Cuối ca" cho món đã xử lý): đã lấy ra quầy hôm nay
+            // (Nhập thêm) và số đếm Cuối kỳ (trừ bì). need/fillQty vẫn tính theo đầu ca ở trên.
+            const restock = r1(restockInputs[ing.ingredient])
+            if (restock > 0) item.restock = restock
+            const counted = inventoryInputs[ing.ingredient]
+            if (counted !== undefined && counted !== '') item.counted = Math.max(0, r1(counted - tare))
             out.push(item)
         }
     }
@@ -107,7 +113,7 @@ export function buildDepletedList({ ingredientsList, openingInputs, openingStock
             ingredient: ing.ingredient,
             kind: 'depleted',
             have: balance, // số thật (có thể âm) — thấy được mức lệch so với số đếm
-            haveLabel: 'Lý thuyết',
+            haveLabel: 'Tồn quầy lý thuyết',
             need,
             needPacks: packs,
             low, // sắp hết (còn hàng nhưng dưới sàn quầy) — card hiện "Sắp hết" thay "Hết"
@@ -137,10 +143,11 @@ export const isPrepDone = (it, restockInputs, skipped) =>
 
 // Tổng đã "Nhập kho" (mua qua RestockModal, is_refill trên expenses) hôm nay theo NVL — hiển thị kèm dòng
 // "Đã mua hôm nay" để thấy đã mua bao nhiêu (số đó đã nằm trong tồn kho, chỉ là hiển thị thêm).
+// Phiếu hiệu chỉnh (sửa tay tồn kho, metadata.adjustment) cũng là expense is_refill nhưng KHÔNG phải mua → bỏ.
 export function buildTodayBoughtMap(todayExpenses) {
     const m = {}
     for (const e of todayExpenses || []) {
-        if (!e.is_refill || e.metadata?.cancelled) continue
+        if (!e.is_refill || e.metadata?.cancelled || e.metadata?.adjustment) continue
         const ing = e.metadata?.ingredient
         const qty = Number(e.metadata?.qty) || 0
         if (!ing || !qty) continue
@@ -150,11 +157,12 @@ export function buildTodayBoughtMap(todayExpenses) {
     return m
 }
 
-// "Bổ sung tồn kho" — cho mai: sáng mai rút từ kho ra quầy phần còn thiếu, và kho vẫn phải còn ≥ min_stock.
+// "Bổ sung tồn kho" — cho mai: sáng mai rút từ kho ra quầy phần còn thiếu, và kho không được tụt dưới min_stock.
 //   rút mai = max(forecast mai, min_counter_stock) − tồn quầy cuối ca (thật, đã trừ bì), kẹp ≥ 0.
-//   cần mua = min_stock + rút mai − (kho tổng − restock)  (min_stock là hàng dự phòng, cộng dồn chứ không max).
+//   cần mua = max(min_stock, rút mai) − (kho tổng − restock)  (min_stock là sàn của kho, không cộng chồng lên rút mai).
 //   Chưa đếm Cuối kỳ → ước lượng quầy theo Lý thuyết (Đầu kỳ + Nhập thêm − Sử dụng).
 //   effectiveWarehouseStocks là kho TRƯỚC khi trừ restock của ca này → phải trừ restock để khỏi đếm 2 lần.
+//   Món đã mua đủ hôm nay vẫn nằm trong danh sách với `done: true` (nếu trước khi mua nó còn thiếu).
 export function buildWarehousePrepList({ ingredientsList, effectiveWarehouseStocks, restockInputs, inventoryInputs, openingInputs, openingStock, usedMap, nextDowUsedMap, todayBoughtMap }) {
     const out = []
     for (const ing of ingredientsList || []) {
@@ -173,14 +181,29 @@ export function buildWarehousePrepList({ ingredientsList, effectiveWarehouseStoc
         const counterReal = Math.max(0, r1(counter - r1(ing.tare_weight)))
         const warehouseLeft = Math.max(0, r1(warehouse - restock))
         const minStock = r1(ing.min_stock)
-        const pull = Math.max(0, r1(Math.max(forecastFor(ing.ingredient, usedMap, nextDowUsedMap), r1(ing.min_counter_stock)) - counterReal))
-        const item = toPrepItem(ing, warehouseLeft, minStock + pull)
+        const forecast = forecastFor(ing.ingredient, usedMap, nextDowUsedMap)
+        const pull = Math.max(0, r1(Math.max(forecast, r1(ing.min_counter_stock)) - counterReal))
+        // min_stock = sàn của KHO (không được tụt dưới), không cộng chồng lên phần rút mai: mua đủ mức lớn hơn trong hai.
+        const target = Math.max(minStock, pull)
+        const bought = lookupByLabel(ing.ingredient, todayBoughtMap)
+        const item = toPrepItem(ing, warehouseLeft, target)
+        // Các số card hiển thị (dùng cho cả món còn thiếu lẫn món đã mua đủ — quản lý khác mở lên vẫn hiểu vì sao).
+        const detail = {
+            forecast, // phần rút ra quầy cho mai nằm trong số mua → card nói ra, kẻo "Mua N" không giải thích được
+            warehouse: warehouseLeft,
+            minStock, // sàn của kho → card luôn nói ra, kẻo "Mua N" lên tới sàn mà không giải thích
+            have: counterReal, // hiển thị tồn quầy; need đã tính theo kho
+            boughtToday: bought,
+        }
         if (item) {
-            item.warehouse = warehouseLeft
-            item.minStock = minStock // đã cộng vào số cần mua → card luôn nói ra, kẻo "Mua N" có phần dự phòng mà không giải thích
-            item.have = counterReal // hiển thị tồn quầy; need đã tính theo kho
-            item.boughtToday = lookupByLabel(ing.ingredient, todayBoughtMap)
-            out.push(item)
+            out.push(Object.assign(item, detail))
+        } else if (bought > 0 && r1(target - Math.max(0, r1(warehouseLeft - bought))) > 0) {
+            // Đã mua đủ hôm nay: trước khi mua món này còn thiếu → giữ lại làm dòng "xong" (không biến mất) để
+            // mẫu số của tiến độ x/y đứng yên suốt ngày. Món tình cờ nhập kho mà vốn không thiếu thì không vào đây.
+            out.push({
+                ingredient: ing.ingredient, done: true, ...detail,
+                unit: ing.unit, packUnit: ing.pack_unit, packSize: Number(ing.pack_size) || 0, pack2: pack2Of(ing),
+            })
         }
     }
     return out
