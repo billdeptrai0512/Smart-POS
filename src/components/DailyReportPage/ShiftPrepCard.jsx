@@ -15,6 +15,8 @@ export default function ShiftPrepCard({
     // Khi set → mỗi dòng đổi ô tick thành nút "+" mở phiếu Nhập kho (card "Chuẩn bị tồn
     // kho"). Bấm dòng gọi onRestock(ingredient). Không set → giữ hành vi tick như cũ.
     onRestock,
+    // Chỉ dùng cùng onRestock: bấm tên nguyên liệu → onOpen(ingredient) (mở trang chi tiết).
+    onOpen,
     // Khi set (card Soạn) → mỗi dòng thêm nút "bỏ qua" (✕): đánh dấu "đã xem, không cần
     // lấy" để vẫn hoàn tất ca; bấm lại (↩) để hủy. skipped: { [ingredient]: true }.
     skipped = {},
@@ -138,20 +140,27 @@ export default function ShiftPrepCard({
                             )
                         }
 
-                        // Còn lại là card "Chuẩn bị tồn kho" (restockMode) — bấm dòng mở phiếu Nhập kho.
+                        // Còn lại là card "Chuẩn bị tồn kho" (restockMode): bấm "+"/CTA mở phiếu Nhập kho,
+                        // bấm tên mở chi tiết nguyên liệu (onOpen; không set → cũng mở phiếu Nhập kho).
+                        const restock = () => onRestock(it.ingredient, it.needPacks > 0 ? it.needPacks : it.need)
                         return (
-                            <button
-                                key={it.ingredient}
-                                type="button"
-                                onClick={() => onRestock(it.ingredient, it.needPacks > 0 ? it.needPacks : it.need)}
-                                className="flex items-start gap-3 py-2.5 border-b border-border/20 last:border-0 text-left active:scale-[0.99] transition"
-                            >
-                                {nameDesc}
-                                <div className="flex flex-col items-center gap-1.5 shrink-0">
+                            <div key={it.ingredient} className="flex items-start gap-3 py-2.5 border-b border-border/20 last:border-0">
+                                <button
+                                    type="button"
+                                    onClick={onOpen ? () => onOpen(it.ingredient) : restock}
+                                    className="flex-1 min-w-0 flex text-left active:scale-[0.99] transition"
+                                >
+                                    {nameDesc}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={restock}
+                                    className="flex flex-col items-center gap-1.5 shrink-0 active:scale-95 transition"
+                                >
                                     {ctaText}
                                     {leadIcon}
-                                </div>
-                            </button>
+                                </button>
+                            </div>
                         )
                     })}
                 </div>

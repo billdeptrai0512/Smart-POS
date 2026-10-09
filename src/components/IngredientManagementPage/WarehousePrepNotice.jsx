@@ -20,21 +20,27 @@ import Toast from '../POSPage/Toast'
 // mai (target = max(dự báo mai, tồn tối thiểu) − tổng tồn kho + quầy). Bấm → danh sách "Mua N …", bấm
 // dòng mở RestockModal (cùng form Nhập kho của trang chi tiết). Mua đủ thì món tự rớt khỏi danh sách.
 // Chỉ chủ/quản lý (nhập kho là thao tác ghi chi phí + kho); guest/offline ẩn như dải ở /pos.
-export default function WarehousePrepNotice({ onRestocked }) {
+// Bấm tên nguyên liệu → sang trang chi tiết (trang cha unmount); cờ module này cho lần mount kế
+// (back về /inventory) mở lại đúng bảng — cùng kiểu cache `saved` của IngredientManagementPage.
+let reopenSheet = false
+
+export default function WarehousePrepNotice({ onRestocked, onOpenIngredient }) {
     const { isGuest, isManager, isAdmin } = useAuth()
     const { selectedAddress } = useAddress()
     const { isOnline } = useStats()
-    return (isManager || isAdmin) && !isGuest && isOnline && selectedAddress?.id ? <Notice onRestocked={onRestocked} /> : null
+    return (isManager || isAdmin) && !isGuest && isOnline && selectedAddress?.id
+        ? <Notice onRestocked={onRestocked} onOpenIngredient={onOpenIngredient} /> : null
 }
 
-function Notice({ onRestocked }) {
+function Notice({ onRestocked, onOpenIngredient }) {
     const { selectedAddress } = useAddress()
     const { profile } = useAuth()
     const { ingredientUnits, refreshProducts } = useProducts()
     const { refreshTodayExpenses } = useHistory()
     const { items, ready, ingredientsList, warehouseStocks, reload, toast } = useWarehousePrep()
     const pendingCount = items.length
-    const [open, setOpen] = useState(false)
+    const [open, setOpen] = useState(reopenSheet)
+    useEffect(() => { reopenSheet = false }, [])
     const [restock, setRestock] = useState(null) // { ingredient, qty }
     const [cashClosedToday, setCashClosedToday] = useState(false)
 
@@ -61,7 +67,7 @@ function Notice({ onRestocked }) {
             )}
             <Toast toast={toast} />
 
-            {open && !restock && (
+            {open && !restock && (ready || pendingCount > 0) && (
                 <NoticeSheet
                     icon={<Package size={18} className="text-primary shrink-0" />}
                     title="Bổ sung tồn kho"
@@ -74,6 +80,7 @@ function Notice({ onRestocked }) {
                         emptyTitle="Kho tổng đủ cho mai!"
                         emptyHint="Không cần đi chợ đắp thêm cho ngày mai."
                         items={items}
+                        onOpen={onOpenIngredient && (ingredient => { reopenSheet = true; onOpenIngredient(ingredient) })}
                         onRestock={(ingredient, qty) => setRestock({ ingredient, qty: qty > 0 ? qty : null })}
                     />
                 </NoticeSheet>

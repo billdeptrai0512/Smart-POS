@@ -33,8 +33,8 @@ export default function IngredientDetailsTab({
                     <Row
                         label="Kiểm kê"
                         sub={countInAudit
-                            ? 'Nguyên liệu này được liệt kê trong danh sách kiểm kê.'
-                            : 'Nguyên liệu này không được liệt kê trong danh sách kiểm kê.'}
+                            ? 'Nguyên liệu này nằm trong danh sách kiểm kê.'
+                            : 'Nguyên liệu này không nằm trong danh sách kiểm kê.'}
                     >
                         <button
                             type="button"

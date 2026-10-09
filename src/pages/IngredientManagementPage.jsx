@@ -447,7 +447,7 @@ export default function IngredientManagementPage() {
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
 
-            <WarehousePrepNotice onRestocked={loadStocks} />
+            <WarehousePrepNotice onRestocked={loadStocks} onOpenIngredient={openIngredient} />
 
             <MenuPageHeader
                 title="Tồn kho"
