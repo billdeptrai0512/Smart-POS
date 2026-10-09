@@ -55,6 +55,8 @@ export default function ShiftPrepCard({
                         const isDone = !!checked[it.ingredient]
                         const isSkipped = !isDone && !!skipped[it.ingredient]
                         const muted = isDone || isSkipped || !!it.done // đã xử lý (nhập, bỏ qua hoặc đã mua đủ) → mờ + gạch ngang
+                        // Số lượng theo quy cách đóng gói ("2 hộp", "1 bịch + 350 g"), cùng kiểu với viên CTA; không có quy cách thì đơn vị gốc.
+                        const fmt = n => formatPackedQty(n, it.packSize, it.packUnit, it.unit, { compact: true, pack2: it.pack2 })
                         // Kho không đủ cho NHU CẦU hôm nay (kho < Cần) → tô đỏ: soạn hết kho vẫn thiếu, cần mua thêm.
                         // Chỉ đọc ở nhánh skipMode (card Soạn) bên dưới, và dòng "Tồn kho" ở đó chỉ vẽ khi chưa xử lý.
                         const shortfall = it.warehouse != null && it.warehouse < it.need
@@ -68,21 +70,23 @@ export default function ShiftPrepCard({
                                     {/* Cam = hành động (CTA "Mua"), đỏ = vấn đề (kho dưới mức tối thiểu), xanh = đã mua đủ, xám = thông tin. */}
                                     {it.warehouse != null && (
                                         <span className={`block ${it.done ? 'text-success font-bold' : it.warehouse < it.minStock ? 'text-danger font-bold' : ''}`}>
-                                            Tồn kho cuối kỳ: {it.warehouse} {it.unit}
+                                            Tồn kho cuối kỳ: {fmt(it.warehouse)}
                                         </span>
                                     )}
-                                    {it.minStock > 0 && <span className="block">Tồn kho cần ít nhất: {it.minStock} {it.unit}</span>}
+                                    {it.minStock > 0 && <span className="block">Tồn kho cần ít nhất: {fmt(it.minStock)}</span>}
                                     <span className="block">
-                                        {haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{it.have} {it.unit}
+                                        {haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}
                                     </span>
-                                    {it.forecast > 0 && <span className="block">Dự báo ngày mai sử dụng: {it.forecast} {it.unit}</span>}
-                                    {/* Món đã mua đủ thì viên "Đã mua N" bên phải đã nói số này — khỏi lặp. */}
-                                    {it.boughtToday > 0 && !it.done && (
-                                        <span className="block text-success">
-                                            Đã mua hôm nay: {it.boughtToday} {it.unit}
-                                        </span>
-                                    )}
                                 </div>
+                            </div>
+                        )
+                        // Các dòng dưới cùng nằm NGOÀI hàng có viên thuốc → chạy hết chiều ngang, không bị bẻ dòng bởi viên.
+                        // Món đã mua đủ thì viên "Đã mua N" đã nói số đã mua — khỏi lặp.
+                        const showBought = it.boughtToday > 0 && !it.done
+                        const tail = (it.forecast > 0 || showBought) && (
+                            <div className="text-[11px] text-text-dim">
+                                {it.forecast > 0 && <span className="block">Dự báo ngày mai sử dụng: {fmt(it.forecast)}</span>}
+                                {showBought && <span className="block text-success">Đã mua hôm nay: {fmt(it.boughtToday)}</span>}
                             </div>
                         )
 
@@ -130,17 +134,17 @@ export default function ShiftPrepCard({
                                             {/* Tồn kho chỉ để biết còn đủ hàng mà lấy; xử lý xong rồi thì số đó chỉ còn gây nhiễu. */}
                                             {!muted && it.warehouse != null && (
                                                 <span className={`block ${shortfall ? 'text-danger font-bold' : ''}`}>
-                                                    Tồn kho: {it.warehouse} {it.unit}
+                                                    Tồn kho: {fmt(it.warehouse)}
                                                 </span>
                                             )}
                                             {it.reason && <span className="block text-warning font-bold">{it.reason}</span>}
                                             <span className="block">
-                                                {it.haveLabel || haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{it.have} {it.unit}
+                                                {it.haveLabel || haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}
                                             </span>
                                             {/* Món đã xử lý → kể tiếp hành trình trong ca (mỗi số một dòng) để số cuối ca không đứng một mình.
                                                 Món còn chờ lấy chỉ có dòng đầu ca (đã đếm 0 mà nút vẫn "Lấy" thì "cuối ca" gây mâu thuẫn). */}
-                                            {muted && it.restock > 0 && <span className="block">Đã lấy thêm: +{it.restock} {it.unit}</span>}
-                                            {muted && it.counted != null && <span className="block">Tồn quầy cuối ca: {it.tare > 0 && <>{it.tare} + </>}{it.counted} {it.unit}</span>}
+                                            {muted && it.restock > 0 && <span className="block">Đã lấy thêm: +{fmt(it.restock)}</span>}
+                                            {muted && it.counted != null && <span className="block">Tồn quầy cuối ca: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.counted)}</span>}
                                         </div>
                                     </div>
                                     <span className={`self-center ${PILL} ${
@@ -158,30 +162,34 @@ export default function ShiftPrepCard({
                         // Còn lại là card "Chuẩn bị tồn kho" (không skipMode): bấm nút "Mua N …" mở phiếu Nhập kho,
                         // bấm tên mở chi tiết nguyên liệu (onOpen; không set → cũng mở phiếu Nhập kho).
                         const restock = () => onRestock(it.ingredient, it.needPacks > 0 ? it.needPacks : it.need)
+                        const open = onOpen ? () => onOpen(it.ingredient) : restock
                         return (
-                            <div key={it.ingredient} className="flex items-start gap-3 py-2.5 border-b border-border/20 last:border-0">
-                                <button
-                                    type="button"
-                                    onClick={onOpen ? () => onOpen(it.ingredient) : restock}
-                                    className="flex-1 min-w-0 flex text-left active:scale-[0.99] transition"
-                                >
-                                    {nameDesc}
-                                </button>
-                                {it.done ? (
-                                    <span className={`self-center ${PILL} bg-success/15 text-success`}>
-                                        <Check size={13} strokeWidth={3} />
-                                        Đã mua {formatPackedQty(it.boughtToday, it.packSize, it.packUnit, it.unit, { compact: true, pack2: it.pack2 })}
-                                    </span>
-                                ) : (
+                            <div key={it.ingredient} className="py-2.5 border-b border-border/20 last:border-0">
+                                <div className="flex items-start gap-3">
                                     <button
                                         type="button"
-                                        onClick={restock}
-                                        title="Nhập kho"
-                                        className={`self-center ${PILL} bg-primary/10 text-primary active:scale-95`}
+                                        onClick={open}
+                                        className="flex-1 min-w-0 flex text-left active:scale-[0.99] transition"
                                     >
-                                        {ctaLabel}
+                                        {nameDesc}
                                     </button>
-                                )}
+                                    {it.done ? (
+                                        <span className={`self-center ${PILL} bg-success/15 text-success`}>
+                                            <Check size={13} strokeWidth={3} />
+                                            Đã mua {fmt(it.boughtToday)}
+                                        </span>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={restock}
+                                            title="Nhập kho"
+                                            className={`self-center ${PILL} bg-primary/10 text-primary active:scale-95`}
+                                        >
+                                            {ctaLabel}
+                                        </button>
+                                    )}
+                                </div>
+                                {tail && <button type="button" onClick={open} className="block w-full text-left active:scale-[0.99] transition">{tail}</button>}
                             </div>
                         )
                     })}

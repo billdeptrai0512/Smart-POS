@@ -29,6 +29,7 @@ const toPrepItem = (ing, have, target) => {
         need,
         needPacks,
         unit: ing.unit,
+        packSize,
         packUnit: ing.pack_unit,
         pack2: pack2Of(ing),
         // Lượng đổ vào Nhập thêm khi tick "đã soạn" = số quy đổi nguyên bịch
@@ -118,6 +119,7 @@ export function buildDepletedList({ ingredientsList, openingInputs, openingStock
             needPacks: packs,
             low, // sắp hết (còn hàng nhưng dưới sàn quầy) — card hiện "Sắp hết" thay "Hết"
             unit: ing.unit,
+            packSize,
             packUnit: ing.pack_unit,
             pack2: pack2Of(ing),
             fillQty: Math.max(0, Math.min(need, left)), // 0 = kho dự trữ cũng hết, không lấy thêm được
