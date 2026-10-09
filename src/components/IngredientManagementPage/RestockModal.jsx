@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
+import { unitTiersOf } from '../../utils/inventory'
 import MoneyInput from '../common/MoneyInput'
 import { parseVNDInput, formatVND, formatVNDInput, computeDiscount } from '../../utils'
 import { dateStringVN, timeStringVN } from '../../utils/dateVN'
@@ -25,12 +26,7 @@ export default function RestockModal({
 }) {
     const today = dateStringVN()
     const hasPack = !!(packSize && packUnit)
-    // Đơn vị nhập, lớn → nhỏ: [cấp 2], cấp 1, đơn vị gốc. mult = số đơn vị gốc trong 1 đơn vị đó.
-    const units = hasPack
-        ? [...(pack2 ? [{ key: 'pack2', label: pack2.unit, mult: packSize * pack2.size }] : []),
-            { key: 'pack', label: packUnit, mult: packSize },
-            { key: 'base', label: unit, mult: 1 }]
-        : []
+    const units = hasPack ? unitTiersOf(packSize, packUnit, pack2, unit) : []
     // Edit mode: auto-chọn đơn vị lớn nhất mà qty chia hết (user nhập theo thùng/lốc/hộp).
     // Create mode: default cấp 1 (hộp) như cũ.
     const editUnit = mode === 'edit' && hasPack && initial?.qty != null

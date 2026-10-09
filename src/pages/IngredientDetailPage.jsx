@@ -567,7 +567,7 @@ export default function IngredientDetailPage() {
                             minCounterStock={minCounterStock}
                             onSaveMinCounter={saveMinCounter}
                             counterStock={stockData?.counter_stock ?? null}
-                            counterEstimated={!!stockData?.counter_estimated}
+                            counterCountedOn={stockData?.counter_counted_on ?? null}
                             currentStock={currentStock}
                             siblingCounterStocks={siblingCounterStocks}
                             canEdit={canEdit}

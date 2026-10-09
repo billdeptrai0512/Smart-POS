@@ -13,7 +13,7 @@ import Dropdown from '../common/Dropdown'
 // (we just close the edit affordance optimistically before awaiting).
 export default function IngredientDetailsTab({
     nameLabel, unit, category, groupId = null, groups = null, packSize, packUnit, pack2,
-    countInAudit, onToggleAudit,   // toggle "báo cáo tồn quầy" — rút gọn từ panel Kiểm kê cũ thành 1 row
+    countInAudit, onToggleAudit,   // toggle "Kiểm kê" — rút gọn từ panel Kiểm kê cũ thành 1 row
     hintPack = false,
     canEdit, saving,
     onSaveName,         // (newDisplayName: string) => Promise
@@ -35,14 +35,13 @@ export default function IngredientDetailsTab({
                         sub={countInAudit
                             ? 'Nguyên liệu này được liệt kê trong danh sách kiểm kê.'
                             : 'Nguyên liệu này không được liệt kê trong danh sách kiểm kê.'}
-                        centerValue
                     >
                         <button
                             type="button"
                             role="checkbox"
                             aria-checked={countInAudit}
-                            aria-label="Báo cáo tồn quầy"
-                            title={countInAudit ? 'Đang báo cáo tồn quầy — bấm để tắt' : 'Đang TẮT báo cáo tồn quầy — bấm để bật'}
+                            aria-label="Kiểm kê"
+                            title={countInAudit ? 'Đang kiểm kê — bấm để tắt' : 'Đang TẮT kiểm kê — bấm để bật'}
                             disabled={!canEdit || saving}
                             onClick={() => canEdit && onToggleAudit(!countInAudit)}
                             className={`relative w-5 h-5 flex items-center justify-center rounded-[6px] border transition-colors focus:outline-none shrink-0 before:absolute before:-inset-2.5 before:content-[''] ${
@@ -139,7 +138,7 @@ export function IngredientCounterPanel({
     unit, packSize, packUnit, pack2, tareWeight, hintTare = false,
     minCounterStock,        // tồn QUẦY ít nhất
     counterStock, currentStock,
-    counterEstimated,       // true = Tồn quầy đang là số ƯỚC TÍNH theo lý thuyết (chưa đếm hôm nay)
+    counterCountedOn,       // 'YYYY-MM-DD' | null — ngày kiểm kê gần nhất của tồn quầy
     siblingCounterStocks,   // [{ addressId, addressName, counterStock }] | null — tồn quầy các địa chỉ khác dùng chung kho
     canEdit,
     onSaveCounter,      // (newCounter: number)    => Promise  (Tồn quầy → ghi remaining ca mới nhất)
@@ -173,7 +172,7 @@ export function IngredientCounterPanel({
                     value={counterStock} unit={unit}
                     hasPack={hasPack} packSize={packSize} packUnit={packUnit} pack2={pack2}
                     canEdit={canEdit} editable onSave={onSaveCounter}
-                    note={counterEstimated ? 'ước tính theo lý thuyết — nhập số đếm để xác nhận' : null}
+                    note={counterCountedOn ? `Lần cuối kiểm kê ${counterCountedOn.split('-').reverse().join('/')}` : null}
                 />
                 {siblingCounterStocks?.map(s => (
                     <QtyRow
@@ -203,7 +202,7 @@ export function IngredientCounterPanel({
 }
 
 // ── Panel (titled section card) ─────────────────────────────────────────────
-// `action` = control cấp panel (vd toggle "báo cáo tồn quầy"), nằm cuối hàng title cho khỏi
+// `action` = control cấp panel (vd toggle "Kiểm kê"), nằm cuối hàng title cho khỏi
 // chiếm 1 dòng trong thẻ — panel nào không truyền thì hàng title y như cũ.
 function Panel({ title, children, action }) {
     return (
@@ -222,9 +221,9 @@ function Panel({ title, children, action }) {
 // ── Row container ───────────────────────────────────────────────────────────
 // `sub` = caption spanning the FULL row width (dùng cho note dài, không đoán trước được độ dài —
 // vd danh sách địa chỉ cùng nhóm kho tổng). Khác với `note` bên trong QtyRow (ngắn, nằm cạnh số).
-// `centerValue` = caption nằm dưới label (cột trái), giá trị canh giữa theo chiều dọc của cả 2 dòng.
-function Row({ label, children, sub, centerValue }) {
-    if (centerValue) {
+// `sub` mặc định nằm dưới label (cột trái), giá trị canh giữa theo chiều dọc của cả 2 dòng.
+function Row({ label, children, sub, wideSub }) {
+    if (sub && !wideSub) {
         return (
             <div className="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -280,7 +279,7 @@ function NameRow({ value, canEdit, onSave }) {
 }
 
 // ── Daily qty row (Tồn đầu ngày / Lấy ra / Nhập mới) ────────────────────────
-// Chỉ đọc, cùng cách diễn đạt với Tồn quy đổi: số gốc đậm ở trên, breakdown quy
+// Chỉ đọc, cùng cách diễn đạt với QtyRow: số gốc đậm ở trên, breakdown quy
 // đổi (nếu có) mờ bên dưới — thay vì gộp sẵn thành 1 chuỗi compact như trước.
 function DailyQtyRow({ label, value, unit, hasPack, packSize, packUnit, pack2, sign = '', accentClass = 'text-text' }) {
     const rounded = Math.round(value * 10) / 10
@@ -320,7 +319,7 @@ function QtyRow({ label, value, unit, hasPack, packSize, packUnit, pack2, canEdi
         if (Number.isFinite(num) && num >= 0) onSave?.(num)
     }
     return (
-        <Row label={label} sub={groupNote}>
+        <Row label={label} sub={groupNote ?? note} wideSub={!!groupNote}>
             {editing && tappable ? (
                 <div className="flex items-center gap-1">
                     <input
@@ -353,9 +352,6 @@ function QtyRow({ label, value, unit, hasPack, packSize, packUnit, pack2, canEdi
                         <span className="text-[11px] font-medium text-text-dim tabular-nums">
                             = {formatPackedQty(value, packSize, packUnit, unit, { compact: true, pack2 })}
                         </span>
-                    )}
-                    {note && (
-                        <span className="text-[11px] font-medium text-text-dim/80 tabular-nums">{note}</span>
                     )}
                 </div>
             )}
@@ -559,7 +555,6 @@ function TareRow({ tareWeight, unit, canEdit, onSave, hint = false }) {
         <Row
             label="Bao bì"
             sub="Khối lượng của hộp/chai đựng nguyên liệu tại quầy."
-            centerValue
         >
             {editing && canEdit ? (
                 <div className="flex items-center gap-1">

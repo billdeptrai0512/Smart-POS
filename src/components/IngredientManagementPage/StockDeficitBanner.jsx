@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { AlertTriangle, ChevronRight, ClipboardCheck, Loader, Check } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
 import { adjustIngredientStock } from '../../services/orderService'
-import { pack2Of, r1 } from '../../utils/inventory'
+import { pack2Of, r1, unitTiersOf } from '../../utils/inventory'
 import { Dialog, MODAL_PANEL, ModalHeader } from '../common/ModalShell'
 
 /**
@@ -61,21 +61,8 @@ export default function StockDeficitBanner({ deficits, ingredientUnits, configBy
     )
 }
 
-// Các ô đếm của 1 nguyên liệu, lớn → nhỏ: [thùng] [hộp] [đơn vị gốc]. mult = số đơn vị gốc trong 1 ô.
-// Không có quy cách thì chỉ 1 ô (đơn vị gốc).
-function tiersOf(cfg, baseUnit) {
-    const ps = Number(cfg?.pack_size) || 0
-    if (!ps || !cfg?.pack_unit) return [{ label: baseUnit, mult: 1 }]
-    const p2 = pack2Of(cfg)
-    return [
-        ...(p2 ? [{ label: p2.unit, mult: ps * p2.size }] : []),
-        { label: cfg.pack_unit, mult: ps },
-        { label: baseUnit, mult: 1 },
-    ]
-}
-
 function KiemKeModal({ deficits, ingredientUnits, configByIngredient, addressId, staffName, onClose, onResolved }) {
-    // counts[ingredient] = mảng chuỗi, mỗi phần tử ứng với 1 ô trong tiersOf. '' = chưa đếm:
+    // counts[ingredient] = mảng chuỗi, mỗi phần tử ứng với 1 ô trong unitTiersOf. '' = chưa đếm:
     // nguyên liệu để trống KHÔNG bị ghi (khác bản cũ mặc định 0 → vô tình reset kho về 0).
     const [counts, setCounts] = useState({})
     const [submitting, setSubmitting] = useState(false)
@@ -84,7 +71,8 @@ function KiemKeModal({ deficits, ingredientUnits, configByIngredient, addressId,
 
     const rows = deficits.map(d => {
         const baseUnit = getIngredientUnit(d.ingredient, ingredientUnits?.[d.ingredient], ingredientUnits)
-        const tiers = tiersOf(configByIngredient?.get?.(d.ingredient), baseUnit)
+        const cfg = configByIngredient?.get?.(d.ingredient)
+        const tiers = unitTiersOf(cfg?.pack_size, cfg?.pack_unit, pack2Of(cfg), baseUnit)
         const vals = counts[d.ingredient] || []
         return {
             d, baseUnit, tiers, vals,

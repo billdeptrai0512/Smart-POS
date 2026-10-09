@@ -2,7 +2,7 @@
 // Nguồn: src/utils/inventory.js
 
 import { describe, it, expect } from 'vitest';
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateLossValue, buildRecipeIngredientSet, buildIngredientToProduct, averageIngredientMaps, formatPackedQty, formatPackCount, isLowStockOf } from '../../src/utils/inventory';
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateLossValue, buildRecipeIngredientSet, buildIngredientToProduct, averageIngredientMaps, formatPackedQty, formatPackCount, isLowStockOf, unitTiersOf } from '../../src/utils/inventory';
 
 const recipes = [
     { product_id: 'cf_den', ingredient: 'coffee_g', amount: 18 },
@@ -420,5 +420,17 @@ describe('isLowStockOf (tồn quầy ít nhất + tồn kho ít nhất)', () => 
     it('không đặt ngưỡng / hết hàng → false', () => {
         expect(isLowStockOf(st(5, 5), { tareWeight: 0 }, 'g')).toBe(false)
         expect(isLowStockOf(st(0, 0), cfg, 'g')).toBe(false)
+    })
+})
+
+describe('unitTiersOf', () => {
+    it('không quy cách → chỉ đơn vị gốc; có cấp 1/cấp 2 → lớn → nhỏ, mult tính theo đơn vị gốc', () => {
+        expect(unitTiersOf(null, null, null, 'g')).toEqual([{ key: 'base', label: 'g', mult: 1 }])
+        expect(unitTiersOf(1284, 'hộp', null, 'g').map(t => t.mult)).toEqual([1284, 1])
+        expect(unitTiersOf(1284, 'hộp', { size: 12, unit: 'thùng' }, 'g')).toEqual([
+            { key: 'pack2', label: 'thùng', mult: 15408 },
+            { key: 'pack', label: 'hộp', mult: 1284 },
+            { key: 'base', label: 'g', mult: 1 },
+        ])
     })
 })

@@ -448,6 +448,15 @@ export function calculateLossValue({
 export const pack2Of = (cfg) => cfg?.pack2_size && cfg?.pack2_unit
     ? { size: Number(cfg.pack2_size), unit: cfg.pack2_unit } : null
 
+// Đơn vị nhập/đếm, lớn → nhỏ: [cấp 2], cấp 1, đơn vị gốc. mult = số đơn vị gốc trong 1 đơn vị đó.
+// Không có quy cách cấp 1 → chỉ còn đơn vị gốc.
+export function unitTiersOf(packSize, packUnit, pack2, baseUnit) {
+    const base = { key: 'base', label: baseUnit, mult: 1 }
+    const ps = Number(packSize) || 0
+    if (!ps || !packUnit) return [base]
+    return [...(pack2 ? [{ key: 'pack2', label: pack2.unit, mult: ps * pack2.size }] : []), { key: 'pack', label: packUnit, mult: ps }, base]
+}
+
 // Số gói nguyên (vd needPacks) → "1 thùng + 3 hộp" khi có cấp 2, không thì "15 hộp".
 export function formatPackCount(packs, packUnit, pack2) {
     const bigs = pack2 ? Math.floor(packs / pack2.size) : 0

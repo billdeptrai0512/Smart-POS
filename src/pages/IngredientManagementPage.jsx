@@ -45,11 +45,11 @@ import { isRecipeProgressDone, isInventoryProgressDone } from '../utils/onboardi
 import { isRecipeStepActive } from '../components/common/onboarding/steps'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 
-// Module-level scroll cache. Set when user opens a card to drill into
+// Module-level cache { scroll, groupFilter, search }. Set when user opens a card to drill into
 // /inventory/stocking/:key; consumed once on next mount of /inventory (back nav).
-// Mirrors the /category pattern so back-from-detail lands at the same scroll
+// Mirrors the /category pattern so back-from-detail lands at the same list + scroll
 // position the user left.
-let savedScroll = null
+let saved = null
 
 export default function IngredientManagementPage() {
     const navigate = useNavigate()
@@ -84,10 +84,10 @@ export default function IngredientManagementPage() {
     const [showCreateModal, setShowCreateModal] = useState(false)
 
     // Search theo tên — không phân biệt hoa/thường & dấu tiếng Việt.
-    const [search, setSearch] = useState('')
+    const [search, setSearch] = useState(saved?.search ?? '')
 
     // Lọc theo nhóm: 'all' | 'none' (chưa phân nhóm) | group id. Id lạ (nhóm đã xoá) tự rơi về 'all' qua effectiveFilter.
-    const [groupFilter, setGroupFilter] = useState('all')
+    const [groupFilter, setGroupFilter] = useState(saved?.groupFilter ?? 'all')
     const [showGroupsSheet, setShowGroupsSheet] = useState(false)
 
     // Tab nằm trên URL: /inventory/management = Kiểm kê (hôm nay / ngày cũ / hao hụt theo kỳ), /inventory/stocking = Lưu trữ.
@@ -108,11 +108,11 @@ export default function IngredientManagementPage() {
 
     // Restore scroll on back nav from /inventory/stocking/:key; clear cache after use.
     // Chỉ áp khi danh sách đã vẽ thật (stocksLoaded) — lúc mount mới chỉ có skeleton, scroll bị kẹp về 0.
-    const restoreScrollRef = useRef(savedScroll)
-    useEffect(() => { savedScroll = null }, [])
+    const restoreScrollRef = useRef(saved?.scroll ?? null)
+    useEffect(() => { saved = null }, [])
 
     const openIngredient = (ingredient) => {
-        savedScroll = mainRef.current?.scrollTop ?? 0
+        saved = { scroll: mainRef.current?.scrollTop ?? 0, groupFilter, search }
         navigate(`/inventory/stocking/${ingredient}`, { state: location.state })
     }
 
