@@ -95,15 +95,19 @@ export default function IngredientCostItem({
                     )
                 })()}
 
-                {/* Tồn quầy (manager only) — cùng cụm với tồn kho, chỉ 1 divider ngăn cả cụm với Tổng cộng.
+                {/* Tồn quầy (manager only) — divider riêng tách khỏi cụm tồn kho để mắt quét 2 nơi chứa hàng.
                      Nhóm + Quy đổi đã chuyển sang trang chi tiết của ingredient. */}
-                {canEdit && (siblingCounterStocks ? (
-                    siblingCounterStocks.map(s => (
-                        <Row key={s.addressId ?? 'default'} label={`Tồn quầy · ${s.addressName}`} value={`${fmtRound(s.counterStock)} ${displayUnit}`} />
-                    ))
-                ) : (
-                    <Row label="Tồn quầy hiện có" value={`${fmtRound(stockData?.counter_stock)} ${displayUnit}`} />
-                ))}
+                {canEdit && (
+                    <div className="pt-2 border-t border-border/40 flex flex-col gap-1.5">
+                        {siblingCounterStocks ? (
+                            siblingCounterStocks.map(s => (
+                                <Row key={s.addressId ?? 'default'} label={`Tồn quầy · ${s.addressName}`} value={`${fmtRound(s.counterStock)} ${displayUnit}`} />
+                            ))
+                        ) : (
+                            <Row label="Tồn quầy hiện có" value={`${fmtRound(stockData?.counter_stock)} ${displayUnit}`} />
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Hero (đáy thẻ, dưới divider): tổng tồn kho number + unit + pack breakdown */}
