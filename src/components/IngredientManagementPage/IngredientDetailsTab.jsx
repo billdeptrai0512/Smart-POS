@@ -30,12 +30,7 @@ export default function IngredientDetailsTab({
                 <NameRow value={nameLabel} canEdit={canEdit} onSave={onSaveName} />
                 <UnitRow value={unit} canEdit={canEdit} onSave={onSaveUnit} />
                 {onToggleAudit && (
-                    <Row
-                        label="Kiểm kê"
-                        sub={countInAudit
-                            ? 'Nguyên liệu này nằm trong danh sách kiểm kê.'
-                            : 'Nguyên liệu này không nằm trong danh sách kiểm kê.'}
-                    >
+                    <Row label="Kiểm kê">
                         <button
                             type="button"
                             role="checkbox"
@@ -172,7 +167,7 @@ export function IngredientCounterPanel({
                     value={counterStock} unit={unit}
                     hasPack={hasPack} packSize={packSize} packUnit={packUnit} pack2={pack2}
                     canEdit={canEdit} editable onSave={onSaveCounter}
-                    note={counterCountedOn ? `Lần cuối kiểm kê ${counterCountedOn.split('-').reverse().join('/')}` : null}
+                    note={counterCountedOn ? `Kiểm kê lần cuối: ${counterCountedOn.split('-').reverse().join('/')}` : null}
                 />
                 {siblingCounterStocks?.map(s => (
                     <QtyRow

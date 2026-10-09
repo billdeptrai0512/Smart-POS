@@ -5,10 +5,12 @@ import { onboardingHintClass } from '../../utils/onboardingHint'
  * Compact ingredient card — read-only summary:
  *   ┌──────────────────────────┐
  *   │ Cà phê                   │  ← name (tap card to open detail)
- *   │ 9180 g                   │  ← hero stock number
- *   │ = 9 bịch + 180 g         │  ← pack breakdown (if pack configured)
+ *   │ Kiểm kê lần cuối: 06/09  │  ← ngày kiểm kê quầy (manager only)
  *   │ Tồn đầu / Lấy ra / …     │  ← daily context
  *   │ Tồn quầy hiện có 8g      │  ← counter stock (manager only); 1 dòng/địa chỉ nếu kho dùng chung nhóm
+ *   │ ──────────────────────── │
+ *   │ Tổng cộng        9180 g  │  ← hero stock number (phải)
+ *   │             = 9 bịch…    │  ← pack breakdown dưới số tổng (if pack configured)
  *   └──────────────────────────┘
  *
  * All edit affordances (name, stock, unit, pack, category, min-stock, cost,
@@ -40,6 +42,8 @@ export default function IngredientCostItem({
     const isOutStock = shownStock !== null && shownStock <= 0
     const isLowStock = stockData ? isLowStockOf(stockData, { tareWeight, minStock, minCounterStock }, displayUnit) : false
 
+    const countedOn = stockData?.counter_counted_on?.split('-').slice(1).reverse().join('/')
+
     const warn = isOutStock || isLowStock
     const borderClass = warn ? 'border-danger/40' : 'border-border/60'
     const textClass = warn ? 'text-danger' : 'text-text'
@@ -51,9 +55,12 @@ export default function IngredientCostItem({
         >
             {/* Row 1: name + status badge (chiếm chỗ nút [+] nhập kho cũ) */}
             <div className="flex items-start gap-1.5 min-w-0">
-                <span className="flex-1 min-w-0 text-[14.5px] font-black text-primary leading-tight line-clamp-2 break-words">
-                    {ingredientLabel(ingredient)}
-                </span>
+                <div className="flex-1 min-w-0">
+                    <span className="block text-[14.5px] font-black text-primary leading-tight line-clamp-2 break-words">
+                        {ingredientLabel(ingredient)}
+                    </span>
+                    {canEdit && countedOn && <span className="block mt-0.5 text-[11px] text-text-dim">Kiểm kê lần cuối: {countedOn}</span>}
+                </div>
                 {isOutStock && (
                     <span className="shrink-0 text-[10px] font-black text-danger uppercase tracking-wide bg-danger/10 px-1.5 py-0.5 rounded-md">Hết</span>
                 )}
@@ -62,25 +69,7 @@ export default function IngredientCostItem({
                 )}
             </div>
 
-            {/* Row 2: hero — tồn kho number + unit + pack breakdown */}
-            <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 min-w-0 -mt-0.5">
-                <span className="text-[11px] font-bold uppercase tracking-wide text-text-dim leading-none">Tổng</span>
-                <span className={`text-[19px] font-black tabular-nums leading-none ${textClass}`}>
-                    {shownStock ?? '—'}
-                </span>
-                <span className="text-[13.5px] font-bold text-text-secondary leading-none mr-0.5">
-                    {displayUnit}
-                </span>
-
-                {/* Pack breakdown inline (if pack configured & stock meets pack size) */}
-                {shownStock !== null && packSize && packUnit && shownStock >= packSize && (
-                    <span className="text-[12.5px] font-semibold text-text-dim tabular-nums leading-none">
-                        = {formatPackedQty(shownStock, packSize, packUnit, displayUnit, { compact: true, pack2 })}
-                    </span>
-                )}
-            </div>
-
-            <div className="mt-1.5 pt-2 border-t border-border/40 flex-1 flex flex-col gap-1.5 text-[12px] tabular-nums">
+            <div className="mt-1.5 pt-2 border-t border-border/40 flex flex-col gap-1.5 text-[12px] tabular-nums">
                 {(() => {
                     const todayRefill = Number(dailyContext?.today_refill || 0)
                     const todayRestock = Number(dailyContext?.today_restock || 0)
@@ -105,22 +94,39 @@ export default function IngredientCostItem({
                         </>
                     )
                 })()}
+
+                {/* Tồn quầy (manager only) — cùng cụm với tồn kho, chỉ 1 divider ngăn cả cụm với Tổng cộng.
+                     Nhóm + Quy đổi đã chuyển sang trang chi tiết của ingredient. */}
+                {canEdit && (siblingCounterStocks ? (
+                    siblingCounterStocks.map(s => (
+                        <Row key={s.addressId ?? 'default'} label={`Tồn quầy · ${s.addressName}`} value={`${fmtRound(s.counterStock)} ${displayUnit}`} />
+                    ))
+                ) : (
+                    <Row label="Tồn quầy hiện có" value={`${fmtRound(stockData?.counter_stock)} ${displayUnit}`} />
+                ))}
             </div>
 
-            {/* Row 3: manager-only details — separated by border-top.
-                 Nhóm + Quy đổi đã chuyển sang trang chi tiết của ingredient. */}
-            {canEdit && (
-                <div className="mt-1.5 pt-2 border-t border-border/40 flex flex-col gap-1.5 text-[12px] tabular-nums">
-                    {siblingCounterStocks ? (
-                        siblingCounterStocks.map(s => (
-                            <Row key={s.addressId ?? 'default'} label={`Tồn quầy · ${s.addressName}`} value={`${fmtRound(s.counterStock)} ${displayUnit}`} />
-                        ))
-                    ) : (
-                        <Row label={stockData?.counter_counted_on ? `Tồn quầy · kiểm kê ${stockData.counter_counted_on.split('-').slice(1).reverse().join('/')}` : 'Tồn quầy hiện có'} value={`${fmtRound(stockData?.counter_stock)} ${displayUnit}`} />
+            {/* Hero (đáy thẻ, dưới divider): tổng tồn kho number + unit + pack breakdown */}
+            <div className="mt-auto pt-2 border-t border-border/40 flex justify-between items-center gap-2 min-w-0">
+                <span className="text-[11px] font-bold uppercase tracking-wide text-text-dim leading-none">Tổng cộng</span>
+                <div className="flex flex-col items-end gap-1 min-w-0">
+                    <div className="flex items-baseline gap-1.5">
+                        <span className={`text-[16px] font-black tabular-nums leading-none ${textClass}`}>
+                            {shownStock ?? '—'}
+                        </span>
+                        <span className="text-[12.5px] font-bold text-text-secondary leading-none">
+                            {displayUnit}
+                        </span>
+                    </div>
+
+                    {/* Pack breakdown dưới số tổng (nếu có quy cách & tồn ≥ 1 bịch) */}
+                    {shownStock !== null && packSize && packUnit && shownStock >= packSize && (
+                        <span className="text-[11.5px] font-semibold text-text-dim tabular-nums leading-none">
+                            = {formatPackedQty(shownStock, packSize, packUnit, displayUnit, { compact: true, pack2 })}
+                        </span>
                     )}
                 </div>
-            )}
-
+            </div>
         </div>
     )
 }
