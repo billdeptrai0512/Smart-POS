@@ -4,7 +4,7 @@ import { ingredientLabel } from '../../utils/ingredients'
 import { formatPackCount, formatPackedQty } from '../../utils/inventory'
 
 // Viên thuốc CTA dùng chung cho cả 2 card (Lấy / Mua) — màu theo trạng thái do từng nơi ghép thêm.
-const PILL = 'shrink-0 min-h-[44px] px-3 flex items-center gap-1 rounded-xl text-[12px] font-black transition'
+const PILL = 'shrink-0 min-h-[44px] min-w-[124px] px-3 flex items-center justify-center gap-1 rounded-xl text-[12px] font-black transition'
 
 // Danh sách checklist dùng chung cho 2 dải notice: "Chuẩn bị hôm nay" (/pos — đưa hàng ra quầy) và
 // "Bổ sung tồn kho" (/inventory — đi chợ đắp kho). Mỗi dòng có viên thuốc CTA (Lấy = tick, Mua = nhập kho)
@@ -152,7 +152,7 @@ export default function ShiftPrepCard({
                                             : isSkipped ? 'bg-border/30 text-text-dim'
                                                 : 'bg-primary/10 text-primary'}`}>
                                         {isDone && <Check size={13} strokeWidth={3} />}
-                                        {isDone ? `Đã ${packVerb.toLowerCase()} ${qty}` : isSkipped ? 'Bỏ qua' : ctaLabel}
+                                        {isDone ? `Đã ${packVerb.toLowerCase()} ${fmt(it.restock)}` : isSkipped ? 'Bỏ qua' : ctaLabel}
                                     </span>
                                 </button>
                                 </Fragment>
