@@ -17,8 +17,8 @@ import RestockModal from './RestockModal'
 import Toast from '../POSPage/Toast'
 
 // Dải notice "Bổ sung tồn kho" ở đỉnh /inventory (Tồn kho): NVL/bao bì cần MUA thêm để đủ bán ngày
-// mai (target = max(dự báo mai, tồn tối thiểu) − tổng tồn kho + quầy). Bấm → danh sách "Mua N …", bấm
-// dòng mở RestockModal (cùng form Nhập kho của trang chi tiết). Mua đủ thì món tự rớt khỏi danh sách.
+// mai (target = max(dự báo mai, tồn tối thiểu) − tổng tồn kho + quầy). Bấm → danh sách; nút "Mua N …"
+// mở RestockModal (cùng form Nhập kho của trang chi tiết), bấm tên → trang chi tiết. Mua đủ thì món tự rớt khỏi danh sách.
 // Chỉ chủ/quản lý (nhập kho là thao tác ghi chi phí + kho); guest/offline ẩn như dải ở /pos.
 // Bấm tên nguyên liệu → sang trang chi tiết (trang cha unmount); cờ module này cho lần mount kế
 // (back về /inventory) mở lại đúng bảng — cùng kiểu cache `saved` của IngredientManagementPage.

@@ -13,7 +13,7 @@ export default function ShiftPrepCard({
     checked = {},
     onToggle,
     // Khi set → mỗi dòng đổi ô tick thành nút "Mua N …" mở phiếu Nhập kho (card "Chuẩn bị tồn
-    // kho"). Bấm dòng gọi onRestock(ingredient). Không set → giữ hành vi tick như cũ.
+    // kho"). Bấm nút "Mua N …" gọi onRestock(ingredient, qty). Không set → giữ hành vi tick như cũ.
     onRestock,
     // Chỉ dùng cùng onRestock: bấm tên nguyên liệu → onOpen(ingredient) (mở trang chi tiết).
     onOpen,
@@ -71,7 +71,7 @@ export default function ShiftPrepCard({
                                             Tồn kho cuối kỳ: {it.warehouse} {it.unit}
                                         </span>
                                     )}
-                                    {it.reason && <span className="block text-text-secondary">{it.reason}</span>}
+                                    {it.minStock > 0 && <span className="block text-text-secondary">Tồn kho ít nhất: {it.minStock} {it.unit}</span>}
                                     <span className="block">
                                         {haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{it.have} {it.unit}
                                     </span>
@@ -85,10 +85,11 @@ export default function ShiftPrepCard({
                         )
 
                         // Không cấu hình pack_size (mua rời, vd Ống hút) → đếm theo đơn vị gốc.
+                        const ctaLabel = `${packVerb} ${it.needPacks > 0 ? formatPackCount(it.needPacks, it.packUnit, it.pack2) : `${it.need} ${it.unit}`}`
                         const ctaText = (
                             <div className="flex flex-col items-end shrink-0">
                                 <span className={`text-[12px] font-black leading-tight text-right ${muted ? 'text-text-dim line-through' : 'text-primary'}`}>
-                                    {packVerb} {it.needPacks > 0 ? formatPackCount(it.needPacks, it.packUnit, it.pack2) : `${it.need} ${it.unit}`}
+                                    {ctaLabel}
                                 </span>
                             </div>
                         )
@@ -156,7 +157,7 @@ export default function ShiftPrepCard({
                                     title="Nhập kho"
                                     className="self-center shrink-0 min-h-[44px] px-3 flex items-center rounded-xl bg-primary/10 text-primary text-[12px] font-black active:scale-95 transition"
                                 >
-                                    {packVerb} {it.needPacks > 0 ? formatPackCount(it.needPacks, it.packUnit, it.pack2) : `${it.need} ${it.unit}`}
+                                    {ctaLabel}
                                 </button>
                             </div>
                         )

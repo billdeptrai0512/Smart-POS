@@ -107,18 +107,18 @@ describe('buildWarehousePrepList (Bổ sung tồn kho — cho mai)', () => {
     it('đủ hàng cho mai (hoặc ≥ min_stock) → không vào danh sách', () => {
         expect(buildWarehousePrepList({ ...args, nextDowUsedMap: { cà_phê: 1500 } })).toEqual([])
     })
-    it('min_stock là hàng dự phòng của KHO: kho thấp hơn ngưỡng → mua phần thiếu, kèm lý do', () => {
+    it('min_stock là hàng dự phòng của KHO: kho thấp hơn ngưỡng → mua phần thiếu, kèm minStock', () => {
         const out = buildWarehousePrepList({ ...args, ingredientsList: [{ ...coffee, min_stock: 3000 }] })
-        expect(out[0]).toMatchObject({ need: 1000, reason: 'Tồn kho ít nhất: 3000 g' })
+        expect(out[0]).toMatchObject({ need: 1000, minStock: 3000 })
     })
     it('min_stock cộng dồn với phần rút mai (không phải max)', () => {
         // kho 2000, quầy 300, mai cần 1500 → rút 1200; dự phòng 1000 → cần kho 2200 → mua 200
         const out = buildWarehousePrepList({ ...args, ingredientsList: [{ ...coffee, min_stock: 1000 }], inventoryInputs: { cà_phê: '300' }, nextDowUsedMap: { cà_phê: 1500 } })
-        expect(out[0]).toMatchObject({ need: 200, warehouse: 2000, have: 300, reason: 'Tồn kho ít nhất: 1000 g' })
+        expect(out[0]).toMatchObject({ need: 200, warehouse: 2000, have: 300, minStock: 1000 })
     })
-    it('kho cũng thiếu cho nhu cầu mai → vẫn ghi lý do min_stock (phần dự phòng nằm trong số mua)', () => {
+    it('kho cũng thiếu cho nhu cầu mai → vẫn mang minStock (phần dự phòng nằm trong số mua)', () => {
         const out = buildWarehousePrepList({ ...args, effectiveWarehouseStocks: { cà_phê: 0 }, ingredientsList: [{ ...coffee, min_stock: 100 }], inventoryInputs: { cà_phê: '300' }, nextDowUsedMap: { cà_phê: 1000 } })
-        expect(out[0]).toMatchObject({ need: 800, reason: 'Tồn kho ít nhất: 100 g' }) // rút 700 + dự phòng 100
+        expect(out[0]).toMatchObject({ need: 800, minStock: 100 }) // rút 700 + dự phòng 100
     })
     it('min_counter_stock nâng mức rút mai khi dự báo thấp', () => {
         // quầy 100, sàn quầy 800 → rút 700; kho 500 → thiếu 200

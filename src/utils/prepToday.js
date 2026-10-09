@@ -176,9 +176,8 @@ export function buildWarehousePrepList({ ingredientsList, effectiveWarehouseStoc
         const pull = Math.max(0, r1(Math.max(forecastFor(ing.ingredient, usedMap, nextDowUsedMap), r1(ing.min_counter_stock)) - counterReal))
         const item = toPrepItem(ing, warehouseLeft, minStock + pull)
         if (item) {
-            if (minStock > 0) item.reason = `Tồn kho ít nhất: ${minStock} ${ing.unit}` // đã cộng vào số cần mua → luôn nói ra, kẻo "Mua N" có phần dự phòng mà không giải thích
             item.warehouse = warehouseLeft
-            item.minStock = minStock
+            item.minStock = minStock // đã cộng vào số cần mua → card luôn nói ra, kẻo "Mua N" có phần dự phòng mà không giải thích
             item.have = counterReal // hiển thị tồn quầy; need đã tính theo kho
             item.boughtToday = lookupByLabel(ing.ingredient, todayBoughtMap)
             out.push(item)
