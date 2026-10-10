@@ -51,10 +51,13 @@ export default function IngredientDetailPage() {
         ? `Dùng chung với: ${warehouseSiblings.map(a => a.name).join(', ')}`
         : null
     // Nhật ký phải thấy phiếu nhập/rút ở CẢ NHÓM khi có kho tổng chung — 1 phần tử khi độc lập.
+    // Khoá theo id: warehouseSiblings đổi tham chiếu mỗi lần addresses refetch → loadHistory chạy lại, spinner nháy.
+    const siblingKey = (warehouseSiblings || []).map(a => a.id).join(',')
     const groupAddressIds = useMemo(
-        () => addressId ? [addressId, ...(warehouseSiblings || []).map(a => a.id)] : [],
-        [addressId, warehouseSiblings]
+        () => addressId ? [addressId, ...(siblingKey ? siblingKey.split(',') : [])] : [],
+        [addressId, siblingKey]
     )
+    const hasAddress = !!selectedAddress
     const addressNameById = useMemo(() => {
         const map: Record<string, string> = {}
         if (addressId && selectedAddress) map[addressId] = selectedAddress.name
@@ -129,16 +132,16 @@ export default function IngredientDetailPage() {
     }, [ingredientKey, calcRef])
 
     useEffect(() => {
-        if (!selectedAddress || !ingredientKey) return
+        if (!hasAddress || !ingredientKey) return
         fetchStockRow(addressId).then(setStockData)
-    }, [selectedAddress, addressId, ingredientKey, fetchStockRow, recipesReady])
+    }, [hasAddress, addressId, ingredientKey, fetchStockRow, recipesReady])
 
     // Đầu ngày/Lấy ra/Nhập mới cho panel Kiểm kê — cùng nguồn dữ liệu với card ở /inventory.
     useEffect(() => {
-        if (!selectedAddress || !ingredientKey) return
+        if (!hasAddress || !ingredientKey) return
         fetchIngredientDailyContext(addressId)
             .then(map => setDailyContext(map[ingredientKey] || null))
-    }, [selectedAddress, addressId, ingredientKey])
+    }, [hasAddress, addressId, ingredientKey])
 
     // Tồn quầy của các địa chỉ khác dùng chung kho tổng — chỉ đọc (sửa quầy của họ phải mở đúng địa chỉ đó).
     useEffect(() => {
@@ -149,7 +152,7 @@ export default function IngredientDetailPage() {
                 addressName: a.name,
                 counterStock: results[i].find((s: Row) => s.ingredient === ingredientKey)?.counter_stock ?? 0,
             }))))
-    }, [selectedAddress, warehouseSiblings, ingredientKey])
+    }, [warehouseSiblings, ingredientKey])
 
     // History is scoped to the displayed month. Gồm 2 nguồn xen kẽ theo thời gian:
     // phiếu nhập/hiệu chỉnh (expenses) + lượt "Rút ra quầy" (restock trong phiếu
@@ -175,22 +178,22 @@ export default function IngredientDetailPage() {
     }, [groupAddressIds, ingredientKey, fromDate, toDate])
 
     const reloadStock = useCallback(async () => {
-        if (!selectedAddress) return
+        if (!hasAddress) return
         setStockData(await fetchStockRow(addressId))
-    }, [selectedAddress, addressId, fetchStockRow])
+    }, [hasAddress, addressId, fetchStockRow])
 
     const reloadHistory = useCallback(async () => {
-        if (!selectedAddress) return
+        if (!hasAddress) return
         setHistory(await loadHistory())
-    }, [selectedAddress, loadHistory])
+    }, [hasAddress, loadHistory])
 
     useEffect(() => {
-        if (!selectedAddress || !ingredientKey) return
+        if (!hasAddress || !ingredientKey) return
         setLoading(true)
         loadHistory()
             .then(setHistory)
             .finally(() => setLoading(false))
-    }, [loadHistory, selectedAddress, ingredientKey])
+    }, [loadHistory, hasAddress, ingredientKey])
 
     const summary = useMemo(() => {
         let totalSpent = 0, totalQty = 0, totalOwing = 0, totalPaidInMonth = 0
@@ -220,8 +223,8 @@ export default function IngredientDetailPage() {
     // ── Save callbacks for child rows ───────────────────────────────────────
     // category đi theo section của nhóm (trigger DB ép) — client chỉ gán group_id.
     async function saveGroup(groupId: UUID | null) {
-        if (!addressId) return
         await withSaving('Lưu nhóm nguyên liệu', async () => {
+            if (!addressId) throw new Error('Cần chọn một địa chỉ cụ thể (không áp dụng cho Mẫu mặc định)')
             await setIngredientsGroup([ingredientKey], addressId, groupId)
             refreshProducts?.()
         })
@@ -295,8 +298,9 @@ export default function IngredientDetailPage() {
 
     async function saveName(newDisplayName: string) {
         const newKey = normalizeIngredientKey(newDisplayName)
-        if (!addressId || !newKey || newKey === ingredientKey) return
+        if (!newKey || newKey === ingredientKey) return
         await withSaving('Đổi tên nguyên liệu', async () => {
+            if (!addressId) throw new Error('Cần chọn một địa chỉ cụ thể (không áp dụng cho Mẫu mặc định)')
             await renameIngredient(ingredientKey, newKey, addressId)
             refreshProducts?.()
             // URL param drives every fetch on this page — repoint at the new key

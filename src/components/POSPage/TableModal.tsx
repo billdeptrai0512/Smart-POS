@@ -193,8 +193,8 @@ export default function TableModal({ onClose, inline = false, takeawaySlot }: Pr
     )
     async function handleDragEnd({ active, over }: DragEndEvent) {
         if (!over || !addressId || active.id === over.id) return
-        const from = configured.indexOf(active.id as string)
-        const to = configured.indexOf(over.id as string)
+        const from = configured.indexOf(String(active.id))
+        const to = configured.indexOf(String(over.id))
         // -1 = bàn tạm (adHoc, không nằm trong configured) — cùng 1 SortableContext
         // với bàn cố định (xem render bên dưới) nên có thể là target thả, bỏ qua.
         if (from === -1 || to === -1) return

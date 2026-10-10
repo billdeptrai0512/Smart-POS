@@ -11,7 +11,7 @@ import type { Inputs } from '../utils/prepToday'
 import type { ExtraIngredients, MissingCupCandidate, RecipeRow, UsageMap } from '../utils/inventory'
 import type { Row } from '../types/domain'
 
-interface History { shiftClosings: Row[]; orders: Row[]; addressId: string | null | undefined }
+interface History { shiftClosings: Row[]; orders: Row[]; addressId: string | null }
 const EMPTY_HISTORY: History = { shiftClosings: [], orders: [], addressId: null }
 const NO_CANDIDATES: ReturnType<typeof attachRepeatHistory<MissingCupCandidate>> = []
 
@@ -28,7 +28,7 @@ export function useMissingCupSuspicion({
     ingredientsList, inventoryInputs, restockInputs, openingInputs, openingStock,
     usedMap, recipes, extraIngredients, products,
 }: {
-    enabled: boolean; addressId: string | null | undefined; ingredientsList?: Row[]
+    enabled: boolean; addressId: string | null; ingredientsList?: Row[]
     inventoryInputs: Inputs; restockInputs: Inputs; openingInputs: Inputs; openingStock: UsageMap; usedMap: UsageMap
     recipes: RecipeRow[]; extraIngredients: ExtraIngredients; products: Row[] | null
 }) {
@@ -37,9 +37,7 @@ export function useMissingCupSuspicion({
     // range khi user đang XEM scope tuần/tháng, còn card này cần cả khi xem "Hôm nay".
     const [fetched, setFetched] = useState<History>(EMPTY_HISTORY)
     useEffect(() => {
-        // addressId === null (KHÁC undefined) là "Mẫu mặc định" — địa chỉ hợp lệ, không
-        // phải "chưa chọn địa chỉ". Cùng quy ước với useDailyReportData.
-        if (!enabled || addressId === undefined) return
+        if (!enabled) return
         let alive = true
         const end = startOfDayVN(new Date()) // đầu ngày hôm nay = mốc kết thúc window (loại hôm nay)
         const start = new Date(end.getTime() - 14 * 86_400_000)

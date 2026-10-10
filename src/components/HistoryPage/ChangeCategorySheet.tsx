@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { ToastAction } from '../../hooks/useToast'
 import type { ExpenseCategory, Row, UUID } from '../../types/domain'
-import { Plus, Check, Pencil, Trash2, ChevronDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, ChevronDown } from 'lucide-react'
 import { EXPENSE_GROUPS, groupMeta, labelsInGroup } from '../../constants/expenseGroups'
 import { formatVND } from '../../utils/money'
 import { dayMonthVN } from '../../utils/dateVN'

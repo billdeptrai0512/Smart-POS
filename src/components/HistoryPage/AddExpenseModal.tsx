@@ -203,7 +203,7 @@ export default function AddExpenseModal({
                         onChange={onDateChange}
                         presets={false}
                         align="start"
-                        trigger={(label, toggle) => (
+                        trigger={(_label, toggle) => (
                             <button
                                 type="button"
                                 onClick={toggle}

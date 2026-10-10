@@ -122,7 +122,7 @@ export function diffOrderHeads(localOrders: Row[], heads: Row[], knownIds: Set<U
 export interface OrdersPollChange { newOrders: Row[]; patched: Row[]; moneyChanged: boolean; tableChanged: boolean }
 
 export function useOrdersPoll({ addressId, isGuest, localOrdersRef, onChange, onResume }: {
-    addressId: UUID | null | undefined; isGuest: boolean; localOrdersRef: { current: Row[] }
+    addressId: UUID | null; isGuest: boolean; localOrdersRef: { current: Row[] }
     onChange: (change: OrdersPollChange) => void; onResume?: () => void
 }) {
     const { pathname } = useLocation()
@@ -193,7 +193,7 @@ export function useOrdersPoll({ addressId, isGuest, localOrdersRef, onChange, on
                     knownIdsRef.current = null
                 }
 
-                const { rev, heads } = await fetchOrdersSync(addressId ?? null, revRef.current)
+                const { rev, heads } = await fetchOrdersSync(addressId, revRef.current)
                 // heads === null là "không có gì đổi" — KHÁC [] là "hôm nay chưa có đơn nào".
                 // Đây là đường chạy của gần như mọi nhịp.
                 if (!heads) { revRef.current = rev; return }

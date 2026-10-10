@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
 import { startOfDayVN } from '../utils/dateVN'
 import { inflightCache } from './cache'
-import type { UUID, Row, SupabaseError } from '../types/domain'
+import type { UUID, Row } from '../types/domain'
 
 // Stock numbers are stored as floats (WAC math can produce arbitrary precision).
 // Card UI rounds to 1 decimal; persist the same precision so historical reads
@@ -48,11 +48,11 @@ async function fetchIngredientStocksUncached(addressId: UUID | null) {
             warehouse_stock_set: row.warehouse_stock_set ?? (warehouse_stock > 0),
             counter_stock_set: row.counter_stock_set ?? (counter_stock > 0),
             // Mốc đếm cuối (migration 20261005); path không có cột này (default template) → null = không ước tính.
-            counter_counted_on: (row.counter_counted_on ?? null) as string | null,
+            counter_counted_on: row.counter_counted_on ?? null,
             restock_since_count: Number(row.restock_since_count) || 0,
             // Lần đếm gần nhất TRƯỚC hôm nay (migration 20261007) — để Đầu kỳ hôm nay tính lại được kể cả khi NVL vừa được đếm hôm nay.
             prior_counter_stock: row.prior_counter_stock == null ? null : Number(row.prior_counter_stock),
-            prior_counted_on: (row.prior_counted_on ?? null) as string | null,
+            prior_counted_on: row.prior_counted_on ?? null,
             prior_restock_since: Number(row.prior_restock_since) || 0
         }
     }

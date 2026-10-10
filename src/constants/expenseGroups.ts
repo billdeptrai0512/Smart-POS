@@ -23,5 +23,5 @@ const KNOWN_GROUP_KEYS = new Set(EXPENSE_GROUPS.map(g => g.key))
 // Nhãn thuộc 1 nhóm — nhãn cũ chưa gán group_section (hoặc gán giá trị lạ) mặc định
 // rơi vào "operating" thay vì biến mất khỏi mọi nhóm.
 export const labelsInGroup = <T extends { group_section?: string | null }>(categories: T[], key: string) => categories.filter(c =>
-    c.group_section === key || (key === 'operating' && !KNOWN_GROUP_KEYS.has(c.group_section as string))
+    c.group_section === key || (key === 'operating' && !KNOWN_GROUP_KEYS.has(c.group_section ?? ''))
 )

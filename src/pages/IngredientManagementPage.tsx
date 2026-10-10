@@ -64,9 +64,13 @@ export default function IngredientManagementPage() {
     } = useProducts()
     const { addressId, selectedAddress, siblingsByAddress } = useAddress()
     const warehouseSiblings = addressId ? siblingsByAddress[addressId] : null
+    // Khoá theo id (không theo mảng/đối tượng): `siblingsByAddress` và `selectedAddress` đổi tham chiếu mỗi lần addresses refetch,
+    // mà groupAddressIds là dep của loadStocks (quét deficits toàn lịch sử) — đổi tham chiếu = tải lại cả trang.
+    const hasAddress = !!selectedAddress
+    const siblingKey = (warehouseSiblings || []).map(a => a.id).join(',')
     const groupAddressIds = useMemo(
-        () => selectedAddress ? [addressId, ...(warehouseSiblings || []).map(a => a.id)] : [null],
-        [addressId, selectedAddress, warehouseSiblings]
+        () => hasAddress ? [addressId, ...(siblingKey ? siblingKey.split(',') : [])] : [null],
+        [hasAddress, addressId, siblingKey]
     )
     const { isManager, isAdmin, profile, isGuest } = useAuth()
     const { toast, showToast, showError } = useToast()
@@ -175,7 +179,8 @@ export default function IngredientManagementPage() {
     }
 
     const handleAssignOrphan = async (oldKey: string, newKey: string) => {
-        if (!addressId || !oldKey || !newKey || oldKey === newKey) return
+        if (!oldKey || !newKey || oldKey === newKey) return
+        if (!addressId) throw new Error('Cần chọn một địa chỉ cụ thể (không áp dụng cho Mẫu mặc định)')
         await syncIngredientKey(addressId, oldKey, newKey)
         await Promise.all([loadStocks(), refreshProducts?.()])
     }
@@ -376,7 +381,10 @@ export default function IngredientManagementPage() {
         try {
             await upsertIngredientCost(key, 0, addressId, unit)
             // category (báo cáo "Mua bao bì" vs "Mua nguyên liệu") đi theo section của nhóm — trigger DB ép.
-            if (newGroupId && addressId) await setIngredientsGroup([key], addressId, newGroupId)
+            if (newGroupId) {
+                if (!addressId) throw new Error('Cần chọn một địa chỉ cụ thể (không áp dụng cho Mẫu mặc định)')
+                await setIngredientsGroup([key], addressId, newGroupId)
+            }
             setIngredientUnits(prev => ({ ...prev, [key]: unit }))
             // Refresh configs so the new ingredient picks up its category in `configByIngredient`.
             refreshProducts?.()

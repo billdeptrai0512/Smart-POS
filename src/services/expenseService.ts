@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
 import { startOfDayVN } from '../utils/dateVN'
 import { reportCache, invalidateReportCache } from './cache'
-import type { UUID, Row, ExpenseCategory } from '../types/domain'
+import type { UUID, Row, ExpenseCategory, SupabaseError } from '../types/domain'
 
 // ---- Expenses CRUD ----
 
@@ -162,7 +162,7 @@ export async function fetchIngredientRestockHistory(addressIds: (UUID | null)[] 
         'id, address_id, name, amount, staff_name, metadata, created_at, discount_amount, extra_cost, payment_method',
         'id, address_id, name, amount, staff_name, metadata, created_at, payment_method',
     ]
-    let data: Row[] | null = null, error: { code?: string; message?: string; details?: string } | null = null
+    let data: Row[] | null = null, error: SupabaseError = null
     for (const sel of trySelects) {
         const res = await supabase
             .from('expenses')

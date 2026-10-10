@@ -30,7 +30,7 @@ export async function fetchProducts(addressId: UUID | null): Promise<Product[]> 
 }
 
 // Update product price directly (isolated clone architecture)
-export async function upsertProductPrice(productId: UUID, addressId: UUID | null, price: number) {
+export async function upsertProductPrice(productId: UUID, price: number) {
     if (localRepo.isGuest()) return localRepo.updateLocalProductPrice(productId, price)
     // .select() forces PostgREST to return affected rows — without it, an UPDATE
     // silently blocked by RLS (0 rows matched) returns no error at all, and the
@@ -110,7 +110,7 @@ export async function removeProductFromAddress(productId: UUID, _addressId?: UUI
 // Update sort order for products at an address.
 // Single RPC writes all rows in one statement — N parallel UPDATEs would each pay
 // PostgREST overhead (auth + RLS + lock).
-export async function updateProductSortOrder(addressId: UUID | null, orderedProductIds: UUID[]) {
+export async function updateProductSortOrder(orderedProductIds: UUID[]) {
     if (localRepo.isGuest()) return localRepo.updateLocalProductSortOrder(orderedProductIds)
     if (!orderedProductIds?.length) return
 

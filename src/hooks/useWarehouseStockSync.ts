@@ -17,7 +17,7 @@ import type { Row } from '../types/domain'
 //
 // `estimateOpening` (chỉ xem HÔM NAY): Đầu kỳ = tồn quầy ước tính theo lý thuyết (estimateOpeningStocks) thay vì số
 // remaining của phiếu gần nhất (có thể là 0 nếu NVL không đếm, hoặc số cũ nếu phiếu cách vài ngày).
-export function useWarehouseStockSync(addressId: string | null | undefined, { seedReady, isDayScope, seedYesterdayClosing, estimateOpening }: {
+export function useWarehouseStockSync(addressId: string | null, { seedReady, isDayScope, seedYesterdayClosing, estimateOpening }: {
     seedReady?: boolean; isDayScope?: boolean; seedYesterdayClosing?: Row | null; estimateOpening?: boolean
 }) {
     const [warehouseStocks, setWarehouseStocks] = useState<UsageMap>({})
@@ -26,14 +26,12 @@ export function useWarehouseStockSync(addressId: string | null | undefined, { se
     // Công thức tải xong sau lần reload đầu → reload đổi identity để tính lại Đầu kỳ ước tính (xem recipesBelongTo).
     const recipesReady = recipesBelongTo(useProducts().recipes, addressId)
 
-    // addressId === undefined guarded by the sole caller (useShiftInventoryState.reloadStocks)
-    // before this is ever invoked — no guard duplicated here.
     const reload = useCallback(() => {
         const yesterdayPromise = seedReady
             ? Promise.resolve(seedYesterdayClosing)
-            : isDayScope ? Promise.resolve(undefined) : fetchYesterdayShiftClosing(addressId ?? null)
+            : isDayScope ? Promise.resolve(undefined) : fetchYesterdayShiftClosing(addressId)
         return Promise.all([
-            fetchIngredientStocks(addressId ?? null),
+            fetchIngredientStocks(addressId),
             yesterdayPromise,
         ]).then(async ([rows, yesterdayClosing]) => {
             const warehouses: UsageMap = {}

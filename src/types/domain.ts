@@ -140,4 +140,4 @@ export interface TodayStats {
 export type CostPerItem = Record<string, number>
 
 /** `error` của một phản hồi supabase-js (PostgREST) — chỉ phần code/message mà service soi tới. */
-export type SupabaseError = { code?: string; message?: string } | null
+export type SupabaseError = { code?: string; message?: string; details?: string } | null

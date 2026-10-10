@@ -5,8 +5,8 @@ import { useProducts } from '../../contexts/ProductContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { useToast } from '../../hooks/useToast'
 import Toast from '../POSPage/Toast'
-import { parseWorkbook, resolveImportPlan, commitImportPlan, type ExistingData } from '../../services/importService'
-import { downloadCurrentDataExcel, type ExportInput } from '../../services/exportService'
+import { parseWorkbook, resolveImportPlan, commitImportPlan } from '../../services/importService'
+import { downloadCurrentDataExcel } from '../../services/exportService'
 
 // Nhập liệu hàng loạt từ 1 file Excel (mẫu ở public/templates/mau-nhap-lieu.xlsx) — mở từ
 // "+ Tạo công thức" ở RecipeMenuPage thay vì 1 trang riêng. 2 cột trái/phải (tải mẫu | chọn

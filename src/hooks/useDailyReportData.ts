@@ -40,7 +40,7 @@ function logReady(label: string, t0: number, firstLoadRef: { current: boolean })
 }
 
 export function useDailyReportData({ addressId, scope, offset, customRange, onError }: {
-    addressId?: string | null; scope: string; offset: number; customRange?: { startISO?: string | null; endISO?: string | null } | null
+    addressId: string | null; scope: string; offset: number; customRange?: { startISO?: string | null; endISO?: string | null } | null
     onError?: (err: unknown, context: string) => void
 }) {
     const firstLoadRef = useRef(true)
@@ -85,10 +85,6 @@ export function useDailyReportData({ addressId, scope, offset, customRange, onEr
     // promise chỉ resolve SAU KHI state đã cập nhật, để caller (vd handleSaveRestockEdit) await
     // xong mới báo toast/đóng modal, tránh báo "đã lưu" trước khi báo cáo thật sự làm mới.
     const refetch = useCallback(() => {
-        // addressId === null (not undefined) means "Mẫu mặc định" (admin default
-        // template) — a valid target, not "no address selected yet".
-        if (addressId === undefined) return Promise.resolve()
-
         setIsAsyncReady(false)
         const t0 = performance.now()
         let promise

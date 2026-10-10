@@ -73,7 +73,7 @@ const journalLines = (lines: TableLine[]) => lines.map(l => `${l.qty > 1 ? l.qty
 export function buildLastOrderFromDB(order: Row) {
     const lines = mergeTableLines([], (order.order_items || []).map((i: Row) =>
         tableLine(i.products?.name || '?', (i.options || '').split(', '), null, i.quantity)))
-    return { id: order.id as UUID, total: order.total as number, createdAt: order.created_at as string, items: journalLines(lines) }
+    return { id: order.id, total: order.total, createdAt: order.created_at, items: journalLines(lines) }
 }
 
 /** Một dòng "Nhật ký" gần nhất trên header /pos. */
@@ -117,17 +117,15 @@ export function computeSubmitTotals(cartItems: CartItem[], discountAmountArg: nu
         return sum + c * item.quantity
     }, 0)
     const itemTotal = cartTotal(cartItems)
-    const countableQty = cartItems.reduce((sum, item) => {
-        const prod = products?.find(p => p.id === item.productId)
-        return prod?.count_as_cup === false ? sum : sum + item.quantity
-    }, 0)
+    const productById = new Map((products || []).map(p => [p.id, p]))
+    const countableQty = cartItems.reduce((sum, item) =>
+        productById.get(item.productId)?.count_as_cup === false ? sum : sum + item.quantity, 0)
     // Số tiền thực thu = gộp trừ chiết khấu; server tính lại y hệt (bulk_create_orders).
     const discountApplied = Math.min(Math.round(discountAmountArg) || 0, itemTotal)
     const netTotal = itemTotal - discountApplied
     // Giảm theo chương trình: giỏ mang sẵn GIÁ ĐÃ GIẢM ở basePrice nên phần chênh so với products.price
     // không nằm trong discountApplied. Chỉ mirror cho hàng lạc quan — KHÔNG gửi lên RPC (server tự cộng).
-    const priceById = new Map((products || []).map(p => [p.id, p.price]))
-    const programLineDiscount = (item: CartItem) => Math.max(0, (priceById.get(item.productId) ?? item.basePrice) - item.basePrice) * item.quantity
+    const programLineDiscount = (item: CartItem) => Math.max(0, (productById.get(item.productId)?.price ?? item.basePrice) - item.basePrice) * item.quantity
     const programDiscount = cartItems.reduce((sum, item) => sum + programLineDiscount(item), 0)
     const lineDiscount = (item: CartItem) => manualLineDiscount(item) + programLineDiscount(item)
     return { costPerItem, cartCost, itemTotal, countableQty, discountApplied, netTotal, programDiscount, totalDiscount: discountApplied + programDiscount, lineDiscount }

@@ -79,7 +79,7 @@ const diffKeys = (cur: Record<string, unknown>, base: Record<string, unknown>) =
 // seedReady=false mà isDayScope vẫn đợi (không tự bắn fetch trùng với fetch đang chạy của
 // cha). isDayScope=false (range tuần/tháng/custom nhiều ngày) → giữ hành vi tự fetch cũ.
 export function useShiftInventoryState(
-    addressId: string | null | undefined, ingredientSortOrder: string[] | null | undefined, dateKey: string | undefined,
+    addressId: string | null, ingredientSortOrder: string[] | null | undefined, dateKey: string | undefined,
     onFieldConflict?: (ingredient: string) => void, onRemoteCash?: (row: Row) => void, seed: ShiftSeed = {},
 ) {
     const { seedReady = false, isDayScope = false, todayClosing: seedTodayClosing, yesterdayClosing: seedYesterdayClosing, ingredientRows } = seed
@@ -129,9 +129,6 @@ export function useShiftInventoryState(
     // ── Load existing shift closing → seed input maps ─────────────────────────
     // Re-runs when dateKey changes (midnight rollover) to drop stale yesterday inputs.
     useEffect(() => {
-        // addressId === null (not undefined) means "Mẫu mặc định" (admin default
-        // template) — a valid target, not "no address selected yet".
-        if (addressId === undefined) return
         // Clear pre-existing input state so a new day starts blank if no closing exists yet.
         setExistingClosing(null)
         setClosingLoaded(false)
@@ -203,7 +200,6 @@ export function useShiftInventoryState(
         estimateOpening: (!dateKey || dateKey === dateStringVN()) && (!isDayScope || seedReady),
     })
     const reloadStocks = useCallback(() => {
-        if (addressId === undefined) return Promise.resolve()
         return reloadWarehouseStock().then(({ counters }) => {
             setStocksLoaded(true)
             // Seed openingInputs only if today's closing hasn't set them yet.
@@ -217,10 +213,9 @@ export function useShiftInventoryState(
                 return { ...prev, opening: openings }
             })
         })
-    }, [addressId, reloadWarehouseStock])
+    }, [reloadWarehouseStock])
 
     useEffect(() => {
-        if (addressId === undefined) return
         // Scope 1 ngày: ĐỢI cha fetch xong phiếu chốt rồi mới đọc tồn. Gọi sớm là gọi thừa —
         // reload chưa có phiếu hôm qua nên openingStock ra rỗng, rồi seedReady bật làm reload
         // đổi identity và effect này bắn lại get_ingredient_stocks_v2 y hệt lần nữa (mỗi lần
@@ -447,7 +442,7 @@ export function useShiftInventoryState(
         if (!patches.length) return null
         pushingRef.current = true
         try {
-            const row = await mergeShiftClosingInventory(addressId ?? null, patches, closedBy, systemTotalRevenue)
+            const row = await mergeShiftClosingInventory(addressId, patches, closedBy, systemTotalRevenue)
             if (!row) return null
             // Pushed values → baseline (so they read non-dirty); tombstones (all null) drop the key.
             const b = baselineRef.current

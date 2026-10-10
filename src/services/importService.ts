@@ -505,7 +505,7 @@ async function commitImportPlanSequential(plan: ImportPlan, addressId: UUID | nu
         productByName.set(normKey(p.name), row.id)
     })
     await runWithConcurrency(plan.productUpdates, CONCURRENCY, async (p) => {
-        await upsertProductPrice(productByName.get(normKey(p.name))!, addressId, p.price)
+        await upsertProductPrice(productByName.get(normKey(p.name))!, p.price)
     })
 
     await runWithConcurrency([...plan.ingredients, ...plan.ingredientUpdates], CONCURRENCY, async (ing) => {

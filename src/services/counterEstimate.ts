@@ -12,7 +12,7 @@ interface CounterCalc { recipes: RecipeRow[]; extraIngredients: ExtraIngredients
 
 // Công thức của địa chỉ = các dòng recipes có address_id đúng địa chỉ đó. Context còn rỗng hoặc đang là của địa chỉ trước
 // (vừa đổi địa chỉ) thì chưa dùng được — callers cũng dùng nó làm dep để tính lại khi công thức tải xong.
-export const recipesBelongTo = (recipes: Row[], addressId: string | null | undefined) => recipes.length > 0 && recipes.every(r => r.address_id === addressId)
+export const recipesBelongTo = (recipes: Row[], addressId: string | null) => recipes.length > 0 && recipes.every(r => r.address_id === addressId)
 
 // Tiêu hao cho các dòng cần ước tính. Ngày ĐÃ QUA đọc từ daily_ingredient_usage; ngày nào chưa có thì tính từ đơn
 // rồi ghi lại (đóng băng — lần sau khỏi tải đơn); HÔM NAY tính trực tiếp từ đơn (bỏ qua khi !includeToday).
@@ -51,7 +51,7 @@ async function loadUsage(rows: Row[], addressId: string, { recipes, extraIngredi
 // rows = kết quả fetchIngredientStocks của MỘT địa chỉ. NVL chưa đếm hôm nay thì tồn quầy được nối theo lý thuyết
 // (estimateCounterRow). Công thức là của địa chỉ đang chọn — chỉ gọi cho địa chỉ đó.
 // Lỗi → trả số thô, không làm hỏng trang.
-export async function withCounterEstimate(rows: Row[] | null | undefined, addressId: string | null | undefined, calc: CounterCalc) {
+export async function withCounterEstimate(rows: Row[] | null | undefined, addressId: string | null, calc: CounterCalc) {
     if (!addressId || !rows?.length) return rows
     try {
         const usage = await loadUsage(rows, addressId, calc, true)

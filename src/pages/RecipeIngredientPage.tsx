@@ -197,7 +197,7 @@ export default function RecipeIngredientPage() {
     async function saveProductPrice(newPrice: number) {
         if (!selectedAddress) return
         await withSaving('Lưu giá bán sản phẩm', async () => {
-            await upsertProductPrice(productId, addressId, newPrice)
+            await upsertProductPrice(productId, newPrice)
             refreshProducts?.()
         })
     }

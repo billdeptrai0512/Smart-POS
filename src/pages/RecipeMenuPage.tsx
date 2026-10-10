@@ -161,7 +161,7 @@ export default function RecipeMenuPage() {
         try {
             const newProd = await insertProduct(newProductName.trim(), parsedPrice, addressId)
             if (newProd && addressId) {
-                await upsertProductPrice(newProd.id, addressId, parsedPrice)
+                await upsertProductPrice(newProd.id, parsedPrice)
             }
             refreshProducts?.()
             setNewProductName('')
@@ -231,7 +231,7 @@ export default function RecipeMenuPage() {
         const previous = orderedProducts
         setOrderedProducts(updated)
         try {
-            await updateProductSortOrder(addressId || null, updated.map(p => p.id))
+            await updateProductSortOrder(updated.map(p => p.id))
             refreshProducts?.()
         } catch (err) {
             setOrderedProducts(previous)

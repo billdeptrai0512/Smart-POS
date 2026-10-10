@@ -11,14 +11,13 @@ import type { IngredientConfig, Row } from '../types/domain'
 // `seedRows` (tuỳ chọn) = ingredientConfigs của ProductContext — đúng bộ `rows` mà hàm fetch dưới đây trả, đã được
 // context nạp sẵn (và cache localStorage nên có ngay lúc mở app). Có seed → dùng thẳng, KHÔNG tự fetch (2 request
 // thừa mỗi lần vào trang: ingredient_costs + ingredient_groups); đổi dữ liệu thì context tự refresh nên reload là no-op.
-export function useIngredientCatalog(addressId: string | null | undefined, ingredientSortOrder: string[] | null | undefined, seedRows?: Row[] | null) {
+export function useIngredientCatalog(addressId: string | null, ingredientSortOrder: string[] | null | undefined, seedRows?: Row[] | null) {
     const seeded = !!seedRows
     const [fetched, setFetched] = useState<Row[]>([])
     const [isLoading, setIsLoading] = useState(!seeded)
 
     const reloadIngredients = useCallback(() => {
         if (seeded) return Promise.resolve()
-        if (addressId === undefined) { setIsLoading(false); return Promise.resolve() }
         setIsLoading(true)
         return fetchIngredientCostsWithUnits(addressId).then(setFetched).catch(() => { /* đã log ở service; giữ danh sách cũ */ }).finally(() => setIsLoading(false))
     }, [addressId, seeded])
