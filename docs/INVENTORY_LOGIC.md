@@ -214,4 +214,4 @@ hợp nhất) trong khi **quầy vẫn riêng từng địa chỉ** (đếm tay 
 | 4 RPC tồn kho làm group-aware | `supabase/migrations/20260714_warehouse_groups_3_inventory_rpcs.sql` |
 | UI quản lý nhóm | `src/components/AddressSelectPage/BranchGrid.tsx` (modal "Kho tổng chung" trong menu Quản lý mỗi địa chỉ) |
 | Context | `src/contexts/AddressContext.tsx` — `warehouseGroups`, `siblingsByAddress`, `createWarehouseGroup`/`renameWarehouseGroup`/`removeWarehouseGroup`/`setAddressGroup` |
-| Sửa giá vốn thủ công | `updateIngredientUnitCost` (`src/services/ingredientCostService.ts`) → RPC `set_ingredient_unit_cost` (thay vì upsert thẳng, để đi qua fan-out) |
+| Sửa giá vốn thủ công | **Hiện không có UI** (ô sửa giá đã bỏ từ 13/8/2026, commit 358b701; hàm client `updateIngredientUnitCost` đã xoá). RPC `set_ingredient_unit_cost` vẫn còn ở DB — muốn làm lại thì gọi RPC này (không upsert thẳng) để giá vốn fan-out đúng cho nhóm kho tổng |

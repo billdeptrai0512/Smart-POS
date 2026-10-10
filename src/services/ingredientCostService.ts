@@ -145,15 +145,6 @@ export async function upsertIngredientCost(ingredient: string, unitCost: number,
     if (error) throw error
 }
 
-// Sửa giá vốn thủ công — đi qua RPC (không upsert thẳng) để giá vốn fan-out đúng khi địa chỉ
-// thuộc 1 warehouse group dùng chung kho tổng (xem set_ingredient_unit_cost). Guest/local mode
-// không có khái niệm nhóm nên giữ nguyên đường upsert local cũ.
-export async function updateIngredientUnitCost(ingredient: string, unitCost: number, addressId: UUID) {
-    if (localRepo.isGuest()) return localRepo.upsertLocalIngredientCost({ ingredient, unit_cost: unitCost, address_id: addressId })
-    const { error } = await supabase.rpc('set_ingredient_unit_cost', { p_address_id: addressId, p_ingredient: ingredient, p_unit_cost: unitCost })
-    if (error) throw error
-}
-
 // Sync (rename or merge) an ingredient key across ingredient_costs, recipes,
 // shift_closings.inventory_report (JSONB), and expenses.metadata (JSONB).
 // Always-merge mode: if newKey already exists in ingredient_costs for this address,
