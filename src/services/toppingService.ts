@@ -2,15 +2,15 @@ import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
 import { upsertIngredientCost } from './ingredientCostService'
 import { normalizeIngredientKey } from '../utils/ingredients'
-import type { UUID, Row } from '../types/domain'
+import type { UUID, Row, CartTopping } from '../types/domain'
 
 // ---- Toppings CRUD ----
 // Thực thể toàn cục (không product_id) — mirrors product_extras nhưng gắn vào nhiều món
 // qua product_toppings thay vì 1-1. Xem CLAUDE.md/plan: tồn kho topping KHÔNG suy từ
 // topping_ingredients, nó là 1 dòng ingredient_costs độc lập cùng tên (đếm tay ở kiểm kê).
 
-export async function fetchToppings(addressId: UUID | null) {
-    if (localRepo.isGuest()) return localRepo.fetchLocalToppings(addressId)
+export async function fetchToppings(addressId: UUID | null): Promise<CartTopping[]> {
+    if (localRepo.isGuest()) return localRepo.fetchLocalToppings(addressId) as CartTopping[]
     let query = supabase.from('toppings').select('id, name, price, address_id, sort_order').order('sort_order', { ascending: true, nullsFirst: false })
 
     if (addressId) query = query.eq('address_id', addressId)

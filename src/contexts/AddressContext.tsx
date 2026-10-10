@@ -1,0 +1,392 @@
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
+import type { Address, Row, SelectedAddress, UUID, WarehouseGroup } from '../types/domain'
+import { useAuth } from './AuthContext'
+import {
+    fetchAddresses, createAddress as apiCreateAddress, updateAddress as apiUpdateAddress, deleteAddress as apiDeleteAddress,
+    setAddressTables as apiSetAddressTables,
+    setAddressPrinters as apiSetAddressPrinters, fetchAddressPrinters,
+    upsertSession,
+    fetchWarehouseGroups, upsertWarehouseGroup as apiUpsertWarehouseGroup,
+    deleteWarehouseGroup as apiDeleteWarehouseGroup, setAddressWarehouseGroup as apiSetAddressWarehouseGroup,
+    setWarehouseGroupHub as apiSetWarehouseGroupHub
+} from '../services/authService'
+import { getDemoAddress } from '../services/localRepository'
+import { STORAGE_KEYS } from '../constants/storageKeys'
+import { readJSON, writeJSON } from '../utils/storage'
+import { Outlet } from 'react-router-dom'
+
+export type WarehouseRole = 'none' | 'hub' | 'member' | 'nohub' | 'pending'
+
+export interface AddressContextValue {
+    addresses: Address[]
+    selectedAddress: SelectedAddress | null
+    /** selectedAddress?.id ?? null — null = "Mẫu mặc định" của admin (hoặc chưa chọn; các trang POS đã được RequireAddress chặn). */
+    addressId: UUID | null
+    setSelectedAddress: (addr: SelectedAddress | null) => void
+    createNewAddress: (name: string) => Promise<Address>
+    renameAddress: (addressId: UUID, newName: string) => Promise<Row>
+    setTables: (addressId: UUID, tables: string[]) => Promise<Row>
+    setPrinters: (addressId: UUID, printers: { counterPrinterIp?: string | null; kitchenPrinterIp?: string | null }) => Promise<Row>
+    removeAddress: (addressId: UUID) => Promise<void>
+    warehouseGroups: WarehouseGroup[]
+    /** addressId → các địa chỉ khác cùng nhóm kho tổng. */
+    siblingsByAddress: Record<string, Address[]>
+    createWarehouseGroup: (name: string) => Promise<UUID>
+    renameWarehouseGroup: (groupId: UUID, name: string) => Promise<void>
+    removeWarehouseGroup: (groupId: UUID) => Promise<void>
+    setAddressGroup: (addressId: UUID, groupId?: UUID | null) => Promise<void>
+    /** addressId null → bỏ đặt kho tổng của nhóm. */
+    setGroupHub: (groupId: UUID, addressId?: UUID | null) => Promise<void>
+    /** Vai trò của địa chỉ đang chọn trong nhóm kho chung (xem warehouseRole trong provider). */
+    warehouseRole: WarehouseRole
+    loading: boolean
+    fetchError: string | null
+}
+
+const AddressContext = createContext<AddressContextValue | null>(null)
+
+// ponytail: hook co-located with its Provider (standard context pattern) —
+// splitting into its own file isn't worth the diff for a fast-refresh (dev-only HMR) nag.
+// eslint-disable-next-line react-refresh/only-export-components
+export function useAddress() {
+    const ctx = useContext(AddressContext)
+    if (!ctx) throw new Error('useAddress must be used within AddressProvider')
+    return ctx
+}
+
+// Normalize a name for duplicate detection (trim + collapse spaces + lowercase)
+const normalizeName = (s?: string | null) => (s || '').trim().replace(/\s+/g, ' ').toLowerCase()
+
+// Cached selected-address object → lets the POS render on cold start without
+// waiting for the addresses network fetch (which can hang 5s behind the SW
+// NetworkFirst timeout on a flaky connection = "lag không bấm được order").
+const readCachedAddress = () => readJSON<SelectedAddress | null>(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, null)
+
+export function AddressProvider() {
+    const { profile, isGuest, hasSession } = useAuth()
+    const cachedAddress = readCachedAddress()
+    const [addresses, setAddresses] = useState<Address[]>([])
+    const [warehouseGroups, setWarehouseGroups] = useState<WarehouseGroup[]>([])
+    const [groupsLoaded, setGroupsLoaded] = useState(false) // false = chưa biết nhóm/kho tổng (xem warehouseRole 'pending')
+    const [selectedAddress, setSelectedAddressState] = useState<SelectedAddress | null>(() => (isGuest ? null : cachedAddress))
+    // Start unblocked when we already have a cached address — RequireAddress lets
+    // POS through immediately and the real list refetches in the background.
+    const [loading, setLoading] = useState(() => isGuest ? true : !cachedAddress)
+    const [fetchError, setFetchError] = useState<string | null>(null)
+
+    // Load addresses when profile is available. Synchronous setState in the
+    // guest/no-profile branches is an intentional init reset, not a cascade hazard.
+    useEffect(() => {
+        if (isGuest) {
+            const demo = getDemoAddress()
+            setAddresses([demo])
+            setSelectedAddressState(demo)
+            setWarehouseGroups([]) // grouping không áp dụng guest/local mode
+            setGroupsLoaded(true)
+            setLoading(false)
+            return
+        }
+
+        if (!profile?.id) {
+            setAddresses([])
+            setWarehouseGroups([])
+            setGroupsLoaded(true)
+            setLoading(false)
+            return
+        }
+
+        // profile có thể đến từ cache trong khi chưa có session — xem hasSession trong
+        // AuthContext. Giữ nguyên cache, effect chạy lại khi session về (hasSession ở deps).
+        if (!hasSession) {
+            setLoading(false)
+            return
+        }
+
+        let addressOwnerId = null
+        if (profile.role === 'admin') {
+            addressOwnerId = 'ALL'
+        } else if (profile.role === 'manager') {
+            // co-manager has manager_id pointing to the main manager
+            addressOwnerId = profile.manager_id || profile.id
+        } else {
+            addressOwnerId = profile.manager_id
+        }
+
+        if (!addressOwnerId && profile.role !== 'admin') {
+            setLoading(false)
+            return
+        }
+
+        // Only gate the UI when we have nothing to show yet. With a cached address
+        // the POS is already interactive; this fetch just reconciles in the background.
+        if (!selectedAddress) setLoading(true)
+        setFetchError(null)
+        fetchAddresses(addressOwnerId).then(({ data, error }) => {
+            if (error) {
+                // Network/RLS failure → keep any cached address so POS stays usable offline.
+                setFetchError(error.message || 'Không tải được danh sách địa chỉ')
+                setLoading(false)
+                return
+            }
+            const addrs = data || []
+            setAddresses(addrs)
+
+            if (addressOwnerId === 'ALL') {
+                setWarehouseGroups([]) // admin xem toàn hệ thống — nhóm kho tổng chỉ có ý nghĩa trong 1 manager
+                setGroupsLoaded(true)
+            } else {
+                fetchWarehouseGroups(addressOwnerId).then(({ data: groups }) => { setWarehouseGroups(groups || []); setGroupsLoaded(true) })
+            }
+
+            // "Mẫu mặc định" (id: null, admin-only) isn't a row in `addrs` — it can't be
+            // looked up by id, so the reconcile-with-server-list logic below would always
+            // "miss" and wrongly treat it as a deleted address. Keep it as-is instead.
+            if (cachedAddress?.id === null) {
+                setLoading(false)
+                return
+            }
+
+            // Restore previously selected address from localStorage
+            const savedId = localStorage.getItem(STORAGE_KEYS.SELECTED_ADDRESS)
+            const saved = addrs.find(a => a.id === savedId)
+            if (saved) {
+                setSelectedAddressState(saved)
+                writeJSON(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, saved)
+            } else if (addrs.length === 1) {
+                // Auto-select if only one address
+                setSelectedAddressState(addrs[0])
+                localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS, addrs[0].id)
+                writeJSON(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, addrs[0])
+            } else if (!saved && addrs.length) {
+                // Saved address genuinely no longer exists for this account → drop the
+                // stale selection + cache so RequireAddress sends the user to pick a
+                // valid one. (An empty result — likely a transient read — keeps the cache.)
+                if (cachedAddress) {
+                    setSelectedAddressState(null)
+                    localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS)
+                    localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ)
+                }
+            }
+
+            setLoading(false)
+        })
+        // ponytail: isGuest/cachedAddress/selectedAddress are read once as this-render
+        // snapshots (gating UI / one-time stale-cache cleanup), not live reactive state —
+        // every path that flips isGuest also updates `profile` (sync or one async hop via
+        // loadProfile), which already re-triggers this effect.
+        //
+        // Deps là 3 field nguyên thuỷ, KHÔNG phải object `profile`: loadProfile chạy vài lần
+        // lúc khởi động (finish + onAuthStateChange) và mỗi lần setProfile ra object mới dù
+        // dữ liệu y hệt → refetch addresses 4 lần, kéo theo stats RPC (~1.9s) + subscription
+        // chạy 4 lần. Chỉ 3 field này ảnh hưởng query bên dưới.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [profile?.id, profile?.role, profile?.manager_id, hasSession])
+
+    const setSelectedAddress = useCallback((addr: SelectedAddress | null) => {
+        setSelectedAddressState(addr)
+        if (addr) {
+            // addr.id is null for "Mẫu mặc định" (admin-only default template) — it isn't a
+            // real address, so skip the id-lookup cache key and session tracking for it.
+            if (addr.id) localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS, addr.id)
+            else localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS)
+            writeJSON(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, addr)
+            if (profile?.id && addr.id) {
+                upsertSession(profile.id, addr.id)
+                localStorage.setItem(STORAGE_KEYS.ACTIVE_USER_ID, profile.id)
+            }
+        } else {
+            localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS)
+            localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ)
+            localStorage.removeItem(STORAGE_KEYS.ACTIVE_USER_ID)
+        }
+    }, [profile])
+
+    const createNewAddress = useCallback(async (name: string) => {
+        if (isGuest) throw new Error('Vui lòng đăng ký tài khoản để tạo quán mới!')
+        if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể tạo địa chỉ')
+        const cleanName = (name || '').trim().replace(/\s+/g, ' ')
+        if (!cleanName) throw new Error('Tên địa chỉ không được để trống')
+        const norm = normalizeName(cleanName)
+        if (addresses.some(a => normalizeName(a.name) === norm)) {
+            throw new Error(`Địa chỉ "${cleanName}" đã tồn tại`)
+        }
+        // co-manager creates under main manager's id
+        const ownerId = profile.manager_id || profile.id
+        const newAddr = await apiCreateAddress(ownerId, cleanName)
+        setAddresses(prev => [...prev, newAddr])
+        return newAddr
+    }, [profile, addresses, isGuest])
+
+    // Khuôn chung "ghi API xong, phản chiếu vào addresses + selectedAddress (nếu đang chọn
+    // đúng địa chỉ đó) + cache localStorage" — rename/setTables/setPrinters/poll IP
+    // bên dưới đều cùng một khuôn này, gộp lại đỡ chép tay 4 lần. `patch` là object đủ field
+    // (rename/setTables/setPrinters — API trả cả row) hoặc chỉ vài cột (poll IP).
+    const syncAddressPatch = useCallback((addressId: UUID, patch: Row) => {
+        setAddresses(prev => prev.map(a => a.id === addressId ? { ...a, ...patch } : a))
+        setSelectedAddressState(prev => {
+            if (!prev || prev.id !== addressId) return prev
+            const updated = { ...prev, ...patch }
+            writeJSON(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, updated)
+            return updated
+        })
+    }, [])
+
+    const renameAddress = useCallback(async (addressId: UUID, newName: string) => {
+        if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
+        if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể sửa địa chỉ')
+        const cleanName = (newName || '').trim().replace(/\s+/g, ' ')
+        if (!cleanName) throw new Error('Tên địa chỉ không được để trống')
+        const norm = normalizeName(cleanName)
+        if (addresses.some(a => a.id !== addressId && normalizeName(a.name) === norm)) {
+            throw new Error(`Địa chỉ "${cleanName}" đã tồn tại`)
+        }
+        const updatedAddr = await apiUpdateAddress(addressId, cleanName)
+        syncAddressPatch(addressId, updatedAddr)
+        return updatedAddr
+    }, [profile, addresses, isGuest, syncAddressPatch])
+
+    // Danh sách bàn cố định. Mirror renameAddress: cùng guard quản lý — POS đọc
+    // addresses.tables từ cache localStorage nên lưới bàn vẽ được ngay lúc cold-start.
+    // Khách dùng thử cũng qua đây (profile giả là manager) — service tự ghi local.
+    const setTables = useCallback(async (addressId: UUID, tables: string[]) => {
+        if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể sửa danh sách bàn')
+        const updatedAddr = await apiSetAddressTables(addressId, tables)
+        syncAddressPatch(addressId, updatedAddr)
+        return updatedAddr
+    }, [profile, syncAddressPatch])
+
+    // IP máy in ESC/POS (quầy + bếp) cho app native. Cùng guard/cách đồng bộ như
+    // setTables ở trên.
+    const setPrinters = useCallback(async (addressId: UUID, printers: { counterPrinterIp?: string | null; kitchenPrinterIp?: string | null }) => {
+        if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
+        if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể sửa địa chỉ')
+        const updatedAddr = await apiSetAddressPrinters(addressId, printers)
+        syncAddressPatch(addressId, updatedAddr)
+        return updatedAddr
+    }, [profile, isGuest, syncAddressPatch])
+
+    // Đổi IP máy in ở máy A chỉ tự cập nhật selectedAddress ở CHÍNH máy A (xem setPrinters
+    // ở trên) — máy B ngồi cùng địa chỉ không có gì đẩy realtime, chỉ thấy IP mới sau khi
+    // tự fetchAddresses lại (đăng nhập lại / mở app). Poll nhẹ theo chu kỳ ở đây để máy B
+    // bắt kịp trong lúc vẫn đang mở app, không cần khởi động lại. Chỉ 3 cột, rẻ hơn hẳn
+    // fetchAddresses (select * toàn bộ danh sách) — xem fetchAddressPrinters.
+    useEffect(() => {
+        if (isGuest || !selectedAddress?.id) return
+        const id = selectedAddress.id
+        const tick = async () => {
+            if (document.hidden) return
+            const fresh = await fetchAddressPrinters(id)
+            if (!fresh) return
+            if (fresh.counter_printer_ip === selectedAddress.counter_printer_ip && fresh.kitchen_printer_ip === selectedAddress.kitchen_printer_ip) return
+            syncAddressPatch(id, { counter_printer_ip: fresh.counter_printer_ip, kitchen_printer_ip: fresh.kitchen_printer_ip })
+        }
+        const interval = setInterval(tick, 20000)
+        return () => clearInterval(interval)
+    }, [isGuest, selectedAddress?.id, selectedAddress?.counter_printer_ip, selectedAddress?.kitchen_printer_ip, syncAddressPatch])
+
+    const removeAddress = useCallback(async (addressId: UUID) => {
+        if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
+        if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể xóa địa chỉ')
+        await apiDeleteAddress(addressId)
+        setAddresses(prev => prev.filter(a => a.id !== addressId))
+        if (selectedAddress?.id === addressId) {
+            setSelectedAddressState(null)
+            localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS)
+            localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ)
+        }
+    }, [profile, selectedAddress, isGuest])
+
+    // Kho tổng dùng chung nhiều địa chỉ — 1 địa chỉ chỉ thuộc tối đa 1 nhóm (groupId=null = rời nhóm).
+    const createWarehouseGroup = useCallback(async (name: string) => {
+        if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
+        if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể tạo nhóm kho tổng')
+        const cleanName = (name || '').trim()
+        if (!cleanName) throw new Error('Tên nhóm không được để trống')
+        const ownerId = profile.manager_id || profile.id
+        const groupId = await apiUpsertWarehouseGroup(null, cleanName)
+        setWarehouseGroups(prev => [...prev, { id: groupId, manager_id: ownerId, name: cleanName, created_at: new Date().toISOString() }])
+        return groupId
+    }, [profile, isGuest])
+
+    const renameWarehouseGroup = useCallback(async (groupId: UUID, name: string) => {
+        if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
+        const cleanName = (name || '').trim()
+        if (!cleanName) throw new Error('Tên nhóm không được để trống')
+        await apiUpsertWarehouseGroup(groupId, cleanName)
+        setWarehouseGroups(prev => prev.map(g => g.id === groupId ? { ...g, name: cleanName } : g))
+    }, [isGuest])
+
+    const removeWarehouseGroup = useCallback(async (groupId: UUID) => {
+        if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
+        await apiDeleteWarehouseGroup(groupId)
+        setWarehouseGroups(prev => prev.filter(g => g.id !== groupId))
+        setAddresses(prev => prev.map(a => a.warehouse_group_id === groupId ? { ...a, warehouse_group_id: null } : a))
+    }, [isGuest])
+
+    // groupId=null → rời nhóm, kho tổng của địa chỉ này trở lại độc lập.
+    const setAddressGroup = useCallback(async (addressId: UUID, groupId?: UUID | null) => {
+        if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
+        await apiSetAddressWarehouseGroup(addressId, groupId ?? null)
+        setAddresses(prev => prev.map(a => a.id === addressId ? { ...a, warehouse_group_id: groupId ?? null } : a))
+    }, [isGuest])
+
+    // addressId null → bỏ đặt kho tổng của nhóm.
+    const setGroupHub = useCallback(async (groupId: UUID, addressId?: UUID | null) => {
+        if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
+        await apiSetWarehouseGroupHub(groupId, addressId ?? null)
+        setWarehouseGroups(prev => prev.map(g => g.id === groupId ? { ...g, hub_address_id: addressId ?? null } : g))
+    }, [isGuest])
+
+    // Vai trò của địa chỉ ĐANG CHỌN trong nhóm kho chung:
+    //   'none'  = không thuộc nhóm · 'hub' = kho tổng (nơi giữ hàng, chia hàng, nhập kho) · 'member' = chi nhánh nhận hàng
+    //   'nohub' = nhóm chưa đặt kho tổng (hành vi cũ, mọi thành viên bình đẳng) · 'pending' = danh sách nhóm chưa tải xong
+    // hub_address_id trỏ vào địa chỉ đã rời nhóm thì coi như chưa đặt.
+    const warehouseRole = useMemo((): WarehouseRole => {
+        const gid = selectedAddress?.warehouse_group_id
+        if (!gid) return 'none'
+        const group = warehouseGroups.find(g => g.id === gid)
+        // Admin không tải nhóm (xem toàn hệ thống) → đã "tải xong" nhưng rỗng: coi như chưa đặt kho tổng, đừng ẩn dải.
+        if (!group) return groupsLoaded ? 'nohub' : 'pending'
+        const hubOk = group.hub_address_id && addresses.some(a => a.id === group.hub_address_id && a.warehouse_group_id === gid)
+        if (!hubOk) return 'nohub'
+        return group.hub_address_id === selectedAddress.id ? 'hub' : 'member'
+    }, [selectedAddress, warehouseGroups, groupsLoaded, addresses])
+
+    // Địa chỉ "anh em" cùng nhóm kho tổng — dùng để hiển thị nhãn "Kho tổng chung với: X, Y".
+    const siblingsByAddress = useMemo(() => {
+        const map: Record<string, Address[]> = {}
+        for (const addr of addresses) {
+            if (!addr.warehouse_group_id) continue
+            map[addr.id] = addresses.filter(a => a.id !== addr.id && a.warehouse_group_id === addr.warehouse_group_id)
+        }
+        return map
+    }, [addresses])
+
+    const value = useMemo(() => ({
+        addresses,
+        selectedAddress,
+        addressId: selectedAddress?.id ?? null,
+        setSelectedAddress,
+        createNewAddress,
+        renameAddress,
+        setTables,
+        setPrinters,
+        removeAddress,
+        warehouseGroups,
+        siblingsByAddress,
+        createWarehouseGroup,
+        renameWarehouseGroup,
+        removeWarehouseGroup,
+        setAddressGroup,
+        setGroupHub,
+        warehouseRole,
+        loading,
+        fetchError
+    }), [addresses, selectedAddress, setSelectedAddress, createNewAddress, renameAddress, setTables, setPrinters, removeAddress, warehouseGroups, siblingsByAddress, createWarehouseGroup, renameWarehouseGroup, removeWarehouseGroup, setAddressGroup, setGroupHub, warehouseRole, loading, fetchError])
+
+    return (
+        <AddressContext.Provider value={value}>
+            <Outlet />
+        </AddressContext.Provider>
+    )
+}

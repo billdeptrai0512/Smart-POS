@@ -8,8 +8,54 @@ export type UUID = string
 // `Record` keeps call sites honest about "unknown shape" instead of pretending via `any`.
 export type Row = Record<string, any>
 
+/** Một dòng bảng `addresses` (chi nhánh). */
+export type Address = {
+    id: UUID
+    name: string
+    manager_id?: UUID | null
+    ingredient_sort_order?: string[] | null
+    tables?: string[] | null
+    warehouse_group_id?: UUID | null
+    counter_printer_ip?: string | null
+    kitchen_printer_ip?: string | null
+    created_at?: string
+} & Row
+
+/** Địa chỉ đang chọn: id = null là "Mẫu mặc định" của admin (hợp lệ, KHÁC với chưa chọn = null cả object). */
+export type SelectedAddress = Address | (Omit<Address, 'id'> & { id: null })
+
+/** Một dòng bảng `expense_categories` (nhãn chi phí). */
+export interface ExpenseCategory {
+    id: UUID
+    name: string
+    group_section?: string | null
+    sort_order?: number | null
+    is_default?: boolean
+}
+
+/** Một nguyên liệu trong danh mục (dòng ingredientConfigs: giá vốn, đơn vị, quy cách, tồn tối thiểu…). */
+export type IngredientConfig = Row & { ingredient: string }
+
+/** Một dòng bảng `products` — món bán, hoặc dòng "mục" (is_divider) chia nhóm menu. */
+export type Product = Row & { id: UUID; name: string; price: number; is_divider?: boolean; sort_order?: number | null }
+
+/** Nhóm nguyên liệu (ingredient_groups) — section 'main' | 'packaging' quyết định dòng "Mua bao bì" ở dòng tiền. */
+export interface IngredientGroup { id: UUID; name: string; section?: string; sort_order: number }
+
+/** Nhóm kho tổng dùng chung giữa các địa chỉ của một manager. */
+export interface WarehouseGroup { id: UUID; manager_id: UUID; name: string; created_at: string; hub_address_id?: UUID | null }
+
+/** Một dòng bảng `users` (profile của người đăng nhập). Các cột khác đọc qua Row. */
+export type Profile = {
+    id: string
+    name: string
+    role: 'admin' | 'manager' | 'co-manager' | 'staff' | string
+    email?: string | null
+    username?: string
+} & Row
+
 /** An extra option (size/đường/đá...) selected on a cart line — a `product_extras` row. */
-interface CartExtra {
+export interface CartExtra {
     id: string
     name: string
     price: number
@@ -18,7 +64,7 @@ interface CartExtra {
 
 /** A topping selected on a cart line — a `toppings` row (global entity, own id space,
  *  attached to many products via `product_toppings`; separate from CartExtra). */
-type CartTopping = Omit<CartExtra, 'is_sticky'>
+export type CartTopping = Omit<CartExtra, 'is_sticky'>
 
 /** A single line in the POS cart (see POSContext.handleAddItem). */
 export interface CartItem {
@@ -92,3 +138,6 @@ export interface TodayStats {
 
 /** Map of cartItemId → snapshot unit COGS for an order. */
 export type CostPerItem = Record<string, number>
+
+/** `error` của một phản hồi supabase-js (PostgREST) — chỉ phần code/message mà service soi tới. */
+export type SupabaseError = { code?: string; message?: string; details?: string } | null

@@ -1,0 +1,41 @@
+import type { ReactNode } from 'react'
+import { ChevronDown } from 'lucide-react'
+
+// Khung card thu gọn/mở rộng dùng chung cho khu Tồn kho (Soạn / Hao hụt / Chuẩn bị).
+// Controlled: `open` + `onToggle` do parent giữ — parent chạy accordion (mỗi lúc mở 1 card,
+// mặc định mở card của bước hiện tại trong flow). `count` là chuỗi nhỏ cạnh chevron (vd "4/4").
+interface Props {
+    icon?: ReactNode
+    title: string
+    titleExtra?: ReactNode
+    count?: number | string | null
+    open: boolean
+    onToggle: () => void
+    borderClass?: string
+    children: ReactNode
+}
+
+export default function CollapsibleCard({ icon, title, titleExtra, count, open, onToggle, borderClass = 'border-border/60', children }: Props) {
+    return (
+        <div className={`bg-surface rounded-[20px] p-3 border ${borderClass} shadow-sm`}>
+            <button
+                type="button"
+                onClick={onToggle}
+                className={`w-full flex items-center justify-between gap-2 ${open ? 'mb-3' : ''}`}
+            >
+                <div className="flex items-center gap-1.5">
+                    {icon}
+                    <span className="text-[12px] font-black uppercase tracking-widest text-text">{title}</span>
+                    {titleExtra}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                    {count != null && (
+                        <span className="text-[11px] font-bold text-text-secondary tabular-nums">{count}</span>
+                    )}
+                    <ChevronDown size={16} className={`text-text-dim transition-transform ${open ? 'rotate-180' : ''}`} />
+                </div>
+            </button>
+            {open && children}
+        </div>
+    )
+}

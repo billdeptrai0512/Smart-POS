@@ -12,12 +12,12 @@ sửa/thêm 1 phase thì sửa ở đâu?"*
 if (!isGuest || !addressId || !loaded) return null
 ```
 
-[OnboardingGuide.jsx](../src/components/common/onboarding/OnboardingGuide.jsx) chỉ render khi
-`isGuest === true` (xem [AuthContext](../src/contexts/AuthContext.jsx)). User đã đăng nhập thật
+[OnboardingGuide.tsx](../src/components/common/onboarding/OnboardingGuide.tsx) chỉ render khi
+`isGuest === true` (xem [AuthContext](../src/contexts/AuthContext.tsx)). User đã đăng nhập thật
 không bao giờ thấy widget này — đây là quyết định có chủ đích (commit `4cd8cd1`), không phải bug.
 
 Widget được mount **một lần duy nhất** ở layout level (`OnboardingLayout` trong
-[App.jsx](../src/App.jsx)), không phải mỗi trang tự gắn. Trang nào có UI đáy màn hình riêng
+[App.tsx](../src/App.tsx)), không phải mỗi trang tự gắn. Trang nào có UI đáy màn hình riêng
 (FAB, thanh Hủy/Lưu của sort-mode...) tự che/dịch guide qua
 [`useOnboardingVisibility()`](../src/contexts/OnboardingVisibilityContext.jsx) (`setHidden`,
 `setBottomOffset`) thay vì unmount guide.
@@ -28,7 +28,7 @@ Widget được mount **một lần duy nhất** ở layout level (`OnboardingLa
 
 ```
 src/components/common/onboarding/
-├── OnboardingGuide.jsx     ← shell: fetch data dùng chung, chọn phase active, render khung/pill
+├── OnboardingGuide.tsx     ← shell: fetch data dùng chung, chọn phase active, render khung/pill
 ├── ChecklistRow.jsx        ← 1 dòng checklist dùng chung (label + tick)
 └── steps/
     ├── orderStep.jsx             (1) Tạo đơn
@@ -39,8 +39,8 @@ src/components/common/onboarding/
     └── ingredientSetupStep.jsx   (6) Cài đặt nguyên liệu — phase CUỐI CÙNG
 ```
 
-Khi xong cả 6 phase, `OnboardingGuide.jsx` không unmount nữa — nó chuyển sang render
-`FINISHED_STEP` (khai báo ngay trong `OnboardingGuide.jsx`, không phải 1 file `steps/` vì
+Khi xong cả 6 phase, `OnboardingGuide.tsx` không unmount nữa — nó chuyển sang render
+`FINISHED_STEP` (khai báo ngay trong `OnboardingGuide.tsx`, không phải 1 file `steps/` vì
 không gắn với `done()`/`ctx` nào): panel với CTA "Đăng ký tài khoản" → `/signup`.
 
 Mỗi file trong `steps/` export **default 1 object**:
@@ -61,7 +61,7 @@ xuống cho `done()` và `<Body>` của **mọi** phase — không phải mỗi 
 
 Muốn sửa nội dung/điều kiện của 1 phase → chỉ sửa đúng 1 file trong `steps/`, không đụng shell.
 Muốn thêm phase 7 → thêm file mới theo khuôn trên rồi chèn vào mảng `STEPS` trong
-`OnboardingGuide.jsx`.
+`OnboardingGuide.tsx`.
 
 ---
 
@@ -88,11 +88,11 @@ thật (gõ/chuyển tab/giữ item) chứ không phải bước submit sau đó
 
 | # | Phase | File | Điều kiện done | Trigger ghi cờ |
 |---|---|---|---|---|
-| 1 | Tạo đơn | `orderStep.jsx` | `orderProgress.sent` (số đơn đã gửi thật, 0–2): **đơn 1** = Cà phê sữa; **đơn 2** = Bạc xỉu (Ít ngọt) + Cacao Cà Phê (Lớn) + Matcha Cà Phê (Lớn + Hơi ngọt). Dòng 1 done khi `sent > 0`, 3 dòng sau done khi `sent > 1`. Chỉ `sent` được lưu — "đơn hiện tại đủ món chưa" suy thẳng từ giỏ (bảng `ORDERS` trong hook, cũng là nguồn của hint); gửi đơn thiếu món thì không tăng `sent`. `viewedHistory` không gate bước này (chỉ lái hint sang phase 2) | [useOrderOnboardingProgress.js](../src/hooks/useOrderOnboardingProgress.js), viết từ `POSPage.jsx` |
-| 2 | Nhật ký | `journalStep.jsx` | `journalProgress`: xem tab Thu nhập + Chi phí + Báo cáo (tab bar `/history`) | `HistoryPage.jsx`, viết khi đổi tab |
-| 3 | Báo cáo dòng tiền | `cashReportStep.jsx` | `cashFlowProgress`: đã **lưu** "Thực thu" với ô Tiền mặt VÀ ô Chuyển khoản đều có gõ gì đó (độc lập, không theo thứ tự) | `DailyReportPage.jsx`, viết trong `handleSaveCashflow` sau khi lưu thành công |
-| 4 | Báo cáo tồn kho | `inventoryStep.jsx` | `inventoryProgress`: đã **lưu** kiểm kê tồn kho với Cuối kỳ có gõ gì đó cho nguyên liệu "Cà phê" và "Cacao" (match theo label, không hardcode key), mỗi cái tính riêng | `DailyReportPage.jsx`, viết trong callback sau khi lưu kiểm kê thành công |
-| 5 | Điều chỉnh công thức | `recipeStep.jsx` | `recipeProgress`: đã điền định lượng (`amount > 0`) VÀ tạo "tùy chọn thêm" cho đúng công thức "Cà phê đen" (match theo tên món). Không có nút nav riêng trong panel guide — xem hint mũi tên header ngay dưới | `RecipeIngredientPage.jsx`, render-time-adjust theo `prodRecipes`/`extras` |
+| 1 | Tạo đơn | `orderStep.jsx` | `orderProgress.sent` (số đơn đã gửi thật, 0–2): **đơn 1** = Cà phê sữa; **đơn 2** = Bạc xỉu (Ít ngọt) + Cacao Cà Phê (Lớn) + Matcha Cà Phê (Lớn + Hơi ngọt). Dòng 1 done khi `sent > 0`, 3 dòng sau done khi `sent > 1`. Chỉ `sent` được lưu — "đơn hiện tại đủ món chưa" suy thẳng từ giỏ (bảng `ORDERS` trong hook, cũng là nguồn của hint); gửi đơn thiếu món thì không tăng `sent`. `viewedHistory` không gate bước này (chỉ lái hint sang phase 2) | [useOrderOnboardingProgress.ts](../src/hooks/useOrderOnboardingProgress.ts), viết từ `POSPage.tsx` |
+| 2 | Nhật ký | `journalStep.jsx` | `journalProgress`: xem tab Thu nhập + Chi phí + Báo cáo (tab bar `/history`) | `HistoryPage.tsx`, viết khi đổi tab |
+| 3 | Báo cáo dòng tiền | `cashReportStep.jsx` | `cashFlowProgress`: đã **lưu** "Thực thu" với ô Tiền mặt VÀ ô Chuyển khoản đều có gõ gì đó (độc lập, không theo thứ tự) | `DailyReportPage.tsx`, viết trong `handleSaveCashflow` sau khi lưu thành công |
+| 4 | Báo cáo tồn kho | `inventoryStep.jsx` | `inventoryProgress`: đã **lưu** kiểm kê tồn kho với Cuối kỳ có gõ gì đó cho nguyên liệu "Cà phê" và "Cacao" (match theo label, không hardcode key), mỗi cái tính riêng | `DailyReportPage.tsx`, viết trong callback sau khi lưu kiểm kê thành công |
+| 5 | Điều chỉnh công thức | `recipeStep.jsx` | `recipeProgress`: đã điền định lượng (`amount > 0`) VÀ tạo "tùy chọn thêm" cho đúng công thức "Cà phê đen" (match theo tên món). Không có nút nav riêng trong panel guide — xem hint mũi tên header ngay dưới | `RecipeIngredientPage.tsx`, render-time-adjust theo `prodRecipes`/`extras` |
 | 6 | Cài đặt nguyên liệu (CUỐI CÙNG) | `ingredientSetupStep.jsx` | Đủ cả **4 việc** trên đúng 1 ingredient mẫu "Cà phê": Tồn kho cuối ngày (`warehouse_stock_set`) + Quy đổi (`pack_size`+`pack_unit`) + Tồn kho tối thiểu (`min_stock != null`) + Khối lượng bì (`tare_weight > 0`) — xem `nextIngredientSetupField()` | `warehouse_stock_set` từ RPC `fetchIngredientStocks()`; 3 field còn lại đọc thẳng `ingredientConfigs` (không fetch thêm) |
 
 > [!IMPORTANT]
@@ -109,42 +109,42 @@ thật (gõ/chuyển tab/giữ item) chứ không phải bước submit sau đó
 
 Song song với "done" gate, `OnboardingGuide` còn spotlight UI element kế tiếp cần bấm/gõ qua class
 CSS `onboarding-hint` (animation ở `src/index.css`) — xem
-[onboardingHint.js](../src/utils/onboardingHint.js) (`onboardingHintClass`, `norm`,
+[onboardingHint.ts](../src/utils/onboardingHint.ts) (`onboardingHintClass`, `norm`,
 `nextIngredientSetupField`). Mỗi trang tự tính hint boolean cục bộ từ đúng `*Progress`
 object/helper của phase đang active trên trang đó (ví dụ `CashFlowCard`/`InventoryReportCard`/
-`ReportViewFilter` ở `DailyReportPage.jsx`; `ProductCard` ở `RecipeMenuPage.jsx` + phần
-`FastIngredientFill`/`ExtrasSection` ở `RecipeIngredientPage.jsx`; `IngredientCostItem` ở
-`IngredientManagementPage.jsx` (hint cả thẻ) + `QtyRow`/`PackRow`/`MinStockRow`/`TareRow` ở
-`IngredientDetailsTab.jsx` (hint từng field, đi theo đúng thứ tự
+`ReportViewFilter` ở `DailyReportPage.tsx`; `ProductCard` ở `RecipeMenuPage.tsx` + phần
+`FastIngredientFill`/`ExtrasSection` ở `RecipeIngredientPage.tsx`; `IngredientCostItem` ở
+`IngredientManagementPage.tsx` (hint cả thẻ) + `QtyRow`/`PackRow`/`MinStockRow`/`TareRow` ở
+`IngredientDetailsTab.tsx` (hint từng field, đi theo đúng thứ tự
 `nextIngredientSetupField` trả về)), không đọc từ `ctx` của `OnboardingGuide` (2 component khác
 nhau, chỉ chia sẻ qua `localStorage`/`ingredientConfigs`).
 
 Phase 5 là ca đặc biệt: không có nút "Đi tới ..." riêng trong panel guide (không set `navLabel`).
 Thay vào đó, mũi tên "tiến" có sẵn ở `HistoryHeader` (nút `onForward`, dùng chung bởi
-`/history` và `/daily-report`, đi xuyên page theo [menuSequence.js](../src/utils/menuSequence.js))
+`/history` và `/daily-report`, đi xuyên page theo [menuSequence.ts](../src/utils/menuSequence.ts))
 được gắn hint (`hintForward` prop) khi phase 4 đã xong nhưng phase 5 thì chưa — tính ở
-`DailyReportPage.jsx`/`HistoryPage.jsx` (dùng chung công thức qua `isRecipeStepActive`, export từ
+`DailyReportPage.tsx`/`HistoryPage.tsx` (dùng chung công thức qua `isRecipeStepActive`, export từ
 `recipeStep.jsx`). Bấm mũi tên đó đưa thẳng tới `/recipes`, nơi
 `ProductCard`/`FastIngredientFill`/`ExtrasSection` tiếp quản chuỗi hint.
 
 Phase 6 vẫn giữ nút "Đi tới nguyên liệu" (`to: '/ingredients'`) trong panel guide, vì
-`menuSequence.js` không có stop cho `/ingredients` (mũi tên header chỉ đi qua `/history` ↔
+`menuSequence.ts` không có stop cho `/ingredients` (mũi tên header chỉ đi qua `/history` ↔
 `/recipes`). Tới `/ingredients`, thẻ "Cà phê" tự sáng (`hintCoffee` trong
-`IngredientManagementPage.jsx`); bấm vào, trang chi tiết hint lần lượt từng field theo thứ tự
+`IngredientManagementPage.tsx`); bấm vào, trang chi tiết hint lần lượt từng field theo thứ tự
 `nextIngredientSetupField` trả về.
 
 ---
 
 ## 5. `ctx` — dữ liệu shell truyền xuống từng phase
 
-Build trong `OnboardingGuide.jsx` mỗi lần render (sau khi `reload()` fetch xong):
+Build trong `OnboardingGuide.tsx` mỗi lần render (sau khi `reload()` fetch xong):
 
 ```js
 const ctx = { ...local, stockProgress, coffeeConfig }
 ```
 
 `local` = toàn bộ object đọc từ `localStorage` (`onboarding_v4_<addressId>`, xem
-[onboardingStorage.js](../src/utils/onboardingStorage.js)): `orderProgress`, `journalProgress`,
+[onboardingStorage.ts](../src/utils/onboardingStorage.ts)): `orderProgress`, `journalProgress`,
 `cashFlowProgress`, `inventoryProgress`, `recipeProgress`, `collapsed`.
 
 `coffeeConfig` = `findCoffeeIngredient(ingredientConfigs)` — nguyên object config (pack/min_stock/
@@ -155,7 +155,7 @@ cần fetch riêng**. `stockProgress = { coffeeWarehouseSet }` là phần DUY NH
 `reload()` gọi **1 API duy nhất** (`fetchIngredientStocks`), chạy lại khi: đổi `addressId`, đổi
 `coffeeConfig` (tức đổi `ingredientConfigs`), tab quay lại foreground (`visibilitychange`), hoặc
 trang khác gọi `requestRefresh()` từ `useOnboardingVisibility()` sau khi vừa ghi 1 `*Progress` cờ
-(qua [useOnboardingProgressPersist.js](../src/hooks/useOnboardingProgressPersist.js), shared bởi
+(qua [useOnboardingProgressPersist.ts](../src/hooks/useOnboardingProgressPersist.ts), shared bởi
 phase 1-5). Phase 1-5 tự đọc/ghi `*Progress` trực tiếp trong `local` — không qua fetch riêng.
 Phase 6 không có `*Progress` riêng — done gate đọc thẳng `coffeeConfig` + `stockProgress`.
 

@@ -1,0 +1,219 @@
+import { useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { X } from 'lucide-react'
+import { Dialog } from '../common/ModalShell'
+import { useProducts } from '../../contexts/ProductContext'
+import { useAddress } from '../../contexts/AddressContext'
+import { useToast } from '../../hooks/useToast'
+import Toast from '../POSPage/Toast'
+import { parseWorkbook, resolveImportPlan, commitImportPlan } from '../../services/importService'
+import { downloadCurrentDataExcel } from '../../services/exportService'
+
+// Nhập liệu hàng loạt từ 1 file Excel (mẫu ở public/templates/mau-nhap-lieu.xlsx) — mở từ
+// "+ Tạo công thức" ở RecipeMenuPage thay vì 1 trang riêng. 2 cột trái/phải (tải mẫu | chọn
+// file), kết quả xem trước (resolveImportPlan, thuần, chưa ghi gì) hiện full-width bên dưới
+// sau khi chọn file, xác nhận mới thật sự ghi (commitImportPlan).
+export default function ExcelImportModal({ onClose }: { onClose: () => void }) {
+    const {
+        products, toppings, ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups,
+        recipes, productToppings, productExtras, extraIngredients, discountPrograms, productDiscounts, refreshProducts,
+    } = useProducts()
+    const { addressId, selectedAddress } = useAddress()
+    const { toast, showToast, showError } = useToast()
+    const fileInputRef = useRef<HTMLInputElement>(null)
+
+    const [fileName, setFileName] = useState('')
+    const [result, setResult] = useState<ReturnType<typeof resolveImportPlan> | null>(null)
+    const [committing, setCommitting] = useState(false)
+    const [exporting, setExporting] = useState(false)
+
+    // Dữ liệu ĐÃ CÓ, dùng để khớp tên khi xem trước lẫn khi xuất — Extras key theo
+    // productId nội bộ nên cần join sang tên món ở đây (importService chỉ biết tên).
+    const existing = useMemo(() => {
+        const productById = new Map(products.map(p => [p.id, p.name]))
+        const extras = Object.entries(productExtras).flatMap(([productId, exs]) =>
+            exs.map(e => ({ id: e.id, productName: productById.get(productId) || '', name: e.name }))
+        )
+        return { products, toppings, ingredientCosts, extras, discountPrograms }
+    }, [products, toppings, ingredientCosts, productExtras, discountPrograms])
+
+    async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0]
+        e.target.value = '' // cho phép chọn lại đúng file đó lần sau (VD sau khi sửa lỗi)
+        if (!file) return
+        try {
+            const buf = await file.arrayBuffer()
+            const parsed = parseWorkbook(buf)
+            setResult(resolveImportPlan(parsed, existing))
+            setFileName(file.name)
+        } catch (err) {
+            showError(err, 'Đọc file Excel')
+        }
+    }
+
+    async function handleCommit() {
+        if (!result || result.blockingErrors.length > 0 || committing) return
+        setCommitting(true)
+        try {
+            await commitImportPlan(result.plan, addressId, existing)
+            await refreshProducts()
+            showToast('Đã nhập dữ liệu thành công', 'success')
+            setResult(null)
+            setFileName('')
+        } catch (err) {
+            // Import không chạy trong 1 transaction — lỗi giữa chừng có thể đã ghi được 1 phần
+            // (VD tạo xong vài sản phẩm/tùy chọn rồi mới rớt mạng). Đồng bộ lại state rồi buộc
+            // chọn lại file: preview lần sau sẽ resolveImportPlan trên dữ liệu MỚI NHẤT, nên
+            // phần đã ghi thành công tự rơi vào nhánh "cập nhật" thay vì bị tạo trùng khi bấm lại.
+            await refreshProducts().catch(() => { })
+            setResult(null)
+            showError(err, 'Nhập liệu Excel')
+            showToast('1 phần dữ liệu có thể đã được ghi — chọn lại file rồi nhập lại để tự bổ sung phần còn thiếu, không bị trùng', 'warning')
+        } finally {
+            setCommitting(false)
+        }
+    }
+
+    async function handleExport() {
+        if (exporting) return
+        setExporting(true)
+        try {
+            await downloadCurrentDataExcel({
+                addressName: selectedAddress?.name,
+                products, toppings, ingredientConfigs, ingredientGroups, ingredientUnits,
+                recipes, productToppings, productExtras, extraIngredients, discountPrograms, productDiscounts,
+            })
+        } catch (err) {
+            showError(err, 'Xuất Excel')
+        } finally {
+            setExporting(false)
+        }
+    }
+
+    const summary: [number, string][] = result ? ([
+        [result.plan.dividers.length, 'danh mục mới'],
+        [result.plan.layout.filter(l => !l.divider).length, 'món được xếp theo danh mục'],
+        [result.plan.products.length, 'sản phẩm mới'],
+        [result.plan.productUpdates.length, 'sản phẩm cập nhật giá'],
+        [result.plan.ingredients.length, 'nguyên liệu mới'],
+        [result.plan.ingredientUpdates.length, 'nguyên liệu cập nhật giá/đơn vị'],
+        [result.plan.recipes.length, 'dòng công thức'],
+        [result.plan.toppings.length, 'topping mới'],
+        [result.plan.toppingUpdates.length, 'topping cập nhật giá'],
+        [result.plan.toppingIngredients.length, 'dòng công thức topping'],
+        [result.plan.extras.length, 'tùy chọn thêm mới'],
+        [result.plan.extraUpdates.length, 'tùy chọn thêm cập nhật'],
+        [result.plan.extraIngredients.length, 'dòng công thức tùy chọn'],
+        [result.plan.toppingLinks.reduce((s, l) => s + l.productNames.length, 0), 'liên kết topping-món'],
+        [result.plan.discounts.length, 'chương trình giảm giá mới'],
+        [result.plan.discountUpdates.length, 'chương trình giảm giá cập nhật'],
+        [result.plan.discountLinks.reduce((s, l) => s + l.productNames.length, 0), 'liên kết giảm giá-món'],
+    ] as [number, string][]).filter(([n]) => n > 0) : []
+
+    const removals: [string[], string][] = result ? ([
+        [result.plan.removals.products, 'món'],
+        [result.plan.removals.dividers, 'danh mục'],
+        [result.plan.removals.toppings, 'topping'],
+        [result.plan.removals.extras, 'tùy chọn thêm'],
+        [result.plan.removals.discounts, 'chương trình giảm giá'],
+    ] as [string[], string][]).filter(([items]) => items.length > 0) : []
+
+    return (
+        <Dialog onClose={() => !committing && onClose()} panelClassName="w-full max-w-xl mx-4 max-h-[85dvh] flex flex-col bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
+            <Toast toast={toast} />
+
+            <div className="shrink-0 flex items-center justify-between px-5 pt-5 pb-3 border-b border-border/60">
+                <span className="text-[16px] font-black text-text">Nhập liệu Excel</span>
+                <button
+                    onClick={() => !committing && onClose()}
+                    className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text transition-all"
+                >
+                    <X size={16} />
+                </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+                <div className="grid grid-cols-2 gap-3">
+                    <a
+                        href="/templates/mau-nhap-lieu.xlsx"
+                        download
+                        className="flex flex-col items-center justify-center text-center gap-1 py-6 px-3 text-[13px] text-primary/80 hover:text-primary font-medium bg-surface-light border border-border/60 rounded-[16px] transition-colors"
+                    >
+                        <span className="font-black">Tải file mẫu</span>
+                        <span className="text-[11px] text-text-secondary">mau-nhap-lieu.xlsx</span>
+                    </a>
+
+                    <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex flex-col items-center justify-center text-center gap-1 py-6 px-3 text-[13px] text-text-secondary font-bold bg-surface-light border border-dashed border-border rounded-[16px] hover:bg-border/20 transition-colors"
+                    >
+                        <span className="font-black">+ Chọn file đã điền</span>
+                        {fileName && <span className="text-[11px] text-text-secondary/80 line-clamp-1 break-all px-1">{fileName}</span>}
+                    </button>
+                    <input ref={fileInputRef} type="file" accept=".xlsx" onChange={handleFileChange} className="hidden" />
+                </div>
+
+                <button
+                    onClick={handleExport}
+                    disabled={exporting}
+                    className="w-full py-2.5 text-[12px] text-text-secondary hover:text-primary font-bold bg-surface-light border border-border/60 rounded-[14px] transition-colors disabled:opacity-50"
+                >
+                    {exporting ? 'Đang xuất...' : 'Xuất dữ liệu hiện tại ra Excel (để sửa rồi nạp lại)'}
+                </button>
+
+                {result && (
+                    <div className="flex flex-col gap-3">
+                        {summary.length > 0 && (
+                            <div className="space-y-1">
+                                {summary.map(([n, label]) => (
+                                    <p key={label} className="text-[13px] font-bold text-success">Sẽ tạo {n} {label}</p>
+                                ))}
+                            </div>
+                        )}
+
+                        {Object.values(result.plan.replace).some(Boolean) && (
+                            <div className="space-y-1 bg-danger-soft border border-danger/20 rounded-[12px] p-3">
+                                <p className="text-[12px] font-black text-danger uppercase">Ghi đè toàn bộ theo file</p>
+                                <p className="text-[12px] text-danger">Món, danh mục, topping, tùy chọn, công thức, chương trình giảm giá và các liên kết không có trong file sẽ bị xoá khỏi địa chỉ này. Sheet không có trong file thì giữ nguyên. Nguyên liệu không bị xoá.</p>
+                                {removals.map(([items, label]) => (
+                                    <p key={label} className="text-[12px] text-danger font-bold">
+                                        Xoá {items.length} {label}: {items.join(', ')}
+                                    </p>
+                                ))}
+                            </div>
+                        )}
+
+                        {result.blockingErrors.length > 0 && (
+                            <div className="space-y-1 bg-danger-soft border border-danger/20 rounded-[12px] p-3">
+                                <p className="text-[12px] font-black text-danger uppercase">Lỗi cần sửa trong file ({result.blockingErrors.length})</p>
+                                {result.blockingErrors.map((e, i) => (
+                                    <p key={i} className="text-[12px] text-danger">{e}</p>
+                                ))}
+                            </div>
+                        )}
+
+                        {result.warnings.length > 0 && (
+                            <div className="space-y-1 bg-warning-soft border border-warning/20 rounded-[12px] p-3">
+                                <p className="text-[12px] font-black text-warning uppercase">Cảnh báo — vẫn nhập được ({result.warnings.length})</p>
+                                {result.warnings.map((w, i) => (
+                                    <p key={i} className="text-[12px] text-warning">{w}</p>
+                                ))}
+                            </div>
+                        )}
+
+                        {summary.length === 0 && result.blockingErrors.length === 0 && result.warnings.length === 0 && (
+                            <p className="text-[13px] text-text-secondary text-center py-2">File không có dòng dữ liệu nào.</p>
+                        )}
+
+                        <button
+                            onClick={handleCommit}
+                            disabled={result.blockingErrors.length > 0 || summary.length === 0 || committing}
+                            className="w-full py-3 rounded-[12px] bg-primary text-bg text-[14px] font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 uppercase"
+                        >
+                            {committing ? `Đang ghi ${summary.reduce((n, [c]) => n + c, 0)} mục lên máy chủ...` : 'Xác nhận nhập liệu'}
+                        </button>
+                    </div>
+                )}
+            </div>
+        </Dialog>
+    )
+}

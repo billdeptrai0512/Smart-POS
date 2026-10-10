@@ -1,10 +1,11 @@
 import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
 import type { UUID, Row } from '../types/domain'
+import type { RecipeRow } from '../utils/inventory'
 
 // Fetch all recipes from Supabase (Pure isolated by address)
-export async function fetchAllRecipes(addressId: UUID | null) {
-    if (localRepo.isGuest()) return localRepo.fetchLocalRecipes(addressId)
+export async function fetchAllRecipes(addressId: UUID | null): Promise<RecipeRow[]> {
+    if (localRepo.isGuest()) return localRepo.fetchLocalRecipes(addressId) as RecipeRow[]
     let query = supabase.from('recipes').select('product_id, ingredient, amount, unit, address_id')
 
     if (addressId) {
@@ -19,7 +20,7 @@ export async function fetchAllRecipes(addressId: UUID | null) {
         return []
     }
 
-    return data || []
+    return (data || []) as RecipeRow[]
 }
 
 // Upsert a recipe row (insert or update ingredient amount for a product)

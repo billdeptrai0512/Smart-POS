@@ -27,16 +27,16 @@ Bảng `extraIngredients` ngoài việc lưu nguyên liệu khách mua thêm, c�
      - Thẻ kho `Ly Lớn`: `amount: 1` (Sử dụng 1 Ly Lớn)
      - Thẻ kho `Ly Nhỏ`: `amount: -1` (Bù trừ âm 1 Ly Nhỏ của công thức gốc)
 
-### Cơ chế tính toán trong `src/utils/inventory.js`
+### Cơ chế tính toán trong `src/utils/inventory.ts`
 1. Thuật toán `calculateEstimatedConsumption` sẽ cộng dồn công thức món chính với hệ số nhân của các Extra khách hàng chọn (`amount * quantity`).
 2. Với bài toán up-size, thành phần `Ly Nhỏ` sẽ có giá trị: `(Công thức gốc) 1 + (Bù trừ) -1 = 0`. Thuật toán có bước dọn những nguyên liệu kết quả bằng 0 để giao diện sạch sẽ.
 3. Thuật toán `calculateItemCost` cũng lấy lượng bù trừ (cả âm và dương) nhân cho `ingredientCosts` (đơn giá vốn mỗi thẻ), tự động cân bằng ra **Giá vốn (COGS)** trọn vẹn của ly Size L một cách chính xác tuyệt đối.
 
 ## Cách Test Xác Nhận Logic
 
-Thư mục Unit Test và các file minh chứng mô phỏng nằm tại: `tests/inventory/inventory.test.js`
+Thư mục Unit Test và các file minh chứng mô phỏng nằm tại: `tests/inventory/inventory.test.ts`
 
 Để chạy mô phỏng, dùng lệnh:
 ```bash
-npx vitest run tests/inventory/inventory.test.js
+npx vitest run tests/inventory/inventory.test.ts
 ```

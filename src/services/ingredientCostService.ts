@@ -1,8 +1,6 @@
 import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
-import type { UUID, Row } from '../types/domain'
-
-type SupabaseError = { code?: string; message?: string } | null
+import type { UUID, Row, SupabaseError } from '../types/domain'
 
 // Fetch ingredient costs + units in one query, return both shapes
 export async function fetchIngredientCostsAndUnits(addressId: UUID | null) {
@@ -23,10 +21,8 @@ export async function fetchIngredientCostsAndUnits(addressId: UUID | null) {
     // rows DO NOT propagate to existing active addresses.
     const groupsPromise = fetchIngredientGroups(addressId)
     const cols = 'ingredient, unit_cost, unit, address_id, pack_size, pack_unit, pack2_size, pack2_unit, min_stock, min_counter_stock, category, count_in_audit, tare_weight, group_id'
-    const q = supabase.from('ingredient_costs').select(cols)
-    // .select(cols) with a dynamic column string (not a literal) makes supabase-js
-    // fall back to its GenericStringError type — cast to the real loose shape.
-    const { data, error } = await (addressId ? q.eq('address_id', addressId) : q.is('address_id', null)) as unknown as { data: Row[] | null; error: SupabaseError }
+    const q = supabase.from('ingredient_costs').select<string, Row>(cols) // cols là chuỗi động → khai báo hình dạng hàng, nếu không supabase-js rơi về GenericStringError
+    const { data, error } = await (addressId ? q.eq('address_id', addressId) : q.is('address_id', null))
     const groups = await groupsPromise
     if (error) {
         // Ném (không trả rỗng): ProductContext giữ cache + retry, thay vì ghi đè giá vốn/quy cách bằng {} rồi cache luôn.
@@ -146,15 +142,6 @@ export async function upsertIngredientCost(ingredient: string, unitCost: number,
         body = rest
         ;({ error } = await upsert(body))
     }
-    if (error) throw error
-}
-
-// Sửa giá vốn thủ công — đi qua RPC (không upsert thẳng) để giá vốn fan-out đúng khi địa chỉ
-// thuộc 1 warehouse group dùng chung kho tổng (xem set_ingredient_unit_cost). Guest/local mode
-// không có khái niệm nhóm nên giữ nguyên đường upsert local cũ.
-export async function updateIngredientUnitCost(ingredient: string, unitCost: number, addressId: UUID) {
-    if (localRepo.isGuest()) return localRepo.upsertLocalIngredientCost({ ingredient, unit_cost: unitCost, address_id: addressId })
-    const { error } = await supabase.rpc('set_ingredient_unit_cost', { p_address_id: addressId, p_ingredient: ingredient, p_unit_cost: unitCost })
     if (error) throw error
 }
 

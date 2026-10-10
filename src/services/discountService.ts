@@ -1,13 +1,14 @@
 import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
 import type { UUID, Row } from '../types/domain'
+import type { DiscountProgram } from '../utils/discountPrograms'
 
 // Chương trình giảm giá tự động theo lịch — thực thể toàn cục theo địa chỉ (không product_id),
 // gắn vào nhiều món qua discount_program_products. Mirrors toppingService.ts (Topping <->
 // product_toppings) — xem plan "Chương trình giảm giá tự động theo lịch".
 
-export async function fetchDiscountPrograms(addressId: UUID | null) {
-    if (localRepo.isGuest()) return localRepo.fetchLocalDiscountPrograms(addressId)
+export async function fetchDiscountPrograms(addressId: UUID | null): Promise<DiscountProgram[]> {
+    if (localRepo.isGuest()) return localRepo.fetchLocalDiscountPrograms(addressId) as DiscountProgram[]
     if (!addressId) return []
     const { data, error } = await supabase
         .from('discount_programs')
@@ -18,7 +19,7 @@ export async function fetchDiscountPrograms(addressId: UUID | null) {
         console.error('fetchDiscountPrograms error:', error)
         return []
     }
-    return data || []
+    return (data || []) as DiscountProgram[]
 }
 
 export async function insertDiscountProgram(payload: Row) {

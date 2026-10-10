@@ -1,0 +1,153 @@
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabaseClient'
+import { fetchMonetizationEnabled } from '../services/adminService'
+import { useAddress } from '../contexts/AddressContext'
+import { useAuth } from '../contexts/AuthContext'
+import { ALL_TIER } from '../constants/monetization'
+import { onTabReturn } from '../utils/tabVisibility'
+
+// app_config chỉ RLS cho role `authenticated` (xem 20260511_monetization_phase1.sql)
+// → nếu query bắn đi TRƯỚC KHI supabase-js gắn xong access token của session (ngay
+// lúc app vừa mount, trước khi AuthContext.hasSession=true), request đi bằng anon
+// key, RLS lọc ra [] (không phải lỗi) → _serverFlag cắm cứng thành false CẢ PHIÊN,
+// badge gói biến mất khỏi mọi card dù server đang bật thật. Gate bằng hasSession.
+
+// ─── Server kill switch (runtime, app_config) ────────────────────────────────
+//   Đọc 1 lần, cache module-level → mọi hook share chung 1 request (không spam DB).
+//   _serverFlag: undefined = chưa đọc; true/false = đã rõ.
+//   Lỗi đọc config → false (fail-open: KHÔNG gate ai, tránh khoá nhầm khách đã trả
+//   khi mạng/DB chập chờn). Flip ON/OFF = UPDATE app_config, KHÔNG cần redeploy.
+//   Lỗi trả `undefined` (≠ false "đã đọc, đang tắt") và KHÔNG cache promise hỏng:
+//   1 lần đọc lỗi mà cache lại thì cả phiên chạy như monetization tắt — badge gói
+//   biến mất trên mọi card và sort địa chỉ theo gói sai, tới khi user tự reload.
+//   Cache gắn với hasSession lúc đọc: guest đọc bằng anon key → RLS trả [] → false. Guest
+//   đăng ký/đăng nhập ngay trong tab (không reload) mà dùng lại cache đó thì badge gói biến
+//   mất khỏi mọi card tới khi F5 → đổi trạng thái đăng nhập là bỏ cache, đọc lại.
+let _serverFlag: boolean | undefined
+let _serverFlagPromise: Promise<boolean | undefined> | null = null
+let _serverFlagAuthed: boolean | undefined
+export function loadServerFlag(authed: boolean) {
+    if (_serverFlagPromise && _serverFlagAuthed === authed) return _serverFlagPromise
+    if (_serverFlagAuthed !== authed) _serverFlag = undefined
+    _serverFlagAuthed = authed
+    const p = fetchMonetizationEnabled()
+        .then((v) => {
+            // Lần đọc cũ (trạng thái đăng nhập trước) về muộn không được đè giá trị mới.
+            if (_serverFlagPromise === p) _serverFlag = v
+            return v
+        })
+        .catch(() => { if (_serverFlagPromise === p) _serverFlagPromise = null; return undefined })
+    _serverFlagPromise = p
+    return p
+}
+
+/**
+ * Trạng thái bật/tắt monetization — do server quyết (app_config.monetization_enabled).
+ * Dùng cho mọi quyết định hiển thị gate/badge/route monetization.
+ * @returns {{ enabled: boolean, loading: boolean }}
+ */
+export function useMonetizationEnabled() {
+    const { hasSession, isGuest } = useAuth()
+    const [flag, setFlag] = useState(_serverFlag)
+
+    useEffect(() => {
+        // Guest không có session thật (xem AuthContext) → sẽ không bao giờ authenticated,
+        // đọc thẳng bằng anon key cũng được (app_config không có gì nhạy cảm với guest).
+        if (!hasSession && !isGuest) return
+        // loadServerFlag() trả promise đã cache → nếu đã đọc xong, .then resolve ngay
+        // với giá trị cũ (React bỏ qua nếu không đổi). Không setState đồng bộ trong effect.
+        let cancelled = false
+        let retryId: ReturnType<typeof setTimeout> | undefined
+        const apply = (retry: boolean) => (v: boolean | undefined) => {
+            if (cancelled) return
+            // undefined = đọc lỗi → thử lại ĐÚNG 1 lần (promise hỏng đã bỏ cache ở trên).
+            // Mạng chết hẳn thì dừng ở đây, không quay vòng gọi DB.
+            if (v === undefined) {
+                if (retry) retryId = setTimeout(() => loadServerFlag(hasSession).then(apply(false)), 2000)
+            } else setFlag(v)
+        }
+        loadServerFlag(hasSession).then(apply(true))
+        // "Thử lại đúng 1 lần" ở trên chỉ cứu lần đọc đầu — hook này gắn ở các Provider
+        // mount 1 lần cho cả phiên (vd AddressStatsProvider bọc mọi route sau login),
+        // nên nếu cả 2 lần đó đều rớt mạng thì flag kẹt undefined/false SUỐT PHIÊN, không
+        // gì tự sửa (badge gói biến mất khỏi mọi card). Thêm onTabReturn để mỗi lần quay
+        // lại app là 1 cơ hội đọc lại, không cần đợi F5.
+        const offTabReturn = onTabReturn(() => loadServerFlag(hasSession).then(apply(true)))
+        return () => { cancelled = true; clearTimeout(retryId); offTabReturn() }
+    }, [hasSession, isGuest])
+
+    const loading = flag === undefined
+    const enabled = flag === true
+    return { enabled, loading }
+}
+
+/**
+ * Hook trả về quyền truy cập báo cáo của address đang chọn — 1 gói all-access
+ * duy nhất (xem docs/MONETIZATION.md §1: mô hình multi-module đã bỏ 2026-06-09),
+ * nên chỉ cần 1 boolean, không phải danh sách module.
+ *
+ * Bypass (hasAccess:true, không query) khi:
+ *   - monetization OFF (server app_config), HOẶC
+ *   - đang ở guest mode (Khách ghé thăm xem full tính năng), HOẶC
+ *   - đang ở "Mẫu mặc định" (id: null, admin-only playground) — không phải địa
+ *     chỉ trả phí thật nên không có (và không cần) hàng entitlement nào cho nó.
+ *
+ * Khi ON + không guest → query RPC get_address_entitlement, hasAccess = có
+ * hàng tier='all' còn hạn không.
+ *
+ * Trong lúc còn đọc server flag (configLoading) → trả loading:true (coi như có
+ * quyền) để KHÔNG nháy gate trước khi biết trạng thái thật.
+ *
+ * ⚠️ Rules of Hooks: hooks LUÔN được gọi — bypass chỉ bỏ qua effect logic,
+ *    KHÔNG return sớm trước hooks.
+ */
+export function useEntitlement() {
+    const { selectedAddress } = useAddress()
+    const { isGuest } = useAuth()
+    const { enabled, loading: configLoading } = useMonetizationEnabled()
+
+    // selectedAddress?.id === null (not undefined) ⇒ "Mẫu mặc định" đang được chọn
+    // (object có id, id=null) — phân biệt với "chưa chọn địa chỉ" (selectedAddress
+    // chính nó null/undefined ⇒ ?.id trả undefined).
+    const isDefaultTemplate = selectedAddress?.id === null
+    const bypass = !enabled || isGuest || isDefaultTemplate
+
+    const [state, setState] = useState({ hasAccess: false, loading: true })
+
+    useEffect(() => {
+        // Không query khi bypass, hoặc khi chưa biết server flag (tránh query thừa).
+        if (bypass || configLoading) return
+
+        if (!selectedAddress?.id) {
+            // Intentional reset when no address is selected — nothing to fetch.
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setState({ hasAccess: false, loading: false })
+            return
+        }
+
+        setState(prev => ({ ...prev, loading: true }))
+
+        supabase
+            .rpc('get_address_entitlement', { p_address_id: selectedAddress.id })
+            .then(({ data, error }) => {
+                if (error) {
+                    console.error('[useEntitlement] RPC error:', error)
+                    // Fail-open: lỗi mạng → không gate user (không phạt oan)
+                    setState({ hasAccess: true, loading: false })
+                    return
+                }
+                // RPC trả về rows { tier, valid_to } — 1 row tier='all' còn hạn = có quyền.
+                const rows = Array.isArray(data) ? data : (data ? [data] : [])
+                setState({ hasAccess: rows.some(r => r.tier === ALL_TIER), loading: false })
+            })
+    }, [bypass, configLoading, selectedAddress?.id])
+
+    // Bypass (monetization OFF hoặc guest) → có quyền.
+    // Khi đang load server flag → loading:true để KHÔNG nháy gate.
+    if (bypass) {
+        return { hasAccess: true, loading: configLoading, enabled }
+    }
+
+    return { ...state, enabled }
+}
+

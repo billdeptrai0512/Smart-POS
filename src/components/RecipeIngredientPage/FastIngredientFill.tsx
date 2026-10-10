@@ -1,0 +1,228 @@
+import { useState, useEffect, useMemo } from 'react'
+import { formatVND } from '../../utils'
+import { ingredientLabel } from '../../utils/ingredients'
+import { onboardingHintClass } from '../../utils/onboardingHint'
+import IngredientPicker from './IngredientPicker'
+
+export interface AddCustomPayload { keys: string[]; custom?: { key: string; unit: string; category: string } }
+
+interface Props {
+    entries: { ingredient: string; amount: number }[]
+    dbIngredients: string[]
+    getUnit: (ingredient: string) => string
+    categoryOf?: (ingredient: string) => string | null | undefined
+    ingredientCosts?: Record<string, number>
+    canEdit?: boolean
+    showCost?: boolean
+    allowNegative?: boolean
+    /** Có = đang vẽ extra: hiện tổng thực pha (định mức gốc + mức lệch). */
+    baseAmounts?: Record<string, number>
+    onSetAmount: (ingredient: string, amount: number, unit: string) => void
+    onRemove: (ingredient: string) => void
+    onAddCustom: (payload: AddCustomPayload) => void
+    hint?: boolean
+}
+
+const CATS = [
+    { key: 'main', label: 'Nguyên liệu chính' },
+    { key: 'packaging', label: 'Bao bì' },
+]
+
+// Compact fast-fill used by both the base recipe and each extra. Ingredients already
+// in use are single-line rows with an amount box; the rest are click chips grouped by
+// category — tap to add, then type the quantity. No name-typing in the daily flow.
+// Each category has its own "create new" so a brand-new ingredient lands in the right one.
+export default function FastIngredientFill({
+    entries, dbIngredients, getUnit, categoryOf = () => 'main',
+    ingredientCosts, canEdit, showCost = false, allowNegative = false,
+    baseAmounts, onSetAmount, onRemove, onAddCustom, hint = false,
+}: Props) {
+    const [revealed, setRevealed] = useState<Set<string>>(() => new Set()) // chip-tapped, not yet saved
+    const [creatingCat, setCreatingCat] = useState<string | null>(null) // 'main' | 'packaging' while typing a new name
+    const [addOpen, setAddOpen] = useState(false) // chip palette hidden until tapped — keeps the screen tidy
+
+    const amountByKey = useMemo(() => {
+        const m: Record<string, number> = {}
+        for (const e of entries) m[e.ingredient] = e.amount
+        return m
+    }, [entries])
+
+    // Rows = saved entries ∪ chip-revealed keys.
+    const rowKeys = useMemo(() => {
+        const set = new Set(entries.map(e => e.ingredient))
+        for (const k of revealed) set.add(k)
+        return [...set]
+    }, [entries, revealed])
+
+    const reveal = (k: string) => setRevealed(prev => new Set(prev).add(k))
+    const drop = (k: string) => setRevealed(prev => { const n = new Set(prev); n.delete(k); return n })
+
+    const available = dbIngredients.filter(k => !rowKeys.includes(k))
+    const itemsOf = (catKey: string) => available.filter(k =>
+        catKey === 'packaging' ? categoryOf(k) === 'packaging' : categoryOf(k) !== 'packaging')
+
+    return (
+        <div className="space-y-2">
+            <div className="space-y-1.5">
+                {rowKeys.map(k => (
+                    <FillRow
+                        key={k}
+                        ingredient={k}
+                        amount={amountByKey[k]}
+                        unit={getUnit(k)}
+                        unitCost={ingredientCosts?.[k] || 0}
+                        canEdit={canEdit}
+                        showCost={showCost}
+                        allowNegative={allowNegative}
+                        baseAmount={baseAmounts && (baseAmounts[k] ?? 0)}
+                        autoFocus={revealed.has(k) && !(amountByKey[k] != null)}
+                        onCommit={onSetAmount}
+                        onRemove={() => { onRemove(k); drop(k) }}
+                        hint={hint}
+                    />
+                ))}
+            </div>
+
+            {canEdit && !addOpen && (
+                <button onClick={() => setAddOpen(true)}
+                    className="text-[12px] border border-dashed border-border/70 text-text-secondary px-2.5 py-1.5 rounded-lg font-medium hover:text-primary hover:border-primary/50 transition-colors">
+                    + Thêm nguyên liệu / bao bì
+                </button>
+            )}
+
+            {canEdit && addOpen && CATS.map(cat => (
+                <div key={cat.key} className="space-y-1">
+                    <span className="text-[12px] text-text-secondary">{cat.label}</span>
+                    <div className="flex flex-wrap gap-1.5">
+                        {itemsOf(cat.key).map(k => (
+                            <button key={k} onClick={() => reveal(k)}
+                                className="text-[12px] border border-primary/20 bg-primary/10 text-primary px-2.5 py-1.5 rounded-lg font-medium hover:bg-primary/20 active:bg-primary/30 transition-colors">
+                                + {ingredientLabel(k)}
+                            </button>
+                        ))}
+                        <button onClick={() => setCreatingCat(cat.key)}
+                            className="text-[12px] border border-dashed border-border/70 text-text-secondary px-2.5 py-1.5 rounded-lg font-medium hover:text-primary hover:border-primary/50 transition-colors">
+                            + Tạo mới
+                        </button>
+                    </div>
+                    {creatingCat === cat.key && (
+                        <IngredientPicker
+                            availableIngredients={[]}
+                            existingIngredients={dbIngredients}
+                            label={`Tạo nguyên liệu mới · ${cat.label}`}
+                            onConfirm={(payload) => {
+                                const custom = payload.custom ? { ...payload.custom, category: cat.key } : undefined
+                                onAddCustom({ keys: payload.keys, custom })
+                                setCreatingCat(null)
+                            }}
+                            onCancel={() => setCreatingCat(null)}
+                        />
+                    )}
+                </div>
+            ))}
+
+            {canEdit && addOpen && (
+                <div className="flex justify-end">
+                    <button onClick={() => setAddOpen(false)}
+                        className="text-[12px] text-text-secondary px-1 py-0.5 font-medium hover:text-text transition-colors">
+                        Thu gọn
+                    </button>
+                </div>
+            )}
+        </div>
+    )
+}
+
+interface FillRowProps {
+    ingredient: string
+    amount?: number
+    unit: string
+    unitCost: number
+    canEdit?: boolean
+    showCost: boolean
+    allowNegative: boolean
+    baseAmount?: number
+    autoFocus: boolean
+    onCommit: Props['onSetAmount']
+    onRemove: () => void
+    hint?: boolean
+}
+
+function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowNegative, baseAmount, autoFocus, onCommit, onRemove, hint = false }: FillRowProps) {
+    // Khi có nút ±, dấu chỉ sống ở nút — ô số luôn là trị tuyệt đối, tránh đọc thành "− (−1)".
+    const toDraft = (a?: number | null) => a == null ? '' : String(allowNegative ? Math.abs(a) : a)
+    const [draft, setDraft] = useState(() => toDraft(amount))
+    const [negative, setNegative] = useState((amount || 0) < 0)
+    // Re-sync when the saved amount changes elsewhere (copy-from, context refresh).
+    // Intentional prop→state sync, not a cascade: only fires when `amount` itself changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    useEffect(() => { setDraft(toDraft(amount)); setNegative((amount || 0) < 0) }, [amount]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    const parseDraft = () => parseFloat(draft.replace(',', '.')) || 0 // VN keyboards send "0,5"
+    const signed = (n: number, neg: boolean) => neg ? -Math.abs(n) : n // gõ tay "-1" ở chế độ + vẫn ra âm
+
+    const commit = () => {
+        const v = signed(parseDraft(), negative)
+        if (v === (amount || 0)) return // unchanged — skip the write
+        onCommit(ingredient, v, unit)
+    }
+
+    const toggleSign = () => {
+        const next = !negative
+        setNegative(next)
+        const n = Math.abs(parseDraft())
+        if (n) onCommit(ingredient, next ? -n : n, unit) // ghi ngay: bấm nút không gây blur
+    }
+
+    const val = amount || 0
+
+    return (
+        <div className="flex items-center gap-2 max-[329px]:gap-1.5 px-3 max-[329px]:px-2 py-2 rounded-[12px] bg-surface-light">
+            <span className="flex-1 min-w-0 text-[13px] text-text truncate">{ingredientLabel(ingredient)}</span>
+            {allowNegative && canEdit && (
+                // ± toggle: bàn phím decimal trên mobile không có phím "-". Dùng cho extra
+                // "bớt nguyên liệu". preventDefault để không blur→commit khi bấm.
+                <button
+                    type="button"
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={toggleSign}
+                    className={`shrink-0 w-6 h-6 flex items-center justify-center rounded text-[14px] font-bold ${negative ? 'bg-danger/15 text-danger' : 'bg-primary/10 text-primary hover:bg-primary/20'}`}
+                    title="Đổi dấu âm/dương"
+                >
+                    {negative ? '−' : '+'}
+                </button>
+            )}
+            <input
+                type="text"
+                inputMode="decimal"
+                autoFocus={autoFocus}
+                value={draft}
+                disabled={!canEdit}
+                onChange={e => setDraft(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                onBlur={commit}
+                placeholder="—"
+                className={`w-[60px] max-[329px]:w-11 bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[13px] text-text text-right focus:outline-none focus:border-primary disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${onboardingHintClass(hint)}`}
+            />
+            {baseAmount != null ? (
+                // Tổng thực pha = định mức gốc + mức lệch của tùy chọn. Chỉ hiện ở extra;
+                // ô này mang luôn đơn vị nên hàng không lặp đơn vị lần nữa.
+                <span className="shrink-0 text-[11px] text-text-secondary tabular-nums">
+                    = {baseAmount + val} {unit}
+                </span>
+            ) : (
+                <span className="text-[11px] text-text-secondary w-6 shrink-0">{unit}</span>
+            )}
+            {showCost && (
+                <span className="text-[10px] text-text-dim tabular-nums w-[52px] text-right shrink-0">
+                    {val ? formatVND(val * unitCost) : ''}
+                </span>
+            )}
+            {canEdit && (
+                <button onClick={onRemove} className="text-danger/60 hover:text-danger text-[13px] shrink-0 w-5 flex items-center justify-center" title="Bỏ khỏi công thức">
+                    ✕
+                </button>
+            )}
+        </div>
+    )
+}

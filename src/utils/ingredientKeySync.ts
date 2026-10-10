@@ -1,0 +1,96 @@
+import { ingredientLabel } from './ingredients'
+
+/**
+ * Detect ingredient key mismatches across recipes / ingredient_costs / inventory_report
+ * AND extra-ingredient assignments. Pure function — no DB calls, no side effects.
+ *
+ * @param {Object} input
+ * @param {Array<{ingredient: string}>} input.recipes - base recipe rows
+ * @param {Object<string, number>} input.ingredientCosts - map key → unit_cost
+ * @param {Array<{ingredient: string}>} input.inventoryReport - latest shift_closing.inventory_report
+ * @param {Object<string, Array<{ingredient: string, extra_id?: string}>>} [input.extraIngredients]
+ *        Map extraId → list of extra-ingredient impacts. From ProductContext.
+ * @returns {{
+ *   orphanRecipeKeys: string[],          // keys in recipes but not in ingredient_costs
+ *   orphanInventoryKeys: string[],       // keys in inventory but not in ingredient_costs
+ *   orphanExtraIngredientKeys: string[], // keys assigned to extras but not in ingredient_costs
+ *   labelCollisions: Array<{ label: string, keys: string[] }>,  // same display label, different keys
+ *   hasIssues: boolean
+ * }}
+ */
+export function detectKeyMismatches({
+    recipes = [] as { ingredient?: string }[],
+    ingredientCosts = {} as Record<string, number>,
+    inventoryReport = [] as { ingredient?: string }[],
+    extraIngredients = {} as Record<string, { ingredient?: string }[]>,
+    ignoredKeys = null as Set<string> | string[] | null,   // orphan keys the user has chosen to suppress
+}) {
+    const recipeKeys    = new Set(recipes.map(r => r.ingredient).filter((k): k is string => !!k))
+    const costKeys      = new Set(Object.keys(ingredientCosts || {}))
+    const inventoryKeys = new Set((inventoryReport || []).map(i => i.ingredient).filter((k): k is string => !!k))
+    const ignored: Set<string> = ignoredKeys instanceof Set ? ignoredKeys : new Set(ignoredKeys || [])
+
+    // Flatten extra-ingredient assignments — each extra has [{ ingredient, ... }, ...].
+    // An orphan here is critical: hao hụt calc reads recipe + extra ingredients to estimate
+    // consumption; missing keys silently get cost=0 → mất tiền invisible.
+    const extraIngKeys = new Set<string>()
+    for (const list of Object.values(extraIngredients || {})) {
+        if (!Array.isArray(list)) continue
+        for (const ei of list) {
+            if (ei?.ingredient) extraIngKeys.add(ei.ingredient)
+        }
+    }
+
+    const orphanRecipeKeys         = [...recipeKeys].filter(k => !costKeys.has(k) && !ignored.has(k)).sort()
+    const orphanExtraIngredientKeys = [...extraIngKeys].filter(k => !costKeys.has(k) && !ignored.has(k)).sort()
+
+    // Inventory orphans are only flagged when STILL referenced by a live recipe or
+    // extra — i.e. an active money leak (counted + referenced + uncosted). A key that
+    // lives ONLY in historical shift_closings.inventory_report (no recipe, no extra)
+    // is stale audit data left behind after the ingredient was deleted; deleting an
+    // ingredient cleans costs/recipes/extras but can't rewrite immutable past closings,
+    // so without this guard a deleted ingredient would warn forever. Drop that noise.
+    const referencedKeys = new Set([...recipeKeys, ...extraIngKeys])
+    const orphanInventoryKeys = [...inventoryKeys]
+        .filter(k => !costKeys.has(k) && !ignored.has(k) && referencedKeys.has(k))
+        .sort()
+
+    // Group all known keys by their display label (case-insensitive)
+    const allKeys = new Set([...recipeKeys, ...costKeys, ...inventoryKeys, ...extraIngKeys])
+    const byLabel = new Map<string, string[]>()
+    for (const key of allKeys) {
+        const label = ingredientLabel(key).toLowerCase().trim()
+        if (!byLabel.has(label)) byLabel.set(label, [])
+        byLabel.get(label)!.push(key)
+    }
+
+    const labelCollisions = [...byLabel.entries()]
+        .filter(([, keys]) => keys.length > 1)
+        .map(([, keys]) => ({
+            label: ingredientLabel(keys[0]),
+            keys: keys.slice().sort()
+        }))
+
+    return {
+        orphanRecipeKeys,
+        orphanInventoryKeys,
+        orphanExtraIngredientKeys,
+        labelCollisions,
+        hasIssues: orphanRecipeKeys.length > 0
+                || orphanInventoryKeys.length > 0
+                || orphanExtraIngredientKeys.length > 0
+                || labelCollisions.length > 0
+    }
+}
+
+/**
+ * Pick canonical key from a collision group. Heuristic: prefer keys that appear in
+ * ingredient_costs (user-managed) over orphan recipe/inventory keys.
+ */
+export function suggestCanonical(collision: { keys: string[] }, ingredientCosts: Record<string, number> = {}) {
+    const costKeys = new Set(Object.keys(ingredientCosts))
+    const inCosts = collision.keys.filter(k => costKeys.has(k))
+    if (inCosts.length === 1) return inCosts[0]
+    // Multiple in costs (or none) — fall back to alphabetical first
+    return collision.keys[0]
+}

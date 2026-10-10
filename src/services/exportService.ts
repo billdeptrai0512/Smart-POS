@@ -1,29 +1,27 @@
 import * as XLSX from 'xlsx'
 import { ingredientLabel, normalizeIngredientKey } from '../utils/ingredients'
 import { fetchToppingIngredients } from './toppingService'
-import type { UUID } from '../types/domain'
+import type { CartExtra, CartTopping, IngredientConfig, IngredientGroup, Product, UUID } from '../types/domain'
+import type { ExtraIngredients, RecipeRow } from '../utils/inventory'
+import type { DiscountProgram } from '../utils/discountPrograms'
 
 // Xuất TOÀN BỘ thiết lập hiện tại của 1 địa chỉ ra đúng layout mà importService.ts đọc được
 // (public/templates/mau-nhap-lieu.xlsx) — sửa trực tiếp trong file này rồi nạp lại qua
 // ExcelImportModal sẽ CẬP NHẬT (không tạo trùng) đúng những gì đã sửa.
 
-interface ExportInput {
+export interface ExportInput {
     addressName?: string | null
-    products: Array<{ id: UUID; name: string; price: number; is_divider?: boolean; sort_order?: number | null }>
-    toppings: Array<{ id: UUID; name: string; price: number }>
-    ingredientConfigs: Array<{
-        ingredient: string; unit: string; unit_cost: number; category: string | null; group_id?: UUID | null
-        pack_size?: number | null; pack_unit?: string | null; pack2_size?: number | null; pack2_unit?: string | null
-        min_stock?: number | null; min_counter_stock?: number | null
-    }>
-    ingredientGroups?: Array<{ id: UUID; name: string }> // đã sắp theo sort_order
+    products: Product[]
+    toppings: CartTopping[]
+    ingredientConfigs: IngredientConfig[]
+    ingredientGroups?: IngredientGroup[] | null // đã sắp theo sort_order
     ingredientUnits: Record<string, string>
-    discountPrograms: Array<{ id: UUID; name: string; type: string; value: number; days_of_week: number[]; start_date: string | null; end_date: string | null; enabled: boolean }>
-    productDiscounts: Record<UUID, Array<{ id: UUID }>>
-    recipes: Array<{ product_id: UUID; ingredient: string; amount: number; unit: string | null }>
-    productToppings: Record<UUID, Array<{ id: UUID; name: string }>>
-    productExtras: Record<UUID, Array<{ id: UUID; name: string; price: number; is_sticky: boolean }>>
-    extraIngredients: Record<UUID, Array<{ ingredient: string; amount: number; unit: string | null }>>
+    discountPrograms: DiscountProgram[]
+    productDiscounts: Record<UUID, DiscountProgram[]>
+    recipes: RecipeRow[]
+    productToppings: Record<UUID, CartTopping[]>
+    productExtras: Record<UUID, CartExtra[]>
+    extraIngredients: ExtraIngredients
 }
 
 export async function downloadCurrentDataExcel(input: ExportInput) {

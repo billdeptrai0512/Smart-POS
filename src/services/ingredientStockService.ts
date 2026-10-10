@@ -48,11 +48,11 @@ async function fetchIngredientStocksUncached(addressId: UUID | null) {
             warehouse_stock_set: row.warehouse_stock_set ?? (warehouse_stock > 0),
             counter_stock_set: row.counter_stock_set ?? (counter_stock > 0),
             // Mốc đếm cuối (migration 20261005); path không có cột này (default template) → null = không ước tính.
-            counter_counted_on: (row.counter_counted_on ?? null) as string | null,
+            counter_counted_on: row.counter_counted_on ?? null,
             restock_since_count: Number(row.restock_since_count) || 0,
             // Lần đếm gần nhất TRƯỚC hôm nay (migration 20261007) — để Đầu kỳ hôm nay tính lại được kể cả khi NVL vừa được đếm hôm nay.
             prior_counter_stock: row.prior_counter_stock == null ? null : Number(row.prior_counter_stock),
-            prior_counted_on: (row.prior_counted_on ?? null) as string | null,
+            prior_counted_on: row.prior_counted_on ?? null,
             prior_restock_since: Number(row.prior_restock_since) || 0
         }
     }
@@ -221,8 +221,8 @@ export async function fetchIngredientWithdrawals(addressIds: UUID[] | UUID | nul
     const sb = supabase
     const closingsQuery = async (sel: string) => await sb
         .from('shift_closings')
-        .select(sel)
-        .in('address_id', ids) as unknown as { data: Row[] | null; error: { code?: string; message?: string } | null }
+        .select<string, Row>(sel)
+        .in('address_id', ids)
     const [refillsRes, closingsRes] = await Promise.all([
         sb
             .from('expenses')
@@ -252,7 +252,7 @@ export async function fetchIngredientWithdrawals(addressIds: UUID[] | UUID | nul
 // Without the `max(0, ...)` clamp that fetchIngredientStocks applies. Negative values mean
 // staff over-reported restock OR bought outside the system — `/ingredients` surfaces these
 // as a "kho lệch sổ sách" banner so manager can reconcile via the Kiểm kê & reset flow.
-export async function fetchIngredientDeficits(addressIds: UUID[] | UUID | null) {
+export async function fetchIngredientDeficits(addressIds: (UUID | null)[] | UUID | null) {
     const ids = Array.isArray(addressIds) ? addressIds : [addressIds]
     if (localRepo.isGuest()) {
         const addressId = ids[0] // guest không hỗ trợ nhóm kho tổng

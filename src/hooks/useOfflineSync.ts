@@ -1,0 +1,153 @@
+import { useEffect, useRef, useCallback } from 'react'
+import { bulkSubmitOrders, closeTable } from '../services/orderService'
+import { STORAGE_KEYS } from '../constants/storageKeys'
+import { readJSON, writeJSON } from '../utils/storage'
+import type { Row, UUID } from '../types/domain'
+
+// Đơn xếp hàng offline (camelCase — khác shape của bảng orders).
+export interface PendingOrder {
+    id: UUID; orderItems: Row[]; total: number; totalCost: number; discountAmount: number
+    paymentMethod: string | null; addressId: UUID | null; staffName: string | null; tableName: string | null; createdAt: string
+}
+interface PendingTableClose { addressId: UUID; tableName: string; closedAt: string }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function isValidOrder(order: PendingOrder) {
+    if (!Array.isArray(order.orderItems) || order.orderItems.length === 0) return false
+    return order.orderItems.every((item: Row) => UUID_RE.test(item.productId))
+}
+
+const PENDING_ORDERS_KEY = STORAGE_KEYS.PENDING_ORDERS
+
+export function getPendingOrders() {
+    return readJSON<PendingOrder[]>(PENDING_ORDERS_KEY, [])
+}
+
+function savePendingOrders(orders: PendingOrder[]) {
+    writeJSON(PENDING_ORDERS_KEY, orders)
+}
+
+export function removePendingOrder(createdAt: string) {
+    const pending = getPendingOrders()
+    savePendingOrders(pending.filter(o => o.createdAt !== createdAt))
+}
+
+// id is fixed at creation and kept across every retry (see syncPending) so a batch
+// resend after a lost response is idempotent server-side (ON CONFLICT in bulk_create_orders)
+// instead of minting a new row each retry.
+export function addPendingOrder(
+    orderItems: Row[], total: number, paymentMethod: string | null = null, addressId: UUID | null = null, totalCost = 0,
+    staffName: string | null = null, discountAmount = 0, id: UUID | null = null, tableName: string | null = null,
+) {
+    const pending = getPendingOrders()
+    pending.push({
+        id: id || crypto.randomUUID(),
+        orderItems,
+        total,
+        totalCost,
+        discountAmount,
+        paymentMethod,
+        addressId,
+        staffName,
+        tableName,
+        createdAt: new Date().toISOString(),
+    })
+    savePendingOrders(pending)
+}
+
+// ---- Tính tiền bàn lúc mất mạng ----
+// Đóng bàn là một UPDATE thẳng lên orders, mất mạng là ném lỗi — mà khách thì đang
+// đứng trả tiền. Xếp hàng y như đơn offline: mốc closedAt chốt tại thời điểm thu tiền,
+// đẩy lên khi có mạng lại.
+const PENDING_CLOSES_KEY = STORAGE_KEYS.PENDING_TABLE_CLOSES
+
+function getPendingTableCloses() {
+    return readJSON<PendingTableClose[]>(PENDING_CLOSES_KEY, [])
+}
+
+function savePendingTableCloses(list: PendingTableClose[]) {
+    writeJSON(PENDING_CLOSES_KEY, list)
+}
+
+export function addPendingTableClose(addressId: UUID, tableName: string, closedAt: string) {
+    savePendingTableCloses([...getPendingTableCloses(), { addressId, tableName, closedAt }])
+}
+
+// Hoàn tác lúc còn đang offline: rút lệnh khỏi hàng chờ trước khi nó kịp lên server.
+export function removePendingTableClose(closedAt: string) {
+    savePendingTableCloses(getPendingTableCloses().filter(c => c.closedAt !== closedAt))
+}
+
+async function flushTableCloses() {
+    const pending = getPendingTableCloses()
+    if (pending.length === 0) return
+    const failed: PendingTableClose[] = []
+    for (const c of pending) {
+        try { await closeTable(c.addressId, c.tableName, c.closedAt) }
+        catch (err) { console.error('Sync đóng bàn thất bại:', err); failed.push(c) }
+    }
+    savePendingTableCloses(failed)
+}
+
+export function useOfflineSync(onSyncComplete?: () => void) {
+    const isSyncing = useRef(false)
+
+    const syncPending = useCallback(async () => {
+        if (isSyncing.current) return
+        isSyncing.current = true
+        try {
+            const allPending = getPendingOrders()
+            // Discard orders with invalid (non-UUID) product IDs from pre-migration data
+            const pending = allPending.filter(o => {
+                if (!isValidOrder(o)) {
+                    console.warn('Discarding invalid pending order (non-UUID productId):', o)
+                    return false
+                }
+                return true
+            })
+            if (pending.length < allPending.length) savePendingOrders(pending)
+
+            let ordersSynced = false
+            if (pending.length > 0) {
+                const failed: PendingOrder[] = []
+                try {
+                    // Bulk exact orders. If this entire batch fails, it's pushed to failed stack.
+                    // Supabase RPC does all in one Postgres transaction
+                    await bulkSubmitOrders(pending)
+                } catch (err) {
+                    console.error('Bulk sync failed for orders:', err)
+                    // Rollback entire array to local cache if sync fails
+                    failed.push(...pending)
+                }
+                savePendingOrders(failed)
+                ordersSynced = failed.length < pending.length
+            }
+
+            // SAU đơn: đơn offline của bàn phải nằm trong DB trước, không thì nó lọt ra
+            // ngoài hoá đơn vừa đóng và bàn tự mở lại. No-op khi hàng chờ rỗng.
+            await flushTableCloses()
+
+            // Chỉ báo khi có ĐƠN lên được — onSyncComplete nạp lại doanh thu/ly bán, mà
+            // đóng bàn thì không đụng hai số đó.
+            if (ordersSynced && onSyncComplete) onSyncComplete()
+        } finally {
+            isSyncing.current = false
+        }
+    }, [onSyncComplete])
+
+    useEffect(() => {
+        // Try syncing on mount
+        syncPending()
+
+        // Sync when coming back online
+        const handleOnline = () => {
+            syncPending()
+        }
+
+        window.addEventListener('online', handleOnline)
+        return () => window.removeEventListener('online', handleOnline)
+    }, [syncPending])
+
+    return { syncPending, getPendingCount: () => getPendingOrders().length, retrySync: syncPending }
+}

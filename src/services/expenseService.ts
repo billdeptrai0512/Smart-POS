@@ -1,0 +1,315 @@
+import { supabase } from '../lib/supabaseClient'
+import * as localRepo from './localRepository'
+import { startOfDayVN } from '../utils/dateVN'
+import { reportCache, invalidateReportCache } from './cache'
+import type { UUID, Row, ExpenseCategory, SupabaseError } from '../types/domain'
+
+// ---- Expenses CRUD ----
+
+// Fetch today's expenses, newest first (optionally scoped by address)
+export async function fetchTodayExpenses(addressId: UUID | null) {
+    if (localRepo.isGuest()) return localRepo.fetchLocalExpenses(addressId)
+    const today = startOfDayVN()
+
+    let query = supabase
+        .from('expenses')
+        .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, metadata, category_id, created_at')
+        .gte('created_at', today.toISOString())
+
+    if (addressId) query = query.eq('address_id', addressId)
+
+    const { data, error } = await query.order('created_at', { ascending: false })
+
+    if (error) {
+        // Fallback if table doesn't exist yet (42P01)
+        if (error.code !== '42P01') {
+            console.error('fetchTodayExpenses error:', error)
+        }
+        return []
+    }
+    return data
+}
+
+// Insert an expense
+// - isFixed: auto-injected fixed costs (rent, salary, etc.) — excluded from cash flow
+// - isRefill: "Mua nguyên vật liệu" — excluded from netProfit (COGS already covers it),
+//   but counted in cash flow / đối soát
+// - paymentMethod: 'cash' | 'transfer' — determines which pot the refill came from
+// - metadata: JSONB object for structured data like `{ items: [{ingredient, qty, price}] }`
+// - categoryId: FK into expense_categories. NULL is allowed for NVL refills (NVL is
+//   in COGS, not a tagged expense). For all other expenses callers should pass the
+//   category picked in the form, or omit to let UI default to "Chi phí khác".
+export async function insertExpense(
+    name: string, amount: number, addressId: UUID | null = null, isFixed = false, staffName: string | null = null, isRefill = false,
+    paymentMethod = 'cash', metadata: Row = {}, categoryId: UUID | null = null, createdAt: string | null = null, extraCols: Row | null = null,
+) {
+    invalidateReportCache(addressId)
+    if (localRepo.isGuest()) {
+        // Only set created_at when explicitly backdating — an explicit `created_at:
+        // undefined` key would override insertLocalExpense's own now() default via
+        // object spread, producing an Invalid Date that fails every "today" filter.
+        const guestPayload: Row = { name, amount, address_id: addressId, is_fixed: isFixed, staff_name: staffName, is_refill: isRefill, payment_method: paymentMethod, metadata, category_id: categoryId, ...(extraCols || {}) }
+        if (createdAt) guestPayload.created_at = createdAt
+        return localRepo.insertLocalExpense(guestPayload)
+    }
+    const payload: Row = { name, amount, is_fixed: isFixed, is_refill: isRefill, payment_method: paymentMethod, metadata }
+    if (addressId) payload.address_id = addressId
+    if (staffName) payload.staff_name = staffName
+    if (categoryId) payload.category_id = categoryId
+    if (createdAt) payload.created_at = createdAt
+    if (extraCols) Object.assign(payload, extraCols)
+
+    const { data, error } = await supabase
+        .from('expenses')
+        .insert(payload)
+        .select()
+        .single()
+    if (error) throw error
+    return data
+}
+
+// Update an expense (currently only category_id; extend as needed).
+// addressId unknown here so flush the whole report cache.
+export async function updateExpense(id: UUID, updates: Row) {
+    invalidateReportCache(null)
+    if (localRepo.isGuest()) return localRepo.updateLocalExpense(id, updates)
+    const payload: Row = {}
+    if (updates.category_id !== undefined) payload.category_id = updates.category_id
+    if (updates.name !== undefined) payload.name = updates.name
+    if (updates.amount !== undefined) payload.amount = updates.amount
+    if (updates.payment_method !== undefined) payload.payment_method = updates.payment_method
+    // Sửa chi phí (modal edit): ngày + phase (is_refill/free_form) cũng đổi được.
+    if (updates.created_at !== undefined) payload.created_at = updates.created_at
+    if (updates.is_refill !== undefined) payload.is_refill = updates.is_refill
+    if (updates.metadata !== undefined) payload.metadata = updates.metadata
+    const { data, error } = await supabase
+        .from('expenses')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single()
+    if (error) throw error
+    return data
+}
+
+// Delete an expense — addressId unknown here so flush the whole report cache.
+export async function deleteExpense(expenseId: UUID) {
+    invalidateReportCache(null)
+    if (localRepo.isGuest()) return localRepo.deleteLocalExpense(expenseId)
+    const { error } = await supabase
+        .from('expenses')
+        .delete()
+        .eq('id', expenseId)
+    if (error) throw error
+    return true
+}
+
+// Fetch expenses within a date range
+export async function fetchExpensesByRange(addressId: UUID | null, start: Date, end: Date) {
+    return reportCache.through([addressId, 'expensesByRange', start.toISOString(), end.toISOString()], async () => {
+        if (localRepo.isGuest()) {
+            const sMs = start.getTime(), eMs = end.getTime()
+            return localRepo.fetchAllLocalExpenses(addressId)
+                .filter(x => {
+                    const t = new Date(x.created_at).getTime()
+                    return t >= sMs && t <= eMs
+                })
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        }
+        let query = supabase
+            .from('expenses')
+            .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, metadata, category_id, created_at, address_id')
+            .gte('created_at', start.toISOString())
+            .lte('created_at', end.toISOString())
+        if (addressId) query = query.eq('address_id', addressId)
+        const { data, error } = await query.order('created_at', { ascending: false })
+        if (error) { console.error('fetchExpensesByRange error:', error); return [] }
+        return data || []
+    })
+}
+
+// Fetch restock history for a specific ingredient within a date range.
+// addressIds: mảng — 1 phần tử cho địa chỉ độc lập, nhiều phần tử khi địa chỉ thuộc 1 warehouse
+// group (kho tổng dùng chung — Nhật ký phải thấy phiếu nhập ở BẤT KỲ địa chỉ nào trong nhóm,
+// vì tất cả cùng cộng vào 1 kho tổng). RLS tự giới hạn: manager thấy đủ cả nhóm (sở hữu mọi địa
+// chỉ), staff chỉ thấy các địa chỉ mình được cấp quyền — chấp nhận cho v1 (không cần RPC riêng).
+export async function fetchIngredientRestockHistory(addressIds: (UUID | null)[] | UUID | null, ingredient: string, fromDate: string, toDate: string) {
+    // filter(Boolean): "Mẫu mặc định" (admin) có id null — không lọc thì .in() gửi "null"
+    // và Postgres trả 22P02. Cùng cách xử lý với fetchIngredientWithdrawals.
+    const ids = (Array.isArray(addressIds) ? addressIds : [addressIds]).filter(Boolean)
+    if (localRepo.isGuest()) {
+        const addressId = ids[0] // guest không hỗ trợ nhóm kho tổng
+        const expenses = localRepo.fetchAllLocalExpenses(addressId).filter(e =>
+            e.is_refill && e.metadata?.ingredient === ingredient &&
+            new Date(e.created_at) >= new Date(fromDate) &&
+            new Date(e.created_at) <= new Date(toDate)
+        )
+        const payments = localRepo.fetchAllLocalExpensePayments(addressId)
+        return expenses
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .map(e => ({
+                ...e,
+                discount_amount: e.discount_amount || 0,
+                extra_cost: e.extra_cost || 0,
+                payments: payments.filter(p => p.expense_id === e.id),
+            }))
+    }
+    if (!ids.length) return []
+    // Nested select kéo luôn payments để FE tính owing & hiển thị badge mà không cần round-trip phụ.
+    // Có 3 cấp fallback nếu migration 20260528 chưa deploy: bỏ payments → bỏ discount/extra columns.
+    const trySelects = [
+        'id, address_id, name, amount, staff_name, metadata, created_at, discount_amount, extra_cost, payment_method, expense_payments(id, amount, payment_method, staff_name, paid_at)',
+        'id, address_id, name, amount, staff_name, metadata, created_at, discount_amount, extra_cost, payment_method',
+        'id, address_id, name, amount, staff_name, metadata, created_at, payment_method',
+    ]
+    let data: Row[] | null = null, error: SupabaseError = null
+    for (const sel of trySelects) {
+        const res = await supabase
+            .from('expenses')
+            .select<string, Row>(sel)
+            .in('address_id', ids)
+            .eq('is_refill', true)
+            .gte('created_at', fromDate)
+            .lte('created_at', toDate)
+            .order('created_at', { ascending: false })
+        if (!res.error) { data = res.data; error = null; break }
+        error = res.error
+        // 42P01 = relation missing, 42703 = column missing
+        if (error.code !== '42P01' && error.code !== '42703' && error.code !== 'PGRST200') break
+    }
+    if (error) {
+        console.error('fetchIngredientRestockHistory error code:', error.code, 'msg:', error.message, 'details:', error.details)
+        return []
+    }
+    // Filter by ingredient in metadata (client-side, since Supabase JSONB filter syntax varies)
+    return (data || [])
+        .filter(e => e.metadata?.ingredient === ingredient)
+        .map(e => ({ ...e, payments: e.expense_payments || [] }))
+}
+
+// ---- Expense Categories CRUD ----
+// Tags that group expenses on the profit report. Manager-managed inline through
+// the expense form. NVL refills intentionally don't get a category — they're
+// in COGS, not the expense breakdown.
+
+export async function fetchExpenseCategories(addressId?: UUID | null): Promise<ExpenseCategory[]> {
+    if (!addressId) return []
+    return reportCache.through<ExpenseCategory[]>([addressId, 'expenseCategories'], async () => {
+        if (localRepo.isGuest()) return localRepo.fetchLocalExpenseCategories(addressId) as ExpenseCategory[]
+        const { data, error } = await supabase
+            .from('expense_categories')
+            .select('id, name, group_section, sort_order, is_active, is_default, created_at')
+            .eq('address_id', addressId)
+            .eq('is_active', true)
+            .order('sort_order', { ascending: true })
+            .order('created_at', { ascending: true })
+        if (error) {
+            if (error.code !== '42P01') console.error('fetchExpenseCategories error:', error)
+            return []
+        }
+        return (data || []) as ExpenseCategory[]
+    })
+}
+
+export async function insertExpenseCategory(addressId: UUID | null | undefined, { name, group_section, sort_order = 100 }: { name: string; group_section: string; sort_order?: number }): Promise<ExpenseCategory> {
+    if (!addressId) throw new Error('addressId required')
+    invalidateReportCache(addressId)
+    if (localRepo.isGuest()) return localRepo.insertLocalExpenseCategory({ address_id: addressId, name, group_section, sort_order }) as unknown as ExpenseCategory
+    const { data, error } = await supabase
+        .from('expense_categories')
+        .insert({ address_id: addressId, name, group_section, sort_order })
+        .select()
+        .single()
+    if (error) throw error
+    return data as ExpenseCategory
+}
+
+// Partial update. addressId unknown — flush all.
+export async function updateExpenseCategory(id: UUID, updates: Row) {
+    invalidateReportCache(null)
+    if (localRepo.isGuest()) return localRepo.updateLocalExpenseCategory(id, updates)
+    const payload: Row = {}
+    if (updates.name !== undefined) payload.name = updates.name
+    if (updates.group_section !== undefined) payload.group_section = updates.group_section
+    if (updates.sort_order !== undefined) payload.sort_order = updates.sort_order
+    const { data, error } = await supabase
+        .from('expense_categories')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single()
+    if (error) throw error
+    return data
+}
+
+// Count expenses per category for the address in ONE query (just the FK column),
+// reduced client-side → { [categoryId]: count }. Powers the count badge on each
+// label in the manage sheet so managers see what they're about to delete.
+export async function fetchExpenseCategoryCounts(addressId?: UUID | null) {
+    if (!addressId) return {}
+    if (localRepo.isGuest()) return localRepo.fetchLocalExpenseCategoryCounts(addressId)
+    const { data, error } = await supabase
+        .from('expenses')
+        .select('category_id')
+        .eq('address_id', addressId)
+    if (error) {
+        if (error.code !== '42P01') console.error('fetchExpenseCategoryCounts error:', error)
+        return {}
+    }
+    const counts: Record<string, number> = {}
+    for (const row of data || []) {
+        if (row.category_id) counts[row.category_id] = (counts[row.category_id] || 0) + 1
+    }
+    return counts
+}
+
+// Un-delete a soft-deleted category (is_active → true). Mirror of
+// deleteExpenseCategory; used by the "Hoàn tác" undo after a delete.
+export async function restoreExpenseCategory(id: UUID) {
+    invalidateReportCache(null)
+    if (localRepo.isGuest()) return localRepo.restoreLocalExpenseCategory(id)
+    const { error } = await supabase
+        .from('expense_categories')
+        .update({ is_active: true })
+        .eq('id', id)
+    if (error) throw error
+    return true
+}
+
+// List every expense still tagged with a category (any date, scoped to address).
+// Drives the "force re-tag before delete" gate: a label with attached expenses
+// can't be deleted until the manager moves each of these to another label, so the
+// profit report never silently dumps them into "Chi phí khác". Newest first.
+export async function fetchExpensesByCategory(addressId?: UUID | null, categoryId?: UUID | null) {
+    if (!addressId || !categoryId) return []
+    if (localRepo.isGuest()) return localRepo.fetchLocalExpensesByCategory(addressId, categoryId)
+    const { data, error } = await supabase
+        .from('expenses')
+        .select('id, name, amount, category_id, created_at')
+        .eq('address_id', addressId)
+        .eq('category_id', categoryId)
+        .order('created_at', { ascending: false })
+    if (error) {
+        if (error.code !== '42P01') console.error('fetchExpensesByCategory error:', error)
+        return []
+    }
+    return data || []
+}
+
+// Soft-delete a category. Existing expenses keep the FK but readers should
+// treat soft-deleted categories as falling back to "Chi phí khác". We do NOT
+// hard-delete because that would null-out historical expense.category_id via
+// the ON DELETE SET NULL trigger and lose audit trail.
+// NOTE: callers must guarantee the category has no attached expenses (count = 0)
+// — either it was always empty, or they moved each row to another label first
+// (see fetchExpensesByCategory). Otherwise orphaned rows fall back to "Chi phí khác".
+export async function deleteExpenseCategory(id: UUID) {
+    invalidateReportCache(null)
+    if (localRepo.isGuest()) return localRepo.deleteLocalExpenseCategory(id)
+    const { error } = await supabase
+        .from('expense_categories')
+        .update({ is_active: false })
+        .eq('id', id)
+    if (error) throw error
+    return true
+}
