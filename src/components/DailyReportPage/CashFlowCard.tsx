@@ -698,9 +698,10 @@ function MoneyInputRow({ label, value, onChange, onBlur, hint }: { label: string
     return (
         <div className="flex items-center justify-between gap-3 rounded-lg">
             <span className="text-[12px] font-bold text-text-secondary shrink-0">{label}</span>
-            {/* pr-0: khung viền đứt chỉ chừa lề bên trái, để mép phải của "đ" thẳng
-                hàng với số của các dòng chỉ-đọc bên dưới (Chi phí trong ca, Tổng thực thu). */}
-            <div className={`flex items-center max-w-[180px] flex-1 justify-end rounded-[8px] pl-1.5 pr-0 py-0.5 transition-colors ${empty ? 'border border-dashed border-primary/50 bg-primary/5' : 'border border-transparent'} ${onboardingHintClass(hint)}`}>
+            {/* pr-2 + -mr-2: khung viền đứt có lề hai bên để "0đ" không đè lên viền, nhưng lề phải được
+                bù bằng margin âm nên mép phải của "đ" vẫn thẳng hàng với số của các dòng chỉ-đọc bên dưới
+                (Chi phí trong ca, Tổng thực thu). py-1 + -my-0.5 giữ nguyên chiều cao dòng. */}
+            <div className={`flex items-center max-w-[180px] flex-1 justify-end rounded-[8px] pl-2 pr-2 -mr-2 py-1 -my-0.5 transition-colors ${empty ? 'border border-dashed border-primary/50 bg-primary/5' : 'border border-transparent'} ${onboardingHintClass(hint)}`}>
                 <input
                     type="text"
                     inputMode="numeric"
