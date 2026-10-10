@@ -1,12 +1,12 @@
 import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
-import type { UUID, Row, CartExtra } from '../types/domain'
+import type { UUID, Row, CartExtra, Product } from '../types/domain'
 import type { ExtraIngredients, ExtraIngRow } from '../utils/inventory'
 
 // ---- Products CRUD ----
 
 // Fetch all products for the menu (purely branch isolated)
-export async function fetchProducts(addressId: UUID | null) {
+export async function fetchProducts(addressId: UUID | null): Promise<Product[]> {
     if (localRepo.isGuest()) return localRepo.fetchLocalProducts(addressId)
 
     const q = supabase.from('products').select('id, name, price, is_active, owner_address_id, sort_order, count_as_cup, is_divider').eq('is_active', true)

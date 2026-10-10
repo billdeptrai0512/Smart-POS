@@ -221,8 +221,8 @@ export async function fetchIngredientWithdrawals(addressIds: UUID[] | UUID | nul
     const sb = supabase
     const closingsQuery = async (sel: string) => await sb
         .from('shift_closings')
-        .select(sel)
-        .in('address_id', ids) as unknown as { data: Row[] | null; error: SupabaseError }
+        .select<string, Row>(sel)
+        .in('address_id', ids)
     const [refillsRes, closingsRes] = await Promise.all([
         sb
             .from('expenses')

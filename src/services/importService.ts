@@ -617,14 +617,14 @@ async function commitDiscounts(
 // Thuần — đổi plan (theo TÊN) sang payload theo ID cho RPC bulk_import_menu. Id món/topping/tùy
 // chọn mới sinh ở client để SQL không phải khớp tên (tránh lệch NFC/lowercase giữa JS và Postgres).
 export function buildBulkPayload(plan: ImportPlan, existing: ExistingData) {
-    const productId = new Map(existing.products.filter(p => !p.is_divider).map(p => [normKey(p.name), p.id as string]))
-    const dividerId = new Map(existing.products.filter(p => p.is_divider).map(p => [normKey(p.name), p.id as string]))
+    const productId = new Map<string, string>(existing.products.filter(p => !p.is_divider).map(p => [normKey(p.name), p.id]))
+    const dividerId = new Map<string, string>(existing.products.filter(p => p.is_divider).map(p => [normKey(p.name), p.id]))
     const newDividers = plan.dividers.map(name => {
         const id = crypto.randomUUID()
         dividerId.set(normKey(name), id)
         return { id, name }
     })
-    const toppingId = new Map(existing.toppings.map(t => [normKey(t.name), t.id as string]))
+    const toppingId = new Map<string, string>(existing.toppings.map(t => [normKey(t.name), t.id]))
     const newProducts = plan.products.map(p => {
         const id = crypto.randomUUID()
         productId.set(normKey(p.name), id)

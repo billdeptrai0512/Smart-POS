@@ -33,8 +33,7 @@ export default function ExcelImportModal({ onClose }: { onClose: () => void }) {
         const extras = Object.entries(productExtras).flatMap(([productId, exs]) =>
             exs.map(e => ({ id: e.id, productName: productById.get(productId) || '', name: e.name }))
         )
-        // ProductContext giữ Row[] lỏng; importService/exportService khai báo hình dạng chặt hơn → ép kiểu ở ranh giới này.
-        return { products, toppings, ingredientCosts, extras, discountPrograms } as unknown as ExistingData
+        return { products, toppings, ingredientCosts, extras, discountPrograms }
     }, [products, toppings, ingredientCosts, productExtras, discountPrograms])
 
     async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
@@ -82,7 +81,7 @@ export default function ExcelImportModal({ onClose }: { onClose: () => void }) {
                 addressName: selectedAddress?.name,
                 products, toppings, ingredientConfigs, ingredientGroups, ingredientUnits,
                 recipes, productToppings, productExtras, extraIngredients, discountPrograms, productDiscounts,
-            } as unknown as ExportInput)
+            })
         } catch (err) {
             showError(err, 'Xuất Excel')
         } finally {

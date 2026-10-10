@@ -21,10 +21,8 @@ export async function fetchIngredientCostsAndUnits(addressId: UUID | null) {
     // rows DO NOT propagate to existing active addresses.
     const groupsPromise = fetchIngredientGroups(addressId)
     const cols = 'ingredient, unit_cost, unit, address_id, pack_size, pack_unit, pack2_size, pack2_unit, min_stock, min_counter_stock, category, count_in_audit, tare_weight, group_id'
-    const q = supabase.from('ingredient_costs').select(cols)
-    // .select(cols) with a dynamic column string (not a literal) makes supabase-js
-    // fall back to its GenericStringError type — cast to the real loose shape.
-    const { data, error } = await (addressId ? q.eq('address_id', addressId) : q.is('address_id', null)) as unknown as { data: Row[] | null; error: SupabaseError }
+    const q = supabase.from('ingredient_costs').select<string, Row>(cols) // cols là chuỗi động → khai báo hình dạng hàng, nếu không supabase-js rơi về GenericStringError
+    const { data, error } = await (addressId ? q.eq('address_id', addressId) : q.is('address_id', null))
     const groups = await groupsPromise
     if (error) {
         // Ném (không trả rỗng): ProductContext giữ cache + retry, thay vì ghi đè giá vốn/quy cách bằng {} rồi cache luôn.

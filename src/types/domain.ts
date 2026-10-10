@@ -36,6 +36,9 @@ export interface ExpenseCategory {
 /** Một nguyên liệu trong danh mục (dòng ingredientConfigs: giá vốn, đơn vị, quy cách, tồn tối thiểu…). */
 export type IngredientConfig = Row & { ingredient: string }
 
+/** Một dòng bảng `products` — món bán, hoặc dòng "mục" (is_divider) chia nhóm menu. */
+export type Product = Row & { id: UUID; name: string; price: number; is_divider?: boolean; sort_order?: number | null }
+
 /** Nhóm nguyên liệu (ingredient_groups) — section 'main' | 'packaging' quyết định dòng "Mua bao bì" ở dòng tiền. */
 export interface IngredientGroup { id: UUID; name: string; section?: string; sort_order: number }
 

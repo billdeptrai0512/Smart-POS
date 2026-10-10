@@ -166,13 +166,13 @@ export async function fetchIngredientRestockHistory(addressIds: (UUID | null)[] 
     for (const sel of trySelects) {
         const res = await supabase
             .from('expenses')
-            .select(sel)
+            .select<string, Row>(sel)
             .in('address_id', ids)
             .eq('is_refill', true)
             .gte('created_at', fromDate)
             .lte('created_at', toDate)
             .order('created_at', { ascending: false })
-        if (!res.error) { data = res.data as unknown as Row[]; error = null; break }
+        if (!res.error) { data = res.data; error = null; break }
         error = res.error
         // 42P01 = relation missing, 42703 = column missing
         if (error.code !== '42P01' && error.code !== '42703' && error.code !== 'PGRST200') break

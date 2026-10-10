@@ -5,7 +5,7 @@
  */
 import { dateStringVN, startOfDayVN } from '../utils/dateVN'
 import { ONBOARDING_STORAGE_PREFIX } from '../utils/onboardingStorage'
-import type { Row } from '../types/domain'
+import type { Row, Product } from '../types/domain'
 import { readJSON, writeJSON } from '../utils/storage'
 
 const generateId = () => crypto.randomUUID();
@@ -145,7 +145,7 @@ export const initializeGuestFromGlobal = (data: Row) => {
 // --- CRUD Helpers ---
 
 export const fetchLocalProducts = (addressId: string | null) => {
-    const list = get(KEYS.PRODUCTS).filter(p => p.owner_address_id === addressId && p.is_active);
+    const list = get(KEYS.PRODUCTS).filter(p => p.owner_address_id === addressId && p.is_active) as Product[];
     list.sort((a, b) => {
         const aSort = a.sort_order ?? 999999;
         const bSort = b.sort_order ?? 999999;

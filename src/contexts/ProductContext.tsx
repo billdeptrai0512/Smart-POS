@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import type { CartExtra, CartTopping, IngredientConfig, IngredientGroup, Row, UUID } from '../types/domain'
+import type { CartExtra, CartTopping, IngredientConfig, IngredientGroup, Product, Row, UUID } from '../types/domain'
 import type { ExtraIngredients, RecipeRow } from '../utils/inventory'
 import type { DiscountProgram } from '../utils/discountPrograms'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
@@ -13,7 +13,7 @@ import { onTabReturn } from '../utils/tabVisibility'
 import { readJSON, writeJSON } from '../utils/storage'
 
 export interface ProductContextValue {
-    products: Row[]
+    products: Product[]
     recipes: RecipeRow[]
     ingredientCosts: Record<string, number>
     ingredientUnits: Record<string, string>
@@ -116,7 +116,7 @@ export function ProductProvider() {
 
     const readCache = useCallback(<T,>(name: string, fallback: T) => readJSON<T>(cacheKey(name), fallback), [cacheKey])
 
-    const [products, setProducts] = useState<Row[]>(() => readCache('products', []))
+    const [products, setProducts] = useState<Product[]>(() => readCache('products', []))
     const [recipes, setRecipes] = useState<RecipeRow[]>(() => readCache('recipes', []))
     const [ingredientCosts, setIngredientCosts] = useState<Record<string, number>>(() => readCache('costs', {}))
     const [ingredientUnits, setIngredientUnits] = useState<Record<string, string>>(() => readCache('units', {}))
@@ -134,7 +134,7 @@ export function ProductProvider() {
     const freshAtRef = useRef(0) // lúc bắt đầu lần tải mạng gần nhất (0 = chưa có / vừa thất bại) — cho refreshProducts({ ifStale })
 
     const applyData = useCallback((
-        prods: Row[], recs: RecipeRow[], costsResult: Awaited<ReturnType<typeof fetchIngredientCostsAndUnits>>, extras: Record<string, CartExtra[]>,
+        prods: Product[], recs: RecipeRow[], costsResult: Awaited<ReturnType<typeof fetchIngredientCostsAndUnits>>, extras: Record<string, CartExtra[]>,
         extraIngs: ExtraIngredients, addressId: UUID | null, toppingsList: CartTopping[], productToppingsMap: Record<string, CartTopping[]>,
         discountProgramsList: DiscountProgram[], productDiscountsMap: Record<string, DiscountProgram[]>,
     ) => {
