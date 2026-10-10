@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
 import { startOfDayVN } from '../utils/dateVN'
 import { inflightCache } from './cache'
-import type { UUID, Row } from '../types/domain'
+import type { UUID, Row, SupabaseError } from '../types/domain'
 
 // Stock numbers are stored as floats (WAC math can produce arbitrary precision).
 // Card UI rounds to 1 decimal; persist the same precision so historical reads
@@ -222,7 +222,7 @@ export async function fetchIngredientWithdrawals(addressIds: UUID[] | UUID | nul
     const closingsQuery = async (sel: string) => await sb
         .from('shift_closings')
         .select(sel)
-        .in('address_id', ids) as unknown as { data: Row[] | null; error: { code?: string; message?: string } | null }
+        .in('address_id', ids) as unknown as { data: Row[] | null; error: SupabaseError }
     const [refillsRes, closingsRes] = await Promise.all([
         sb
             .from('expenses')
@@ -252,7 +252,7 @@ export async function fetchIngredientWithdrawals(addressIds: UUID[] | UUID | nul
 // Without the `max(0, ...)` clamp that fetchIngredientStocks applies. Negative values mean
 // staff over-reported restock OR bought outside the system — `/ingredients` surfaces these
 // as a "kho lệch sổ sách" banner so manager can reconcile via the Kiểm kê & reset flow.
-export async function fetchIngredientDeficits(addressIds: UUID[] | UUID | null) {
+export async function fetchIngredientDeficits(addressIds: (UUID | null)[] | UUID | null) {
     const ids = Array.isArray(addressIds) ? addressIds : [addressIds]
     if (localRepo.isGuest()) {
         const addressId = ids[0] // guest không hỗ trợ nhóm kho tổng

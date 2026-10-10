@@ -1,0 +1,325 @@
+import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react'
+import type { Session, User } from '@supabase/supabase-js'
+import type { Profile, Row } from '../types/domain'
+import { supabase } from '../lib/supabaseClient'
+import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, fetchProfileByAuthId, removeSession, fetchDefaultIngredientSort } from '../services/authService'
+import { isGuest as getLocalIsGuest, setIsGuest as setLocalIsGuest, initializeGuestFromGlobal, clearGuestData, setGuestIngredientSortOrder } from '../services/localRepository'
+import { trackGuestOnboardingStage, markGuestFunnelSignup } from '../services/onboardingFunnelService'
+import { STORAGE_KEYS } from '../constants/storageKeys'
+import { readJSON, writeJSON } from '../utils/storage'
+
+export interface AuthContextValue {
+    user: User | null
+    profile: Profile | null
+    loading: boolean
+    isGuest: boolean
+    /** Có token Supabase thật (khác user/profile đọc từ cache lúc cold start). */
+    hasSession: boolean
+    setIsGuest: (val: boolean) => void
+    initGuestMode: () => Promise<void>
+    signIn: (username: string, password: string) => ReturnType<typeof authSignIn>
+    signUp: (username: string, password: string, name: string, email?: string | null) => ReturnType<typeof authSignUp>
+    signOut: () => Promise<void>
+    refreshProfile: () => Promise<void>
+    isManager: boolean
+    isStaff: boolean
+    isAdmin: boolean
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null)
+
+// Cached auth user/profile. On cold start (the OS killed the PWA) we hydrate
+// these so the loading gate passes immediately, and — crucially — if the
+// launch-time token refresh fails on a flaky connection we keep the user signed
+// in instead of bouncing them to /login. Only a real onAuthStateChange
+// 'SIGNED_OUT' clears them.
+function clearCachedAuth() {
+    localStorage.removeItem(STORAGE_KEYS.AUTH_USER)
+    localStorage.removeItem(STORAGE_KEYS.AUTH_PROFILE)
+}
+
+// ponytail: hook co-located with its Provider (standard context pattern) —
+// 15+ call sites import useAuth from here, splitting into its own file isn't
+// worth the diff for a fast-refresh (dev-only HMR) nag.
+// eslint-disable-next-line react-refresh/only-export-components
+export function useAuth() {
+    const ctx = useContext(AuthContext)
+    if (!ctx) throw new Error('useAuth must be used within AuthProvider')
+    return ctx
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+    const [user, setUser] = useState<User | null>(() => getLocalIsGuest() ? null : readJSON<User | null>(STORAGE_KEYS.AUTH_USER, null))       // Supabase auth user (hydrated from cache on cold start)
+    const [profile, setProfile] = useState<Profile | null>(() => getLocalIsGuest() ? null : readJSON<Profile | null>(STORAGE_KEYS.AUTH_PROFILE, null))  // User profile row (from 'users' table)
+    const [loading, setLoading] = useState(true)
+    const [isGuest, setIsGuestState] = useState(() => getLocalIsGuest())
+    // Chỉ true khi supabase-js THỰC SỰ có session. user/profile hydrate từ cache nên vẫn
+    // truthy khi launch token refresh hỏng/chậm (safety valve bên dưới) — lúc đó mọi query
+    // bảng bay đi bằng anon key và RLS gọi auth_owner_id() mà anon không có EXECUTE → 42501.
+    const [hasSession, setHasSession] = useState(false)
+    // auth_id đã nạp profile rồi — xem loadProfileOnce trong effect khởi tạo bên dưới.
+    const loadedProfileForRef = useRef<string | null>(null)
+
+    // initGuestMode: called from LoginPage when user clicks "Dùng thử miễn phí"
+    // Fetches the global default setup from Supabase (address_id IS NULL) and seeds localStorage
+    const initGuestMode = useCallback(async () => {
+        setLoading(true)
+        try {
+            // IMPORTANT: Clear guest flag temporarily to ensure orderService fetches from Supabase
+            // instead of trying to read from an empty localStorage
+            setLocalIsGuest(false)
+
+            const {
+                fetchProducts,
+                fetchAllRecipes,
+                fetchIngredientCostsAndUnits,
+                fetchProductExtras,
+                fetchExtraIngredients,
+                fetchIngredientStocks
+            } = await import('../services/orderService')
+
+            // Step 1 — fetch products/recipes/ingredients/extras/stocks/sort in parallel.
+            // Stocks come from the default address (address_id IS NULL) so the playground
+            // starts with realistic on-hand quantities instead of zero. The ingredient sort
+            // order comes from app_settings so the playground respects admin-curated order.
+            const [products, recipes, ingredientData, extrasMap, stocks, defaultSort] = await Promise.all([
+                fetchProducts(null),
+                fetchAllRecipes(null),
+                fetchIngredientCostsAndUnits(null),
+                fetchProductExtras(null),
+                fetchIngredientStocks(null),
+                fetchDefaultIngredientSort(),
+            ])
+
+            // Seed the guest's persisted ingredient sort_order so getDemoAddress() returns it.
+            if (Array.isArray(defaultSort) && defaultSort.length) {
+                setGuestIngredientSortOrder(defaultSort)
+            }
+
+            // Step 2 — only fetch extra_ingredients for the default extras we just got.
+            // (Previously this called fetchExtraIngredients(null) which scans the whole
+            // table — gets slower as more addresses/extras are added.)
+            // extrasMap is keyed by product_id (fetchProductExtras groups by it for direct
+            // POS lookup use, so each item omits the now-redundant field) — re-attach it here
+            // before flattening, or every seeded guest extra loses its product association.
+            // sort_order = vị trí trong list (đã sort theo DB) — fetchProductExtras không trả
+            // sort_order, thiếu nó thì fetchLocalProductExtras rơi về sort theo tên ("hơi Ngọt"
+            // đứng trước "Lớn" dù mẫu mặc định xếp ngược lại).
+            const extras = Object.entries(extrasMap).flatMap(([productId, list]) =>
+                list.map((e, i): Row => ({ ...e, product_id: productId, sort_order: i }))
+            )
+            const extraIds = extras.map(e => e.id)
+            const extraIngsMap = extraIds.length ? await fetchExtraIngredients(extraIds) : {}
+            const extraIngredients = Object.values(extraIngsMap).flat()
+
+            // Seed localStorage with the fetched global data
+            initializeGuestFromGlobal({
+                products,
+                recipes,
+                ingredients: ingredientData.rows,
+                extras,
+                extraIngredients,
+                stocks
+            })
+        } catch (err) {
+            console.error('[Guest] Failed to fetch global setup, using empty sandbox:', err)
+        } finally {
+            // Only NOW flip the guest flag — data is already in localStorage.
+            // Also set a synthetic manager profile so role-gated UI (canEdit, isManager)
+            // unlocks immediately — guest data lives in localStorage so full edit access
+            // is safe. Without this, profile stayed null until the next page reload
+            // (when the restoration branch in the auth useEffect sets it).
+            setLocalIsGuest(true)
+            setIsGuestState(true)
+            setProfile({ id: 'guest', name: 'Nhân viên A', role: 'manager', email: 'guest@demo.local' })
+            // Phễu onboarding: mốc 0 "Vào dùng thử". Chỉ chạy khi user thật sự bấm "Dùng thử
+            // miễn phí" (initGuestMode), không chạy ở nhánh khôi phục sau khi refresh trang —
+            // đúng ngữ nghĩa "có bao nhiêu người vào dùng thử". Fire-and-forget, không chặn.
+            trackGuestOnboardingStage(0)
+            setLoading(false)
+        }
+    }, [])
+
+    // setIsGuest(false) resets guest state without fetching
+    const setIsGuest = useCallback((val: boolean) => {
+        setIsGuestState(val)
+        setLocalIsGuest(val)
+    }, [])
+
+    // Load profile when auth user changes
+    const loadProfile = useCallback(async (authUser: User | null) => {
+        if (!authUser) {
+            setProfile(null)
+            return
+        }
+
+        // Retry fetching profile in case it's a new sign-up and the insert hasn't completed yet
+        let pf: Profile | null = null
+        let retries = 3
+        while (!pf && retries > 0) {
+            pf = await fetchProfileByAuthId(authUser.id)
+            if (pf) break
+            await new Promise(res => setTimeout(res, 500))
+            retries--
+        }
+
+        // Keep a cached profile across a transient null (network) so we don't blank
+        // role-gated UI on a flaky refetch; only overwrite when we actually got one.
+        if (pf) {
+            setProfile(pf)
+            writeJSON(STORAGE_KEYS.AUTH_PROFILE, pf)
+        } else if (!readJSON(STORAGE_KEYS.AUTH_PROFILE, null)) {
+            setProfile(null)
+        }
+    }, [])
+
+    // Initialize: check existing session
+    useEffect(() => {
+        // supabase-js re-notify 'SIGNED_IN' với ĐÚNG session cũ mỗi lần tab visible
+        // (_onVisibilityChanged → _recoverAndRefresh) → khoá theo auth_id, nếu không là
+        // 1 GET /users mỗi lần. refreshProfile() vẫn gọi thẳng loadProfile, không qua đây.
+        const loadProfileOnce = (authUser: User) => {
+            if (loadedProfileForRef.current === authUser.id) return Promise.resolve()
+            loadedProfileForRef.current = authUser.id
+            return loadProfile(authUser)
+        }
+
+        // Get initial session. Run once via finish(); whichever fires first —
+        // getSession resolving or the safety valve — wins.
+        let settled = false
+        const finish = (session: Session | null) => {
+            if (settled) return
+            settled = true
+            const authUser = session?.user ?? null
+            if (authUser) {
+                setUser(authUser)
+                setHasSession(true)
+                writeJSON(STORAGE_KEYS.AUTH_USER, authUser)
+                setIsGuest(false)
+                // Profile is already hydrated from cache (see useState init), so the UI
+                // can render immediately. Don't gate PageLoading on the refetch: on
+                // peak-hours / flaky wifi loadProfile retries fetchProfileByAuthId up to
+                // 3×500ms (+ slow network each), freezing the whole app on the loading
+                // skeleton for seconds. Release now and refresh in the background; only a
+                // genuine first launch (no cache, role-gating needs the profile) waits.
+                if (readJSON(STORAGE_KEYS.AUTH_PROFILE, null)) {
+                    setLoading(false)
+                    loadProfileOnce(authUser)
+                } else {
+                    loadProfileOnce(authUser).finally(() => setLoading(false))
+                }
+            } else if (getLocalIsGuest()) {
+                // Returning guest (page refresh) — restore guest profile without fetching
+                setIsGuestState(true)
+                setProfile({ id: 'guest', name: 'Nhân viên A', role: 'manager', email: 'guest@demo.local' })
+                setLoading(false)
+            } else if (readJSON(STORAGE_KEYS.AUTH_USER, null)) {
+                // We had a real session but getSession came back empty (or too slow) —
+                // on a flaky launch that's a failed/hung token refresh, NOT a sign-out.
+                // Stay in (cached user/profile already hydrated); a genuine sign-out
+                // arrives below as 'SIGNED_OUT' and clears us out.
+                setLoading(false)
+            } else {
+                // No session, never logged in → show login page
+                setLoading(false)
+            }
+        }
+        supabase.auth.getSession().then(({ data: { session } }) => finish(session))
+        // Safety valve: getSession refreshes an expired token over the network with
+        // NO timeout, so it can hang ~30s on a dead connection and freeze the loading
+        // gate. If we already have a cached session, stop blocking after 2.5s and let
+        // onAuthStateChange reconcile once the refresh eventually resolves.
+        const valve = setTimeout(() => {
+            if (readJSON(STORAGE_KEYS.AUTH_USER, null)) finish(null)
+        }, 2500)
+
+        // Listen for auth changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_OUT') {
+                // The only definitive sign-out signal — now it's safe to drop the user
+                // and the cached credentials (a flaky refresh never reaches here).
+                setUser(null)
+                setProfile(null)
+                setHasSession(false)
+                clearCachedAuth()
+                loadedProfileForRef.current = null // đăng nhập lại (kể cả cùng tài khoản) phải fetch lại
+                return
+            }
+            const authUser = session?.user ?? null
+            if (authUser) {
+                setUser(authUser)
+                setHasSession(true)
+                writeJSON(STORAGE_KEYS.AUTH_USER, authUser)
+                setIsGuest(false)
+                // Có session thật → profile sentinel {id:'guest'} hết đúng, mà setIsGuest(false)
+                // vừa tắt guard isGuest() trong authService. Giữ lại dù chỉ 1 nhịp là đủ để các
+                // context bắn query với managerId='guest' → 22P02. Bỏ ngay; loadProfile điền thật.
+                setProfile(p => (p?.id === 'guest' ? null : p))
+                loadProfileOnce(authUser)
+            }
+        })
+
+        return () => { clearTimeout(valve); subscription.unsubscribe() }
+    }, [loadProfile, setIsGuest])
+
+    const signIn = useCallback(async (username: string, password: string) => {
+        const data = await authSignIn(username, password)
+        // Auth state change listener will handle setting user/profile.
+        // Transition from guest sandbox → real account: clear local guest data so stale
+        // guest_* keys don't linger (signUp / signUpWithInvite already do this). Only after
+        // a SUCCESSFUL sign-in, so a failed attempt doesn't wipe an active guest session.
+        clearGuestData()
+        // Account switch on a shared device → drop the previous user's cached address.
+        localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ)
+        setIsGuest(false)
+        return data
+    }, [setIsGuest])
+
+    const signOut = useCallback(async () => {
+        if (profile?.id) await removeSession(profile.id)
+        await authSignOut()
+        clearCachedAuth()
+        // Drop the cached address OBJECT so a different user signing in on a shared
+        // device doesn't briefly see the previous branch name (the SELECTED_ADDRESS
+        // id stays, so the SAME user's selection still auto-restores after refetch).
+        localStorage.removeItem(STORAGE_KEYS.SELECTED_ADDRESS_OBJ)
+        setUser(null)
+        setProfile(null)
+    }, [profile])
+
+    const signUp = useCallback(async (username: string, password: string, name: string, email: string | null = null) => {
+        const data = await authSignUp(username, password, name, email)
+        setUser(data.user)
+        setProfile(data.profile)
+        writeJSON(STORAGE_KEYS.AUTH_USER, data.user)
+        writeJSON(STORAGE_KEYS.AUTH_PROFILE, data.profile)
+        // Phễu onboarding: mốc cuối "Đăng ký tài khoản". No-op nếu máy này chưa từng dùng thử.
+        // Gọi trước clearGuestData() để không phụ thuộc việc hàm đó có xoá visitor id hay không.
+        markGuestFunnelSignup()
+        // Transition from guest to real user — clear sandbox
+        clearGuestData()
+        setIsGuest(false)
+        return data
+    }, [setIsGuest])
+
+
+    // Re-fetch profile row (vd: sau khi lưu SĐT qua set_my_phone)
+    const refreshProfile = useCallback(() => loadProfile(user), [user, loadProfile])
+
+    const isManager = profile?.role === 'manager' || profile?.role === 'co-manager'
+    const isStaff = profile?.role === 'staff'
+    const isAdmin = profile?.role === 'admin'
+
+    // Every function here is already useCallback'd — memoizing the value itself
+    // stops every consumer (MenuGrid, HistoryPage, IngredientManagementPage, ...)
+    // from re-rendering whenever AuthProvider re-renders for an unrelated reason.
+    const value = useMemo(() => ({
+        user, profile, loading, isGuest, hasSession, setIsGuest, initGuestMode, signIn, signUp, signOut, refreshProfile, isManager, isStaff, isAdmin
+    }), [user, profile, loading, isGuest, hasSession, setIsGuest, initGuestMode, signIn, signUp, signOut, refreshProfile, isManager, isStaff, isAdmin])
+
+    return (
+        <AuthContext.Provider value={value}>
+            {children}
+        </AuthContext.Provider>
+    )
+}

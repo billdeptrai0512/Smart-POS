@@ -1,5 +1,5 @@
 // Menu — bố cục lưới: computeExtrasAfterIdx.
-// Nguồn: src/utils/menuGridLayout.js
+// Nguồn: src/utils/menuGridLayout.ts
 
 import { describe, it, expect } from 'vitest'
 import { computeExtrasAfterIdx } from '../../src/utils/menuGridLayout'

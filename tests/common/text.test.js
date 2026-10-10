@@ -1,5 +1,5 @@
 // Text — capitalizeWords (tự viết hoa chữ đầu).
-// Nguồn: src/utils/text.js
+// Nguồn: src/utils/text.ts
 
 import { describe, it, expect } from 'vitest'
 import { capitalizeWords } from '../../src/utils/text'

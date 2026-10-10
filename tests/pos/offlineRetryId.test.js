@@ -1,5 +1,5 @@
 // POS — addPendingOrder: id giữ nguyên qua mọi lần retry offline.
-// Nguồn: src/hooks/useOfflineSync.js
+// Nguồn: src/hooks/useOfflineSync.ts
 //
 // Kịch bản 3: mất mạng lúc gửi đơn (POSContext.doSubmit) → orderId đã sinh sẵn TRƯỚC khi
 // gọi RPC được truyền thẳng vào addPendingOrder, không phải sinh mới. syncPending sau đó

@@ -1,8 +1,6 @@
 import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
-import type { UUID, Row } from '../types/domain'
-
-type SupabaseError = { code?: string; message?: string } | null
+import type { UUID, Row, SupabaseError } from '../types/domain'
 
 // Fetch ingredient costs + units in one query, return both shapes
 export async function fetchIngredientCostsAndUnits(addressId: UUID | null) {

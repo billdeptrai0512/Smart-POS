@@ -1,12 +1,12 @@
 // Báo cáo — getDateRange: tính khoảng ngày cho header (hôm nay/tuần/tháng).
-// Nguồn: src/utils/rangeCalc.js
+// Nguồn: src/utils/rangeCalc.ts
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getDateRange } from '../../src/utils/rangeCalc';
 import { dateStringVN, timeStringVN } from '../../src/utils/dateVN';
 
-// dateVN.js trả về Date object là 1 MỐC THỜI GIAN TUYỆT ĐỐI biểu diễn ranh giới VN-local
-// (xem comment đầu dateVN.js) — .getDate()/.getMonth()/.getHours() đọc theo TZ của máy
+// dateVN.ts trả về Date object là 1 MỐC THỜI GIAN TUYỆT ĐỐI biểu diễn ranh giới VN-local
+// (xem comment đầu dateVN.ts) — .getDate()/.getMonth()/.getHours() đọc theo TZ của máy
 // đang chạy process, nên trên máy dev (VN) khớp tình cờ nhưng trên CI (UTC) lệch hẳn
 // ngày/tháng. Phải đọc qua dateStringVN/timeStringVN (VN-aware) như mọi nơi khác trong
 // app, không đọc getter local trực tiếp.

@@ -1,5 +1,5 @@
 // Common — onTabReturn: chỉ chạy callback khi tab quay lại SAU KHI đi vắng đủ lâu.
-// Nguồn: src/utils/tabVisibility.js
+// Nguồn: src/utils/tabVisibility.ts
 //
 // Luật này là cái chặn vòng lặp fetch: visibilitychange bắn dồn dập (chuyển app, khoá
 // màn hình) và các context nghe nó đều fetch → set state → fetch. Sai ở đây = 3 RPC

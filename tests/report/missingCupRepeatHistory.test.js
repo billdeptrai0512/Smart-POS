@@ -1,7 +1,7 @@
 // Nghi vấn bán thiếu ghi nhận — phần "lặp lại mấy ngày gần đây".
 // Chốt việc tách buildDayCandidateSets (quét lịch sử, đắt, đứng yên khi gõ) ra khỏi
 // attachRepeatHistory (gắn repeatDays, rẻ, chạy mỗi keystroke) không đổi kết quả.
-// Nguồn: src/utils/inventory.js
+// Nguồn: src/utils/inventory.ts
 
 import { describe, it, expect } from 'vitest'
 import { findMissingCupCandidates, buildDayCandidateSets, attachRepeatHistory } from '../../src/utils/inventory'

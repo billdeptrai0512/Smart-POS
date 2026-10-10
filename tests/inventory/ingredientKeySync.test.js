@@ -1,5 +1,5 @@
 // Tồn kho — phát hiện lệch key nguyên liệu (detectKeyMismatches, suggestCanonical).
-// Nguồn: src/utils/ingredientKeySync.js
+// Nguồn: src/utils/ingredientKeySync.ts
 
 import { describe, it, expect } from 'vitest'
 import { detectKeyMismatches, suggestCanonical } from '../../src/utils/ingredientKeySync'

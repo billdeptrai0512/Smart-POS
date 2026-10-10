@@ -1,5 +1,5 @@
 // Nhân bản chi nhánh: applySnapshot phải dịch id nguồn → id mới ở MỌI bảng con (nhóm nguyên liệu,
-// topping, giảm giá) và chép nguyên row ingredient_costs. Nguồn: src/services/backupService.js
+// topping, giảm giá) và chép nguyên row ingredient_costs. Nguồn: src/services/backupService.ts
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 

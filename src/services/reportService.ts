@@ -2,9 +2,7 @@ import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
 import { startOfDayVN, endOfDayVN, dateStringVN } from '../utils/dateVN'
 import { reportCache, historicalCache, invalidateReportCache, invalidateInflight } from './cache'
-import type { UUID, Row } from '../types/domain'
-
-type SupabaseError = { code?: string; message?: string } | null
+import type { UUID, Row, SupabaseError } from '../types/domain'
 
 // ---- Shift Closing CRUD ----
 
@@ -136,7 +134,7 @@ export async function updateShiftClosing(id: UUID, data: Row) {
 // dưới row lock. KHÔNG refetch ở đây (gọi xong tự nhẹ); convergence do postgres_changes lo.
 // `patches`: [{ingredient, unit, opening, opening_locked, remaining, restock, skipped}], số = null
 // (và skipped = false) ⇒ xoá NVL khỏi report.
-export async function mergeShiftClosingInventory(addressId: UUID, patches: Row[], closedBy: string | null, systemTotalRevenue = 0) {
+export async function mergeShiftClosingInventory(addressId: UUID | null, patches: Row[], closedBy: string | null | undefined, systemTotalRevenue = 0) {
     invalidateReportCache(addressId)
     if (localRepo.isGuest()) {
         // Guest local-only: không có đua, merge tay rồi upsert cả mảng.
@@ -193,7 +191,7 @@ export async function mergeShiftClosingInventory(addressId: UUID, patches: Row[]
 // (migration 20260818_report_rpc_cash_closed_at.sql) — không cần bù thêm PK lookup riêng nữa.
 
 // Fetch today's shift closing for an address (latest one)
-export async function fetchTodayShiftClosing(addressId: UUID) {
+export async function fetchTodayShiftClosing(addressId: UUID | null) {
     if (localRepo.isGuest()) return localRepo.fetchLocalShiftClosing(addressId, new Date().toISOString())
     const startOfDay = startOfDayVN()
 
@@ -217,14 +215,14 @@ export async function fetchTodayShiftClosing(addressId: UUID) {
 // kho (chưa chốt → 'in_shift', đã chốt → 'post_close'). Cùng hàng shift_closings và bộ
 // filter với fetchTodayShiftClosing ở trên — tái dùng nó thay vì lặp lại query.
 // Phòng thủ: cột chưa migrate hoặc lỗi → coi như CHƯA chốt (false) → mặc định 'in_shift'.
-export async function fetchCashClosedToday(addressId: UUID) {
+export async function fetchCashClosedToday(addressId: UUID | null) {
     if (!addressId) return false
     const sc = await fetchTodayShiftClosing(addressId)
     return !!sc?.cash_closed_at
 }
 
 // Fetch the most recent shift closing BEFORE today (for opening stock)
-export async function fetchYesterdayShiftClosing(addressId: UUID) {
+export async function fetchYesterdayShiftClosing(addressId: UUID | null) {
     if (localRepo.isGuest()) return localRepo.fetchLocalYesterdayShiftClosing(addressId)
     const startOfDay = startOfDayVN()
 
@@ -247,7 +245,7 @@ export async function fetchYesterdayShiftClosing(addressId: UUID) {
 // Fetch order items for the same weekday one week ago, `daysAgo` days back.
 //   daysAgo = 7 → same weekday as TODAY   → dự báo "Soạn cho hôm nay".
 //   daysAgo = 6 → same weekday as TOMORROW → dự báo "Chuẩn bị ngày mai".
-export async function fetchLastWeekSameDayOrderItems(addressId: UUID, daysAgo = 6) {
+export async function fetchLastWeekSameDayOrderItems(addressId: UUID | null, daysAgo = 6) {
     return historicalCache.through([addressId, 'lastWeekSameDay', daysAgo, dateStringVN()], async () => {
         const today = startOfDayVN()
 
@@ -334,7 +332,7 @@ export async function fetchOrdersSince(addressId: UUID, fromDay: string, toDay?:
 // feels instant. Cache invalidates on any write to the underlying tables via
 // invalidateReportCache(). Existing call sites use invalidateDailyContext() as
 // the public API; it forwards to invalidateReportCache.
-export function invalidateDailyContext(addressId: UUID) {
+export function invalidateDailyContext(addressId: UUID | null) {
     invalidateReportCache(addressId)
 }
 
@@ -347,7 +345,7 @@ function attachInvoiceMeta(payments: Row[], expenseMap: Map<string, Row>) {
 }
 
 // Helper: filter local payments by paid_at range and address.
-function filterLocalPayments(addressId: UUID, start: Date, end: Date) {
+function filterLocalPayments(addressId: UUID | null, start: Date, end: Date) {
     const sMs = start.getTime(), eMs = end.getTime()
     return localRepo.fetchAllLocalExpensePayments(addressId).filter((p: Row) => {
         const t = new Date(p.paid_at).getTime()
@@ -355,7 +353,7 @@ function filterLocalPayments(addressId: UUID, start: Date, end: Date) {
     })
 }
 
-export async function fetchDailyReportContext(addressId: UUID) {
+export async function fetchDailyReportContext(addressId: UUID | null) {
     if (!addressId) return {}
     return reportCache.through([addressId, 'dailyReportContext'], async () => {
         if (localRepo.isGuest()) {
@@ -376,7 +374,7 @@ export async function fetchDailyReportContext(addressId: UUID) {
     })
 }
 
-export async function fetchReportByDate(addressId: UUID, dateStr: string) {
+export async function fetchReportByDate(addressId: UUID | null, dateStr: string) {
     return reportCache.through([addressId, 'reportByDate', dateStr], async () => {
         if (localRepo.isGuest()) {
             const targetDateStr = dateStringVN(new Date(dateStr))
@@ -401,7 +399,7 @@ export async function fetchReportByDate(addressId: UUID, dateStr: string) {
     })
 }
 
-export async function fetchReportByRange(addressId: UUID, targetStart: string | Date, targetEnd: string | Date, prevStart: string | Date, prevEnd: string | Date) {
+export async function fetchReportByRange(addressId: UUID | null, targetStart: string | Date, targetEnd: string | Date, prevStart: string | Date, prevEnd: string | Date) {
     return reportCache.through([addressId, 'reportByRange', targetStart, targetEnd, prevStart, prevEnd], async () => {
         if (localRepo.isGuest()) {
             const allOrders = localRepo.fetchAllLocalOrders(addressId)

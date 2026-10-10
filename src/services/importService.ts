@@ -73,7 +73,7 @@ function toBool(v: unknown): boolean {
 }
 
 // Loại chỉ có 2 giá trị thật (main/packaging) — 'tools' là giá trị legacy, không cho import
-// tạo ra (mirror normalizeIngredientCategory ở src/utils/ingredients.js).
+// tạo ra (mirror normalizeIngredientCategory ở src/utils/ingredients.ts).
 function mapCategory(raw: unknown): 'main' | 'packaging' {
     const v = normKey(raw)
     if (v.includes('bao bì') || v.includes('đóng gói') || v === 'packaging' || v === 'tools') return 'packaging'
@@ -175,7 +175,7 @@ interface ImportPlan {
     discountLinks: Array<{ programName: string; productNames: string[] }>
 }
 
-interface ExistingData {
+export interface ExistingData {
     products: Array<{ id: UUID; name: string; is_divider?: boolean }>
     toppings: Array<{ id: UUID; name: string }>
     ingredientCosts: Record<string, unknown>
@@ -501,13 +501,11 @@ async function commitImportPlanSequential(plan: ImportPlan, addressId: UUID | nu
     const toppingByName = new Map(existing.toppings.map(t => [normKey(t.name), t.id]))
 
     await runWithConcurrency(plan.products, CONCURRENCY, async (p) => {
-        // insertProduct is untyped JS (checkJs:false) — TS infers its addressId param
-        // from the bare `= null` default, not the real UUID|null; cast at this interop edge.
-        const row = await insertProduct(p.name, p.price, addressId as any)
+        const row = await insertProduct(p.name, p.price, addressId)
         productByName.set(normKey(p.name), row.id)
     })
     await runWithConcurrency(plan.productUpdates, CONCURRENCY, async (p) => {
-        await upsertProductPrice(productByName.get(normKey(p.name)), addressId, p.price)
+        await upsertProductPrice(productByName.get(normKey(p.name))!, addressId, p.price)
     })
 
     await runWithConcurrency([...plan.ingredients, ...plan.ingredientUpdates], CONCURRENCY, async (ing) => {
@@ -531,16 +529,15 @@ async function commitImportPlanSequential(plan: ImportPlan, addressId: UUID | nu
     }
     await runWithConcurrency(plan.extras, CONCURRENCY, async (ex) => {
         const productId = productByName.get(normKey(ex.productName))
-        // insertProductExtra is untyped JS (checkJs:false) — same interop cast as insertProduct above.
-        const row = await insertProductExtra(productId, ex.name, ex.price, addressId as any)
+        const row = await insertProductExtra(productId!, ex.name, ex.price, addressId)
         extraByKey.set(`${productId}|${normKey(ex.name)}`, row.id)
         if (ex.sticky) await updateProductExtraSticky(row.id, true)
     })
     await runWithConcurrency(plan.extraUpdates, CONCURRENCY, async (ex) => {
         const productId = productByName.get(normKey(ex.productName))
         const extraId = extraByKey.get(`${productId}|${normKey(ex.name)}`)
-        await updateProductExtraPrice(extraId, ex.price)
-        await updateProductExtraSticky(extraId, ex.sticky)
+        await updateProductExtraPrice(extraId!, ex.price)
+        await updateProductExtraSticky(extraId!, ex.sticky)
     })
 
     if (plan.recipes.length > 0) {
@@ -561,8 +558,7 @@ async function commitImportPlanSequential(plan: ImportPlan, addressId: UUID | nu
     await runWithConcurrency(plan.extraIngredients, CONCURRENCY, async (ei) => {
         const productId = productByName.get(normKey(ei.productName))
         const extraId = extraByKey.get(`${productId}|${normKey(ei.extraName)}`)
-        // upsertExtraIngredient is untyped JS (checkJs:false) — same interop cast as insertProduct above.
-        await upsertExtraIngredient(extraId, ei.ingredient, ei.amount, ei.unit as any)
+        await upsertExtraIngredient(extraId!, ei.ingredient, ei.amount, ei.unit)
     })
 
     await runWithConcurrency(plan.toppingLinks, CONCURRENCY, async (link) => {

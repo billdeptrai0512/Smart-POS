@@ -1,5 +1,5 @@
 // Báo cáo — readParamsSeed: đọc lựa chọn ngày từ URL, chuẩn hoá custom-1-ngày về day scope.
-// Nguồn: src/hooks/useDateScope.js
+// Nguồn: src/hooks/useDateScope.ts
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { readParamsSeed } from '../../src/hooks/useDateScope'

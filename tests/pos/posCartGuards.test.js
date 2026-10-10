@@ -1,4 +1,4 @@
-// POS — 2 guard rút ra từ src/contexts/POSContext.jsx, khoá lại 2 bug đã xảy ra
+// POS — 2 guard rút ra từ src/contexts/POSContext.tsx, khoá lại 2 bug đã xảy ra
 // thật (xem comment tại nguồn).
 
 import { describe, it, expect } from 'vitest'

@@ -130,7 +130,7 @@ Chi tiết + unit test: `tests/inventory/` (chạy `npx vitest run tests/invento
 | Nhập kho + WAC | RPC `process_ingredient_restock` | Tạo expense refill, cập nhật `unit_cost`. KHÔNG đụng bảng `inventory`. |
 | Hủy phiếu | RPC `cancel_restock` | Zero-out tại chỗ (qty/amount → 0), giữ dòng + badge ĐÃ HỦY. |
 | Xóa NVL | RPC `delete_ingredient` | Dọn `ingredient_costs`/`recipes`/`extra_ingredients` + strip key khỏi snapshot. |
-| Tiêu hao theo công thức | `src/utils/inventory.js` → `calculateEstimatedConsumption` | Dùng cho cột Sử dụng / Hao hụt. |
+| Tiêu hao theo công thức | `src/utils/inventory.ts` → `calculateEstimatedConsumption` | Dùng cho cột Sử dụng / Hao hụt. |
 
 > **Lưu ý:** bảng `inventory`/`ingredients.stock` đã **bị bỏ** (migration `20260508_drop_legacy_inventory`).
 > Tồn kho KHÔNG đọc từ chúng. Trigger cũ `subtract_stock_from_restock` cũng đã bị drop — đừng tham chiếu.
@@ -204,7 +204,7 @@ hợp nhất) trong khi **quầy vẫn riêng từng địa chỉ** (đếm tay 
   hàng vật lý không mất. Xác nhận live 2026-07-15: xoá 1 địa chỉ đã đóng góp 200g vào nhóm 2 thành
   viên → thành viên còn lại tụt đúng 200g ngay lập tức. Không chặn xoá (giữ đúng ngữ nghĩa "xoá =
   xoá hết dữ liệu địa chỉ"), chỉ cảnh báo rõ hậu quả trong modal xác nhận xoá
-  (`BranchGrid.jsx`) khi địa chỉ đang có thành viên nhóm khác.
+  (`BranchGrid.tsx`) khi địa chỉ đang có thành viên nhóm khác.
 
 ### Implementation
 | Thành phần | Vị trí |
@@ -212,6 +212,6 @@ hợp nhất) trong khi **quầy vẫn riêng từng địa chỉ** (đếm tay 
 | Schema | `supabase/migrations/20260714_warehouse_groups_1_schema.sql` |
 | Helper + RPC quản lý nhóm | `supabase/migrations/20260714_warehouse_groups_2_rpcs.sql` (`get_warehouse_group_address_ids`, `sync_group_unit_cost`, `recompute_group_unit_cost`, `set_ingredient_unit_cost`, `upsert_warehouse_group`, `delete_warehouse_group`, `set_address_warehouse_group`) |
 | 4 RPC tồn kho làm group-aware | `supabase/migrations/20260714_warehouse_groups_3_inventory_rpcs.sql` |
-| UI quản lý nhóm | `src/components/AddressSelectPage/BranchGrid.jsx` (modal "Kho tổng chung" trong menu Quản lý mỗi địa chỉ) |
-| Context | `src/contexts/AddressContext.jsx` — `warehouseGroups`, `siblingsByAddress`, `createWarehouseGroup`/`renameWarehouseGroup`/`removeWarehouseGroup`/`setAddressGroup` |
+| UI quản lý nhóm | `src/components/AddressSelectPage/BranchGrid.tsx` (modal "Kho tổng chung" trong menu Quản lý mỗi địa chỉ) |
+| Context | `src/contexts/AddressContext.tsx` — `warehouseGroups`, `siblingsByAddress`, `createWarehouseGroup`/`renameWarehouseGroup`/`removeWarehouseGroup`/`setAddressGroup` |
 | Sửa giá vốn thủ công | `updateIngredientUnitCost` (`src/services/ingredientCostService.ts`) → RPC `set_ingredient_unit_cost` (thay vì upsert thẳng, để đi qua fan-out) |

@@ -1,5 +1,5 @@
 // Chuẩn bị hôm nay — danh sách soạn sáng nay + món HẾT ở quầy giữa ca (Lý thuyết ≤ 0).
-// Nguồn: src/utils/prepToday.js
+// Nguồn: src/utils/prepToday.ts
 
 import { describe, it, expect } from 'vitest'
 import { buildPrepTodayList, buildDepletedList, mergePrepItems, isPrepDone, buildWarehousePrepList, buildTodayBoughtMap } from '../../src/utils/prepToday'

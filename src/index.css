@@ -18,7 +18,7 @@ img[src^="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP"] {
 @custom-variant dine-split (@media (min-width: 768px), @media (min-width: 650px) and (orientation: portrait));
 
 /* Layout lưới cho POSPage: 1 cột (menu trên, chốt đơn dưới) ở phone,
-   2 cột đều nhau (menu | bàn, chốt đơn dưới cột bàn) ở dine-split — xem POSPage.jsx.
+   2 cột đều nhau (menu | bàn, chốt đơn dưới cột bàn) ở dine-split — xem POSPage.tsx.
    Grid thay vì 2 flex-col tách rời để CheckoutBar chỉ cần mount MỘT lần, tự "nhảy"
    chỗ theo breakpoint bằng grid-area thay vì phải render 2 bản rồi ẩn bớt (2 bản
    thì 2 state độc lập — gập/mở Samsung Z Fold giữa lúc đang sửa giảm giá là mất
@@ -409,7 +409,7 @@ body {
 }
 
 /* ====== PWA Install Banner ====== */
-/* ponytail: chỉ hiện ở /addresses (xem PWAInstallPrompt.jsx), trang đó luôn có thanh
+/* ponytail: chỉ hiện ở /addresses (xem PWAInstallPrompt.tsx), trang đó luôn có thanh
    hành động dính đáy (Đăng xuất / Tạo địa chỉ) cao ~66px + safe-area. Đẩy banner lên
    trên thanh đó thay vì đè lên — đổi cùng lúc nếu chiều cao thanh hành động đổi. */
 .pwa-install-banner {
@@ -442,9 +442,9 @@ body.pwa-banner-open .address-scroll-list {
   justify-content: space-between;
 }
 
-/* In bill (PrintBill.jsx — dùng chung cho bill theo bàn ở TableDetailModal và bill đơn
+/* In bill (PrintBill.tsx — dùng chung cho bill theo bàn ở TableDetailModal và bill đơn
    mang đi lẻ ở OrdersList). #print-bill được portal thẳng ra document.body (xem
-   createPortal trong PrintBill.jsx) nên là anh em của #root, không nằm trong cây app —
+   createPortal trong PrintBill.tsx) nên là anh em của #root, không nằm trong cây app —
    lúc in chỉ cần display:none thẳng #root là loại hẳn khỏi layout (không chỉ ẩn nhìn
    như visibility:hidden, tránh nó vẫn chiếm chỗ đẩy #print-bill xuống ra khoảng trắng
    đầu bill). ponytail: in qua trình duyệt, không SDK máy in nhiệt. Đổi khi quán có máy
@@ -460,7 +460,7 @@ body.pwa-banner-open .address-scroll-list {
     /* KHÔNG ép width cứng (từng thử 300px theo chuẩn 80mm@96dpi của captureImage — sai:
        khổ in thật của máy/driver hẹp hơn giả định đó, ép cứng làm nội dung tràn ra ngoài
        khổ giấy thật và bị cắt còn nặng hơn). Để width tự co đúng theo @page thật — cột 1fr
-       trong bảng món (PrintBill.jsx) có thể lệch chưa tới 1px do làm tròn của trình duyệt,
+       trong bảng món (PrintBill.tsx) có thể lệch chưa tới 1px do làm tròn của trình duyệt,
        bù bằng padding phải rộng hơn một chút thay vì đoán số px tuyệt đối. */
     margin: 0;
     padding: 8px 14px;

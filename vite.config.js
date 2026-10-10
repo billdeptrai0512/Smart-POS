@@ -35,7 +35,7 @@ export default defineConfig({
         // Vite 8 / rolldown requires the function form of manualChunks.
         manualChunks(id) {
           if (!id.includes('node_modules')) return
-          // Dynamically imported (see main.jsx/useToast.js) so it can stay out of the
+          // Dynamically imported (see main.tsx/useToast.ts) so it can stay out of the
           // initial bundle — must NOT fall into the '/react/' check below, which
           // otherwise matches its node_modules/@sentry/react path by substring
           // accident and drags it into the always-eager vendor-react chunk.

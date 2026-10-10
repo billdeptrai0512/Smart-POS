@@ -1,5 +1,5 @@
 // Monetization flag (app_config) — cache theo trạng thái đăng nhập.
-// Nguồn: src/hooks/useEntitlement.js (loadServerFlag)
+// Nguồn: src/hooks/useEntitlement.ts (loadServerFlag)
 //
 // Guest đọc bằng anon key → RLS trả rỗng → false. Guest đăng ký/đăng nhập ngay trong tab
 // (không reload) mà dùng lại cache false đó thì badge gói biến mất khỏi mọi card ở

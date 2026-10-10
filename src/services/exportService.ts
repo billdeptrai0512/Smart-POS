@@ -7,7 +7,7 @@ import type { UUID } from '../types/domain'
 // (public/templates/mau-nhap-lieu.xlsx) — sửa trực tiếp trong file này rồi nạp lại qua
 // ExcelImportModal sẽ CẬP NHẬT (không tạo trùng) đúng những gì đã sửa.
 
-interface ExportInput {
+export interface ExportInput {
     addressName?: string | null
     products: Array<{ id: UUID; name: string; price: number; is_divider?: boolean; sort_order?: number | null }>
     toppings: Array<{ id: UUID; name: string; price: number }>

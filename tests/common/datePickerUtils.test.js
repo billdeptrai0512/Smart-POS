@@ -1,5 +1,5 @@
 // Ngày — parseIsoDay và tiện ích date-picker.
-// Nguồn: src/components/common/datePickerUtils.js
+// Nguồn: src/components/common/datePickerUtils.ts
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {

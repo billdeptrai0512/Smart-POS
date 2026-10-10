@@ -1,5 +1,5 @@
 // Menu — thứ tự MENU_SEQUENCE.
-// Nguồn: src/utils/menuSequence.js
+// Nguồn: src/utils/menuSequence.ts
 
 import { describe, it, expect, vi } from 'vitest'
 import {

@@ -1,4 +1,4 @@
-// POS (dine_in) — tính bàn thuần (không I/O) rút ra từ src/contexts/POSContext.jsx:
+// POS (dine_in) — tính bàn thuần (không I/O) rút ra từ src/contexts/POSContext.tsx:
 // handleCloseTable (dropTableByName/restoreTable) và moveTableRounds (moveRoundsIntoTable).
 // Nguồn: src/services/orderService.ts
 

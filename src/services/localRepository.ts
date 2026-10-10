@@ -500,7 +500,7 @@ export const renameLocalIngredient = (addressId: string | null, oldKey: string, 
     };
 };
 
-// Local fixed_costs CRUD removed — see expenseService.js comment.
+// Local fixed_costs CRUD removed — see expenseService.ts comment.
 
 // --- Expense Categories (tags for the profit report) ---
 // Default seed matches the Supabase migration so guest and signed-in users see

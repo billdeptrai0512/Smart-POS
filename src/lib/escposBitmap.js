@@ -7,7 +7,7 @@ import { Capacitor } from '@capacitor/core'
 // Android — tác giả thư viện xác nhận phải in ảnh).
 //
 // Chụp thẳng DOM thay vì tự vẽ lại layout bằng canvas: khớp 100% với bản web
-// (PrintBill.jsx) vĩnh viễn, kể cả sau này sửa layout — không có 2 bản song song
+// (PrintBill.tsx) vĩnh viễn, kể cả sau này sửa layout — không có 2 bản song song
 // lệch nhau dần.
 //
 // Thuật toán đóng gói bit copy nguyên từ EscPosPrinterCommands.bitmapToBytes (Java)
@@ -157,7 +157,7 @@ function onPrinter(printerIp, job) {
 // In thẳng qua mạng bằng plugin native — dùng trên app Capacitor khi địa chỉ đã cấu
 // hình IP máy in (xem setPrinters ở AddressContext). capture: promise canvas đang chụp
 // (PrintBill.captureImage cho bill quầy, printKitchenTicket cho phiếu bếp). err.stage đánh dấu
-// lỗi xảy ra ở bước nào (capture DOM hay gửi mạng) — showError/Sentry (useToast.js) đọc lại
+// lỗi xảy ra ở bước nào (capture DOM hay gửi mạng) — showError/Sentry (useToast.ts) đọc lại
 // để debug từ xa không phải đoán, thay vì mọi lỗi in đều chung 1 message mù mờ như nhau.
 export async function printImageNative(capture, label, printerIp) {
     let canvas
@@ -216,7 +216,7 @@ let printBusy = false
 // hành, đợi 'afterprint' hoặc tối đa AFTERPRINT_FALLBACK_MS.
 export async function printBillJob(billRef, printerIp) {
     if (printBusy) {
-        // expected: true — lỗi biết trước (đang in dở), không phải bug, useToast.js không
+        // expected: true — lỗi biết trước (đang in dở), không phải bug, useToast.ts không
         // báo Sentry cho loại này.
         throw Object.assign(new Error('Máy in đang bận, đợi bill trước in xong rồi thử lại'), { expected: true })
     }

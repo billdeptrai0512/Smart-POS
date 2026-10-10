@@ -234,7 +234,7 @@ $$;
 ### Frontend hook
 
 ```js
-// src/hooks/useEntitlement.js
+// src/hooks/useEntitlement.ts
 export function useEntitlement() {
     const { selectedAddress } = useAddress();
     const [state, setState] = useState({ activeModules: [], validToByModule: {}, loading: true });
@@ -255,7 +255,7 @@ export function useEntitlement() {
     return state;
 }
 
-// activeModules = ['all'] khi address còn hạn (xem MODULES trong useEntitlement.js)
+// activeModules = ['all'] khi address còn hạn (xem MODULES trong useEntitlement.ts)
 export function hasModule(activeModules, module = 'all') {
     return Array.isArray(activeModules) && activeModules.includes(module);
 }
@@ -301,7 +301,7 @@ Từ khi bỏ giới hạn theo SĐT (`20260717_trial_4_per_address_not_per_phon
 Click badge → `navigate('/subscription', { state: { preselectAddressId } })`.
 
 ### Trang `/subscription` (đích chung)
-`src/pages/SubscriptionPage.jsx` — owner tự lắp gói:
+`src/pages/SubscriptionPage.tsx` — owner tự lắp gói:
 1. **Chọn chi nhánh**: list address quản lý, multi-select + "Chọn tất cả" (→ all-branches).
 2. **Chọn báo cáo**: 3 toggle module, chọn 1/2/3.
 3. **Chu kỳ**: tháng / năm.
@@ -405,7 +405,7 @@ Payment là sự kiện **tần suất thấp, thời lượng giới hạn** �
 1. **Cổng chưa từng mở.** `hasMultiDevice = countActiveSessions(addressId) >= 2` dựa vào `active_sessions`, mà bảng đó upsert `onConflict: 'user_id'` → **hai máy đăng nhập cùng một tài khoản chỉ sinh MỘT dòng**. Đếm ra 1, kênh không bao giờ subscribe, không máy nào broadcast. Tức là ca dùng phổ biến nhất — quán nhỏ, một tài khoản, hai điện thoại — chưa từng đồng bộ được ngày nào.
 2. **Không tới được quy mô.** Kể cả khi cổng mở: 1000 quán × 2 máy = 2000 kết nối đồng thời, **vượt trần ~500**. Đúng nút thắt đã mô tả ở §7.1 cho payment. Thêm nữa mỗi sự kiện realtime kéo `fetchTodayOrders` (join lồng `order_items` + `products` của cả ngày) trên MỌI máy — đơn thứ 300 trong ngày kéo 300 dòng về từng máy một.
 
-**Cơ chế mới** (`src/hooks/useOrdersPoll.js`): poll `orders` có diff theo id, **chỉ cột vô hướng**, không join; chỉ đơn thật sự mới mới tốn thêm một lượt fetch kèm món. Cổng theo màn hình (`/pos` hoặc `/history`) — miễn phí, không bao giờ trả lời sai. Poll ngay khi tab hiện lại. Stateless, scale ngang.
+**Cơ chế mới** (`src/hooks/useOrdersPoll.ts`): poll `orders` có diff theo id, **chỉ cột vô hướng**, không join; chỉ đơn thật sự mới mới tốn thêm một lượt fetch kèm món. Cổng theo màn hình (`/pos` hoặc `/history`) — miễn phí, không bao giờ trả lời sai. Poll ngay khi tab hiện lại. Stateless, scale ngang.
 
 **✅ AS-BUILT (2026-08-13, bản 2) — watermark, nhịp xuống 888ms.** Bản đầu poll 5s và mỗi nhịp tải về đầu đơn **cả ngày** chỉ để so. Chi phí = `số nhịp × số đơn`, nên quán càng đông thì payload càng to *mà* càng muốn nhịp nhanh — không mua được độ trễ bằng cách hạ khoảng nhịp. Đo thật (gzip, 12h, 200 đơn/ngày/máy): 5s → 28 MB, 2s → 69 MB, 1s → 137 MB.
 
@@ -417,7 +417,7 @@ Vì sao **không** quay lại realtime cho orders dù muốn <1s: chi phí realt
 
 Kèm theo: `20260813_drop_orders_realtime.sql` gỡ `orders` khỏi publication; xoá luôn vòng poll `countActiveSessions` 30s/máy (~2880 query/ngày/máy) vốn chỉ để trả lời một câu boolean. Heartbeat `upsertSession` giữ lại (5 phút/lần) cho màn `/addresses`. **Còn lại đúng một kênh realtime toàn hệ thống: `shift-closing-db`** — xem block ngay dưới.
 
-**✅ AS-BUILT (2026-08-13) — `shift-closing-db` GIỮ realtime, chỉ gỡ cổng.** Đoạn "Rà soát mở rộng (2026-07-13)" bên dưới khoe đã thêm gate multi-device cho kênh này *"để nhất quán với `orders-realtime`"*. Chính gate đó làm kênh **không bao giờ mở** — cùng lỗi đếm `countActiveSessions` mô tả ở mục 1 trên. Bộ merge hai chiều của kiểm kê (merge RPC per-field ở server + `reconcileFromRemote` per-ô ở client + toast xung đột) đã xây xong từ 2026-06-19 nhưng gần như chưa chạy ngày nào. Đã xoá gate; `countActiveSessions` giờ không còn ai gọi nên xoá khỏi `authService.js`.
+**✅ AS-BUILT (2026-08-13) — `shift-closing-db` GIỮ realtime, chỉ gỡ cổng.** Đoạn "Rà soát mở rộng (2026-07-13)" bên dưới khoe đã thêm gate multi-device cho kênh này *"để nhất quán với `orders-realtime`"*. Chính gate đó làm kênh **không bao giờ mở** — cùng lỗi đếm `countActiveSessions` mô tả ở mục 1 trên. Bộ merge hai chiều của kiểm kê (merge RPC per-field ở server + `reconcileFromRemote` per-ô ở client + toast xung đột) đã xây xong từ 2026-06-19 nhưng gần như chưa chạy ngày nào. Đã xoá gate; `countActiveSessions` giờ không còn ai gọi nên xoá khỏi `authService.ts`.
 
 **Vì sao kênh này KHÔNG chuyển sang poll như orders** (hai tải khác nhau, không phải thiếu nhất quán):
 
@@ -432,7 +432,7 @@ Kèm theo: `20260813_drop_orders_realtime.sql` gỡ `orders` khỏi publication;
 
 **Kèm theo — sửa bug mất tiền ở "Lưu thực thu" (độc lập transport).** `handleSaveCashflow` trước đây UPDATE cả `actual_cash` lẫn `actual_transfer` lấy từ state local: A đếm két, B đối chiếu bank, ai bấm Lưu sau đè số người trước bằng bản cũ của mình. `reportService.ts` đã ghi nhận và **chấp nhận** last-write-wins ở đây, nhưng chấp nhận đó dựa trên giả định "một người chốt" — use case hai máy phá đúng giả định đó. Giờ `buildCashPayload()` chỉ gửi ô đã đổi (không đổi gì → `null`, không gửi request); cùng sửa một ô thì vẫn ai lưu sau thắng (hai người đếm cùng một con số). Test: `tests/report/cashPayload.test.js`.
 
-**Rà soát mở rộng (2026-07-13):** ngoài payment còn 2 kênh realtime khác dùng chung quota: `orders-realtime-${addressId}` (`POSContext.jsx`, core order-sync đa thiết bị — **giữ nguyên**, đã gate đúng: chỉ mở khi ≥2 phiên hoạt động cùng địa chỉ + tab foreground) và `shift-closing-db-${addressId}` (`useShiftInventoryState.js`, đồng bộ kiểm kê cuối ca — **trước đó KHÔNG có gate**, mở kênh cho mọi thiết bị vào trang Báo cáo dù chỉ 1 thiết bị/địa chỉ). Đã thêm cùng gate multi-device (`countActiveSessions` ≥2, re-check mỗi 5 phút) cho `shift-closing-db` để nhất quán với `orders-realtime` và cắt phần lớn kênh vô nghĩa ở quy mô lớn.
+**Rà soát mở rộng (2026-07-13):** ngoài payment còn 2 kênh realtime khác dùng chung quota: `orders-realtime-${addressId}` (`POSContext.tsx`, core order-sync đa thiết bị — **giữ nguyên**, đã gate đúng: chỉ mở khi ≥2 phiên hoạt động cùng địa chỉ + tab foreground) và `shift-closing-db-${addressId}` (`useShiftInventoryState.ts`, đồng bộ kiểm kê cuối ca — **trước đó KHÔNG có gate**, mở kênh cho mọi thiết bị vào trang Báo cáo dù chỉ 1 thiết bị/địa chỉ). Đã thêm cùng gate multi-device (`countActiveSessions` ≥2, re-check mỗi 5 phút) cho `shift-closing-db` để nhất quán với `orders-realtime` và cắt phần lớn kênh vô nghĩa ở quy mô lớn.
 
 ### 7.2 — Trạng thái: c ĐÃ LIVE (2026-06-10 → 06-12)
 
@@ -452,13 +452,13 @@ Kèm theo: `20260813_drop_orders_realtime.sql` gỡ `orders` khỏi publication;
 Trang admin nội bộ (route `/admin/dashboard`, `/admin/reconciliation`, chỉ role `admin`):
 
 - **`admin_dashboard_overview`** (RPC, SECURITY DEFINER, tự chặn non-admin) — 1 lần gọi trả toàn bộ
-  số liệu cho `/admin/dashboard` (`src/services/adminDashboardService.js`): doanh thu, số địa chỉ
+  số liệu cho `/admin/dashboard` (`src/services/adminDashboardService.ts`): doanh thu, số địa chỉ
   active/trial, delta MoM, danh sách "Cần chú ý" (gộp payment lệch/treo + sub sắp hết hạn + địa
   chỉ không hoạt động/đã rời bỏ + trial chưa dùng), feed hoạt động gần đây (payment/địa chỉ mới/
   referral/review). Migration `20260713_admin_dashboard_overview.sql` → vá đếm sai ở
   `20260714_admin_dashboard_overview_v2.sql`.
 - **`admin_resolve_payment_intent(p_intent_id, p_grant)`** (RPC) — `/admin/reconciliation`
-  (`src/services/reconciliationService.js`) resolve thủ công 1 intent `pending`/`manual_review`:
+  (`src/services/reconciliationService.ts`) resolve thủ công 1 intent `pending`/`manual_review`:
   cấp gói (đã đối soát sao kê khớp) hoặc bỏ qua. Có audit log
   (migration `20260714_admin_resolve_payment_intent_audit.sql`).
 - Cùng trang: nút Mock/Reset gói (`admin_set_subscription`/`admin_reset_subscription`, xem #8 Decisions),
@@ -504,7 +504,7 @@ không đụng feature code.
 
 ### Implementation
 
-> ✅ **Đã implement (2026-06-09):** `useMonetizationEnabled()` trong `src/hooks/useEntitlement.js` —
+> ✅ **Đã implement (2026-06-09):** `useMonetizationEnabled()` trong `src/hooks/useEntitlement.ts` —
 > hiệu lực = client(build `VITE_MONETIZATION_ENABLED`) **AND** server(`app_config.monetization_enabled`,
 > đọc runtime, cache module-level 1 request). Mọi consumer (DailyReportPage gate, SubscriptionBadge,
 > SubscriptionPage route, usePaymentListener) dùng `enabled` runtime → flip `app_config` là đổi cả UI,
@@ -520,7 +520,7 @@ VITE_MONETIZATION_ENABLED=false
 ```
 
 ```js
-// src/hooks/useEntitlement.js
+// src/hooks/useEntitlement.ts
 const ENABLED = import.meta.env.VITE_MONETIZATION_ENABLED === 'true';
 
 export function useEntitlement() {
@@ -575,7 +575,7 @@ Hoàn toàn khả thi để bắt đầu làm Feature Flag, Schema, Trial grant 
 
 - [x] **Bước 1 (Feature flag):** Thiết lập env var `VITE_MONETIZATION_ENABLED`, tạo table `app_config`, và thêm bypass logic mặc định OFF cho toàn app.
   - `.env` → `VITE_MONETIZATION_ENABLED=false`
-  - `src/hooks/useEntitlement.js` → bypass: khi OFF trả `{ tier: 'pro', validTo: '2099-12-31', loading: false, enabled: false }`
+  - `src/hooks/useEntitlement.ts` → bypass: khi OFF trả `{ tier: 'pro', validTo: '2099-12-31', loading: false, enabled: false }`
   - Migration: `supabase/migrations/20260511_monetization_phase1.sql`
 
 - [x] **Bước 2 (Schema DB):** Tạo bảng `trial_grants`, `address_subscriptions`, `payment_intents` và RPC `get_address_entitlement`.
@@ -583,7 +583,7 @@ Hoàn toàn khả thi để bắt đầu làm Feature Flag, Schema, Trial grant 
   - RLS đã setup cho cả 4 bảng mới
 
 - [x] **Bước 3 (Trial grant & Hook):** Custom hook `useEntitlement` + helper `hasFeature` đã hoàn thiện.
-  - File: `src/hooks/useEntitlement.js`
+  - File: `src/hooks/useEntitlement.ts`
   - ⚠️ Trial grant RPC `create_address` chưa implement (cần Phase 2 — Phone OTP) — sẽ cấp trial thủ công qua `admin_set_subscription` ở Phase 3
 
 - [x] **Bước 4 (Gate Components):** Xây dựng component dùng chung: `<UpsellPage>` (full-screen) và `<UpsellSheet>` (bottom sheet).
@@ -600,8 +600,8 @@ Hoàn toàn khả thi để bắt đầu làm Feature Flag, Schema, Trial grant 
     `PastInventoryEditor`, gate ở Bước R6 bên dưới đã gỡ audit-upsell từ trước đó.
 
 - [x] **Bước 6 (Status Banner):** Hiển thị Banner trạng thái gói cước ở AddressSelectPage.
-  - `src/components/AddressSelectPage/SubscriptionBadge.jsx` — badge per-address
-  - Tích hợp vào `BranchGrid.jsx`; click → `<UpsellSheet>` mở tại AddressSelectPage
+  - `src/components/AddressSelectPage/SubscriptionBadge.tsx` — badge per-address
+  - Tích hợp vào `BranchGrid.tsx`; click → `<UpsellSheet>` mở tại AddressSelectPage
   - Khi `MONETIZATION_ENABLED=false` → badge hoàn toàn ẩn (zero render)
 
 **⚠️ Phase 1 đã build theo mô hình CŨ (basic/pro).** Mô hình đổi sang **3 module độc lập** (2026-06-03) — cần rework. Code cũ vẫn chạy (flag OFF), nhưng giá trị `tier`, FEATURE_MATRIX, gate UI phải đổi.
@@ -609,12 +609,12 @@ Hoàn toàn khả thi để bắt đầu làm Feature Flag, Schema, Trial grant 
 ### Phase 1b: Rework sang 3-module (2026-06-03)
 *Mục tiêu: chuyển basic/pro → cashflow/inventory/finance. Flag vẫn OFF, không charge ai.*
 
-- [x] **Bước R1 (Hook):** `useEntitlement` → export `MODULES` + `hasModule(activeModules, module)`; OFF **hoặc guest mode** trả đủ `['cashflow','inventory','finance']`. `hasFeature` giữ làm shim deprecated cho tới R3. (`src/hooks/useEntitlement.js`)
+- [x] **Bước R1 (Hook):** `useEntitlement` → export `MODULES` + `hasModule(activeModules, module)`; OFF **hoặc guest mode** trả đủ `['cashflow','inventory','finance']`. `hasFeature` giữ làm shim deprecated cho tới R3. (`src/hooks/useEntitlement.ts`)
 - [x] **Bước R2 (Migration):** `supabase/migrations/20260603_monetization_three_modules.sql` — drop CHECK basic/pro, convert legacy (pro→inventory, basic→split 3 row), add CHECK `tier IN ('cashflow','inventory','finance')` cho cả 2 bảng, refresh `get_address_entitlement`. Cột vẫn tên `tier` (lưu giá trị module).
 - [x] **Bước R3 (Gate per-view):** `DailyReportPage` — bỏ gate toàn trang; gate từng view (cashflow/inventory/finance) bằng `<UpsellGate>`. Trang + footer luôn render. Chốt: **khoá cả view kể cả hôm nay** (trial 3–7 ngày + guest cho xem full). Khi loading entitlement → coi như có quyền (tránh nháy gate).
-- [x] **Bước R4 (UI mở khoá thống nhất):** `SubscriptionScreen.jsx` (chrome full-screen, **header style /history**: back bo góc + chip "Đăng ký gói" + thanh tab = **chu kỳ Theo tháng/Theo năm**; giữ `period` state, truyền xuống panel controlled) + `SubscriptionPanel.jsx` (thân: chi nhánh multi-select + 3 toggle module + QR + tính tiền bundle/lẻ × số CN + admin mock). Route `/subscription` và tab báo cáo bị khoá đều render `SubscriptionScreen` → một UI duy nhất. Giá ở `src/constants/monetization.js`. 🗑️ Bỏ hẳn `UpsellGate.jsx` + `UpsellSheet.jsx` + `UpsellPage.jsx`.
+- [x] **Bước R4 (UI mở khoá thống nhất):** `SubscriptionScreen.tsx` (chrome full-screen, **header style /history**: back bo góc + chip "Đăng ký gói" + thanh tab = **chu kỳ Theo tháng/Theo năm**; giữ `period` state, truyền xuống panel controlled) + `SubscriptionPanel.tsx` (thân: chi nhánh multi-select + 3 toggle module + QR + tính tiền bundle/lẻ × số CN + admin mock). Route `/subscription` và tab báo cáo bị khoá đều render `SubscriptionScreen` → một UI duy nhất. Giá ở `src/constants/monetization.ts`. 🗑️ Bỏ hẳn `UpsellGate.jsx` + `UpsellSheet.jsx` + `UpsellPage.jsx`.
 - [x] **Bước R5 (Hao hụt → inventory):** Bỏ `canAccessAudit`/`required="pro"`; audit + RangeLossCard mở khoá cùng quyền `inventory` (view inventory đã gate sẵn → tới được card là đã có quyền).
-- [x] **Bước R6 (Trang đăng ký gói duy nhất + Banner):** Gom mọi luồng mở khoá về **1 trang `/subscription`** (`src/pages/SubscriptionPage.jsx`) thay vì bottom-sheet rải rác.
+- [x] **Bước R6 (Trang đăng ký gói duy nhất + Banner):** Gom mọi luồng mở khoá về **1 trang `/subscription`** (`src/pages/SubscriptionPage.tsx`) thay vì bottom-sheet rải rác.
   - Trang: danh sách chi nhánh user quản lý (multi-select + "Chọn tất cả") · 3 toggle module (chọn 1/2/3) · toggle tháng/năm · QR placeholder · tính tiền (3 module = giá bundle, <3 = cộng lẻ) × số chi nhánh · admin mock insert.
   - `SubscriptionBadge`: rework sang module (`Trọn bộ` / `N/3 gói` / `Mở khoá báo cáo`), **sửa bug `<button>` lồng `<button>`** → đổi sang `<span role=button>`. Click → `/subscription`.
   - Badge → `navigate('/subscription', { state })`; tab Báo cáo bị khoá → nhúng thẳng `<SubscriptionPanel>` (không điều hướng, cùng UI).
@@ -626,7 +626,7 @@ Hoàn toàn khả thi để bắt đầu làm Feature Flag, Schema, Trial grant 
 *Gộp Báo cáo/Lợi nhuận (finance) vào Dòng tiền (cashflow). Còn 2 sản phẩm bán.*
 
 - [x] **Migration** `supabase/migrations/20260606_monetization_two_modules.sql` — trigger trial cấp 2 module, gộp `finance→cashflow`, CHECK còn `('cashflow','inventory')` cho cả 2 bảng.
-- [x] `constants/monetization.js` — `MODULE_KEYS=['cashflow','inventory']`; `cashflow` meta gộp tài chính; `PRICE.bundle = 166,888đ/th · 1,666,888đ/năm`.
+- [x] `constants/monetization.ts` — `MODULE_KEYS=['cashflow','inventory']`; `cashflow` meta gộp tài chính; `PRICE.bundle = 166,888đ/th · 1,666,888đ/năm`.
 - [x] `useEntitlement.MODULES` → 2 module. `DailyReportPage` — view Lợi nhuận (profit) gate bằng quyền `cashflow`.
 - [x] `SubscriptionPanel` — lưới **2 cột**, bundle khi chọn đủ 2 (`moduleCount===MODULE_KEYS.length`). `SubscriptionBadge` → `Trọn bộ`/`1/2 gói`.
 - [x] Realtime listener (`usePaymentListener`) + migration `20260603_realtime_address_subscriptions.sql` (Phase 3 / Bước 10 — frontend phần). ⚠️ là **placeholder**, sẽ thay bằng poll-while-pending (xem §7.1).

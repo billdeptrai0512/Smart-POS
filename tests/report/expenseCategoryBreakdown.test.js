@@ -1,5 +1,5 @@
 // Báo cáo — gộp chi phí theo nhóm (buildCategoryBreakdown).
-// Nguồn: src/utils/expenseCategoryBreakdown.js
+// Nguồn: src/utils/expenseCategoryBreakdown.ts
 
 import { describe, it, expect } from 'vitest'
 import { buildCategoryBreakdown } from '../../src/utils/expenseCategoryBreakdown'

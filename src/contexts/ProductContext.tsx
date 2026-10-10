@@ -1,0 +1,296 @@
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import type { CartExtra, CartTopping, IngredientConfig, IngredientGroup, Row, UUID } from '../types/domain'
+import type { ExtraIngredients, RecipeRow } from '../utils/inventory'
+import type { DiscountProgram } from '../utils/discountPrograms'
+import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
+import { fetchToppings, fetchProductToppingLinks } from '../services/toppingService'
+import { fetchDiscountPrograms, fetchDiscountProgramProductLinks } from '../services/discountService'
+import { useAuth } from './AuthContext'
+import { useAddress } from './AddressContext'
+import { Outlet } from 'react-router-dom'
+import { cacheKey as buildCacheKey } from '../constants/storageKeys'
+import { onTabReturn } from '../utils/tabVisibility'
+import { readJSON, writeJSON } from '../utils/storage'
+
+export interface ProductContextValue {
+    products: Row[]
+    recipes: RecipeRow[]
+    ingredientCosts: Record<string, number>
+    ingredientUnits: Record<string, string>
+    ingredientConfigs: IngredientConfig[]
+    /** null = địa chỉ không hỗ trợ nhóm nguyên liệu. */
+    ingredientGroups: IngredientGroup[] | null
+    productExtras: Record<string, CartExtra[]>
+    extraIngredients: ExtraIngredients
+    toppings: CartTopping[]
+    productToppings: Record<string, CartTopping[]>
+    discountPrograms: DiscountProgram[]
+    productDiscounts: Record<string, DiscountProgram[]>
+    refreshProducts: (opts?: { ifStale?: boolean }) => Promise<void>
+    loading: boolean
+    loadError: unknown
+}
+
+const ProductContext = createContext<ProductContextValue | null>(null)
+const FRESH_MS = 30_000 // cửa sổ "vừa tải xong" cho refreshProducts({ ifStale })
+
+// A quán-wifi blip during the one-shot product fetch used to require reopening
+// the app (remounting ProductProvider) to recover — nothing else retried it.
+// Bounded retry (same pattern as AuthContext's profile fetch) absorbs a
+// transient failure without user intervention.
+// toppings là thực thể toàn cục (không product_id) — dựng map productId -> Topping[]
+// từ bảng nối product_toppings để POS/MenuGrid dùng y hệt cách đọc productExtras.
+function buildProductToppingsMap(toppings: CartTopping[], links: Row[]) {
+    const byId = new Map(toppings.map(t => [t.id, t]))
+    const map: Record<string, CartTopping[]> = {}
+    for (const link of links) {
+        const topping = byId.get(link.topping_id)
+        if (!topping) continue
+        if (!map[link.product_id]) map[link.product_id] = []
+        map[link.product_id].push(topping)
+    }
+    return map
+}
+
+// discountPrograms là thực thể toàn cục theo địa chỉ (không product_id) — dựng map
+// productId -> DiscountProgram[] từ bảng nối discount_program_products, mirrors
+// buildProductToppingsMap ở trên.
+function buildProductDiscountsMap(programs: DiscountProgram[], links: Row[]) {
+    const byId = new Map(programs.map(p => [p.id, p]))
+    const map: Record<string, DiscountProgram[]> = {}
+    for (const link of links) {
+        const program = byId.get(link.discount_program_id)
+        if (!program) continue
+        if (!map[link.product_id]) map[link.product_id] = []
+        map[link.product_id].push(program)
+    }
+    return map
+}
+
+async function fetchProductDataWithRetry(addressId: UUID | null, attempts = 3, delayMs = 800) {
+    let lastError: unknown
+    for (let i = 0; i < attempts; i++) {
+        try {
+            const [prods, recs, costsResult, extras, toppings, discountPrograms] = await Promise.all([
+                fetchProducts(addressId),
+                fetchAllRecipes(addressId),
+                fetchIngredientCostsAndUnits(addressId),
+                fetchProductExtras(addressId),
+                fetchToppings(addressId),
+                fetchDiscountPrograms(addressId),
+            ])
+            const extraIds = Object.values(extras).flat().map(e => e.id)
+            const [extraIngs, toppingLinks, discountLinks] = await Promise.all([
+                fetchExtraIngredients(extraIds),
+                fetchProductToppingLinks(toppings.map(t => t.id)),
+                fetchDiscountProgramProductLinks(discountPrograms.map(p => p.id)),
+            ])
+            return {
+                prods, recs, costsResult, extras, extraIngs, toppings,
+                productToppings: buildProductToppingsMap(toppings, toppingLinks),
+                discountPrograms, productDiscounts: buildProductDiscountsMap(discountPrograms, discountLinks),
+            }
+        } catch (error) {
+            lastError = error
+            if (i < attempts - 1) await new Promise(res => setTimeout(res, delayMs))
+        }
+    }
+    throw lastError
+}
+
+// ponytail: hook co-located with its Provider (standard context pattern) —
+// splitting into its own file isn't worth the diff for a fast-refresh (dev-only HMR) nag.
+// eslint-disable-next-line react-refresh/only-export-components
+export function useProducts() {
+    const ctx = useContext(ProductContext)
+    if (!ctx) throw new Error('useProducts must be used within ProductProvider')
+    return ctx
+}
+
+export function ProductProvider() {
+    const { profile } = useAuth()
+    const activeManagerId = profile?.role === 'manager' ? profile.id : profile?.manager_id
+    const { addressId } = useAddress()
+
+    const cacheKey = useCallback((name: string) => buildCacheKey(addressId || 'default', name), [addressId])
+
+    const readCache = useCallback(<T,>(name: string, fallback: T) => readJSON<T>(cacheKey(name), fallback), [cacheKey])
+
+    const [products, setProducts] = useState<Row[]>(() => readCache('products', []))
+    const [recipes, setRecipes] = useState<RecipeRow[]>(() => readCache('recipes', []))
+    const [ingredientCosts, setIngredientCosts] = useState<Record<string, number>>(() => readCache('costs', {}))
+    const [ingredientUnits, setIngredientUnits] = useState<Record<string, string>>(() => readCache('units', {}))
+    const [ingredientConfigs, setIngredientConfigs] = useState<IngredientConfig[]>(() => readCache('configs', []))
+    const [ingredientGroups, setIngredientGroups] = useState<IngredientGroup[] | null>(() => readCache('ingredient_groups', null)) // null = địa chỉ không hỗ trợ nhóm
+    const [productExtras, setProductExtras] = useState<Record<string, CartExtra[]>>(() => readCache('extras', {}))
+    const [extraIngredients, setExtraIngredients] = useState<ExtraIngredients>(() => readCache('extra_ingredients', {}))
+    const [toppings, setToppings] = useState<CartTopping[]>(() => readCache('toppings', []))
+    const [productToppings, setProductToppings] = useState<Record<string, CartTopping[]>>(() => readCache('product_toppings', {}))
+    const [discountPrograms, setDiscountPrograms] = useState<DiscountProgram[]>(() => readCache('discount_programs', []))
+    const [productDiscounts, setProductDiscounts] = useState<Record<string, DiscountProgram[]>>(() => readCache('product_discounts', {}))
+    const [loading, setLoading] = useState(true)
+    const [loadError, setLoadError] = useState<unknown>(null)
+    const loadGenRef = useRef(0) // bumped each effect run so a stale retry can no-op instead of writing over a newer address's data
+    const freshAtRef = useRef(0) // lúc bắt đầu lần tải mạng gần nhất (0 = chưa có / vừa thất bại) — cho refreshProducts({ ifStale })
+
+    const applyData = useCallback((
+        prods: Row[], recs: RecipeRow[], costsResult: Awaited<ReturnType<typeof fetchIngredientCostsAndUnits>>, extras: Record<string, CartExtra[]>,
+        extraIngs: ExtraIngredients, addressId: UUID | null, toppingsList: CartTopping[], productToppingsMap: Record<string, CartTopping[]>,
+        discountProgramsList: DiscountProgram[], productDiscountsMap: Record<string, DiscountProgram[]>,
+    ) => {
+        const { costs, units, rows, groups } = costsResult
+        setProducts(prods)
+        setRecipes(recs)
+        setIngredientCosts(costs)
+        setIngredientUnits(units)
+        setIngredientConfigs((rows || []) as IngredientConfig[])
+        setIngredientGroups((groups ?? null) as IngredientGroup[] | null)
+        setProductExtras(extras)
+        setExtraIngredients(extraIngs)
+        setToppings(toppingsList)
+        setProductToppings(productToppingsMap)
+        setDiscountPrograms(discountProgramsList)
+        setProductDiscounts(productDiscountsMap)
+        // writeJSON nuốt lỗi quota
+        Object.entries({
+            products: prods,
+            recipes: recs,
+            costs,
+            units,
+            configs: rows || [],
+            ingredient_groups: groups ?? null,
+            extras,
+            extra_ingredients: extraIngs,
+            toppings: toppingsList,
+            product_toppings: productToppingsMap,
+            discount_programs: discountProgramsList,
+            product_discounts: productDiscountsMap,
+        }).forEach(([name, val]) => writeJSON(buildCacheKey(addressId || 'default', name), val))
+    }, [])
+
+    useEffect(() => {
+        const gen = ++loadGenRef.current
+
+        // Instantly apply address-specific cache while fresh data loads. This is
+        // also the offline-fallback path: if the fetch below fails (no network at
+        // shift-open), this cache-hydrated state is simply left in place — the POS
+        // screen still shows the last-known menu/prices/extras and orders queue
+        // into the existing offline-order mechanism.
+        setProducts(readCache('products', []))
+        setRecipes(readCache('recipes', []))
+        setIngredientCosts(readCache('costs', {}))
+        setIngredientUnits(readCache('units', {}))
+        setIngredientConfigs(readCache('configs', []))
+        setIngredientGroups(readCache('ingredient_groups', null))
+        setProductExtras(readCache('extras', {}))
+        setExtraIngredients(readCache('extra_ingredients', {}))
+        setToppings(readCache('toppings', []))
+        setProductToppings(readCache('product_toppings', {}))
+        setDiscountPrograms(readCache('discount_programs', []))
+        setProductDiscounts(readCache('product_discounts', {}))
+
+        async function load() {
+            try {
+                setLoading(true)
+                setLoadError(null)
+                freshAtRef.current = Date.now()
+                const {
+                    prods, recs, costsResult, extras, extraIngs, toppings: toppingsList, productToppings: productToppingsMap,
+                    discountPrograms: discountProgramsList, productDiscounts: productDiscountsMap,
+                } = await fetchProductDataWithRetry(addressId)
+                if (loadGenRef.current !== gen) return // a newer address/profile change superseded this fetch
+                applyData(prods, recs, costsResult, extras, extraIngs, addressId, toppingsList, productToppingsMap, discountProgramsList, productDiscountsMap)
+            } catch (error) {
+                // Offline-at-shift-open fallback: deliberately do NOT clear products/
+                // recipes/etc here. They're already holding the cache snapshot set
+                // above, so the POS screen keeps showing the last-known menu/prices
+                // instead of going blank. loadError only drives the UI copy ("offline,
+                // will sync" vs "no menu yet") — see MenuGrid.
+                console.error('Failed to load product data', error)
+                freshAtRef.current = 0
+                setLoadError(error)
+            } finally {
+                setLoading(false)
+            }
+        }
+        load()
+    }, [activeManagerId, addressId, applyData, readCache])
+
+    // ifStale: dành cho refresh lúc mount trang — bỏ qua nếu vừa tải xong (9 request, 2 đợt nối
+    // tiếp). Không truyền = luôn tải, như mọi nơi gọi sau khi sửa dữ liệu.
+    const refreshProducts = useCallback(async ({ ifStale }: { ifStale?: boolean } = {}) => {
+        if (ifStale && Date.now() - freshAtRef.current < FRESH_MS) return
+        freshAtRef.current = Date.now()
+        // Snapshot the generation so a slow refresh (e.g. the online-retry below,
+        // which can be in flight for a while on a bad connection) can't clobber a
+        // newer address's data if the user switches addresses before it resolves.
+        const gen = loadGenRef.current
+        const [prods, recs, costsResult, extras, toppingsList, discountProgramsList] = await Promise.all([
+            fetchProducts(addressId),
+            fetchAllRecipes(addressId),
+            fetchIngredientCostsAndUnits(addressId),
+            fetchProductExtras(addressId),
+            fetchToppings(addressId),
+            fetchDiscountPrograms(addressId),
+        ])
+        const extraIds = Object.values(extras).flat().map(e => e.id)
+        const [extraIngs, toppingLinks, discountLinks] = await Promise.all([
+            fetchExtraIngredients(extraIds),
+            fetchProductToppingLinks(toppingsList.map(t => t.id)),
+            fetchDiscountProgramProductLinks(discountProgramsList.map(p => p.id)),
+        ])
+        if (loadGenRef.current !== gen) return
+        applyData(
+            prods, recs, costsResult, extras, extraIngs, addressId, toppingsList, buildProductToppingsMap(toppingsList, toppingLinks),
+            discountProgramsList, buildProductDiscountsMap(discountProgramsList, discountLinks),
+        )
+    }, [addressId, applyData])
+
+    // Genuinely-offline case: retries above gave up, then connectivity actually
+    // comes back while the tab stays open (no visibilitychange to trigger the
+    // other effect's refetch below) — reconcile without waiting for a reload.
+    useEffect(() => {
+        if (!loadError) return
+        const onOnline = () => { refreshProducts().then(() => setLoadError(null)).catch(() => { }) }
+        window.addEventListener('online', onOnline)
+        return () => window.removeEventListener('online', onOnline)
+    }, [loadError, refreshProducts])
+
+    // Refresh menu/recipe/cost/extras when tab becomes visible again.
+    // Replaces a per-address realtime channel that previously held an open
+    // WebSocket subscription on 4 tables for every signed-in client. Product
+    // data changes infrequently, so an on-focus refetch is sufficient.
+    useEffect(() => {
+        if (!addressId) return
+
+        // Only refetch the 5 product tables if the tab was actually away for a
+        // while. Without this, every quick app-switch / lock-screen fires a herd
+        // of reads that saturates a flaky connection (a key "lag after foreground"
+        // aggravator). Product data changes infrequently → 30s is plenty.
+        return onTabReturn(() => refreshProducts().catch(() => { }))
+    }, [addressId, refreshProducts])
+
+    const value = useMemo(() => ({
+        products,
+        recipes,
+        ingredientCosts,
+        ingredientUnits,
+        ingredientConfigs,
+        ingredientGroups,
+        productExtras,
+        extraIngredients,
+        toppings,
+        productToppings,
+        discountPrograms,
+        productDiscounts,
+        refreshProducts,
+        loading,
+        loadError
+    }), [products, recipes, ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, productExtras, extraIngredients, toppings, productToppings, discountPrograms, productDiscounts, refreshProducts, loading, loadError])
+
+    return (
+        <ProductContext.Provider value={value}>
+            <Outlet />
+        </ProductContext.Provider>
+    )
+}

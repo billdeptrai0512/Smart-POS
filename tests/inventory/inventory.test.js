@@ -1,5 +1,5 @@
 // Tồn kho — tiêu hao & hao hụt: calculateEstimatedConsumption, calculateLossValue.
-// Nguồn: src/utils/inventory.js
+// Nguồn: src/utils/inventory.ts
 
 import { describe, it, expect } from 'vitest';
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown, calculateLossValue, buildRecipeIngredientSet, buildIngredientToProduct, averageIngredientMaps, formatPackedQty, formatPackCount, isLowStockOf, unitTiersOf } from '../../src/utils/inventory';

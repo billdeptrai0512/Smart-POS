@@ -1,5 +1,5 @@
 // POS — diffOrderHeads: so đơn đang giữ trong máy với danh sách đầu đơn vừa poll về.
-// Nguồn: src/hooks/useOrdersPoll.js
+// Nguồn: src/hooks/useOrdersPoll.ts
 //
 // Đây là toàn bộ cơ chế đồng bộ giữa hai máy cùng địa chỉ (một máy ghi món, một máy mở
 // Nhật ký) sau khi bỏ realtime. Sai ở đây là đơn của máy kia không bao giờ hiện, hoặc

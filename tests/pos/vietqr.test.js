@@ -1,5 +1,5 @@
 // QR chuyển khoản in trên bill (PrintBill) — sai 1 ký tự là app ngân hàng báo mã không hợp lệ,
-// hoặc tệ hơn: chuyển nhầm số tiền. Nguồn: src/utils/vietqr.js
+// hoặc tệ hơn: chuyển nhầm số tiền. Nguồn: src/utils/vietqr.ts
 
 import { describe, it, expect } from 'vitest'
 import { crc16, vietQrPayload } from '../../src/utils/vietqr'

@@ -117,7 +117,7 @@ export async function fetchTodayOrders(addressId: UUID | null): Promise<any> {
     return data
 }
 
-// ---- Đồng bộ đa thiết bị (poll, xem hooks/useOrdersPoll.js) ----
+// ---- Đồng bộ đa thiết bị (poll, xem hooks/useOrdersPoll.ts) ----
 // Câu chạy 1.5 giây một lần trên mỗi máy đang mở /pos hoặc /history, nên nó phải rẻ ở
 // TRẠNG THÁI KHÔNG ĐỔI — tức gần như mọi nhịp.
 //
@@ -309,9 +309,7 @@ export async function bulkSubmitOrders(ordersArray: any[]): Promise<boolean> {
 // Soft Delete an order. addressId unknown — flush all.
 export async function deleteOrder(orderId: UUID, staffName: string | null = null): Promise<boolean> {
     invalidateReportCache(null)
-    // localRepository is untyped JS; its `= null` defaults make tsc infer params as `null`.
-    // Cast the fn (lazy, at call time — safe under circular imports) until it's converted.
-    if (localRepo.isGuest()) return (localRepo.deleteLocalOrder as any)(orderId, staffName)
+    if (localRepo.isGuest()) return localRepo.deleteLocalOrder(orderId, staffName)
 
     const { error: orderError } = await supabase
         .from('orders')
@@ -331,7 +329,7 @@ export async function deleteOrder(orderId: UUID, staffName: string | null = null
 // affects revenue, not cost. addressId unknown → flush all.
 export async function updateOrderDiscount(orderId: UUID, total: number, discountAmount: number, itemDiscounts: { id: UUID, discount_amount: number }[] = []): Promise<boolean> {
     invalidateReportCache(null)
-    if (localRepo.isGuest()) return (localRepo.updateLocalOrderDiscount as any)(orderId, total, discountAmount, itemDiscounts)
+    if (localRepo.isGuest()) return localRepo.updateLocalOrderDiscount(orderId, total, discountAmount, itemDiscounts)
 
     const { error } = await supabase.rpc('update_order_discount', {
         p_order_id: orderId,
@@ -417,18 +415,18 @@ export async function fetchRecentOrders(addressId: UUID | null, limit = 3): Prom
 // served_at IS NULL — ra món xong thì coi như xong, rơi khỏi bucket này (đọc/in/xoá đơn cũ
 // vẫn làm ở Nhật ký). Nhờ vậy TableModal/moveTableRounds/toggleMark dùng lại nguyên logic
 // "một bàn" cho cả mang đi, không cần state/fetch riêng.
-type TableLine = { name: string; qty: number; dish: string; opts: string[]; note: string | null }
+export type TableLine = { name: string; qty: number; dish: string; opts: string[]; note: string | null }
 type TableRoundItem = { productId: UUID; qty: number; extraIds: UUID[]; toppingIds: UUID[]; discountAmount: number; note: string | null }
 export type TableRound = { id: UUID; orderNo: number | null; createdAt: string; total: number; discountAmount: number; servedAt: string | null; paidAt: string | null; staffName: string | null; printCount: number; lines: TableLine[]; items: TableRoundItem[] }
-type OpenTable = { name: string | null; total: number; rounds: TableRound[]; openedAt: string; lines: TableLine[] }
+export type OpenTable = { name: string | null; total: number; rounds: TableRound[]; openedAt: string; lines: TableLine[] }
 
 // 'Tiền mặt'/'MoMo' đi chung mảng extras nhưng là cách trả tiền, không phải topping —
-// cùng quy ước với buildLastOrderFrom* ở POSContext.
+// cùng quy ước với buildLastOrderFrom* ở cartOps.
 const PAYMENT_EXTRAS = new Set(['Tiền mặt', 'MoMo'])
 const isOption = (n: string | undefined): n is string => !!n && !PAYMENT_EXTRAS.has(n)
 
 // Nhãn một dòng hoá đơn. Dùng ở fetchOpenTables (extras đã là chuỗi 'a, b' trong
-// order_items.options) và ở POSContext (extras còn là mảng object của giỏ).
+// order_items.options) và ở cartOps (extras còn là mảng object của giỏ).
 // note: ghi chú riêng dòng (order_items.note) — nối sau " — " nên 2 ly cùng món khác ghi chú
 // không bị mergeTableLines gộp làm một, và tự hiện ở chi tiết bàn lẫn phiếu bếp.
 export function tableLineName(name: string, extraNames: (string | undefined)[], note?: string | null): string {
@@ -444,7 +442,7 @@ export function tableLine(dish: string, extraNames: (string | undefined)[], note
     return { name: tableLineName(dish, extraNames, note), qty, dish, opts: extraNames.filter(isOption), note: note || null }
 }
 
-// Gộp dòng trùng nhãn. Dùng cả ở đây và ở POSContext (cộng lạc quan đợt vừa gửi).
+// Gộp dòng trùng nhãn. Dùng cả ở đây và ở cartOps (cộng lạc quan đợt vừa gửi).
 export function mergeTableLines(base: TableLine[], add: TableLine[]): TableLine[] {
     const out = base.map(l => ({ ...l }))
     for (const l of add) {
@@ -528,7 +526,7 @@ export async function markOrder(orderId: UUID, patch: { served_at?: string | nul
 }
 
 // Đọc số lần đã in TRỰC TIẾP TỪ SERVER rồi +1 và ghi lại — không tin props.printCount
-// (nguồn todayOrders/openTables ở client): orders_sync (poll đồng bộ, useOrdersPoll.js) chỉ
+// (nguồn todayOrders/openTables ở client): orders_sync (poll đồng bộ, useOrdersPoll.ts) chỉ
 // patch một tập cột "head" cố định (xem diffOrderHeads) — có print_count từ 20260919, nhưng
 // chỉ tới sau một nhịp poll, không kịp cho cú in liên tiếp ngay trên máy này.
 //
@@ -560,7 +558,7 @@ async function incrementOrderPrintCount(orderId: UUID): Promise<number | null> {
 }
 
 // Cache trong bộ nhớ TAB HIỆN TẠI (mất khi reload) — cho "In lần" hiện ĐÚNG NGAY khi bấm in
-// (không đợi round-trip mạng của incrementOrderPrintCount ở trên, xem PrintBill.jsx), đồng
+// (không đợi round-trip mạng của incrementOrderPrintCount ở trên, xem PrintBill.tsx), đồng
 // thời vẫn tăng đúng qua nhiều lần in liên tiếp trong cùng phiên dù PrintBill remount (Nhật
 // ký, mỗi lần bấm in mount lại — xem usePrintArmed) vì cache không mất theo component như
 // props.printCount. Server vẫn là nguồn sự thật: ghi ở nền qua incrementOrderPrintCount (đọc-
