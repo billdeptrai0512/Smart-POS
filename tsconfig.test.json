@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "types": [
+      "node"
+    ]
+  },
+  "//": "Test fixtures are deliberately partial/loose: relaxed flags, still checks call signatures and typos.",
+  "include": [
+    "src/**/*.test.ts",
+    "tests/**/*.ts",
+    "tests/**/*.tsx",
+    "src/vite-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".claude"
+  ]
+}

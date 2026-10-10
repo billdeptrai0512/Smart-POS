@@ -9,16 +9,16 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { onTabReturn } from '../../src/utils/tabVisibility'
 
 // document giả: giữ handler để test tự bắn event và tự đặt visibilityState.
-let handlers
+let handlers: Set<() => void>
 function fakeDocument() {
     handlers = new Set()
     globalThis.document = {
         visibilityState: 'visible',
-        addEventListener: (type, fn) => { if (type === 'visibilitychange') handlers.add(fn) },
-        removeEventListener: (type, fn) => { if (type === 'visibilitychange') handlers.delete(fn) },
-    }
+        addEventListener: (type: string, fn: () => void) => { if (type === 'visibilitychange') handlers.add(fn) },
+        removeEventListener: (type: string, fn: () => void) => { if (type === 'visibilitychange') handlers.delete(fn) },
+    } as unknown as Document
 }
-const fire = (state) => { globalThis.document.visibilityState = state; handlers.forEach(fn => fn()) }
+const fire = (state: DocumentVisibilityState) => { Object.assign(globalThis.document, { visibilityState: state }); handlers.forEach(fn => fn()) }
 
 describe('onTabReturn', () => {
     beforeEach(() => {

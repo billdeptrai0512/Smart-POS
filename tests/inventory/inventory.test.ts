@@ -372,7 +372,7 @@ describe('buildIngredientToProduct', () => {
 
 describe('formatPackedQty', () => {
     const pack2 = { size: 12, unit: 'thùng' } // 1 thùng = 12 hộp; 1 hộp = 1286 ml
-    const fmt = (q, o = { compact: true }) => formatPackedQty(q, 1286, 'hộp', 'ml', o)
+    const fmt = (q: number, o: Parameters<typeof formatPackedQty>[4] = { compact: true }) => formatPackedQty(q, 1286, 'hộp', 'ml', o)
 
     it('1 cấp: giữ nguyên hành vi cũ', () => {
         expect(fmt(2572 + 40)).toBe('2 hộp + 40 ml')

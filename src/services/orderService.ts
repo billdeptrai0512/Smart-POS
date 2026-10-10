@@ -443,7 +443,7 @@ export function tableLine(dish: string, extraNames: (string | undefined)[], note
 }
 
 // Gộp dòng trùng nhãn. Dùng cả ở đây và ở cartOps (cộng lạc quan đợt vừa gửi).
-export function mergeTableLines(base: TableLine[], add: TableLine[]): TableLine[] {
+export function mergeTableLines<L extends { name: string; qty: number }>(base: L[], add: L[]): L[] {
     const out = base.map(l => ({ ...l }))
     for (const l of add) {
         const hit = out.find(x => x.name === l.name)

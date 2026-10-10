@@ -101,7 +101,7 @@ describe('rollIngredientDays — tồn quầy theo lý thuyết tới khi đếm
 // địa chỉ đếm hằng ngày ra đúng từng dòng như cũ (số này đổ vào P&L "Hao hụt / hủy").
 function legacyWalk({ shiftClosings = [], dailyConsumption = {}, prevShiftClosings = [], openingOverrideMap = null }) {
     if (!shiftClosings.length) return []
-    const sorted = [...shiftClosings].sort((a, b) => new Date(a.closed_at || a.created_at) - new Date(b.closed_at || b.created_at))
+    const sorted = [...shiftClosings].sort((a, b) => new Date(a.closed_at || a.created_at).getTime() - new Date(b.closed_at || b.created_at).getTime())
     let firstOpeningMap = openingOverrideMap
     if (!firstOpeningMap) {
         firstOpeningMap = {}

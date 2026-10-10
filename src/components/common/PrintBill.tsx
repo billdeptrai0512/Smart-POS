@@ -21,7 +21,7 @@ const MUTED: CSSProperties = { fontSize: 11 }
 // ponytail: tài khoản nhận chuyển khoản hardcode cùng chỗ với logo/địa chỉ/SĐT (xem comment
 // ngay dưới) — đổi tài khoản chỉ cần sửa 2 hằng này; QR tự sinh theo tổng hoá đơn.
 const BANK_BIN = '970407' // mã NAPAS của Techcombank (TCB)
-const BANK_ACCOUNT = 'M99900003951129' // TK ảo Loa Ting Ting (9Pay) — tiền về là loa báo; chuỗi khớp mã tĩnh in sẵn, xem vietqr.test.js
+const BANK_ACCOUNT = 'M99900003951129' // TK ảo Loa Ting Ting (9Pay) — tiền về là loa báo; chuỗi khớp mã tĩnh in sẵn, xem vietqr.test.ts
 
 const fullLabel = (d: Date) => `${timeStringVN(d)} ${dateShortVN(d)}`
 

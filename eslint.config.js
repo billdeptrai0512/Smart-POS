@@ -54,7 +54,7 @@ export default defineConfig([
   },
   // Node-only configs (vite.config.js, scripts) — allow `process`
   {
-    files: ['vite.config.js', 'scripts/**/*.{js,mjs}', 'tests/**/*.{js,jsx}'],
+    files: ['vite.config.js', 'scripts/**/*.{js,mjs}', 'tests/**/*.{ts,tsx}'],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
     },

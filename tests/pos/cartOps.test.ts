@@ -10,8 +10,17 @@ import {
     mergeFetchedOrders, computeSubmitTotals, submitLines, appendRoundToTables, buildOptimisticRound,
     buildOptimisticOrder, cartItemsFromRound, seedRoundDiscounts,
 } from '../../src/services/cartOps'
+import type { ReopenResult } from '../../src/services/cartOps'
+import type { CartItem } from '../../src/types/domain'
+import type { OpenTable } from '../../src/services/orderService'
 
-const line = (over = {}) => ({
+// cartItemsFromRound trả { ok: false } | { ok: true, ... } — thu hẹp để test đọc được items/programDeltas.
+const okResult = (r: ReopenResult) => {
+    if (!r.ok) throw new Error('cartItemsFromRound trả ok:false')
+    return r
+}
+
+const line = (over: Partial<CartItem> = {}): CartItem => ({
     cartItemId: 'c1', productId: 'p1', name: 'Cà phê', basePrice: 10000, quantity: 1, extras: [], toppings: [], ...over,
 })
 const ice = { id: 'e-ice', name: 'Ít đá', price: 0, is_sticky: true }
@@ -59,7 +68,7 @@ describe('thêm / bớt / sửa dòng', () => {
         expect(l).toEqual({ cartItemId: 'new-id', productId: 'p1', name: 'Cà phê', basePrice: 10000, quantity: 1, extras: [ice], toppings: [] })
     })
     it('newCartLine: dùng giá chương trình giảm giá đang hiệu lực', () => {
-        const program = { enabled: true, start_date: null, end_date: null, days_of_week: [], type: 'amount', value: 2000 }
+        const program = { id: 'd1', name: 'Giảm 2k', enabled: true, start_date: null, end_date: null, days_of_week: [], type: 'amount', value: 2000 }
         const l = newCartLine({ id: 'p1', name: 'Cà phê', price: 10000 }, [], [], [program], 'x')
         expect(l.basePrice).toBe(8000)
     })
@@ -209,7 +218,7 @@ describe('đợt lạc quan của bàn', () => {
 
     it('appendRoundToTables: bàn đã mở thì cộng dồn tổng, thêm đợt, gộp dòng cùng nhãn', () => {
         const round = buildOptimisticRound(items, totals, 'o2', 't1', lines)
-        const existing = { name: 'Bàn 1', total: 10000, rounds: [{ id: 'o1' }], openedAt: 't0', lines: submitLines([line({ extras: [shot], note: 'nóng' })]) }
+        const existing = { name: 'Bàn 1', total: 10000, rounds: [{ id: 'o1' }], openedAt: 't0', lines: submitLines([line({ extras: [shot], note: 'nóng' })]) } as OpenTable
         const next = appendRoundToTables([existing, { name: 'Bàn 2', total: 5, rounds: [], openedAt: 't', lines: [] }], 'Bàn 1', round, 't1')
         expect(next).toHaveLength(2)
         expect(next[0].total).toBe(39000)
@@ -258,12 +267,12 @@ describe('sửa đợt: cartItemsFromRound', () => {
         expect(cartItemsFromRound(round, [], {}, {}, {})).toEqual({ ok: false })
     })
     it('đợt chưa có số đơn → orderNo null', () => {
-        const r = cartItemsFromRound({ items: round.items }, products, {}, {}, {})
+        const r = okResult(cartItemsFromRound({ items: round.items }, products, {}, {}, {}))
         expect(r.items[0].edit).toEqual({ orderNo: null })
     })
     it('giá chương trình: basePrice là giá đã giảm, programDeltas ghi phần chênh × qty', () => {
-        const program = { enabled: true, start_date: null, end_date: null, days_of_week: [], type: 'amount', value: 1000 }
-        const r = cartItemsFromRound(round, products, {}, {}, { p1: [program] })
+        const program = { id: 'd1', name: 'Giảm 1k', enabled: true, start_date: null, end_date: null, days_of_week: [], type: 'amount', value: 1000 }
+        const r = okResult(cartItemsFromRound(round, products, {}, {}, { p1: [program] }))
         expect(r.items[0].basePrice).toBe(9000)
         expect(r.programDeltas).toEqual([2000])
     })

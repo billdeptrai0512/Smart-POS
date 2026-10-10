@@ -9,7 +9,7 @@ nhanh. Vitest tự quét `*.test.*` nên chạy không cần cấu hình gì th�
 npm test                          # chạy hết
 npx vitest run tests/report       # chạy 1 mảng
 npx vitest                        # watch mode (chạy lại khi sửa)
-npx vitest run tests/common/money.test.js   # 1 file
+npx vitest run tests/common/money.test.ts   # 1 file
 ```
 
 Mỗi file có **header** ghi: test cái gì + file nguồn. Từng case đọc ở chuỗi `describe(...)`

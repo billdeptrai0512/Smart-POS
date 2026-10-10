@@ -4,8 +4,9 @@
 import { describe, it, expect } from 'vitest'
 import { computeExtrasAfterIdx } from '../../src/utils/menuGridLayout'
 
-const p = (id) => ({ id })
-const div = (id) => ({ id, is_divider: true })
+const item = (id: number | string, is_divider = false) => ({ id, is_divider })
+const p = (id: number | string) => item(id)
+const div = (id: number | string) => item(id, true)
 
 describe('computeExtrasAfterIdx', () => {
     it('không có active → -1', () => {

@@ -288,7 +288,7 @@ describe('calculateEstimatedConsumption', () => {
     it('[BUG] truyền extra_ids dạng string thay vì {id} object → extra bị bỏ qua (sai)', () => {
         // Mô phỏng bug: i.extras = i.extra_ids = ['ly_lon'] (mảng string từ DB)
         const ordersWithBug = [{ product_id: 'cafe_sua', qty: 1, extras: ['ly_lon'] }];
-        const bugResult = calculateEstimatedConsumption(ordersWithBug, recipes, extraIngredients);
+        const bugResult = calculateEstimatedConsumption(ordersWithBug as never, recipes, extraIngredients);
         // Extra bị bỏ qua → kết quả sai (thiếu LyLon, CaPhe không được cộng thêm 7)
         expect(bugResult).toEqual({ CaPhe: 20, SuaDac: 30, LyNho: 1 }); // SAI so với thực tế
 

@@ -34,9 +34,9 @@ Bảng `extraIngredients` ngoài việc lưu nguyên liệu khách mua thêm, c�
 
 ## Cách Test Xác Nhận Logic
 
-Thư mục Unit Test và các file minh chứng mô phỏng nằm tại: `tests/inventory/inventory.test.js`
+Thư mục Unit Test và các file minh chứng mô phỏng nằm tại: `tests/inventory/inventory.test.ts`
 
 Để chạy mô phỏng, dùng lệnh:
 ```bash
-npx vitest run tests/inventory/inventory.test.js
+npx vitest run tests/inventory/inventory.test.ts
 ```

@@ -191,7 +191,7 @@ describe('aggregateOrderStats discount', () => {
         extraPriceMap: {},
         extraNameMap: {},
         recipes: [],
-        extraIngredients: [],
+        extraIngredients: {},
         ingredientCosts: {},
     }
 

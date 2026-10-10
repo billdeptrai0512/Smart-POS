@@ -1,6 +1,6 @@
 // Logic THUẦN của giỏ hàng / đơn lạc quan, rút từ POSContext. Mọi hàm không đọc state, không gọi
 // mạng, không đụng ref — POSContext giữ phần "ref đồng bộ + setState + gọi server", ở đây chỉ còn
-// tính toán, nên test được mà không cần render React (xem tests/pos/cartOps.test.js).
+// tính toán, nên test được mà không cần render React (xem tests/pos/cartOps.test.ts).
 import type { CartItem, CartExtra, CartTopping, CostPerItem, Discount, UUID, Row } from '../types/domain'
 import { errorMessage } from '../utils/errorMessage'
 import { computeDiscount, cartLineSubtotal, discountToPercent, NO_DISCOUNT } from '../utils/money'
