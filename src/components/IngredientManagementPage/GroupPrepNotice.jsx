@@ -5,19 +5,20 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useStats } from '../../contexts/StatsContext'
 import NoticeBar from '../common/NoticeBar'
 
-// Dải "Soạn kho nhóm" ở đỉnh /inventory → mở trang /inventory/group-prep (GroupPrepPage). Chỉ hiện khi địa chỉ đang
-// chọn dùng chung kho tổng với địa chỉ khác, và chỉ cho chủ/quản lý (số liệu đọc đơn của cả các chi nhánh).
+// Dải "Chia hàng cho chi nhánh" ở đỉnh /inventory → mở trang /inventory/group-prep (GroupPrepPage). Chỉ hiện ở KHO TỔNG của nhóm
+// (hoặc nhóm chưa đặt kho tổng — hành vi cũ), và chỉ cho chủ/quản lý (số liệu đọc đơn của cả các chi nhánh).
 export default function GroupPrepNotice() {
     const navigate = useNavigate()
     const { isGuest, isManager, isAdmin } = useAuth()
-    const { selectedAddress, siblingsByAddress } = useAddress()
+    const { selectedAddress, siblingsByAddress, warehouseRole } = useAddress()
     const { isOnline } = useStats()
     const siblings = selectedAddress ? siblingsByAddress[selectedAddress.id] : null
-    if (!((isManager || isAdmin) && !isGuest && isOnline && siblings?.length)) return null
+    const canDistribute = warehouseRole === 'hub' || warehouseRole === 'nohub'
+    if (!((isManager || isAdmin) && !isGuest && isOnline && canDistribute && siblings?.length)) return null
     return (
         <NoticeBar
             icon={<Boxes size={15} className="text-primary shrink-0" />}
-            label="Soạn kho nhóm"
+            label="Chia hàng cho chi nhánh"
             onClick={() => navigate('/inventory/group-prep')}
         />
     )

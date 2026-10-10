@@ -140,7 +140,6 @@ export function IngredientCounterPanel({
     minCounterStock,        // tồn QUẦY ít nhất
     counterStock, currentStock,
     counterEstimated,       // true = Tồn quầy đang là số ƯỚC TÍNH theo lý thuyết (chưa đếm hôm nay)
-    siblingCounterStocks,   // [{ addressId, addressName, counterStock }] | null — tồn quầy các địa chỉ khác dùng chung kho
     canEdit,
     onSaveCounter,      // (newCounter: number)    => Promise  (Tồn quầy → ghi remaining ca mới nhất)
     onSaveTareWeight,   // (newTare: number)       => Promise  (0 = xoá bì)
@@ -169,20 +168,12 @@ export function IngredientCounterPanel({
             )}
             <Panel>
                 <QtyRow
-                    label={siblingCounterStocks?.length ? 'Tồn quầy cuối kỳ · đây' : 'Tồn quầy cuối kỳ'}
+                    label="Tồn quầy cuối kỳ"
                     value={counterStock} unit={unit}
                     hasPack={hasPack} packSize={packSize} packUnit={packUnit} pack2={pack2}
                     canEdit={canEdit} editable onSave={onSaveCounter}
                     note={counterEstimated ? 'ước tính theo lý thuyết — nhập số đếm để xác nhận' : null}
                 />
-                {siblingCounterStocks?.map(s => (
-                    <QtyRow
-                        key={s.addressId}
-                        label={`Tồn quầy · ${s.addressName}`} value={s.counterStock} unit={unit}
-                        hasPack={hasPack} packSize={packSize} packUnit={packUnit} pack2={pack2}
-                        canEdit={false} editable={false}
-                    />
-                ))}
                 {showTare && (
                     <TareRow tareWeight={tareWeight} unit={unit} canEdit={canEdit} onSave={onSaveTareWeight} hint={hintTare} />
                 )}

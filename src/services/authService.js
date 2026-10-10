@@ -433,6 +433,13 @@ export async function deleteWarehouseGroup(groupId) {
     return true
 }
 
+// Đặt địa chỉ giữ hàng thật của nhóm (kho tổng); addressId null → bỏ đặt.
+export async function setWarehouseGroupHub(groupId, addressId) {
+    const { error } = await supabase.rpc('set_warehouse_group_hub', { p_group_id: groupId, p_address_id: addressId })
+    if (error) throw error
+    return true
+}
+
 // p_group_id null → rời nhóm (kho tổng độc lập trở lại).
 export async function setAddressWarehouseGroup(addressId, groupId) {
     const { error } = await supabase.rpc('set_address_warehouse_group', { p_address_id: addressId, p_group_id: groupId })

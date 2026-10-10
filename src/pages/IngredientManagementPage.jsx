@@ -130,8 +130,6 @@ export default function IngredientManagementPage() {
     const [dismissedSig, setDismissedSig] = useState('')
     const [stockDeficits, setStockDeficits] = useState([])
     const [dailyContext, setDailyContext] = useState({})
-    // Tồn quầy riêng của từng địa chỉ khác trong nhóm kho dùng chung (kho thì gộp, quầy thì không).
-    const [siblingStocks, setSiblingStocks] = useState({})
 
     // Filter recipes to only those referencing currently active products.
     // Without this, dead recipes for soft-deleted products show as false-positive orphans.
@@ -236,21 +234,16 @@ export default function IngredientManagementPage() {
         // Tab Kiểm kê không dùng kết quả (tự tải tồn qua useShiftInventoryState) — chỉ tải khi ở Lưu trữ;
         // activeView trong deps nên chuyển sang tab Lưu trữ sẽ tự tải lại (cũng là bản tươi sau khi Kiểm kê lưu).
         if (!selectedAddress || activeView !== 'stocking') return
-        const siblingIds = groupAddressIds.filter(id => id !== (selectedAddress.id ?? null))
         // Deficits quét TOÀN BỘ lịch sử expenses + shift_closings (nặng nhất) mà chỉ phục vụ banner của quản lý
         // → không chặn danh sách: banner hiện sau, nhân viên thì khỏi tải.
         if (canEdit) fetchIngredientDeficits(groupAddressIds).then(setStockDeficits).catch(err => console.error('fetchIngredientDeficits', err))
-        const [stocks, daily, ...siblingResults] = await Promise.all([
+        const [stocks, daily] = await Promise.all([
             // Tồn quầy NVL chưa đếm hôm nay = ước tính theo lý thuyết (withCounterEstimate).
             fetchIngredientStocks(selectedAddress.id ?? null).then(s => withCounterEstimate(s, selectedAddress.id, calcRef.current)),
             fetchIngredientDailyContext(selectedAddress.id ?? null),
-            ...siblingIds.map(id => fetchIngredientStocks(id)),
         ])
         setIngredientStocks(stocks)
         setDailyContext(daily)
-        const siblingMap = {}
-        siblingIds.forEach((id, i) => { siblingMap[id] = siblingResults[i] })
-        setSiblingStocks(siblingMap)
         // ponytail: deliberately keyed on id+name, not the whole object — selectedAddress
         // gets a new reference on every context refetch even when nothing relevant changed
         // (e.g. ingredient_sort_order edits), which would refire this on every such update.
@@ -289,32 +282,6 @@ export default function IngredientManagementPage() {
     const coffeeKey = coffeeConfig?.ingredient ?? null
     const hintCoffee = isGuest && recipeDone && !!coffeeKey
         && nextIngredientSetupField(coffeeConfig, stockByIngredient.get(coffeeKey)?.warehouse_stock_set) !== null
-
-    // Tồn quầy theo từng địa chỉ trong nhóm kho dùng chung — null nếu kho không thuộc nhóm nào
-    // (card list rơi về hiển thị tồn quầy của riêng địa chỉ đang chọn).
-    const counterStocksByIngredient = useMemo(() => {
-        if (!warehouseSiblings || warehouseSiblings.length === 0) return null
-        const siblingByIngredient = new Map()
-        for (const [addrId, stocks] of Object.entries(siblingStocks)) {
-            const inner = new Map()
-            for (const s of stocks) inner.set(s.ingredient, s)
-            siblingByIngredient.set(addrId, inner)
-        }
-        const addrs = [
-            { id: selectedAddress?.id ?? null, name: selectedAddress?.name || 'Kho này' },
-            ...warehouseSiblings.map(a => ({ id: a.id, name: a.name })),
-        ]
-        const map = new Map()
-        for (const ing of allIngredients) {
-            map.set(ing, addrs.map(addr => {
-                const row = addr.id === (selectedAddress?.id ?? null)
-                    ? stockByIngredient.get(ing)
-                    : siblingByIngredient.get(addr.id)?.get(ing)
-                return { addressId: addr.id, addressName: addr.name, counterStock: row?.counter_stock ?? 0 }
-            }))
-        }
-        return map
-    }, [warehouseSiblings, selectedAddress, allIngredients, stockByIngredient, siblingStocks])
 
     // PERF: index configs by ingredient ONCE.
     // Was: ingredientConfigs.find() called THREE times per ingredient (packSize, packUnit, minStock).
@@ -577,7 +544,6 @@ export default function IngredientManagementPage() {
                                 minStock={cfg?.min_stock}
                                 minCounterStock={cfg?.min_counter_stock}
                                 stockData={stockByIngredient.get(ingredient)}
-                                siblingCounterStocks={counterStocksByIngredient?.get(ingredient)}
                                 dailyContext={dailyContext[ingredient]}
                                 onOpen={openIngredient}
                                 hint={hintCoffee && ingredient === coffeeKey}

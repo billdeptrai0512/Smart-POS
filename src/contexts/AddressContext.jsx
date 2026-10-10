@@ -6,7 +6,8 @@ import {
     setAddressPrinters as apiSetAddressPrinters, fetchAddressPrinters,
     upsertSession,
     fetchWarehouseGroups, upsertWarehouseGroup as apiUpsertWarehouseGroup,
-    deleteWarehouseGroup as apiDeleteWarehouseGroup, setAddressWarehouseGroup as apiSetAddressWarehouseGroup
+    deleteWarehouseGroup as apiDeleteWarehouseGroup, setAddressWarehouseGroup as apiSetAddressWarehouseGroup,
+    setWarehouseGroupHub as apiSetWarehouseGroupHub
 } from '../services/authService'
 import { getDemoAddress } from '../services/localRepository'
 import { STORAGE_KEYS } from '../constants/storageKeys'
@@ -37,6 +38,7 @@ export function AddressProvider() {
     const cachedAddress = readCachedAddress()
     const [addresses, setAddresses] = useState([])
     const [warehouseGroups, setWarehouseGroups] = useState([])
+    const [groupsLoaded, setGroupsLoaded] = useState(false) // false = chưa biết nhóm/kho tổng (xem warehouseRole 'pending')
     const [selectedAddress, setSelectedAddressState] = useState(() => (isGuest ? null : cachedAddress))
     // Start unblocked when we already have a cached address — RequireAddress lets
     // POS through immediately and the real list refetches in the background.
@@ -51,6 +53,7 @@ export function AddressProvider() {
             setAddresses([demo])
             setSelectedAddressState(demo)
             setWarehouseGroups([]) // grouping không áp dụng guest/local mode
+            setGroupsLoaded(true)
             setLoading(false)
             return
         }
@@ -58,6 +61,7 @@ export function AddressProvider() {
         if (!profile?.id) {
             setAddresses([])
             setWarehouseGroups([])
+            setGroupsLoaded(true)
             setLoading(false)
             return
         }
@@ -100,8 +104,9 @@ export function AddressProvider() {
 
             if (addressOwnerId === 'ALL') {
                 setWarehouseGroups([]) // admin xem toàn hệ thống — nhóm kho tổng chỉ có ý nghĩa trong 1 manager
+                setGroupsLoaded(true)
             } else {
-                fetchWarehouseGroups(addressOwnerId).then(({ data: groups }) => setWarehouseGroups(groups || []))
+                fetchWarehouseGroups(addressOwnerId).then(({ data: groups }) => { setWarehouseGroups(groups || []); setGroupsLoaded(true) })
             }
 
             // "Mẫu mặc định" (id: null, admin-only) isn't a row in `addrs` — it can't be
@@ -296,6 +301,28 @@ export function AddressProvider() {
         setAddresses(prev => prev.map(a => a.id === addressId ? { ...a, warehouse_group_id: groupId ?? null } : a))
     }, [isGuest])
 
+    // addressId null → bỏ đặt kho tổng của nhóm.
+    const setGroupHub = useCallback(async (groupId, addressId) => {
+        if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
+        await apiSetWarehouseGroupHub(groupId, addressId ?? null)
+        setWarehouseGroups(prev => prev.map(g => g.id === groupId ? { ...g, hub_address_id: addressId ?? null } : g))
+    }, [isGuest])
+
+    // Vai trò của địa chỉ ĐANG CHỌN trong nhóm kho chung:
+    //   'none'  = không thuộc nhóm · 'hub' = kho tổng (nơi giữ hàng, chia hàng, nhập kho) · 'member' = chi nhánh nhận hàng
+    //   'nohub' = nhóm chưa đặt kho tổng (hành vi cũ, mọi thành viên bình đẳng) · 'pending' = danh sách nhóm chưa tải xong
+    // hub_address_id trỏ vào địa chỉ đã rời nhóm thì coi như chưa đặt.
+    const warehouseRole = useMemo(() => {
+        const gid = selectedAddress?.warehouse_group_id
+        if (!gid) return 'none'
+        const group = warehouseGroups.find(g => g.id === gid)
+        // Admin không tải nhóm (xem toàn hệ thống) → đã "tải xong" nhưng rỗng: coi như chưa đặt kho tổng, đừng ẩn dải.
+        if (!group) return groupsLoaded ? 'nohub' : 'pending'
+        const hubOk = group.hub_address_id && addresses.some(a => a.id === group.hub_address_id && a.warehouse_group_id === gid)
+        if (!hubOk) return 'nohub'
+        return group.hub_address_id === selectedAddress.id ? 'hub' : 'member'
+    }, [selectedAddress, warehouseGroups, groupsLoaded, addresses])
+
     // Địa chỉ "anh em" cùng nhóm kho tổng — dùng để hiển thị nhãn "Kho tổng chung với: X, Y".
     const siblingsByAddress = useMemo(() => {
         const map = {}
@@ -321,9 +348,11 @@ export function AddressProvider() {
         renameWarehouseGroup,
         removeWarehouseGroup,
         setAddressGroup,
+        setGroupHub,
+        warehouseRole,
         loading,
         fetchError
-    }), [addresses, selectedAddress, setSelectedAddress, createNewAddress, renameAddress, setTables, setPrinters, removeAddress, warehouseGroups, siblingsByAddress, createWarehouseGroup, renameWarehouseGroup, removeWarehouseGroup, setAddressGroup, loading, fetchError])
+    }), [addresses, selectedAddress, setSelectedAddress, createNewAddress, renameAddress, setTables, setPrinters, removeAddress, warehouseGroups, siblingsByAddress, createWarehouseGroup, renameWarehouseGroup, removeWarehouseGroup, setAddressGroup, setGroupHub, warehouseRole, loading, fetchError])
 
     return (
         <AddressContext.Provider value={value}>

@@ -39,7 +39,7 @@ const prefetchedIds = new Set()
 export default function AddressSelectPage() {
     const {
         addresses, setSelectedAddress, createNewAddress, renameAddress, setPrinters, removeAddress, loading, fetchError,
-        warehouseGroups, createWarehouseGroup, renameWarehouseGroup, removeWarehouseGroup, setAddressGroup,
+        warehouseGroups, createWarehouseGroup, renameWarehouseGroup, removeWarehouseGroup, setAddressGroup, setGroupHub,
     } = useAddress()
     const { cupsMap, revenueMap, prevCupsMap, prevRevenueMap, sessionsMap, subscriptionStatusMap, subscriptionRowsMap, subscriptionLoading, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
     const { signOut, profile, isStaff, isManager, isAdmin, isGuest } = useAuth()
@@ -326,6 +326,7 @@ export default function AddressSelectPage() {
                         onRenameWarehouseGroup={renameWarehouseGroup}
                         onRemoveWarehouseGroup={removeWarehouseGroup}
                         onSetAddressGroup={setAddressGroup}
+                        onSetGroupHub={setGroupHub}
                         onSupportClick={() => setShowSupportModal(true)}
                         onDefaultTemplate={async () => {
                             // Load persisted ingredient sort so /inventory respects admin's saved order.

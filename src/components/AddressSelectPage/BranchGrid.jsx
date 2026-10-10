@@ -27,7 +27,7 @@ export default function BranchGrid({
     isStaff, isAdmin, error, setError,
     onSelect, onSelectReport, onSelectHistory, onSelectIngredients, onSelectRecipes,
     onRename, onRemove, onDefaultTemplate, onSupportClick, onSetPrinters,
-    warehouseGroups = [], onCreateWarehouseGroup, onRenameWarehouseGroup, onRemoveWarehouseGroup, onSetAddressGroup,
+    warehouseGroups = [], onCreateWarehouseGroup, onRenameWarehouseGroup, onRemoveWarehouseGroup, onSetAddressGroup, onSetGroupHub,
 }) {
     // Which per-card sub-modal (rename/delete/backup/wipe/group/printers) is open, and for which
     // address. Layers ON TOP of expandedActionsId's action-sheet (both can be open at once —
@@ -395,6 +395,7 @@ export default function BranchGrid({
                                     onRenameWarehouseGroup={onRenameWarehouseGroup}
                                     onRemoveWarehouseGroup={onRemoveWarehouseGroup}
                                     onSetAddressGroup={onSetAddressGroup}
+                                    onSetGroupHub={onSetGroupHub}
                                     onClose={closeAll}
                                 />
                             )}

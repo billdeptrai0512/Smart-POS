@@ -4,16 +4,21 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../hooks/useToast'
 import { useGroupPrep } from '../hooks/useGroupPrep'
+import { useProducts } from '../contexts/ProductContext'
+import { useHistory } from '../contexts/HistoryContext'
 import { fetchWarehouseTransfer, saveWarehouseTransfer } from '../services/warehouseTransferService'
+import { processIngredientRestock } from '../services/orderService'
+import { fetchCashClosedToday } from '../services/reportService'
 import { poolOf } from '../utils/prepToday'
 import { draftFromItems, draftToItems, draftTotals, fmtQty, shortNames, toQty } from '../utils/warehouseTransfer'
 import { useConfirm } from '../contexts/ConfirmContext'
-import { ingredientLabel } from '../utils/ingredients'
+import { ingredientLabel, lookupByLabel } from '../utils/ingredients'
 import { addDaysVN, dateFullVN, dateStringVN } from '../utils/dateVN'
-import { r1 } from '../utils/inventory'
+import { pack2Of, r1 } from '../utils/inventory'
 import Toast from '../components/POSPage/Toast'
 import Dropdown from '../components/common/Dropdown'
 import IngredientDetailHeader from '../components/IngredientManagementPage/IngredientDetailHeader'
+import RestockModal from '../components/IngredientManagementPage/RestockModal'
 
 const AUTOSAVE_MS = 800
 
@@ -23,11 +28,13 @@ const AUTOSAVE_MS = 800
 // "Nhập thêm" lúc chốt ca; giao/nhận làm ở bước sau.
 export default function GroupPrepPage() {
     const { isGuest, isManager, isAdmin } = useAuth()
-    const { selectedAddress, siblingsByAddress, addresses, fetchError } = useAddress()
+    const { selectedAddress, siblingsByAddress, addresses, fetchError, warehouseRole } = useAddress()
     const siblings = selectedAddress ? siblingsByAddress[selectedAddress.id] : null
-    // Tải thẳng URL: địa chỉ chọn đọc từ cache nhưng danh sách `addresses` (nguồn của siblings) về sau — chờ, đừng đá đi vội.
-    if (addresses.length === 0 && !fetchError) return null
-    if (isGuest || !(isManager || isAdmin) || !siblings?.length) return <Navigate to="/inventory/stocking" replace />
+    // Tải thẳng URL: địa chỉ chọn đọc từ cache nhưng danh sách `addresses`/nhóm (nguồn của siblings, kho tổng) về sau — chờ, đừng đá đi vội.
+    if ((addresses.length === 0 && !fetchError) || warehouseRole === 'pending') return null
+    // Chia hàng là việc của KHO TỔNG (hoặc nhóm chưa đặt kho tổng); chi nhánh thường chỉ nhận hàng.
+    const canDistribute = warehouseRole === 'hub' || warehouseRole === 'nohub'
+    if (isGuest || !(isManager || isAdmin) || !siblings?.length || !canDistribute) return <Navigate to="/inventory/stocking" replace />
     return <Page selectedAddress={selectedAddress} siblings={siblings} />
 }
 
@@ -35,6 +42,9 @@ function Page({ selectedAddress, siblings }) {
     const navigate = useNavigate()
     const { toast, showToast, showError } = useToast()
     const confirm = useConfirm()
+    const { profile } = useAuth()
+    const { refreshProducts } = useProducts()
+    const { refreshTodayExpenses } = useHistory()
     const tomorrow = useMemo(() => addDaysVN(new Date(), 1), [])
     const forDate = dateStringVN(tomorrow)
     const groupId = selectedAddress.warehouse_group_id
@@ -59,6 +69,16 @@ function Page({ selectedAddress, siblings }) {
             .catch(err => { console.error('fetchWarehouseTransfer', err); if (alive) { setDraft({}); setLoadError(err) } })
         return () => { alive = false }
     }, [groupId, forDate])
+
+    // Chia vượt kho → nhập kho ngay tại đây (mua hàng ghi vào địa chỉ đang chọn = kho tổng), cùng form Nhập kho như trang chi tiết NVL.
+    const [restock, setRestock] = useState(null) // { ingredient, qty }
+    const [cashClosedToday, setCashClosedToday] = useState(false)
+    useEffect(() => {
+        if (!restock) return
+        let alive = true
+        fetchCashClosedToday(selectedAddress.id).then(v => { if (alive) setCashClosedToday(!!v) })
+        return () => { alive = false }
+    }, [restock, selectedAddress.id])
 
     const locked = status === 'issued'
     const unitOf = useMemo(() => {
@@ -218,11 +238,16 @@ function Page({ selectedAddress, siblings }) {
                                                 </label>
                                             ))}
                                         </div>
-                                        <p className={`mt-3 text-[14px] font-bold ${over > 0 ? 'text-danger' : 'text-success'}`}>
-                                            {over > 0
-                                                ? `Chia nhiều hơn kho ${fmtQty(over, c.unit)}`
-                                                : `Đã chia ${fmtQty(c.total, c.unit)} · còn lại ${fmtQty(r1(c.pool - c.total), c.unit)}`}
-                                        </p>
+                                        <div className="mt-3 flex items-center gap-3">
+                                            <p className={`flex-1 text-[14px] font-bold ${over > 0 ? 'text-danger' : 'text-success'}`}>
+                                                {over > 0
+                                                    ? `Chia nhiều hơn kho ${fmtQty(over, c.unit)}`
+                                                    : `Đã chia ${fmtQty(c.total, c.unit)} · còn lại ${fmtQty(r1(c.pool - c.total), c.unit)}`}
+                                            </p>
+                                            {over > 0 && (
+                                                <button type="button" onClick={() => setRestock({ ingredient: c.ingredient, qty: over })} className="shrink-0 px-3 py-1.5 rounded-[10px] bg-primary text-bg text-[13px] font-black">Nhập kho</button>
+                                            )}
+                                        </div>
                                     </div>
                                 )
                             })}
@@ -238,6 +263,32 @@ function Page({ selectedAddress, siblings }) {
                     )}
                 </div>
             </main>
+
+            {restock && (() => {
+                const cfg = branches?.[0]?.ingredientsList.find(i => i.ingredient === restock.ingredient) // branches[0] = địa chỉ đang chọn
+                return (
+                    <RestockModal
+                        ingredient={restock.ingredient}
+                        unit={unitOf[restock.ingredient] || 'đv'}
+                        packSize={cfg?.pack_size}
+                        packUnit={cfg?.pack_unit}
+                        pack2={pack2Of(cfg)}
+                        initialQty={restock.qty}
+                        cashClosedToday={cashClosedToday}
+                        onClose={() => setRestock(null)}
+                        onConfirm={async ({ ingredient: ing, qty, subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate }) => {
+                            const wh = lookupByLabel(ing, pool, null)
+                            const result = await processIngredientRestock(selectedAddress.id, ing, qty, profile?.name, {
+                                subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate,
+                                ...(wh != null ? { beforeStock: wh } : {}),
+                            })
+                            // Kho đổi → tươi lại số kho nhóm, giá vốn (context sản phẩm) và chi phí hôm nay.
+                            await Promise.all([reload(), refreshProducts?.(), refreshTodayExpenses?.()])
+                            return result
+                        }}
+                    />
+                )
+            })()}
 
             {ready && !locked && (
                 <footer className="shrink-0 border-t border-border/60 bg-surface px-4 py-3">

@@ -28,8 +28,6 @@ export default function IngredientCostItem({
     stockData,
     // Daily context (always inline)
     dailyContext,
-    // Tồn quầy theo từng địa chỉ trong nhóm kho dùng chung (null nếu kho không thuộc nhóm nào)
-    siblingCounterStocks,
     // Navigation — parent owns scroll-cache save before navigating to detail
     onOpen,
     hint = false,
@@ -111,13 +109,7 @@ export default function IngredientCostItem({
                  Nhóm + Quy đổi đã chuyển sang trang chi tiết của ingredient. */}
             {canEdit && (
                 <div className="mt-1.5 pt-2 border-t border-border/40 flex flex-col gap-1.5 text-[12px] tabular-nums">
-                    {siblingCounterStocks ? (
-                        siblingCounterStocks.map(s => (
-                            <Row key={s.addressId ?? 'default'} label={`Tồn quầy · ${s.addressName}`} value={`${fmtRound(s.counterStock)} ${displayUnit}`} />
-                        ))
-                    ) : (
-                        <Row label={stockData?.counter_estimated ? 'Tồn quầy hiện có (ước tính)' : 'Tồn quầy hiện có'} value={`${fmtRound(stockData?.counter_stock)} ${displayUnit}`} />
-                    )}
+                    <Row label={stockData?.counter_estimated ? 'Tồn quầy hiện có (ước tính)' : 'Tồn quầy hiện có'} value={`${fmtRound(stockData?.counter_stock)} ${displayUnit}`} />
                 </div>
             )}
 

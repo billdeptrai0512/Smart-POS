@@ -7,7 +7,7 @@ import { Dialog, ModalHeader } from '../common/ModalShell'
 // gõ lại tên xác nhận như xoá địa chỉ — chỉ 1 lần tap xác nhận cho việc xoá nhóm.
 export default function WarehouseGroupModal({
     addr, addresses, warehouseGroups,
-    onCreateWarehouseGroup, onRenameWarehouseGroup, onRemoveWarehouseGroup, onSetAddressGroup,
+    onCreateWarehouseGroup, onRenameWarehouseGroup, onRemoveWarehouseGroup, onSetAddressGroup, onSetGroupHub,
     onClose,
 }) {
     const [groupSaving, setGroupSaving] = useState(false)
@@ -26,6 +26,20 @@ export default function WarehouseGroupModal({
             await onSetAddressGroup(addr.id, groupId)
         } catch (err) {
             setGroupError(err.message || 'Không thể đổi nhóm kho tổng')
+        } finally {
+            setGroupSaving(false)
+        }
+    }
+
+    // Đặt / bỏ địa chỉ đang mở làm kho tổng (nơi giữ hàng thật) của nhóm.
+    async function handleToggleHub(group) {
+        if (groupSaving) return
+        setGroupSaving(true)
+        setGroupError('')
+        try {
+            await onSetGroupHub(group.id, group.hub_address_id === addr.id ? null : addr.id)
+        } catch (err) {
+            setGroupError(err.message || 'Không thể đặt kho tổng')
         } finally {
             setGroupSaving(false)
         }
@@ -97,7 +111,9 @@ export default function WarehouseGroupModal({
                 </button>
 
                 {warehouseGroups.map(g => {
-                    const memberCount = addresses.filter(a => a.warehouse_group_id === g.id).length
+                    const members = addresses.filter(a => a.warehouse_group_id === g.id)
+                    const memberCount = members.length
+                    const hub = members.find(a => a.id === g.hub_address_id) // hub đã rời nhóm → coi như chưa đặt
                     const isCurrent = addr.warehouse_group_id === g.id
                     const confirming = confirmDeleteGroupId === g.id
                     const isRenaming = renamingGroupId === g.id
@@ -142,8 +158,19 @@ export default function WarehouseGroupModal({
                                 className="flex-1 min-w-0 text-left disabled:opacity-100"
                             >
                                 <span className="truncate block">{g.name}</span>
-                                <span className="block text-[11px] font-medium text-text-secondary">{memberCount} địa chỉ</span>
+                                <span className="block text-[11px] font-medium text-text-secondary">
+                                    {memberCount} địa chỉ{hub ? ` · Kho tổng: ${hub.name}` : ' · Chưa đặt kho tổng'}
+                                </span>
                             </button>
+                            {isCurrent && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); handleToggleHub(g) }}
+                                    disabled={groupSaving}
+                                    className={`shrink-0 px-2 py-1.5 rounded-lg text-[11px] font-black disabled:opacity-50 ${g.hub_address_id === addr.id ? 'bg-primary text-black' : 'bg-surface-light text-text-secondary'}`}
+                                >
+                                    {g.hub_address_id === addr.id ? 'Là kho tổng ✓' : 'Đặt làm kho tổng'}
+                                </button>
+                            )}
                             {confirming ? (
                                 <div className="flex items-center gap-1.5 shrink-0">
                                     <button

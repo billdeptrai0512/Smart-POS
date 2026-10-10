@@ -22,9 +22,11 @@ import Toast from '../POSPage/Toast'
 // Chỉ chủ/quản lý (nhập kho là thao tác ghi chi phí + kho); guest/offline ẩn như dải ở /pos.
 export default function WarehousePrepNotice({ onRestocked }) {
     const { isGuest, isManager, isAdmin } = useAuth()
-    const { selectedAddress } = useAddress()
+    const { selectedAddress, warehouseRole } = useAddress()
     const { isOnline } = useStats()
-    return (isManager || isAdmin) && !isGuest && isOnline && selectedAddress?.id ? <Notice onRestocked={onRestocked} /> : null
+    // Nhóm đã có kho tổng: số "cần mua" của từng chi nhánh so riêng với CÙNG 1 kho chung nên sai — việc mua nằm ở trang Chia hàng.
+    const groupedWithHub = warehouseRole === 'hub' || warehouseRole === 'member' || warehouseRole === 'pending'
+    return (isManager || isAdmin) && !isGuest && isOnline && selectedAddress?.id && !groupedWithHub ? <Notice onRestocked={onRestocked} /> : null
 }
 
 function Notice({ onRestocked }) {
