@@ -4,7 +4,6 @@ import { useAddressStats } from '../contexts/AddressStatsContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { fetchDefaultIngredientSort, setTeamMemberRole, removeTeamMember, setTeamMemberName } from '../services/authService'
-import { useMonetizationEnabled } from '../hooks/useEntitlement'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { cloneFromShareCode, getSharedConfig } from '../services/backupService'
 import { Loader } from 'lucide-react'
@@ -17,21 +16,8 @@ import SupportModal from '../components/common/SupportModal'
 import { BottomSheet, SheetHeader } from '../components/common/ModalShell'
 import { cacheKey as buildCacheKey, STORAGE_KEYS } from '../constants/storageKeys'
 import { writeJSON } from '../utils/storage'
-import { computeSubscriptionStatus } from '../utils/subscriptionStatus'
 import { errorMessage } from '../utils/errorMessage'
 import type { Address, UUID } from '../types/domain'
-
-// Sắp theo mức độ CẦN CHÚ Ý, không phải theo trạng thái gói suông — gate chỉ có
-// 2 trạng thái thực (mở/khoá); "trial"/"pending"/"paid" chỉ là LÝ DO đang mở, còn
-// "có hoạt động hôm nay" (bán hàng — POS luôn free bất kể gói) mới là tín hiệu
-// quan trọng hơn. Ưu tiên (0 = đầu danh sách):
-//   0. Có hoạt động + ĐÃ KHOÁ (hết hạn thật) — đang mất tiền rõ nhất: vẫn bán
-//      đều mà chưa trả phí, cần chủ quán thấy ngay để gia hạn/liên hệ.
-//   1. Có hoạt động + trial thật đang đếm ngược — sắp cần quyết định trả phí.
-//   2. Có hoạt động + đang free tạm (chưa full-close lần nào, chưa đếm ngược).
-//   3. Có hoạt động + đã đăng ký (paid) — ổn, không cần chú ý.
-//   4. Không hoạt động hôm nay — bất kể trạng thái gói (có thể đã nghỉ/rời bỏ).
-const ACTIVE_STATUS_RANK: Record<string, number> = { none: 0, trial: 1, pending: 2, paid: 3 }
 
 // Module scope, KHÔNG phải useRef: page này unmount mỗi lần sang /pos, nên ref sẽ
 // reset và prefetch chạy lại từ đầu mỗi lần quay về danh sách địa chỉ.
@@ -44,7 +30,6 @@ export default function AddressSelectPage() {
     } = useAddress()
     const { cupsMap, revenueMap, prevCupsMap, prevRevenueMap, sessionsMap, subscriptionStatusMap, subscriptionRowsMap, subscriptionLoading, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
     const { signOut, profile, isStaff, isManager, isAdmin, isGuest } = useAuth()
-    const { enabled: monetizationEnabled } = useMonetizationEnabled()
     const navigate = useNavigate()
 
     const [activeTab, setActiveTab] = useState('branches')
@@ -74,28 +59,12 @@ export default function AddressSelectPage() {
         return addresses.filter(a => a.manager_id === teamOwnerId)
     }, [addresses, teamOwnerId])
 
-    // rank 4 = "không hoạt động hôm nay" luôn xuống cuối, bất kể trạng thái gói.
-    // Trong nhóm rank 1 (trial đang đếm ngược), sort phụ theo daysLeft tăng dần —
-    // trial sắp hết trước lên trước (khớp màu cảnh báo ở SubscriptionBadge).
-    // Trong cùng nhóm/daysLeft giữ nguyên thứ tự created_at có sẵn từ query
-    // (Array.sort ổn định) làm tie-break phụ.
-    const sortedAddresses = useMemo(() => {
-        if (!monetizationEnabled) return addresses
-        const rankOf = (addr: Address) => {
-            const hasActivity = (cupsMap[addr.id] || 0) > 0 || (revenueMap[addr.id] || 0) > 0
-            if (!hasActivity) return { group: 4, daysLeft: Infinity }
-            const status = subscriptionStatusMap[addr.id]
-            const group = ACTIVE_STATUS_RANK[status] ?? 4
-            const daysLeft = status === 'trial'
-                ? (computeSubscriptionStatus(subscriptionRowsMap[addr.id]).daysLeft ?? Infinity)
-                : Infinity
-            return { group, daysLeft }
-        }
-        return [...addresses].sort((a, b) => {
-            const ra = rankOf(a), rb = rankOf(b)
-            return ra.group - rb.group || ra.daysLeft - rb.daysLeft
-        })
-    }, [addresses, subscriptionStatusMap, subscriptionRowsMap, cupsMap, revenueMap, monetizationEnabled])
+    // Doanh thu hôm nay giảm dần; không hoạt động = 0 nên tự xuống cuối; hoà giữ
+    // thứ tự created_at từ query (Array.sort ổn định).
+    const sortedAddresses = useMemo(
+        () => [...addresses].sort((a, b) => (revenueMap[b.id] || 0) - (revenueMap[a.id] || 0)),
+        [addresses, revenueMap],
+    )
 
     // PERF: count by role in a single pass instead of two .filter() walks per render.
     const { staffCount, managerCount } = useMemo(() => {
