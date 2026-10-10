@@ -382,10 +382,11 @@ export default function IngredientManagementPage() {
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
 
-            <WarehousePrepNotice onRestocked={loadStocks} onOpenIngredient={openIngredient} />
-            <GroupPrepNotice />
-
             <MenuPageHeader
+                notice={<>
+                    <WarehousePrepNotice onRestocked={loadStocks} onOpenIngredient={openIngredient} />
+                    <GroupPrepNotice />
+                </>}
                 title="Tồn kho"
                 count={visibleIngredients.length}
                 unitLabel="loại"
