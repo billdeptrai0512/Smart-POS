@@ -98,7 +98,7 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
         await handleDeleteOrder(round.id)
     }
 
-    // printBillJob (escposBitmap.js, dùng chung với usePrintArmed — xem comment ở đó): native
+    // printBillJob (escposBitmap.ts, dùng chung với usePrintArmed — xem comment ở đó): native
     // (Capacitor + đã cấu hình IP máy in quầy) in bitmap thẳng qua mạng không dialog, web hoặc
     // chưa cấu hình thì mở hộp in trình duyệt/hệ điều hành như cũ, CSS @media print (index.css)
     // lo phần chỉ hiện #print-bill — bill dựng sẵn trong DOM (PrintBill) nên không có bước

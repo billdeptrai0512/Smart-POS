@@ -369,7 +369,7 @@ export default function BranchGrid({
                                                         onClick={() => { setSubModal({ type: 'rename', addressId: addr.id }); setError('') }}
                                                     />
                                                     {/* Chỉ dùng cho app native (Capacitor) — máy in ESC/POS qua mạng, xem
-                                                        escposBitmap.js. Web bỏ qua 2 cột này, vẫn window.print() như cũ. */}
+                                                        escposBitmap.ts. Web bỏ qua 2 cột này, vẫn window.print() như cũ. */}
                                                     <ActionPill
                                                         icon={<Printer size={16} />}
                                                         label="Máy in"

@@ -17,7 +17,7 @@ export default function KitchenReprintButton({ round, tableName }: { round: Pick
     const ip = nativePrinterIp(selectedAddress?.kitchen_printer_ip)
     if (!ip) return null
 
-    async function reprint() {
+    const reprint = async () => {
         setPrinting(true)
         try {
             await printKitchenTicket(ip, { orderNo: round.orderNo, tableName, lines: round.lines, tag: 'IN LẠI' })

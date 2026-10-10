@@ -44,7 +44,7 @@ export function useToast(duration = 3500) {
         const errMsg = err?.message || String(errArg) || 'Lỗi không xác định'
         const errCode = err?.code ? `\nCode: ${err.code}` : ''
         const errDetails = err?.details ? `\nDetails: ${err.details}` : ''
-        // err.stage: vài nơi gọi (vd escposBitmap.js) gắn thêm bước xảy ra lỗi (capture DOM
+        // err.stage: vài nơi gọi (vd escposBitmap.ts) gắn thêm bước xảy ra lỗi (capture DOM
         // hay gửi mạng...) — debug từ xa không cần đoán mò từ 1 message chung chung.
         const errStage = err?.stage ? `\nStage: ${err.stage}` : ''
         const copy = [

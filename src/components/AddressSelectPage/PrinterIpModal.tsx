@@ -15,7 +15,7 @@ interface Props {
 
 // Modal cấu hình máy in (IP mạng, hoặc "usb" = máy in cắm USB thẳng vào tablet) — chỉ có tác
 // dụng trên app native (Capacitor), web vẫn window.print() bất kể có nhập gì ở đây. Xem
-// escposBitmap.js.
+// escposBitmap.ts.
 const USB_BTN = 'shrink-0 px-4 rounded-[12px] bg-surface-light border border-border/60 text-text-secondary text-xs font-black uppercase tracking-wide hover:text-primary hover:border-primary/40 disabled:opacity-50'
 export default function PrinterIpModal({ addr, onSetPrinters, onCancel, onClose, onSuccess, setError }: Props) {
     const [printerForm, setPrinterForm] = useState({

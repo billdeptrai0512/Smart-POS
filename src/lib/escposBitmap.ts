@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core'
+import type { ESCPOSPlugin as EscPosApi } from '@albgen/capacitor-escpos-plugin/dist/esm/definitions'
 
 // Chuyển ảnh (chụp từ DOM #print-bill qua html2canvas) sang ESC/POS raster (GS v 0)
 // rồi in thẳng qua mạng bằng plugin native — bitmap là cách DUY NHẤT in đúng dấu
@@ -21,7 +22,13 @@ const PRINT_RETRY_ATTEMPTS = 3
 const PRINT_RETRY_DELAY_MS = 800
 const AFTERPRINT_FALLBACK_MS = 5000 // WebView Capacitor không đảm bảo bắn 'afterprint' sau window.print()
 
-export function packGSv0(imageData, widthPx, heightPx) {
+/** Lỗi in có gắn thêm cờ: stage (bước nào hỏng — useToast.ts đọc lại), isTimeout (withTimeout tự tạo), expected (không báo Sentry). */
+type PrintError = Error & { stage?: 'capture' | 'send'; isTimeout?: boolean; expected?: boolean }
+type PrintPayload = Parameters<EscPosApi['printFormattedText']>[0]
+/** Phần của PrintBill (useImperativeHandle) mà printBillJob dùng. */
+interface BillHandle { captureImage(): Promise<HTMLCanvasElement | null>; print(): void }
+
+export function packGSv0(imageData: { data: ArrayLike<number> }, widthPx: number, heightPx: number) {
     const bytesPerLine = Math.ceil(widthPx / 8)
     const out = new Uint8Array(8 + bytesPerLine * heightPx)
     out[0] = 0x1D; out[1] = 0x76; out[2] = 0x30; out[3] = 0x00
@@ -49,20 +56,20 @@ export function packGSv0(imageData, widthPx, heightPx) {
 // từng byte (ảnh 1 bill dài có thể tới hàng trăm nghìn byte).
 const HEX_BYTE = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'))
 
-export function bytesToHex(bytes) {
-    const out = new Array(bytes.length)
+export function bytesToHex(bytes: ArrayLike<number>) {
+    const out = new Array<string>(bytes.length)
     for (let i = 0; i < bytes.length; i++) out[i] = HEX_BYTE[bytes[i]]
     return out.join('')
 }
 
 // canvas: kết quả html2canvas(#print-bill) — scale về đúng bề rộng máy in, giữ tỉ lệ.
-function canvasToEscPosImage(canvas) {
+function canvasToEscPosImage(canvas: HTMLCanvasElement) {
     const scale = PRINTER_WIDTH_PX / canvas.width
     const heightPx = Math.round(canvas.height * scale)
     const scaled = document.createElement('canvas')
     scaled.width = PRINTER_WIDTH_PX
     scaled.height = heightPx
-    const ctx = scaled.getContext('2d')
+    const ctx = scaled.getContext('2d')!
     ctx.fillStyle = '#fff'
     ctx.fillRect(0, 0, PRINTER_WIDTH_PX, heightPx)
     ctx.drawImage(canvas, 0, 0, PRINTER_WIDTH_PX, heightPx)
@@ -77,11 +84,11 @@ function canvasToEscPosImage(canvas) {
 // — hết giờ chỉ là JS-side bỏ cuộc, việc gốc (chụp ảnh, gửi lệnh in) có thể vẫn đang chạy.
 // isTimeout đánh dấu RIÊNG lỗi do chính đây tạo ra — printWithRetry cần phân biệt với lỗi
 // THẬT ném từ plugin/network (xem comment ở đó).
-function withTimeout(promise, ms, label) {
-    let timeoutId
-    const timeout = new Promise((_, reject) => {
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout>
+    const timeout = new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => {
-            const err = new Error(`${label}: quá ${ms}ms, có thể bị treo`)
+            const err: PrintError = new Error(`${label}: quá ${ms}ms, có thể bị treo`)
             err.isTimeout = true
             reject(err)
         }, ms)
@@ -90,7 +97,7 @@ function withTimeout(promise, ms, label) {
 }
 
 // Chờ ms mili giây — dùng cho khoảng nghỉ giữa các lần thử lại bên dưới.
-function sleep(ms) {
+function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms))
 }
 
@@ -101,8 +108,8 @@ function sleep(ms) {
 // vài lần với khoảng nghỉ ngắn trước khi thật sự báo lỗi cho người dùng — attempt sau
 // tạo TCP connection MỚI HOÀN TOÀN (không phải nối lại cái cũ), nên gần như luôn qua
 // được nếu đây đúng là tranh chấp khe kết nối thoáng qua.
-async function printWithRetry(ESCPOSPlugin, payload, attempts = PRINT_RETRY_ATTEMPTS) {
-    let lastErr
+async function printWithRetry(ESCPOSPlugin: EscPosApi, payload: PrintPayload, attempts = PRINT_RETRY_ATTEMPTS) {
+    let lastErr: unknown
     for (let i = 0; i < attempts; i++) {
         try {
             return await withTimeout(ESCPOSPlugin.printFormattedText(payload), PRINT_TIMEOUT_MS, 'printFormattedText')
@@ -115,7 +122,7 @@ async function printWithRetry(ESCPOSPlugin, payload, attempts = PRINT_RETRY_ATTE
             // không ngừng (sự cố thật đã gặp với đơn nhiều món). Chỉ retry lỗi THẬT từ plugin
             // (vd "Unable to connect to TCP device" — bị từ chối ngay trước khi gửi dữ liệu, an
             // toàn để mở kết nối mới thử lại).
-            if (err?.isTimeout) throw err
+            if ((err as PrintError | null)?.isTimeout) throw err
             if (i < attempts - 1) await sleep(PRINT_RETRY_DELAY_MS)
         }
     }
@@ -132,7 +139,7 @@ export const OFFSCREEN_FRAME_CSS = 'position:fixed; left:-9999px; top:0; width:3
 // Android) rasterize thừa ~9 lần rồi vẫn bị scale ngược xuống. ignoreElements bỏ qua các con
 // khác của body (cả cây React của app) — html2canvas mặc định clone NGUYÊN document để chụp 1
 // phần tử, tốn vô ích mỗi đơn khi phiếu bếp tự in.
-export async function captureOffscreen(el) {
+export async function captureOffscreen(el: HTMLElement) {
     await new Promise(requestAnimationFrame)
     const { default: html2canvas } = await import('html2canvas')
     return html2canvas(el, { backgroundColor: '#fff', scale: 2, ignoreElements: n => n.parentElement === document.body && n !== el })
@@ -140,15 +147,15 @@ export async function captureOffscreen(el) {
 
 // In mạng được không: chỉ app native (Capacitor) + đã cấu hình IP. null → người gọi tự
 // fallback (bill quầy: hộp in trình duyệt; phiếu bếp: bỏ qua).
-export const nativePrinterIp = (ip) => (Capacitor.isNativePlatform() && ip) || null
+export const nativePrinterIp = (ip?: string | null) => (Capacitor.isNativePlatform() && ip) || null
 // "usb" (bấm nút USB ở PrinterIpModal) thay cho IP = máy in cắm USB thẳng vào tablet.
-const isUsbPrinter = (ip) => /^usb$/i.test(ip?.trim() || '')
+const isUsbPrinter = (ip: string) => /^usb$/i.test(ip.trim())
 
 // Chuỗi gửi theo từng IP: máy in nhiệt TCP chỉ có 1 khe kết nối (xem printWithRetry) — 2 lệnh
 // cùng IP (phiếu bếp tự bắn liên tiếp, hoặc quán dùng 1 máy cho cả quầy lẫn bếp) xếp hàng thay
 // vì đụng nhau; khác IP vẫn in song song.
-const printerChains = new Map()
-function onPrinter(printerIp, job) {
+const printerChains = new Map<string, Promise<unknown>>()
+function onPrinter(printerIp: string, job: () => Promise<unknown>) {
     const result = (printerChains.get(printerIp) ?? Promise.resolve()).then(job)
     printerChains.set(printerIp, result.catch(() => {}))
     return result
@@ -159,13 +166,13 @@ function onPrinter(printerIp, job) {
 // (PrintBill.captureImage cho bill quầy, printKitchenTicket cho phiếu bếp). err.stage đánh dấu
 // lỗi xảy ra ở bước nào (capture DOM hay gửi mạng) — showError/Sentry (useToast.ts) đọc lại
 // để debug từ xa không phải đoán, thay vì mọi lỗi in đều chung 1 message mù mờ như nhau.
-export async function printImageNative(capture, label, printerIp) {
-    let canvas
+export async function printImageNative(capture: Promise<HTMLCanvasElement | null | undefined> | undefined, label: string, printerIp: string) {
+    let canvas: HTMLCanvasElement | null | undefined
     try {
-        canvas = await withTimeout(capture, CAPTURE_TIMEOUT_MS, label)
+        canvas = await withTimeout(Promise.resolve(capture), CAPTURE_TIMEOUT_MS, label)
         if (!canvas) throw new Error(`${label}: không tìm thấy phần tử để chụp`)
     } catch (err) {
-        err.stage = 'capture'
+        ;(err as PrintError).stage = 'capture'
         throw err
     }
     const hex = canvasToEscPosImage(canvas)
@@ -193,7 +200,8 @@ export async function printImageNative(capture, label, printerIp) {
             mmFeedPaper: '32',
             text: `[C]<img>${hex}</img>\n`,
         }, usb ? 1 : undefined))
-    } catch (err) {
+    } catch (e) {
+        const err = e as PrintError
         err.stage = 'send'
         if (usb && /USB_PERMISSION/.test(err.message)) Object.assign(err, { message: 'Bấm "Cho phép" trên hộp thoại USB rồi in lại', expected: true })
         else if (usb && /not found/i.test(err.message)) err.message = 'Không thấy máy in USB — kiểm tra cáp và nguồn máy in'
@@ -214,7 +222,7 @@ let printBusy = false
 // printImageNative) dễ quên áp lại chỗ còn lại. Native (Capacitor + đã cấu hình IP máy in):
 // in bitmap qua mạng, không dialog. Web hoặc chưa cấu hình: mở hộp in trình duyệt/hệ điều
 // hành, đợi 'afterprint' hoặc tối đa AFTERPRINT_FALLBACK_MS.
-export async function printBillJob(billRef, printerIp) {
+export async function printBillJob(billRef: { current: BillHandle | null }, printerIp?: string | null) {
     if (printBusy) {
         // expected: true — lỗi biết trước (đang in dở), không phải bug, useToast.ts không
         // báo Sentry cho loại này.
@@ -222,8 +230,9 @@ export async function printBillJob(billRef, printerIp) {
     }
     printBusy = true
     try {
-        if (nativePrinterIp(printerIp)) {
-            await printImageNative(billRef.current?.captureImage(), 'captureImage', printerIp)
+        const nativeIp = nativePrinterIp(printerIp)
+        if (nativeIp) {
+            await printImageNative(billRef.current?.captureImage(), 'captureImage', nativeIp)
             return
         }
         await new Promise((resolve) => {

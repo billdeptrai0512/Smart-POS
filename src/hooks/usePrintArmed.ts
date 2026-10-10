@@ -8,7 +8,7 @@ import { printBillJob } from '../lib/escposBitmap'
 // nhiều #print-bill cùng tồn tại, CSS in sẽ hiện chồng lên nhau.
 //
 // printerIp: IP máy in mạng (selectedAddress.counter_printer_ip) — truyền thẳng cho
-// printBillJob (escposBitmap.js, dùng chung với TableDetailModal): có IP + đang chạy app
+// printBillJob (escposBitmap.ts, dùng chung với TableDetailModal): có IP + đang chạy app
 // native (Capacitor) thì in bitmap ESC/POS qua mạng, không thì mở hộp in trình duyệt/hệ điều
 // hành. Nhánh native từng THIẾU ở bản cũ là bug thật: PrintBill.print() gọi thẳng
 // window.print() — API này KHÔNG TỒN TẠI trên WebView Android (window.print === undefined),

@@ -19,7 +19,7 @@ window.addEventListener('vite:preloadError', (e) => {
 const isNative = Capacitor.isNativePlatform()
 
 // Preload sớm 2 chunk chỉ dùng lúc in bill native (html2canvas + plugin ESC/POS,
-// xem escposBitmap.js) — nếu đợi tới lúc bấm "In bill" mới import lần đầu thì lần
+// xem escposBitmap.ts) — nếu đợi tới lúc bấm "In bill" mới import lần đầu thì lần
 // in ĐẦU TIÊN của phiên phải cộng thêm thời gian tải+parse chunk vào độ trễ in
 // thật. Không await, không chặn render — chạy nền lúc mở app, sẵn trong cache
 // module của trình duyệt trước khi người dùng kịp bấm.
