@@ -10,10 +10,9 @@ import NoticeBar from '../common/NoticeBar'
 export default function GroupPrepNotice() {
     const navigate = useNavigate()
     const { isGuest, isManager, isAdmin } = useAuth()
-    const { addressId, siblingsByAddress, warehouseRole } = useAddress()
+    const { addressId, siblingsByAddress, canDistribute } = useAddress()
     const { isOnline } = useStats()
     const siblings = addressId ? siblingsByAddress[addressId] : null
-    const canDistribute = warehouseRole === 'hub' || warehouseRole === 'nohub'
     if (!((isManager || isAdmin) && !isGuest && isOnline && canDistribute && siblings?.length)) return null
     return (
         <NoticeBar

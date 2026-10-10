@@ -6,11 +6,10 @@ import { fetchExtraIngredients } from '../services/productService'
 import { fetchLastWeekSameDayOrderItems } from '../services/reportService'
 import { withCounterEstimate } from '../services/counterEstimate'
 import { forecastFromWeeks } from '../utils/inventory'
-import { buildGroupPrepPlan, HISTORY_OFFSETS_TOMORROW, type GroupPrepBranchInput } from '../utils/prepToday'
+import { buildGroupPrepPlan, HISTORY_OFFSETS_TOMORROW, type GroupPrepBranch } from '../utils/prepToday'
 import type { Row } from '../types/domain'
 import type { UsageMap } from '../utils/inventory'
 
-export interface GroupPrepBranch extends GroupPrepBranchInput { ingredientsList: Row[]; counterStock: UsageMap; forecast: UsageMap }
 interface State { branches: GroupPrepBranch[] | null; pool: UsageMap | null; loading: boolean; error: unknown }
 
 // Số liệu "Soạn kho nhóm": tải công thức / cấu hình / tồn quầy / dự báo mai của TỪNG chi nhánh trong nhóm kho chung

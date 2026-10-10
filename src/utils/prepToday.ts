@@ -206,7 +206,7 @@ export const poolOf = (ingredient: string, pool?: UsageMap | null) => Math.max(0
 //   pool: { ing: kho tổng hiện có } — số server đã trừ mọi lần rút đã ghi của cả nhóm.
 //   cần mua = min_stock + Σ rút − pool, kẹp ≥ 0. min_stock lấy MAX giữa các chi nhánh (hàng dự phòng của nhóm chỉ giữ 1 lần).
 // ponytail: chưa trừ phần "đã soạn nhưng chưa ghi" — chờ phiếu xuất kho nội bộ.
-export interface GroupPrepBranchInput { id: string; name: string; ingredientsList?: Row[]; counterStock?: UsageMap; forecast?: UsageMap }
+export interface GroupPrepBranch { id: string; name: string; ingredientsList: Row[]; counterStock: UsageMap; forecast: UsageMap }
 export interface GroupPrepRow {
     ingredient: string
     unit: string
@@ -216,7 +216,7 @@ export interface GroupPrepRow {
     totalPull: number
     buy: number
 }
-export function buildGroupPrepPlan({ branches, pool }: { branches: GroupPrepBranchInput[]; pool?: UsageMap | null }): GroupPrepRow[] {
+export function buildGroupPrepPlan({ branches, pool }: { branches: GroupPrepBranch[]; pool?: UsageMap | null }): GroupPrepRow[] {
     const byIng = new Map<string, Omit<GroupPrepRow, 'pool' | 'totalPull' | 'buy'>>()
     for (const b of branches) {
         for (const ing of b.ingredientsList || []) {

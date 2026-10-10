@@ -36,9 +36,11 @@ export interface AddressContextValue {
     removeWarehouseGroup: (groupId: UUID) => Promise<void>
     setAddressGroup: (addressId: UUID, groupId?: UUID | null) => Promise<void>
     /** addressId null → bỏ đặt kho tổng của nhóm. */
-    setGroupHub: (groupId: UUID, addressId?: UUID | null) => Promise<void>
+    setGroupHub: (groupId: UUID, addressId: UUID | null) => Promise<void>
     /** Vai trò của địa chỉ đang chọn trong nhóm kho chung (xem warehouseRole trong provider). */
     warehouseRole: WarehouseRole
+    /** Địa chỉ đang chọn được chia hàng cho các chi nhánh: kho tổng, hoặc nhóm chưa đặt kho tổng. */
+    canDistribute: boolean
     loading: boolean
     fetchError: string | null
 }
@@ -331,10 +333,10 @@ export function AddressProvider() {
     }, [isGuest])
 
     // addressId null → bỏ đặt kho tổng của nhóm.
-    const setGroupHub = useCallback(async (groupId: UUID, addressId?: UUID | null) => {
+    const setGroupHub = useCallback(async (groupId: UUID, addressId: UUID | null) => {
         if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
-        await apiSetWarehouseGroupHub(groupId, addressId ?? null)
-        setWarehouseGroups(prev => prev.map(g => g.id === groupId ? { ...g, hub_address_id: addressId ?? null } : g))
+        await apiSetWarehouseGroupHub(groupId, addressId)
+        setWarehouseGroups(prev => prev.map(g => g.id === groupId ? { ...g, hub_address_id: addressId } : g))
     }, [isGuest])
 
     // Vai trò của địa chỉ ĐANG CHỌN trong nhóm kho chung:
@@ -380,6 +382,7 @@ export function AddressProvider() {
         setAddressGroup,
         setGroupHub,
         warehouseRole,
+        canDistribute: warehouseRole === 'hub' || warehouseRole === 'nohub',
         loading,
         fetchError
     }), [addresses, selectedAddress, setSelectedAddress, createNewAddress, renameAddress, setTables, setPrinters, removeAddress, warehouseGroups, siblingsByAddress, createWarehouseGroup, renameWarehouseGroup, removeWarehouseGroup, setAddressGroup, setGroupHub, warehouseRole, loading, fetchError])

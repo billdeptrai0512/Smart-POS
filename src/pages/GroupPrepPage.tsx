@@ -29,12 +29,11 @@ const AUTOSAVE_MS = 800
 // "Nhập thêm" lúc chốt ca; giao/nhận làm ở bước sau.
 export default function GroupPrepPage() {
     const { isGuest, isManager, isAdmin } = useAuth()
-    const { selectedAddress, addressId, siblingsByAddress, addresses, fetchError, warehouseRole } = useAddress()
+    const { selectedAddress, addressId, siblingsByAddress, addresses, fetchError, warehouseRole, canDistribute } = useAddress()
     const siblings = addressId ? siblingsByAddress[addressId] : null
     // Tải thẳng URL: địa chỉ chọn đọc từ cache nhưng danh sách `addresses`/nhóm (nguồn của siblings, kho tổng) về sau — chờ, đừng đá đi vội.
     if ((addresses.length === 0 && !fetchError) || warehouseRole === 'pending') return null
     // Chia hàng là việc của KHO TỔNG (hoặc nhóm chưa đặt kho tổng); chi nhánh thường chỉ nhận hàng.
-    const canDistribute = warehouseRole === 'hub' || warehouseRole === 'nohub'
     if (isGuest || !(isManager || isAdmin) || !siblings?.length || !canDistribute) return <Navigate to="/inventory/stocking" replace />
     return <Page selectedAddress={selectedAddress!} siblings={siblings} />
 }
@@ -100,10 +99,11 @@ function Page({ selectedAddress, siblings }: { selectedAddress: SelectedAddress;
         return next
     })
 
+    const items = useMemo(() => draftToItems(draft, unitOf), [draft, unitOf])
     async function save(nextStatus: 'draft' | 'issued') {
         setSaving(true)
         try {
-            await saveWarehouseTransfer(groupId, forDate, draftToItems(draft, unitOf), nextStatus)
+            await saveWarehouseTransfer(groupId, forDate, items, nextStatus)
             setStatus(nextStatus)
             setDirty(false)
             setFailed(false)
@@ -151,8 +151,8 @@ function Page({ selectedAddress, siblings }: { selectedAddress: SelectedAddress;
 
     const sheet = useMemo(() => addresses.map((a, i) => ({
         id: a.id, label: labels[i],
-        items: draftToItems(draft, unitOf).filter(it => it.address_id === a.id),
-    })), [addresses, labels, draft, unitOf])
+        items: items.filter(it => it.address_id === a.id),
+    })), [addresses, labels, items])
     function copyText() {
         const text = [`CHIA HÀNG NGÀY ${dateFullVN(tomorrow)}`, ...sheet.filter(b => b.items.length).flatMap(b =>
             ['', b.label, ...b.items.map(it => `- ${ingredientLabel(it.ingredient)}: ${fmtQty(it.qty, it.unit)}`)])].join('\n')
