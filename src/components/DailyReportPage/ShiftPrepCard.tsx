@@ -86,32 +86,28 @@ export default function ShiftPrepCard({
                         // Chỉ đọc ở nhánh skipMode (card Soạn) bên dưới, và dòng "Tồn kho" ở đó chỉ vẽ khi chưa xử lý.
                         const shortfall = it.warehouse != null && it.warehouse < it.need
 
-                        const nameDesc = (
-                            <div className="flex-1 min-w-0">
-                                <span className={`block text-[14px] font-bold leading-tight ${muted ? 'text-text-dim line-through' : 'text-text'}`}>
-                                    {ingredientLabel(it.ingredient)}
-                                </span>
-                                <div className="text-[11px] text-text-dim mt-0.5">
-                                    {/* Cam = hành động (CTA "Mua"), đỏ = vấn đề (kho dưới mức tối thiểu), xanh = đã mua đủ, xám = thông tin. */}
-                                    {it.warehouse != null && (
-                                        <span className={`block ${it.done ? 'text-success font-bold' : it.warehouse < it.minStock ? 'text-danger font-bold' : ''}`}>
-                                            Tồn kho cuối kỳ: {fmt(it.warehouse)}
-                                        </span>
-                                    )}
-                                    {it.minStock > 0 && <span className="block">Tồn kho cần ít nhất: {fmt(it.minStock)}</span>}
+                        const name = (
+                            <span className={`block text-[14px] font-bold leading-tight ${muted ? 'text-text-dim line-through' : 'text-text'}`}>
+                                {ingredientLabel(it.ingredient)}
+                            </span>
+                        )
+                        const details = (
+                            <div className="text-[11px] text-text-dim">
+                                {/* Cam = hành động (CTA "Mua"), đỏ = vấn đề (kho dưới mức tối thiểu), xanh = đã mua đủ, xám = thông tin. */}
+                                {it.warehouse != null && (
                                     <span className="block">
-                                        {haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}
+                                        Tồn kho cuối kỳ: <span className={it.done ? 'text-success font-bold' : it.warehouse < it.minStock ? 'text-danger font-bold' : ''}>{fmt(it.warehouse)}</span>
                                     </span>
-                                </div>
+                                )}
+                                {it.minStock > 0 && <span className="block">Tồn kho cần ít nhất: {fmt(it.minStock)}</span>}
                             </div>
                         )
                         // Các dòng dưới cùng nằm NGOÀI hàng có viên thuốc → chạy hết chiều ngang, không bị bẻ dòng bởi viên.
                         // Món đã mua đủ thì viên "Đã mua N" đã nói số đã mua — khỏi lặp.
                         const showBought = it.boughtToday > 0 && !it.done
-                        const tail = (it.forecast > 0 || showBought) && (
+                        const tail = showBought && (
                             <div className="text-[11px] text-text-dim">
-                                {it.forecast > 0 && <span className="block">Dự báo ngày mai sử dụng: {fmt(it.forecast)}</span>}
-                                {showBought && <span className="block text-success">Đã mua hôm nay: {fmt(it.boughtToday)}</span>}
+                                <span className="block text-success">Đã mua hôm nay: {fmt(it.boughtToday)}</span>
                             </div>
                         )
 
@@ -190,16 +186,14 @@ export default function ShiftPrepCard({
                         const open = onOpen ? () => onOpen(it.ingredient) : restock
                         return (
                             <div key={it.ingredient} className="py-2.5 border-b border-border/20 last:border-0">
-                                <div className="flex items-start gap-3">
-                                    <button
-                                        type="button"
-                                        onClick={open}
-                                        className="flex-1 min-w-0 flex text-left active:scale-[0.99] transition"
-                                    >
-                                        {nameDesc}
+                                {/* Lưới 2×2: hàng 1 = tên | nút (cùng một đường giữa); hàng 2 = 2 dòng trái | 2 dòng phải (cùng đỉnh).
+                                    min-h-8! thấp hơn PILL (44px) để nút cân với tên. */}
+                                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5">
+                                    <button type="button" onClick={open} className="min-w-0 text-left active:scale-[0.99] transition">
+                                        {name}
                                     </button>
                                     {it.done ? (
-                                        <span className={`self-center ${PILL} bg-success/15 text-success`}>
+                                        <span className={`${PILL} min-h-8! justify-self-end bg-success/15 text-success`}>
                                             <Check size={13} strokeWidth={3} />
                                             Đã mua {fmt(it.boughtToday)}
                                         </span>
@@ -208,11 +202,20 @@ export default function ShiftPrepCard({
                                             type="button"
                                             onClick={restock}
                                             title="Nhập kho"
-                                            className={`self-center ${PILL} bg-primary/10 text-primary active:scale-95`}
+                                            className={`${PILL} min-h-8! justify-self-end bg-primary/10 text-primary active:scale-95`}
                                         >
                                             {ctaLabel}
                                         </button>
                                     )}
+                                    <button type="button" onClick={open} className="min-w-0 self-start text-left active:scale-[0.99] transition">
+                                        {details}
+                                    </button>
+                                    <div className="self-start text-[11px] text-text-dim text-right">
+                                        <span className="block">
+                                            {haveLabel}: <span className="whitespace-nowrap">{it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}</span>
+                                        </span>
+                                        {it.forecast > 0 && <span className="block">Dự báo sử dụng: <span className="whitespace-nowrap">{fmt(it.forecast)} / ngày</span></span>}
+                                    </div>
                                 </div>
                                 {tail && <button type="button" onClick={open} className="block w-full text-left active:scale-[0.99] transition">{tail}</button>}
                             </div>
