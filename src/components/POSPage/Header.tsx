@@ -67,7 +67,7 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                     onClick={onOpenHistory}
                     role="button"
                     tabIndex={0}
-                    className={`dine-split:col-span-2 cursor-pointer bg-primary/5 rounded-[20px] p-3 sm:p-3.5 border border-primary/40 hover:border-primary/60 shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${hintClass}`}
+                    className={`dine-split:col-span-2 cursor-pointer bg-bg rounded-[20px] p-3 sm:p-3.5 border border-primary/35 hover:border-primary/60 shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${hintClass}`}
                 >
                     <div className="flex flex-col justify-between items-start relative z-10 w-full">
                         <div className="flex items-center justify-between w-full">
