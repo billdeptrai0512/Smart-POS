@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, useState } from 'react'
 import type { PrepItem } from '../../utils/prepToday'
 import { Check, X, RotateCcw } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
@@ -62,10 +62,13 @@ export default function ShiftPrepCard({
     // Card Soạn gộp 2 nguồn: món hết giữa ca (cần lấy ngay) lên đầu, món soạn đầu ca xuống dưới; chỉ chia
     // tiêu đề khi cả 2 nhóm cùng có mặt. Trong mỗi nhóm, món còn việc lên trước, món đã xử lý (tick/bỏ qua)
     // xuống đáy (card Mua cũng vậy: món đã mua đủ `done` xuống đáy). Sort ổn định nên thứ tự còn lại giữ nguyên.
+    // "Đã xử lý" chỉ chốt lúc mở card: tick xong dòng đứng yên (đổi màu tại chỗ) để không nhảy dưới ngón tay,
+    // đóng sheet mở lại mới xuống đáy.
     const rows = items.map(withDefaults)
     const isUrgent = (it: Item) => it.kind === 'depleted'
-    const isHandled = (it: Item) => !!checked[it.ingredient] || !!skipped[it.ingredient] || !!it.done
-    const ordered = [...rows].sort((a, b) => Number(isUrgent(b)) - Number(isUrgent(a)) || Number(isHandled(a)) - Number(isHandled(b)))
+    const [handledOnOpen] = useState(() => new Set(
+        rows.filter(it => checked[it.ingredient] || skipped[it.ingredient] || it.done).map(it => it.ingredient)))
+    const ordered = [...rows].sort((a, b) => Number(isUrgent(b)) - Number(isUrgent(a)) || Number(handledOnOpen.has(a.ingredient)) - Number(handledOnOpen.has(b.ingredient)))
     const split = skipMode && ordered.some(isUrgent) && ordered.some(it => !isUrgent(it))
 
     return (
