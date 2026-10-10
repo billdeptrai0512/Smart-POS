@@ -17,7 +17,6 @@ interface Props {
     tareWeight?: number | null
     stockData?: Row | null
     dailyContext?: { today_refill?: number | null; today_restock?: number | null } | null
-    siblingCounterStocks?: { addressId?: string | null; addressName: string; counterStock: number }[] | null
     onOpen?: (ingredient: string) => void
     hint?: boolean
 }
@@ -28,7 +27,7 @@ interface Props {
  *   │ Cà phê                   │  ← name (tap card to open detail)
  *   │ Kiểm kê lần cuối: 06/09  │  ← ngày kiểm kê quầy (manager only)
  *   │ Tồn đầu / Lấy ra / …     │  ← daily context
- *   │ Tồn quầy hiện có 8g      │  ← counter stock (manager only); 1 dòng/địa chỉ nếu kho dùng chung nhóm
+ *   │ Tồn quầy hiện có 8g      │  ← counter stock (manager only)
  *   │ ──────────────────────── │
  *   │ Tổng cộng        9180 g  │  ← hero stock number (phải)
  *   │             = 9 bịch…    │  ← pack breakdown dưới số tổng (if pack configured)
@@ -51,8 +50,6 @@ export default function IngredientCostItem({
     stockData,
     // Daily context (always inline)
     dailyContext,
-    // Tồn quầy theo từng địa chỉ trong nhóm kho dùng chung (null nếu kho không thuộc nhóm nào)
-    siblingCounterStocks,
     // Navigation — parent owns scroll-cache save before navigating to detail
     onOpen,
     hint = false,
@@ -120,13 +117,7 @@ export default function IngredientCostItem({
                      Nhóm + Quy đổi đã chuyển sang trang chi tiết của ingredient. */}
                 {canEdit && (
                     <div className="pt-2 border-t border-border/40 flex flex-col gap-1.5">
-                        {siblingCounterStocks ? (
-                            siblingCounterStocks.map(s => (
-                                <Row key={s.addressId ?? 'default'} label={`Tồn quầy · ${s.addressName}`} value={`${fmtRound(s.counterStock)} ${displayUnit}`} />
-                            ))
-                        ) : (
-                            <Row label="Tồn quầy hiện có" value={`${fmtRound(stockData?.counter_stock)} ${displayUnit}`} />
-                        )}
+                        <Row label="Tồn quầy hiện có" value={`${fmtRound(stockData?.counter_stock)} ${displayUnit}`} />
                     </div>
                 )}
             </div>

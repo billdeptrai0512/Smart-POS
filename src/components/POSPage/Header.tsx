@@ -1,4 +1,4 @@
-import { useState, useEffect, type Ref } from 'react'
+import { useState, useEffect, type ReactNode, type Ref } from 'react'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import type { LastOrder } from '../../services/cartOps'
 
@@ -24,9 +24,10 @@ interface Props {
     enterKey: string | null
     showOnboardingHint?: boolean
     takeawaySlotRef: Ref<HTMLDivElement>
+    notice?: ReactNode // dải notice dưới 2 thẻ, vẫn trong header (PrepPinBar)
 }
 
-export default function Header({ dayName, dateOnly, onOpenHistory, addressName, onAddressClick, recentOrders = [], enterKey, showOnboardingHint = false, takeawaySlotRef }: Props) {
+export default function Header({ dayName, dateOnly, onOpenHistory, addressName, onAddressClick, recentOrders = [], enterKey, showOnboardingHint = false, takeawaySlotRef, notice }: Props) {
     const hintClass = onboardingHintClass(showOnboardingHint, 'solid')
     // Saved orders only, newest first (max 3). isNew matches only the exact row just
     // committed locally (enterKey) → it slides in and types out; the realtime DB echo,
@@ -101,6 +102,8 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                     <button>, ngoài grid thì chỉ rộng vừa chữ. */}
                 <div ref={takeawaySlotRef} className="hidden dine-split:block [&>*]:h-full [&>*]:w-full" />
             </div>
+            {/* empty:hidden — notice trả null thì không chừa khoảng trống */}
+            <div className="px-6 mt-3 empty:hidden [&>button]:rounded-[14px]">{notice}</div>
         </header >
     )
 }

@@ -181,7 +181,6 @@ interface CounterPanelProps extends PackProps {
     counterStock?: number | null
     currentStock?: number | null
     counterCountedOn?: string | null
-    siblingCounterStocks?: { addressId?: string | null; addressName: string; counterStock: number }[] | null
     canEdit?: boolean
     onSaveCounter?: SaveNumber
     onSaveTareWeight?: SaveNumber
@@ -193,7 +192,6 @@ export function IngredientCounterPanel({
     minCounterStock,        // tồn QUẦY ít nhất
     counterStock, currentStock,
     counterCountedOn,       // 'YYYY-MM-DD' | null — ngày kiểm kê gần nhất của tồn quầy
-    siblingCounterStocks,   // [{ addressId, addressName, counterStock }] | null — tồn quầy các địa chỉ khác dùng chung kho
     canEdit,
     onSaveCounter,      // (newCounter: number)    => Promise  (Tồn quầy → ghi remaining ca mới nhất)
     onSaveTareWeight,   // (newTare: number)       => Promise  (0 = xoá bì)
@@ -223,20 +221,12 @@ export function IngredientCounterPanel({
             )}
             <Panel>
                 <QtyRow
-                    label={siblingCounterStocks?.length ? 'Tồn quầy cuối kỳ · đây' : 'Tồn quầy cuối kỳ'}
+                    label="Tồn quầy cuối kỳ"
                     value={counterStock} unit={unit}
                     hasPack={hasPack} packSize={packSize} packUnit={packUnit} pack2={pack2}
                     canEdit={canEdit} editable onSave={onSaveCounter}
                     note={counterCountedOn ? `Kiểm kê lần cuối: ${counterCountedOn.split('-').reverse().join('/')}` : null}
                 />
-                {siblingCounterStocks?.map(s => (
-                    <QtyRow
-                        key={s.addressId}
-                        label={`Tồn quầy · ${s.addressName}`} value={s.counterStock} unit={unit}
-                        hasPack={hasPack} packSize={packSize} packUnit={packUnit} pack2={pack2}
-                        canEdit={false} editable={false}
-                    />
-                ))}
                 {showTare && (
                     <TareRow tareWeight={tareWeight} unit={unit} canEdit={canEdit} onSave={onSaveTareWeight} hint={hintTare} />
                 )}

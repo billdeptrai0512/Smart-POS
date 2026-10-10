@@ -43,7 +43,7 @@ export type Product = Row & { id: UUID; name: string; price: number; is_divider?
 export interface IngredientGroup { id: UUID; name: string; section?: string; sort_order: number }
 
 /** Nhóm kho tổng dùng chung giữa các địa chỉ của một manager. */
-export interface WarehouseGroup { id: UUID; manager_id: UUID; name: string; created_at: string }
+export interface WarehouseGroup { id: UUID; manager_id: UUID; name: string; created_at: string; hub_address_id?: UUID | null }
 
 /** Một dòng bảng `users` (profile của người đăng nhập). Các cột khác đọc qua Row. */
 export type Profile = {

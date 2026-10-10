@@ -31,9 +31,11 @@ interface Props {
 
 export default function WarehousePrepNotice({ onRestocked, onOpenIngredient }: Props) {
     const { isGuest, isManager, isAdmin } = useAuth()
-    const { addressId } = useAddress()
+    const { addressId, warehouseRole } = useAddress()
     const { isOnline } = useStats()
-    return (isManager || isAdmin) && !isGuest && isOnline && addressId
+    // Nhóm đã có kho tổng: số "cần mua" của từng chi nhánh so riêng với CÙNG 1 kho chung nên sai — việc mua nằm ở trang Chia hàng.
+    const groupedWithHub = warehouseRole === 'hub' || warehouseRole === 'member' || warehouseRole === 'pending'
+    return (isManager || isAdmin) && !isGuest && isOnline && addressId && !groupedWithHub
         ? <Notice addressId={addressId} onRestocked={onRestocked} onOpenIngredient={onOpenIngredient} /> : null
 }
 

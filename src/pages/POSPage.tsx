@@ -14,6 +14,7 @@ import MenuGrid from '../components/POSPage/MenuGrid'
 import CheckoutBar from '../components/POSPage/CheckoutBar'
 import TableModal from '../components/POSPage/TableModal'
 import Toast from '../components/POSPage/Toast'
+import PrepPinBar from '../components/common/PrepPinBar'
 
 export default function POSPage() {
     const navigate = useNavigate()
@@ -86,6 +87,7 @@ export default function POSPage() {
                     enterKey={enterKey}
                     showOnboardingHint={showHistoryHint}
                     takeawaySlotRef={setTakeawaySlot}
+                    notice={<PrepPinBar />}
                 />
             </div>
 

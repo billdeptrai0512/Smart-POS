@@ -75,7 +75,6 @@ export default function IngredientDetailPage() {
     const [loading, setLoading] = useState(true)
     const [stockData, setStockData] = useState<Row | null>(null)
     const [dailyContext, setDailyContext] = useState<Row | null>(null)
-    const [siblingCounterStocks, setSiblingCounterStocks] = useState<{ addressId: UUID; addressName: string; counterStock: number }[] | null>(null)
     const { saving, withSaving, setSaving } = useSavingAction(showError)
     const [packModalOpen, setPackModalOpen] = useState(false)
     const [paymentInvoice, setPaymentInvoice] = useState<Row | null>(null)
@@ -142,17 +141,6 @@ export default function IngredientDetailPage() {
         fetchIngredientDailyContext(addressId)
             .then(map => setDailyContext(map[ingredientKey] || null))
     }, [hasAddress, addressId, ingredientKey])
-
-    // Tồn quầy của các địa chỉ khác dùng chung kho tổng — chỉ đọc (sửa quầy của họ phải mở đúng địa chỉ đó).
-    useEffect(() => {
-        if (!warehouseSiblings?.length || !ingredientKey) { setSiblingCounterStocks(null); return }
-        Promise.all(warehouseSiblings.map(a => fetchIngredientStocks(a.id)))
-            .then(results => setSiblingCounterStocks(warehouseSiblings.map((a, i) => ({
-                addressId: a.id,
-                addressName: a.name,
-                counterStock: results[i].find((s: Row) => s.ingredient === ingredientKey)?.counter_stock ?? 0,
-            }))))
-    }, [warehouseSiblings, ingredientKey])
 
     // History is scoped to the displayed month. Gồm 2 nguồn xen kẽ theo thời gian:
     // phiếu nhập/hiệu chỉnh (expenses) + lượt "Rút ra quầy" (restock trong phiếu
@@ -575,7 +563,6 @@ export default function IngredientDetailPage() {
                             counterStock={stockData?.counter_stock ?? null}
                             counterCountedOn={stockData?.counter_counted_on ?? null}
                             currentStock={currentStock}
-                            siblingCounterStocks={siblingCounterStocks}
                             canEdit={canEdit}
                             onSaveCounter={saveCounter}
                         />

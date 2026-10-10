@@ -156,6 +156,14 @@ export function averageIngredientMaps(maps?: (UsageMap | null | undefined)[] | n
     return averaged;
 }
 
+// Dự báo tiêu hao: trung bình các tuần mẫu. weeks = mỗi phần tử là order_items của 1 ngày mẫu
+// [{ product_id, quantity, extra_ids }] (fetchLastWeekSameDayOrderItems).
+export function forecastFromWeeks(weeks: Row[][], recipes: RecipeRow[], extraIngredients: ExtraIngredients) {
+    return averageIngredientMaps(weeks.map(items => calculateEstimatedConsumption(
+        items.map(i => ({ productId: i.product_id, qty: i.quantity, extras: (i.extra_ids || []).map((id: string) => ({ id })) })),
+        recipes, extraIngredients)));
+}
+
 /**
  * Tính breakdown tiêu hao theo từng biến thể (sản phẩm + tổ hợp extras) cho mỗi nguyên liệu.
  * Dùng để drill-down "Tiêu CT" trong inventory audit.
