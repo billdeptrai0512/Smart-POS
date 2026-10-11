@@ -334,12 +334,6 @@ body {
   animation: scale-up 300ms ease-out;
 }
 
-.pwa-update-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
 .pwa-update-icon {
   font-size: 1.5rem;
 }
@@ -362,12 +356,6 @@ body {
   max-height: 150px;
   overflow-y: auto;
   border: 1px solid var(--color-border-light);
-}
-
-.pwa-update-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 4px;
 }
 
 .pwa-update-btn {
