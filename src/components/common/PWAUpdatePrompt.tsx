@@ -6,11 +6,11 @@ export default function PWAUpdatePrompt() {
     const [updating, setUpdating] = useState(false)
     const [stale, setStale] = useState(false)
     const swReg = useRef<ServiceWorkerRegistration | undefined>(undefined)
-    const {
-        needRefresh: [needRefresh],
-        updateServiceWorker,
-    } = useRegisterSW({
+    useRegisterSW({
         onRegisteredSW(_swUrl, r) { swReg.current = r },
+        // autoUpdate: SW mới tự skipWaiting + claim, plugin mặc định reload ngay giữa phiên → mất giỏ
+        // hàng chưa gửi. Chỉ báo banner, để nhân viên tự bấm lúc rảnh.
+        onNeedReload: () => setStale(true),
         onRegisterError(error) {
             console.error('SW registration error:', error)
         },
@@ -34,14 +34,10 @@ export default function PWAUpdatePrompt() {
         }
     }, [])
 
-    if (!needRefresh && !stale) return null
+    if (!stale) return null
 
     const update = () => {
-        setUpdating(true)
-        if (needRefresh) updateServiceWorker(true)
-        // `controlling` có thể không bắn (SW chờ bị deploy mới thay / trình duyệt di động hủy) →
-        // nút kẹt "Đang cập nhật…" mãi. Quá 3s mà chưa tự reload thì reload tay.
-        setTimeout(reloadForNewVersion, needRefresh ? 3000 : 0)
+        setUpdating(reloadForNewVersion()) // false = đang cooldown, không reload → trả nút về bấm lại được
     }
 
     return (

@@ -52,7 +52,9 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'prompt',
+      // autoUpdate (không phải 'prompt'): SW mới tự skipWaiting + clientsClaim, không cần client bấm nút.
+      // 'prompt' từng làm máy cũ kẹt bản cũ vì bản vá nằm trong bundle mà chính máy đó không tải được.
+      registerType: 'autoUpdate',
       includeAssets: ['favicon.png', 'icons/*.png'],
       manifest: {
         name: 'KOPOS',
@@ -76,7 +78,8 @@ export default defineConfig({
             type: 'image/png'
           },
           {
-            src: '/icons/icon-512x512.png',
+            // Bản có đệm ~15% mỗi cạnh: icon-512 cắt sát logo (94% bề ngang) bị mask Android xén mất "KO"/"S".
+            src: '/icons/icon-maskable-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable'
