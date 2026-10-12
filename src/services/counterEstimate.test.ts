@@ -142,7 +142,7 @@ describe('estimateOpeningStocks — Đầu kỳ hôm nay từ lần đếm gần
         ordersMock.mockImplementation(ordersFor)
         const { stocks, periods } = await estimateOpening([prior()], 'addr', calc)
         expect(stocks).toEqual({ ca_phe: 900 })
-        expect(periods).toEqual({ ca_phe: { since: daysAgo(3), used: 300, restock: 200 } })
+        expect(periods).toEqual({ ca_phe: { since: daysAgo(3), counted: 1000, used: 300, restock: 200 } })
     })
 
     it('periods: đếm hôm qua → không có ngày ở giữa nên không tóm tắt', async () => {
