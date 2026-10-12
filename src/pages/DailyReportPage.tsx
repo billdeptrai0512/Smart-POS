@@ -10,7 +10,7 @@ import { buildCashPayload } from '../services/reportService'
 import { useIngredientCatalog } from '../hooks/useIngredientCatalog'
 import { useDailyReportData } from '../hooks/useDailyReportData'
 import { calculateEstimatedConsumption, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, isLiveOrder, openingSeed, pack2Of } from '../utils/inventory'
-import { estimateOpeningStocks, recipesBelongTo } from '../services/counterEstimate'
+import { estimateOpening, recipesBelongTo } from '../services/counterEstimate'
 import { useCounterCalc } from '../hooks/useCounterCalc'
 import { ingredientLabel, getIngredientUnit } from '../utils/ingredients'
 import { readOnboardingState, DEFAULT_ONBOARDING_STATE, isCashFlowProgressDone, isInventoryProgressDone, reachedCashCard } from '../utils/onboardingStorage'
@@ -396,8 +396,8 @@ export default function DailyReportPage() {
         if (!isDayScope || !isTodayScope || !isAsyncReady || !addressId) { setEstimatedOpening({}); return }
         let cancelled = false
         fetchIngredientStocks(addressId)
-            .then(rows => estimateOpeningStocks(rows, addressId, counterCalc.current))
-            .then(estimates => { if (!cancelled) setEstimatedOpening(estimates) })
+            .then(rows => estimateOpening(rows, addressId, counterCalc.current))
+            .then(({ stocks }) => { if (!cancelled) setEstimatedOpening(stocks) })
             .catch(err => console.error('estimatedOpening', err))
         return () => { cancelled = true }
     }, [isDayScope, isTodayScope, isAsyncReady, addressId, counterCalc, recipesReady])

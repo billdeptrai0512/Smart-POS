@@ -4,8 +4,10 @@ vi.mock('./reportService', () => ({ fetchOrdersSince: vi.fn() }))
 vi.mock('./dailyUsageService', () => ({ fetchStoredUsage: vi.fn(), saveUsageDays: vi.fn() }))
 import { fetchOrdersSince } from './reportService'
 import { fetchStoredUsage, saveUsageDays } from './dailyUsageService'
-import { withCounterEstimate, estimateOpeningStocks, recipesBelongTo } from './counterEstimate'
+import { withCounterEstimate, estimateOpening, recipesBelongTo } from './counterEstimate'
 import { dateStringVN, addDaysVN } from '../utils/dateVN'
+
+const estimateOpeningStocks = async (...args: Parameters<typeof estimateOpening>) => (await estimateOpening(...args)).stocks
 
 const ordersMock = vi.mocked(fetchOrdersSince)
 const storedMock = vi.mocked(fetchStoredUsage)
@@ -134,6 +136,18 @@ describe('estimateOpeningStocks — Đầu kỳ hôm nay từ lần đếm gần
         ordersMock.mockImplementation(ordersFor)
         const counted = prior({ counter_stock: 460, counter_counted_on: daysAgo(0), restock_since_count: 999 })
         expect(await estimateOpeningStocks([counted], 'addr', calc)).toEqual({ ca_phe: 900 })
+    })
+
+    it('periods: đếm cách 3 ngày → tổng dùng (hôm kia + hôm qua, không gồm ngày đếm/hôm nay) và tổng nhập của cả quãng', async () => {
+        ordersMock.mockImplementation(ordersFor)
+        const { stocks, periods } = await estimateOpening([prior()], 'addr', calc)
+        expect(stocks).toEqual({ ca_phe: 900 })
+        expect(periods).toEqual({ ca_phe: { since: daysAgo(3), used: 300, restock: 200 } })
+    })
+
+    it('periods: đếm hôm qua → không có ngày ở giữa nên không tóm tắt', async () => {
+        const { periods } = await estimateOpening([prior({ prior_counter_stock: 500, prior_counted_on: daysAgo(1), prior_restock_since: 0 })], 'addr', calc)
+        expect(periods).toEqual({})
     })
 
     it('đếm đúng HÔM QUA → Đầu kỳ ước tính = số đếm, không tải đơn nào', async () => {
