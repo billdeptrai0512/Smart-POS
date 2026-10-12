@@ -1,5 +1,6 @@
 import { formatPackedQty, netStockOf, isLowStockOf } from '../../utils/inventory'
 import { onboardingHintClass } from '../../utils/onboardingHint'
+import { countedLabelVN } from '../../utils/dateVN'
 import type { Pack2 } from '../../utils/inventory'
 import type { Row } from '../../types/domain'
 
@@ -25,7 +26,7 @@ interface Props {
  * Compact ingredient card — read-only summary:
  *   ┌──────────────────────────┐
  *   │ Cà phê                   │  ← name (tap card to open detail)
- *   │ Kiểm kê lần cuối: 06/09  │  ← ngày kiểm kê quầy (manager only)
+ *   │ Kiểm kê lần cuối: 10:05 06/09 │  ← giờ + ngày kiểm kê quầy (manager only)
  *   │ Tồn đầu / Lấy ra / …     │  ← daily context
  *   │ Tồn quầy hiện có 8g      │  ← counter stock (manager only)
  *   │ ──────────────────────── │
@@ -60,7 +61,7 @@ export default function IngredientCostItem({
     const isOutStock = shownStock !== null && shownStock <= 0
     const isLowStock = stockData ? isLowStockOf(stockData, { tareWeight, minStock, minCounterStock }, displayUnit) : false
 
-    const countedOn = stockData?.counter_counted_on?.split('-').slice(1).reverse().join('/')
+    const countedOn = stockData?.counter_counted_on ? countedLabelVN(stockData.counter_counted_on, stockData.counter_counted_at) : null
 
     const warn = isOutStock || isLowStock
     const borderClass = warn ? 'border-danger/40' : 'border-border/60'

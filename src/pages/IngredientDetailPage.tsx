@@ -256,8 +256,6 @@ export default function IngredientDetailPage() {
     // thay vì báo lỗi, để nhập tồn quầy lúc setup ban đầu vẫn hoạt động; chốt ca đầu
     // tiên sẽ tự tính hao hụt dựa trên Đầu kỳ này.
     async function saveCounter(newCounter: number) {
-        // Đang hiện số ƯỚC TÍNH: nhập đúng số đó vẫn là một lần xác nhận đếm — không được bỏ qua.
-        if (!stockData?.counter_estimated && newCounter === (stockData?.counter_stock ?? 0)) return
         await withSaving('Sửa tồn quầy', async () => {
             const res = await setCounterStock(addressId, ingredientKey, newCounter)
             if (!res) {
@@ -562,6 +560,7 @@ export default function IngredientDetailPage() {
                             onSaveMinCounter={saveMinCounter}
                             counterStock={stockData?.counter_stock ?? null}
                             counterCountedOn={stockData?.counter_counted_on ?? null}
+                            counterCountedAt={stockData?.counter_counted_at ?? null}
                             currentStock={currentStock}
                             canEdit={canEdit}
                             onSaveCounter={saveCounter}
