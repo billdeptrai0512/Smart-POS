@@ -8,6 +8,16 @@ export interface TransferItem { address_id: string; ingredient: string; unit: st
 // Chấp nhận dấu phẩy thập phân. toQty làm tròn 1 số lẻ — đúng số sẽ được lưu, nên "có số" (toQty > 0) khớp phiếu.
 export const toQty = (v: unknown) => r1(String(v).replace(',', '.'))
 
+// Ô nhập gam/ml cho gõ "5kg" / "2 lít" → đổi sang "5000" / "2000" (gọi lúc rời ô). Không khớp hoặc đơn vị khác thì giữ nguyên.
+export function parseQtyInput(v: string, unit?: string | null) {
+    const m = /^\s*(\d+(?:[.,]\d+)?)\s*(kg|l|lít|lit)\s*$/i.exec(v)
+    if (!m || !((unit === 'g') === /^kg$/i.test(m[2])) || (unit !== 'g' && unit !== 'ml')) return v
+    return String(r1(Number(m[1].replace(',', '.')) * 1000))
+}
+
+// Gợi ý chỉ vài gam/ml (vd. 8 g cacao) là nhiễu trong danh sách chia hàng — không gợi ý, quản lý muốn thì tự gõ.
+export const isTrivialQty = (qty: number, unit?: string | null) => (unit === 'g' || unit === 'ml') && qty < 10
+
 // Số kiểu Việt ("10.000") kèm đơn vị; g/ml đủ lớn thì ghi thêm kg/lít trong ngoặc ("10.000 g (10 kg)") vì chủ quán nghĩ bằng kg dễ hơn.
 // Chỉ để HIỂN THỊ — ô nhập và dữ liệu lưu vẫn theo đơn vị gốc.
 const vn = (n: number) => Number(n).toLocaleString('vi-VN')

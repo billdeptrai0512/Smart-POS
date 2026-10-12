@@ -115,7 +115,8 @@ export default function ShiftPrepCard({
                         )
 
                         // Không cấu hình pack_size (mua rời, vd Ống hút) → đếm theo đơn vị gốc.
-                        const qty = it.done ? '' : it.needPacks > 0 ? formatPackCount(it.needPacks, it.packUnit, it.pack2) : `${it.need} ${it.unit}`
+                        // Có phiếu chia của kho tổng → nút lấy đúng số kho đã soạn (không phải số theo dự báo).
+                        const qty = it.done ? '' : it.sent ? fmt(it.sent) : it.needPacks > 0 ? formatPackCount(it.needPacks, it.packUnit, it.pack2) : `${it.need} ${it.unit}`
                         const ctaLabel = `${packVerb} ${qty}`
 
                         // Card Soạn (skipMode): nút bỏ qua (✕/↩) nằm ngay cạnh tên nguyên liệu; viên thuốc ở cuối dòng
@@ -159,6 +160,12 @@ export default function ShiftPrepCard({
                                             {!muted && it.warehouse != null && (
                                                 <span className={`block ${shortfall ? 'text-danger font-bold' : ''}`}>
                                                     Tồn kho: {fmt(it.warehouse)}
+                                                </span>
+                                            )}
+                                            {/* Kho tổng đã chia số này cho chi nhánh; nhận khác số đó (đã Nhập thêm xong) → cam để đối chiếu. */}
+                                            {it.sent != null && (
+                                                <span className={`block ${isDone && it.restock !== it.sent ? 'text-warning font-bold' : ''}`}>
+                                                    Kho tổng chia: {fmt(it.sent)}{it.sentPacked && ' ✓ đã soạn'}{isDone && it.restock !== it.sent && ` · nhận ${fmt(it.restock)}`}
                                                 </span>
                                             )}
                                             {it.reason && <span className="block text-warning font-bold">{it.reason}</span>}

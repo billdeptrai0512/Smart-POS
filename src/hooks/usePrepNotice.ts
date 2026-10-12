@@ -5,12 +5,13 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from './useToast'
 import { useShiftInventoryState } from './useShiftInventoryState'
-import { fetchLastWeekSameDayOrderItems } from '../services/reportService'
+import { fetchForecastDays } from '../services/reportService'
+import { fetchTransferToAddress } from '../services/warehouseTransferService'
 import { getPendingOrders } from './useOfflineSync'
 import { calculateEstimatedConsumption, orderItemsOf, isLiveOrder, forecastFromWeeks, r1 } from '../utils/inventory'
 import {
     buildPrepTodayList, buildDepletedList, mergePrepItems, isPrepDone, isPrepFilled,
-    buildWarehousePrepList, buildTodayBoughtMap, HISTORY_OFFSETS_TODAY, HISTORY_OFFSETS_TOMORROW,
+    buildWarehousePrepList, buildTodayBoughtMap, HISTORY_OFFSETS_TODAY, HISTORY_OFFSETS_TOMORROW, RECENT_OFFSETS_TODAY, RECENT_OFFSETS_TOMORROW, type SentMap,
 } from '../utils/prepToday'
 import { ingredientLabel } from '../utils/ingredients'
 import { isSameDayVN, dateStringVN } from '../utils/dateVN'
@@ -47,7 +48,7 @@ function useSnapshot<T>(kind: string, live: T, ready: boolean): T {
 }
 
 // Phần chung: nạp đơn hôm nay + dự báo cùng thứ 3 tuần trước + trạng thái kiểm kê, và báo `ready`.
-function useShiftPrepBase(offsets: number[]) {
+function useShiftPrepBase(offsets: number[], recent: number[]) {
     const selectedAddress = useSelectedAddress()
     const { recipes, extraIngredients, ingredientConfigs } = useProducts()
     const { todayOrders, todayExpenses, handleLoadHistory } = useHistory()
@@ -77,7 +78,7 @@ function useShiftPrepBase(offsets: number[]) {
     const [weeks, setWeeks] = useState<Row[][] | null>(null)
     useEffect(() => {
         let alive = true
-        Promise.all(offsets.map(d => fetchLastWeekSameDayOrderItems(selectedAddress.id, d)))
+        fetchForecastDays(selectedAddress.id, offsets, recent)
             .then(w => { if (alive) setWeeks(w) })
             .catch(() => {})
         return () => { alive = false }
@@ -112,18 +113,30 @@ function useShiftPrepBase(offsets: number[]) {
 // quầy đã về 0 giữa ca). Nhân viên xác nhận ngay trong modal → ghi vào Nhập thêm (restock) của ca.
 export function usePrepNotice() {
     const { profile } = useAuth()
-    const { inventory, ready, common, forecastMap, systemTotalRevenue, toast, showToast, showError } = useShiftPrepBase(HISTORY_OFFSETS_TODAY)
+    const base = useShiftPrepBase(HISTORY_OFFSETS_TODAY, RECENT_OFFSETS_TODAY)
+    const { inventory, common, forecastMap, systemTotalRevenue, toast, showToast, showError } = base
     const { restockInputs, skipped } = inventory
+    const selectedAddress = useSelectedAddress()
+
+    // Hàng kho tổng đã chốt chia cho chi nhánh này hôm nay — đọc 1 lần lúc mở (quản lý sửa sau đó thì vào lại trang).
+    // Lỗi/chưa có phiếu = {} (vẫn soạn theo dự báo như cũ); chờ đọc xong mới `ready` để dòng khỏi đổi số giữa chừng.
+    const [sent, setSent] = useState<SentMap | null>(null)
+    useEffect(() => {
+        let alive = true
+        fetchTransferToAddress(selectedAddress.id!, dateStringVN()).catch(() => ({})).then(m => { if (alive) setSent(m) })
+        return () => { alive = false }
+    }, [selectedAddress.id])
+    const ready = base.ready && sent !== null
 
     const items = useMemo(() => {
         if (!ready) return []
         return mergePrepItems(
-            buildPrepTodayList({ ...common, restockInputs, inventoryInputs: inventory.inventoryInputs, lastWeekUsedMap: forecastMap }),
+            buildPrepTodayList({ ...common, restockInputs, inventoryInputs: inventory.inventoryInputs, lastWeekUsedMap: forecastMap, sent: sent! }),
             buildDepletedList({ ...common, restockInputs, inventoryInputs: inventory.inventoryInputs, skipped, effectiveWarehouseStocks: inventory.effectiveWarehouseStocks }),
             restockInputs)
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ready, common.ingredientsList, common.openingInputs, common.openingStock, common.warehouseStocks, common.usedMap,
-        inventory.effectiveWarehouseStocks, inventory.inventoryInputs, forecastMap, restockInputs, skipped])
+        inventory.effectiveWarehouseStocks, inventory.inventoryInputs, forecastMap, restockInputs, skipped, sent])
 
     const checked = useMemo(
         () => Object.fromEntries(items.map(it => [it.ingredient, isPrepDone(it, restockInputs, skipped)])),
@@ -193,7 +206,7 @@ export function usePrepNotice() {
 // /inventory — "Bổ sung tồn kho": NVL cần MUA thêm cho ngày mai. Mua qua RestockModal của caller (không
 // ghi restock ở đây) nên chỉ trả danh sách + hàm tươi lại sau khi mua.
 export function useWarehousePrep() {
-    const { inventory, ready, common, forecastMap, todayExpenses, toast, handleLoadHistory } = useShiftPrepBase(HISTORY_OFFSETS_TOMORROW)
+    const { inventory, ready, common, forecastMap, todayExpenses, toast, handleLoadHistory } = useShiftPrepBase(HISTORY_OFFSETS_TOMORROW, RECENT_OFFSETS_TOMORROW)
 
     const items = useMemo(() => {
         if (!ready) return []

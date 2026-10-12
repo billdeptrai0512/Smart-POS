@@ -299,6 +299,17 @@ export async function fetchLastWeekSameDayOrderItems(addressId: UUID | null, day
     })
 }
 
+// Các ngày mẫu cho dự báo tiêu hao: ngày cùng thứ theo `offsets` (xem trên). Cả mấy ngày đó đều không có đơn (chi nhánh mới
+// mở, chưa có lịch sử cùng thứ) → dự phòng: các ngày CÓ đơn trong `recent` (RECENT_OFFSETS_* ở prepToday: dự báo hôm nay
+// bỏ hôm nay vì chưa hết ngày; dự báo ngày mai lấy luôn hôm nay), trung bình theo số ngày có bán để chi nhánh mới mở vài
+// ngày khỏi bị chia cho 7. Có lịch sử cùng thứ thì không đọc thêm gì.
+// ponytail: dự phòng không xét thứ trong tuần — thay bằng hệ số xu hướng nếu cần sát hơn.
+export async function fetchForecastDays(addressId: UUID | null, offsets: number[], recent: number[], fetchDay = fetchLastWeekSameDayOrderItems) {
+    const days = await Promise.all(offsets.map(d => fetchDay(addressId, d)))
+    if (days.some(d => d.length)) return days
+    return (await Promise.all(recent.map(d => fetchDay(addressId, d)))).filter(d => d.length)
+}
+
 // Đơn chưa xoá từ 00:00 VN của `fromDay` ('YYYY-MM-DD') tới `toDay` (loại trừ; bỏ trống = tới nay), kèm món — để ước tính tiêu hao từ
 // lần đếm cuối. Phân trang vì PostgREST cắt ở 1000 dòng: cắt âm thầm = thiếu tiêu hao = tồn cao giả.
 export async function fetchOrdersSince(addressId: UUID, fromDay: string, toDay?: string) {

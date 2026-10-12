@@ -30,7 +30,13 @@ export interface PrepItem {
     forecast?: number
     minStock?: number
     boughtToday?: number
+    // buildPrepTodayList: kho tổng đã chốt chia cho chi nhánh này hôm nay (+ đã tick "soạn xong" chưa)
+    sent?: number
+    sentPacked?: boolean
 }
+
+/** Phiếu chia hàng kho tổng → chi nhánh (hôm nay): { [ingredient]: { qty, packed } }. */
+export type SentMap = Record<string, { qty: number; packed: boolean }>
 
 // Danh sách "Chuẩn bị hôm nay" (đưa NVL từ kho dự trữ ra quầy) — dùng chung cho /report
 // (card Chuẩn bị hôm nay) và /pos (dải notice + modal xác nhận). Hàm thuần, không đọc state.
@@ -39,6 +45,10 @@ export interface PrepItem {
 // averageIngredientMaps) thay vì chỉ đúng 1 tuần trước để đỡ nhạy với 1 ngày bất thường.
 export const HISTORY_OFFSETS_TODAY = [7, 14, 21]
 export const HISTORY_OFFSETS_TOMORROW = [6, 13, 20]  // cùng thứ NGÀY MAI
+// Dự phòng khi chưa có lịch sử cùng thứ (chi nhánh mới): 7 ngày gần nhất. Dự báo hôm nay bỏ hôm nay (chưa hết ngày);
+// dự báo ngày mai lấy luôn hôm nay — thường là ngày bán duy nhất của chi nhánh vừa mở.
+export const RECENT_OFFSETS_TODAY = [1, 2, 3, 4, 5, 6, 7]
+export const RECENT_OFFSETS_TOMORROW = [0, 1, 2, 3, 4, 5, 6]
 
 // "Soạn cho hôm nay" coi là đã làm khi Nhập thêm (restock) khác 0 — rỗng/0 = chưa soạn.
 export const isPrepFilled = (v: unknown) => v !== undefined && v !== null && v !== '' && Number(v) !== 0
@@ -77,9 +87,11 @@ const openingGross = (ing: Row, openingInputs: Inputs, openingStock: UsageMap) =
 // "Soạn cho hôm nay" — sáng: đưa NVL ra QUẦY đủ cho dự báo bán hôm nay.
 // have = tồn quầy ĐẦU ca (opening, đã trừ bì); need = max(forecast, min_counter_stock) − opening.
 // Ngày dự báo thấp vẫn đưa ra đủ sàn quầy; min_stock (ngưỡng KHO) không chặn việc rút hàng.
-export function buildPrepTodayList({ ingredientsList, openingInputs, openingStock, restockInputs = {}, inventoryInputs = {}, warehouseStocks, usedMap, lastWeekUsedMap }: {
+// Có phiếu chia hàng của kho tổng (`sent`) → món đó LUÔN có dòng (kể cả dự báo không cần) và tick đổ đúng số kho đã soạn
+// vào Nhập thêm thay vì số theo dự báo — hàng đã ra khỏi kho tổng thì chi nhánh ghi nhận đúng số đó (sửa tay nếu nhận lệch).
+export function buildPrepTodayList({ ingredientsList, openingInputs, openingStock, restockInputs = {}, inventoryInputs = {}, warehouseStocks, usedMap, lastWeekUsedMap, sent = {} }: {
     ingredientsList?: Row[] | null; openingInputs: Inputs; openingStock: UsageMap; restockInputs?: Inputs; inventoryInputs?: Inputs
-    warehouseStocks?: UsageMap | null; usedMap: UsageMap; lastWeekUsedMap: UsageMap
+    warehouseStocks?: UsageMap | null; usedMap: UsageMap; lastWeekUsedMap: UsageMap; sent?: SentMap
 }) {
     const out: PrepItem[] = []
     for (const ing of ingredientsList || []) {
@@ -89,9 +101,13 @@ export function buildPrepTodayList({ ingredientsList, openingInputs, openingStoc
         const opening = Math.max(0, r1(openingGross(ing, openingInputs, openingStock) - tare))
         const forecast = forecastFor(ing.ingredient, usedMap, lastWeekUsedMap)
         const minCounter = r1(ing.min_counter_stock)
-        const item = toPrepItem(ing, opening, Math.max(forecast, minCounter))
+        const t = sent[ing.ingredient]
+        const base = toPrepItem(ing, opening, Math.max(forecast, minCounter))
+        const forced = !base && !!t
+        const item = base ?? (t ? toPrepItem(ing, opening, opening + t.qty) : null)
         if (item) {
-            if (forecast - opening <= 0) item.reason = `Tồn quầy ít nhất: ${minCounter} ${ing.unit}` // chỉ vì sàn quầy mới phải lấy
+            if (t) { item.sent = t.qty; item.sentPacked = t.packed; item.fillQty = t.qty }
+            if (!forced && forecast - opening <= 0) item.reason = `Tồn quầy ít nhất: ${minCounter} ${ing.unit}` // chỉ vì sàn quầy mới phải lấy
             // Kho tổng hiện có (warehouse_stock thực tế, KHÔNG phải số đầu ca) để rút ra
             // quầy. Lookup theo key trực tiếp; null nếu NVL không theo dõi kho.
             const wh = (warehouseStocks || {})[ing.ingredient]
@@ -206,12 +222,13 @@ export const poolOf = (ingredient: string, pool?: UsageMap | null) => Math.max(0
 //   pool: { ing: kho tổng hiện có } — số server đã trừ mọi lần rút đã ghi của cả nhóm.
 //   cần mua = min_stock + Σ rút − pool, kẹp ≥ 0. min_stock lấy MAX giữa các chi nhánh (hàng dự phòng của nhóm chỉ giữ 1 lần).
 // ponytail: chưa trừ phần "đã soạn nhưng chưa ghi" — chờ phiếu xuất kho nội bộ.
-export interface GroupPrepBranch { id: string; name: string; ingredientsList: Row[]; counterStock: UsageMap; forecast: UsageMap }
+// sampleDays = số ngày CÓ đơn làm mẫu cho `forecast` (ít → ước lượng thô, UI gắn nhãn).
+export interface GroupPrepBranch { id: string; name: string; ingredientsList: Row[]; counterStock: UsageMap; forecast: UsageMap; sampleDays?: number }
 export interface GroupPrepRow {
     ingredient: string
     unit: string
     minStock: number
-    branches: { id: string; name: string; qty: number; packs: number; packUnit?: string | null }[]
+    branches: { id: string; name: string; qty: number; packs: number; packUnit?: string | null; sampleDays?: number }[]
     pool: number
     totalPull: number
     buy: number
@@ -231,7 +248,7 @@ export function buildGroupPrepPlan({ branches, pool }: { branches: GroupPrepBran
                 byIng.set(ing.ingredient, row)
             }
             row.minStock = Math.max(row.minStock, r1(ing.min_stock))
-            row.branches.push({ id: b.id, name: b.name, qty, packs, packUnit: ing.pack_unit })
+            row.branches.push({ id: b.id, name: b.name, qty, packs, packUnit: ing.pack_unit, sampleDays: b.sampleDays })
         }
     }
     const out: GroupPrepRow[] = []

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { draftFromItems, draftToItems, draftTotals, fmtQty, shortNames, toQty } from './warehouseTransfer'
+import { draftFromItems, draftToItems, draftTotals, fmtQty, isTrivialQty, parseQtyInput, shortNames, toQty } from './warehouseTransfer'
 
 describe('fmtQty', () => {
     it('g/ml đủ lớn ghi thêm kg/lít, nhỏ hoặc đơn vị khác giữ nguyên', () => {
@@ -8,6 +8,22 @@ describe('fmtQty', () => {
         expect(fmtQty(2000, 'ml')).toBe('2.000 ml (2 lít)')
         expect(fmtQty(900, 'g')).toBe('900 g')
         expect(fmtQty(30, 'cái')).toBe('30 cái')
+    })
+})
+
+describe('parseQtyInput / isTrivialQty', () => {
+    it('gõ kg / lít đổi sang g / ml; còn lại giữ nguyên', () => {
+        expect(parseQtyInput('5kg', 'g')).toBe('5000')
+        expect(parseQtyInput('1,5 KG', 'g')).toBe('1500')
+        expect(parseQtyInput('2 lít', 'ml')).toBe('2000')
+        expect(parseQtyInput('2 lít', 'g')).toBe('2 lít') // sai loại đơn vị
+        expect(parseQtyInput('5kg', 'cái')).toBe('5kg')
+        expect(parseQtyInput('5000', 'g')).toBe('5000')
+    })
+    it('số quá nhỏ chỉ với g/ml', () => {
+        expect(isTrivialQty(8, 'g')).toBe(true)
+        expect(isTrivialQty(10, 'g')).toBe(false)
+        expect(isTrivialQty(3, 'cái')).toBe(false)
     })
 })
 

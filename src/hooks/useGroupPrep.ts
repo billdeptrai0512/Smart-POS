@@ -3,10 +3,10 @@ import { fetchIngredientStocks } from '../services/ingredientStockService'
 import { fetchIngredientCostsAndUnits } from '../services/ingredientCostService'
 import { fetchAllRecipes } from '../services/recipeService'
 import { fetchExtraIngredients } from '../services/productService'
-import { fetchLastWeekSameDayOrderItems } from '../services/reportService'
+import { fetchForecastDays } from '../services/reportService'
 import { withCounterEstimate } from '../services/counterEstimate'
 import { forecastFromWeeks } from '../utils/inventory'
-import { buildGroupPrepPlan, HISTORY_OFFSETS_TOMORROW, type GroupPrepBranch } from '../utils/prepToday'
+import { buildGroupPrepPlan, HISTORY_OFFSETS_TOMORROW, RECENT_OFFSETS_TOMORROW, type GroupPrepBranch } from '../utils/prepToday'
 import type { Row } from '../types/domain'
 import type { UsageMap } from '../utils/inventory'
 
@@ -31,7 +31,7 @@ export function useGroupPrep(addresses: { id: string; name: string }[]) {
                 // Ước tính tồn quầy cần công thức + extras + tồn — nối chuỗi thay vì chờ cả lô, để dự báo/cấu hình tải chồng lên.
                 const estimatedP = Promise.all([stocksP, recipesP, extraP])
                     .then(([stocks, recipes, extraIngredients]) => withCounterEstimate(stocks, id, { recipes, extraIngredients, canPersist: false }))
-                const weeksP = Promise.all(HISTORY_OFFSETS_TOMORROW.map(d => fetchLastWeekSameDayOrderItems(id, d)))
+                const weeksP = fetchForecastDays(id, HISTORY_OFFSETS_TOMORROW, RECENT_OFFSETS_TOMORROW)
                 const [{ rows }, recipes, stocks, estimated, weeks, extraIngredients] =
                     await Promise.all([fetchIngredientCostsAndUnits(id), recipesP, stocksP, estimatedP, weeksP, extraP])
                 return {
@@ -39,6 +39,7 @@ export function useGroupPrep(addresses: { id: string; name: string }[]) {
                     branch: {
                         id, name, ingredientsList: rows,
                         forecast: forecastFromWeeks(weeks, recipes, extraIngredients),
+                        sampleDays: weeks.filter((w: Row[]) => w.length).length,
                         counterStock: Object.fromEntries((estimated ?? []).map((s: Row) => [s.ingredient, s.counter_stock])),
                     },
                 }
