@@ -58,7 +58,8 @@ export default function ShiftPrepCard({
     // nếu có pack_size, không thì "<packVerb> X <đơn vị>".
     packVerb,
 }: Props) {
-    const skipMode = typeof onSkip === 'function'
+    // Có onToggle = dạng checklist "Lấy/Soạn" (Chuẩn bị hôm nay, Soạn cho ngày mai); có thêm onSkip thì mới có nút ✕ bỏ qua.
+    const skipMode = typeof onToggle === 'function'
     // Card Soạn gộp 2 nguồn: món hết giữa ca (cần lấy ngay) lên đầu, món soạn đầu ca xuống dưới; chỉ chia
     // tiêu đề khi cả 2 nhóm cùng có mặt. Trong mỗi nhóm, món còn việc lên trước, món đã xử lý (tick/bỏ qua)
     // xuống đáy (card Mua cũng vậy: món đã mua đủ `done` xuống đáy). Sort ổn định nên thứ tự còn lại giữ nguyên.
@@ -145,9 +146,9 @@ export default function ShiftPrepCard({
                                                 {ingredientLabel(it.ingredient)}
                                             </span>
                                             {/* Đã tick xong thì không còn gì để "bỏ qua" — ẩn ✕; món đã bỏ qua vẫn giữ ↩ hoàn tác. */}
-                                            {!isDone && (
+                                            {!isDone && onSkip && (
                                                 <span
-                                                    onClick={(e) => { e.stopPropagation(); onSkip?.(it.ingredient) }}
+                                                    onClick={(e) => { e.stopPropagation(); onSkip(it.ingredient) }}
                                                     title={isSkipped ? 'Hoàn tác bỏ qua' : 'Bỏ qua — không cần lấy'}
                                                     className={`shrink-0 w-6 h-6 flex items-center justify-center rounded-lg active:scale-95 transition ${isSkipped ? 'text-primary hover:bg-primary/10' : 'text-text-dim hover:text-text hover:bg-border/40'}`}
                                                 >
@@ -165,7 +166,7 @@ export default function ShiftPrepCard({
                                             {/* Kho tổng đã chia số này cho chi nhánh; nhận khác số đó (đã Nhập thêm xong) → cam để đối chiếu. */}
                                             {it.sent != null && (
                                                 <span className={`block ${isDone && it.restock !== it.sent ? 'text-warning font-bold' : ''}`}>
-                                                    Kho tổng chia: {fmt(it.sent)}{it.sentPacked && ' ✓ đã soạn'}{isDone && it.restock !== it.sent && ` · nhận ${fmt(it.restock)}`}
+                                                    Kho tổng chia: {fmt(it.sent)}{it.sentPacked && ` ✓ đã soạn${it.by ? ` bởi ${it.by}` : ''}`}{isDone && it.restock !== it.sent && ` · nhận ${fmt(it.restock)}`}
                                                 </span>
                                             )}
                                             {it.reason && <span className="block text-warning font-bold">{it.reason}</span>}
@@ -174,6 +175,7 @@ export default function ShiftPrepCard({
                                             </span>
                                             {/* Món đã xử lý → kể tiếp hành trình trong ca (mỗi số một dòng) để số cuối ca không đứng một mình.
                                                 Món còn chờ lấy chỉ có dòng đầu ca (đã đếm 0 mà nút vẫn "Lấy" thì "cuối ca" gây mâu thuẫn). */}
+                                            {isDone && it.by && it.sent == null && <span className="block">Đã soạn bởi {it.by}</span>}
                                             {muted && it.restock > 0 && <span className="block">Đã lấy thêm: +{fmt(it.restock)}</span>}
                                             {muted && it.counted != null && <span className="block">Tồn quầy cuối ca: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.counted)}</span>}
                                         </div>

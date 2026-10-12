@@ -34,10 +34,11 @@ export interface PrepItem {
     // buildPrepTodayList: kho tổng đã chốt chia cho chi nhánh này hôm nay (+ đã tick "soạn xong" chưa)
     sent?: number
     sentPacked?: boolean
+    by?: string // tên người đã xác nhận soạn (kho tổng → "Soạn cho ngày mai"), hiện cạnh dòng "đã soạn"
 }
 
 /** Phiếu chia hàng kho tổng → chi nhánh (hôm nay): { [ingredient]: { qty, packed } }. */
-export type SentMap = Record<string, { qty: number; packed: boolean }>
+export type SentMap = Record<string, { qty: number; packed: boolean; by?: string }>
 
 // Danh sách "Chuẩn bị hôm nay" (đưa NVL từ kho dự trữ ra quầy) — dùng chung cho /report
 // (card Chuẩn bị hôm nay) và /pos (dải notice + modal xác nhận). Hàm thuần, không đọc state.
@@ -107,7 +108,7 @@ export function buildPrepTodayList({ ingredientsList, openingInputs, openingStoc
         const forced = !base && !!t
         const item = base ?? (t ? toPrepItem(ing, opening, opening + t.qty) : null)
         if (item) {
-            if (t) { item.sent = t.qty; item.sentPacked = t.packed; item.fillQty = t.qty }
+            if (t) { item.sent = t.qty; item.sentPacked = t.packed; item.by = t.by; item.fillQty = t.qty }
             if (!forced && forecast - opening <= 0) item.reason = `Tồn quầy ít nhất: ${minCounter} ${ing.unit}` // chỉ vì sàn quầy mới phải lấy
             // Kho tổng hiện có (warehouse_stock thực tế, KHÔNG phải số đầu ca) để rút ra
             // quầy. Lookup theo key trực tiếp; null nếu NVL không theo dõi kho.
@@ -269,6 +270,24 @@ export function buildGroupPrepPlan({ branches, pool }: { branches: GroupPrepBran
         if (totalPull > 0 || buy > 0) out.push({ ...row, pool: poolNow, totalPull, buy })
     }
     return out.sort((a, c) => c.buy - a.buy || c.totalPull - a.totalPull)
+}
+
+// "Soạn cho ngày mai" của MỘT địa chỉ trong nhóm kho chung: cùng công thức "Soạn cho hôm nay" nhưng theo dự báo MAI —
+// rút mai = max(dự báo mai, min_counter_stock) − tồn quầy cuối ca (đã trừ bì). warehouse = kho tổng chung còn lại.
+export function buildTomorrowPrepList({ ingredientsList, counterStock, forecast, pool }: {
+    ingredientsList?: Row[] | null; counterStock: UsageMap; forecast: UsageMap; pool?: UsageMap | null
+}) {
+    const out: PrepItem[] = []
+    for (const ing of ingredientsList || []) {
+        const tare = r1(ing.tare_weight)
+        const counterReal = Math.max(0, r1(r1(lookupByLabel(ing.ingredient, counterStock || {})) - tare))
+        const item = toPrepItem(ing, counterReal, Math.max(r1(lookupByLabel(ing.ingredient, forecast || {})), r1(ing.min_counter_stock)))
+        if (!item) continue
+        item.warehouse = poolOf(ing.ingredient, pool)
+        item.tare = tare
+        out.push(item)
+    }
+    return out
 }
 
 // "Bổ sung tồn kho" — cho mai: sáng mai rút từ kho ra quầy phần còn thiếu, và kho không được tụt dưới min_stock.

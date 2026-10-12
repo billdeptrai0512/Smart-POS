@@ -7,26 +7,27 @@ import { useHistory } from '../../contexts/HistoryContext'
 import { useGroupPrep } from '../../hooks/useGroupPrep'
 import { useCashClosedToday } from '../../hooks/useCashClosedToday'
 import { processIngredientRestock } from '../../services/orderService'
-import { ceilToBigUnit, fmtQty } from '../../utils/warehouseTransfer'
-import { byIngredientLabel, ingredientLabel, lookupByLabel } from '../../utils/ingredients'
+import { ceilToBigUnit } from '../../utils/warehouseTransfer'
+import { byIngredientLabel, lookupByLabel } from '../../utils/ingredients'
 import { pack2Of } from '../../utils/inventory'
+import type { PrepItem } from '../../utils/prepToday'
 import NoticeBar from '../common/NoticeBar'
 import NoticeSheet from '../common/NoticeSheet'
+import ShiftPrepCard from '../DailyReportPage/ShiftPrepCard'
 import RestockModal from './RestockModal'
 
-// "Bổ sung tồn kho" của KHO TỔNG trong nhóm kho chung (thay cho bản tính riêng từng địa chỉ — vốn sai khi cả nhóm dùng chung 1 kho):
-// cần mua = tồn tối thiểu + tổng dự báo rút ngày mai của MỌI địa chỉ trong nhóm − kho còn, làm tròn LÊN theo đơn vị nhập lớn nhất.
-// Tính khi mở (~5 request × số địa chỉ) chứ không tính sẵn lúc vào trang.
+// "Bổ sung tồn kho" của KHO TỔNG trong nhóm kho chung (thay cho bản tính riêng từng địa chỉ — vốn sai khi cả nhóm dùng chung 1 kho),
+// cùng giao diện card "Mua" như bản thường: cần mua = tồn tối thiểu + tổng dự báo rút ngày mai của MỌI địa chỉ trong nhóm − kho còn,
+// làm tròn LÊN theo đơn vị nhập lớn nhất. Tính khi mở (~5 request × số địa chỉ) chứ không tính sẵn lúc vào trang.
 export default function HubBuyNotice({ onRestocked }: { onRestocked?: () => unknown }) {
     const { selectedAddress, siblingsByAddress } = useAddress()
     const [open, setOpen] = useState(false)
-    const siblings = selectedAddress?.id ? siblingsByAddress[selectedAddress.id] : null
     if (!selectedAddress?.id) return null
     return (
         <>
             <NoticeBar icon={<Package size={15} className="text-primary shrink-0" />} label="Bổ sung tồn kho" onClick={() => setOpen(true)} />
             {open && (
-                <Sheet addressId={selectedAddress.id} addresses={[selectedAddress, ...(siblings ?? [])]} onClose={() => setOpen(false)} onRestocked={onRestocked} />
+                <Sheet addressId={selectedAddress.id} addresses={[selectedAddress, ...(siblingsByAddress[selectedAddress.id] ?? [])]} onClose={() => setOpen(false)} onRestocked={onRestocked} />
             )}
         </>
     )
@@ -38,18 +39,27 @@ function Sheet({ addressId, addresses: all, onClose, onRestocked }: { addressId:
     const { refreshTodayExpenses } = useHistory()
     const addresses = useMemo(() => all.map(a => ({ id: a.id!, name: a.name })), [all])
     const { plan, pool, cfgOf, error, reload } = useGroupPrep(addresses)
-    const [restock, setRestock] = useState<{ ingredient: string; qty: number } | null>(null)
+    const [restock, setRestock] = useState<{ ingredient: string; qty: number | null } | null>(null)
     const cashClosedToday = useCashClosedToday(addressId, !!restock)
 
-    const buyList = useMemo(() => (plan ?? [])
-        .map(r => ({ ingredient: r.ingredient, unit: r.unit, buy: ceilToBigUnit(r.buy, r.unit, cfgOf[r.ingredient]) }))
-        .filter(x => x.buy > 0)
+    const items = useMemo<PrepItem[]>(() => (plan ?? [])
+        .map(r => {
+            const cfg = cfgOf[r.ingredient]
+            const need = ceilToBigUnit(r.buy, r.unit, cfg)
+            const packSize = Number(cfg?.pack_size) || 0
+            return {
+                ingredient: r.ingredient, unit: r.unit, need, needPacks: packSize > 0 ? Math.ceil(need / packSize) : 0,
+                packSize, packUnit: cfg?.pack_unit, pack2: pack2Of(cfg),
+                warehouse: r.pool, minStock: r.minStock, have: r.totalPull,
+            }
+        })
+        .filter(it => it.need > 0)
         .sort((a, b) => byIngredientLabel(a.ingredient, b.ingredient)), [plan, cfgOf])
     const cfg = restock ? cfgOf[restock.ingredient] : undefined
 
     return (
         <>
-            <NoticeSheet icon={<Package size={18} className="text-primary shrink-0" />} title="Bổ sung tồn kho" count={plan ? buyList.length : ''} onClose={onClose}>
+            <NoticeSheet icon={<Package size={18} className="text-primary shrink-0" />} title="Bổ sung tồn kho" count={plan ? items.length : ''} onClose={onClose}>
                 {error ? (
                     <div className="py-6 text-center flex flex-col items-center gap-2">
                         <span className="text-[14px] font-bold text-danger">Không tải được số liệu kho</span>
@@ -57,15 +67,16 @@ function Sheet({ addressId, addresses: all, onClose, onRestocked }: { addressId:
                     </div>
                 ) : !plan ? (
                     <p className="py-8 text-center text-[14px] text-text-secondary">Đang tính…</p>
-                ) : buyList.length === 0 ? (
-                    <p className="py-8 text-center text-[14px] text-text-secondary">Kho tổng đủ cho ngày mai — không cần đi chợ.</p>
-                ) : buyList.map(x => (
-                    <div key={x.ingredient} className="flex items-center gap-2 py-2.5 border-b border-border/20 last:border-0">
-                        <span className="flex-1 min-w-0 truncate text-[14px] font-medium text-text">{ingredientLabel(x.ingredient)}</span>
-                        <span className="text-[15px] font-black tabular-nums text-text">{fmtQty(x.buy, x.unit, cfgOf[x.ingredient])}</span>
-                        <button type="button" onClick={() => setRestock({ ingredient: x.ingredient, qty: x.buy })} className="shrink-0 px-2.5 py-1.5 rounded-[8px] bg-primary text-bg text-[11px] font-black">Nhập kho</button>
-                    </div>
-                ))}
+                ) : (
+                    <ShiftPrepCard
+                        packVerb="Mua"
+                        haveLabel="Cả nhóm rút ngày mai"
+                        emptyTitle="Kho tổng đủ cho mai!"
+                        emptyHint="Không cần đi chợ đắp thêm cho ngày mai."
+                        items={items}
+                        onRestock={(ingredient, qty) => setRestock({ ingredient, qty: qty > 0 ? qty : null })}
+                    />
+                )}
             </NoticeSheet>
 
             {restock && (
