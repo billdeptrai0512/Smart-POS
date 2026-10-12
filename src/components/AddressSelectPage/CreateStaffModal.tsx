@@ -8,6 +8,7 @@ import FloatingLabelInput from '../common/FloatingLabelInput'
 import PasswordInput from '../common/PasswordInput'
 import PasswordChecklist from '../common/PasswordChecklist'
 import { errorMessage } from '../../utils/errorMessage'
+import { isStrongPassword } from '../../utils/password'
 
 const ROLES = [
     { key: 'staff', label: 'Nhân viên', icon: UserPlus, description: 'Đăng nhập bằng mã PIN 6 số' },
@@ -25,7 +26,7 @@ export default function CreateStaffModal({ onClose, onSuccess }: { onClose: () =
     const isCo = role === 'manager'
 
     const pwValid = isCo
-        ? password.length >= 8 && /[a-zA-Z]/.test(password) && /[0-9]/.test(password)
+        ? isStrongPassword(password)
         : /^[0-9]{6}$/.test(password)
 
     async function handleSubmit(e: FormEvent) {

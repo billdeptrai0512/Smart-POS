@@ -47,12 +47,16 @@ export function Dialog({ onClose, zIndexClass = 'z-50', className = '', panelCla
 // panelClassName dùng chung cho các Dialog kiểu "trang con có nút quay lại" (chọn bàn
 // đích, danh sách đơn mang đi, chi tiết bàn) — cùng khung bottom-sheet-trên-desktop nên
 // tách 1 lần thay vì mỗi modal tự khai lại chuỗi class.
+// panelClassName chuẩn của BottomSheet kiểu form (tạo/sửa nhanh). Cần thêm max-h/overflow thì nối chuỗi.
+export const SHEET_PANEL = 'w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up'
 export const MODAL_PANEL = 'w-full max-w-md mx-4 max-h-[85dvh] flex flex-col bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden'
 
 // Khuôn nút chip tròn (trạng thái ra món, nút hành động nhỏ trên mỗi đợt/đơn) — dùng ở
 // TableDetailModal + TakeawayListModal.
 export const CHIP = 'h-[26px] whitespace-nowrap rounded-full border text-[11px] font-black uppercase tracking-wider transition-colors'
 export const CHIP_IDLE = `${CHIP} bg-surface-light border-border/60 text-text-secondary`
+export const ROUND_ICON_BTN = 'shrink-0 w-[26px] h-[26px] rounded-full border bg-surface-light border-border/60 flex items-center justify-center transition-colors'
+export const CHIP_ICON = `${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center`
 
 // Pill ngày/giờ mở đợt/đơn — tách riêng ngày và giờ thành 2 pill cạnh nhau (thay vì 1
 // chuỗi text) để dễ quét mắt hơn khi liệt kê nhiều đợt/đơn liên tiếp. Cùng h-[26px] với

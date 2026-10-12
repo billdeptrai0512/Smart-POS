@@ -26,13 +26,10 @@ import ExpensePanel from '../components/HistoryPage/ExpensePanel'
 import AddExpenseModal from '../components/HistoryPage/AddExpenseModal'
 import { shiftFinalizedKey, cashClosedKey } from '../constants/storageKeys'
 import { Plus } from 'lucide-react'
-import { fetchExpenseCategories, insertExpenseCategory, updateExpenseCategory, deleteExpenseCategory, fetchExpensesByCategory, fetchExpenseCategoryCounts, restoreExpenseCategory } from '../services/expenseService'
+import { useExpenseCategories } from '../hooks/useExpenseCategories'
+import { buildExpenseUpdates } from '../utils/expenseUpdates'
 import Toast from '../components/POSPage/Toast'
-import type { CartExtra, ExpenseCategory, Row } from '../types/domain'
-
-// Use dateStringVN so YYYY-MM-DD always reflects Vietnam local date,
-// regardless of where the browser runs.
-const getLocalISO = (date = new Date()) => dateStringVN(date)
+import type { CartExtra, Row } from '../types/domain'
 
 export default function HistoryPage() {
     const navigate = useNavigate()
@@ -115,32 +112,18 @@ export default function HistoryPage() {
     const [pendingOrders, setPendingOrders] = useState(() => getPendingOrders())
     const [isSyncing, setIsSyncing] = useState(false)
 
-    // ─── Expense state ────────────────────────────────────────────────
-
     // ─── Add-expense form state ───────────────────────────────────────
-    // `expenseCategory` here = top tab. 'expense' → Vận hành (operating tags),
-    // 'fixed' → Quản lý & khác (overhead tags). The legacy 'fixed' key is kept
-    // to avoid touching scattered handlers; semantically it now drives only
-    // group_section, not the fixed_costs template flow (which is deprecated).
-    const [expenseCategory, setExpenseCategory] = useState('expense')
     const [costName, setCostName] = useState('')
     const [costAmount, setCostAmount] = useState('')
-    const [expenseDate, setExpenseDate] = useState(() => getLocalISO()) // ngày chi, default hôm nay
+    const [expenseDate, setExpenseDate] = useState(() => dateStringVN()) // ngày chi, default hôm nay
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
-    const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([])
+    // Tải lại mỗi lần mở modal: thẻ chi phí cũng cần nhãn để vẽ chip nên không chỉ gắn với lúc modal mở.
+    const { categories: expenseCategories, actions: categoryActions } = useExpenseCategories(addressId, showAddModal)
     const [isAfterShift, setIsAfterShift] = useState(false)
     const [paymentMethod, setPaymentMethod] = useState('cash')
     // null = đang TẠO mới; có object = đang SỬA chi phí đó (modal prefill từ thẻ).
     const [editingExpense, setEditingExpense] = useState<Row | null>(null)
-
-    // Fetch tags on mount + whenever the modal opens (cache-backed). Card list
-    // also needs categories to resolve the tag chip on each ExpenseCard, so we
-    // can't gate solely on modal open.
-    useEffect(() => {
-        if (!addressId) return
-        fetchExpenseCategories(addressId).then(setExpenseCategories)
-    }, [addressId, showAddModal])
 
     // Auto-pick a default category khi mở modal mà CHƯA có nhãn nào chọn. KHÔNG
     // re-pick theo nhóm legacy nữa: việc đổi Phân loại (group) + chọn nhãn đầu của
@@ -164,15 +147,14 @@ export default function HistoryPage() {
         if (!showAddModal) {
             setCostName('')
             setCostAmount('')
-            setExpenseCategory('expense')
             setSelectedCategoryId(null)
-            setExpenseDate(getLocalISO())
+            setExpenseDate(dateStringVN())
             setIsAfterShift(false)
             setPaymentMethod('cash')
             setEditingExpense(null)
         } else if (!editingExpense) {
             // Default toggle to "Sau chốt ca" when shift or cash is already closed
-            const today = getLocalISO()
+            const today = dateStringVN()
             const finalized = addressId && (
                 !!localStorage.getItem(shiftFinalizedKey(addressId, today)) ||
                 !!localStorage.getItem(cashClosedKey(addressId, today))
@@ -180,44 +162,6 @@ export default function HistoryPage() {
             setIsAfterShift(!!finalized)
         }
     }, [showAddModal, addressId]) // eslint-disable-line react-hooks/exhaustive-deps
-
-    const handleCreateCategory = useCallback(async ({ name, group_section }: { name: string; group_section: string }) => {
-        if (!addressId) return null
-        const created = await insertExpenseCategory(addressId, { name, group_section })
-        setExpenseCategories(prev => [...prev, created])
-        return created
-    }, [addressId])
-
-    const handleUpdateCategory = useCallback(async (id: string, updates: Partial<ExpenseCategory>) => {
-        const updated = await updateExpenseCategory(id, updates)
-        setExpenseCategories(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c))
-        return updated
-    }, [])
-
-    // Soft-delete an EMPTY label (no expenses attached). The sheet lists a label's
-    // expenses first — a label still holding expenses must have each row moved to
-    // another label before this runs, so we never silently dump rows into "Chi phí khác".
-    const handleDeleteCategoryTag = useCallback(async (id: string) => {
-        await deleteExpenseCategory(id)
-        setExpenseCategories(prev => prev.filter(c => c.id !== id))
-    }, [])
-
-    const handleListCategoryExpenses = useCallback(
-        (id: string) => fetchExpensesByCategory(addressId, id),
-        [addressId]
-    )
-
-    const handleCountCategories = useCallback(
-        () => fetchExpenseCategoryCounts(addressId),
-        [addressId]
-    )
-
-    // Hoàn tác xoá nhãn: bật lại is_active + đưa lại vào danh sách. Việc trả các
-    // chi phí về nhãn cũ do sheet lo (gọi onMoveExpense ngược).
-    const handleRestoreCategory = useCallback(async (category: ExpenseCategory) => {
-        await restoreExpenseCategory(category.id)
-        setExpenseCategories(prev => prev.some(c => c.id === category.id) ? prev : [...prev, category])
-    }, [])
 
     // ─── Range fetch ──────────────────────────────────────────────────
     const { rangeStart, rangeEnd, rangeLabel } = useMemo(() => {
@@ -237,10 +181,14 @@ export default function HistoryPage() {
     // Move ONE expense to another label (re-tag). Patches both the today list
     // (via POS handler) and the range list so the moved card shows its new tag
     // immediately; report cards refetch on their own via cache invalidation.
-    const handleMoveExpense = useCallback(async (expenseId: string, toId: string) => {
-        await handleUpdateExpense(expenseId, { category_id: toId })
-        if (!isTodayScope && patchRangeExpense) patchRangeExpense(expenseId, { category_id: toId })
+    const updateExpense = useCallback(async (expenseId: string, patch: Parameters<typeof handleUpdateExpense>[1]) => {
+        await handleUpdateExpense(expenseId, patch)
+        if (!isTodayScope && patchRangeExpense) patchRangeExpense(expenseId, patch)
     }, [handleUpdateExpense, isTodayScope, patchRangeExpense])
+    const handleMoveExpense = useCallback(
+        (expenseId: string, toId: string) => updateExpense(expenseId, { category_id: toId }),
+        [updateExpense]
+    )
 
     // ─── Offline order sync ───────────────────────────────────────────
     const refreshPending = useCallback(() => setPendingOrders(getPendingOrders()), [])
@@ -310,7 +258,7 @@ export default function HistoryPage() {
         [baseExpenses]
     )
 
-    const isLoadingExpenses = isReadOnly ? false : (isTodayScope ? isLoadingHistory : isLoadingRange)
+    const isLoadingExpenses = !isReadOnly && (isTodayScope ? isLoadingHistory : isLoadingRange)
 
     // ─── Action handlers ──────────────────────────────────────────────
     // "Thực chi" only: mọi chi phí đều là expense thực được ghi nhận tại
@@ -321,7 +269,7 @@ export default function HistoryPage() {
         setEditingExpense(expense)
         setCostName(expense.name || '')
         setCostAmount(formatVNDInput(String(expense.amount ?? '')))
-        setExpenseDate(getLocalISO(new Date(expense.created_at)))
+        setExpenseDate(dateStringVN(new Date(expense.created_at)))
         setIsAfterShift(!!expense.metadata?.free_form)
         setPaymentMethod(expense.payment_method || 'cash')
         setSelectedCategoryId(expense.category_id || null)
@@ -333,28 +281,14 @@ export default function HistoryPage() {
         if (amount <= 0 || !costName.trim()) return
         setIsSubmitting(true)
         try {
-            const tagId = selectedCategoryId || null
-            const today = getLocalISO()
+            const today = dateStringVN()
             // Phase: "Sau chốt ca" lưu is_refill=true + metadata.free_form; "Trong ca" thì không.
-            const isRefill = !!isAfterShift
             const metadata = isAfterShift ? { free_form: true } : {}
 
             if (editingExpense) {
-                // SỬA: chỉ đổi created_at khi NGÀY khác ngày gốc (giữ giờ gốc nếu cùng ngày).
-                const sameDay = getLocalISO(new Date(editingExpense.created_at)) === expenseDate
-                const createdAt = sameDay
-                    ? editingExpense.created_at
-                    : new Date(`${expenseDate}T12:00:00+07:00`).toISOString()
-                await handleUpdateExpense(editingExpense.id, {
-                    name: costName.trim(), amount, payment_method: paymentMethod,
-                    category_id: tagId, created_at: createdAt, is_refill: isRefill, metadata,
-                })
-                if (!isTodayScope && patchRangeExpense) {
-                    patchRangeExpense(editingExpense.id, {
-                        name: costName.trim(), amount, payment_method: paymentMethod,
-                        category_id: tagId, created_at: createdAt, is_refill: isRefill, metadata,
-                    })
-                }
+                await updateExpense(editingExpense.id, buildExpenseUpdates(editingExpense, {
+                    name: costName, amount, paymentMethod, categoryId: selectedCategoryId, date: expenseDate, isAfterShift,
+                }))
                 setShowAddModal(false)
                 return
             }
@@ -362,7 +296,7 @@ export default function HistoryPage() {
             // TẠO mới — backdate: anchor noon VN; null = today → server NOW() giữ giờ thật.
             const isBackdated = expenseDate && expenseDate !== today
             const createdAt = isBackdated ? new Date(`${expenseDate}T12:00:00+07:00`).toISOString() : null
-            await handleAddExpense(costName.trim(), amount, isRefill, paymentMethod, metadata, false, tagId, createdAt)
+            await handleAddExpense(costName.trim(), amount, isAfterShift, paymentMethod, metadata, false, selectedCategoryId, createdAt)
             setShowAddModal(false)
         } catch { /* lỗi đã được context surface qua toast */ }
         finally { setIsSubmitting(false) }
@@ -372,18 +306,13 @@ export default function HistoryPage() {
     const deleteEditingExpense = async () => {
         if (!editingExpense) return
         if (!await confirm({ title: `Xóa chi phí "${editingExpense.name}"?`, detail: 'Hành động này không thể hoàn tác!', danger: true, confirmLabel: 'Xóa' })) return
-        await deleteExpense(editingExpense.id, editingExpense.amount)
-        setShowAddModal(false)
-    }
-
-    const deleteExpense = async (id: string, amount: number) => {
         // If the deleted expense was a refill bound to an ingredient, the server-side
         // stock formula (warehouse_stock = Σ refill − Σ restock) will recompute on next
         // fetch — trigger refreshProducts so unit cost / ingredient list stay in sync.
-        const target = baseExpenses.find(e => e.id === id)
-        const wasInventoryRefill = !!(target?.is_refill && target?.metadata?.ingredient)
+        const { id, amount, is_refill, metadata } = editingExpense
         await handleDeleteExpense(id, amount)
-        if (wasInventoryRefill) await refreshProducts?.()
+        if (is_refill && metadata?.ingredient) await refreshProducts?.()
+        setShowAddModal(false)
     }
 
     const handleForward = () => {
@@ -414,8 +343,8 @@ export default function HistoryPage() {
                 onTabSelect={setActiveTab}
                 onOffsetPrev={goOffsetPrev}
                 onOffsetNext={goOffsetNext}
-                rangeStartISO={rangeStart ? getLocalISO(rangeStart) : undefined}
-                rangeEndISO={rangeEnd ? getLocalISO(rangeEnd) : undefined}
+                rangeStartISO={rangeStart ? dateStringVN(rangeStart) : undefined}
+                rangeEndISO={rangeEnd ? dateStringVN(rangeEnd) : undefined}
                 dayInputValue={dayInputValue}
                 todayISO={todayISO}
                 canGoForwardDay={canGoForwardDay}
@@ -477,7 +406,6 @@ export default function HistoryPage() {
                 <AddExpenseModal
                     isEditing={!!editingExpense}
                     onDelete={deleteEditingExpense}
-                    expenseCategory={expenseCategory}
                     costName={costName}
                     costAmount={costAmount}
                     isSubmitting={isSubmitting}
@@ -486,17 +414,11 @@ export default function HistoryPage() {
                     expenseCategories={expenseCategories}
                     selectedCategoryId={selectedCategoryId}
                     onCategoryIdChange={setSelectedCategoryId}
-                    onCreateCategory={handleCreateCategory}
-                    onUpdateCategory={handleUpdateCategory}
-                    onDeleteCategory={handleDeleteCategoryTag}
-                    onListCategoryExpenses={handleListCategoryExpenses}
+                    {...categoryActions}
                     onMoveExpense={handleMoveExpense}
-                    onCountCategories={handleCountCategories}
-                    onRestoreCategory={handleRestoreCategory}
                     showToast={showToast}
                     onClose={() => setShowAddModal(false)}
                     onSubmit={submitExpense}
-                    onCategoryChange={setExpenseCategory}
                     onNameChange={setCostName}
                     onAmountChange={setCostAmount}
                     expenseDate={expenseDate}
@@ -506,13 +428,8 @@ export default function HistoryPage() {
                 />
             )}
 
-            {/* Toast nâng lên trên modal/sheet (z-[100]) để nút Hoàn tác bấm được.
-                Wrapper inset-0 pointer-events-none cho click xuyên qua, chỉ toast nhận click. */}
-            <div className="fixed inset-0 z-[200] pointer-events-none">
-                <div className="pointer-events-auto">
-                    <Toast toast={toast} />
-                </div>
-            </div>
+            {/* Toast tự có z-[300] — trên modal/sheet (z-[100]) nên nút Hoàn tác vẫn bấm được. */}
+            <Toast toast={toast} />
         </div>
     )
 }

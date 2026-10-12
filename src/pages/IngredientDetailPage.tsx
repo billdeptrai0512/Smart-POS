@@ -13,7 +13,6 @@ import {
     editIngredientRestock, mergeShiftClosingInventory, fetchIngredientDailyContext,
     processIngredientRestock, setIngredientsGroup,
 } from '../services/orderService'
-import { fetchCashClosedToday } from '../services/reportService'
 import { formatVND } from '../utils'
 import { pack2Of } from '../utils/inventory'
 import {
@@ -29,8 +28,10 @@ import RestockModal, { type RestockPayload } from '../components/IngredientManag
 import Toast from '../components/POSPage/Toast'
 import { useToast } from '../hooks/useToast'
 import { useSavingAction } from '../hooks/useSavingAction'
+import { useCashClosedToday } from '../hooks/useCashClosedToday'
+import { restockInitialFrom } from '../utils/restockInitial'
 import { useConfirm } from '../contexts/ConfirmContext'
-import { dateStringVN, timeStringVN, startOfMonthVN, endOfMonthVN } from '../utils/dateVN'
+import { dateStringVN, startOfMonthVN, endOfMonthVN } from '../utils/dateVN'
 import { findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
 import { isRecipeProgressDone, readOnboardingState, writeOnboardingState } from '../utils/onboardingStorage'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
@@ -81,15 +82,8 @@ export default function IngredientDetailPage() {
     const [paymentInvoice, setPaymentInvoice] = useState<Row | null>(null)
     const [editingEntry, setEditingEntry] = useState<Row | null>(null)
     const [restockOpen, setRestockOpen] = useState(false)
-    // Đã chốt ca tiền hôm nay chưa → default phân loại tiền mặt khi nhập kho. Fetch khi
-    // mở modal nhập kho để luôn tươi (user có thể vừa chốt ở /report).
-    const [cashClosedToday, setCashClosedToday] = useState(false)
-    useEffect(() => {
-        if (!restockOpen) return
-        let alive = true
-        fetchCashClosedToday(addressId).then(v => { if (alive) setCashClosedToday(!!v) })
-        return () => { alive = false }
-    }, [restockOpen, addressId])
+    // Đã chốt ca tiền hôm nay chưa → default phân loại tiền mặt khi nhập kho.
+    const cashClosedToday = useCashClosedToday(addressId, restockOpen)
 
     // Month navigation (Nhật ký tab)
     const [monthOffset, setMonthOffset] = useState(0)
@@ -219,22 +213,19 @@ export default function IngredientDetailPage() {
         })
     }
 
-    async function saveCountInAudit(next: boolean) {
-        if (next === countInAudit) return
-        await withSaving('Lưu thiết lập kiểm kê', async () => {
-            await upsertIngredientCost(ingredientKey, cost, addressId, unit, { countInAudit: next })
+    // Ghi một phần cấu hình giá/quy cách của nguyên liệu (upsertIngredientCost) rồi làm tươi context.
+    const saveCost = (ctx: string, opts: Parameters<typeof upsertIngredientCost>[4], unitOverride = unit) =>
+        withSaving(ctx, async () => {
+            await upsertIngredientCost(ingredientKey, cost, addressId, unitOverride, opts)
             refreshProducts?.()
         })
+
+    function saveCountInAudit(next: boolean) {
+        if (next !== countInAudit) return saveCost('Lưu thiết lập kiểm kê', { countInAudit: next })
     }
 
-    async function savePackConfig({ packSize: ps, packUnit: pu, pack2Size: ps2, pack2Unit: pu2 }: PackConfigValues) {
-        await withSaving('Lưu quy cách đóng gói', async () => {
-            await upsertIngredientCost(ingredientKey, cost, addressId, unit, {
-                packSize: ps, packUnit: pu, pack2Size: ps2, pack2Unit: pu2, minStock: config.min_stock,
-            })
-            refreshProducts?.()
-        })
-    }
+    const savePackConfig = ({ packSize: ps, packUnit: pu, pack2Size: ps2, pack2Unit: pu2 }: PackConfigValues) =>
+        saveCost('Lưu quy cách đóng gói', { packSize: ps, packUnit: pu, pack2Size: ps2, pack2Unit: pu2, minStock: config.min_stock })
 
     // Sửa KHO SAU (warehouse) = nhập số tuyệt đối. delta so với kho sau hiện tại
     // (KHÔNG so với tổng) → chỉ tác động warehouse, không đụng quầy.
@@ -275,12 +266,8 @@ export default function IngredientDetailPage() {
         })
     }
 
-    async function saveUnit(newUnit: string) {
-        if (newUnit === unit) return
-        await withSaving('Lưu đơn vị', async () => {
-            await upsertIngredientCost(ingredientKey, cost, addressId, newUnit, { category: config.category })
-            refreshProducts?.()
-        })
+    function saveUnit(newUnit: string) {
+        if (newUnit !== unit) return saveCost('Lưu đơn vị', { category: config.category }, newUnit)
     }
 
     async function saveName(newDisplayName: string) {
@@ -296,38 +283,21 @@ export default function IngredientDetailPage() {
         })
     }
 
-    async function saveMinStock(newMin: number) {
-        if (newMin === (minStock || 0)) return
-        await withSaving('Lưu tồn tối thiểu', async () => {
-            await upsertIngredientCost(ingredientKey, cost, addressId, unit, {
-                category: config.category,
-                packSize: config.pack_size,
-                packUnit: config.pack_unit,
-                minStock: newMin,
-            })
-            refreshProducts?.()
-        })
+    function saveMinStock(newMin: number) {
+        if (newMin !== (minStock || 0)) {
+            return saveCost('Lưu tồn tối thiểu', { category: config.category, packSize: config.pack_size, packUnit: config.pack_unit, minStock: newMin })
+        }
     }
 
-    async function saveMinCounter(newMin: number) {
-        if (newMin === (minCounterStock || 0)) return
-        await withSaving('Lưu tồn quầy tối thiểu', async () => {
-            await upsertIngredientCost(ingredientKey, cost, addressId, unit, { minCounterStock: newMin })
-            refreshProducts?.()
-        })
+    function saveMinCounter(newMin: number) {
+        if (newMin !== (minCounterStock || 0)) return saveCost('Lưu tồn quầy tối thiểu', { minCounterStock: newMin })
     }
 
-    async function saveTareWeight(newTare: number) {
-        if (newTare === (tareWeight || 0)) return
-        await withSaving('Lưu khối lượng bì', async () => {
-            await upsertIngredientCost(ingredientKey, cost, addressId, unit, {
-                category: config.category,
-                packSize: config.pack_size,
-                packUnit: config.pack_unit,
-                tareWeight: newTare || null, // 0 = xoá bì
-            })
-            refreshProducts?.()
-        })
+    function saveTareWeight(newTare: number) {
+        if (newTare !== (tareWeight || 0)) {
+            // newTare 0 = xoá bì
+            return saveCost('Lưu khối lượng bì', { category: config.category, packSize: config.pack_size, packUnit: config.pack_unit, tareWeight: newTare || null })
+        }
     }
 
     async function handleRestock({ ingredient: ing, qty, subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate }: RestockPayload) {
@@ -463,11 +433,11 @@ export default function IngredientDetailPage() {
     async function handleDelete() {
         const label = ingredientLabel(ingredientKey)
         if (!await confirm({ title: `Xóa nguyên liệu "${label}"?`, detail: 'Sẽ gỡ khỏi tất cả công thức liên quan.', danger: true, confirmLabel: 'Xóa' })) return
-        try {
+        await withSaving('Xóa nguyên liệu', async () => {
             await deleteIngredientCost(ingredientKey, addressId)
             refreshProducts?.()
             navigate('/inventory/stocking')
-        } catch (err) { showError(err, 'Xóa nguyên liệu') }
+        })
     }
 
     const titleLabel = ingredientLabel(ingredientKey)
@@ -599,7 +569,6 @@ export default function IngredientDetailPage() {
 
             {packModalOpen && (
                 <PackConfigModal
-                    open={true}
                     onClose={() => setPackModalOpen(false)}
                     ingredientLabel={titleLabel}
                     baseUnit={unit}
@@ -635,17 +604,7 @@ export default function IngredientDetailPage() {
                     pack2={pack2}
                     cashClosedToday={false}
                     mode="edit"
-                    initial={{
-                        qty: editingEntry.metadata?.qty ?? 0,
-                        subtotal: editingEntry.metadata?.subtotal ?? editingEntry.amount ?? 0,
-                        discount: editingEntry.discount_amount ?? 0,
-                        extraCost: editingEntry.extra_cost ?? 0,
-                        paid: (editingEntry.payments || []).reduce((s: number, p: Row) => s + (p.amount || 0), 0),
-                        paymentMethod: editingEntry.payment_method || 'cash',
-                        cashPhase: editingEntry.metadata?.cash_phase || 'post_close',
-                        purchaseDate: dateStringVN(new Date(editingEntry.created_at)),
-                        purchaseTime: timeStringVN(new Date(editingEntry.created_at)),
-                    }}
+                    initial={restockInitialFrom(editingEntry)}
                     onConfirm={(form) => handleEditRestock(editingEntry, form)}
                     onClose={() => setEditingEntry(null)}
                 />

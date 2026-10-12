@@ -32,11 +32,11 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
     // Saved orders only, newest first (max 3). isNew matches only the exact row just
     // committed locally (enterKey) → it slides in and types out; the realtime DB echo,
     // which remounts the row under a new server-timestamp key, can't replay it.
-    const rows = recentOrders.map(o => ({
+    const rows = recentOrders.slice(0, 3).map(o => ({
         key: o.id ?? o.createdAt, // id is collision-proof; createdAt (ms) can repeat on same-tick commits
         isNew: o.createdAt === enterKey,
         text: o.items.join(' · '),
-    })).slice(0, 3)
+    }))
     return (
         <header className="shrink-0 pt-6 pb-6 bg-surface border-b border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.03)] relative z-20">
             <div className="px-6 grid grid-cols-2 dine-split:grid-cols-4 gap-3 mb-1">
@@ -49,16 +49,12 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                 >
                     <div className="flex flex-col justify-between items-start relative z-10 w-full">
                         <span className="text-[12px] sm:text-[13px] text-text-secondary font-black uppercase tracking-wider">Địa chỉ</span>
-                        <div className="flex items-center justify-between w-full mt-0.5">
-                            {addressName && <span className="text-[13px] text-success font-black uppercase tracking-wider line-clamp-1">{addressName}</span>}
-                        </div>
+                        {addressName && <span className="w-full mt-0.5 text-[13px] text-success font-black uppercase tracking-wider line-clamp-1">{addressName}</span>}
                     </div>
                     <div className="w-full h-[1px] bg-border/60 rounded-full relative z-10 my-[3px] mt-[4px]"></div>
                     <div className="flex flex-col justify-between items-start relative z-10 mt-[6px]">
-                        <span className="text-[13px] sm:text-[13px] text-text-secondary font-bold uppercase tracking-wider">{dayName}</span>
-                        <div className="flex items-center gap-1.5">
-                            <span className="text-[14px] sm:text-[14px] text-text font-black uppercase tracking-tight">{dateOnly}</span>
-                        </div>
+                        <span className="text-[13px] text-text-secondary font-bold uppercase tracking-wider">{dayName}</span>
+                        <span className="text-[14px] text-text font-black uppercase tracking-tight">{dateOnly}</span>
                     </div>
                     <div className="absolute top-0 right-0 w-24 h-24 bg-success/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
                 </div>
@@ -71,9 +67,7 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
                     className={`dine-split:col-span-2 cursor-pointer bg-bg rounded-[20px] p-3 sm:p-3.5 border border-primary/35 hover:border-primary/60 shadow-sm flex flex-col gap-[2px] relative overflow-hidden h-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${hintClass}`}
                 >
                     <div className="flex flex-col justify-between items-start relative z-10 w-full">
-                        <div className="flex items-center justify-between w-full">
-                            <span className="text-[12px] sm:text-[13px] text-primary font-black uppercase tracking-wider">Nhật ký</span>
-                        </div>
+                        <span className="text-[12px] sm:text-[13px] text-primary font-black uppercase tracking-wider">Nhật ký</span>
                         <div className="w-full">
                             {rows.length > 0 ? (
                                 <div className="flex flex-col mt-1.5 gap-2">
@@ -104,6 +98,6 @@ export default function Header({ dayName, dateOnly, onOpenHistory, addressName, 
             </div>
             {/* empty:hidden — notice trả null thì không chừa khoảng trống */}
             <div className="px-6 mt-3 empty:hidden [&>button]:rounded-[14px]">{notice}</div>
-        </header >
+        </header>
     )
 }

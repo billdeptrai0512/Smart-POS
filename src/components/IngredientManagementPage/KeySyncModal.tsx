@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Check, Loader, AlertTriangle, ChevronRight, Plus } from 'lucide-react'
-import { ingredientLabel } from '../../utils/ingredients'
+import { ingredientLabel, byIngredientLabel } from '../../utils/ingredients'
 import { syncIngredientKey, upsertIngredientCost } from '../../services/orderService'
 import { suggestCanonical, type detectKeyMismatches } from '../../utils/ingredientKeySync'
 import { Dialog, ModalHeader } from '../common/ModalShell'
@@ -12,7 +12,6 @@ interface RecipeUse { name: string; deleted: boolean }
 interface ExtraUse { extraName: string; productName: string }
 
 interface Props {
-    open: boolean
     onClose: () => void
     mismatches?: ReturnType<typeof detectKeyMismatches> | null
     recipes?: Row[]
@@ -49,7 +48,6 @@ function guessUnit(key?: string | null) {
  * không có action — user phải sửa qua recipe editor hoặc tạo lại ingredient.
  */
 export default function KeySyncModal({
-    open,
     onClose,
     mismatches,            // { orphanRecipeKeys, orphanInventoryKeys, orphanExtraIngredientKeys, labelCollisions }
     recipes = [],          // liveRecipes — filtered to active products (used for collision UI)
@@ -140,7 +138,7 @@ export default function KeySyncModal({
 
     const costKeys = useMemo(() => new Set(Object.keys(ingredientCosts || {})), [ingredientCosts])
     const sortedExistingKeys = useMemo(
-        () => [...costKeys].sort((a, b) => ingredientLabel(a).localeCompare(ingredientLabel(b))),
+        () => [...costKeys].sort(byIngredientLabel),
         [costKeys]
     )
 
@@ -169,8 +167,6 @@ export default function KeySyncModal({
         }
         return result
     }, [productExtras, extraIngredients, products])
-
-    if (!open) return null
 
     const collisions = mismatches?.labelCollisions || []
     const orphanRecipe = mismatches?.orphanRecipeKeys || []
@@ -206,7 +202,6 @@ export default function KeySyncModal({
 
     const handleClose = () => {
         if (syncing || creatingOrphans) return
-        setDone(false); setSummary(null) // mở lại modal không còn màn "thành công" của lần trước
         onClose()
     }
 
@@ -222,11 +217,6 @@ export default function KeySyncModal({
         } finally {
             setAssignBusyKey(null)
         }
-    }
-
-    const handleIgnoreClick = (orphanKey: string) => {
-        if (!onIgnoreKey) return
-        onIgnoreKey(orphanKey)
     }
 
     const handleCreateOrphans = async () => {
@@ -423,7 +413,7 @@ export default function KeySyncModal({
                                                                 )}
                                                                 {onIgnoreKey && (
                                                                     <button
-                                                                        onClick={() => handleIgnoreClick(k)}
+                                                                        onClick={() => onIgnoreKey(k)}
                                                                         disabled={assignBusyKey === k || creatingOrphans}
                                                                         className="px-2 py-1 rounded-md bg-bg border border-border/60 text-text-secondary text-[10px] font-bold hover:bg-surface hover:text-text transition-colors disabled:opacity-50 shrink-0"
                                                                         title="Bỏ qua orphan này vĩnh viễn (lưu trong localStorage)"

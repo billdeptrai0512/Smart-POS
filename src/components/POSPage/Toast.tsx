@@ -1,20 +1,18 @@
 import type { ToastState } from '../../hooks/useToast'
 
+const ERROR: [string, string] = ['bg-danger-soft text-danger border-danger/20', '✕ ']
+const STYLE: Record<string, [string, string]> = {
+    success: ['bg-success-soft text-success border-success/20', '✓ '],
+    error: ERROR,
+    danger: ERROR,
+    warning: ['bg-warning-soft text-warning border-warning/20', '⚡ '],
+    info: ['bg-surface text-text border-border/40', ''],
+}
+
 export default function Toast({ toast }: { toast: ToastState | null }) {
     if (!toast) return null
 
-    const colorClass = toast.type === 'success'
-        ? 'bg-success-soft text-success border-success/20'
-        : toast.type === 'error' || toast.type === 'danger'
-            ? 'bg-danger-soft text-danger border-danger/20'
-            : toast.type === 'warning'
-                ? 'bg-warning-soft text-warning border-warning/20'
-                : 'bg-surface text-text border-border/40'
-
-    const icon = toast.type === 'success' ? '✓ '
-        : toast.type === 'error' || toast.type === 'danger' ? '✕ '
-        : toast.type === 'warning' ? '⚡ '
-        : null
+    const [colorClass, icon] = STYLE[toast.type] ?? STYLE.info
 
     // z-[300]: trên cả BottomSheet/ConfirmContext (z-[200]) — toast lỗi phải luôn thấy
     // được kể cả khi bắn ra trong lúc một modal/confirm đang mở (vd in bill lỗi trong

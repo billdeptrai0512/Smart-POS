@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronDown, Settings2 } from 'lucide-react'
 import MoneyInput from '../common/MoneyInput'
 import DatePicker from '../common/DatePicker'
@@ -9,6 +9,7 @@ import { parseVNDInput } from '../../utils'
 import { dateStringVN } from '../../utils/dateVN'
 import { EXPENSE_GROUPS, groupMeta, labelsInGroup } from '../../constants/expenseGroups'
 import { BottomSheet, SheetHeader } from '../common/ModalShell'
+import SegmentedControl from '../common/SegmentedControl'
 import { useClickOutside } from '../../hooks/useClickOutside'
 
 // Create flow: pick label → name → amount → (date) → submit. Payment defaults to
@@ -20,7 +21,6 @@ interface Props extends Pick<CategoryActions, 'onListCategoryExpenses' | 'onMove
     onDeleteCategory: CategoryActions['onDelete']
     isEditing?: boolean
     onDelete?: () => void
-    expenseCategory: string
     costName: string
     costAmount: string
     isSubmitting?: boolean
@@ -35,7 +35,6 @@ interface Props extends Pick<CategoryActions, 'onListCategoryExpenses' | 'onMove
     onPaymentMethodChange?: (method: string) => void
     onClose: () => void
     onSubmit: () => void
-    onCategoryChange?: (category: string) => void
     onNameChange: (name: string) => void
     onAmountChange: (amount: string) => void
 }
@@ -43,7 +42,7 @@ interface Props extends Pick<CategoryActions, 'onListCategoryExpenses' | 'onMove
 export default function AddExpenseModal({
     isEditing = false,
     onDelete,
-    expenseCategory, costName, costAmount, isSubmitting,
+    costName, costAmount, isSubmitting,
     isAfterShift, onAfterShiftChange,
     // Tag picker
     expenseCategories = [],
@@ -63,10 +62,9 @@ export default function AddExpenseModal({
     paymentMethod = 'cash', onPaymentMethodChange,
     //
     onClose, onSubmit,
-    onCategoryChange, onNameChange, onAmountChange,
+    onNameChange, onAmountChange,
 }: Props) {
     const canSubmit = parseVNDInput(costAmount) > 0 && costName.trim() && !isSubmitting
-    const submitColor = expenseCategory === 'fixed' ? 'bg-warning' : 'bg-danger'
     const today = dateStringVN()
 
     const nameRef = useRef<HTMLInputElement>(null)
@@ -84,30 +82,22 @@ export default function AddExpenseModal({
     }
     // Chỉ 1 dropdown mở tại 1 thời điểm: 'group' | 'label' | null.
     const [openDd, setOpenDd] = useState<'group' | 'label' | null>(null)
-    const closeDd = useCallback(() => setOpenDd(null), [setOpenDd])
     // Sheet CRUD nhãn (lọc theo nhóm đang chọn).
     const [manageOpen, setManageOpen] = useState(false)
 
     const groupLabels = labelsInGroup(expenseCategories, activeGroup)
+    // Nhóm Quản lý & khác (overhead) tông vàng, còn lại đỏ.
+    const submitColor = activeGroup === 'overhead' ? 'bg-warning' : 'bg-danger'
 
-    // Mirror group → expenseCategory ('fixed' cho overhead, 'expense' còn lại) để
-    // route save path + tông nút Xác nhận, không cần tab riêng.
-    const mirrorGroup = (key?: string | null) => {
-        const next = key === 'overhead' ? 'fixed' : 'expense'
-        if (next !== expenseCategory) onCategoryChange?.(next)
-    }
     // Đổi PHÂN LOẠI: set group + mirror; nếu nhãn đang chọn không thuộc nhóm mới thì
     // tự chọn nhãn đầu (luôn có category hợp lệ, khỏi để trống).
     const applyGroup = (key: string) => {
         setActiveGroup(key)
-        mirrorGroup(key)
         const labels = labelsInGroup(expenseCategories, key)
         if (!labels.some(l => l.id === selectedCategoryId) && labels[0]) onCategoryIdChange(labels[0].id)
         setOpenDd(null)
     }
     const handlePickCategory = (id: UUID) => {
-        const chip = expenseCategories.find(c => c.id === id)
-        if (chip) mirrorGroup(chip.group_section)
         onCategoryIdChange(id)
         setOpenDd(null)
         // Advance focus only when the user hasn't started typing — avoid
@@ -135,7 +125,7 @@ export default function AddExpenseModal({
                         disabled={isSubmitting}
                         open={openDd === 'group'}
                         onToggle={() => setOpenDd(o => (o === 'group' ? null : 'group'))}
-                        onClose={closeDd}
+                        onClose={() => setOpenDd(null)}
                     >
                         {EXPENSE_GROUPS.map(g => (
                             <OptionRow
@@ -170,7 +160,7 @@ export default function AddExpenseModal({
                         disabled={isSubmitting}
                         open={openDd === 'label'}
                         onToggle={() => setOpenDd(o => (o === 'label' ? null : 'label'))}
-                        onClose={closeDd}
+                        onClose={() => setOpenDd(null)}
                     >
                         {groupLabels.map(c => (
                             <OptionRow
@@ -382,18 +372,7 @@ function SegmentToggle<T extends string | boolean>({ label, options, value, onCh
     return (
         <div className="flex flex-col gap-1.5">
             <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">{label}</span>
-            <div className="w-full flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
-                {options.map(opt => (
-                    <button
-                        key={String(opt.value)}
-                        type="button"
-                        onClick={() => onChange?.(opt.value)}
-                        className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${value === opt.value ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                    >
-                        {opt.label}
-                    </button>
-                ))}
-            </div>
+            <SegmentedControl options={options} value={value} onChange={onChange} />
         </div>
     )
 }

@@ -3,7 +3,7 @@ import type { CartExtra } from '../../types/domain'
 import type { ExtraIngredients } from '../../utils/inventory'
 import ExtraCard from './ExtraCard'
 import { onboardingHintClass } from '../../utils/onboardingHint'
-import type { AddCustomPayload } from './FastIngredientFill'
+import type { CustomIngredient } from './FastIngredientFill'
 
 export interface ExtraHandlers {
     saveName: (extraId: string, name: string) => void
@@ -12,7 +12,7 @@ export interface ExtraHandlers {
     deleteExtra: (extraId: string, name: string) => void
     saveExtraAmount: (extraId: string, ingredient: string, amount: number) => void
     deleteExtraIngredient: (extraId: string, ingredient: string) => void
-    addExtraIngredients: (extraId: string, payload: AddCustomPayload) => void
+    addExtraIngredients: (extraId: string, ingredient: CustomIngredient) => void
     duplicate: (extraId: string, name: string) => void
 }
 
@@ -111,7 +111,7 @@ export default function ExtrasSection({
                         onDelete={() => extraHandlers.deleteExtra(extra.id, extra.name)}
                         onSaveExtraAmount={(ing, v) => extraHandlers.saveExtraAmount(extra.id, ing, v)}
                         onDeleteExtraIngredient={(ing) => extraHandlers.deleteExtraIngredient(extra.id, ing)}
-                        onAddExtraIngredients={(payload) => extraHandlers.addExtraIngredients(extra.id, payload)}
+                        onAddExtraIngredients={(ingredient) => extraHandlers.addExtraIngredients(extra.id, ingredient)}
                         onDuplicate={(name) => extraHandlers.duplicate(extra.id, name)}
                         categoryOf={categoryOf}
                         baseAmounts={baseAmounts}

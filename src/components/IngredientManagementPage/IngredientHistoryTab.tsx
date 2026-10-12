@@ -140,14 +140,15 @@ function MonthSummaryCard({ monthLabel, monthOffset, onMonthChange, showStats, s
     )
 }
 
+// [màu nhãn, màu giá trị]
+const STAT_TONE: Record<string, [string, string]> = {
+    success: ['text-success', 'text-success'],
+    warning: ['text-warning', 'text-warning'],
+    primary: ['text-text-secondary', 'text-primary'],
+}
+
 function Stat({ label, value, tone, align = 'center' }: { label: string; value: string; tone?: 'success' | 'warning' | 'primary'; align?: 'start' | 'end' | 'center' }) {
-    const labelCls = tone === 'success' ? 'text-success'
-        : tone === 'warning' ? 'text-warning'
-        : 'text-text-secondary'
-    const valueCls = tone === 'success' ? 'text-success'
-        : tone === 'warning' ? 'text-warning'
-        : tone === 'primary' ? 'text-primary'
-        : 'text-text'
+    const [labelCls, valueCls] = STAT_TONE[tone ?? ''] ?? ['text-text-secondary', 'text-text']
     return (
         <div className={`flex flex-col ${align === 'start' ? 'items-start' : align === 'end' ? 'items-end' : 'items-center'}`}>
             <span className={`text-[10px] font-black uppercase tracking-wider ${labelCls}`}>{label}</span>
@@ -352,16 +353,17 @@ function HistoryCard({ entry, unit, packSize, packUnit, pack2, onOpenPayment, on
 
 // Pill — local helper supporting the tone set this card uses. Same shape as
 // /history Pill but expanded palette for status semantics.
+const PILL_TONE = {
+    success: 'bg-success/10 border-success/30 text-success',
+    warning: 'bg-warning/10 border-warning/30 text-warning',
+    primary: 'bg-primary/10 border-primary/30 text-primary',
+    neutral: 'bg-surface-light border-border/60 text-text-secondary',
+}
+
 function Pill({ tone, children }: { tone: 'success' | 'warning' | 'primary' | 'neutral'; children: ReactNode }) {
     // Project palette has no separate "info" hue (warning ≡ primary literally),
     // so partial-status uses the neutral pill — clearly distinct from unpaid (amber).
-    const cls = tone === 'success'
-        ? 'bg-success/10 border-success/30 text-success'
-        : tone === 'warning'
-        ? 'bg-warning/10 border-warning/30 text-warning'
-        : tone === 'primary'
-        ? 'bg-primary/10 border-primary/30 text-primary'
-        : 'bg-surface-light border-border/60 text-text-secondary'
+    const cls = PILL_TONE[tone]
     return (
         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${cls}`}>
             {children}

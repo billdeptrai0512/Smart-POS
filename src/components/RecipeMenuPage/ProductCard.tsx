@@ -36,23 +36,21 @@ export default function ProductCard({ product, prodRecipes, cost, ingredientUnit
                 </h3>
 
                 {!sortMode && (prodRecipes.length > 0 || notCup) && (
-                    <div className="flex flex-col items-left gap-y-1">
-                        <div className="flex flex-col gap-0.5">
-                            {prodRecipes.map(r => {
-                                const u = getIngredientUnit(r.ingredient, r.unit, ingredientUnits)
-                                const isSymbol = SYMBOL_UNITS.has(String(u).toLowerCase())
-                                return (
-                                    <span key={r.ingredient} className="text-[12px] font-medium text-text-secondary">
-                                        • {ingredientLabel(r.ingredient)} {r.amount}{isSymbol ? u : ` ${u}`}
-                                    </span>
-                                )
-                            })}
-                            {notCup && (
-                                <span title="Không tính vào tổng số ly bán/ngày" className="text-[12px] font-medium text-text-secondary">
-                                    • Không tính ly
+                    <div className="flex flex-col gap-0.5">
+                        {prodRecipes.map(r => {
+                            const u = getIngredientUnit(r.ingredient, r.unit, ingredientUnits)
+                            const isSymbol = SYMBOL_UNITS.has(String(u).toLowerCase())
+                            return (
+                                <span key={r.ingredient} className="text-[12px] font-medium text-text-secondary">
+                                    • {ingredientLabel(r.ingredient)} {r.amount}{isSymbol ? u : ` ${u}`}
                                 </span>
-                            )}
-                        </div>
+                            )
+                        })}
+                        {notCup && (
+                            <span title="Không tính vào tổng số ly bán/ngày" className="text-[12px] font-medium text-text-secondary">
+                                • Không tính ly
+                            </span>
+                        )}
                     </div>
                 )}
 

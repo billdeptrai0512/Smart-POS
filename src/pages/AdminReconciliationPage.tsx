@@ -24,27 +24,26 @@ interface AttentionItem {
     owner_name?: string | null
 }
 
-const REASON_LABEL: Record<string, string> = {
-    payment_review: 'Lệch tiền',
-    payment_stale: 'Thanh toán treo',
-    trial_ending: 'Dùng thử sắp hết',
-    expiring: 'Sắp hết hạn',
-    inactive: 'Không hoạt động',
-    churned_recent: 'Đã rời bỏ',
-    trial_inactive: 'Trial chưa dùng',
-    never_activated: 'Chưa kích hoạt',
-    dormant: 'Đã bỏ (>90 ngày)',
+// admin_dashboard_overview(): chỉ phần trang này đọc. dormant (v5) = đã bỏ >90 ngày, KHÔNG tính vào KPI "Cần chú ý".
+interface Overview {
+    attention: AttentionItem[]
+    attention_total_count?: number
+    dormant_addresses?: AttentionItem[]
+    dormant_count?: number
 }
-const REASON_TAG_CLASS: Record<string, string> = {
-    payment_review: 'bg-red-500/10 text-red-500',
-    payment_stale: 'bg-warning-soft/60 text-warning',
-    trial_ending: 'bg-warning-soft text-warning',
-    expiring: 'bg-warning-soft text-warning',
-    inactive: 'bg-danger-soft text-danger',
-    churned_recent: 'bg-danger-soft text-danger',
-    trial_inactive: 'bg-warning-soft text-warning',
-    never_activated: 'bg-warning-soft text-warning',
-    dormant: 'bg-border/60 text-text-dim',
+
+const WARN = 'bg-warning-soft text-warning'
+const DANGER = 'bg-danger-soft text-danger'
+const REASON: Record<string, { label: string; cls: string }> = {
+    payment_review: { label: 'Lệch tiền', cls: 'bg-red-500/10 text-red-500' },
+    payment_stale: { label: 'Thanh toán treo', cls: 'bg-warning-soft/60 text-warning' },
+    trial_ending: { label: 'Dùng thử sắp hết', cls: WARN },
+    expiring: { label: 'Sắp hết hạn', cls: WARN },
+    inactive: { label: 'Không hoạt động', cls: DANGER },
+    churned_recent: { label: 'Đã rời bỏ', cls: DANGER },
+    trial_inactive: { label: 'Trial chưa dùng', cls: WARN },
+    never_activated: { label: 'Chưa kích hoạt', cls: WARN },
+    dormant: { label: 'Đã bỏ (>90 ngày)', cls: 'bg-border/60 text-text-dim' },
 }
 
 const fmtDT = (iso: string) => {
@@ -53,6 +52,7 @@ const fmtDT = (iso: string) => {
 }
 
 const elapsedMinutes = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 60_000)
+const daysSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
 const daysLeft = (dateStr: string) => Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86_400_000)
 
 function attentionDetail(item: AttentionItem) {
@@ -66,11 +66,11 @@ function attentionDetail(item: AttentionItem) {
     }
     if (item.reason === 'inactive') {
         return item.last_active_at
-            ? `Không hoạt động ${Math.floor((Date.now() - new Date(item.last_active_at).getTime()) / 86_400_000)} ngày`
+            ? `Không hoạt động ${daysSince(item.last_active_at)} ngày`
             : 'Chưa từng hoạt động'
     }
     if (item.reason === 'churned_recent') {
-        const d = Math.floor((Date.now() - new Date(item.valid_to).getTime()) / 86_400_000)
+        const d = daysSince(item.valid_to)
         return d <= 0 ? 'Vừa hết hạn hôm nay' : `Hết hạn ${d} ngày trước — chưa gia hạn`
     }
     if (item.reason === 'trial_inactive') {
@@ -79,12 +79,12 @@ function attentionDetail(item: AttentionItem) {
     if (item.reason === 'never_activated') {
         // v4: valid_to tái dùng để chứa NGÀY TẠO địa chỉ cho reason này (không phải hạn),
         // xem 20260815_admin_dashboard_overview_v4.sql.
-        const days = Math.floor((Date.now() - new Date(item.valid_to).getTime()) / 86_400_000)
+        const days = daysSince(item.valid_to)
         return `Đăng ký ${days} ngày trước, chưa chốt ca nào`
     }
     if (item.reason === 'dormant') {
         return item.last_active_at
-            ? `Im lặng ${Math.floor((Date.now() - new Date(item.last_active_at).getTime()) / 86_400_000)} ngày — gần như chắc đã bỏ`
+            ? `Im lặng ${daysSince(item.last_active_at)} ngày — gần như chắc đã bỏ`
             : 'Chưa từng hoạt động, đã trả phí lâu'
     }
     return `Mã SP${item.reference} · ${fmtDT(item.intent_created_at)}`
@@ -109,28 +109,25 @@ export default function AdminReconciliationPage() {
     const navigate = useNavigate()
     const { isAdmin, loading: authLoading } = useAuth()
 
-    const [items, setItems] = useState<AttentionItem[] | null>(null)
-    const [totalCount, setTotalCount] = useState(0) // đếm thật (đã dedupe), items chỉ là top-20 hiển thị
-    const [dormant, setDormant] = useState<AttentionItem[] | null>(null) // v5: đã bỏ >90 ngày, KHÔNG tính vào KPI "Cần chú ý"
-    const [dormantCount, setDormantCount] = useState(0)
+    const [data, setData] = useState<Overview | null>(null)
     const [busyId, setBusyId] = useState<string | null>(null)
     const [confirmId, setConfirmId] = useState<string | null>(null) // 2-step confirm cho "Cấp gói tay"
     const [error, setError] = useState<string | null>(null)
 
     const reload = useCallback(() => {
         fetchAdminDashboard()
-            .then((d) => {
-                setItems(d.attention)
-                setTotalCount(d.attention_total_count ?? d.attention.length)
-                setDormant(d.dormant_addresses ?? [])
-                setDormantCount(d.dormant_count ?? 0)
-            })
+            .then(setData)
             .catch((e) => setError(errorMessage(e, '')))
     }, [])
 
     useEffect(() => {
         if (isAdmin) reload()
     }, [isAdmin, reload])
+
+    const items = data?.attention ?? null
+    const dormant = data?.dormant_addresses ?? []
+    const totalCount = data?.attention_total_count ?? items?.length ?? 0 // đếm thật (đã dedupe), items chỉ là top-20 hiển thị
+    const dormantCount = data?.dormant_count ?? 0
 
     if (authLoading) return null
     if (!isAdmin) return <Navigate to="/addresses" />
@@ -146,8 +143,7 @@ export default function AdminReconciliationPage() {
         setError(null)
         try {
             await resolvePaymentIntent(id, grant)
-            setItems((prev) => prev && prev.filter((i) => i.intent_id !== id))
-            setTotalCount((prev) => Math.max(0, prev - 1))
+            setData((d) => d && { ...d, attention: d.attention.filter((i) => i.intent_id !== id), attention_total_count: Math.max(0, totalCount - 1) })
         } catch (e) {
             setError(errorMessage(e, ''))
         } finally {
@@ -192,7 +188,9 @@ export default function AdminReconciliationPage() {
                     {items === null ? (
                         <Loader2 size={20} className="animate-spin text-text-dim mx-auto my-4" />
                     ) : items.length === 0 ? (
-                        <EmptyCard text="Không có chi nhánh nào cần xử lý." />
+                        <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-4 text-center">
+                            <p className="text-[12px] text-text-secondary font-medium">Không có chi nhánh nào cần xử lý.</p>
+                        </div>
                     ) : (
                         items.map((it) => {
                             const key = itemKey(it)
@@ -211,7 +209,7 @@ export default function AdminReconciliationPage() {
                 </section>
 
                 {/* v5: im lặng >90 ngày — tách khỏi KPI, chỉ để tham khảo/gọi lại nếu rảnh */}
-                {dormant && dormant.length > 0 && (
+                {dormant.length > 0 && (
                     <section className="flex flex-col gap-2.5">
                         <SectionHeader
                             icon={<AlertTriangle size={14} className="text-text-dim" />}
@@ -219,7 +217,7 @@ export default function AdminReconciliationPage() {
                             hint={`${dormant.length}${dormantCount > dormant.length ? `/${dormantCount}` : ''} chi nhánh · im lặng >90 ngày`}
                         />
                         {dormant.map((it) => (
-                            <AttentionItemCard key={itemKey(it)} item={it} busy={false} confirming={false} onGrant={() => {}} onDismiss={() => {}} />
+                            <AttentionItemCard key={itemKey(it)} item={it} />
                         ))}
                     </section>
                 )}
@@ -228,9 +226,9 @@ export default function AdminReconciliationPage() {
     )
 }
 
-function AttentionItemCard({ item, busy, confirming, onGrant, onDismiss }: { item: AttentionItem; busy: boolean; confirming: boolean; onGrant: () => void; onDismiss: () => void }) {
+function AttentionItemCard({ item, busy, confirming, onGrant, onDismiss }: { item: AttentionItem; busy?: boolean; confirming?: boolean; onGrant?: () => void; onDismiss?: () => void }) {
     const isPayment = item.reason === 'payment_review' || item.reason === 'payment_stale'
-    const tagLabel = item.reason === 'payment_stale' ? `Pending ${elapsedMinutes(item.intent_created_at)}'` : REASON_LABEL[item.reason]
+    const tagLabel = item.reason === 'payment_stale' ? `Pending ${elapsedMinutes(item.intent_created_at)}'` : REASON[item.reason].label
 
     return (
         <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2">
@@ -239,7 +237,7 @@ function AttentionItemCard({ item, busy, confirming, onGrant, onDismiss }: { ite
                     {item.name}
                     {(item.branch_extra ?? 0) > 0 && <span className="text-text-dim font-medium"> +{item.branch_extra} khác</span>}
                 </span>
-                <span className={`shrink-0 text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-full ${REASON_TAG_CLASS[item.reason]}`}>
+                <span className={`shrink-0 text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-full ${REASON[item.reason].cls}`}>
                     {tagLabel}
                 </span>
             </div>
@@ -287,14 +285,6 @@ function SectionHeader({ icon, title, hint }: { icon: ReactNode; title: string; 
             {icon}
             <p className="text-[12px] font-black text-text uppercase tracking-wider">{title}</p>
             {hint && <span className="text-[10px] text-text-dim normal-case font-medium">{hint}</span>}
-        </div>
-    )
-}
-
-function EmptyCard({ text }: { text: string }) {
-    return (
-        <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-4 text-center">
-            <p className="text-[12px] text-text-secondary font-medium">{text}</p>
         </div>
     )
 }

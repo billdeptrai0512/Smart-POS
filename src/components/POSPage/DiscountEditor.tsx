@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { formatVND, formatVNDInput, parseVNDInput } from '../../utils'
+import { clampPercentInput } from '../../utils/discountPrograms'
 import type { Discount } from '../../types/domain'
 
 const PERCENT_PRESETS = [20, 50, 100]
@@ -40,11 +41,7 @@ export default function DiscountEditor({ discount, onApply, onSecondary, onPrevi
     }
 
     function handleInput(raw: string) {
-        if (type === 'amount') return setInput(formatVNDInput(raw))
-        // Percent: digits only, clamp to 100
-        const digits = raw.replace(/[^\d]/g, '')
-        if (!digits) return setInput('')
-        setInput(String(Math.min(parseInt(digits, 10), 100)))
+        setInput(type === 'amount' ? formatVNDInput(raw) : clampPercentInput(raw))
     }
 
     return (

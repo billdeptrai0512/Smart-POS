@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Trash2 } from 'lucide-react'
 import { useProducts } from '../contexts/ProductContext'
@@ -6,14 +6,15 @@ import { useAuth } from '../contexts/AuthContext'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { useToast } from '../hooks/useToast'
 import { useSavingAction } from '../hooks/useSavingAction'
+import { useProductLinks } from '../hooks/useProductLinks'
 import Toast from '../components/POSPage/Toast'
 import EditableEntityHeader from '../components/common/EditableEntityHeader'
-import DayOfWeekPicker from '../components/common/DayOfWeekPicker'
+import ScheduleFields from '../components/common/ScheduleFields'
 import DiscountTypePicker from '../components/common/DiscountTypePicker'
 import MoneyInput from '../components/common/MoneyInput'
 import ToggleSwitch from '../components/common/ToggleSwitch'
-import { parseVNDInput } from '../utils'
-import { clampPercentInput, type DiscountProgram } from '../utils/discountPrograms'
+import ProductLinksSection from '../components/common/ProductLinksSection'
+import { clampPercentInput, parseDiscountValue, type DiscountProgram } from '../utils/discountPrograms'
 import {
     updateDiscountProgram, deleteDiscountProgram,
     fetchDiscountProgramProductLinks, setDiscountProgramProducts,
@@ -31,21 +32,18 @@ export default function DiscountProgramDetailPage() {
     const program = discountPrograms.find(p => p.id === programId)
 
     const { saving, withSaving } = useSavingAction(showError)
-    const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set())
-    const [savedProductIds, setSavedProductIds] = useState<Set<string>>(new Set())
+    const productLinks = useProductLinks()
 
     useEffect(() => {
         let cancelled = false
         async function load() {
             const links = await fetchDiscountProgramProductLinks([programId])
             if (cancelled) return
-            const ids = new Set(links.map(l => l.product_id))
-            setSelectedProductIds(ids)
-            setSavedProductIds(ids)
+            productLinks.reset(new Set(links.map(l => l.product_id)))
         }
         load()
         return () => { cancelled = true }
-    }, [programId])
+    }, [programId, productLinks.reset])
 
     async function saveName(name: string) {
         if (!name.trim()) return
@@ -77,25 +75,10 @@ export default function DiscountProgramDetailPage() {
         })
     }
 
-    function toggleProduct(productId: string) {
-        setSelectedProductIds(prev => {
-            const next = new Set(prev)
-            if (next.has(productId)) next.delete(productId)
-            else next.add(productId)
-            return next
-        })
-    }
-
-    const linksDirty = useMemo(() => {
-        if (selectedProductIds.size !== savedProductIds.size) return true
-        for (const id of selectedProductIds) if (!savedProductIds.has(id)) return true
-        return false
-    }, [selectedProductIds, savedProductIds])
-
     async function saveLinks() {
         await withSaving('Lưu danh sách món áp dụng', async () => {
-            await setDiscountProgramProducts(programId, [...selectedProductIds])
-            setSavedProductIds(new Set(selectedProductIds))
+            await setDiscountProgramProducts(programId, [...productLinks.selected])
+            productLinks.markSaved()
             await refreshProducts()
             showToast('Đã lưu', 'success')
         })
@@ -118,8 +101,6 @@ export default function DiscountProgramDetailPage() {
             </div>
         )
     }
-
-    const sellableProducts = products.filter(p => !p.is_divider)
 
     return (
         <div className="flex flex-col h-full bg-bg">
@@ -156,43 +137,7 @@ export default function DiscountProgramDetailPage() {
 
                 <ScheduleSection key={program.id} program={program} canEdit={canEdit} saving={saving} onSave={saveSchedule} />
 
-                <section className="pt-4 border-t border-border/40">
-                    <div className="flex items-center justify-between mb-3">
-                        <span className="text-[13px] font-black text-text uppercase tracking-wide">Áp dụng cho món</span>
-                        {selectedProductIds.size > 0 && (
-                            <span className="text-[10px] text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded">
-                                Đã chọn {selectedProductIds.size}
-                            </span>
-                        )}
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                        {sellableProducts.map(p => {
-                            const isSelected = selectedProductIds.has(p.id)
-                            return (
-                                <button
-                                    key={p.id}
-                                    disabled={!canEdit}
-                                    onClick={() => toggleProduct(p.id)}
-                                    className={`text-[12px] border px-2.5 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-60 ${isSelected
-                                        ? 'bg-primary text-bg border-primary shadow-sm'
-                                        : 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 active:bg-primary/30'
-                                        }`}
-                                >
-                                    {isSelected ? '✓ ' : '+ '}{p.name}
-                                </button>
-                            )
-                        })}
-                    </div>
-                    {canEdit && linksDirty && (
-                        <button
-                            onClick={saveLinks}
-                            disabled={saving}
-                            className="w-full mt-3 py-2.5 rounded-[12px] bg-primary text-bg text-[13px] font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 uppercase"
-                        >
-                            Lưu danh sách món
-                        </button>
-                    )}
-                </section>
+                <ProductLinksSection links={productLinks} products={products} canEdit={canEdit} saving={saving} onSave={saveLinks} />
             </main>
         </div>
     )
@@ -207,7 +152,7 @@ function ValueSection({ program, canEdit, saving, onSave }: SectionProps<[type: 
     const [type, setType] = useState(program.type)
     const [valueInput, setValueInput] = useState(String(program.value))
 
-    const rawValue = type === 'percent' ? Math.min(parseInt(valueInput, 10) || 0, 100) : parseVNDInput(valueInput)
+    const rawValue = parseDiscountValue(type, valueInput)
     const dirty = type !== program.type || rawValue !== program.value
 
     return (
@@ -244,9 +189,9 @@ function ValueSection({ program, canEdit, saving, onSave }: SectionProps<[type: 
 // Lịch áp dụng: 2 bộ lọc độc lập — thứ trong tuần (rỗng = mọi thứ) và khoảng ngày (để trống =
 // không giới hạn phía đó). State cục bộ tách khỏi form cha cùng lý do như ValueSection ở trên.
 function ScheduleSection({ program, canEdit, saving, onSave }: SectionProps<[days: number[], startDate: string, endDate: string]>) {
-    const [days, setDays] = useState(program.days_of_week)
-    const [startDate, setStartDate] = useState(program.start_date || '')
-    const [endDate, setEndDate] = useState(program.end_date || '')
+    const [{ days, startDate, endDate }, setSchedule] = useState({
+        days: program.days_of_week, startDate: program.start_date || '', endDate: program.end_date || '',
+    })
 
     const dirty = days.join(',') !== program.days_of_week.join(',')
         || startDate !== (program.start_date || '') || endDate !== (program.end_date || '')
@@ -256,30 +201,8 @@ function ScheduleSection({ program, canEdit, saving, onSave }: SectionProps<[day
             <span className="block text-[13px] font-black text-text uppercase tracking-wide mb-1">Lịch áp dụng</span>
             <p className="text-[11px] text-text-secondary mb-3">Không chọn thứ nào = áp dụng mọi ngày. Để trống ngày = không giới hạn.</p>
 
-            <DayOfWeekPicker value={days} onChange={setDays} disabled={!canEdit} />
-
-            <div className="flex gap-2 mt-3">
-                <div className="flex-1">
-                    <span className="block text-[11px] font-bold text-text-secondary mb-1">Từ ngày</span>
-                    <input
-                        type="date"
-                        disabled={!canEdit}
-                        value={startDate}
-                        onChange={e => setStartDate(e.target.value)}
-                        className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[13px] font-medium text-text focus:outline-none focus:border-primary/40 transition-colors disabled:opacity-60"
-                    />
-                </div>
-                <div className="flex-1">
-                    <span className="block text-[11px] font-bold text-text-secondary mb-1">Đến ngày</span>
-                    <input
-                        type="date"
-                        disabled={!canEdit}
-                        value={endDate}
-                        onChange={e => setEndDate(e.target.value)}
-                        className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[13px] font-medium text-text focus:outline-none focus:border-primary/40 transition-colors disabled:opacity-60"
-                    />
-                </div>
-            </div>
+            <ScheduleFields days={days} startDate={startDate} endDate={endDate} disabled={!canEdit}
+                onChange={patch => setSchedule(prev => ({ ...prev, ...patch }))} />
 
             {canEdit && dirty && (
                 <button

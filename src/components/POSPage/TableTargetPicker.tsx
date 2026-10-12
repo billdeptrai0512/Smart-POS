@@ -8,6 +8,8 @@ import type { UUID } from '../../types/domain'
 // đơn mang đi, TakeawayListModal) — cả hai chỉ khác nhau ở orderIds truyền vào và có cho
 // chọn "Mang đi" làm đích hay không (nguồn đã là mang đi thì không cần tự chuyển vào chính
 // nó). moveTableRounds coi target=null là "Mang đi", xem POSContext.tsx.
+const ROW_BTN = 'w-full text-left px-4 py-3 rounded-[14px] border border-border/40 bg-surface-light/40 text-[13px] font-black uppercase tracking-wide text-text hover:border-primary/40 transition-colors'
+
 interface Props {
     orderIds: UUID[]
     label: string
@@ -40,7 +42,7 @@ export default function TableTargetPicker({ orderIds, label, tableNames, showTak
                 {showTakeawayOption && (
                     <button
                         onClick={() => confirmMove(null)}
-                        className="w-full text-left px-4 py-3 rounded-[14px] border border-border/40 bg-surface-light/40 text-[13px] font-black uppercase tracking-wide text-text hover:border-primary/40 transition-colors"
+                        className={ROW_BTN}
                     >
                         Mang đi
                     </button>
@@ -49,7 +51,7 @@ export default function TableTargetPicker({ orderIds, label, tableNames, showTak
                     <button
                         key={name}
                         onClick={() => confirmMove(name)}
-                        className="w-full text-left px-4 py-3 rounded-[14px] border border-border/40 bg-surface-light/40 text-[13px] font-black uppercase tracking-wide text-text hover:border-primary/40 transition-colors"
+                        className={ROW_BTN}
                     >
                         {name}
                     </button>

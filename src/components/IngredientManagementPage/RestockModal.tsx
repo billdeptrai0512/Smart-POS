@@ -8,10 +8,11 @@ import { dateStringVN, timeStringVN } from '../../utils/dateVN'
 import DatePicker from '../common/DatePicker'
 import TimeInput from '../common/TimeInput'
 import { BottomSheet } from '../common/ModalShell'
+import SegmentedControl from '../common/SegmentedControl'
 import type { Discount } from '../../types/domain'
 
-type PayMethod = 'cash' | 'transfer'
-type CashPhase = 'in_shift' | 'post_close'
+export type PayMethod = 'cash' | 'transfer'
+export type CashPhase = 'in_shift' | 'post_close'
 
 /** Phiếu nhập gốc khi sửa (mode = 'edit'). */
 export interface RestockInitial {
@@ -265,17 +266,13 @@ export default function RestockModal({
                                         onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
                                     />
                                     {hasPack ? (
-                                        <div className="flex items-center gap-0.5 mr-1.5 shrink-0 bg-surface-light border border-border/60 rounded-md p-0.5">
-                                            {units.map(u => (
-                                                <button
-                                                    key={u.key}
-                                                    onClick={() => { if (qtyUnit !== u.key) { setQtyUnit(u.key); setQty('') } }}
-                                                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${qtyUnit === u.key ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                                                >
-                                                    {u.label}
-                                                </button>
-                                            ))}
-                                        </div>
+                                        <SegmentedControl
+                                            options={units.map(u => ({ value: u.key, label: u.label }))}
+                                            value={qtyUnit}
+                                            onChange={k => { if (k !== qtyUnit) { setQtyUnit(k); setQty('') } }}
+                                            className="mr-1.5 shrink-0 bg-surface-light border border-border/60 rounded-md"
+                                            buttonClassName="px-2 py-0.5 text-[11px]"
+                                        />
                                     ) : (
                                         <span className="text-[11px] font-bold text-text-secondary pr-3 shrink-0 pointer-events-none">{unit}</span>
                                     )}
@@ -326,20 +323,13 @@ export default function RestockModal({
                                         }}
                                         className="w-full bg-transparent px-3 py-2 text-[13px] font-bold text-text text-right tabular-nums placeholder:text-text-secondary/40 focus:outline-none"
                                     />
-                                    <div className="flex items-center gap-0.5 mr-1.5 shrink-0 bg-surface border border-border/60 rounded-md p-0.5">
-                                        <button
-                                            onClick={() => { if (discountMode !== 'amount') { setDiscountMode('amount'); setDiscountInput('') } }}
-                                            className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${discountMode === 'amount' ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                                        >
-                                            đ
-                                        </button>
-                                        <button
-                                            onClick={() => { if (discountMode !== 'percent') { setDiscountMode('percent'); setDiscountInput('') } }}
-                                            className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${discountMode === 'percent' ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                                        >
-                                            %
-                                        </button>
-                                    </div>
+                                    <SegmentedControl
+                                        options={[{ value: 'amount' as Discount['type'], label: 'đ' }, { value: 'percent' as Discount['type'], label: '%' }]}
+                                        value={discountMode}
+                                        onChange={m => { if (m !== discountMode) { setDiscountMode(m); setDiscountInput('') } }}
+                                        className="mr-1.5 shrink-0 bg-surface border border-border/60 rounded-md"
+                                        buttonClassName="px-2 py-0.5 text-[11px]"
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -384,35 +374,19 @@ export default function RestockModal({
                             Trả 0đ (ghi nợ toàn bộ) → không có tiền nào đi nên ẩn cả khối. */}
                         {paidNum > 0 && (
                         <div className="flex flex-col gap-2 pt-2 border-t border-border/40">
-                            <div className="w-full flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
-                                <button
-                                    onClick={() => setPaymentMethod('cash')}
-                                    className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${paymentMethod === 'cash' ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                                >
-                                    Tiền mặt
-                                </button>
-                                <button
-                                    onClick={() => setPaymentMethod('transfer')}
-                                    className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                                >
-                                    Bank
-                                </button>
-                            </div>
+                            <SegmentedControl
+                                options={[{ value: 'cash' as PayMethod, label: 'Tiền mặt' }, { value: 'transfer' as PayMethod, label: 'Bank' }]}
+                                value={paymentMethod}
+                                onChange={setPaymentMethod}
+                                className="w-full bg-surface border border-border/60 rounded-lg"
+                            />
                             {showPhaseToggle && (
-                                <div className="w-full flex items-center gap-0.5 bg-surface border border-border/60 rounded-lg p-0.5">
-                                    <button
-                                        onClick={() => { setUserTouchedPhase(true); setCashPhase('in_shift') }}
-                                        className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${cashPhase === 'in_shift' ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                                    >
-                                        Trong ca
-                                    </button>
-                                    <button
-                                        onClick={() => { setUserTouchedPhase(true); setCashPhase('post_close') }}
-                                        className={`flex-1 px-1 py-2 rounded-md text-[12px] font-bold transition-all ${cashPhase === 'post_close' ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                                    >
-                                        Sau chốt
-                                    </button>
-                                </div>
+                                <SegmentedControl
+                                    options={[{ value: 'in_shift' as CashPhase, label: 'Trong ca' }, { value: 'post_close' as CashPhase, label: 'Sau chốt' }]}
+                                    value={cashPhase}
+                                    onChange={p => { setUserTouchedPhase(true); setCashPhase(p) }}
+                                    className="w-full bg-surface border border-border/60 rounded-lg"
+                                />
                             )}
                         </div>
                         )}

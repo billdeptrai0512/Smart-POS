@@ -17,7 +17,7 @@ import type { Row } from '../../types/domain'
 import { useOnboardingProgress } from '../../hooks/useOnboardingProgress'
 import { useVisualViewportBox } from '../../hooks/useVisualViewportBox'
 import { getPendingOrders } from '../../hooks/useOfflineSync'
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown, buildIngredientToProduct, orderItemsOf, isLiveOrder } from '../../utils/inventory'
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown, buildIngredientToProduct, orderItemsOf, isLiveOrder, sumLiveRevenue } from '../../utils/inventory'
 import { ingredientLabel } from '../../utils/ingredients'
 import { findCoffeeIngredient, findIngredientByLabel } from '../../utils/onboardingHint'
 import { isCashFlowProgressDone, isInventoryProgressDone } from '../../utils/onboardingStorage'
@@ -115,13 +115,10 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
         [inventory.ingredientsList]
     )
     // Snapshot doanh thu hệ thống gửi kèm khi tạo phiếu chốt mới.
-    const systemTotalRevenue = useMemo(() => {
-        if (!isTodayScope) return 0
-        let sum = 0
-        for (const o of todayOrders) if (isLiveOrder(o)) sum += o.total || 0
-        for (const o of offlineToday) if (isLiveOrder(o)) sum += o.total || 0
-        return sum
-    }, [isTodayScope, todayOrders, offlineToday])
+    const systemTotalRevenue = useMemo(
+        () => (isTodayScope ? sumLiveRevenue(todayOrders, offlineToday) : 0),
+        [isTodayScope, todayOrders, offlineToday]
+    )
 
     // ── Onboarding phase 4 (Kiểm kê tồn kho): hint Cà phê → Cacao, tick khi bấm Lưu ──
     const cashFlowProgress = useOnboardingProgress('cashFlowProgress', { isGuest, addressId })

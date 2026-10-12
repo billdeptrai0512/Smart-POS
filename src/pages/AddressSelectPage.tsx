@@ -13,7 +13,7 @@ import BranchGrid from '../components/AddressSelectPage/BranchGrid'
 import StaffTab from '../components/AddressSelectPage/StaffTab'
 import CreateStaffModal from '../components/AddressSelectPage/CreateStaffModal'
 import SupportModal from '../components/common/SupportModal'
-import { BottomSheet, SheetHeader } from '../components/common/ModalShell'
+import { BottomSheet, SheetHeader, SHEET_PANEL } from '../components/common/ModalShell'
 import { cacheKey as buildCacheKey, STORAGE_KEYS } from '../constants/storageKeys'
 import { writeJSON } from '../utils/storage'
 import { errorMessage } from '../utils/errorMessage'
@@ -362,7 +362,7 @@ export default function AddressSelectPage() {
             {showCreateModal && (
                 <BottomSheet
                     onClose={() => !creating && setShowCreateModal(false)}
-                    panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
+                    panelClassName={SHEET_PANEL}
                 >
                         <SheetHeader title="Tạo địa chỉ mới" onClose={() => setShowCreateModal(false)} closeDisabled={creating} />
                         <div className="flex flex-col gap-3">

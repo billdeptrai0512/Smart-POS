@@ -9,11 +9,12 @@ import { useProducts } from '../contexts/ProductContext'
 import { useHistory } from '../contexts/HistoryContext'
 import { fetchWarehouseTransfer, saveWarehouseTransfer, setWarehouseTransferPacked } from '../services/warehouseTransferService'
 import { processIngredientRestock } from '../services/orderService'
-import { fetchCashClosedToday } from '../services/reportService'
+import { useCashClosedToday } from '../hooks/useCashClosedToday'
 import { poolOf } from '../utils/prepToday'
 import { draftFromItems, draftToItems, draftTotals, fmtQty, isTrivialQty, shortNames, toQty, type Draft } from '../utils/warehouseTransfer'
 import { useConfirm } from '../contexts/ConfirmContext'
-import { ingredientLabel, lookupByLabel } from '../utils/ingredients'
+import { byIngredientLabel, ingredientLabel, lookupByLabel } from '../utils/ingredients'
+import { copyText } from '../utils/clipboard'
 import { addDaysVN, dateFullVN, dateStringVN } from '../utils/dateVN'
 import { pack2Of, r1 } from '../utils/inventory'
 import Toast from '../components/POSPage/Toast'
@@ -87,13 +88,7 @@ function Page({ selectedAddress, siblings }: { selectedAddress: SelectedAddress;
 
     // Chia vượt kho → nhập kho ngay tại đây (mua hàng ghi vào địa chỉ đang chọn = kho tổng), cùng form Nhập kho như trang chi tiết NVL.
     const [restock, setRestock] = useState<{ ingredient: string; qty: number } | null>(null)
-    const [cashClosedToday, setCashClosedToday] = useState(false)
-    useEffect(() => {
-        if (!restock) return
-        let alive = true
-        fetchCashClosedToday(selectedAddress.id).then(v => { if (alive) setCashClosedToday(!!v) })
-        return () => { alive = false }
-    }, [restock, selectedAddress.id])
+    const cashClosedToday = useCashClosedToday(selectedAddress.id, !!restock)
 
     const locked = status === 'issued'
     const unitOf = useMemo(() => {
@@ -101,6 +96,7 @@ function Page({ selectedAddress, siblings }: { selectedAddress: SelectedAddress;
         for (const b of branches || []) for (const i of b.ingredientsList) m[i.ingredient] ??= i.unit
         return m
     }, [branches])
+    const unitKeys = useMemo(() => Object.keys(unitOf).sort(byIngredientLabel), [unitOf])
 
     const update = useCallback((fn: (d: Draft) => Draft) => { setDraft(d => fn(d ?? {})); setDirty(true); setFailed(false) }, [])
     const setQty = (addrId: string, ing: string, v: string) => update(d => ({ ...d, [addrId]: { ...d[addrId], [ing]: v } }))
@@ -163,27 +159,25 @@ function Page({ selectedAddress, siblings }: { selectedAddress: SelectedAddress;
     // Thẻ "Kho tổng": nguyên liệu kho còn > 0 hoặc đã có số chia. Kho hết mà chưa chia thì ẩn cho đỡ rối.
     const cards = useMemo(() => {
         if (!branches) return []
-        return Object.keys(unitOf)
+        return unitKeys
             .filter(k => poolOf(k, pool) > 0 || totals[k] > 0)
-            .sort((a, b) => ingredientLabel(a).localeCompare(ingredientLabel(b), 'vi'))
             .map(k => ({ ingredient: k, unit: unitOf[k], pool: poolOf(k, pool), total: totals[k] || 0 }))
-    }, [branches, unitOf, pool, totals])
+    }, [branches, unitKeys, unitOf, pool, totals])
     // Danh sách "Cần mua": kho tổng phải giữ tồn tối thiểu (max min_stock của các chi nhánh) SAU khi chia hết số đã gõ —
     // cần mua = min_stock + Σ chia − kho còn (cùng công thức buildGroupPrepPlan, nhưng tính trên số quản lý thực gõ).
     const buyList = useMemo(() => {
         const minStock: Record<string, number> = {}
         for (const b of branches || []) for (const i of b.ingredientsList) minStock[i.ingredient] = Math.max(minStock[i.ingredient] || 0, r1(i.min_stock))
-        return Object.keys(unitOf)
+        return unitKeys
             .map(k => ({ ingredient: k, unit: unitOf[k], buy: Math.max(0, r1((minStock[k] || 0) + (totals[k] || 0) - poolOf(k, pool))) }))
             .filter(x => x.buy > 0)
-            .sort((a, b) => ingredientLabel(a.ingredient).localeCompare(ingredientLabel(b.ingredient), 'vi'))
-    }, [branches, unitOf, pool, totals])
+    }, [branches, unitKeys, unitOf, pool, totals])
     // Dòng của từng chi nhánh = nguyên liệu có gợi ý + nguyên liệu đã có ô (đã gõ/đã lưu/vừa thêm; xoá trắng số vẫn giữ dòng).
     const allOptions = useMemo(
-        () => Object.keys(unitOf).sort((a, b) => ingredientLabel(a).localeCompare(ingredientLabel(b), 'vi')).map(k => ({ value: k, label: ingredientLabel(k) })),
-        [unitOf])
+        () => unitKeys.map(k => ({ value: k, label: ingredientLabel(k) })),
+        [unitKeys])
     const rowsOf = (addrId: string) => [...new Set([...Object.keys(suggestOf[addrId] || {}), ...Object.keys(draft?.[addrId] || {})])]
-        .sort((a, b) => ingredientLabel(a).localeCompare(ingredientLabel(b), 'vi'))
+        .sort(byIngredientLabel)
         .map(k => ({ ingredient: k, unit: unitOf[k] ?? '', value: draft?.[addrId]?.[k] ?? '', left: r1(poolOf(k, pool) - (totals[k] || 0)), suggest: suggestOf[addrId]?.[k] }))
     const overCards = cards.filter(c => c.total > c.pool)
     const hasOver = overCards.length > 0
@@ -197,6 +191,7 @@ function Page({ selectedAddress, siblings }: { selectedAddress: SelectedAddress;
         save('issued')
     }
     const ready = draft !== null && !!branches
+    const restockCfg = restock ? branches?.[0]?.ingredientsList.find(i => i.ingredient === restock.ingredient) : undefined // branches[0] = địa chỉ đang chọn
 
     const sheet = useMemo(() => addresses.map((a, i) => ({
         id: a.id, label: labels[i],
@@ -204,9 +199,11 @@ function Page({ selectedAddress, siblings }: { selectedAddress: SelectedAddress;
     })), [addresses, labels, items])
     // Mỗi chi nhánh thường có nhóm Zalo riêng → sao chép được từng chi nhánh, hoặc cả phiếu.
     const linesOf = (b: (typeof sheet)[number]) => [b.label, ...b.items.map(it => `- ${ingredientLabel(it.ingredient)}: ${fmtQty(it.qty, it.unit)}`)]
-    const copy = (lines: string[]) => navigator.clipboard.writeText([`CHIA HÀNG NGÀY ${dateFullVN(tomorrow)}`, ...lines].join('\n'))
-        .then(() => showToast('Đã sao chép — dán vào Zalo', 'success'), err => showError(err, 'Sao chép'))
-    const copyText = () => copy(sheet.filter(b => b.items.length).flatMap(b => ['', ...linesOf(b)]))
+    const copy = async (lines: string[]) => {
+        const ok = await copyText([`CHIA HÀNG NGÀY ${dateFullVN(tomorrow)}`, ...lines].join('\n'))
+        showToast(ok ? 'Đã sao chép — dán vào Zalo' : 'Không sao chép được', ok ? 'success' : 'warning')
+    }
+    const copyAll = () => copy(sheet.filter(b => b.items.length).flatMap(b => ['', ...linesOf(b)]))
 
     return (
         <div className="flex flex-col h-full bg-bg">
@@ -270,7 +267,7 @@ function Page({ selectedAddress, siblings }: { selectedAddress: SelectedAddress;
                                 </div>
                                 )
                             })}
-                            <button type="button" onClick={copyText} className="w-full py-3 rounded-[14px] bg-primary text-bg text-[15px] font-black">Sao chép để gửi Zalo</button>
+                            <button type="button" onClick={copyAll} className="w-full py-3 rounded-[14px] bg-primary text-bg text-[15px] font-black">Sao chép để gửi Zalo</button>
                         </>
                     )}
 
@@ -301,31 +298,28 @@ function Page({ selectedAddress, siblings }: { selectedAddress: SelectedAddress;
                 </div>
             </main>
 
-            {restock && (() => {
-                const cfg = branches?.[0]?.ingredientsList.find(i => i.ingredient === restock.ingredient) // branches[0] = địa chỉ đang chọn
-                return (
-                    <RestockModal
-                        ingredient={restock.ingredient}
-                        unit={unitOf[restock.ingredient] || 'đv'}
-                        packSize={cfg?.pack_size}
-                        packUnit={cfg?.pack_unit}
-                        pack2={pack2Of(cfg)}
-                        initialQty={restock.qty}
-                        cashClosedToday={cashClosedToday}
-                        onClose={() => setRestock(null)}
-                        onConfirm={async ({ ingredient: ing, qty, subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate }) => {
-                            const wh = lookupByLabel<number | null>(ing, pool, null)
-                            const result = await processIngredientRestock(selectedAddress.id ?? null, ing, qty, profile?.name ?? null, {
-                                subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate,
-                                ...(wh != null ? { beforeStock: wh } : {}),
-                            })
-                            // Kho đổi → tươi lại số kho nhóm, giá vốn (context sản phẩm) và chi phí hôm nay.
-                            await Promise.all([reload(), refreshProducts?.(), refreshTodayExpenses?.()])
-                            return result
-                        }}
-                    />
-                )
-            })()}
+            {restock && (
+                <RestockModal
+                    ingredient={restock.ingredient}
+                    unit={unitOf[restock.ingredient] || 'đv'}
+                    packSize={restockCfg?.pack_size}
+                    packUnit={restockCfg?.pack_unit}
+                    pack2={pack2Of(restockCfg)}
+                    initialQty={restock.qty}
+                    cashClosedToday={cashClosedToday}
+                    onClose={() => setRestock(null)}
+                    onConfirm={async ({ ingredient: ing, qty, subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate }) => {
+                        const wh = lookupByLabel<number | null>(ing, pool, null)
+                        const result = await processIngredientRestock(selectedAddress.id ?? null, ing, qty, profile?.name ?? null, {
+                            subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate,
+                            ...(wh != null ? { beforeStock: wh } : {}),
+                        })
+                        // Kho đổi → tươi lại số kho nhóm, giá vốn (context sản phẩm) và chi phí hôm nay.
+                        await Promise.all([reload(), refreshProducts?.(), refreshTodayExpenses?.()])
+                        return result
+                    }}
+                />
+            )}
 
             {ready && !locked && (
                 <footer className="shrink-0 border-t border-border/60 bg-surface px-4 py-3">

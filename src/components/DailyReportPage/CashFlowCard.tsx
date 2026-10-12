@@ -5,6 +5,7 @@ import { formatVND, parseVNDInput, capFirst } from '../../utils'
 import { dayMonthVN, timeStringVN } from '../../utils/dateVN'
 import { OFFSCREEN_FRAME_CSS, captureOffscreen, printBillJob } from '../../lib/escposBitmap'
 import { Dialog } from '../common/ModalShell'
+import { ReportPanel, PanelRow } from './ReportPanel'
 import { ingredientLabel, normalizeIngredientCategory, INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 import { groupMeta } from '../../constants/expenseGroups'
 import { useClickOutside } from '../../hooks/useClickOutside'
@@ -354,8 +355,12 @@ export default function CashFlowCard({
             {children && <div className="w-full">{children}</div>}
 
             {/* PANEL 1: THỰC THU */}
-            <div ref={panelRef} className={`w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group ${onboardingHintClass(hintCard)}`}>
-                <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Thực thu</h3>
+            <ReportPanel
+                panelRef={panelRef}
+                className={onboardingHintClass(hintCard)}
+                title="Thực thu"
+                total={{ label: 'Tổng thực thu', value: formatVND(actualTotal), className: 'text-success' }}
+            >
                 <div className="flex flex-col gap-2.5 pl-2">
                     {editable ? (
                         <>
@@ -376,53 +381,26 @@ export default function CashFlowCard({
                         </>
                     ) : (
                         <>
-                            <div className="flex justify-between items-center">
-                                <span className="text-[12px] font-bold text-text-secondary">Tiền mặt</span>
-                                <span className="text-[13px] font-bold text-text tabular-nums">
-                                    {formatVND(actualCash)}
-                                </span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-[12px] font-bold text-text-secondary">Chuyển khoản</span>
-                                <span className="text-[13px] font-bold text-text tabular-nums">
-                                    {formatVND(actualTransfer)}
-                                </span>
-                            </div>
+                            <PanelRow label="Tiền mặt" value={formatVND(actualCash)} />
+                            <PanelRow label="Chuyển khoản" value={formatVND(actualTransfer)} />
                         </>
                     )}
-                    <div className="flex justify-between items-center">
-                        <span className="text-[12px] font-bold text-text-secondary">
-                            Chi phí trong ca
-                        </span>
-                        <span className="text-[13px] font-bold text-warning tabular-nums">
-                            {formatVND(inShiftOpsCash)}
-                        </span>
-                    </div>
+                    <PanelRow label="Chi phí trong ca" value={formatVND(inShiftOpsCash)} valueClassName="text-warning" />
                     {/* NVL/đi chợ trả tiền mặt TRƯỚC chốt cũng là tiền rút từ két trong ca →
                         cộng vào Thực thu. Hiện riêng để tổng nhìn ra được phần cộng lại. */}
                     {inShiftRefillCash > 0 && (
-                        <div className="flex justify-between items-center">
-                            <span className="text-[12px] font-bold text-text-secondary">Mua NVL trong ca</span>
-                            <span className="text-[13px] font-bold text-warning tabular-nums">
-                                {formatVND(inShiftRefillCash)}
-                            </span>
-                        </div>
+                        <PanelRow label="Mua NVL trong ca" value={formatVND(inShiftRefillCash)} valueClassName="text-warning" />
                     )}
                 </div>
-                <div className="w-full h-[1px] bg-border/60 rounded-full my-3" />
-                <div className="flex justify-between items-center mt-1 pl-1">
-                    <span className="text-[13px] font-black text-text uppercase tracking-wide leading-none">Tổng thực thu</span>
-                    <span className="text-[14px] font-black text-success tabular-nums leading-none">
-                        {formatVND(actualTotal)}
-                    </span>
-                </div>
-            </div>
+            </ReportPanel>
 
             {/* PANEL 2: THỰC CHI — 4 section theo group_section nhãn (Vận hành / Quản lý
                 & khác / Tồn kho / Ngoài kinh doanh), section phụ chỉ hiện khi có chi.
                 Mỗi section là các dòng nhãn collapse; Tổng thực chi nằm cuối CÙNG PANEL. */}
-            <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
-                <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Thực chi</h3>
+            <ReportPanel
+                title="Thực chi"
+                total={{ label: 'Tổng thực chi', value: `-${formatVND(totalExpenses)}`, className: 'text-danger' }}
+            >
 
                 {/* SECTION: VẬN HÀNH (luôn hiện) */}
                 <Section title="Vận hành" total={operating.total} blocks={operating.groups}
@@ -453,16 +431,7 @@ export default function CashFlowCard({
                     </>
                 )}
 
-                <div className="w-full h-[1px] bg-border/60 rounded-full my-3" />
-
-                {/* TỔNG THỰC CHI — cùng panel, cùng kiểu với Tổng thực nhận. */}
-                <div className="flex justify-between items-center mt-1 pl-1">
-                    <span className="text-[13px] font-black text-text uppercase tracking-wide leading-none">Tổng thực chi</span>
-                    <span className="text-[14px] font-black text-danger tabular-nums leading-none">
-                        -{formatVND(totalExpenses)}
-                    </span>
-                </div>
-            </div>
+            </ReportPanel>
 
             {createPortal((
                 <div id="print-bill" ref={printElRef} className="hidden">{sheet(printedAtRef)}</div>
@@ -495,32 +464,15 @@ export default function CashFlowCard({
             )}
 
             {/* PANEL 4: THỰC NHẬN */}
-            <div className="w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
-                <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">Thực nhận</h3>
+            <ReportPanel
+                title="Thực nhận"
+                total={{ label: 'Tổng thực nhận', value: money(takeHome), className: cashNotEntered ? 'text-text-dim' : takeHome < 0 ? 'text-danger' : 'text-success' }}
+            >
                 <div className="flex flex-col gap-2.5 pl-2">
-                    <div className="flex justify-between items-center">
-                        <span className="text-[12px] font-bold text-text-secondary">Tiền mặt</span>
-                        <span className={`text-[13px] font-bold tabular-nums ${cashNotEntered ? 'text-text-dim' : takeHomeCash < 0 ? 'text-danger' : 'text-text'}`}>
-                            {cashNotEntered ? '—' : formatVND(takeHomeCash)}
-                        </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-[12px] font-bold text-text-secondary">Chuyển khoản</span>
-                        <span className={`text-[13px] font-bold tabular-nums ${cashNotEntered ? 'text-text-dim' : takeHomeTransfer < 0 ? 'text-danger' : 'text-text'}`}>
-                            {cashNotEntered ? '—' : formatVND(takeHomeTransfer)}
-                        </span>
-                    </div>
+                    <PanelRow label="Tiền mặt" value={money(takeHomeCash)} valueClassName={cashNotEntered ? 'text-text-dim' : takeHomeCash < 0 ? 'text-danger' : 'text-text'} />
+                    <PanelRow label="Chuyển khoản" value={money(takeHomeTransfer)} valueClassName={cashNotEntered ? 'text-text-dim' : takeHomeTransfer < 0 ? 'text-danger' : 'text-text'} />
                 </div>
-
-                <div className="w-full h-[1px] bg-border/60 rounded-full my-3" />
-
-                <div className="flex justify-between items-center mt-1 pl-1">
-                    <span className="text-[13px] font-black text-text uppercase tracking-wide leading-none">Tổng thực nhận</span>
-                    <span className={`text-[14px] font-black tabular-nums leading-none ${cashNotEntered ? 'text-text-dim' : takeHome < 0 ? 'text-danger' : 'text-success'}`}>
-                        {cashNotEntered ? '—' : formatVND(takeHome)}
-                    </span>
-                </div>
-            </div>
+            </ReportPanel>
         </div>
     )
 }

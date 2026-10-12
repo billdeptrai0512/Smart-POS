@@ -3,7 +3,7 @@ import { withCounterEstimate, recipesBelongTo } from '../services/counterEstimat
 import { useCounterCalc } from '../hooks/useCounterCalc'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Plus, Settings2 } from 'lucide-react'
-import { BottomSheet, SheetHeader } from '../components/common/ModalShell'
+import { BottomSheet, SheetHeader, SHEET_PANEL } from '../components/common/ModalShell'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -29,6 +29,7 @@ import CreateIngredientForm from '../components/IngredientManagementPage/CreateI
 import IngredientGroupsSheet from '../components/IngredientManagementPage/IngredientGroupsSheet'
 import { detectKeyMismatches } from '../utils/ingredientKeySync'
 import { useToast } from '../hooks/useToast'
+import { useSavingAction } from '../hooks/useSavingAction'
 import { useConfirm } from '../contexts/ConfirmContext'
 import Toast from '../components/POSPage/Toast'
 import { keySyncDismissedKey, orphanIgnoredKey } from '../constants/storageKeys'
@@ -59,7 +60,7 @@ export default function IngredientManagementPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const {
-        ingredientCosts: contextCosts, ingredientUnits: contextUnits,
+        ingredientCosts, ingredientUnits,
         recipes: contextRecipes, products: contextProducts, ingredientConfigs,
         productExtras: contextProductExtras, extraIngredients: contextExtraIngs,
         ingredientGroups, refreshProducts,
@@ -79,15 +80,7 @@ export default function IngredientManagementPage() {
     const confirm = useConfirm()
     const canEdit = isManager || isAdmin
 
-    const [ingredientCosts, setIngredientCosts] = useState(contextCosts || {})
-    const [ingredientUnits, setIngredientUnits] = useState(contextUnits || {})
-    const [saving, setSaving] = useState(false)
-
-    // Create form
-    const [newName, setNewName] = useState('')
-    const [newUnit, setNewUnit] = useState('')
-
-    const [newGroupId, setNewGroupId] = useState('')
+    const { saving, withSaving } = useSavingAction(showError)
     const [showCreateModal, setShowCreateModal] = useState(false)
 
     // Search theo tên — không phân biệt hoa/thường & dấu tiếng Việt.
@@ -258,9 +251,6 @@ export default function IngredientManagementPage() {
     }, [addressId, selectedAddress?.name, groupAddressIds, activeView, canEdit, recipesReady])
     useEffect(() => { loadStocks().finally(() => { if (activeView === 'stocking') setStocksLoaded(true) }) }, [loadStocks])
 
-    useEffect(() => { setIngredientCosts(contextCosts) }, [contextCosts])
-    useEffect(() => { setIngredientUnits(contextUnits || {}) }, [contextUnits])
-
     const allIngredients = useMemo(
         () => Object.keys(ingredientCosts).sort((a, b) => sortIngredients(a, b, selectedAddress?.ingredient_sort_order)),
         [ingredientCosts, selectedAddress?.ingredient_sort_order]
@@ -348,30 +338,19 @@ export default function IngredientManagementPage() {
         () => visibleIngredients.reduce((sum, ing) => sum + (stockByIngredient.get(ing)?.warehouse_stock || 0) * (ingredientCosts[ing] || 0), 0),
         [visibleIngredients, stockByIngredient, ingredientCosts])
 
-    async function handleCreateIngredient() {
-        if (!newName.trim()) return
-        const key = normalizeIngredientKey(newName)
-        const unit = newUnit || 'đv'
-        setSaving(true)
-        try {
-            await upsertIngredientCost(key, 0, addressId, unit)
-            // category (báo cáo "Mua bao bì" vs "Mua nguyên liệu") đi theo section của nhóm — trigger DB ép.
-            if (newGroupId) {
-                if (!addressId) throw new Error('Cần chọn một địa chỉ cụ thể (không áp dụng cho Mẫu mặc định)')
-                await setIngredientsGroup([key], addressId, newGroupId)
-            }
-            setIngredientUnits(prev => ({ ...prev, [key]: unit }))
-            // Refresh configs so the new ingredient picks up its category in `configByIngredient`.
-            refreshProducts?.()
-            setNewName(''); setNewUnit(''); setNewGroupId('')
-            setShowCreateModal(false)
-            showToast('Đã tạo nguyên liệu', 'success')
-        } catch (err) {
-            showError(err, 'Tạo nguyên liệu mới')
-        } finally {
-            setSaving(false)
+    const handleCreateIngredient = (name: string, unit: string, groupId: string) => withSaving('Tạo nguyên liệu mới', async () => {
+        const key = normalizeIngredientKey(name)
+        await upsertIngredientCost(key, 0, addressId, unit || 'đv')
+        // category (báo cáo "Mua bao bì" vs "Mua nguyên liệu") đi theo section của nhóm — trigger DB ép.
+        if (groupId) {
+            if (!addressId) throw new Error('Cần chọn một địa chỉ cụ thể (không áp dụng cho Mẫu mặc định)')
+            await setIngredientsGroup([key], addressId, groupId)
         }
-    }
+        // Refresh configs so the new ingredient picks up its category in `configByIngredient`.
+        refreshProducts?.()
+        setShowCreateModal(false)
+        showToast('Đã tạo nguyên liệu', 'success')
+    })
 
     // Còn Kiểm kê chưa lưu → xác nhận trước khi rời tab/trang (liệt kê tối đa 5 dòng sắp mất).
     const guardLeave = async (proceed: () => void) => {
@@ -501,8 +480,6 @@ export default function IngredientManagementPage() {
                             <IngredientCostItem
                                 key={ingredient}
                                 ingredient={ingredient}
-                                ingredientLabel={ingredientLabel}
-                                getIngredientUnit={getIngredientUnit}
                                 storedUnit={ingredientUnits[ingredient]}
                                 canEdit={canEdit}
                                 packSize={cfg?.pack_size}
@@ -532,20 +509,10 @@ export default function IngredientManagementPage() {
             {showCreateModal && (
                 <BottomSheet
                     onClose={() => !saving && setShowCreateModal(false)}
-                    panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
+                    panelClassName={SHEET_PANEL}
                 >
                         <SheetHeader title="Tạo nguyên liệu mới" onClose={() => setShowCreateModal(false)} closeDisabled={saving} />
-                        <CreateIngredientForm
-                            name={newName}
-                            unit={newUnit}
-                            groupId={newGroupId}
-                            groups={ingredientGroups}
-                            saving={saving}
-                            onNameChange={setNewName}
-                            onUnitChange={setNewUnit}
-                            onGroupChange={setNewGroupId}
-                            onSubmit={handleCreateIngredient}
-                        />
+                        <CreateIngredientForm groups={ingredientGroups} saving={saving} onSubmit={handleCreateIngredient} />
                 </BottomSheet>
             )}
 
@@ -568,8 +535,7 @@ export default function IngredientManagementPage() {
                 </div>
             )}
 
-            <KeySyncModal
-                open={showKeySync}
+            {showKeySync && <KeySyncModal
                 onClose={() => setShowKeySync(false)}
                 mismatches={keyMismatches}
                 recipes={liveRecipes}
@@ -584,7 +550,7 @@ export default function IngredientManagementPage() {
                 onComplete={async () => {
                     await Promise.all([loadStocks(), refreshProducts?.()])
                 }}
-            />
+            />}
         </div>
     )
 }

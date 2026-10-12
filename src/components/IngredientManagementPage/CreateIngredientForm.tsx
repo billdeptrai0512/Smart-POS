@@ -1,24 +1,21 @@
+import { useState } from 'react'
 import Dropdown from '../common/Dropdown'
 import type { IngredientGroup } from '../../types/domain'
 
 interface Props {
-    name: string
-    unit: string
-    groupId: string
     groups: Pick<IngredientGroup, 'id' | 'name'>[] | null
     saving?: boolean
-    onNameChange: (value: string) => void
-    onUnitChange: (value: string) => void
-    onGroupChange: (value: string) => void
-    onSubmit: () => void
+    onSubmit: (name: string, unit: string, groupId: string) => void
 }
 
 // groups = null (guest/template, chưa có bảng nhóm) → ẩn ô chọn nhóm.
-export default function CreateIngredientForm({
-    name, unit, groupId, groups, saving,
-    onNameChange, onUnitChange, onGroupChange, onSubmit,
-}: Props) {
+// Tự giữ name/unit/groupId: modal gỡ mount sau khi tạo xong nên state tự reset; lỗi thì form còn nguyên giá trị.
+export default function CreateIngredientForm({ groups, saving, onSubmit }: Props) {
+    const [name, setName] = useState('')
+    const [unit, setUnit] = useState('')
+    const [groupId, setGroupId] = useState('')
     const canSubmit = name.trim() && !saving
+    const submit = () => { if (canSubmit) onSubmit(name.trim(), unit, groupId) }
 
     return (
         <div className="flex flex-col gap-3">
@@ -27,7 +24,7 @@ export default function CreateIngredientForm({
                     type="text"
                     placeholder="Tên..."
                     value={name}
-                    onChange={e => onNameChange(e.target.value)}
+                    onChange={e => setName(e.target.value)}
                     className="flex-1 min-w-0 bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
                 />
                 <div className="relative shrink-0 flex items-center w-[80px] bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden">
@@ -35,8 +32,8 @@ export default function CreateIngredientForm({
                         type="text"
                         placeholder="Đơn vị"
                         value={unit}
-                        onChange={e => onUnitChange(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') onSubmit() }}
+                        onChange={e => setUnit(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') submit() }}
                         className="w-full bg-transparent px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none z-10"
                     />
                 </div>
@@ -45,14 +42,14 @@ export default function CreateIngredientForm({
                 <Dropdown
                     value={groupId}
                     triggerLabel={groups.find(g => g.id === groupId)?.name || 'Phân loại'}
-                    onChange={onGroupChange}
+                    onChange={setGroupId}
                     items={[{ value: '', label: 'Chưa phân nhóm' }, ...groups.map(g => ({ value: g.id, label: g.name }))]}
                     triggerClassName="h-11 px-3 rounded-[12px] bg-surface-light border border-border/60 text-[14px]"
                 />
             )}
 
             <button
-                onClick={onSubmit}
+                onClick={submit}
                 disabled={!canSubmit}
                 className="w-full py-3 rounded-[12px] bg-primary text-bg text-[14px] font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase"
             >

@@ -20,6 +20,10 @@ interface QtyPackProps extends PackProps {
 }
 type SaveNumber = (value: number) => unknown
 
+const ADD_BTN = 'w-6 h-6 flex items-center justify-center rounded-lg border border-primary/30 text-[13px] font-bold text-primary hover:bg-primary/10 transition-colors'
+// Giữ chữ số và một dấu thập phân ("0,5" → "0.5").
+const cleanDecimal = (s: string) => s.replace(',', '.').replace(/[^\d.]/g, '')
+
 // All "tap-to-edit" state lives inside this component. The page only hands in
 // current values + one save callback per field — keeps the page's state
 // surface small and lets the row components be self-contained.
@@ -57,10 +61,10 @@ export default function IngredientDetailsTab({
     return (
         <div className="flex flex-col gap-4">
             {/* Thuộc tính NVL/bao bì (không phải số tồn) — số tồn/kiểm kê nằm ở tab Nhật ký. */}
-            <Panel >
+            <Panel>
                 <CategoryRow value={category} groupId={groupId} groups={groups} canEdit={canEdit} saving={saving} onChange={onChangeGroup} />
-                <NameRow value={nameLabel} canEdit={canEdit} onSave={onSaveName} />
-                <UnitRow value={unit} canEdit={canEdit} onSave={onSaveUnit} />
+                <TextRow label="Tên" value={nameLabel} inputWidth="w-40" canEdit={canEdit} onSave={onSaveName} />
+                <TextRow label="Đơn vị" value={unit} inputWidth="w-20" canEdit={canEdit} onSave={onSaveUnit} normalize={u => u.trim() || 'đv'} />
                 {onToggleAudit && (
                     <Row label="Kiểm kê">
                         <button
@@ -249,16 +253,11 @@ export function IngredientCounterPanel({
     )
 }
 
-// ── Panel (titled section card) ─────────────────────────────────────────────
-// `action` = control cấp panel (vd toggle "Kiểm kê"), nằm cuối hàng title cho khỏi
-// chiếm 1 dòng trong thẻ — panel nào không truyền thì hàng title y như cũ.
-function Panel({ title, children, action }: { title?: string; children: ReactNode; action?: ReactNode }) {
+// ── Panel (section card) ───────────────────────────────────────────────────
+// pt-1.5: giữ khoảng cách cũ giữa các panel (trước đây là hàng tiêu đề rỗng + gap).
+function Panel({ children }: { children: ReactNode }) {
     return (
-        <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between gap-2 px-1">
-                <span className="text-[11px] font-black uppercase tracking-widest text-text-secondary">{title}</span>
-                {action}
-            </div>
+        <div className="pt-1.5">
             <section className="bg-surface rounded-[18px] border border-border/60 p-4 flex flex-col divide-y divide-border/40">
                 {children}
             </section>
@@ -293,14 +292,15 @@ function Row({ label, children, sub, wideSub }: { label: string; children: React
     )
 }
 
-// ── Name ────────────────────────────────────────────────────────────────────
-function NameRow({ value, canEdit, onSave }: { value: string; canEdit?: boolean; onSave?: (name: string) => unknown }) {
+// ── Name / Unit ─────────────────────────────────────────────────────────────
+// Dòng chữ bấm-để-sửa: `normalize` chuẩn hoá chuỗi trước khi gọi onSave (vd. đơn vị rỗng → 'đv').
+function TextRow({ label, value, inputWidth, canEdit, onSave, normalize = (s: string) => s }: { label: string; value: string; inputWidth: string; canEdit?: boolean; onSave?: (value: string) => unknown; normalize?: (s: string) => string }) {
     const [editing, setEditing] = useState(false)
     const [input, setInput] = useState('')
     const start = () => { setInput(value); setEditing(true) }
-    const commit = () => { setEditing(false); onSave?.(input) }
+    const commit = () => { setEditing(false); onSave?.(normalize(input)) }
     return (
-        <Row label="Tên">
+        <Row label={label}>
             {editing && canEdit ? (
                 <input
                     autoFocus
@@ -312,7 +312,7 @@ function NameRow({ value, canEdit, onSave }: { value: string; canEdit?: boolean;
                         if (e.key === 'Enter') commit()
                         if (e.key === 'Escape') setEditing(false)
                     }}
-                    className="w-40 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[13px] font-bold text-text text-right focus:outline-none focus:border-primary/50"
+                    className={`${inputWidth} bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[13px] font-bold text-text text-right focus:outline-none focus:border-primary/50`}
                 />
             ) : (
                 <button
@@ -387,7 +387,7 @@ function QtyRow({ label, value, unit, hasPack, packSize, packUnit, pack2, canEdi
                         type="text"
                         inputMode="decimal"
                         value={input}
-                        onChange={e => setInput(e.target.value.replace(',', '.').replace(/[^\d.]/g, ''))}
+                        onChange={e => setInput(cleanDecimal(e.target.value))}
                         onBlur={commit}
                         onKeyDown={e => {
                             if (e.key === 'Enter') commit()
@@ -418,40 +418,6 @@ function QtyRow({ label, value, unit, hasPack, packSize, packUnit, pack2, canEdi
         </Row>
     )
 }
-
-// ── Unit ────────────────────────────────────────────────────────────────────
-function UnitRow({ value, canEdit, onSave }: { value: string; canEdit?: boolean; onSave?: (unit: string) => unknown }) {
-    const [editing, setEditing] = useState(false)
-    const [input, setInput] = useState('')
-    const start = () => { setInput(value); setEditing(true) }
-    const commit = () => { setEditing(false); onSave?.((input || '').trim() || 'đv') }
-    return (
-        <Row label="Đơn vị">
-            {editing && canEdit ? (
-                <input
-                    autoFocus
-                    type="text"
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    onBlur={commit}
-                    onKeyDown={e => {
-                        if (e.key === 'Enter') commit()
-                        if (e.key === 'Escape') setEditing(false)
-                    }}
-                    className="w-20 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[13px] font-bold text-text text-right focus:outline-none focus:border-primary/50"
-                />
-            ) : (
-                <button
-                    onClick={canEdit ? start : undefined}
-                    className={`text-[13px] font-bold text-text ${canEdit ? 'cursor-pointer hover:text-primary' : 'cursor-default'}`}
-                >
-                    {value}
-                </button>
-            )}
-        </Row>
-    )
-}
-
 
 // ── Category (single-tap select; no edit toggle) ────────────────────────────
 // Dropdown liệt kê mọi nhóm (value = groupId, '' = chưa phân nhóm); category của món đi theo section của nhóm
@@ -491,7 +457,7 @@ function PackRow({ hasPack, packSize, packUnit, pack2, unit, canEdit, onConfigur
                 {canEdit ? (
                     <button
                         onClick={onConfigure}
-                        className={`w-6 h-6 flex items-center justify-center rounded-lg border border-primary/30 text-[13px] font-bold text-primary hover:bg-primary/10 transition-colors ${onboardingHintClass(hint)}`}
+                        className={`${ADD_BTN} ${onboardingHintClass(hint)}`}
                     >
                         +
                     </button>
@@ -538,7 +504,7 @@ function MinStockRow({ label, minStock, unit, hasPack, packSize, packUnit, pack2
     }
     const commit = () => {
         setEditing(false)
-        const raw = String(input).replace(',', '.').replace(/[^\d.]/g, '')
+        const raw = cleanDecimal(String(input))
         onSave?.(raw ? Number(raw) : 0)
     }
     return (
@@ -550,7 +516,7 @@ function MinStockRow({ label, minStock, unit, hasPack, packSize, packUnit, pack2
                         type="text"
                         inputMode="decimal"
                         value={input}
-                        onChange={e => setInput(e.target.value.replace(',', '.').replace(/[^\d.]/g, ''))}
+                        onChange={e => setInput(cleanDecimal(e.target.value))}
                         onBlur={commit}
                         onKeyDown={e => {
                             if (e.key === 'Enter') commit()
@@ -577,7 +543,7 @@ function MinStockRow({ label, minStock, unit, hasPack, packSize, packUnit, pack2
             ) : (
                 <button
                     onClick={start}
-                    className={`w-6 h-6 flex items-center justify-center rounded-lg border border-primary/30 text-[13px] font-bold text-primary hover:bg-primary/10 transition-colors ${onboardingHintClass(hint)}`}
+                    className={`${ADD_BTN} ${onboardingHintClass(hint)}`}
                 >
                     +
                 </button>
@@ -608,7 +574,7 @@ function TareRow({ tareWeight, unit, canEdit, onSave, hint = false }: { tareWeig
     }
     const commit = () => {
         setEditing(false)
-        const raw = String(input).replace(',', '.').replace(/[^\d.]/g, '')
+        const raw = cleanDecimal(String(input))
         const grams = raw ? Number(raw) * TARE_UNITS[tareUnit] : 0
         onSave?.(Math.round(grams / gPerBase * 1e4) / 1e4)
     }
@@ -624,7 +590,7 @@ function TareRow({ tareWeight, unit, canEdit, onSave, hint = false }: { tareWeig
                         type="text"
                         inputMode="decimal"
                         value={input}
-                        onChange={e => setInput(e.target.value.replace(',', '.').replace(/[^\d.]/g, ''))}
+                        onChange={e => setInput(cleanDecimal(e.target.value))}
                         onBlur={commit}
                         onKeyDown={e => {
                             if (e.key === 'Enter') commit()
@@ -653,7 +619,7 @@ function TareRow({ tareWeight, unit, canEdit, onSave, hint = false }: { tareWeig
             ) : (
                 <button
                     onClick={start}
-                    className={`w-6 h-6 flex items-center justify-center rounded-lg border border-primary/30 text-[13px] font-bold text-primary hover:bg-primary/10 transition-colors ${onboardingHintClass(hint)}`}
+                    className={`${ADD_BTN} ${onboardingHintClass(hint)}`}
                 >
                     +
                 </button>

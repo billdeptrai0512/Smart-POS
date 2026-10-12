@@ -8,11 +8,11 @@ import Toast from '../components/POSPage/Toast'
 import IngredientDetailHeader from '../components/IngredientManagementPage/IngredientDetailHeader'
 import MoneyInput from '../components/common/MoneyInput'
 import DiscountTypePicker from '../components/common/DiscountTypePicker'
-import DayOfWeekPicker from '../components/common/DayOfWeekPicker'
+import ScheduleFields from '../components/common/ScheduleFields'
 import { FormDialog } from '../components/common/ModalShell'
-import { formatVND, parseVNDInput } from '../utils'
+import { formatVND } from '../utils'
 import { insertDiscountProgram } from '../services/discountService'
-import { activePrograms, clampPercentInput, type DiscountProgram } from '../utils/discountPrograms'
+import { activePrograms, clampPercentInput, parseDiscountValue, type DiscountProgram } from '../utils/discountPrograms'
 import { DISCOUNT_TAB } from '../constants/menuTabs'
 
 const initialForm = { name: '', type: 'fixed', value: '', days: [] as number[], startDate: '', endDate: '' }
@@ -36,7 +36,7 @@ export default function DiscountProgramsPage() {
     const [form, setForm] = useState(initialForm)
     const [saving, setSaving] = useState(false)
 
-    const rawValue = form.type === 'percent' ? Math.min(parseInt(form.value, 10) || 0, 100) : parseVNDInput(form.value)
+    const rawValue = parseDiscountValue(form.type, form.value)
     const canSubmit = !!form.name.trim() && rawValue > 0 && !!addressId && !saving
 
     function setField(patch: Partial<typeof initialForm>) {
@@ -138,27 +138,7 @@ export default function DiscountProgramsPage() {
                         <div className="pt-2 border-t border-border/40">
                             <span className="block text-[11px] font-black text-text-secondary uppercase tracking-wide mb-1">Lịch áp dụng</span>
                             <p className="text-[11px] text-text-secondary mb-2">Không chọn thứ nào = mọi ngày. Để trống ngày = không giới hạn.</p>
-                            <DayOfWeekPicker value={form.days} onChange={days => setField({ days })} />
-                            <div className="flex gap-2 mt-2">
-                                <div className="flex-1">
-                                    <span className="block text-[11px] font-bold text-text-secondary mb-1">Từ ngày</span>
-                                    <input
-                                        type="date"
-                                        value={form.startDate}
-                                        onChange={e => setField({ startDate: e.target.value })}
-                                        className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[13px] font-medium text-text focus:outline-none focus:border-primary/40 transition-colors"
-                                    />
-                                </div>
-                                <div className="flex-1">
-                                    <span className="block text-[11px] font-bold text-text-secondary mb-1">Đến ngày</span>
-                                    <input
-                                        type="date"
-                                        value={form.endDate}
-                                        onChange={e => setField({ endDate: e.target.value })}
-                                        className="w-full bg-surface-light border border-border/60 rounded-[12px] px-3 py-2 text-[13px] font-medium text-text focus:outline-none focus:border-primary/40 transition-colors"
-                                    />
-                                </div>
-                            </div>
+                            <ScheduleFields days={form.days} startDate={form.startDate} endDate={form.endDate} onChange={setField} />
                         </div>
                     </FormDialog>
                 )}

@@ -11,6 +11,7 @@ import type { StaffMember } from '../../contexts/AddressStatsContext'
 import type { Address, UUID } from '../../types/domain'
 import { fetchStaffRevokedAddresses, fetchTeamRevokedAddresses, fetchStaffLastLogins, setStaffAddressAccess, setStaffPassword } from '../../services/authService'
 import { errorMessage } from '../../utils/errorMessage'
+import { isStrongPassword } from '../../utils/password'
 
 // "Đăng nhập gần nhất: 5 phút trước" / "... 3 giờ trước" / "... 2 ngày trước" / ngày cụ thể nếu đã lâu.
 function formatLastLogin(iso?: string | null) {
@@ -75,7 +76,7 @@ function MemberPanel({ member, addresses, initialRevoked, onRevokedChange, onRen
     // co-manager (role 'manager') = ≥8 chars with a letter and a number (mirrors signup).
     const pwValid = isStaff
         ? /^\d{6}$/.test(pwDraft)
-        : pwDraft.length >= 8 && /[a-zA-Z]/.test(pwDraft) && /\d/.test(pwDraft)
+        : isStrongPassword(pwDraft)
 
     const nameDirty = nameDraft.trim() !== '' && nameDraft.trim() !== savedName
 

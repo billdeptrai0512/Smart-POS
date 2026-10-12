@@ -12,7 +12,6 @@ export interface PackConfigValues {
 }
 
 interface Props {
-    open: boolean
     onClose: () => void
     ingredientLabel: string
     baseUnit: string
@@ -42,7 +41,6 @@ const NUM_INPUT = 'bg-bg border border-border/60 rounded-[10px] px-3 py-2 text-t
  *   - Hiển thị "+1 hộp" thay vì "+380 ml" trong báo cáo bổ sung
  */
 export default function PackConfigModal({
-    open,
     onClose,
     ingredientLabel,
     baseUnit,           // vd 'ml', 'g'
@@ -59,19 +57,15 @@ export default function PackConfigModal({
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState('')
 
-    // Reset form when modal opens or current values change
+    // Nạp form khi modal được mở (mount) hoặc giá trị hiện tại đổi
     useEffect(() => {
-        if (open) {
-            setPackUnit(currentPackUnit || '')
-            setPackSize(currentPackSize != null ? String(currentPackSize) : '')
-            setPack2Unit(currentPack2?.unit || '')
-            setPack2Size(currentPack2 ? String(currentPack2.size) : '')
-            setShowPack2(!!currentPack2)
-            setError('')
-        }
-    }, [open, currentPackSize, currentPackUnit, currentPack2])
-
-    if (!open) return null
+        setPackUnit(currentPackUnit || '')
+        setPackSize(currentPackSize != null ? String(currentPackSize) : '')
+        setPack2Unit(currentPack2?.unit || '')
+        setPack2Size(currentPack2 ? String(currentPack2.size) : '')
+        setShowPack2(!!currentPack2)
+        setError('')
+    }, [currentPackSize, currentPackUnit, currentPack2])
 
     const hasExisting = !!(currentPackSize && currentPackUnit)
     const level1Ok = packUnit.trim() && Number(packSize) > 0

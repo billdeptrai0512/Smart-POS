@@ -17,10 +17,9 @@ import { useAddress } from '../../contexts/AddressContext'
 import DiscountEditor from '../POSPage/DiscountEditor'
 import PrintBill from '../common/PrintBill'
 import Toast from '../POSPage/Toast'
+import { ROUND_ICON_BTN } from '../common/ModalShell'
+import CupsRevenueSummary from '../common/CupsRevenueSummary'
 
-// Nút icon tròn trên thẻ đơn (in, xoá) — cùng một khuôn, tách ra để đổi kiểu
-// một lần. Cùng kích thước với hàng nút trong TableDetailModal.
-const ICON_BTN = 'shrink-0 w-[26px] h-[26px] rounded-full border bg-surface-light border-border/60 flex items-center justify-center transition-colors'
 
 // Pill nhỏ dùng cho giờ/mã đơn/tên bàn/tên nhân viên trên thẻ đơn — cùng khuôn
 // nền/viền/bo tròn, ghép thêm modifier riêng (uppercase, tabular-nums, truncate...) tại
@@ -58,19 +57,8 @@ export default function OrdersList({
         <main className="flex-1 overflow-y-auto px-4 py-5 pb-4 space-y-3 bg-bg">
             {/* Card đầu danh sách — nằm trong luồng cuộn bình thường như mọi card khác,
                 chỉ cần luôn là item ĐẦU TIÊN nên đơn mới không bao giờ chèn lên trên nó. */}
-            <div className="bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex items-start justify-between">
-                <div className="flex flex-col min-w-0 flex-1 mt-1">
-                    <span className="text-[12px] font-black text-text uppercase mb-1">Tổng cộng</span>
-                    <span className="text-[17px] font-bold text-primary tabular-nums leading-none truncate">
-                        {totalCups} ly
-                    </span>
-                </div>
-                <div className="flex flex-col items-end shrink-0 ml-3">
-                    <span className="text-[12px] font-black text-text uppercase mb-0.5">Doanh thu</span>
-                    <span className={`text-[17px] font-bold tabular-nums leading-none ${totalRevenue > 0 ? 'text-success' : 'text-text-secondary'}`}>
-                        {formatVND(totalRevenue)}
-                    </span>
-                </div>
+            <div className="bg-surface rounded-[24px] p-5 shadow-sm border border-border/60">
+                <CupsRevenueSummary cups={totalCups} revenue={totalRevenue} />
             </div>
 
             {pendingOrders.length > 0 && (
@@ -320,7 +308,7 @@ const OrderCard = memo(function OrderCard({ order, isDeleting, setDeletingId, on
                                     onClick={arm}
                                     disabled={printArmed}
                                     aria-label="In bill"
-                                    className={`${ICON_BTN} text-text-secondary hover:text-primary disabled:opacity-50`}
+                                    className={`${ROUND_ICON_BTN} text-text-secondary hover:text-primary disabled:opacity-50`}
                                 >
                                     {printArmed ? <Loader size={14} className="animate-spin" /> : <Printer size={14} strokeWidth={2.25} />}
                                 </button>
@@ -328,7 +316,7 @@ const OrderCard = memo(function OrderCard({ order, isDeleting, setDeletingId, on
                                     onClick={order.isOffline ? () => onDeleteOffline(order.createdAt_key!) : handleDelete}
                                     disabled={!order.isOffline && isDeleting}
                                     aria-label={order.isOffline ? 'Xóa đơn offline' : 'Xóa đơn'}
-                                    className={`${ICON_BTN} ${order.isOffline ? 'text-warning/70' : 'text-text-secondary'} hover:text-danger disabled:opacity-50`}
+                                    className={`${ROUND_ICON_BTN} ${order.isOffline ? 'text-warning/70' : 'text-text-secondary'} hover:text-danger disabled:opacity-50`}
                                 >
                                     <Trash2 size={14} strokeWidth={2.25} />
                                 </button>

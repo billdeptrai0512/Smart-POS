@@ -40,28 +40,13 @@ interface HistoryHeaderProps extends DateRangePickerProps {
     belowTabs?: ReactNode
 }
 
+// Tabs row (activeTab) bỏ qua khi không truyền — trang Báo cáo dùng belowTabs thay thế (DailyReportPage:
+// hàng lọc Dòng tiền / Kiểm kê / Lợi nhuận). Phần còn lại (`picker`) là props của DateRangePicker.
 export default function HistoryHeader({
-    title = 'Nhật ký', rangeLabel, totalCups, scope, isReadOnly,
+    title = 'Nhật ký', totalCups, isReadOnly,
     onBack, onForward, hintForward = false,
-    // Tabs row (moved from footer) — bỏ qua khi không truyền activeTab (trang Báo cáo dùng belowTabs thay thế)
-    activeTab, onTabSelect, hintTab,
-    // Week/month mode — chevrons step by one period; the calendar still renders
-    // with the active period highlighted + its preset chip selected.
-    canGoForward, onOffsetPrev, onOffsetNext,
-    rangeStartISO, rangeEndISO,
-    // Day + custom share ONE range calendar. Tap a day then the same day again
-    // → single day (scope 'day'); tap two different days → range (scope 'custom').
-    dayInputValue, todayISO, canGoForwardDay,
-    onPrevDay, onNextDay,
-    customRange, onRangeChange,
-    // Range scope: ‹ › shift the whole window by its own width.
-    onShiftRange, canShiftRangeForward,
-    // Preset chips inside the DatePicker popover (Hôm nay / Tuần này / Tháng này).
-    // Page maps preset.scope back to its own scope state.
-    onPresetSelect,
-    // Optional slot: extra row rendered below the tabs bar inside the sticky
-    // header (DailyReportPage's Dòng tiền / Kiểm kê / Lợi nhuận filter).
-    belowTabs,
+    activeTab, onTabSelect, hintTab, belowTabs,
+    ...picker
 }: HistoryHeaderProps) {
     return (
         <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
@@ -76,25 +61,7 @@ export default function HistoryHeader({
                 <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center">
                     <span className="text-[12px] font-black text-primary uppercase line-clamp-1">{title}</span>
                     {!isReadOnly ? (
-                        <DateRangePicker
-                            scope={scope}
-                            rangeLabel={rangeLabel}
-                            rangeStartISO={rangeStartISO}
-                            rangeEndISO={rangeEndISO}
-                            dayInputValue={dayInputValue}
-                            customRange={customRange}
-                            todayISO={todayISO}
-                            canGoForwardDay={canGoForwardDay}
-                            canGoForward={canGoForward}
-                            onPrevDay={onPrevDay}
-                            onNextDay={onNextDay}
-                            onOffsetPrev={onOffsetPrev}
-                            onOffsetNext={onOffsetNext}
-                            onRangeChange={onRangeChange}
-                            onShiftRange={onShiftRange}
-                            canShiftRangeForward={canShiftRangeForward}
-                            onPresetSelect={onPresetSelect}
-                        />
+                        <DateRangePicker {...picker} />
                     ) : (
                         <span className="text-[12px] font-bold text-text/80 leading-none tabular-nums">{totalCups} ly</span>
                     )}
@@ -111,21 +78,6 @@ export default function HistoryHeader({
             {activeTab && <HistoryTabsBar activeTab={activeTab} onSelect={onTabSelect} hintTab={hintTab} />}
             {belowTabs}
         </header>
-    )
-}
-
-// Dashed-underline chip shared by every header date control. DatePicker calls
-// the returned fn with (label, toggle); pass `labelOverride` when the chip text
-// differs from the picker's own value (range endpoints show '—' until set).
-function chipTrigger({ labelOverride }: { labelOverride?: string } = {}) {
-    return (label: string, toggle: () => void) => (
-        <button
-            type="button"
-            onClick={toggle}
-            className="text-[12px] font-bold text-text/80 leading-none tabular-nums underline decoration-dashed decoration-primary/40 underline-offset-4"
-        >
-            {labelOverride ?? label}
-        </button>
     )
 }
 
@@ -184,7 +136,15 @@ export function DateRangePicker({
                 onChange={onRangeChange}
                 onPresetSelect={onPresetSelect}
                 activePresetKey={activePresetKey}
-                trigger={chipTrigger({ labelOverride: label })}
+                trigger={(pickerLabel, toggle) => (
+                    <button
+                        type="button"
+                        onClick={toggle}
+                        className="text-[12px] font-bold text-text/80 leading-none tabular-nums underline decoration-dashed decoration-primary/40 underline-offset-4"
+                    >
+                        {label ?? pickerLabel}
+                    </button>
+                )}
             />
             <button
                 onClick={() => canForward && onNext?.()}

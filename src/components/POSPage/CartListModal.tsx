@@ -20,6 +20,15 @@ export default function CartListModal({ cart, onClose, onItemDiscount }: Props) 
     const { editingId, preview, setPreview, toggleEditing } = useDiscountEditing(singleItem ? cart[0].cartItemId : null)
     const [allPreview, setAllPreview] = useState(NO_DISCOUNT)
 
+    // Tổng trước/sau — cùng mức giảm đang gõ áp cho MỖI món, để thấy ngay tác động lên cả đơn
+    // trước khi bấm Đồng ý. 1 pass thay vì 3 reduce riêng.
+    const { subtotal: allSubtotal, final: allFinal } = cart.reduce((acc, item) => {
+        const subtotal = cartLineSubtotal(item)
+        acc.subtotal += subtotal
+        acc.final += computeDiscount(subtotal, allPreview).finalTotal
+        return acc
+    }, { subtotal: 0, final: 0 })
+
     const applyToAll = (d: Discount) => {
         cart.forEach(item => onItemDiscount(item.cartItemId, d))
         onClose()
@@ -98,38 +107,27 @@ export default function CartListModal({ cart, onClose, onItemDiscount }: Props) 
                 </div>
             )}
 
-            {tab === 'all' && (() => {
-                // Tổng trước/sau — cùng mức giảm đang gõ áp cho MỖI món, để thấy ngay
-                // tác động lên cả đơn trước khi bấm Đồng ý. 1 pass thay vì 3 reduce riêng.
-                const { subtotal: allSubtotal, final: allFinal } = cart.reduce((acc, item) => {
-                    const subtotal = cartLineSubtotal(item)
-                    acc.subtotal += subtotal
-                    acc.final += computeDiscount(subtotal, allPreview).finalTotal
-                    return acc
-                }, { subtotal: 0, final: 0 })
-
-                return (
-                    <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-                        <div className="rounded-[14px] border border-border/40 bg-surface-light/40 px-4 py-3 flex items-center justify-between">
-                            <span className="text-[12px] font-bold text-text-secondary">{cart.length} món</span>
-                            <div className="flex flex-col items-end">
-                                {allFinal < allSubtotal && (
-                                    <span className="text-[11px] font-bold text-text-secondary/60 line-through tabular-nums">{formatVND(allSubtotal)}</span>
-                                )}
-                                <span className="text-[15px] font-black tabular-nums text-text">{formatVND(allFinal)}</span>
-                            </div>
+            {tab === 'all' && (
+                <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+                    <div className="rounded-[14px] border border-border/40 bg-surface-light/40 px-4 py-3 flex items-center justify-between">
+                        <span className="text-[12px] font-bold text-text-secondary">{cart.length} món</span>
+                        <div className="flex flex-col items-end">
+                            {allFinal < allSubtotal && (
+                                <span className="text-[11px] font-bold text-text-secondary/60 line-through tabular-nums">{formatVND(allSubtotal)}</span>
+                            )}
+                            <span className="text-[15px] font-black tabular-nums text-text">{formatVND(allFinal)}</span>
                         </div>
-
-                        <DiscountEditor
-                            discount={NO_DISCOUNT}
-                            onPreview={setAllPreview}
-                            secondaryLabel="Hủy"
-                            onSecondary={onClose}
-                            onApply={applyToAll}
-                        />
                     </div>
-                )
-            })()}
+
+                    <DiscountEditor
+                        discount={NO_DISCOUNT}
+                        onPreview={setAllPreview}
+                        secondaryLabel="Hủy"
+                        onSecondary={onClose}
+                        onApply={applyToAll}
+                    />
+                </div>
+            )}
         </Dialog>
     )
 }

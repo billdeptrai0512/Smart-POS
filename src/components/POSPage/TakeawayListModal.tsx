@@ -9,10 +9,11 @@ import { formatVND } from '../../utils'
 import { timeStringVN, openedLabelVN, dateShortVN, isSameDayVN } from '../../utils/dateVN'
 import { priceLineFor } from '../../utils/billLines'
 import { usePrintArmed } from '../../hooks/usePrintArmed'
-import { Dialog, MODAL_PANEL, CHIP, CHIP_IDLE, TIME_PILL } from '../common/ModalShell'
+import { Dialog, MODAL_PANEL, CHIP, CHIP_IDLE, CHIP_ICON, TIME_PILL } from '../common/ModalShell'
 import PrintBill from '../common/PrintBill'
 import TableTargetPicker from './TableTargetPicker'
 import KitchenReprintButton from './KitchenReprintButton'
+import RoundLines from './RoundLines'
 import type { TableRound } from '../../services/orderService'
 import type { UUID } from '../../types/domain'
 
@@ -142,35 +143,20 @@ function TakeawayRow({ order, onToggleServed, onMove, onEdit, onDelete }: RowPro
                     <button
                         onClick={onMove}
                         aria-label="Chuyển vào bàn"
-                        className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-text hover:border-primary/40`}
+                        className={`${CHIP_ICON} hover:text-text hover:border-primary/40`}
                     >
                         <ArrowRightLeft size={12} strokeWidth={2.25} />
                     </button>
                 </div>
                 <span className="text-[13px] font-black tabular-nums text-text">{formatVND(order.total)}</span>
             </div>
-            <div className="flex flex-col gap-0.5 border-t border-border/40 pt-2 pb-2 pl-1">
-                {/* Topping/option + ghi chú xuống dòng riêng, y như TableDetailModal/Nhật ký. */}
-                {order.lines.map(l => (
-                    <div key={l.name} className="flex flex-col gap-0.5">
-                        <span className="text-[13px] font-bold text-text leading-snug">
-                            {l.qty > 1 && <span className="tabular-nums text-text-secondary">{l.qty} </span>}{l.dish}
-                        </span>
-                        {l.opts.map(o => (
-                            <span key={o} className="pl-2.5 text-[12px] leading-snug text-text-secondary/70">• {o}</span>
-                        ))}
-                        {l.note && (
-                            <span className="pl-2.5 text-[12px] leading-snug italic text-text-secondary break-words">Ghi chú: {l.note}</span>
-                        )}
-                    </div>
-                ))}
-            </div>
+            <RoundLines lines={order.lines} />
             <div className="flex items-center gap-2 border-t border-border/40 pt-2">
                 <button
                     onClick={arm}
                     disabled={printArmed}
                     aria-label="In bill"
-                    className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-primary disabled:opacity-50`}
+                    className={`${CHIP_ICON} hover:text-primary disabled:opacity-50`}
                 >
                     {printArmed ? <Loader size={13} className="animate-spin" /> : <Printer size={13} strokeWidth={2.25} />}
                 </button>
@@ -184,7 +170,7 @@ function TakeawayRow({ order, onToggleServed, onMove, onEdit, onDelete }: RowPro
                 <button
                     onClick={onDelete}
                     aria-label={`Xóa đơn ${openedLabelVN(order.createdAt)}`}
-                    className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-danger`}
+                    className={`${CHIP_ICON} hover:text-danger`}
                 >
                     <Trash2 size={13} strokeWidth={2.25} />
                 </button>

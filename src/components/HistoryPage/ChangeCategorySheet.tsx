@@ -5,7 +5,7 @@ import { Plus, Pencil, Trash2, ChevronDown } from 'lucide-react'
 import { EXPENSE_GROUPS, groupMeta, labelsInGroup } from '../../constants/expenseGroups'
 import { formatVND } from '../../utils/money'
 import { dayMonthVN } from '../../utils/dateVN'
-import { BottomSheet, SheetHeader } from '../common/ModalShell'
+import { BottomSheet, SheetHeader, SHEET_PANEL } from '../common/ModalShell'
 
 // Nhãn fallback (Vận hành · "Chi phí khác") là nơi dồn chi phí khi chi phí không
 // gắn nhãn — KHÓA xoá VÀ khoá đổi nhóm để không gãy fallback. Nhãn còn lại tự do.
@@ -37,20 +37,13 @@ interface Props extends CategoryActions {
 
 interface Reassign { category: ExpenseCategory; remaining: Row[]; movedIds: UUID[] }
 
+// selectedId: nhãn đang chọn ở form (để highlight). onPick: set nhãn vào form (không đóng sheet) sau khi tạo.
+// onDelete chỉ xoá nhãn RỖNG. onMoveExpense re-tag 1 chi phí.
 export default function ChangeCategorySheet({
-    open,
-    categories,
-    selectedId,        // nhãn đang chọn ở form (để highlight)
-    onPick,            // (id) => set nhãn vào form (không đóng sheet) — sau khi tạo
-    onCreate,          // ({name, group_section}) => Promise<{id, name}>
-    onUpdate,          // (id, { name?, group_section? }) => Promise
-    onDelete,          // (id) => Promise — soft-delete nhãn RỖNG
-    onListCategoryExpenses, // (id) => Promise<expense[]>
-    onMoveExpense,     // (expenseId, toId) => Promise — re-tag 1 chi phí
-    onCountCategories, // () => Promise<{ [id]: count }>
-    onRestoreCategory, // (category) => Promise — hoàn tác xoá
-    showToast,         // (msg, type, action) => void
-    onClose,
+    open, categories, selectedId, onPick,
+    onCreate, onUpdate, onDelete,
+    onListCategoryExpenses, onMoveExpense, onCountCategories, onRestoreCategory,
+    showToast, onClose,
 }: Props) {
     const [counts, setCounts] = useState<Record<string, number>>({})
     const [busy, setBusy] = useState(false)
@@ -74,29 +67,32 @@ export default function ChangeCategorySheet({
 
     const toast = (msg: string, type = 'success', action: ToastAction | null = null) => showToast?.(msg, type, action)
 
+    // Một thao tác bất đồng bộ tại một thời điểm: bỏ qua khi đang bận, luôn nhả cờ busy.
+    const run = async (fn: () => Promise<unknown>) => {
+        if (busy) return
+        setBusy(true)
+        try { await fn() } finally { setBusy(false) }
+    }
+
     // Action "Hoàn tác": bật lại nhãn + trả các chi phí đã chuyển về nhãn cũ.
     const undoAction = (category: ExpenseCategory, movedIds: UUID[]): ToastAction => ({
         label: 'Hoàn tác',
         onClick: async () => {
             await onRestoreCategory?.(category)
-            for (const id of movedIds) await onMoveExpense?.(id, category.id)
+            for (const id of movedIds) await onMoveExpense(id, category.id)
             refreshCounts()
             toast('Đã hoàn tác', 'info')
         },
     })
 
     // ── Tạo nhãn ──
-    const submitCreate = async () => {
-        if (!newName.trim() || busy) return
-        setBusy(true)
-        try {
-            const created = await onCreate({ name: newName.trim(), group_section: newGroup })
-            if (created?.id) onPick?.(created.id)
-            setCreating(false); setNewName('')
-            toast(`Đã tạo nhãn “${created?.name || newName.trim()}”`)
-            refreshCounts()
-        } finally { setBusy(false) }
-    }
+    const submitCreate = () => newName.trim() && run(async () => {
+        const created = await onCreate({ name: newName.trim(), group_section: newGroup })
+        if (created?.id) onPick?.(created.id)
+        setCreating(false); setNewName('')
+        toast(`Đã tạo nhãn “${created?.name || newName.trim()}”`)
+        refreshCounts()
+    })
 
     // ── Sửa nhãn (tên + nhóm) ──
     const startEdit = (c: ExpenseCategory) => {
@@ -110,31 +106,21 @@ export default function ChangeCategorySheet({
         if (editName.trim() !== c.name) updates.name = editName.trim()
         if (!isProtectedFallback(c) && editGroup !== groupMeta(c.group_section).key) updates.group_section = editGroup
         if (Object.keys(updates).length === 0) { cancelEdit(); return }
-        setBusy(true)
-        try { await onUpdate(c.id, updates); cancelEdit(); toast('Đã cập nhật nhãn') }
-        finally { setBusy(false) }
+        await run(async () => { await onUpdate(c.id, updates); cancelEdit(); toast('Đã cập nhật nhãn') })
     }
 
     // ── Xoá nhãn ──
-    const requestDelete = async (c: ExpenseCategory) => {
-        if (busy) return
-        setBusy(true)
-        try {
-            const expenses = onListCategoryExpenses ? await onListCategoryExpenses(c.id) : []
-            if (expenses.length > 0) { setReassign({ category: c, remaining: expenses, movedIds: [] }); cancelEdit() }
-            else setConfirmId(c.id)
-        } finally { setBusy(false) }
-    }
-    const confirmDeleteEmpty = async (c: ExpenseCategory) => {
-        if (busy) return
-        setBusy(true)
-        try {
-            await onDelete(c.id)
-            setConfirmId(null)
-            refreshCounts()
-            toast(`Đã xoá nhãn “${c.name}”`, 'success', undoAction(c, []))
-        } finally { setBusy(false) }
-    }
+    const requestDelete = (c: ExpenseCategory) => run(async () => {
+        const expenses = onListCategoryExpenses ? await onListCategoryExpenses(c.id) : []
+        if (expenses.length > 0) { setReassign({ category: c, remaining: expenses, movedIds: [] }); cancelEdit() }
+        else setConfirmId(c.id)
+    })
+    const confirmDeleteEmpty = (c: ExpenseCategory) => run(async () => {
+        await onDelete(c.id)
+        setConfirmId(null)
+        refreshCounts()
+        toast(`Đã xoá nhãn “${c.name}”`, 'success', undoAction(c, []))
+    })
 
     const handleClose = () => {
         setReassign(null); setConfirmId(null); cancelEdit(); setCreating(false)
@@ -146,34 +132,22 @@ export default function ChangeCategorySheet({
         const targets = categories.filter(c => c.id !== reassign.category.id)
         const total = reassign.remaining.length + reassign.movedIds.length
 
-        const moveOne = async (expense: Row, toId: UUID) => {
-            if (busy) return
-            setBusy(true)
-            try {
-                await onMoveExpense(expense.id, toId)
-                setReassign(r => r && ({ ...r, remaining: r.remaining.filter(e => e.id !== expense.id), movedIds: [...r.movedIds, expense.id] }))
-            } finally { setBusy(false) }
-        }
-        const moveAll = async (toId: UUID) => {
-            if (busy) return
-            setBusy(true)
-            try {
-                const ids = reassign.remaining.map(e => e.id)
-                for (const e of reassign.remaining) await onMoveExpense(e.id, toId)
-                setReassign(r => r && ({ ...r, remaining: [], movedIds: [...r.movedIds, ...ids] }))
-            } finally { setBusy(false) }
-        }
-        const finishDelete = async () => {
-            if (busy) return
+        const moveOne = (expense: Row, toId: UUID) => run(async () => {
+            await onMoveExpense(expense.id, toId)
+            setReassign(r => r && ({ ...r, remaining: r.remaining.filter(e => e.id !== expense.id), movedIds: [...r.movedIds, expense.id] }))
+        })
+        const moveAll = (toId: UUID) => run(async () => {
+            const ids = reassign.remaining.map(e => e.id)
+            for (const e of reassign.remaining) await onMoveExpense(e.id, toId)
+            setReassign(r => r && ({ ...r, remaining: [], movedIds: [...r.movedIds, ...ids] }))
+        })
+        const finishDelete = () => run(async () => {
             const { category, movedIds } = reassign
-            setBusy(true)
-            try {
-                await onDelete(category.id)
-                setReassign(null)
-                refreshCounts()
-                toast(`Đã chuyển ${movedIds.length} chi phí · xoá nhãn “${category.name}”`, 'success', undoAction(category, movedIds))
-            } finally { setBusy(false) }
-        }
+            await onDelete(category.id)
+            setReassign(null)
+            refreshCounts()
+            toast(`Đã chuyển ${movedIds.length} chi phí · xoá nhãn “${category.name}”`, 'success', undoAction(category, movedIds))
+        })
 
         return (
             <ReassignView
@@ -195,7 +169,7 @@ export default function ChangeCategorySheet({
     return (
         <BottomSheet
             onClose={handleClose}
-            panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up max-h-[85vh] overflow-y-auto"
+            panelClassName={`${SHEET_PANEL} max-h-[85vh] overflow-y-auto`}
         >
                 <SheetHeader title="Quản lý nhãn" onClose={handleClose} />
 
@@ -389,7 +363,7 @@ function ReassignView({ category, remaining, moved, total, targets, busy, onMove
     return (
         <BottomSheet
             onClose={onClose}
-            panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up max-h-[85vh] overflow-y-auto"
+            panelClassName={`${SHEET_PANEL} max-h-[85vh] overflow-y-auto`}
         >
                 <SheetHeader title="Chuyển chi phí trước khi xoá" onClose={onClose} />
 
@@ -422,7 +396,7 @@ function ReassignView({ category, remaining, moved, total, targets, busy, onMove
                     </div>
                 ) : (
                     <>
-                        {/* #7 — chuyển TẤT CẢ còn lại sang 1 nhãn */}
+                        {/* chuyển TẤT CẢ còn lại sang 1 nhãn */}
                         <div className="flex flex-col gap-2 p-3 rounded-[12px] border border-dashed border-border">
                             {!bulkOpen ? (
                                 <button
@@ -443,7 +417,7 @@ function ReassignView({ category, remaining, moved, total, targets, busy, onMove
                             )}
                         </div>
 
-                        {/* #8 — từng chi phí (ngày · tên · số tiền) + picker riêng */}
+                        {/* từng chi phí (ngày · tên · số tiền) + picker riêng */}
                         <div className="flex flex-col gap-2">
                             {remaining.map(exp => (
                                 <ReassignRow key={exp.id} expense={exp} targets={targets} disabled={busy} onMove={(toId) => onMoveOne(exp, toId)} />

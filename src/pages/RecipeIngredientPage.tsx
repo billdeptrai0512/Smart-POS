@@ -26,21 +26,18 @@ import {
     upsertIngredientCost,
     deleteRecipeRow,
 } from '../services/orderService'
-import { sortIngredients, getIngredientUnit, normalizeIngredientCategory, registerNewIngredients } from '../utils/ingredients'
+import { sortIngredients, getIngredientUnit, makeCategoryOf, registerNewIngredients } from '../utils/ingredients'
 import { useToast } from '../hooks/useToast'
 import { useSavingAction } from '../hooks/useSavingAction'
 import { useConfirm } from '../contexts/ConfirmContext'
 import Toast from '../components/POSPage/Toast'
 import RecipeHeader from '../components/RecipeIngredientPage/RecipeHeader'
-import FastIngredientFill, { type AddCustomPayload } from '../components/RecipeIngredientPage/FastIngredientFill'
+import FastIngredientFill, { type CustomIngredient } from '../components/RecipeIngredientPage/FastIngredientFill'
 import ExtrasSection, { type ExtraHandlers } from '../components/RecipeIngredientPage/ExtrasSection'
 import CopyRecipeModal from '../components/RecipeIngredientPage/CopyRecipeModal'
 import { Trash2 } from 'lucide-react'
 import type { CartExtra } from '../types/domain'
-import type { RecipeRow } from '../utils/inventory'
-
-// Cặp {key, unit} đưa cho registerNewIngredients: unit = null là nguyên liệu chọn từ danh sách có sẵn.
-type NewIngredient = { key: string; unit: string | null; category?: string }
+import { groupRecipesByProduct } from '../utils/inventory'
 
 export default function RecipeIngredientPage() {
     const navigate = useNavigate()
@@ -48,7 +45,7 @@ export default function RecipeIngredientPage() {
     const { productId } = useParams() as { productId: string }
     const {
         products, recipes: allRecipes,
-        ingredientCosts: contextCosts, ingredientUnits: contextUnits,
+        ingredientCosts, ingredientUnits,
         productExtras: contextExtras, extraIngredients: contextExtraIngs,
         ingredientConfigs, refreshProducts,
     } = useProducts()
@@ -58,8 +55,6 @@ export default function RecipeIngredientPage() {
     const confirm = useConfirm()
     const canEdit = isManager || isAdmin
 
-    const [ingredientCosts, setIngredientCosts] = useState(contextCosts || {})
-    const [ingredientUnits, setIngredientUnits] = useState(contextUnits || {})
     const [recipes, setRecipes] = useState(allRecipes || [])
     const [extras, setExtras] = useState<CartExtra[]>([])
     const [extraIngs, setExtraIngs] = useState(contextExtraIngs || {})
@@ -85,22 +80,10 @@ export default function RecipeIngredientPage() {
         && !!coffeeConfig && nextIngredientSetupField(coffeeConfig, true) !== null
 
     // Index recipes by product — used by the "copy from" picker and to count rows.
-    const recipesByProduct = useMemo(() => {
-        const map = new Map<string, RecipeRow[]>()
-        for (const r of recipes || []) {
-            const list = map.get(r.product_id)
-            if (list) list.push(r)
-            else map.set(r.product_id, [r])
-        }
-        return map
-    }, [recipes])
+    const recipesByProduct = useMemo(() => groupRecipesByProduct(recipes || []), [recipes])
 
     // Category lookup for the add-ingredient combobox (groups chips into Chính / Bao bì).
-    const categoryOf = useMemo(() => {
-        const m = new Map<string, string | null>()
-        for (const c of ingredientConfigs || []) m.set(c.ingredient, c.category)
-        return (key: string) => normalizeIngredientCategory(m.get(key))
-    }, [ingredientConfigs])
+    const categoryOf = useMemo(() => makeCategoryOf(ingredientConfigs), [ingredientConfigs])
 
     // Fetch fresh data on mount to avoid showing stale localStorage cache.
     // ponytail: mount-only — refreshProducts already refetches on address change via
@@ -110,8 +93,6 @@ export default function RecipeIngredientPage() {
 
     // Sync from context when it updates
     useEffect(() => { setRecipes(allRecipes) }, [allRecipes])
-    useEffect(() => { setIngredientCosts(contextCosts) }, [contextCosts])
-    useEffect(() => { setIngredientUnits(contextUnits || {}) }, [contextUnits])
     useEffect(() => { setExtras(contextExtras?.[productId] || []) }, [contextExtras, productId])
     useEffect(() => { setExtraIngs(contextExtraIngs || {}) }, [contextExtraIngs])
 
@@ -219,30 +200,20 @@ export default function RecipeIngredientPage() {
         })
     }
 
-    async function handleAddBaseIngredients({ keys, custom }: AddCustomPayload) {
-        const toAdd: NewIngredient[] = keys.map(key => ({ key, unit: null }))
-        if (custom) toAdd.push(custom)
-        if (toAdd.length === 0) return
+    async function handleAddBaseIngredients(custom: CustomIngredient) {
         await withSaving('Thêm nguyên liệu vào công thức', async () => {
             // Guard against resetting an ingredient that already exists: only seed amount 0
             // when it's not yet in this recipe, and only register a cost row when it's
             // brand-new — else "Tạo mới" typed with an existing name would zero its amount
             // and (worse) its shared unit cost.
             const existingKeys = new Set(prodRecipes.map(r => r.ingredient))
-            const fresh = await registerNewIngredients(toAdd, { existingKeys, ingredientCosts, addressId, upsertIngredientCost })
+            const fresh = await registerNewIngredients([custom], { existingKeys, ingredientCosts, addressId, upsertIngredientCost })
             if (fresh.length) {
                 await upsertRecipes(fresh.map(({ key, unit }) => ({ productId, ingredient: key, amount: 0, addressId, unit })))
             }
-            setRecipes(prev => {
-                const present = new Set(prev.filter(r => r.product_id === productId).map(r => r.ingredient))
-                return [
-                    ...prev,
-                    ...toAdd.filter(t => !present.has(t.key)).map(({ key, unit }) => ({
-                        product_id: productId, ingredient: key, amount: 0,
-                        unit: unit || getIngredientUnit(key),
-                    })),
-                ]
-            })
+            setRecipes(prev => prev.some(r => r.product_id === productId && r.ingredient === custom.key)
+                ? prev
+                : [...prev, { product_id: productId, ingredient: custom.key, amount: 0, unit: custom.unit }])
             refreshProducts?.()
         })
     }
@@ -321,33 +292,20 @@ export default function RecipeIngredientPage() {
         })
     }
 
-    async function handleAddExtraIngredients(extraId: string, { keys, custom }: AddCustomPayload) {
-        const toAdd: NewIngredient[] = keys.map(key => ({ key, unit: null }))
-        if (custom) toAdd.push(custom)
-        if (toAdd.length === 0) return
-        const present = new Set((extraIngs[extraId] || []).map(ei => ei.ingredient))
+    async function handleAddExtraIngredients(extraId: string, { key, unit, category }: CustomIngredient) {
+        const present = (extraIngs[extraId] || []).some(ei => ei.ingredient === key)
         await withSaving('Thêm nguyên liệu vào tùy chọn', async () => {
-            for (const { key, unit, category } of toAdd) {
-                // Same guard as the base recipe: don't zero an impact/cost that already exists.
-                if (!present.has(key)) {
-                    await upsertExtraIngredient(extraId, key, 0, unit)
-                }
-                // A brand-new ingredient created here must exist in ingredient_costs (with its
-                // category) too, else it won't show in /inventory or the chip list.
-                if (unit !== null && !(key in ingredientCosts)) {
-                    await upsertIngredientCost(key, 0, addressId, unit, category ? { category } : {})
-                }
+            // Same guard as the base recipe: don't zero an impact/cost that already exists.
+            if (!present) await upsertExtraIngredient(extraId, key, 0, unit)
+            // A brand-new ingredient created here must exist in ingredient_costs (with its
+            // category) too, else it won't show in /inventory or the chip list.
+            if (!(key in ingredientCosts)) await upsertIngredientCost(key, 0, addressId, unit, { category })
+            if (!present) {
+                setExtraIngs(prev => ({
+                    ...prev,
+                    [extraId]: [...(prev[extraId] || []), { extra_id: extraId, ingredient: key, amount: 0, unit }],
+                }))
             }
-            setExtraIngs(prev => ({
-                ...prev,
-                [extraId]: [
-                    ...(prev[extraId] || []),
-                    ...toAdd.filter(t => !present.has(t.key)).map(({ key, unit }) => ({
-                        extra_id: extraId, ingredient: key, amount: 0,
-                        unit: unit || getIngredientUnit(key),
-                    })),
-                ],
-            }))
             refreshProducts?.()
         })
     }
@@ -450,7 +408,7 @@ export default function RecipeIngredientPage() {
                             </span>
                             <input
                                 type="checkbox"
-                                checked={product?.count_as_cup !== false}
+                                checked={product.count_as_cup !== false}
                                 onChange={toggleCountAsCup}
                                 disabled={saving}
                                 className="w-5 h-5 accent-primary cursor-pointer shrink-0"

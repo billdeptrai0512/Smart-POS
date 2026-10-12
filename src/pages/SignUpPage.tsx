@@ -7,6 +7,7 @@ import PasswordInput from '../components/common/PasswordInput'
 import PasswordChecklist from '../components/common/PasswordChecklist'
 import { capitalizeWords } from '../utils'
 import { errorMessage } from '../utils/errorMessage'
+import { isStrongPassword } from '../utils/password'
 
 // ponytail: bảng typo cứng thay vì thư viện (mailcheck) — email chỉ dùng để reset
 // mật khẩu, gõ nhầm domain là mất luôn đường đó. Thêm dòng khi gặp ca mới.
@@ -39,12 +40,7 @@ export default function SignUpPage() {
         if (!email.trim()) { setError('Vui lòng nhập email'); return }
         if (!username.trim()) { setError('Vui lòng nhập tài khoản'); return }
         if (username.length < 3) { setError('Tài khoản ít nhất 3 ký tự'); return }
-        const hasLetter = /[a-zA-Z]/.test(password)
-        const hasNumber = /[0-9]/.test(password)
-        if (password.length < 8 || !hasLetter || !hasNumber) {
-            setError('Mật khẩu mạnh yêu cầu ít nhất 8 ký tự, bao gồm cả chữ và số')
-            return
-        }
+        if (!isStrongPassword(password)) { setError('Mật khẩu mạnh yêu cầu ít nhất 8 ký tự, bao gồm cả chữ và số'); return }
         setError('')
         setLoading(true)
         try {

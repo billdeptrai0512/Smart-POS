@@ -26,14 +26,6 @@ interface BaseProps {
  * The `max(0, ...)` clamp in fetchIngredientStocks hides these; this banner exposes
  * them and offers a "Kiểm kê" workflow that writes adjustment expenses to
  * zero out the deficit, so future NHẬP KHO behaves normally.
- *
- * Props:
- *   deficits:           Array<{ ingredient, refill, restock, deficit }>  // deficit < 0
- *   ingredientUnits:    { [ingredient]: 'g' | 'ml' | ... }   // for getIngredientUnit fallback
- *   configByIngredient: Map<ingredient, ingredient_costs row>  // optional pack/pack2 info
- *   addressId:          string | null
- *   staffName:          string
- *   onResolved:         () => void  // called after successful reset → refresh page
  */
 export default function StockDeficitBanner({ deficits, ingredientUnits, configByIngredient, addressId, staffName, onResolved }: BaseProps) {
     const [modalOpen, setModalOpen] = useState(false)

@@ -2,6 +2,7 @@ import { memo, useState, useRef } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { formatVND } from '../../utils'
 import { useClickOutside } from '../../hooks/useClickOutside'
+import CupsRevenueSummary from '../common/CupsRevenueSummary'
 import type { Row } from '../../types/domain'
 
 /** 1 cột giờ của biểu đồ doanh thu (do DailyReportPage dựng). */
@@ -50,24 +51,7 @@ function SalesCard({
 
     return (
         <div className="bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col gap-4">
-            {/* Row: Tổng cộng + Doanh thu */}
-            <div className="flex items-start justify-between">
-                {/* Left: cup count */}
-                <div className="flex flex-col min-w-0 flex-1 mt-1">
-                    <span className="text-[12px] font-black text-text uppercase mb-1">Tổng cộng</span>
-                    <span className="text-[17px] font-bold text-primary tabular-nums leading-none truncate">
-                        {totalCups} ly
-                    </span>
-                </div>
-
-                {/* Right: revenue */}
-                <div className="flex flex-col items-end shrink-0 ml-3">
-                    <span className="text-[12px] font-black text-text uppercase mb-0.5">Doanh thu</span>
-                    <span className={`text-[17px] font-bold tabular-nums leading-none ${totalRevenue > 0 ? 'text-success' : 'text-text-secondary'}`}>
-                        {formatVND(totalRevenue || 0)}
-                    </span>
-                </div>
-            </div>
+            <CupsRevenueSummary cups={totalCups} revenue={totalRevenue} />
 
             {rankedProducts.length > 0 && (<>
                 <div className="h-[1px] bg-border/30 -mx-1" />

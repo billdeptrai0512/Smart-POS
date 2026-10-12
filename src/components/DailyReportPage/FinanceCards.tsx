@@ -4,6 +4,7 @@ import { dayMonthVN } from '../../utils/dateVN'
 import type { ReactNode } from 'react'
 import type { Row } from '../../types/domain'
 import { buildCategoryBreakdown } from '../../utils/expenseCategoryBreakdown'
+import { ReportPanel, PanelRow } from './ReportPanel'
 
 type Breakdown = ReturnType<typeof buildCategoryBreakdown>
 type BreakdownRow = Breakdown['operatingRows'][number]
@@ -104,12 +105,7 @@ export default function FinanceCards({
 
             {/* 3. LỢI NHUẬN GỘP */}
             <ProfitBanner label="Lợi nhuận gộp" amount={grossProfit}>
-                <div className="flex justify-between items-center mt-2 pl-1">
-                    <span className="text-[11px] font-bold text-text-secondary uppercase">Biên lợi nhuận gộp</span>
-                    <span className="text-[13px] font-black text-success tabular-nums">
-                        {margin(grossProfit)}%
-                    </span>
-                </div>
+                <MarginRow label="Biên lợi nhuận gộp" margin={margin(grossProfit)} positive={grossProfit >= 0} />
             </ProfitBanner>
 
             {/* 3b. CHI PHÍ TỒN KHO — vật tư mua không kiểm kê (chỉ hiện khi có chi). */}
@@ -129,12 +125,7 @@ export default function FinanceCards({
 
             {/* 5. LỢI NHUẬN VẬN HÀNH */}
             <ProfitBanner label="Lợi nhuận vận hành" amount={operatingProfit}>
-                <div className="flex justify-between items-center mt-2 pl-1">
-                    <span className="text-[11px] font-bold text-text-secondary uppercase">Biên vận hành</span>
-                    <span className={`text-[13px] font-black tabular-nums ${operatingProfit >= 0 ? 'text-success' : 'text-danger'}`}>
-                        {margin(operatingProfit)}%
-                    </span>
-                </div>
+                <MarginRow label="Biên vận hành" margin={margin(operatingProfit)} positive={operatingProfit >= 0} />
             </ProfitBanner>
 
             {/* 6. CHI PHÍ QUẢN LÝ & KHÁC — dynamic by category */}
@@ -146,7 +137,9 @@ export default function FinanceCards({
             </SimpleCard>
 
             {/* 7. LỢI NHUẬN RÒNG (NET PROFIT) */}
-            <NetProfitCard netProfit={netProfit} margin={margin} />
+            <ProfitBanner label="Lợi nhuận ròng" amount={netProfit}>
+                <MarginRow label="Biên ròng" margin={margin(netProfit)} positive={netProfit >= 0} />
+            </ProfitBanner>
         </div>
     )
 }
@@ -155,25 +148,23 @@ export default function FinanceCards({
 function SimpleCard({ title, totalLabel, totalAmount, totalTone, children }: { title: string; totalLabel: string; totalAmount: number; totalTone: Tone; children: ReactNode }) {
     const toneCls = totalTone === 'success' ? 'text-success' : totalTone === 'warning' ? 'text-warning' : 'text-danger'
     return (
-        <div className="col-span-2 bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group">
-            <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">{title}</h3>
+        <ReportPanel className="col-span-2" title={title} total={{ label: totalLabel, value: formatVND(totalAmount), className: toneCls }}>
             <div className="flex flex-col gap-2 pl-2">{children}</div>
-            <div className="w-full h-[1px] bg-border/60 rounded-full my-3" />
-            <div className="flex justify-between items-center mt-1 pl-1">
-                <span className="text-[13px] font-black text-text uppercase tracking-wide">{totalLabel}</span>
-                <span className={`text-[14px] font-black tabular-nums ${toneCls}`}>{formatVND(totalAmount)}</span>
-            </div>
+        </ReportPanel>
+    )
+}
+
+function MarginRow({ label, margin, positive }: { label: string; margin: string; positive: boolean }) {
+    return (
+        <div className="flex justify-between items-center mt-2 pl-1">
+            <span className="text-[11px] font-bold text-text-secondary uppercase">{label}</span>
+            <span className={`text-[13px] font-black tabular-nums ${positive ? 'text-success' : 'text-danger'}`}>{margin}%</span>
         </div>
     )
 }
 
 function LineItem({ label, amount }: { label: string; amount: number }) {
-    return (
-        <div className="flex justify-between items-center">
-            <span className="text-[12px] font-bold text-text-secondary">{label}</span>
-            <span className="text-[13px] font-bold text-text tabular-nums">{formatVND(amount)}</span>
-        </div>
-    )
+    return <PanelRow label={label} value={formatVND(amount)} />
 }
 
 // Dòng nhãn bấm xổ ra các khoản con (· ngày · tên + số tiền). Chevron thay dấu "·".
@@ -223,25 +214,3 @@ function ProfitBanner({ label, amount, children }: { label: string; amount: numb
     )
 }
 
-function NetProfitCard({ netProfit, margin }: { netProfit: number; margin: (amount: number) => string }) {
-    const isPositive = netProfit >= 0
-    return (
-        <div className={`col-span-2 rounded-[24px] p-5 shadow-sm border flex flex-col justify-center relative overflow-hidden
-            ${isPositive ? 'bg-success/[0.04] border-success/30' : 'bg-danger/[0.04] border-danger/30'}`}
-        >
-            <div className={`absolute top-0 left-0 w-1.5 h-full ${isPositive ? 'bg-success/80' : 'bg-danger/80'}`} />
-            <div className="flex justify-between items-center pl-1">
-                <h3 className="text-[14px] font-black text-text/80 uppercase tracking-wide">Lợi nhuận ròng</h3>
-                <div className={`text-[14px] font-black tabular-nums ${isPositive ? 'text-success' : 'text-danger'}`}>
-                    {formatVND(netProfit)}
-                </div>
-            </div>
-            <div className="flex justify-between items-center pl-1 mt-2">
-                <span className="text-[11px] font-bold text-text-secondary uppercase">Biên ròng</span>
-                <span className={`text-[13px] font-black tabular-nums ${isPositive ? 'text-success' : 'text-danger'}`}>
-                    {margin(netProfit)}%
-                </span>
-            </div>
-        </div>
-    )
-}

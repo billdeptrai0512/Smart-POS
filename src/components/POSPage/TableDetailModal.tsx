@@ -10,10 +10,11 @@ import { printBillJob } from '../../lib/escposBitmap'
 import { bumpOrderPrintCount } from '../../services/orderService'
 import { timeStringVN, openedLabelVN, dateShortVN, isSameDayVN } from '../../utils/dateVN'
 import { tablePriceLines } from '../../utils/billLines'
-import { Dialog, MODAL_PANEL, CHIP, CHIP_IDLE, TIME_PILL } from '../common/ModalShell'
+import { Dialog, MODAL_PANEL, CHIP, CHIP_IDLE, CHIP_ICON, ROUND_ICON_BTN, TIME_PILL } from '../common/ModalShell'
 import PrintBill from '../common/PrintBill'
 import TableTargetPicker from './TableTargetPicker'
 import KitchenReprintButton from './KitchenReprintButton'
+import RoundLines from './RoundLines'
 import type { OpenTable, TableLine, TableRound } from '../../services/orderService'
 import type { UUID } from '../../types/domain'
 import type { PrintBillHandle } from '../common/PrintBill'
@@ -51,7 +52,6 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
     // tính tiền 2 lần, và người dùng không biết bấm có ăn hay chưa.
     const [billing, setBilling] = useState(false)
 
-    const openedLabel = openedLabelVN
     const linesLabel = (lines: TableLine[]) => lines.map(l => `${l.qty} ${l.name}`).join(', ')
 
     // Bill in: nhân viên hiện theo đợt gần nhất (người đang đứng thu tiền), không lặp lại
@@ -87,7 +87,7 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
 
     async function handleDeleteRound(round: TableRound) {
         const ok = await confirm({
-            title: `Xóa đợt ${openedLabel(round.createdAt)}?`,
+            title: `Xóa đợt ${openedLabelVN(round.createdAt)}?`,
             detail: `${linesLabel(round.lines)} — ${formatVND(round.total)}. Hành động này không thể hoàn tác!`,
             danger: true,
             confirmLabel: 'Xóa',
@@ -138,13 +138,10 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
         }
     }
 
-    const handleHeaderPrint = () => withBilling(handlePrint)
-
     // Dọn bàn (khách đã về, bàn rời lưới) hỏi lần lượt: ra món chưa → tính tiền chưa → in
     // bill không. Hai câu đầu chỉ hỏi khi còn đợt chưa ra/chưa thu, và huỷ là dừng hẳn —
     // đó là chỗ duy nhất còn kịp cảnh báo trước khi bàn biến mất.
     const handleClear = () => withBilling(async () => {
-        //
         // Dùng thẳng `table` (đã tính lại từ openTables mỗi render — xem comment ở
         // TableModal — và openTables được vòng poll ~888ms giữ tươi, xem useOrdersPoll.ts)
         // thay vì chặn đầu bằng một refreshTables() đồng bộ: query đó join order_items/
@@ -164,7 +161,7 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
         const unpaid = table.rounds.filter(r => !r.paidAt)
         if (unpaid.length > 0 && !await confirm({
             title: `${table.name} tính tiền chưa?`,
-            detail: `${linesLabel(table.lines)} — chưa thu ${formatVND(unpaid.reduce((s, r) => s + r.total, 0))} · ${table.rounds.length} đợt từ ${openedLabel(table.openedAt)}`,
+            detail: `${linesLabel(table.lines)} — chưa thu ${formatVND(unpaid.reduce((s, r) => s + r.total, 0))} · ${table.rounds.length} đợt từ ${openedLabelVN(table.openedAt)}`,
             confirmLabel: 'Đã thu, dọn tiếp',
         })) return
         // "Không in" hay Esc đều chỉ bỏ qua bước in — bàn vẫn dọn bình thường ở dưới.
@@ -219,16 +216,16 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
                     <button
                         onClick={() => startMove(movableRoundIds, `cả ${table.name}`)}
                         aria-label="Gộp bàn"
-                        className="shrink-0 w-[26px] h-[26px] rounded-full border bg-surface-light border-border/60 flex items-center justify-center text-text-secondary hover:text-primary transition-colors"
+                        className={`${ROUND_ICON_BTN} text-text-secondary hover:text-primary`}
                     >
                         <ArrowRightLeft size={14} strokeWidth={2.25} />
                     </button>
                 )}
                 <button
-                    onClick={handleHeaderPrint}
+                    onClick={() => withBilling(handlePrint)}
                     disabled={billing}
                     aria-label="In bill"
-                    className="shrink-0 w-[26px] h-[26px] rounded-full border bg-surface-light border-border/60 flex items-center justify-center text-text-secondary hover:text-primary transition-colors disabled:opacity-60 disabled:pointer-events-none"
+                    className={`${ROUND_ICON_BTN} text-text-secondary hover:text-primary disabled:opacity-60 disabled:pointer-events-none`}
                 >
                     {billing ? <Loader size={14} className="animate-spin" /> : <Printer size={14} strokeWidth={2.25} />}
                 </button>
@@ -253,22 +250,7 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
                             </div>
                             <span className="ml-auto whitespace-nowrap text-[13px] font-black tabular-nums text-text">{formatVND(round.total)}</span>
                         </div>
-                        <div className="flex flex-col gap-0.5 border-t border-border/40 pt-2 pb-2 pl-2">
-                            {/* Topping/option + ghi chú xuống dòng riêng, cùng kiểu thẻ đơn ở Nhật ký (OrdersList). */}
-                            {round.lines.map(l => (
-                                <div key={l.name} className="flex flex-col gap-0.5">
-                                    <span className="text-[13px] font-bold text-text leading-snug">
-                                        {l.qty > 1 && <span className="tabular-nums text-text-secondary">{l.qty} </span>}{l.dish}
-                                    </span>
-                                    {l.opts.map(o => (
-                                        <span key={o} className="pl-2.5 text-[12px] leading-snug text-text-secondary/70">• {o}</span>
-                                    ))}
-                                    {l.note && (
-                                        <span className="pl-2.5 text-[12px] leading-snug italic text-text-secondary break-words">Ghi chú: {l.note}</span>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
+                        <RoundLines lines={round.lines} />
                         {/* Đợt offline chưa có id trong DB → chưa sửa/xoá/đánh dấu được,
                             ẩn cả hàng nút thay vì để nút bấm vào không có gì xảy ra. */}
                         {round.id && (
@@ -277,16 +259,16 @@ export default function TableDetailModal({ table, tableNames = [], onClose, onPi
                                 {/* Tách đợt này sang bàn khác — cùng màn chọn bàn đích với nút
                                     "Gộp bàn" ở header, chỉ khác orderIds chỉ có mỗi đợt này. */}
                                 <button
-                                    onClick={() => startMove([round.id], `đợt ${openedLabel(round.createdAt)}`)}
-                                    aria-label={`Chuyển đợt ${openedLabel(round.createdAt)} sang bàn khác`}
-                                    className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-text hover:border-primary/40`}
+                                    onClick={() => startMove([round.id], `đợt ${openedLabelVN(round.createdAt)}`)}
+                                    aria-label={`Chuyển đợt ${openedLabelVN(round.createdAt)} sang bàn khác`}
+                                    className={`${CHIP_ICON} hover:text-text hover:border-primary/40`}
                                 >
                                     <ArrowRightLeft size={12} strokeWidth={2.25} />
                                 </button>
                                 <button
                                     onClick={() => handleDeleteRound(round)}
-                                    aria-label={`Xóa đợt ${openedLabel(round.createdAt)}`}
-                                    className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-danger`}
+                                    aria-label={`Xóa đợt ${openedLabelVN(round.createdAt)}`}
+                                    className={`${CHIP_ICON} hover:text-danger`}
                                 >
                                     <Trash2 size={14} strokeWidth={2.25} />
                                 </button>

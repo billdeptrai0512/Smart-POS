@@ -45,17 +45,18 @@ const MENU_BTN = 'w-full flex items-center justify-center gap-2 px-3 py-3 rounde
 // hành động, liếc lưới chỉ cần thấy việc còn tồn. Đã ra hết thì danh sách rỗng, thẻ chỉ còn
 // tên/tổng tiền. Luôn hiện đủ CARD_LINES dòng đợt (không nhường 1 dòng cho "+N nữa" như
 // trước) — còn dư thì thêm đúng 1 dấu "..." báo còn nữa, không cần đếm chính xác bao nhiêu.
+const cupsOf = (round: TableRound) => round.lines.reduce((s, l) => s + (l.qty || 0), 0)
+
 function roundPreview(rounds: TableRound[]) {
     const pending = rounds.filter(r => !r.servedAt)
     const shown = pending.slice(0, CARD_LINES)
     return (
         <span className="min-h-0 overflow-hidden flex flex-col gap-0.5">
             {shown.map((round, i) => {
-                const cups = round.lines.reduce((s, l) => s + (l.qty || 0), 0)
                 return (
                     <span key={round.id || i} className="flex items-center justify-between gap-1 text-[11px] font-bold text-text-secondary leading-snug line-clamp-1">
                         <span className="tabular-nums">{timeStringVN(new Date(round.createdAt))}</span>
-                        <span className="tabular-nums">{cups} món</span>
+                        <span className="tabular-nums">{cupsOf(round)} món</span>
                     </span>
                 )
             })}
@@ -69,7 +70,7 @@ function roundPreview(rounds: TableRound[]) {
 // Tổng số ly còn chưa ra của các round chưa served — thay cho đếm số đợt, vì cái nhân
 // viên cần biết khi liếc lưới là "còn thiếu bao nhiêu ly" chứ không phải "mấy đợt".
 function pendingCups(rounds: TableRound[]) {
-    return rounds.filter(r => !r.servedAt).reduce((s, r) => s + r.lines.reduce((ss, l) => ss + (l.qty || 0), 0), 0)
+    return rounds.filter(r => !r.servedAt).reduce((s, r) => s + cupsOf(r), 0)
 }
 
 // inline = true: render as the permanent right-pane "screen" on tablet split-view

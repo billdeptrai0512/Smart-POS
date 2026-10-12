@@ -56,7 +56,7 @@ export function calculateItemCost(productId: string, extras: { id: string }[] = 
 
 // recipes gom sẵn theo product_id. Không có nó thì mỗi order item quét lại toàn bộ bảng
 // recipes → cuối ca vài trăm đơn × vài trăm dòng công thức = quadratic ngay trên máy nhân viên.
-function groupRecipesByProduct(recipes?: RecipeRow[] | null) {
+export function groupRecipesByProduct(recipes?: RecipeRow[] | null) {
     const byProduct = new Map<string, RecipeRow[]>();
     (recipes || []).forEach(r => {
         const list = byProduct.get(r.product_id);
@@ -88,6 +88,10 @@ export function orderItemsOf(order: Row) {
 
 // Đơn còn sống (chưa xoá) — server dùng deleted_at, đơn offline dùng deletedAt.
 export const isLiveOrder = (o: Row) => !o.deleted_at && !o.deletedAt
+
+/** Tổng doanh thu các đơn còn sống; nhận nhiều danh sách (đơn server + đơn offline chờ đồng bộ). */
+export const sumLiveRevenue = (...lists: Row[][]) =>
+    lists.flat().reduce((sum, o) => (isLiveOrder(o) ? sum + (o.total || 0) : sum), 0)
 
 export function calculateEstimatedConsumption(orderItems: OrderItem[], recipes: RecipeRow[], extraIngredients: ExtraIngredients) {
     const estimated: UsageMap = {};

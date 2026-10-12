@@ -1,12 +1,11 @@
 import { formatPackedQty, netStockOf, isLowStockOf } from '../../utils/inventory'
+import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import { countedLabelVN } from '../../utils/dateVN'
 import type { Pack2 } from '../../utils/inventory'
 import type { Row } from '../../types/domain'
 
 interface Props {
-    ingredientLabel: (key: string) => string
-    getIngredientUnit: (key: string, storedUnit?: string | null) => string
     ingredient: string
     storedUnit?: string | null
     canEdit?: boolean
@@ -39,7 +38,7 @@ interface Props {
  * is a single click target that navigates there.
  */
 export default function IngredientCostItem({
-    ingredientLabel, getIngredientUnit, ingredient,
+    ingredient,
     storedUnit,
     canEdit = true,
     minStock, minCounterStock,
@@ -62,6 +61,20 @@ export default function IngredientCostItem({
     const isLowStock = stockData ? isLowStockOf(stockData, { tareWeight, minStock, minCounterStock }, displayUnit) : false
 
     const countedOn = stockData?.counter_counted_on ? countedLabelVN(stockData.counter_counted_on, stockData.counter_counted_at) : null
+
+    const todayRefill = Number(dailyContext?.today_refill || 0)
+    const todayRestock = Number(dailyContext?.today_restock || 0)
+    const warehouseNow = stockData?.warehouse_stock ?? 0
+    const warehouseStart = warehouseNow + todayRestock - todayRefill
+    const fmt = (n: number) => {
+        // Negative values: collapse to base unit only — pack-breakdown of negative
+        // numbers ("-4 hộp + -1.226 ml") reads awkwardly and isn't meaningful.
+        if (n < 0) {
+            const r = Math.round(n * 10) / 10
+            return `${r.toLocaleString('vi-VN')} ${displayUnit}`
+        }
+        return formatPackedQty(n, packSize, packUnit, displayUnit, { compact: true, pack2 })
+    }
 
     const warn = isOutStock || isLowStock
     const borderClass = warn ? 'border-danger/40' : 'border-border/60'
@@ -89,30 +102,11 @@ export default function IngredientCostItem({
             </div>
 
             <div className="mt-1.5 pt-2 border-t border-border/40 flex flex-col gap-1.5 text-[12px] tabular-nums">
-                {(() => {
-                    const todayRefill = Number(dailyContext?.today_refill || 0)
-                    const todayRestock = Number(dailyContext?.today_restock || 0)
-                    const warehouseNow = stockData?.warehouse_stock ?? 0
-                    const warehouseStart = warehouseNow + todayRestock - todayRefill
-                    const fmt = (n: number) => {
-                        // Negative values: collapse to base unit only — pack-breakdown of negative
-                        // numbers ("-4 hộp + -1.226 ml") reads awkwardly and isn't meaningful.
-                        if (n < 0) {
-                            const r = Math.round(n * 10) / 10
-                            return `${r.toLocaleString('vi-VN')} ${displayUnit}`
-                        }
-                        return formatPackedQty(n, packSize, packUnit, displayUnit, { compact: true, pack2 })
-                    }
-                    return (
-                        <>
-                            {/* Ngày chưa có biến động → đầu = cuối, chỉ cần 1 dòng. */}
-                            {(todayRestock > 0 || todayRefill > 0) && <Row label="Tồn kho đầu ngày" value={fmt(warehouseStart)} />}
-                            {todayRestock > 0 && <Row label="Lấy ra" value={fmt(todayRestock)} sign="-" accent="text-warning" />}
-                            {todayRefill > 0 && <Row label="Nhập mới" value={fmt(todayRefill)} sign="+" accent="text-success" />}
-                            <Row label="Tồn kho cuối ngày" value={fmt(warehouseNow)} bold />
-                        </>
-                    )
-                })()}
+                {/* Ngày chưa có biến động → đầu = cuối, chỉ cần 1 dòng. */}
+                {(todayRestock > 0 || todayRefill > 0) && <Row label="Tồn kho đầu ngày" value={fmt(warehouseStart)} />}
+                {todayRestock > 0 && <Row label="Lấy ra" value={fmt(todayRestock)} sign="-" accent="text-warning" />}
+                {todayRefill > 0 && <Row label="Nhập mới" value={fmt(todayRefill)} sign="+" accent="text-success" />}
+                <Row label="Tồn kho cuối ngày" value={fmt(warehouseNow)} bold />
 
                 {/* Tồn quầy (manager only) — divider riêng tách khỏi cụm tồn kho để mắt quét 2 nơi chứa hàng.
                      Nhóm + Quy đổi đã chuyển sang trang chi tiết của ingredient. */}

@@ -1,15 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import AddExpenseModal from '../HistoryPage/AddExpenseModal'
-import type { ExpenseCategory, Row, UUID } from '../../types/domain'
+import type { Row, UUID } from '../../types/domain'
 import { useHistory } from '../../contexts/HistoryContext'
 import { useConfirm } from '../../contexts/ConfirmContext'
 import { useCart } from '../../contexts/CartContext'
 import { parseVNDInput, formatVNDInput } from '../../utils'
 import { dateStringVN } from '../../utils/dateVN'
-import {
-    fetchExpenseCategories, insertExpenseCategory, updateExpenseCategory,
-    deleteExpenseCategory, fetchExpensesByCategory, fetchExpenseCategoryCounts, restoreExpenseCategory,
-} from '../../services/expenseService'
+import { useExpenseCategories } from '../../hooks/useExpenseCategories'
+import { buildExpenseUpdates } from '../../utils/expenseUpdates'
 
 /**
  * Modal SỬA 1 chi phí, dùng ngay tại chỗ trong báo cáo Dòng tiền (bấm 1 dòng
@@ -39,36 +37,8 @@ export default function ExpenseEditorModal({ expense, addressId, onSaved, onClos
     const [isAfterShift, setIsAfterShift] = useState(!!expense.metadata?.free_form)
     const [paymentMethod, setPaymentMethod] = useState(expense.payment_method || 'cash')
     const [selectedCategoryId, setSelectedCategoryId] = useState<UUID | null>(expense.category_id || null)
-    const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([])
+    const { categories: expenseCategories, actions: categoryActions } = useExpenseCategories(addressId)
     const [isSubmitting, setIsSubmitting] = useState(false)
-
-    useEffect(() => {
-        if (!addressId) return
-        fetchExpenseCategories(addressId).then(setExpenseCategories)
-    }, [addressId])
-
-    const handleCreateCategory = useCallback(async ({ name, group_section }: { name: string; group_section: string }) => {
-        if (!addressId) return undefined
-        const created = await insertExpenseCategory(addressId, { name, group_section })
-        setExpenseCategories(prev => [...prev, created])
-        return created
-    }, [addressId])
-
-    const handleUpdateCategory = useCallback(async (id: UUID, updates: { name?: string; group_section?: string }) => {
-        const updated = await updateExpenseCategory(id, updates)
-        setExpenseCategories(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c))
-        return updated
-    }, [])
-
-    const handleDeleteCategoryTag = useCallback(async (id: UUID) => {
-        await deleteExpenseCategory(id)
-        setExpenseCategories(prev => prev.filter(c => c.id !== id))
-    }, [])
-
-    const handleRestoreCategory = useCallback(async (category: ExpenseCategory) => {
-        await restoreExpenseCategory(category.id)
-        setExpenseCategories(prev => prev.some(c => c.id === category.id) ? prev : [...prev, category])
-    }, [])
 
     const handleMoveExpense = useCallback(async (expenseId: UUID, toId: UUID) => {
         await handleUpdateExpense(expenseId, { category_id: toId })
@@ -80,17 +50,9 @@ export default function ExpenseEditorModal({ expense, addressId, onSaved, onClos
         if (amount <= 0 || !costName.trim()) return
         setIsSubmitting(true)
         try {
-            // Chỉ đổi created_at khi NGÀY khác ngày gốc (giữ giờ gốc nếu cùng ngày).
-            const sameDay = dateStringVN(new Date(expense.created_at)) === expenseDate
-            const updates = {
-                name: costName.trim(),
-                amount,
-                payment_method: paymentMethod,
-                category_id: selectedCategoryId || null,
-                created_at: sameDay ? expense.created_at : new Date(`${expenseDate}T12:00:00+07:00`).toISOString(),
-                is_refill: !!isAfterShift,
-                metadata: isAfterShift ? { free_form: true } : {},
-            }
+            const updates = buildExpenseUpdates(expense, {
+                name: costName, amount, paymentMethod, categoryId: selectedCategoryId, date: expenseDate, isAfterShift,
+            })
             await handleUpdateExpense(expense.id, updates)
             onSaved?.(expense.id, updates)
             onClose()
@@ -109,8 +71,6 @@ export default function ExpenseEditorModal({ expense, addressId, onSaved, onClos
         <AddExpenseModal
             isEditing
             onDelete={remove}
-            expenseCategory="expense"
-            onCategoryChange={() => {}}
             costName={costName}
             costAmount={costAmount}
             isSubmitting={isSubmitting}
@@ -119,13 +79,8 @@ export default function ExpenseEditorModal({ expense, addressId, onSaved, onClos
             expenseCategories={expenseCategories}
             selectedCategoryId={selectedCategoryId}
             onCategoryIdChange={setSelectedCategoryId}
-            onCreateCategory={handleCreateCategory}
-            onUpdateCategory={handleUpdateCategory}
-            onDeleteCategory={handleDeleteCategoryTag}
-            onListCategoryExpenses={(id: UUID) => fetchExpensesByCategory(addressId, id)}
+            {...categoryActions}
             onMoveExpense={handleMoveExpense}
-            onCountCategories={() => fetchExpenseCategoryCounts(addressId)}
-            onRestoreCategory={handleRestoreCategory}
             showToast={showToast}
             onClose={onClose}
             onSubmit={submit}

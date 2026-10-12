@@ -4,7 +4,7 @@ import { ArrowLeft, Loader2, RefreshCw } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { fetchAdminDashboard, fetchAdminFunnelCohorts } from '../services/adminDashboardService'
 import { fetchGuestOnboardingFunnel } from '../services/onboardingFunnelService'
-import { openedLabelVN, dateShortVN } from '../utils/dateVN'
+import { openedLabelVN, dateShortVN, timeStringVN } from '../utils/dateVN'
 import MonetizationToggle from '../components/AddressSelectPage/MonetizationToggle'
 import { errorMessage } from '../utils/errorMessage'
 
@@ -42,7 +42,11 @@ interface GuestFunnel {
     recent_visitors?: FunnelVisitor[]
     prev?: { entered: number; signed_up: number } | null
 }
+interface Cohorts { weeks: Record<string, any>[]; stuck: Record<string, number> }
 type Delta = { text: string; cls: string }
+
+const CARD = 'bg-surface border border-border/60 rounded-[20px] p-4'
+const CARD_TITLE = 'text-[12px] font-black uppercase tracking-wide text-text-secondary'
 
 // v3: chỉ còn 3 loại activity actionable (payment/review/rating) — xem
 // 20260815_admin_dashboard_overview_v3.sql, đã bỏ new_branch/referral/new_account/new_staff.
@@ -64,25 +68,18 @@ function formatStepDuration(seconds?: number | null) {
     return seconds < 60 ? `${seconds}s` : `${Math.round(seconds / 60)}′`
 }
 
-function countDelta(current: number, prev: number): Delta {
-    const diff = current - prev
-    if (diff === 0) return { text: 'Không đổi so với tháng trước', cls: 'text-text-dim' }
+function delta(diff: number, unit: string, period: string, noChange: string): Delta {
+    if (diff === 0) return { text: noChange, cls: 'text-text-dim' }
     return {
-        text: `${diff > 0 ? '+' : ''}${diff} so với tháng trước`,
+        text: `${diff > 0 ? '+' : ''}${diff}${unit} so với ${period}`,
         cls: diff > 0 ? 'text-success' : 'text-danger',
     }
 }
+const countDelta = (current: number, prev: number) => delta(current - prev, '', 'tháng trước', 'Không đổi so với tháng trước')
 
 // So tỷ lệ chuyển đổi (dùng thử → đăng ký) với đúng kỳ liền trước (hôm qua/tuần
 // trước) — trả lời "sửa guide có thật sự giúp không" thay vì chỉ nhìn 1 ảnh chụp.
-function pctDelta(currentPct: number, prevPct: number): Delta {
-    const diff = currentPct - prevPct
-    if (diff === 0) return { text: 'không đổi so với kỳ trước', cls: 'text-text-dim' }
-    return {
-        text: `${diff > 0 ? '+' : ''}${diff}% so với kỳ trước`,
-        cls: diff > 0 ? 'text-success' : 'text-danger',
-    }
-}
+const pctDelta = (currentPct: number, prevPct: number) => delta(currentPct - prevPct, '%', 'kỳ trước', 'không đổi so với kỳ trước')
 
 function activityAgo(iso: string) {
     const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000)
@@ -106,21 +103,16 @@ export default function AdminDashboardPage() {
     const { isAdmin, loading: authLoading } = useAuth()
     const [data, setData] = useState<DashboardData | null>(null)
     const [error, setError] = useState<string | null>(null)
-    // OnboardingFunnelCard fetch riêng (xem component đó) và chỉ tự chạy lúc mount —
-    // refreshToken là cách duy nhất để nút refresh ở header kéo nó fetch lại theo.
-    const [refreshToken, setRefreshToken] = useState(0)
+    // Phễu guest (byRange: 1 lần gọi trả cả today/week/all) và cohort fetch song song với overview.
+    // Hai RPC này lỗi/chưa apply → null → ẩn hẳn thẻ, không hỏng phần còn lại của dashboard.
+    const [byRange, setByRange] = useState<Record<string, GuestFunnel> | null>(null)
+    const [cohorts, setCohorts] = useState<Cohorts | null>(null)
 
     const reload = useCallback(() => {
         fetchAdminDashboard().then(setData).catch((e) => setError(errorMessage(e, '')))
+        fetchGuestOnboardingFunnel().then(setByRange).catch(() => setByRange(null))
+        fetchAdminFunnelCohorts().then(setCohorts).catch(() => setCohorts(null))
     }, [])
-
-    // Nút refresh ở header: reload() (fetch, không setState đồng bộ) + bump refreshToken
-    // (setState đồng bộ) — tách riêng khỏi reload() vì effect mount bên dưới không được
-    // phép setState đồng bộ trong thân effect (react-hooks/set-state-in-effect).
-    const refresh = useCallback(() => {
-        reload()
-        setRefreshToken((t) => t + 1)
-    }, [reload])
 
     useEffect(() => {
         if (isAdmin) reload()
@@ -142,12 +134,12 @@ export default function AdminDashboardPage() {
                     <h1 className="text-[14px] font-black text-text uppercase tracking-wide">Admin Dashboard</h1>
                     {data && (
                         <p className="text-[10.5px] text-text-dim">
-                            Cập nhật {new Date(data.generated_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                            Cập nhật {timeStringVN(new Date(data.generated_at))}
                         </p>
                     )}
                 </div>
                 <button
-                    onClick={refresh}
+                    onClick={reload}
                     className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text-secondary hover:bg-border/40 active:bg-border/60 transition-colors shrink-0 focus:outline-none"
                 >
                     <RefreshCw size={16} strokeWidth={2.5} />
@@ -164,7 +156,7 @@ export default function AdminDashboardPage() {
                             <Loader2 size={24} className="animate-spin text-text-dim" />
                         </div>
                     ) : (
-                        <DashboardBody data={data} navigate={navigate} refreshToken={refreshToken} />
+                        <DashboardBody data={data} byRange={byRange} cohorts={cohorts} />
                     )}
                 </div>
             </div>
@@ -172,7 +164,7 @@ export default function AdminDashboardPage() {
     )
 }
 
-function DashboardBody({ data, navigate, refreshToken }: { data: DashboardData; navigate: (to: string) => void; refreshToken: number }) {
+function DashboardBody({ data, byRange, cohorts }: { data: DashboardData; byRange: Record<string, GuestFunnel> | null; cohorts: Cohorts | null }) {
     const { subscription, attention, activity, attention_total_count, payment_issue_total_count } = data
     // total_count = đếm không giới hạn (đã dedupe theo chi nhánh) từ RPC; attention
     // (mảng) chỉ là top-20 hiển thị nên KHÔNG dùng .length làm KPI — sẽ undercount
@@ -186,12 +178,12 @@ function DashboardBody({ data, navigate, refreshToken }: { data: DashboardData; 
                 đáng tiền không". Mọi số khác trên trang này chỉ là bối cảnh hoặc danh
                 sách hành động, không cái nào thay được câu hỏi này. */}
             <ConversionHeroCard subscription={subscription} />
-            <KpiRow subscription={subscription} attentionCount={attentionCount} paymentIssueCount={paymentIssueCount} navigate={navigate} />
+            <KpiRow subscription={subscription} attentionCount={attentionCount} paymentIssueCount={paymentIssueCount} />
             {/* Kể một chiều theo đường đi của khách. Trước đây Snapshot (đích) đứng
                 trên Onboarding (đầu phễu) nên trang kể ngược. */}
             <div className="flex flex-col gap-4">
-                <OnboardingFunnelCard refreshToken={refreshToken} />
-                <CohortFunnelCard refreshToken={refreshToken} />
+                <OnboardingFunnelCard byRange={byRange} />
+                {cohorts && <CohortFunnelCard data={cohorts} />}
                 <SubscriptionSnapshotCard subscription={subscription} />
                 <ActivityCard items={activity} />
             </div>
@@ -239,7 +231,8 @@ function KpiCard({ stripe, label, value, delta, deltaClass, onClick }: { stripe:
     )
 }
 
-function KpiRow({ subscription, attentionCount, paymentIssueCount, navigate }: { subscription: Subscription; attentionCount: number; paymentIssueCount: number; navigate: (to: string) => void }) {
+function KpiRow({ subscription, attentionCount, paymentIssueCount }: { subscription: Subscription; attentionCount: number; paymentIssueCount: number }) {
+    const navigate = useNavigate()
     const { churned_recent_count = 0, active_rate_7d, expiring_soon_count, trial_count } = subscription
     const needsAction = expiring_soon_count + trial_count
 
@@ -304,8 +297,8 @@ function SubscriptionSnapshotCard({ subscription }: { subscription: Subscription
     const paidDelta = countDelta(paid_count, paid_count_prev)
 
     return (
-        <div className="bg-surface border border-border/60 rounded-[20px] p-4">
-            <h3 className="text-[12px] font-black uppercase tracking-wide text-text-secondary">Subscription</h3>
+        <div className={CARD}>
+            <h3 className={CARD_TITLE}>Subscription</h3>
             <p className={`text-[11px] font-bold mb-3 ${paidDelta.cls}`}>{paidDelta.text}</p>
             <div className="flex flex-col gap-2">
                 <StatRow dotClass="bg-success" label="Đã đăng ký" value={paid_count} />
@@ -329,23 +322,18 @@ const RANGE_TABS = [
 // Phễu onboarding khách dùng thử — bao nhiêu người vào dùng thử và rơi rụng ở mốc nào
 // (xem 20260816_guest_onboarding_funnel_v2.sql + OnboardingGuide.tsx). Đếm theo visitor_id
 // ẩn danh do client sinh, KHÔNG phải theo địa chỉ (mọi khách dùng chung 1 demo address id).
-// Tự fetch riêng (không qua fetchAdminDashboard) — 1 lần gọi trả cả 3 khoảng thời gian
+// Fetch riêng (không qua fetchAdminDashboard) — 1 lần gọi trả cả 3 khoảng thời gian
 // (today/week/all), đổi tab KHÔNG cần round-trip mới. byRange = null khi RPC chưa apply
 // hoặc lỗi → ẩn hẳn phần guest funnel, không hỏng phần còn lại của dashboard.
-function OnboardingFunnelCard({ refreshToken }: { refreshToken: number }) {
-    const [byRange, setByRange] = useState<Record<string, GuestFunnel> | null>(null)
+function OnboardingFunnelCard({ byRange }: { byRange: Record<string, GuestFunnel> | null }) {
     const [range, setRange] = useState('week')
-
-    useEffect(() => {
-        fetchGuestOnboardingFunnel().then(setByRange).catch(() => setByRange(null))
-    }, [refreshToken])
 
     const funnel = byRange?.[range]
 
     return (
-        <div className="bg-surface border border-border/60 rounded-[20px] p-4">
+        <div className={CARD}>
             <div className="flex items-center justify-between gap-2 mb-1">
-                <h3 className="text-[12px] font-black uppercase tracking-wide text-text-secondary">Onboarding</h3>
+                <h3 className={CARD_TITLE}>Onboarding</h3>
                 {byRange && (
                     <div className="flex gap-1 shrink-0">
                         {RANGE_TABS.map((t) => (
@@ -479,28 +467,20 @@ const COHORT_COLS = [
 ]
 
 // Cohort theo TUẦN TẠO ĐỊA CHỈ — khác mọi số còn lại trên trang này (ảnh chụp
-// hôm nay): trả lời "tuần này có khá hơn tuần trước không". Tự fetch riêng như
-// OnboardingFunnelCard; RPC lỗi/chưa apply → ẩn hẳn thẻ, không hỏng phần còn lại.
+// hôm nay): trả lời "tuần này có khá hơn tuần trước không". Fetch riêng như
+// OnboardingFunnelCard; RPC lỗi/chưa apply → cohorts = null → thẻ không được render.
 //
 // ponytail: ở quy mô hiện tại (vài chi nhánh/tuần) mỗi ô trong bảng là 1-3 người,
 // xu hướng theo cột chưa đọc được — phần đọc được ngay là khối "Kẹt" bên dưới.
 // Bảng bắt đầu nói được điều gì từ khoảng 30 địa chỉ mới/tuần trở lên.
-function CohortFunnelCard({ refreshToken }: { refreshToken: number }) {
-    const [data, setData] = useState<{ weeks: Record<string, any>[]; stuck: Record<string, number> } | null>(null)
-
-    useEffect(() => {
-        fetchAdminFunnelCohorts().then(setData).catch(() => setData(null))
-    }, [refreshToken])
-
-    if (!data) return null
-    const { weeks, stuck } = data
+function CohortFunnelCard({ data: { weeks, stuck } }: { data: Cohorts }) {
 
     return (
-        <div className="bg-surface border border-border/60 rounded-[20px] p-4">
+        <div className={CARD}>
             {/* Khối "Kẹt" lên TRƯỚC bảng: đây là phần hành động được ngay (gọi ai),
                 bảng cohort là bối cảnh xu hướng — ở quy mô hiện tại thì bối cảnh
                 đứng sau. Đảo lại khi bảng đủ dày để dẫn chuyện. */}
-            <h3 className="text-[12px] font-black uppercase tracking-wide text-text-secondary mb-2">Kẹt &gt;3 ngày, chưa được cấp trial</h3>
+            <h3 className={`${CARD_TITLE} mb-2`}>Kẹt &gt;3 ngày, chưa được cấp trial</h3>
             <div className="flex flex-col gap-2">
                 <StatRow dotClass="bg-text-dim" label="Chưa bán đơn nào" value={stuck.never_ordered} />
                 <StatRow dotClass="bg-warning" label="Có bán, chưa nhập thực thu" value={stuck.ordered_no_cash_close} />
@@ -541,8 +521,8 @@ function CohortFunnelCard({ refreshToken }: { refreshToken: number }) {
 
 function ActivityCard({ items }: { items: ActivityItem[] }) {
     return (
-        <div className="bg-surface border border-border/60 rounded-[20px] p-4">
-            <h3 className="text-[12px] font-black uppercase tracking-wide text-text-secondary mb-3">Hoạt động gần đây</h3>
+        <div className={CARD}>
+            <h3 className={`${CARD_TITLE} mb-3`}>Hoạt động gần đây</h3>
             {items.length === 0 ? (
                 <p className="text-[12px] text-text-secondary py-2">Chưa có hoạt động nào.</p>
             ) : (

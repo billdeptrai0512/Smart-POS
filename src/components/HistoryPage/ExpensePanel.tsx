@@ -10,9 +10,6 @@ import type { ExpenseCategory, Row } from '../../types/domain'
 // /ingredient/:id (cùng với qty in/out). NVL vẫn xuất hiện trong dòng tiền
 // (CashFlowCard / FinancialFlow) vì chúng là cash-out thật, chỉ không trừ lại
 // trong P&L vì COGS đã đảm nhận.
-function formatTime(iso: string) {
-    return dateShortVN(new Date(iso))
-}
 
 interface Props {
     isReadOnly?: boolean
@@ -38,7 +35,6 @@ export default function ExpensePanel({ isReadOnly, isLoading, expenses, expenseC
                 <ExpenseList
                     expenses={expenses}
                     expenseCategories={expenseCategories}
-                    isReadOnly={isReadOnly}
                     onEdit={isReadOnly ? null : onEditExpense}
                 />
             )}
@@ -48,7 +44,7 @@ export default function ExpensePanel({ isReadOnly, isLoading, expenses, expenseC
 
 // Subcomponent that owns the running-total computation so it
 // doesn't rerun when unrelated state changes in ExpensePanel.
-function ExpenseList({ expenses, expenseCategories, isReadOnly, onEdit }: { expenses: Row[]; expenseCategories: ExpenseCategory[]; isReadOnly?: boolean; onEdit?: ((expense: Row) => void) | null }) {
+function ExpenseList({ expenses, expenseCategories, onEdit }: { expenses: Row[]; expenseCategories: ExpenseCategory[]; onEdit?: ((expense: Row) => void) | null }) {
     // Running total (cumulative) — walks oldest → newest. expenses list is sorted
     // newest-first so we iterate in reverse.
     const runningMap = useMemo(() => {
@@ -74,7 +70,6 @@ function ExpenseList({ expenses, expenseCategories, isReadOnly, onEdit }: { expe
                     key={expense.id}
                     expense={expense}
                     category={catById.get(expense.category_id)}
-                    isReadOnly={isReadOnly}
                     runningTotal={runningMap.get(expense.id)}
                     onEdit={onEdit}
                 />
@@ -88,14 +83,14 @@ function ExpenseList({ expenses, expenseCategories, isReadOnly, onEdit }: { expe
 //   row 1 — tên (hero) · số tiền
 //   row 2 — badge: nhãn (chấm màu nhóm) · thời điểm · phương thức (gọn, nhạt)
 //   row 3 — nhân viên + ngày (trái) · luỹ kế (phải, nhạt)
-interface CardProps { expense: Row; category?: ExpenseCategory; isReadOnly?: boolean; runningTotal?: number; onEdit?: ((expense: Row) => void) | null }
+interface CardProps { expense: Row; category?: ExpenseCategory; runningTotal?: number; onEdit?: ((expense: Row) => void) | null }
 
-function ExpenseCard({ expense, category, isReadOnly, runningTotal, onEdit }: CardProps) {
-    const time = formatTime(expense.created_at)
+function ExpenseCard({ expense, category, runningTotal, onEdit }: CardProps) {
+    const time = dateShortVN(new Date(expense.created_at))
     // "Sau ca" marker: free-form refill flag (NVL refills đã lọc ở trên).
     const isAfterShift = !!expense.metadata?.free_form
     const isTransfer = expense.payment_method === 'transfer'
-    const clickable = !isReadOnly && !!onEdit
+    const clickable = !!onEdit
 
     const tag = category
         ? { name: category.name, group: category.group_section, muted: false, strike: false }

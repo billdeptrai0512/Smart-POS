@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import MoneyInput from '../common/MoneyInput'
 import { formatVND, formatVNDInput, parseVNDInput } from '../../utils'
-import { dateStringVN } from '../../utils/dateVN'
+import { dateStringVN, timeStringVN } from '../../utils/dateVN'
 import DatePicker from '../common/DatePicker'
 import TimeInput from '../common/TimeInput'
 import { BottomSheet } from '../common/ModalShell'
+import SegmentedControl from '../common/SegmentedControl'
+import type { PayMethod, CashPhase } from './RestockModal'
 import type { Row } from '../../types/domain'
 
-export type InvoicePayment = { amount: number; paymentMethod: 'cash' | 'transfer'; paidAt: string; cashPhase: 'in_shift' | 'post_close' }
+export type InvoicePayment = { amount: number; paymentMethod: PayMethod; paidAt: string; cashPhase: CashPhase }
 
 interface Props {
     invoice: Row
@@ -25,12 +27,11 @@ export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfir
     const paidPrev = (invoice.payments || []).reduce((s: number, p: Row) => s + (p.amount || 0), 0)
     const owing = Math.max(0, (invoice.amount || 0) - paidPrev)
     const [amountInput, setAmountInput] = useState(formatVNDInput(owing))
-    const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer'>('cash')
+    const [paymentMethod, setPaymentMethod] = useState<PayMethod>('cash')
     const [paidDate, setPaidDate] = useState(today)
     // Giờ trả tuỳ chọn để nhật ký biên nhận phản ánh đúng thời điểm trả thật.
     // Mặc định = giờ VN hiện tại; RPC chỉ chặn theo NGÀY VN nên giờ nào cũng hợp lệ.
-    const [paidTime, setPaidTime] = useState(() =>
-        new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date()))
+    const [paidTime, setPaidTime] = useState(timeStringVN)
     const [isAfterShift, setIsAfterShift] = useState(false)
     const amount = parseVNDInput(amountInput)
     const isValid = amount > 0 && amount <= owing
@@ -99,22 +100,13 @@ export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfir
                     {/* 2. Thời điểm trả */}
                     <div className="flex items-center justify-between gap-3">
                         <span className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Thời điểm trả</span>
-                        <div className="w-48 flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
-                            <button
-                                type="button"
-                                onClick={() => setIsAfterShift(false)}
-                                className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${!isAfterShift ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                            >
-                                Trong ca
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setIsAfterShift(true)}
-                                className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${isAfterShift ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                            >
-                                Sau chốt ca
-                            </button>
-                        </div>
+                        <SegmentedControl
+                            options={[{ value: false, label: 'Trong ca' }, { value: true, label: 'Sau chốt ca' }]}
+                            value={isAfterShift}
+                            onChange={setIsAfterShift}
+                            className="w-48 bg-surface-light border border-border/60 rounded-lg"
+                            buttonClassName="flex-1 px-1 py-1 text-[11px]"
+                        />
                     </div>
                 </div>
 
@@ -144,22 +136,13 @@ export default function InvoicePaymentSheet({ invoice, saving, onClose, onConfir
                     {/* 5. Phương thức */}
                     <div className="flex items-center justify-between gap-3">
                         <span className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Phương thức</span>
-                        <div className="w-48 flex items-center gap-0.5 bg-surface-light border border-border/60 rounded-lg p-0.5">
-                            <button
-                                type="button"
-                                onClick={() => setPaymentMethod('cash')}
-                                className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'cash' ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                            >
-                                Tiền mặt
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setPaymentMethod('transfer')}
-                                className={`flex-1 px-1 py-1 rounded-md text-[11px] font-bold transition-all ${paymentMethod === 'transfer' ? 'bg-primary text-white' : 'text-text-secondary'}`}
-                            >
-                                Bank
-                            </button>
-                        </div>
+                        <SegmentedControl
+                            options={[{ value: 'cash' as PayMethod, label: 'Tiền mặt' }, { value: 'transfer' as PayMethod, label: 'Bank' }]}
+                            value={paymentMethod}
+                            onChange={setPaymentMethod}
+                            className="w-48 bg-surface-light border border-border/60 rounded-lg"
+                            buttonClassName="flex-1 px-1 py-1 text-[11px]"
+                        />
                     </div>
                 </div>
 

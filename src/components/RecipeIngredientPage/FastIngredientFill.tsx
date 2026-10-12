@@ -4,7 +4,7 @@ import { ingredientLabel } from '../../utils/ingredients'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import IngredientPicker from './IngredientPicker'
 
-export interface AddCustomPayload { keys: string[]; custom?: { key: string; unit: string; category: string } }
+export interface CustomIngredient { key: string; unit: string; category: string }
 
 interface Props {
     entries: { ingredient: string; amount: number }[]
@@ -19,7 +19,7 @@ interface Props {
     baseAmounts?: Record<string, number>
     onSetAmount: (ingredient: string, amount: number, unit: string) => void
     onRemove: (ingredient: string) => void
-    onAddCustom: (payload: AddCustomPayload) => void
+    onAddCustom: (ingredient: CustomIngredient) => void
     hint?: boolean
 }
 
@@ -107,12 +107,10 @@ export default function FastIngredientFill({
                     </div>
                     {creatingCat === cat.key && (
                         <IngredientPicker
-                            availableIngredients={[]}
                             existingIngredients={dbIngredients}
                             label={`Tạo nguyên liệu mới · ${cat.label}`}
-                            onConfirm={(payload) => {
-                                const custom = payload.custom ? { ...payload.custom, category: cat.key } : undefined
-                                onAddCustom({ keys: payload.keys, custom })
+                            onConfirm={(ingredient) => {
+                                onAddCustom({ ...ingredient, category: cat.key })
                                 setCreatingCat(null)
                             }}
                             onCancel={() => setCreatingCat(null)}

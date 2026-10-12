@@ -8,7 +8,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { restrictToFirstScrollableAncestor } from '@dnd-kit/modifiers'
-import { BottomSheet, SheetHeader } from '../components/common/ModalShell'
+import { BottomSheet, SheetHeader, SHEET_PANEL } from '../components/common/ModalShell'
 import MenuDivider from '../components/common/MenuDivider'
 import Dropdown from '../components/common/Dropdown'
 import NoticeBar from '../components/common/NoticeBar'
@@ -19,6 +19,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { upsertProductPrice, insertProduct, updateProductSortOrder, updateProductName, removeProductFromAddress } from '../services/orderService'
 import { parseVNDInput } from '../utils'
 import { useToast } from '../hooks/useToast'
+import { useSavingAction } from '../hooks/useSavingAction'
 import Toast from '../components/POSPage/Toast'
 import SortableItem from '../components/RecipeMenuPage/SortableItem'
 import MenuPageHeader from '../components/common/MenuPageHeader'
@@ -32,7 +33,7 @@ import { isRecipeProgressDone } from '../utils/onboardingStorage'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps'
 import type { Row } from '../types/domain'
-import type { RecipeRow } from '../utils/inventory'
+import { groupRecipesByProduct } from '../utils/inventory'
 
 // ponytail: kéo theo xlsx (~430 kB) — chỉ tải khi bấm "Nhập Excel", không phải lúc mở /category.
 const ExcelImportModal = lazy(() => import('../components/RecipeMenuPage/ExcelImportModal'))
@@ -94,9 +95,7 @@ export default function RecipeMenuPage() {
     const canSort = canEdit && !!(addressId || isAdmin)
     const { toast, showToast, showError } = useToast()
 
-    const [newProductName, setNewProductName] = useState('')
-    const [newProductPrice, setNewProductPrice] = useState('')
-    const [saving, setSaving] = useState(false)
+    const { saving, withSaving } = useSavingAction(showError)
     // Kéo-thả trực tiếp trên lưới chính — không có "chế độ sắp xếp" riêng.
     const [activeId, setActiveId] = useState<string | null>(null)
     // Bản sao local để phản hồi ngay khi thả tay, trước khi round-trip lưu server xong.
@@ -133,15 +132,7 @@ export default function RecipeMenuPage() {
     // PERF: index recipes by product_id ONCE.
     // Was: recipes.filter(...) called twice per product per render — O(N×M).
     // Now: single pass to build the Map, then O(1) lookups.
-    const recipesByProduct = useMemo(() => {
-        const map = new Map<string, RecipeRow[]>()
-        for (const r of recipes || []) {
-            const list = map.get(r.product_id)
-            if (list) list.push(r)
-            else map.set(r.product_id, [r])
-        }
-        return map
-    }, [recipes])
+    const recipesByProduct = useMemo(() => groupRecipesByProduct(recipes || []), [recipes])
 
     // PERF: precompute cost per product. Was: productCost() recomputed per card per render.
     const costByProduct = useMemo(() => {
@@ -154,67 +145,56 @@ export default function RecipeMenuPage() {
         return map
     }, [recipesByProduct, ingredientCosts])
 
-    async function handleCreateProduct() {
-        if (!newProductName.trim()) return
-        setSaving(true)
-        const parsedPrice = parseVNDInput(newProductPrice)
-        try {
-            const newProd = await insertProduct(newProductName.trim(), parsedPrice, addressId)
-            if (newProd && addressId) {
-                await upsertProductPrice(newProd.id, parsedPrice)
-            }
-            refreshProducts?.()
-            setNewProductName('')
-            setNewProductPrice('')
-            setShowCreateModal(false)
-            showToast('Đã tạo món mới', 'success')
-        } catch (err) {
-            showError(err, 'Tạo món mới')
-        } finally {
-            setSaving(false)
+    const handleCreateProduct = (name: string, price: string) => withSaving('Tạo món mới', async () => {
+        const parsedPrice = parseVNDInput(price)
+        const newProd = await insertProduct(name, parsedPrice, addressId)
+        if (newProd && addressId) {
+            await upsertProductPrice(newProd.id, parsedPrice)
         }
-    }
+        refreshProducts?.()
+        setShowCreateModal(false)
+        showToast('Đã tạo món mới', 'success')
+    })
 
     function editDivider(divider: Row) {
         setDividerName(divider.name)
         setDividerModal({ mode: 'edit', id: divider.id })
     }
 
-    async function saveDivider() {
+    function saveDivider() {
         const name = dividerName.trim()
         const modal = dividerModal
         if (!name || !modal) return
-        setSaving(true)
-        try {
+        return withSaving('Lưu danh mục', async () => {
             if (modal.mode === 'create') await insertProduct(name, 0, addressId, true)
             else await updateProductName(modal.id, name)
             refreshProducts?.()
             setDividerModal(null)
             showToast(modal.mode === 'create' ? 'Đã tạo danh mục' : 'Đã đổi tên danh mục', 'success')
-        } catch (err) {
-            showError(err, 'Lưu danh mục')
-        } finally {
-            setSaving(false)
-        }
+        })
     }
 
-    async function deleteDivider() {
+    function deleteDivider() {
         if (dividerModal?.mode !== 'edit') return
-        setSaving(true)
-        try {
-            await removeProductFromAddress(dividerModal.id, addressId)
+        const { id } = dividerModal
+        return withSaving('Xóa danh mục', async () => {
+            await removeProductFromAddress(id, addressId)
             refreshProducts?.()
             setDividerModal(null)
             showToast('Đã xóa danh mục', 'success')
-        } catch (err) {
-            showError(err, 'Xóa danh mục')
-        } finally {
-            setSaving(false)
-        }
+        })
     }
 
     // Thả tay = commit luôn (không có bước "Lưu sắp xếp" riêng). Optimistic update
     // trước, rollback về thứ tự cũ nếu lưu server lỗi.
+    // Props lấy từ dữ liệu đã index sẵn, chung cho cả 4 chỗ vẽ ProductCard.
+    const cardProps = (p: Row) => ({
+        product: p,
+        prodRecipes: recipesByProduct.get(p.id) || [],
+        cost: costByProduct.get(p.id) || 0,
+        ingredientUnits,
+    })
+
     const sensors = useSensors(
         useSensor(PointerSensor),
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -349,10 +329,7 @@ export default function RecipeMenuPage() {
                         {searchedProducts.map(product => (
                             <ProductCard
                                 key={product.id}
-                                product={product}
-                                prodRecipes={recipesByProduct.get(product.id) || []}
-                                cost={costByProduct.get(product.id) || 0}
-                                ingredientUnits={ingredientUnits}
+                                {...cardProps(product)}
                                 onClick={() => {
                                     savedScroll = mainRef.current?.scrollTop ?? 0
                                     navigate(`/category/recipes/${product.id}`, { state: location.state })
@@ -398,10 +375,7 @@ export default function RecipeMenuPage() {
                                                     <SortableItem key={product.id} id={product.id}>
                                                         {({ handle }) => (
                                                             <ProductCard
-                                                                product={product}
-                                                                prodRecipes={recipesByProduct.get(product.id) || []}
-                                                                cost={costByProduct.get(product.id) || 0}
-                                                                ingredientUnits={ingredientUnits}
+                                                                {...cardProps(product)}
                                                                 dragHandle={handle}
                                                                 sortMode
                                                             />
@@ -424,10 +398,7 @@ export default function RecipeMenuPage() {
                             ) : (
                                 <div className="opacity-90 rotate-2 shadow-2xl shadow-black/40 rounded-[1.5rem]">
                                     <ProductCard
-                                        product={activeProduct}
-                                        prodRecipes={recipesByProduct.get(activeProduct.id) || []}
-                                        cost={costByProduct.get(activeProduct.id) || 0}
-                                        ingredientUnits={ingredientUnits}
+                                        {...cardProps(activeProduct)}
                                         sortMode
                                     />
                                 </div>
@@ -449,10 +420,7 @@ export default function RecipeMenuPage() {
                                         {section.items.map(product => (
                                             <ProductCard
                                                 key={product.id}
-                                                product={product}
-                                                prodRecipes={recipesByProduct.get(product.id) || []}
-                                                cost={costByProduct.get(product.id) || 0}
-                                                ingredientUnits={ingredientUnits}
+                                                {...cardProps(product)}
                                                 sortMode
                                             />
                                         ))}
@@ -467,17 +435,10 @@ export default function RecipeMenuPage() {
             {showCreateModal && (
                 <BottomSheet
                     onClose={() => !saving && setShowCreateModal(false)}
-                    panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
+                    panelClassName={SHEET_PANEL}
                 >
                         <SheetHeader title="Tạo công thức mới" onClose={() => setShowCreateModal(false)} closeDisabled={saving} />
-                        <CreateProductForm
-                            name={newProductName}
-                            price={newProductPrice}
-                            saving={saving}
-                            onNameChange={setNewProductName}
-                            onPriceChange={setNewProductPrice}
-                            onSubmit={handleCreateProduct}
-                        />
+                        <CreateProductForm saving={saving} onSubmit={handleCreateProduct} />
                         <button
                             onClick={() => { setShowCreateModal(false); setShowImportModal(true) }}
                             className="text-[13px] text-primary/80 hover:text-primary font-medium text-center"
@@ -492,7 +453,7 @@ export default function RecipeMenuPage() {
             {dividerModal && (
                 <BottomSheet
                     onClose={() => !saving && setDividerModal(null)}
-                    panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-8 flex flex-col gap-4 animate-slide-up"
+                    panelClassName={SHEET_PANEL}
                 >
                         <SheetHeader title={dividerModal.mode === 'create' ? 'Tạo danh mục' : 'Sửa danh mục'} onClose={() => setDividerModal(null)} closeDisabled={saving} />
                         <p className="text-[13px] text-text-secondary -mt-2">Danh mục là dòng tiêu đề ——— tên ——— để phân nhóm menu trên trang bán hàng.</p>

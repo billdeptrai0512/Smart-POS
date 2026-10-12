@@ -9,7 +9,7 @@ import { useSavingAction } from '../../hooks/useSavingAction'
 import { useProducts } from '../../contexts/ProductContext'
 import { useWarehousePrep } from '../../hooks/usePrepNotice'
 import { processIngredientRestock, recordInvoicePayment } from '../../services/orderService'
-import { fetchCashClosedToday } from '../../services/reportService'
+import { useCashClosedToday } from '../../hooks/useCashClosedToday'
 import { fetchIngredientDebts, type IngredientDebt } from '../../services/expenseService'
 import { formatVND } from '../../utils/money'
 import { getIngredientUnit, ingredientLabel } from '../../utils/ingredients'
@@ -61,7 +61,6 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
     const [open, setOpen] = useState(reopenSheet)
     useEffect(() => { reopenSheet = false }, [])
     const [restock, setRestock] = useState<{ ingredient: string; qty: number | null } | null>(null)
-    const [cashClosedToday, setCashClosedToday] = useState(false)
     const loadDebts = useCallback(
         () => fetchIngredientDebts(addressId).then(d => { debtSnapshots.set(addressId, d); setDebts(d) }).catch(err => console.error('fetchIngredientDebts', err)),
         [addressId])
@@ -78,12 +77,7 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
     })
 
     // Phân loại dòng tiền đúng (trước/sau chốt két) — refetch mỗi lần mở form nhập kho.
-    useEffect(() => {
-        if (!restock) return
-        let alive = true
-        fetchCashClosedToday(addressId).then(v => { if (alive) setCashClosedToday(!!v) })
-        return () => { alive = false }
-    }, [restock, addressId])
+    const cashClosedToday = useCashClosedToday(addressId, !!restock)
 
     if (total === 0 && debts.length === 0 && !open && !restock) return null
     const cfg = restock && (ingredientsList || []).find(i => i.ingredient === restock.ingredient)

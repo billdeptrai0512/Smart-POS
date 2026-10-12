@@ -15,6 +15,13 @@ export function normalizeIngredientCategory(raw: unknown) {
     return 'main'
 }
 
+/** Tra danh mục (main | packaging) của key nguyên liệu từ ingredient_configs. */
+export function makeCategoryOf(configs: { ingredient: string; category?: string | null }[] | undefined) {
+    const m = new Map<string, string | null | undefined>()
+    for (const c of configs || []) m.set(c.ingredient, c.category)
+    return (key: string) => normalizeIngredientCategory(m.get(key))
+}
+
 export function sortIngredients(a: string, b: string, customOrderArray?: string[] | null) {
     if (customOrderArray && customOrderArray.length > 0) {
         const idxA = customOrderArray.indexOf(a)
@@ -47,6 +54,9 @@ export function ingredientLabel(key: string) {
     const name = key.replace(/_/g, ' ')
     return name.charAt(0).toUpperCase() + name.slice(1)
 }
+
+/** Comparator theo nhãn hiển thị (tiếng Việt) cho các key nguyên liệu. */
+export const byIngredientLabel = (a: string, b: string) => ingredientLabel(a).localeCompare(ingredientLabel(b), 'vi')
 
 // Đọc giá trị của một nguyên liệu từ `map` kèm fallback theo LABEL: nếu không có key trực
 // tiếp, dò một key khác cùng nhãn (dữ liệu cũ lưu theo biến thể key). Trả `fallback` nếu

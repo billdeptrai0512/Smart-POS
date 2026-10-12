@@ -4,7 +4,7 @@ import type { ExtraIngRow } from '../../utils/inventory'
 import { formatVND } from '../../utils'
 import { getIngredientUnit } from '../../utils/ingredients'
 import InlineEditor from './InlineEditor'
-import FastIngredientFill, { type AddCustomPayload } from './FastIngredientFill'
+import FastIngredientFill, { type CustomIngredient } from './FastIngredientFill'
 
 interface Props {
     extra: CartExtra
@@ -18,7 +18,7 @@ interface Props {
     onDelete: () => void
     onSaveExtraAmount: (ingredient: string, amount: number) => void
     onDeleteExtraIngredient: (ingredient: string) => void
-    onAddExtraIngredients: (payload: AddCustomPayload) => void
+    onAddExtraIngredients: (ingredient: CustomIngredient) => void
     onDuplicate: (name: string) => void
     categoryOf: (ingredient: string) => string | null | undefined
     baseAmounts?: Record<string, number>

@@ -100,10 +100,8 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onRemove, h
                     aria-label={`Huỷ ${product.name}`}
                     className="absolute -top-4 -right-4 z-20 p-2.5 active:scale-90 transition-transform"
                 >
-                    <span className="relative w-7 h-7 rounded-full flex items-center justify-center shadow-lg border-2 border-white/20 overflow-hidden bg-primary">
-                        <span className="relative z-10 text-white">
-                            <X size={15} strokeWidth={3} />
-                        </span>
+                    <span className="w-7 h-7 rounded-full flex items-center justify-center shadow-lg border-2 border-white/20 bg-primary text-white">
+                        <X size={15} strokeWidth={3} />
                     </span>
                 </button>
             )}
@@ -242,14 +240,13 @@ export default function MenuGrid({ products, cart, activeItem, onAddItem, onRemo
 
     // every([]) = true → giữ hành vi menu rỗng; menu chỉ toàn divider cũng coi là chưa có món
     if (products.every(p => p.is_divider)) {
-        const isLoading = loading
         const hasError = !!loadError
-        const title = isLoading
+        const title = loading
             ? 'Đang tải menu…'
             : hasError
                 ? 'Không tải được menu'
                 : 'Chưa có món nào trong menu'
-        const description = isLoading
+        const description = loading
             ? 'Vui lòng chờ giây lát.'
             : hasError
                 ? (navigator.onLine
@@ -258,26 +255,23 @@ export default function MenuGrid({ products, cart, activeItem, onAddItem, onRemo
                 : (canSetup
                     ? 'Thiết lập menu và công thức để bắt đầu bán hàng.'
                     : 'Liên hệ quản lý để được thiết lập menu.')
+        // Nút duy nhất theo trạng thái: lỗi → tải lại; menu trống + có quyền → đi thiết lập.
+        const action = loading ? null
+            : hasError ? { label: 'Tải lại', run: () => window.location.reload() }
+            : canSetup ? { label: 'Thiết lập menu', run: () => navigate('/category/overall', { state: { from: '/pos' } }) }
+            : null
 
         return (
             <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-6 pb-6 pt-5 flex items-center justify-center hide-scrollbar">
                 <div className="bg-surface border border-border/60 rounded-[24px] p-6 max-w-sm w-full text-center shadow-sm">
                     <div className="text-[15px] font-black text-text mb-1.5">{title}</div>
                     <div className="text-[13px] text-text-secondary mb-4 leading-relaxed">{description}</div>
-                    {!isLoading && hasError && (
+                    {action && (
                         <button
-                            onClick={() => window.location.reload()}
+                            onClick={action.run}
                             className="w-full py-3 rounded-[12px] bg-primary text-bg font-black text-[14px] hover:bg-primary/90 active:bg-primary/80 transition-colors uppercase"
                         >
-                            Tải lại
-                        </button>
-                    )}
-                    {!isLoading && !hasError && canSetup && (
-                        <button
-                            onClick={() => navigate('/category/overall', { state: { from: '/pos' } })}
-                            className="w-full py-3 rounded-[12px] bg-primary text-bg font-black text-[14px] hover:bg-primary/90 active:bg-primary/80 transition-colors uppercase"
-                        >
-                            Thiết lập menu
+                            {action.label}
                         </button>
                     )}
                 </div>

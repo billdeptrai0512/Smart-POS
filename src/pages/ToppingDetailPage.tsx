@@ -7,11 +7,13 @@ import { useAuth } from '../contexts/AuthContext'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { useToast } from '../hooks/useToast'
 import { useSavingAction } from '../hooks/useSavingAction'
+import { useProductLinks } from '../hooks/useProductLinks'
 import Toast from '../components/POSPage/Toast'
 import EditableEntityHeader from '../components/common/EditableEntityHeader'
-import FastIngredientFill, { type AddCustomPayload } from '../components/RecipeIngredientPage/FastIngredientFill'
+import ProductLinksSection from '../components/common/ProductLinksSection'
+import FastIngredientFill, { type CustomIngredient } from '../components/RecipeIngredientPage/FastIngredientFill'
 import { capitalizeWords } from '../utils'
-import { getIngredientUnit, normalizeIngredientCategory, registerNewIngredients } from '../utils/ingredients'
+import { getIngredientUnit, makeCategoryOf, registerNewIngredients } from '../utils/ingredients'
 import {
     updateToppingName, updateToppingPrice, deleteTopping,
     fetchToppingIngredients, upsertToppingIngredient, deleteToppingIngredient,
@@ -35,8 +37,7 @@ export default function ToppingDetailPage() {
 
     const { saving, withSaving } = useSavingAction(showError)
     const [toppingIngs, setToppingIngs] = useState<ToppingIng[]>([])
-    const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set())
-    const [savedProductIds, setSavedProductIds] = useState<Set<string>>(new Set())
+    const productLinks = useProductLinks()
 
     useEffect(() => {
         let cancelled = false
@@ -47,19 +48,13 @@ export default function ToppingDetailPage() {
             ])
             if (cancelled) return
             setToppingIngs((ingsMap[toppingId] || []) as ToppingIng[])
-            const ids = new Set(links.map(l => l.product_id))
-            setSelectedProductIds(ids)
-            setSavedProductIds(ids)
+            productLinks.reset(new Set(links.map(l => l.product_id)))
         }
         load()
         return () => { cancelled = true }
-    }, [toppingId])
+    }, [toppingId, productLinks.reset])
 
-    const categoryOf = useMemo(() => {
-        const m = new Map<string, string | null>()
-        for (const c of ingredientConfigs || []) m.set(c.ingredient, c.category)
-        return (key: string) => normalizeIngredientCategory(m.get(key))
-    }, [ingredientConfigs])
+    const categoryOf = useMemo(() => makeCategoryOf(ingredientConfigs), [ingredientConfigs])
 
     const dbIngredients = useMemo(() => Object.keys(ingredientCosts || {}), [ingredientCosts])
 
@@ -97,13 +92,10 @@ export default function ToppingDetailPage() {
         })
     }
 
-    async function addCustomIngredients({ keys, custom }: AddCustomPayload) {
-        const toAdd: { key: string; unit: string | null }[] = keys.map(key => ({ key, unit: null }))
-        if (custom) toAdd.push(custom)
-        if (toAdd.length === 0) return
+    async function addCustomIngredients(custom: CustomIngredient) {
         await withSaving('Thêm nguyên liệu vào công thức', async () => {
             const existingKeys = new Set(toppingIngs.map(r => r.ingredient))
-            const fresh = await registerNewIngredients(toAdd, { existingKeys, ingredientCosts, addressId, upsertIngredientCost })
+            const fresh = await registerNewIngredients([custom], { existingKeys, ingredientCosts, addressId, upsertIngredientCost })
             for (const { key, unit } of fresh) {
                 await upsertToppingIngredient(toppingId, key, 0, unit)
             }
@@ -111,22 +103,6 @@ export default function ToppingDetailPage() {
             await refreshProducts()
         })
     }
-
-    // ─── Áp dụng cho món: tick-list nhiều-nhiều ───
-    function toggleProduct(productId: string) {
-        setSelectedProductIds(prev => {
-            const next = new Set(prev)
-            if (next.has(productId)) next.delete(productId)
-            else next.add(productId)
-            return next
-        })
-    }
-
-    const linksDirty = useMemo(() => {
-        if (selectedProductIds.size !== savedProductIds.size) return true
-        for (const id of selectedProductIds) if (!savedProductIds.has(id)) return true
-        return false
-    }, [selectedProductIds, savedProductIds])
 
     if (!topping) {
         return (
@@ -139,8 +115,8 @@ export default function ToppingDetailPage() {
 
     async function saveLinks() {
         await withSaving('Lưu danh sách món dùng topping', async () => {
-            await setToppingProductLinks(toppingId, [...selectedProductIds])
-            setSavedProductIds(new Set(selectedProductIds))
+            await setToppingProductLinks(toppingId, [...productLinks.selected])
+            productLinks.markSaved()
             await refreshProducts()
             showToast('Đã lưu', 'success')
         })
@@ -154,8 +130,6 @@ export default function ToppingDetailPage() {
             navigate('/category/toppings')
         })
     }
-
-    const sellableProducts = products.filter(p => !p.is_divider)
 
     return (
         <div className="flex flex-col h-full bg-bg">
@@ -198,43 +172,7 @@ export default function ToppingDetailPage() {
                     />
                 </section>
 
-                <section className="pt-4 border-t border-border/40">
-                    <div className="flex items-center justify-between mb-3">
-                        <span className="text-[13px] font-black text-text uppercase tracking-wide">Áp dụng cho món</span>
-                        {selectedProductIds.size > 0 && (
-                            <span className="text-[10px] text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded">
-                                Đã chọn {selectedProductIds.size}
-                            </span>
-                        )}
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                        {sellableProducts.map(p => {
-                            const isSelected = selectedProductIds.has(p.id)
-                            return (
-                                <button
-                                    key={p.id}
-                                    disabled={!canEdit}
-                                    onClick={() => toggleProduct(p.id)}
-                                    className={`text-[12px] border px-2.5 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-60 ${isSelected
-                                        ? 'bg-primary text-bg border-primary shadow-sm'
-                                        : 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 active:bg-primary/30'
-                                        }`}
-                                >
-                                    {isSelected ? '✓ ' : '+ '}{p.name}
-                                </button>
-                            )
-                        })}
-                    </div>
-                    {canEdit && linksDirty && (
-                        <button
-                            onClick={saveLinks}
-                            disabled={saving}
-                            className="w-full mt-3 py-2.5 rounded-[12px] bg-primary text-bg text-[13px] font-black hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 uppercase"
-                        >
-                            Lưu danh sách món
-                        </button>
-                    )}
-                </section>
+                <ProductLinksSection links={productLinks} products={products} canEdit={canEdit} saving={saving} onSave={saveLinks} />
             </main>
         </div>
     )

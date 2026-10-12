@@ -4,10 +4,8 @@ import { useState, type ReactNode } from 'react'
 // internal state handles the edit toggle and draft string.
 //
 // `type`: 'number' | 'text'
-// `step`: for number inputs (e.g. 'any' to allow decimals)
 // `parse`: converts string draft → saved value (defaults to parseInt for number, identity for text)
-// `format`: optional formatter for the read-only display (e.g. formatVND)
-// `renderDisplay`: full control over the read-only span content (overrides `format`)
+// `renderDisplay`: nội dung của span chỉ-đọc (mặc định hiện thẳng value)
 // `suffix`: optional small text rendered next to the input (e.g. unit name)
 interface InlineEditorProps {
     value: string | number | null | undefined
@@ -15,14 +13,11 @@ interface InlineEditorProps {
     // any: caller quyết định kiểu giá trị lưu (string cho text, number cho number, hoặc parse tuỳ biến).
     onSave: (value: any) => void
     type?: 'number' | 'text'
-    step?: string
     allowNegative?: boolean
     transform?: (raw: string) => string
     parse?: (draft: string) => any
-    format?: (value: any) => ReactNode
     renderDisplay?: (value: any) => ReactNode
     suffix?: ReactNode
-    placeholder?: string
     inputClassName?: string
     displayClassName?: string
     inputWidthClassName?: string
@@ -30,14 +25,12 @@ interface InlineEditorProps {
 
 export default function InlineEditor({
     value, canEdit, onSave,
-    type = 'number', step,
+    type = 'number',
     allowNegative = false,
     transform,
     parse,
-    format,
     renderDisplay,
     suffix,
-    placeholder,
     inputClassName = '',
     displayClassName = '',
     inputWidthClassName = 'w-[72px]',
@@ -55,7 +48,7 @@ export default function InlineEditor({
         const parsed = parse
             ? parse(draft)
             : type === 'number'
-                ? (step === 'any' ? (parseFloat(draft) || 0) : (parseInt(draft) || 0))
+                ? (parseInt(draft) || 0)
                 : draft
         setEditing(false)
         onSave(parsed)
@@ -88,7 +81,6 @@ export default function InlineEditor({
                         if (e.key === 'Escape') setEditing(false)
                     }}
                     onBlur={commit}
-                    placeholder={placeholder}
                     className={`${inputWidthClassName} bg-bg border border-primary/60 rounded-lg px-2 py-1 text-[13px] text-text text-right focus:outline-none focus:border-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${inputClassName}`}
                 />
                 {suffix && <span className="text-[12px] text-text-dim">{suffix}</span>}
@@ -96,11 +88,7 @@ export default function InlineEditor({
         )
     }
 
-    const display = renderDisplay
-        ? renderDisplay(value)
-        : format
-            ? format(value)
-            : value
+    const display = renderDisplay ? renderDisplay(value) : value
 
     return (
         <span

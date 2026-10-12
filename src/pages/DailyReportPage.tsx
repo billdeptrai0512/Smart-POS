@@ -9,14 +9,16 @@ import { fetchDailyReportContext, fetchIngredientStocks, invalidateDailyContext,
 import { buildCashPayload } from '../services/reportService'
 import { useIngredientCatalog } from '../hooks/useIngredientCatalog'
 import { useDailyReportData } from '../hooks/useDailyReportData'
-import { calculateEstimatedConsumption, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, isLiveOrder, openingSeed, pack2Of } from '../utils/inventory'
+import { calculateEstimatedConsumption, splitCogsByCategory, calculateLossValue, buildRecipeIngredientSet, isLiveOrder, openingSeed, pack2Of, orderItemsOf, sumLiveRevenue } from '../utils/inventory'
 import { estimateOpening, recipesBelongTo } from '../services/counterEstimate'
 import { useCounterCalc } from '../hooks/useCounterCalc'
+import { calcRangeWithLabel } from '../utils/rangeCalc'
+import { restockInitialFrom } from '../utils/restockInitial'
 import { ingredientLabel, getIngredientUnit } from '../utils/ingredients'
 import { readOnboardingState, DEFAULT_ONBOARDING_STATE, isCashFlowProgressDone, isInventoryProgressDone, reachedCashCard } from '../utils/onboardingStorage'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
 import { isRecipeStepActive } from '../components/common/onboarding/steps'
-import { dateStringVN, timeStringVN, isSameDayVN, dateShortVN, dateFullVN } from '../utils/dateVN'
+import { dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { useDateScope } from '../hooks/useDateScope'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
@@ -42,6 +44,48 @@ import type { ExpenseCategory, Row, UUID } from '../types/domain'
 
 // Pill cuối trang (Hỗ trợ / góp ý · In báo cáo).
 const FOOT_BTN = 'px-5 py-2.5 rounded-full bg-surface-light border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all duration-300 cursor-pointer text-[10px] font-black uppercase tracking-[0.15em] whitespace-nowrap text-primary'
+
+// Tiền mặt / chuyển khoản dự kiến từ đơn khi chưa có phiếu chốt ca: payment_method khác 'cash' tính là chuyển khoản.
+const splitByMethod = (orders: Row[]) => {
+    let cash = 0, transfer = 0
+    for (const o of orders) {
+        if (o.payment_method === 'cash') cash += o.total || 0
+        else transfer += o.total || 0
+    }
+    return { cash, transfer }
+}
+
+// Thực thu cho cả view ngày lẫn khoảng: ngày nào có phiếu chốt thì lấy số đã nhập, chưa chốt thì rơi về tổng đơn của ngày đó.
+function calculateSyncedCashFlow(isDay: boolean, singleClosing: Row | null | undefined, rangeClosings: Row[] | null | undefined, rangeOrders: Row[], rangeOffline: Row[] = []) {
+    const orders = [...rangeOrders, ...rangeOffline].filter(isLiveOrder)
+    if (isDay) {
+        return singleClosing
+            ? { cash: singleClosing.actual_cash || 0, transfer: singleClosing.actual_transfer || 0 }
+            : splitByMethod(orders)
+    }
+
+    const closingByDay = new Map<string, { cash: number; transfer: number }>()
+    for (const s of rangeClosings || []) {
+        const day = dateStringVN(new Date(s.closed_at || s.created_at))
+        const val = closingByDay.get(day) ?? { cash: 0, transfer: 0 }
+        val.cash += s.actual_cash || 0
+        val.transfer += s.actual_transfer || 0
+        closingByDay.set(day, val)
+    }
+    const ordersByDay = new Map<string, Row[]>()
+    for (const o of orders) {
+        const day = dateStringVN(new Date(o.created_at || o.createdAt))
+        ordersByDay.set(day, [...(ordersByDay.get(day) || []), o])
+    }
+
+    let cash = 0, transfer = 0
+    for (const day of new Set([...closingByDay.keys(), ...ordersByDay.keys()])) {
+        const v = closingByDay.get(day) ?? splitByMethod(ordersByDay.get(day) || [])
+        cash += v.cash
+        transfer += v.transfer
+    }
+    return { cash, transfer }
+}
 
 export default function DailyReportPage() {
     const navigate = useNavigate()
@@ -115,21 +159,6 @@ export default function DailyReportPage() {
     // shift_closing data below (all Cuối kỳ counted + cash + transfer both entered),
     // and only synced to localStorage for HistoryPage to classify subsequent expenses
     // as "Sau ca".
-    const [isSavingShift, setIsSavingShift] = useState(false)
-    const saveShiftClosing = useCallback(async (payload: Row, { existingId }: { existingId?: UUID } = {}) => {
-        if (isSavingShift) return null
-        setIsSavingShift(true)
-        try {
-            const saved = existingId
-                ? await updateShiftClosing(existingId, payload)
-                : await insertShiftClosing(payload)
-
-            invalidateDailyContext(addressId)
-            return saved
-        } finally {
-            setIsSavingShift(false)
-        }
-    }, [addressId, isSavingShift])
 
     // Onboarding phase 3 "Báo cáo dòng tiền" + phase 4 "Báo cáo tồn kho" progress — xem
     // onboarding/steps.ts. Cờ chỉ set true (không revert) nên không tái xuất
@@ -291,17 +320,7 @@ export default function DailyReportPage() {
     // Payments của ngày scope hiện tại — driver chính của cashflow refill (paid_at-based).
     const displayPayments = isTodayScope ? (todayPayments || []) : (apiPayments || [])
 
-    const rangeLabel = useMemo(() => {
-        if (scope === 'day') {
-            return dateFullVN(rangeStart)
-        }
-        if (scope === 'custom' && customRange?.startISO && customRange?.endISO) {
-            const sStr = customRange.startISO.split('-')
-            const eStr = customRange.endISO.split('-')
-            return `${sStr[2]}/${sStr[1]} – ${eStr[2]}/${eStr[1]}`
-        }
-        return `${dateShortVN(rangeStart)} – ${dateShortVN(rangeEnd)}`
-    }, [scope, rangeStart, rangeEnd, customRange])
+    const rangeLabel = useMemo(() => calcRangeWithLabel(scope, offset, customRange).label, [scope, offset, customRange])
 
     const isReady = !isLoadingHistory && isAsyncReady
 
@@ -418,24 +437,12 @@ export default function DailyReportPage() {
 
         // Bucket orders by VN date string so calculateLossValue can look up
         // per-day consumption (same dayStr key the RangeLossCard uses).
-        const itemsByDay: Record<string, { productId: UUID; qty: number; extras: { id: string }[] }[]> = {}
-        const pushItem = (dayStr: string, productId: UUID, qty: number, extras: { id: string }[]) => {
-            if (!itemsByDay[dayStr]) itemsByDay[dayStr] = []
-            itemsByDay[dayStr].push({ productId, qty, extras })
-        }
+        const itemsByDay: Record<string, ReturnType<typeof orderItemsOf>> = {}
         const sourceOrders: Row[] = isDayScope ? [...displayOrders, ...offlineToday] : (apiOrders || [])
         for (const o of sourceOrders) {
             if (!isLiveOrder(o)) continue
             const dayStr = dateStringVN(new Date(o.created_at || o.createdAt))
-            const items = o.order_items || o.cart || o.orderItems || []
-            for (const i of items) {
-                pushItem(
-                    dayStr,
-                    i.product_id || i.productId,
-                    i.quantity || i.qty || 1,
-                    i.extra_ids ? i.extra_ids.map((id: string) => ({ id })) : (i.extras || [])
-                )
-            }
+            ;(itemsByDay[dayStr] ||= []).push(...orderItemsOf(o))
         }
         const dailyConsumption: Record<string, ReturnType<typeof calculateEstimatedConsumption>> = {}
         for (const [dayStr, items] of Object.entries(itemsByDay)) {
@@ -471,64 +478,6 @@ export default function DailyReportPage() {
     // NVL refill không trừ ở đây (đã nằm trong COGS/tiêu hao qua kiểm kê).
     const netProfit = totalRevenue - totalCOGS - lossValue - nonRecipeUsageTotal - operationalExpense
 
-    // Sync cash flow calculations for both daily view and range view (handling unclosed shifts by falling back to expected order totals)
-    const calculateSyncedCashFlow = (isDay: boolean, singleClosing: Row | null | undefined, rangeClosings: Row[] | null | undefined, rangeOrders: Row[], rangeOffline: Row[] = []) => {
-        if (isDay) {
-            if (singleClosing) {
-                return {
-                    cash: singleClosing.actual_cash || 0,
-                    transfer: singleClosing.actual_transfer || 0
-                }
-            }
-            const orders = [...rangeOrders, ...rangeOffline].filter(isLiveOrder)
-            const cash = orders.filter(o => o.payment_method === 'cash').reduce((sum, o) => sum + (o.total || 0), 0)
-            const transfer = orders.filter(o => o.payment_method !== 'cash').reduce((sum, o) => sum + (o.total || 0), 0)
-            return { cash, transfer }
-        }
-
-        const closingMap = new Map<string, { cash: number; transfer: number }>()
-            ; (rangeClosings || []).forEach(s => {
-                const dateStr = dateStringVN(new Date(s.closed_at || s.created_at))
-                if (!closingMap.has(dateStr)) {
-                    closingMap.set(dateStr, { cash: 0, transfer: 0 })
-                }
-                const val = closingMap.get(dateStr)!
-                val.cash += s.actual_cash || 0
-                val.transfer += s.actual_transfer || 0
-            })
-
-        const ordersByDate = new Map<string, Row[]>()
-        const allOrders = [...rangeOrders, ...rangeOffline].filter(isLiveOrder)
-        allOrders.forEach(o => {
-            const dateStr = dateStringVN(new Date(o.created_at || o.createdAt))
-            if (!ordersByDate.has(dateStr)) {
-                ordersByDate.set(dateStr, [])
-            }
-            ordersByDate.get(dateStr)!.push(o)
-        })
-
-        const allDates = new Set([...closingMap.keys(), ...ordersByDate.keys()])
-
-        let totalCash = 0
-        let totalTransfer = 0
-
-        allDates.forEach(dateStr => {
-            if (closingMap.has(dateStr)) {
-                const closing = closingMap.get(dateStr)!
-                totalCash += closing.cash
-                totalTransfer += closing.transfer
-            } else {
-                const orders = ordersByDate.get(dateStr) || []
-                const cash = orders.filter(o => o.payment_method === 'cash').reduce((sum, o) => sum + (o.total || 0), 0)
-                const transfer = orders.filter(o => o.payment_method !== 'cash').reduce((sum, o) => sum + (o.total || 0), 0)
-                totalCash += cash
-                totalTransfer += transfer
-            }
-        })
-
-        return { cash: totalCash, transfer: totalTransfer }
-    }
-
     // calculateSyncedCashFlow returns { cash, transfer } — alias on destructure to keep
     // the rest of the page calling them actualCash/actualTransfer.
     const { cash: actualCash, transfer: actualTransfer } = useMemo(() => {
@@ -557,13 +506,10 @@ export default function DailyReportPage() {
 
     // Sum today's orders (online + offline) for the system_total_revenue snapshot we send
     // when creating a new shift_closing. Mirrors /shift-closing's calculation.
-    const systemTotalRevenue = useMemo(() => {
-        if (!isTodayScope) return 0
-        let sum = 0
-        for (const o of todayOrders) if (isLiveOrder(o)) sum += o.total || 0
-        for (const o of offlineToday) if (isLiveOrder(o)) sum += o.total || 0
-        return sum
-    }, [isTodayScope, todayOrders, offlineToday])
+    const systemTotalRevenue = useMemo(
+        () => (isTodayScope ? sumLiveRevenue(todayOrders, offlineToday) : 0),
+        [isTodayScope, todayOrders, offlineToday]
+    )
 
     // Có thay đổi chưa lưu ở ô Thực thu → cảnh báo trước khi rời, chống mất số đang gõ dở.
     const hasUnsaved = isTodayScope && cashDirty
@@ -598,15 +544,15 @@ export default function DailyReportPage() {
     // chạy lại bằng closure mới (input + shiftClosing mới nhất) khi cả 2 cờ nhả.
     const cashSavePendingRef = useRef(false)
     useEffect(() => {
-        if (savingCashflow || isSavingShift || !cashSavePendingRef.current) return
+        if (savingCashflow || !cashSavePendingRef.current) return
         cashSavePendingRef.current = false
         handleSaveCashflow()
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [savingCashflow, isSavingShift])
+    }, [savingCashflow])
 
     const handleSaveCashflow = async () => {
         if (!selectedAddress) return
-        if (savingCashflow || isSavingShift) { cashSavePendingRef.current = true; return }
+        if (savingCashflow) { cashSavePendingRef.current = true; return }
         // CHỈ ô đã sửa (xem buildCashPayload): máy kia đang đếm ô còn lại thì số của họ không
         // bị bản cũ trong state máy này đè lên. Đường UPDATE dùng lại đúng cashChanges đã
         // tính cho nút Lưu; chỉ phiếu MỚI mới phải dựng payload đầy đủ.
@@ -624,17 +570,16 @@ export default function DailyReportPage() {
             ...cashPayload,
         }
         try {
-            const saved = await saveShiftClosing(payload, {
-                // isTodaysClosing, KHÔNG phải chỉ có id: get_daily_report_context thỉnh
-                // thoảng trả phiếu HÔM QUA (biên tz — xem chỗ tính persistedCash). Lúc đó ô
-                // Thực thu hiện trống (đúng), nhưng ghi theo id này là UPDATE tiền hôm nay
-                // đè lên phiếu hôm qua: hôm qua sai số, hôm nay vẫn trống. Bỏ id ⇒ đi đường
-                // INSERT, và insertShiftClosing đã tự lành khi đụng unique index cùng ngày.
-                existingId: isTodaysClosing ? shiftClosing?.id : undefined,
-            })
-            // save() trả null khi bị bỏ qua do đang lưu việc khác → không báo thành công giả,
-            // xếp chờ lưu lại khi rảnh.
-            if (!saved) { cashSavePendingRef.current = true; return }
+            // isTodaysClosing, KHÔNG phải chỉ có id: get_daily_report_context thỉnh
+            // thoảng trả phiếu HÔM QUA (biên tz — xem chỗ tính persistedCash). Lúc đó ô
+            // Thực thu hiện trống (đúng), nhưng ghi theo id này là UPDATE tiền hôm nay
+            // đè lên phiếu hôm qua: hôm qua sai số, hôm nay vẫn trống. Bỏ id ⇒ đi đường
+            // INSERT, và insertShiftClosing đã tự lành khi đụng unique index cùng ngày.
+            const existingId = isTodaysClosing ? shiftClosing?.id : undefined
+            const saved = existingId
+                ? await updateShiftClosing(existingId, payload)
+                : await insertShiftClosing(payload)
+            invalidateDailyContext(addressId)
             showToast('Đã lưu thực thu', 'success')
             // Onboarding phase 3: cash/transfer done độc lập theo ô có gõ gì hay không lúc bấm
             // lưu — "trigger không theo thứ tự" (không đọc actual_cash/actual_transfer trong
@@ -675,6 +620,8 @@ export default function DailyReportPage() {
             />
         )
     }
+
+    const restockCfg = editingRestock && (ingredientsList || []).find(i => i.ingredient === editingRestock.ingredient)
 
     return (
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
@@ -807,34 +754,20 @@ export default function DailyReportPage() {
 
             {/* Sửa phiếu nhập kho (bấm 1 dòng "Mua nguyên liệu/bao bì" trong panel Thực chi) —
                 tái dùng RestockModal của /inventory, xem handleEditRestockPayment. */}
-            {editingRestock && (() => {
-                const { entry, ingredient } = editingRestock
-                const cfg = (ingredientsList || []).find(i => i.ingredient === ingredient)
-                return (
-                    <RestockModal
-                        ingredient={ingredient}
-                        unit={getIngredientUnit(ingredient, ingredientUnits[ingredient])}
-                        packSize={cfg?.pack_size}
-                        packUnit={cfg?.pack_unit}
-                        pack2={pack2Of(cfg)}
-                        cashClosedToday={false}
-                        mode="edit"
-                        initial={{
-                            qty: entry.metadata?.qty ?? 0,
-                            subtotal: entry.metadata?.subtotal ?? entry.amount ?? 0,
-                            discount: entry.discount_amount ?? 0,
-                            extraCost: entry.extra_cost ?? 0,
-                            paid: (entry.payments || []).reduce((s: number, p: Row) => s + (p.amount || 0), 0),
-                            paymentMethod: entry.payment_method || 'cash',
-                            cashPhase: entry.metadata?.cash_phase || 'post_close',
-                            purchaseDate: dateStringVN(new Date(entry.created_at)),
-                            purchaseTime: timeStringVN(new Date(entry.created_at)),
-                        }}
-                        onConfirm={handleSaveRestockEdit}
-                        onClose={() => setEditingRestock(null)}
-                    />
-                )
-            })()}
+            {editingRestock && (
+                <RestockModal
+                    ingredient={editingRestock.ingredient}
+                    unit={getIngredientUnit(editingRestock.ingredient, ingredientUnits[editingRestock.ingredient])}
+                    packSize={restockCfg?.pack_size}
+                    packUnit={restockCfg?.pack_unit}
+                    pack2={pack2Of(restockCfg)}
+                    cashClosedToday={false}
+                    mode="edit"
+                    initial={restockInitialFrom(editingRestock.entry)}
+                    onConfirm={handleSaveRestockEdit}
+                    onClose={() => setEditingRestock(null)}
+                />
+            )}
 
             {/* Support Modal */}
             <SupportModal

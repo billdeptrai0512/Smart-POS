@@ -7,6 +7,7 @@ import FloatingLabelInput from '../components/common/FloatingLabelInput'
 import PasswordInput from '../components/common/PasswordInput'
 import PasswordChecklist from '../components/common/PasswordChecklist'
 import { errorMessage } from '../utils/errorMessage'
+import { isStrongPassword } from '../utils/password'
 
 const CODE_TTL = 15 * 60
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
@@ -60,12 +61,8 @@ export default function ForgotPasswordPage() {
                 await verifyPasswordResetCode(username.trim(), code)
                 setStep('password')
             } else {
-                const hasLetter = /[a-zA-Z]/.test(password)
-                const hasNumber = /[0-9]/.test(password)
                 // Danh sách điều kiện ngay dưới ô đã chỉ rõ thiếu gì → câu lỗi khỏi lặp lại.
-                if (password.length < 8 || !hasLetter || !hasNumber) {
-                    throw new Error('Mật khẩu chưa đủ điều kiện')
-                }
+                if (!isStrongPassword(password)) throw new Error('Mật khẩu chưa đủ điều kiện')
                 if (password !== confirm) throw new Error('Hai mật khẩu chưa khớp')
                 await updateOwnPassword(password)
                 setStep('done')

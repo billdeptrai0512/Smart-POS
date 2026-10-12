@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { buildIngredientToProduct, calculateEstimatedConsumption, calculateConsumptionBreakdown, isLiveOrder } from '../../utils/inventory'
+import { buildIngredientToProduct, calculateEstimatedConsumption, calculateConsumptionBreakdown, isLiveOrder, orderItemsOf } from '../../utils/inventory'
 import { getIngredientUnit, ingredientLabel } from '../../utils/ingredients'
 import { norm } from '../../utils/fieldSync'
 import InventoryReportCard from './InventoryReportCard'
@@ -51,17 +51,7 @@ export default function PastInventoryEditor({
     const readOnly = typeof onSave !== 'function'
     const [open, setOpen] = useState(true)
 
-    const orderItems = useMemo(() => {
-        const items: { productId: string; qty: number; extras: { id: string }[] }[] = []
-        dayOrders.filter(isLiveOrder).forEach((o: Row) => {
-            (o.order_items || o.orderItems || o.cart || []).forEach((i: Row) => items.push({
-                productId: i.product_id || i.productId,
-                qty: i.quantity || i.qty || 1,
-                extras: i.extra_ids ? i.extra_ids.map((id: string) => ({ id })) : (i.extras || []),
-            }))
-        })
-        return items
-    }, [dayOrders])
+    const orderItems = useMemo(() => dayOrders.filter(isLiveOrder).flatMap(orderItemsOf), [dayOrders])
 
     const usedMap = useMemo(
         () => calculateEstimatedConsumption(orderItems, recipes, extraIngredients),

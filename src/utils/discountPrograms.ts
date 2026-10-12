@@ -1,4 +1,5 @@
 import { dateStringVN } from './dateVN'
+import { parseVNDInput } from './money'
 
 export interface DiscountProgram { id: string; name: string; enabled: boolean; start_date?: string | null; end_date?: string | null; days_of_week: number[]; type: string; value: number }
 
@@ -50,3 +51,7 @@ export function clampPercentInput(raw: string) {
     if (!digits) return ''
     return String(Math.min(parseInt(digits, 10), 100))
 }
+
+/** Số thật từ ô nhập mức giảm: percent → số nguyên 0-100, còn lại → VND. */
+export const parseDiscountValue = (type: string, raw: string) =>
+    type === 'percent' ? Math.min(parseInt(raw, 10) || 0, 100) : parseVNDInput(raw)

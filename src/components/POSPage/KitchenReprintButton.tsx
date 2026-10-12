@@ -4,7 +4,7 @@ import { useCart } from '../../contexts/CartContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { nativePrinterIp } from '../../lib/escposBitmap'
 import { printKitchenTicket } from '../common/KitchenTicket'
-import { CHIP_IDLE } from '../common/ModalShell'
+import { CHIP_ICON } from '../common/ModalShell'
 import type { TableRound } from '../../services/orderService'
 
 // In lại phiếu bếp cho 1 đợt/đơn (TableDetailModal, TakeawayListModal) — khi lần in tự động
@@ -33,7 +33,7 @@ export default function KitchenReprintButton({ round, tableName }: { round: Pick
             onClick={reprint}
             disabled={printing}
             aria-label="In lại phiếu bếp"
-            className={`${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center hover:text-primary disabled:opacity-50`}
+            className={`${CHIP_ICON} hover:text-primary disabled:opacity-50`}
         >
             {printing ? <Loader size={13} className="animate-spin" /> : <ChefHat size={13} strokeWidth={2.25} />}
         </button>
