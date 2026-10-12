@@ -368,7 +368,7 @@ const IngredientRow = memo(function IngredientRow({
         const moneyTxt = giaTri != null ? ` · ${formatVND(Math.abs(giaTri))}` : ''
         badge = { text: `Hụt ${Math.abs(haoHut)} ${unit}${moneyTxt}`, tone: 'bad' }
     } else {
-        badge = { text: phantomDu ? 'Thiếu ghi nhập' : `Dư ${haoHut} ${unit}`, tone: 'warn' }
+        badge = { text: `Dư ${haoHut} ${unit}`, tone: 'warn' }
     }
     const badgeToneCls = {
         good: 'bg-success/10 text-success border-success/30',
