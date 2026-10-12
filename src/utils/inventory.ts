@@ -306,7 +306,7 @@ export function buildRecipeIngredientSet(recipes: RecipeRow[] = [], extraIngredi
 // Như lookupByLabel nhưng dựng chỉ mục nhãn MỘT lần cho mỗi map (cache theo identity — map tiêu hao không bị sửa
 // sau khi tạo): lookupByLabel quét cả map mỗi lần trượt khoá, nhân (ngày × nguyên liệu) là hàng trăm nghìn lần.
 const labelIndexOf = new WeakMap<UsageMap, Map<string, number>>()
-function usedOf(map: UsageMap, ingredient: string): number {
+export function usedOf(map: UsageMap, ingredient: string): number {
     if (map[ingredient] != null) return map[ingredient]
     let index = labelIndexOf.get(map)
     if (!index) {
@@ -378,17 +378,20 @@ export function rollIngredientDays({ shiftClosings = [], dailyConsumption = {}, 
 /**
  * Tồn quầy ƯỚC TÍNH của 1 dòng get_ingredient_stocks_v2 (xem 20261005_ingredient_stocks_counted_on.sql):
  *   quầy = max(0, số đếm cuối + Σ nhập thêm sau ngày đếm − Σ tiêu hao từ sau ngày đếm tới nay)
- * Không nối khi: không có ngày đếm (chỉ từ Đầu kỳ/setup), đã đếm hôm nay, hoặc `usedByDay` (từ
- * `fromDay`) không phủ hết khoảng từ ngày đếm — thiếu tiêu hao thì tồn ra cao giả, thà giữ số thô.
+ * Không nối khi: không có ngày đếm (chỉ từ Đầu kỳ/setup), đã đếm hôm nay mà entry chưa có giờ đếm, hoặc `usedByDay`
+ * (từ `fromDay`) không phủ hết khoảng từ ngày đếm — thiếu tiêu hao thì tồn ra cao giả, thà giữ số thô.
+ * Entry có `counter_counted_at`: tiêu hao của CHÍNH ngày đếm tính từ giờ đó (`afterCount[ingredient]`, đơn sau giờ đếm —
+ * usageAfterCount), cộng các ngày sau. Đếm hôm nay thì chỉ còn phần này.
  * current_stock = kho + quầy ước tính (kho tổng giữ nguyên: nhập thêm đã trừ khỏi kho từ trước).
  * Kẹp ≥ 0 MỘT lần ở cuối (restock_since_count là tổng, không có theo ngày). rollIngredientDays kẹp từng ngày nên khác
  * nhau ở đúng một ca: tồn chạm 0 giữa chừng rồi sau đó mới có nhập thêm — roll thực tế hơn, estimate thấp hơn.
  * usedByDay: { 'YYYY-MM-DD': { ingredient: usedAmount } }
  */
-export function estimateCounterRow(row: Row, usedByDay: Record<string, UsageMap>, { today, fromDay }: { today: string; fromDay: string }) {
+export function estimateCounterRow(row: Row, usedByDay: Record<string, UsageMap>, { today, fromDay, afterCount }: { today: string; fromDay: string; afterCount: UsageMap }) {
     const on = row.counter_counted_on
-    if (!on || on >= today || nextDayStr(on) < fromDay) return row
-    let used = 0
+    const at = row.counter_counted_at
+    if (!on || (on >= today && !at) || nextDayStr(on) < fromDay) return row
+    let used = at ? afterCount[row.ingredient] ?? 0 : 0
     for (const [day, map] of Object.entries(usedByDay)) {
         if (day > on) used += usedOf(map, row.ingredient)
     }

@@ -2,7 +2,7 @@ import type { Row } from '../types/domain'
 import { fetchOrdersSince } from './reportService'
 import { fetchStoredUsage, saveUsageDays } from './dailyUsageService'
 import { estimateCounterRow, type ExtraIngredients, type RecipeRow, type UsageMap } from '../utils/inventory'
-import { missingUsageDays, usageByDay } from '../utils/dailyUsage'
+import { missingUsageDays, usageAfterCount, usageByDay } from '../utils/dailyUsage'
 import { dateStringVN, addDaysVN, nextDayStr } from '../utils/dateVN'
 
 // Xa hơn số ngày này thì giữ số đếm thô: tải cả chục nghìn đơn chỉ để ước tính một NVL bỏ quên là không đáng.
@@ -23,16 +23,19 @@ async function loadUsage(rows: Row[], addressId: string, { recipes, extraIngredi
     const today = dateStringVN()
     const floor = dateStringVN(addDaysVN(new Date(), -MAX_DAYS))
     let oldest: string | null = null
+    // Ngày đếm của các dòng có giờ đếm: đơn của ngày đó sau giờ đếm cũng phải trừ (usageAfterCount).
+    const stampedDays = new Set<string>()
     for (const r of rows) {
         const on = r.counter_counted_on
         // Quầy + nhập thêm = 0 thì ước tính chắc chắn cũng 0 (kẹp ≥ 0) — không đáng tải đơn cả tháng vì NVL đó.
-        if (r.counter_stock + r.restock_since_count <= 0) continue
-        if (on && on < today && on >= floor && (!oldest || on < oldest)) oldest = on
+        if (r.counter_stock + r.restock_since_count <= 0 || !on || on < floor) continue
+        if (on < today && (!oldest || on < oldest)) oldest = on
+        if (r.counter_counted_at && (on < today || includeToday)) stampedDays.add(on)
     }
-    if (!oldest) return null
-    const fromDay = nextDayStr(oldest)
+    if (!oldest && !stampedDays.size) return null
+    const fromDay = oldest ? nextDayStr(oldest) : today
     const [stored, todayOrders] = await Promise.all([
-        fetchStoredUsage(addressId, fromDay, today),
+        oldest ? fetchStoredUsage(addressId, fromDay, today) : {},
         includeToday ? fetchOrdersSince(addressId, today) : [],
     ])
     const missing = missingUsageDays(stored, fromDay, today)
@@ -45,7 +48,13 @@ async function loadUsage(rows: Row[], addressId: string, { recipes, extraIngredi
     }
     const used = { ...stored, ...computed }
     if (includeToday) Object.assign(used, usageByDay(todayOrders, [today], recipes, extraIngredients))
-    return { used, today, fromDay }
+    // Ngày đếm trong quá khứ: ngày đó đã đóng băng nguyên ngày nên phần sau giờ đếm phải tính lại từ đơn của riêng ngày đó.
+    const ordersByDay: Record<string, Row[]> = {}
+    await Promise.all([...stampedDays].map(async day => {
+        ordersByDay[day] = day === today ? todayOrders : await fetchOrdersSince(addressId, day, nextDayStr(day))
+    }))
+    const afterCount = usageAfterCount(rows, ordersByDay, recipes, extraIngredients)
+    return { used, today, fromDay, afterCount }
 }
 
 // rows = kết quả fetchIngredientStocks của MỘT địa chỉ. NVL chưa đếm hôm nay thì tồn quầy được nối theo lý thuyết
@@ -71,7 +80,7 @@ export async function estimateOpeningStocks(rows: Row[] | null | undefined, addr
     try {
         const priorRows = rows.filter(r => r.prior_counted_on).map(r => ({
             ingredient: r.ingredient, warehouse_stock: r.warehouse_stock,
-            counter_stock: r.prior_counter_stock, counter_counted_on: r.prior_counted_on, restock_since_count: r.prior_restock_since,
+            counter_stock: r.prior_counter_stock, counter_counted_on: r.prior_counted_on, counter_counted_at: r.prior_counted_at, restock_since_count: r.prior_restock_since,
         }))
         const usage = await loadUsage(priorRows, addressId, calc, false)
         if (!usage) return {}
