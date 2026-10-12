@@ -312,16 +312,25 @@ const IngredientRow = memo(function IngredientRow({
     //   Hao hụt   = Thực tế − Lý thuyết
     //               (âm = thiếu → mất hàng / công thức sai;
     //                dương = dư → nhập vượt / công thức trừ thiếu)
-    const { openingNum, usedNum, lyThuyet, haoHut } = computeBalance({ inventoryValue, restockValue, openingValue, openingFallback, used })
+    // Kỳ kiểm kê (lần đếm trước cách từ 2 ngày, đầu kỳ chưa bị sửa tay): hiển thị CỘNG DỒN từ lần đếm — Đầu kỳ = số đã đếm,
+    // Sử dụng = dùng cả kỳ + hôm nay, nhập thêm = đã nhập trong kỳ + nhập hôm nay. Chỉ là cách hiện; số lưu vẫn theo ngày.
+    const p = isLocked ? undefined : period
+    const restockTotal = p ? restockNum + p.restock : restockNum
+    const { openingNum, usedNum, lyThuyet, haoHut } = p
+        ? computeBalance({ inventoryValue, restockValue: restockTotal, openingValue: p.counted, used: r1(used) + p.used })
+        : computeBalance({ inventoryValue, restockValue, openingValue, openingFallback, used })
     const haoHutTone = haoHut == null
         ? 'neutral'
         : haoHut === 0 ? 'good' : haoHut < 0 ? 'bad' : 'warn'
+
+    // Lý thuyết âm mà đếm ra dương = "dư" ảo (dùng nhiều hơn đầu kỳ + nhập → nhập hàng chưa ghi): không quy ra tiền / ly.
+    const phantomDu = haoHut != null && haoHut > 0 && lyThuyet < 0
 
     // Money value of the discrepancy = |Hao hụt| × unit_cost. Render absolute number
     // tinted by sign so the negative magnitude is implicit in the tone.
     const unitCost = Number(ing.unit_cost) || 0
     let giaTri: number | null = null
-    if (haoHut != null && unitCost > 0) {
+    if (haoHut != null && !phantomDu && unitCost > 0) {
         const rawCost = Math.abs(haoHut * unitCost)
         giaTri = haoHut < 0 ? -rawCost : rawCost
     }
@@ -330,7 +339,7 @@ const IngredientRow = memo(function IngredientRow({
     // could have made. Skips ingredients where amountPerCup is missing/1 (cup/lid passthrough).
     let tuongDuongText = '—'
     const perCup = productRef?.amountPerCup ?? 0
-    if (haoHut != null && perCup > 0 && haoHut !== 0) {
+    if (haoHut != null && !phantomDu && perCup > 0 && haoHut !== 0) {
         const cups = Math.round(Math.abs(haoHut) / perCup)
         if (cups > 0) tuongDuongText = `≈ ${cups} ly ${productRef?.productName || ''}`.trim()
     }
@@ -359,7 +368,7 @@ const IngredientRow = memo(function IngredientRow({
         const moneyTxt = giaTri != null ? ` · ${formatVND(Math.abs(giaTri))}` : ''
         badge = { text: `Hụt ${Math.abs(haoHut)} ${unit}${moneyTxt}`, tone: 'bad' }
     } else {
-        badge = { text: `Dư ${haoHut} ${unit}`, tone: 'warn' }
+        badge = { text: phantomDu ? 'Thiếu ghi nhập' : `Dư ${haoHut} ${unit}`, tone: 'warn' }
     }
     const badgeToneCls = {
         good: 'bg-success/10 text-success border-success/30',
@@ -388,28 +397,30 @@ const IngredientRow = memo(function IngredientRow({
             </button>
 
             {!open ? null : (<div className="pb-3">
-                {/* Lần kiểm kê trước cách từ 2 ngày: Đầu kỳ bên dưới đã gồm các ngày giữa — dòng này cho thấy quãng đó dùng/nhập bao nhiêu. */}
-                {period && (
+                {p && (
                     <div className="grid grid-cols-3 gap-2 mb-2">
-                        <TextCell label="Kiểm lần cuối" text={countedLabelVN(period.since)} />
-                        <TextCell label="Đã dùng" text={`${period.used} ${unit}`} />
-                        <TextCell label="Đã nhập thêm" text={`${period.restock} ${unit}`} />
+                        <TextCell label="Kiểm lần cuối" text={countedLabelVN(p.since)} />
+                        <div className="col-span-2">
+                            <TextCell label="Đã nhập thêm" text={`${p.restock} ${unit}`} />
+                        </div>
                     </div>
                 )}
 
                 {/* Row 1 — warehouse level */}
                 <div className="grid grid-cols-3 gap-2">
-                    <ColumnInput
-                        label="Đầu kỳ"
-                        value={openingDisplay}
-                        unit={unit}
-                        disabled={isLocked || isSubmitting || lockWarehouseInputs || readOnly}
-                        onChange={(v) => onOpeningChange(ing.ingredient, v)}
-                        locked={isLocked || lockWarehouseInputs || readOnly}
-                    />
+                    {p ? <TextCell label="Đầu kỳ" text={`${p.counted} ${unit}`} /> : (
+                        <ColumnInput
+                            label="Đầu kỳ"
+                            value={openingDisplay}
+                            unit={unit}
+                            disabled={isLocked || isSubmitting || lockWarehouseInputs || readOnly}
+                            onChange={(v) => onOpeningChange(ing.ingredient, v)}
+                            locked={isLocked || lockWarehouseInputs || readOnly}
+                        />
+                    )}
                     <div className="col-span-2">
                         <ColumnInput
-                            label="Nhập thêm"
+                            label={p ? 'Nhập hôm nay' : 'Nhập thêm'}
                             value={restockValue || ''}
                             unit={unit}
                             disabled={isSubmitting || lockWarehouseInputs || readOnly}
@@ -422,19 +433,20 @@ const IngredientRow = memo(function IngredientRow({
 
                 {/* Row 2 — counter level */}
                 <div className="grid grid-cols-3 gap-2 mt-2">
-                    <TextCell label="Đã bán" text={totalCupsText} />
-                    <div className="col-span-2">
+                    {/* Kỳ nhiều ngày: không có số ly cộng dồn (ngày đã chốt chỉ lưu gram) và chi tiết món chỉ của hôm nay → ẩn cả hai. */}
+                    {!p && <TextCell label="Đã bán" text={totalCupsText} />}
+                    <div className={p ? 'col-span-3' : 'col-span-2'}>
                         <TextCell
                             label="Sử dụng"
                             text={`${usedNum} ${unit}`}
-                            onClick={hasBreakdown ? toggleExpanded : undefined}
+                            onClick={hasBreakdown && !p ? toggleExpanded : undefined}
                             expanded={expanded}
                         />
                     </div>
 
                 </div>
 
-                {expanded && hasBreakdown && (
+                {expanded && hasBreakdown && !p && (
                     <div className="mt-2 px-3 py-2 bg-surface-light rounded-[10px] border border-border/40 flex flex-col gap-1">
                         {Object.values(breakdown)
                             .filter((e) => (Number(e.totalAmount) || 0) > 0)
@@ -480,7 +492,7 @@ const IngredientRow = memo(function IngredientRow({
                 {showLyThuyetInfo && (
                     /* Nhãn trên, số dưới — 1 hàng không wrap kể cả màn 320px */
                     <div className="mt-2 px-2 py-2 bg-surface-light rounded-[10px] border border-border/40 flex items-center justify-between gap-1 text-[10px] leading-tight whitespace-nowrap">
-                        {[['Đầu kỳ', openingNum], ['Nhập thêm', restockNum], ['Sử dụng', usedNum], ['Lý thuyết', lyThuyet]].map(([label, val], i) => (
+                        {[['Đầu kỳ', openingNum], ['Nhập thêm', restockTotal], ['Sử dụng', usedNum], ['Lý thuyết', lyThuyet]].map(([label, val], i) => (
                             <Fragment key={label}>
                                 {i > 0 && <span className="text-text-secondary">{['+', '−', '='][i - 1]}</span>}
                                 <span className="flex flex-col items-center gap-0.5">

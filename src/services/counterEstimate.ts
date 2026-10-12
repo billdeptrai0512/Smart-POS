@@ -71,8 +71,8 @@ export async function withCounterEstimate(rows: Row[] | null | undefined, addres
     }
 }
 
-// Tóm tắt kỳ kiểm kê của 1 NVL: ngày đếm trước (YYYY-MM-DD), tổng dùng và tổng nhập thêm từ sau đó tới hôm qua.
-export type OpeningPeriods = Record<string, { since: string; used: number; restock: number }>
+// Kỳ kiểm kê của 1 NVL: ngày đếm trước (YYYY-MM-DD) + số đã đếm, tổng dùng và tổng nhập thêm từ sau đó tới hôm qua.
+export type OpeningPeriods = Record<string, { since: string; counted: number; used: number; restock: number }>
 const emptyOpening = (): { stocks: UsageMap; periods: OpeningPeriods } => ({ stocks: {}, periods: {} })
 
 // Đầu kỳ HÔM NAY = tồn quầy ước tính cuối hôm qua, tính từ lần đếm gần nhất TRƯỚC hôm nay (prior_* của RPC): cùng công
@@ -81,7 +81,7 @@ const emptyOpening = (): { stocks: UsageMap; periods: OpeningPeriods } => ({ sto
 // Trả mọi NVL ước tính được (caller cho nó thắng số trong phiếu gần nhất).
 // `periods`: với NVL có ngày ở giữa lần đếm trước và hôm nay (cách từ 2 ngày) — tổng dùng/nhập của cả quãng đó, để báo cáo
 // trả lời "từ lần kiểm kê trước dùng bao nhiêu, nhập bao nhiêu". Dùng tiêu hao thật từng ngày, không suy ngược từ ước tính.
-// → { stocks: { ingredient: số }, periods: { ingredient: { since, used, restock } } }
+// → { stocks: { ingredient: số }, periods: { ingredient: { since, counted, used, restock } } }
 export async function estimateOpening(rows: Row[] | null | undefined, addressId: string | null | undefined, calc: CounterCalc) {
     if (!addressId || !rows?.length) return emptyOpening()
     try {
@@ -97,7 +97,7 @@ export async function estimateOpening(rows: Row[] | null | undefined, addressId:
             if (!e.counter_estimated) continue
             out.stocks[r.ingredient] = e.counter_stock
             if (nextDayStr(r.counter_counted_on) < usage.today)
-                out.periods[r.ingredient] = { since: r.counter_counted_on, used: r1(usedSinceCount(r, usage.used, usage.afterCount)), restock: r.restock_since_count }
+                out.periods[r.ingredient] = { since: r.counter_counted_on, counted: r.counter_stock, used: r1(usedSinceCount(r, usage.used, usage.afterCount)), restock: r.restock_since_count }
         }
         return out
     } catch (err) {
