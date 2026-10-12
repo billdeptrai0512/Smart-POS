@@ -93,6 +93,7 @@ export async function setCounterStock(addressId: UUID | null, ingredient: string
             ingredient, unit: item?.unit, remaining,
             opening: item?.opening ?? null, opening_locked: !!item?.opening_locked,
             restock: item?.restock ?? null, skipped: !!item?.skipped,
+            recounted: true,   // xác nhận đếm: RPC đóng giờ đếm mới kể cả khi số không đổi
         }], null)
     }
 

@@ -10,7 +10,7 @@ import { fetchTransferToAddress } from '../services/warehouseTransferService'
 import { getPendingOrders } from './useOfflineSync'
 import { calculateEstimatedConsumption, orderItemsOf, isLiveOrder, forecastFromWeeks, r1 } from '../utils/inventory'
 import {
-    buildPrepTodayList, buildDepletedList, mergePrepItems, isPrepDone, isPrepFilled,
+    buildPrepTodayList, buildDepletedList, type PrepConfirmed, mergePrepItems, isPrepDone, isPrepFilled,
     buildWarehousePrepList, buildTodayBoughtMap, HISTORY_OFFSETS_TODAY, HISTORY_OFFSETS_TOMORROW, RECENT_OFFSETS_TODAY, RECENT_OFFSETS_TOMORROW, type SentMap,
 } from '../utils/prepToday'
 import { ingredientLabel } from '../utils/ingredients'
@@ -128,15 +128,20 @@ export function usePrepNotice() {
     }, [selectedAddress.id])
     const ready = base.ready && sent !== null
 
+    // Món hết giữa ca vừa lấy trong lần mở modal này → { ingredient: { qty, warehouse } }. Giữ món ở lại danh sách làm dòng
+    // "Đã lấy" đến khi đóng modal (settle); bấm lại dòng đó = hoàn tác đúng số đã lấy.
+    const [confirmed, setConfirmed] = useState<PrepConfirmed>({})
+    const settle = useCallback(() => setConfirmed({}), [])
+
     const items = useMemo(() => {
         if (!ready) return []
         return mergePrepItems(
             buildPrepTodayList({ ...common, restockInputs, inventoryInputs: inventory.inventoryInputs, lastWeekUsedMap: forecastMap, sent: sent! }),
-            buildDepletedList({ ...common, restockInputs, inventoryInputs: inventory.inventoryInputs, skipped, effectiveWarehouseStocks: inventory.effectiveWarehouseStocks }),
+            buildDepletedList({ ...common, restockInputs, inventoryInputs: inventory.inventoryInputs, skipped, effectiveWarehouseStocks: inventory.effectiveWarehouseStocks, confirmed }),
             restockInputs)
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ready, common.ingredientsList, common.openingInputs, common.openingStock, common.warehouseStocks, common.usedMap,
-        inventory.effectiveWarehouseStocks, inventory.inventoryInputs, forecastMap, restockInputs, skipped, sent])
+        inventory.effectiveWarehouseStocks, inventory.inventoryInputs, forecastMap, restockInputs, skipped, confirmed, sent])
 
     const checked = useMemo(
         () => Object.fromEntries(items.map(it => [it.ingredient, isPrepDone(it, restockInputs, skipped)])),
@@ -181,8 +186,19 @@ export function usePrepNotice() {
         let next: number | string
         const fillQty = it.fillQty ?? 0
         if (it.kind === 'depleted') {
+            if (it.taken != null) {
+                const back = r1(Number(restockInputs[ingredient] || 0) - it.taken)
+                inventory.onRestockChange(ingredient, back > 0 ? String(back) : '')
+                // qty 0 = đã hoàn tác; vẫn giữ mục để kho đóng băng về số trước khi lấy (xoá đi thì số nhảy 1 → 0 → 1 như lúc tick).
+                const taken = it.taken
+                setConfirmed(c => ({ ...c, [ingredient]: { qty: 0, warehouse: it.warehouse == null ? null : r1(it.warehouse + taken) } }))
+                schedulePush()
+                return
+            }
             if (fillQty <= 0) return noStock()
             next = r1(Number(restockInputs[ingredient] || 0) + fillQty)
+            const warehouse = it.warehouse == null ? null : Math.max(0, r1(it.warehouse - fillQty))
+            setConfirmed(c => ({ ...c, [ingredient]: { qty: fillQty, warehouse } }))
         } else {
             const fill = it.warehouse != null ? Math.min(fillQty, it.warehouse) : fillQty
             if (!filled && !(fill > 0)) return noStock()
@@ -200,7 +216,7 @@ export function usePrepNotice() {
         schedulePush()
     }, [skipped, restockInputs, inventory, schedulePush])
 
-    return { ...view, ready, confirmPrep, toggleSkip, toast }
+    return { ...view, ready, confirmPrep, toggleSkip, settle, toast }
 }
 
 // /inventory — "Bổ sung tồn kho": NVL cần MUA thêm cho ngày mai. Mua qua RestockModal của caller (không

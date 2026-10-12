@@ -3,6 +3,7 @@ import { Check, Trash2 } from 'lucide-react'
 import { formatPackedQty, netStockOf } from '../../utils/inventory'
 import { INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 import { onboardingHintClass } from '../../utils/onboardingHint'
+import { countedLabelVN } from '../../utils/dateVN'
 import Dropdown from '../common/Dropdown'
 import type { Pack2 } from '../../utils/inventory'
 import type { IngredientGroup } from '../../types/domain'
@@ -181,6 +182,7 @@ interface CounterPanelProps extends PackProps {
     counterStock?: number | null
     currentStock?: number | null
     counterCountedOn?: string | null
+    counterCountedAt?: string | null
     canEdit?: boolean
     onSaveCounter?: SaveNumber
     onSaveTareWeight?: SaveNumber
@@ -192,6 +194,7 @@ export function IngredientCounterPanel({
     minCounterStock,        // tồn QUẦY ít nhất
     counterStock, currentStock,
     counterCountedOn,       // 'YYYY-MM-DD' | null — ngày kiểm kê gần nhất của tồn quầy
+    counterCountedAt,       // ISO | null — giờ kiểm kê đó (null ở entry cũ chưa có dấu giờ)
     canEdit,
     onSaveCounter,      // (newCounter: number)    => Promise  (Tồn quầy → ghi remaining ca mới nhất)
     onSaveTareWeight,   // (newTare: number)       => Promise  (0 = xoá bì)
@@ -225,7 +228,7 @@ export function IngredientCounterPanel({
                     value={counterStock} unit={unit}
                     hasPack={hasPack} packSize={packSize} packUnit={packUnit} pack2={pack2}
                     canEdit={canEdit} editable onSave={onSaveCounter}
-                    note={counterCountedOn ? `Kiểm kê lần cuối: ${counterCountedOn.split('-').reverse().join('/')}` : null}
+                    note={counterCountedOn ? `Kiểm kê lần cuối: ${countedLabelVN(counterCountedOn, counterCountedAt, true)}` : null}
                 />
                 {showTare && (
                     <TareRow tareWeight={tareWeight} unit={unit} canEdit={canEdit} onSave={onSaveTareWeight} hint={hintTare} />
