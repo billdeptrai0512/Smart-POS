@@ -10,7 +10,7 @@ import { useProducts } from '../../contexts/ProductContext'
 import { useWarehousePrep } from '../../hooks/usePrepNotice'
 import { processIngredientRestock, recordInvoicePayment } from '../../services/orderService'
 import { fetchCashClosedToday } from '../../services/reportService'
-import { fetchIngredientDebts } from '../../services/expenseService'
+import { fetchIngredientDebts, type IngredientDebt } from '../../services/expenseService'
 import { formatVND } from '../../utils/money'
 import { getIngredientUnit, ingredientLabel } from '../../utils/ingredients'
 import { pack2Of } from '../../utils/inventory'
@@ -29,6 +29,9 @@ import type { Row } from '../../types/domain'
 // Bấm tên nguyên liệu → sang trang chi tiết (trang cha unmount); cờ module này cho lần mount kế
 // (back về /inventory) mở lại đúng bảng — cùng kiểu cache `saved` của IngredientManagementPage.
 let reopenSheet = false
+// Công nợ lần tải gần nhất theo địa chỉ: về lại từ trang chi tiết thì section Công nợ có NGAY (như ảnh chụp của useSnapshot
+// bên danh sách Cần mua) thay vì hiện sau → khỏi đẩy danh sách xuống. Tải xong thì thay bằng số thật.
+const debtSnapshots = new Map<string, IngredientDebt[]>()
 
 interface Props {
     onRestocked?: () => unknown
@@ -53,14 +56,14 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
     // Món đã mua đủ (done) vẫn nằm trong danh sách → đếm tiến độ "đã mua / tổng", mẫu số đứng yên suốt ngày.
     const total = items.length
     const doneCount = items.filter(it => it.done).length
-    const [debts, setDebts] = useState<{ ingredient: string; owing: number; invoices: Row[] }[]>([])
+    const [debts, setDebts] = useState<IngredientDebt[]>(() => debtSnapshots.get(addressId) ?? [])
     const progress = total > 0 ? `${doneCount}/${total}` : debts.length // chỉ còn nợ (không món cần mua) → đếm số NVL nợ
     const [open, setOpen] = useState(reopenSheet)
     useEffect(() => { reopenSheet = false }, [])
     const [restock, setRestock] = useState<{ ingredient: string; qty: number | null } | null>(null)
     const [cashClosedToday, setCashClosedToday] = useState(false)
     const loadDebts = useCallback(
-        () => fetchIngredientDebts(addressId).then(setDebts).catch(err => console.error('fetchIngredientDebts', err)),
+        () => fetchIngredientDebts(addressId).then(d => { debtSnapshots.set(addressId, d); setDebts(d) }).catch(err => console.error('fetchIngredientDebts', err)),
         [addressId])
     useEffect(() => { loadDebts() }, [loadDebts])
     // Nợ chỉ 1 phiếu → mở thẳng form trả nợ; nhiều phiếu thì vào Nhật ký của nguyên liệu để chọn phiếu cần trả.

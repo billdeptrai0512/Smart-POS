@@ -14,6 +14,7 @@ import {
 } from '../services/orderService'
 import { sortIngredients, ingredientLabel, normalizeSearchText, getIngredientUnit, normalizeIngredientKey } from '../utils/ingredients'
 import { netStockOf, pack2Of, isLowStockOf } from '../utils/inventory'
+import { formatVND } from '../utils/money'
 import { readJSON, writeJSON } from '../utils/storage'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
@@ -341,6 +342,12 @@ export default function IngredientManagementPage() {
     }, [allIngredients, effectiveFilter, gidOf, getStockPriority, search])
 
     // ─── Action handlers ───────────────────────────────────────────────
+    // Giá trị kho tổng của các NVL đang hiện (theo bộ lọc nhóm/tìm kiếm) = Σ tồn kho tổng × giá vốn/đơn vị.
+    // Giá vốn 0 (chưa từng nhập) đóng góp 0đ; tồn kho tổng đã kẹp ≥ 0 nên món lệch sổ không làm tổng giảm.
+    const stockValue = useMemo(
+        () => visibleIngredients.reduce((sum, ing) => sum + (stockByIngredient.get(ing)?.warehouse_stock || 0) * (ingredientCosts[ing] || 0), 0),
+        [visibleIngredients, stockByIngredient, ingredientCosts])
+
     async function handleCreateIngredient() {
         if (!newName.trim()) return
         const key = normalizeIngredientKey(newName)
@@ -388,7 +395,7 @@ export default function IngredientManagementPage() {
             <MenuPageHeader
                 title="Tồn kho"
                 count={visibleIngredients.length}
-                unitLabel="loại"
+                unitLabel={stocksLoaded ? `loại · ${formatVND(Math.round(stockValue))}` : 'loại'}
                 subtitle={activeView === 'management' ? (
                     <DateRangePicker
                         scope={dScope}

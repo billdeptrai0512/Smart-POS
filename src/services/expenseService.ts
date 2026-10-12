@@ -190,7 +190,12 @@ export async function fetchIngredientRestockHistory(addressIds: (UUID | null)[] 
 // Công nợ NCC theo nguyên liệu: Σ max(0, amount − Σ payments) trên các phiếu nhập còn hiệu lực của 1 địa chỉ.
 // Quét mọi phiếu nhập (nợ cũ vẫn nợ) theo trang vì PostgREST cắt 1000 dòng; chỉ trả nguyên liệu có nợ > 0, nợ lớn nhất lên đầu.
 // Phiếu hủy bị xóa (CASCADE payments) nên không còn dòng để tính nợ ma.
-export async function fetchIngredientDebts(addressId: UUID) {
+export interface IngredientDebt { ingredient: string; owing: number; invoices: Row[] }
+// Cache 30s theo địa chỉ (reportCache): nhập kho / trả nợ / hủy phiếu đều invalidateReportCache(addressId) nên không bao giờ cũ sau thao tác trong app.
+export const fetchIngredientDebts = (addressId: UUID) =>
+    reportCache.through<IngredientDebt[]>([addressId, 'ingredientDebts'], () => scanIngredientDebts(addressId))
+
+async function scanIngredientDebts(addressId: UUID): Promise<IngredientDebt[]> {
     const PAGE = 1000
     const owingBy: Record<string, { owing: number; invoices: Row[] }> = {}
     for (let from = 0; ; from += PAGE) {
