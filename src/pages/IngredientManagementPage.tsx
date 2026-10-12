@@ -117,9 +117,9 @@ export default function IngredientManagementPage() {
     const restoreScrollRef = useRef(saved?.scroll ?? null)
     useEffect(() => { saved = null }, [])
 
-    const openIngredient = (ingredient: string) => {
+    const openIngredient = (ingredient: string, tab?: 'history') => {
         saved = { scroll: mainRef.current?.scrollTop ?? 0, groupFilter, search }
-        navigate(`/inventory/stocking/${ingredient}`, { state: location.state })
+        navigate(`/inventory/stocking/${ingredient}${tab ? `?tab=${tab}` : ''}`, { state: location.state })
     }
 
     // Stock & modals

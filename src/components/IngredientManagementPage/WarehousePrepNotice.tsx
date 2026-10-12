@@ -32,7 +32,7 @@ let reopenSheet = false
 
 interface Props {
     onRestocked?: () => unknown
-    onOpenIngredient?: (ingredient: string) => void
+    onOpenIngredient?: (ingredient: string, tab?: 'history') => void
 }
 
 export default function WarehousePrepNotice({ onRestocked, onOpenIngredient }: Props) {
@@ -63,7 +63,7 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
         () => fetchIngredientDebts(addressId).then(setDebts).catch(err => console.error('fetchIngredientDebts', err)),
         [addressId])
     useEffect(() => { loadDebts() }, [loadDebts])
-    // Nợ chỉ 1 phiếu → mở thẳng form trả nợ; nhiều phiếu thì sang trang chi tiết (Nhật ký) để chọn phiếu cần trả.
+    // Nợ chỉ 1 phiếu → mở thẳng form trả nợ; nhiều phiếu thì vào Nhật ký của nguyên liệu để chọn phiếu cần trả.
     const [payInvoice, setPayInvoice] = useState<Row | null>(null)
     const { toast: payToast, showToast, showError } = useToast()
     const { saving, withSaving } = useSavingAction(showError)
@@ -107,12 +107,12 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
                 >
                     {debts.length > 0 && (
                         <>
-                            <SectionHeading first tone="warning" aside={debts.length > 1 ? `Tổng ${formatVND(debts.reduce((s, d) => s + d.owing, 0))}` : undefined}>Công nợ</SectionHeading>
+                            <SectionHeading first tone="warning">Công nợ</SectionHeading>
                             {debts.map(d => (
                                 <button
                                     key={d.ingredient}
                                     type="button"
-                                    onClick={d.invoices.length === 1 ? () => setPayInvoice(d.invoices[0]) : onOpenIngredient && (() => { reopenSheet = true; onOpenIngredient(d.ingredient) })}
+                                    onClick={d.invoices.length === 1 ? () => setPayInvoice(d.invoices[0]) : onOpenIngredient && (() => { reopenSheet = true; onOpenIngredient(d.ingredient, 'history') })}
                                     className="w-full flex items-center gap-3 py-2.5 border-b border-border/20 text-left active:scale-[0.99] transition"
                                 >
                                     <span className="flex-1 min-w-0">
@@ -169,11 +169,10 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
 }
 
 // Dải full-bleed (bù px-5 + pt-1 của NoticeSheet) cùng kiểu "Cần lấy ngay / Soạn đầu ca" của ShiftPrepCard.
-function SectionHeading({ children, tone, first, aside }: { children: string; tone: 'warning' | 'neutral'; first?: boolean; aside?: string }) {
+function SectionHeading({ children, tone, first }: { children: string; tone: 'warning' | 'neutral'; first?: boolean }) {
     return (
-        <div className={`-mx-5 px-5 py-1.5 flex items-baseline justify-between text-[12px] font-black uppercase tracking-wide ${first ? '-mt-1' : 'mt-3'} ${tone === 'warning' ? 'bg-warning/10 text-warning' : 'bg-surface-light text-text-secondary'}`}>
+        <div className={`-mx-5 px-5 py-1.5 text-[12px] font-black uppercase tracking-wide ${first ? '-mt-1' : 'mt-3'} ${tone === 'warning' ? 'bg-warning/10 text-warning' : 'bg-surface-light text-text-secondary'}`}>
             {children}
-            {aside && <span className="normal-case tracking-normal tabular-nums">{aside}</span>}
         </div>
     )
 }

@@ -70,7 +70,8 @@ export default function IngredientDetailPage() {
     const { toast, showToast, showError } = useToast()
     const confirm = useConfirm()
 
-    const [viewMode, setViewMode] = useState('details')
+    // ?tab=history: vào thẳng Nhật ký (vd từ dòng công nợ nhiều phiếu ở modal Bổ sung tồn kho).
+    const [viewMode, setViewMode] = useState(() => new URLSearchParams(location.search).get('tab') === 'history' ? 'history' : 'details')
     const [history, setHistory] = useState<Row[]>([])
     const [loading, setLoading] = useState(true)
     const [stockData, setStockData] = useState<Row | null>(null)
