@@ -1,7 +1,7 @@
 import type { Row } from '../types/domain'
 import { fetchOrdersSince } from './reportService'
 import { fetchStoredUsage, saveUsageDays } from './dailyUsageService'
-import { estimateCounterRow, type ExtraIngredients, type RecipeRow, type UsageMap } from '../utils/inventory'
+import { estimateCounterRow, r1, usedSinceCount, type ExtraIngredients, type RecipeRow, type UsageMap } from '../utils/inventory'
 import { missingUsageDays, usageAfterCount, usageByDay } from '../utils/dailyUsage'
 import { dateStringVN, addDaysVN, nextDayStr } from '../utils/dateVN'
 
@@ -71,27 +71,37 @@ export async function withCounterEstimate(rows: Row[] | null | undefined, addres
     }
 }
 
+// Tóm tắt kỳ kiểm kê của 1 NVL: ngày đếm trước (YYYY-MM-DD), tổng dùng và tổng nhập thêm từ sau đó tới hôm qua.
+export type OpeningPeriods = Record<string, { since: string; used: number; restock: number }>
+const emptyOpening = (): { stocks: UsageMap; periods: OpeningPeriods } => ({ stocks: {}, periods: {} })
+
 // Đầu kỳ HÔM NAY = tồn quầy ước tính cuối hôm qua, tính từ lần đếm gần nhất TRƯỚC hôm nay (prior_* của RPC): cùng công
 // thức estimateCounterRow, tiêu hao chỉ tới hết hôm qua. Không phụ thuộc NVL có được đếm hôm nay hay chưa, nên số này
 // không đổi khi quản lý đếm Cuối kỳ → hao hụt luôn so với cùng một Đầu kỳ. Đếm đúng hôm qua thì bằng số đếm.
-// Trả mọi NVL ước tính được (caller cho nó thắng số trong phiếu gần nhất). → { ingredient: số }
-export async function estimateOpeningStocks(rows: Row[] | null | undefined, addressId: string | null | undefined, calc: CounterCalc) {
-    if (!addressId || !rows?.length) return {}
+// Trả mọi NVL ước tính được (caller cho nó thắng số trong phiếu gần nhất).
+// `periods`: với NVL có ngày ở giữa lần đếm trước và hôm nay (cách từ 2 ngày) — tổng dùng/nhập của cả quãng đó, để báo cáo
+// trả lời "từ lần kiểm kê trước dùng bao nhiêu, nhập bao nhiêu". Dùng tiêu hao thật từng ngày, không suy ngược từ ước tính.
+// → { stocks: { ingredient: số }, periods: { ingredient: { since, used, restock } } }
+export async function estimateOpening(rows: Row[] | null | undefined, addressId: string | null | undefined, calc: CounterCalc) {
+    if (!addressId || !rows?.length) return emptyOpening()
     try {
         const priorRows = rows.filter(r => r.prior_counted_on).map(r => ({
             ingredient: r.ingredient, warehouse_stock: r.warehouse_stock,
             counter_stock: r.prior_counter_stock, counter_counted_on: r.prior_counted_on, counter_counted_at: r.prior_counted_at, restock_since_count: r.prior_restock_since,
         }))
         const usage = await loadUsage(priorRows, addressId, calc, false)
-        if (!usage) return {}
-        const out: UsageMap = {}
+        const out = emptyOpening()
+        if (!usage) return out
         for (const r of priorRows) {
             const e = estimateCounterRow(r, usage.used, usage)
-            if (e.counter_estimated) out[r.ingredient] = e.counter_stock
+            if (!e.counter_estimated) continue
+            out.stocks[r.ingredient] = e.counter_stock
+            if (nextDayStr(r.counter_counted_on) < usage.today)
+                out.periods[r.ingredient] = { since: r.counter_counted_on, used: r1(usedSinceCount(r, usage.used, usage.afterCount)), restock: r.restock_since_count }
         }
         return out
     } catch (err) {
-        console.error('estimateOpeningStocks', err)
-        return {}
+        console.error('estimateOpening', err)
+        return emptyOpening()
     }
 }

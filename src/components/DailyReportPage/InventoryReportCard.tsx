@@ -6,7 +6,9 @@ import type { IngredientConfig } from '../../types/domain'
 import type { Inputs } from '../../utils/prepToday'
 import { formatVND } from '../../utils'
 import { onboardingHintClass } from '../../utils/onboardingHint'
+import { countedLabelVN } from '../../utils/dateVN'
 import { useProducts } from '../../contexts/ProductContext'
+import type { OpeningPeriods } from '../../services/counterEstimate'
 import CollapsibleCard from './CollapsibleCard'
 
 // Status priority for sorting collapsed list. Lower = render earlier.
@@ -21,6 +23,7 @@ interface Props {
     ingredientsList: IngredientConfig[]
     isLoading?: boolean
     openingStock: UsageMap
+    openingPeriods?: OpeningPeriods
     openingInputs: Inputs
     openingLocked: Record<string, boolean>
     restockInputs: Inputs
@@ -65,7 +68,7 @@ function computeRowStatus(args: BalanceArgs) {
 //   Hao hụt   = Thực tế − Lý thuyết           (âm = thiếu, dương = dư, 0 = khớp)
 export default function InventoryReportCard({
     ingredientsList, isLoading,
-    openingStock, openingInputs, openingLocked,
+    openingStock, openingPeriods = {}, openingInputs, openingLocked,
     restockInputs, inventoryInputs,
     warehouseStocks = {},
     ingredientUnits = {},
@@ -182,6 +185,7 @@ export default function InventoryReportCard({
             warehouseAvailable={warehouseStocks[ing.ingredient]}
             used={lookupByLabel(ing.ingredient, usedMap)}
             breakdown={lookupByLabel(ing.ingredient, consumptionBreakdown) || null}
+            period={openingPeriods[ing.ingredient]}
             productRef={ingredientToProduct[ing.ingredient]}
             isSubmitting={isSubmitting}
             lockWarehouseInputs={lockWarehouseInputs}
@@ -257,6 +261,7 @@ interface RowProps {
     warehouseAvailable?: number
     used: number
     breakdown: ConsumptionBreakdown[string] | null
+    period?: OpeningPeriods[string]
     productRef?: IngredientToProduct[string]
     isSubmitting?: boolean
     lockWarehouseInputs: boolean
@@ -269,7 +274,7 @@ interface RowProps {
 
 const IngredientRow = memo(function IngredientRow({
     ing, ingredientUnits, openingValue, openingFallback, isLocked, restockValue, inventoryValue,
-    warehouseAvailable, used, breakdown, productRef,
+    warehouseAvailable, used, breakdown, period, productRef,
     isSubmitting, lockWarehouseInputs, readOnly,
     onOpeningChange, onRestockChange, onInventoryChange,
     hint,
@@ -383,6 +388,15 @@ const IngredientRow = memo(function IngredientRow({
             </button>
 
             {!open ? null : (<div className="pb-3">
+                {/* Lần kiểm kê trước cách từ 2 ngày: Đầu kỳ bên dưới đã gồm các ngày giữa — dòng này cho thấy quãng đó dùng/nhập bao nhiêu. */}
+                {period && (
+                    <div className="grid grid-cols-3 gap-2 mb-2">
+                        <TextCell label="Kiểm lần cuối" text={countedLabelVN(period.since)} />
+                        <TextCell label="Đã dùng" text={`${period.used} ${unit}`} />
+                        <TextCell label="Đã nhập thêm" text={`${period.restock} ${unit}`} />
+                    </div>
+                )}
+
                 {/* Row 1 — warehouse level */}
                 <div className="grid grid-cols-3 gap-2">
                     <ColumnInput

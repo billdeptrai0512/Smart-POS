@@ -387,21 +387,26 @@ export function rollIngredientDays({ shiftClosings = [], dailyConsumption = {}, 
  * nhau ở đúng một ca: tồn chạm 0 giữa chừng rồi sau đó mới có nhập thêm — roll thực tế hơn, estimate thấp hơn.
  * usedByDay: { 'YYYY-MM-DD': { ingredient: usedAmount } }
  */
+// Tiêu hao của 1 NVL từ sau lần đếm của dòng: phần sau giờ đếm của ngày đếm (nếu có giờ) + các ngày sau đó.
+export function usedSinceCount(row: Row, usedByDay: Record<string, UsageMap>, afterCount: UsageMap) {
+    let used = row.counter_counted_at ? afterCount[row.ingredient] ?? 0 : 0
+    for (const [day, map] of Object.entries(usedByDay)) {
+        if (day > row.counter_counted_on) used += usedOf(map, row.ingredient)
+    }
+    return used
+}
+
 export function estimateCounterRow(row: Row, usedByDay: Record<string, UsageMap>, { today, fromDay, afterCount }: { today: string; fromDay: string; afterCount: UsageMap }) {
     const on = row.counter_counted_on
     const at = row.counter_counted_at
     if (!on || (on >= today && !at) || nextDayStr(on) < fromDay) return row
-    let used = at ? afterCount[row.ingredient] ?? 0 : 0
-    for (const [day, map] of Object.entries(usedByDay)) {
-        if (day > on) used += usedOf(map, row.ingredient)
-    }
-    const counter = Math.max(0, r1(row.counter_stock + row.restock_since_count - used))
+    const counter = Math.max(0, r1(row.counter_stock + row.restock_since_count - usedSinceCount(row, usedByDay, afterCount)))
     return { ...row, counter_stock: counter, current_stock: r1(row.warehouse_stock + counter), counter_estimated: true }
 }
 
 /**
  * Đầu kỳ của closing ĐẦU TIÊN trong window cho walkDailyIngredientDiff (làm `openingOverrideMap`): như mặc định của
- * walk — remaining của phiếu gần nhất trước đó, NVL không đếm = 0 — nhưng số ƯỚC TÍNH (estimateOpeningStocks) thắng
+ * walk — remaining của phiếu gần nhất trước đó, NVL không đếm = 0 — nhưng số ƯỚC TÍNH (estimateOpening) thắng
  * khi có: nó tính từ lần đếm thật cuối + nhập thêm − tiêu hao các ngày đã qua, nên đúng cả khi phiếu cách vài ngày.
  */
 export function openingSeed(yesterdayClosing: Row | null | undefined, estimates: UsageMap = {}) {

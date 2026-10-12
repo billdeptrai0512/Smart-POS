@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { fetchIngredientStocks } from '../services/orderService'
-import { estimateOpeningStocks, recipesBelongTo } from '../services/counterEstimate'
+import { estimateOpening, recipesBelongTo, type OpeningPeriods } from '../services/counterEstimate'
 import { useCounterCalc } from './useCounterCalc'
 import { useProducts } from '../contexts/ProductContext'
 import { fetchYesterdayShiftClosing } from '../services/reportService'
@@ -15,13 +15,14 @@ import type { Row } from '../types/domain'
 // `seedReady`/`seedYesterdayClosing` (từ DailyReportPage, xem useShiftInventoryState)
 // — khi cha đã fetch sẵn phiếu chốt hôm qua rồi thì dùng thẳng, khỏi tự query trùng.
 //
-// `estimateOpening` (chỉ xem HÔM NAY): Đầu kỳ = tồn quầy ước tính theo lý thuyết (estimateOpeningStocks) thay vì số
+// `estimateOpening` (chỉ xem HÔM NAY): Đầu kỳ = tồn quầy ước tính theo lý thuyết (estimateOpening) thay vì số
 // remaining của phiếu gần nhất (có thể là 0 nếu NVL không đếm, hoặc số cũ nếu phiếu cách vài ngày).
-export function useWarehouseStockSync(addressId: string | null, { seedReady, isDayScope, seedYesterdayClosing, estimateOpening }: {
+export function useWarehouseStockSync(addressId: string | null, { seedReady, isDayScope, seedYesterdayClosing, estimateOpening: estimateOpeningOn }: {
     seedReady?: boolean; isDayScope?: boolean; seedYesterdayClosing?: Row | null; estimateOpening?: boolean
 }) {
     const [warehouseStocks, setWarehouseStocks] = useState<UsageMap>({})
     const [openingStock, setOpeningStock] = useState<UsageMap>({})
+    const [openingPeriods, setOpeningPeriods] = useState<OpeningPeriods>({})
     const calcRef = useCounterCalc()
     // Công thức tải xong sau lần reload đầu → reload đổi identity để tính lại Đầu kỳ ước tính (xem recipesBelongTo).
     const recipesReady = recipesBelongTo(useProducts().recipes, addressId)
@@ -46,11 +47,13 @@ export function useWarehouseStockSync(addressId: string | null, { seedReady, isD
             })
             // Ước tính thắng số trong phiếu: "phiếu hôm qua" là phiếu GẦN NHẤT trước hôm nay (có thể cách vài ngày); ước tính
             // tính từ lần đếm thật cuối + nhập thêm − tiêu hao các ngày đã qua, và đếm hôm qua thì hai số trùng nhau.
-            if (estimateOpening && recipesReady) Object.assign(counters, await estimateOpeningStocks(rows, addressId, calcRef.current))
+            const { stocks, periods } = estimateOpeningOn && recipesReady ? await estimateOpening(rows, addressId, calcRef.current) : { stocks: {}, periods: {} }
+            Object.assign(counters, stocks)
+            setOpeningPeriods(periods)
             setOpeningStock(counters)
             return { counters }
         })
-    }, [addressId, seedReady, seedYesterdayClosing, isDayScope, estimateOpening, calcRef, recipesReady])
+    }, [addressId, seedReady, seedYesterdayClosing, isDayScope, estimateOpeningOn, calcRef, recipesReady])
 
-    return { warehouseStocks, openingStock, reload }
+    return { warehouseStocks, openingStock, openingPeriods, reload }
 }
