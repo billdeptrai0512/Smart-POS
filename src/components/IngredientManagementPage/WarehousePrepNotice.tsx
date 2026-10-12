@@ -14,6 +14,7 @@ import { fetchIngredientDebts, type IngredientDebt } from '../../services/expens
 import { formatVND } from '../../utils/money'
 import { getIngredientUnit, ingredientLabel } from '../../utils/ingredients'
 import { pack2Of } from '../../utils/inventory'
+import HubBuyNotice from './HubBuyNotice'
 import NoticeBar from '../common/NoticeBar'
 import NoticeSheet from '../common/NoticeSheet'
 import ShiftPrepCard from '../DailyReportPage/ShiftPrepCard'
@@ -42,10 +43,12 @@ export default function WarehousePrepNotice({ onRestocked, onOpenIngredient }: P
     const { isGuest, isManager, isAdmin } = useAuth()
     const { addressId, warehouseRole } = useAddress()
     const { isOnline } = useStats()
-    // Nhóm đã có kho tổng: số "cần mua" của từng chi nhánh so riêng với CÙNG 1 kho chung nên sai — việc mua nằm ở trang Chia hàng.
-    const groupedWithHub = warehouseRole === 'hub' || warehouseRole === 'member' || warehouseRole === 'pending'
-    return (isManager || isAdmin) && !isGuest && isOnline && addressId && !groupedWithHub
-        ? <Notice addressId={addressId} onRestocked={onRestocked} onOpenIngredient={onOpenIngredient} /> : null
+    // Nhóm đã có kho tổng: số "cần mua" của từng chi nhánh so riêng với CÙNG 1 kho chung nên sai → kho tổng tính gộp cả nhóm
+    // (HubBuyNotice), chi nhánh thành viên không mua hàng nên ẩn.
+    if (!((isManager || isAdmin) && !isGuest && isOnline && addressId) || warehouseRole === 'member' || warehouseRole === 'pending') return null
+    return warehouseRole === 'hub'
+        ? <HubBuyNotice onRestocked={onRestocked} />
+        : <Notice addressId={addressId} onRestocked={onRestocked} onOpenIngredient={onOpenIngredient} />
 }
 
 function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressId: string }) {

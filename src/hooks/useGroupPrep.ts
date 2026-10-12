@@ -56,5 +56,12 @@ export function useGroupPrep(addresses: { id: string; name: string }[]) {
 
     useEffect(() => { load() }, [load])
     const plan = useMemo(() => state.branches && buildGroupPrepPlan({ branches: state.branches, pool: state.pool }), [state.branches, state.pool])
-    return { ...state, plan, reload: load }
+    // Cấu hình đơn vị CHUNG của kho cho mỗi nguyên liệu (đơn vị gốc + quy cách nhập): lấy của địa chỉ đầu danh sách, địa chỉ nào
+    // thiếu thì mượn của địa chỉ kế — mọi số trên UI nhóm kho đọc qua đây để gọi tên đơn vị giống nhau.
+    const cfgOf = useMemo(() => {
+        const m: Record<string, Row> = {}
+        for (const b of state.branches || []) for (const i of b.ingredientsList) m[i.ingredient] ??= i
+        return m
+    }, [state.branches])
+    return { ...state, plan, cfgOf, reload: load }
 }

@@ -40,8 +40,6 @@ export interface AddressContextValue {
     setGroupHub: (groupId: UUID, addressId: UUID | null) => Promise<void>
     /** Vai trò của địa chỉ đang chọn trong nhóm kho chung (xem warehouseRole trong provider). */
     warehouseRole: WarehouseRole
-    /** Địa chỉ đang chọn được chia hàng cho các chi nhánh: kho tổng, hoặc nhóm chưa đặt kho tổng. */
-    canDistribute: boolean
     loading: boolean
     fetchError: string | null
 }
@@ -405,7 +403,6 @@ export function AddressProvider() {
         setAddressGroup,
         setGroupHub,
         warehouseRole,
-        canDistribute: warehouseRole === 'hub' || warehouseRole === 'nohub',
         loading,
         fetchError
     }), [addresses, selectedAddress, setSelectedAddress, createNewAddress, renameAddress, setTables, setPrinters, removeAddress, warehouseGroups, siblingsByAddress, createWarehouseGroup, renameWarehouseGroup, removeWarehouseGroup, setAddressGroup, setGroupHub, warehouseRole, loading, fetchError])

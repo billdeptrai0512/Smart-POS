@@ -1,9 +1,8 @@
 import { supabase } from '../lib/supabaseClient'
 import type { UUID } from '../types/domain'
-import type { TransferItem } from '../utils/warehouseTransfer'
 
 // Phiếu soạn kho nội bộ của nhóm kho chung (migration 20261011_warehouse_transfers). 1 phiếu = (nhóm, ngày dùng).
-// Trả { status, items: [{ address_id, ingredient, unit, qty }] } hoặc null nếu chưa có phiếu. Ném khi lỗi
+// Trả { status, items: [{ address_id, ingredient, unit, qty, packed_at }] } hoặc null nếu chưa có phiếu. Ném khi lỗi
 // (vd. migration chưa apply) — caller phân biệt được với "chưa có phiếu".
 export async function fetchWarehouseTransfer(groupId: UUID, forDate: string) {
     const { data, error } = await supabase
@@ -29,20 +28,12 @@ export async function fetchTransferToAddress(addressId: UUID, forDate: string) {
     return Object.fromEntries((data || []).map(i => [i.ingredient, { qty: Number(i.qty), packed: !!i.packed_at }]))
 }
 
-// Tick "đã soạn" 1 dòng — chỉ làm bằng chứng, không đụng tồn kho. Trả mốc tick (null = đã bỏ tick).
-export async function setWarehouseTransferPacked(groupId: UUID, forDate: string, addressId: UUID, ingredient: string, packed: boolean) {
-    const { data, error } = await supabase.rpc('set_warehouse_transfer_packed', {
-        p_group_id: groupId, p_for_date: forDate, p_address_id: addressId, p_ingredient: ingredient, p_packed: packed,
+// "Soạn cho ngày mai": xác nhận (confirmed=true, ghi số đã xác nhận) / bỏ xác nhận 1 dòng (địa chỉ, nguyên liệu, ngày). Chỉ là bằng chứng,
+// không đụng tồn kho. Trả mốc xác nhận (null = đã bỏ).
+export async function setTomorrowPrepConfirmed(groupId: UUID, forDate: string, addressId: UUID, ingredient: string, unit: string, qty: number, confirmed: boolean) {
+    const { data, error } = await supabase.rpc('set_tomorrow_prep_confirmed', {
+        p_group_id: groupId, p_for_date: forDate, p_address_id: addressId, p_ingredient: ingredient, p_unit: unit, p_qty: qty, p_confirmed: confirmed,
     })
     if (error) throw error
     return data as string | null
-}
-
-// Ghi đè toàn bộ dòng của phiếu (nhóm, ngày). status: 'draft' | 'issued'. Trả transfer id.
-export async function saveWarehouseTransfer(groupId: UUID, forDate: string, items: TransferItem[], status: 'draft' | 'issued') {
-    const { data, error } = await supabase.rpc('save_warehouse_transfer', {
-        p_group_id: groupId, p_for_date: forDate, p_items: items, p_status: status,
-    })
-    if (error) throw error
-    return data
 }

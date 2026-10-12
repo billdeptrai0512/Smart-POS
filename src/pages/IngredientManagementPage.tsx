@@ -22,7 +22,7 @@ import StockDeficitBanner from '../components/IngredientManagementPage/StockDefi
 import KeyMismatchBanner from '../components/IngredientManagementPage/KeyMismatchBanner'
 import MenuPageHeader from '../components/common/MenuPageHeader'
 import WarehousePrepNotice from '../components/IngredientManagementPage/WarehousePrepNotice'
-import GroupPrepNotice from '../components/IngredientManagementPage/GroupPrepNotice'
+import TomorrowPrepNotice from '../components/IngredientManagementPage/TomorrowPrepNotice'
 import Dropdown from '../components/common/Dropdown'
 import Skeleton from '../components/common/Skeleton'
 import CreateIngredientForm from '../components/IngredientManagementPage/CreateIngredientForm'
@@ -368,10 +368,10 @@ export default function IngredientManagementPage() {
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
 
-            {/* Mỗi tab 1 dải, không hiện trùng: Kiểm kê → chia hàng cho chi nhánh; Lưu trữ → bổ sung tồn kho. */}
+            {/* Mỗi tab 1 dải, không hiện trùng: Kiểm kê → soạn cho ngày mai; Lưu trữ → bổ sung tồn kho. */}
             {activeView === 'stocking'
                 ? <WarehousePrepNotice onRestocked={loadStocks} onOpenIngredient={openIngredient} />
-                : <GroupPrepNotice />}
+                : <TomorrowPrepNotice />}
 
             <MenuPageHeader
                 title="Tồn kho"
