@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import InlineEditor from '../RecipeIngredientPage/InlineEditor'
 import { formatVND } from '../../utils'
+import { ICON_BTN } from './ModalShell'
 
 // Header "back + tên (chỉnh sửa tại chỗ) + giá tuỳ chọn + action bên phải" —
 // dùng chung cho trang chi tiết công thức/topping/chương trình giảm giá, trước
@@ -30,7 +31,7 @@ export default function EditableEntityHeader({
             <div className="flex items-center gap-3">
                 <button
                     onClick={onBack}
-                    className={`w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none shrink-0 ${backClassName}`}
+                    className={`${ICON_BTN} ${backClassName}`}
                     title="Trở về"
                 >
                     <ArrowLeft size={20} strokeWidth={2.5} />

@@ -1,4 +1,5 @@
 import { ArrowLeft, Plus } from 'lucide-react'
+import { ICON_BTN, ICON_BTN_BASE } from '../common/ModalShell'
 
 interface Props {
     title: string
@@ -32,7 +33,7 @@ export default function IngredientDetailHeader({
             <div className="flex items-center gap-3">
                 <button
                     onClick={onBack}
-                    className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none shrink-0"
+                    className={ICON_BTN}
                     title="Trở về"
                 >
                     <ArrowLeft size={20} strokeWidth={2.5} />
@@ -49,7 +50,7 @@ export default function IngredientDetailHeader({
                 {onAdd ? (
                     <button
                         onClick={onAdd}
-                        className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-primary text-bg hover:bg-primary/90 active:scale-95 transition-all shadow-sm focus:outline-none shrink-0"
+                        className={`${ICON_BTN_BASE} bg-primary text-bg hover:bg-primary/90 active:scale-95 transition-all`}
                         title={addTitle}
                     >
                         <Plus size={20} strokeWidth={2.5} />

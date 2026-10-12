@@ -142,6 +142,16 @@ body {
   /* Chrome, Safari and Opera */
 }
 
+/* Ẩn nút tăng/giảm của <input type="number"> */
+.no-spin {
+  appearance: textfield;
+}
+
+.no-spin::-webkit-outer-spin-button,
+.no-spin::-webkit-inner-spin-button {
+  appearance: none;
+}
+
 /* ====== Active press animations ====== */
 .menu-btn {
   transition: transform 50ms ease, background-color 50ms ease;

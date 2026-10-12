@@ -2,6 +2,7 @@ import { ArrowLeft, ArrowRight } from 'lucide-react'
 import type { ReactNode } from 'react'
 import MenuTabsBar, { type MenuTab } from './MenuTabsBar'
 import { onboardingHintClass } from '../../utils/onboardingHint'
+import { ICON_BTN } from './ModalShell'
 
 // Header dùng chung cho /inventory (Tồn kho) và /category (Công thức) — chỉ khác tiêu đề,
 // đơn vị đếm ("loại" vs "món") và bộ tab. subtitle (tuỳ chọn) thay dòng đếm — vd. chọn ngày của Kiểm kê. hintBack/hintForward: onboarding gợi ý bấm mũi tên
@@ -27,7 +28,7 @@ export default function MenuPageHeader({ title, count, unitLabel, subtitle, onBa
             <div className="flex items-center gap-3">
                 <button
                     onClick={onBack}
-                    className={`w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none shrink-0 ${onboardingHintClass(hintBack)}`}
+                    className={`${ICON_BTN} ${onboardingHintClass(hintBack)}`}
                     title="Trở về"
                 >
                     <ArrowLeft size={20} strokeWidth={2.5} />
@@ -41,7 +42,7 @@ export default function MenuPageHeader({ title, count, unitLabel, subtitle, onBa
                 {onForward && (
                     <button
                         onClick={onForward}
-                        className={`w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none shrink-0 ${onboardingHintClass(hintForward)}`}
+                        className={`${ICON_BTN} ${onboardingHintClass(hintForward)}`}
                         title="Tiếp"
                     >
                         <ArrowRight size={20} strokeWidth={2.5} />

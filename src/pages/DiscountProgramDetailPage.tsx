@@ -19,6 +19,7 @@ import {
     updateDiscountProgram, deleteDiscountProgram,
     fetchDiscountProgramProductLinks, setDiscountProgramProducts,
 } from '../services/discountService'
+import { ICON_BTN_DANGER } from '../components/common/ModalShell'
 
 export default function DiscountProgramDetailPage() {
     const navigate = useNavigate()
@@ -114,7 +115,7 @@ export default function DiscountProgramDetailPage() {
                 action={canEdit && (
                     <button
                         onClick={handleDelete}
-                        className="w-10 h-10 flex items-center justify-center rounded-[14px] border border-danger/20 text-danger hover:bg-danger/10 active:scale-95 transition-all shadow-sm focus:outline-none shrink-0"
+                        className={ICON_BTN_DANGER}
                         title="Xoá chương trình"
                     >
                         <Trash2 size={20} strokeWidth={2.5} />

@@ -7,6 +7,7 @@ import { dateStringVN, timeStringVN } from '../utils/dateVN'
 import { fetchAdminDashboard } from '../services/adminDashboardService'
 import { resolvePaymentIntent } from '../services/reconciliationService'
 import { errorMessage } from '../utils/errorMessage'
+import { ICON_BTN, ICON_BTN_MUTED } from '../components/common/ModalShell'
 
 // Một dòng của admin_dashboard_overview().attention / dormant_addresses. Trường nào có tuỳ theo `reason`.
 interface AttentionItem {
@@ -156,7 +157,7 @@ export default function AdminReconciliationPage() {
             <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex items-center px-4 gap-3">
                 <button
                     onClick={() => navigate('/admin/dashboard')}
-                    className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none shrink-0"
+                    className={ICON_BTN}
                 >
                     <ArrowLeft size={20} strokeWidth={2.5} />
                 </button>
@@ -165,7 +166,7 @@ export default function AdminReconciliationPage() {
                 </div>
                 <button
                     onClick={reload}
-                    className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text-secondary hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none shrink-0"
+                    className={ICON_BTN_MUTED}
                 >
                     <RefreshCw size={16} strokeWidth={2.5} />
                 </button>

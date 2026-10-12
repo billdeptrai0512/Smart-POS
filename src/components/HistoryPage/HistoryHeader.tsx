@@ -5,6 +5,7 @@ import HistoryTabsBar from './HistoryTabsBar'
 import DatePicker, { type DateRange } from '../common/DatePicker'
 import { formatIsoShort, formatIsoDisplay, type PresetRange } from '../common/datePickerUtils'
 import { onboardingHintClass } from '../../utils/onboardingHint'
+import { ICON_BTN } from '../common/ModalShell'
 
 interface DateRangePickerProps {
     scope: string
@@ -53,7 +54,7 @@ export default function HistoryHeader({
             <div className="flex items-center gap-3">
                 <button
                     onClick={onBack}
-                    className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none"
+                    className={ICON_BTN}
                 >
                     <ArrowLeft size={20} strokeWidth={2.5} />
                 </button>
@@ -69,7 +70,7 @@ export default function HistoryHeader({
 
                 <button
                     onClick={onForward}
-                    className={`w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none ${onboardingHintClass(hintForward)}`}
+                    className={`${ICON_BTN} ${onboardingHintClass(hintForward)}`}
                 >
                     <ArrowRight size={20} strokeWidth={2.5} />
                 </button>

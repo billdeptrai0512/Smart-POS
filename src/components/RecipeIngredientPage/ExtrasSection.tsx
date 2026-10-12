@@ -135,7 +135,7 @@ export default function ExtrasSection({
                         <input
                             type="text"
                             placeholder="Giá"
-                            className="w-[80px] bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[13px] text-text focus:outline-none focus:border-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            className="w-[80px] bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[13px] text-text focus:outline-none focus:border-primary no-spin"
                             value={newExtraPrice}
                             onChange={e => setNewExtraPrice(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter') submitAddExtra() }}

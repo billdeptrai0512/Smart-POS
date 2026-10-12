@@ -81,7 +81,7 @@ export default function InlineEditor({
                         if (e.key === 'Escape') setEditing(false)
                     }}
                     onBlur={commit}
-                    className={`${inputWidthClassName} bg-bg border border-primary/60 rounded-lg px-2 py-1 text-[13px] text-text text-right focus:outline-none focus:border-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${inputClassName}`}
+                    className={`${inputWidthClassName} bg-bg border border-primary/60 rounded-lg px-2 py-1 text-[13px] text-text text-right focus:outline-none focus:border-primary no-spin ${inputClassName}`}
                 />
                 {suffix && <span className="text-[12px] text-text-dim">{suffix}</span>}
             </span>

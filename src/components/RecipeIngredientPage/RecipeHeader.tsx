@@ -3,6 +3,7 @@ import type { Row } from '../../types/domain'
 import { capitalizeWords } from '../../utils'
 import EditableEntityHeader from '../common/EditableEntityHeader'
 import { onboardingHintClass } from '../../utils/onboardingHint'
+import { ICON_BTN_BASE } from '../common/ModalShell'
 
 interface Props {
     product: Row
@@ -31,7 +32,7 @@ export default function RecipeHeader({
             action={canEdit && (
                 <button
                     onClick={onCopyFrom}
-                    className="w-10 h-10 flex items-center justify-center rounded-[14px] border border-primary/20 text-primary hover:bg-primary/10 active:scale-95 transition-all shadow-sm focus:outline-none shrink-0"
+                    className={`${ICON_BTN_BASE} border border-primary/20 text-primary hover:bg-primary/10 active:scale-95 transition-all`}
                     title="Chép công thức từ món khác"
                 >
                     <Copy size={20} strokeWidth={2.5} />

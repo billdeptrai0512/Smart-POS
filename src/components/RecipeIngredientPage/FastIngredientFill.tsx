@@ -200,7 +200,7 @@ function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowN
                 onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
                 onBlur={commit}
                 placeholder="—"
-                className={`w-[60px] max-[329px]:w-11 bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[13px] text-text text-right focus:outline-none focus:border-primary disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${onboardingHintClass(hint)}`}
+                className={`w-[60px] max-[329px]:w-11 bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[13px] text-text text-right focus:outline-none focus:border-primary disabled:opacity-60 no-spin ${onboardingHintClass(hint)}`}
             />
             {baseAmount != null ? (
                 // Tổng thực pha = định mức gốc + mức lệch của tùy chọn. Chỉ hiện ở extra;

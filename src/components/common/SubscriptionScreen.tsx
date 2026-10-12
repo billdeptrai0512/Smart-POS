@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import type { UUID } from '../../types/domain'
 import { ArrowLeft } from 'lucide-react'
 import SubscriptionPanel from './SubscriptionPanel'
+import { ICON_BTN } from './ModalShell'
 
 /**
  * SubscriptionScreen — trang đăng ký gói full-screen DÙNG CHUNG.
@@ -25,7 +26,7 @@ export default function SubscriptionScreen({ backTo = '/addresses', preselectAdd
             <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex items-center px-4 gap-3">
                 <button
                     onClick={() => navigate(backTo)}
-                    className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shadow-sm focus:outline-none shrink-0"
+                    className={ICON_BTN}
                 >
                     <ArrowLeft size={20} strokeWidth={2.5} />
                 </button>

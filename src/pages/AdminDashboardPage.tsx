@@ -7,6 +7,7 @@ import { fetchGuestOnboardingFunnel } from '../services/onboardingFunnelService'
 import { openedLabelVN, dateShortVN, timeStringVN } from '../utils/dateVN'
 import MonetizationToggle from '../components/AdminDashboardPage/MonetizationToggle'
 import { errorMessage } from '../utils/errorMessage'
+import { ICON_BTN, ICON_BTN_MUTED } from '../components/common/ModalShell'
 
 // Hình dạng JSON của RPC admin_dashboard_overview / admin_funnel_cohorts / guest_onboarding_funnel_stats
 // (supabase.rpc không có type) — chỉ khai các trường trang này đọc.
@@ -126,7 +127,7 @@ export default function AdminDashboardPage() {
             <header className="shrink-0 bg-surface border-b border-border/60 shadow-sm px-4 py-3 xl:px-8 flex items-center gap-3">
                 <button
                     onClick={() => navigate('/addresses')}
-                    className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text hover:bg-border/40 active:bg-border/60 transition-colors shrink-0 focus:outline-none"
+                    className={ICON_BTN}
                 >
                     <ArrowLeft size={20} strokeWidth={2.5} />
                 </button>
@@ -140,7 +141,7 @@ export default function AdminDashboardPage() {
                 </div>
                 <button
                     onClick={reload}
-                    className="w-10 h-10 flex items-center justify-center rounded-[14px] bg-surface-light border border-border/60 text-text-secondary hover:bg-border/40 active:bg-border/60 transition-colors shrink-0 focus:outline-none"
+                    className={ICON_BTN_MUTED}
                 >
                     <RefreshCw size={16} strokeWidth={2.5} />
                 </button>

@@ -58,6 +58,14 @@ export const CHIP_IDLE = `${CHIP} bg-surface-light border-border/60 text-text-se
 export const ROUND_ICON_BTN = 'shrink-0 w-[26px] h-[26px] rounded-full border bg-surface-light border-border/60 flex items-center justify-center transition-colors'
 export const CHIP_ICON = `${CHIP_IDLE} shrink-0 w-[26px] flex items-center justify-center`
 
+// Nút icon vuông 40px ở header trang (Trở về / Tiếp / Tải lại / Xoá...). BASE cho biến thể riêng
+// (primary), ICON_BTN(_MUTED) = nền xám, ICON_BTN_DANGER = viền đỏ.
+export const ICON_BTN_BASE = 'w-10 h-10 flex items-center justify-center rounded-[14px] shadow-sm focus:outline-none shrink-0'
+const ICON_BTN_GHOST = `${ICON_BTN_BASE} bg-surface-light border border-border/60 hover:bg-border/40 active:bg-border/60 transition-colors`
+export const ICON_BTN = `${ICON_BTN_GHOST} text-text`
+export const ICON_BTN_MUTED = `${ICON_BTN_GHOST} text-text-secondary`
+export const ICON_BTN_DANGER = `${ICON_BTN_BASE} border border-danger/20 text-danger hover:bg-danger/10 active:scale-95 transition-all`
+
 // Pill ngày/giờ mở đợt/đơn — tách riêng ngày và giờ thành 2 pill cạnh nhau (thay vì 1
 // chuỗi text) để dễ quét mắt hơn khi liệt kê nhiều đợt/đơn liên tiếp. Cùng h-[26px] với
 // CHIP để pill và nút chip tròn đứng cạnh nhau (xem TableDetailModal) cao bằng nhau.

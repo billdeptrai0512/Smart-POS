@@ -589,7 +589,7 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, overflow,
                     onChange={e => onChange?.(e.target.value)}
                     disabled={disabled}
                     style={{ width: `${Math.max(String(value ?? '').length, 1)}ch` }}
-                    className={`min-w-0 bg-transparent text-[13px] font-bold text-center placeholder:text-text-secondary/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${tone === 'neutral' ? 'disabled:opacity-50' : ''} ${inputCls}`}
+                    className={`min-w-0 bg-transparent text-[13px] font-bold text-center placeholder:text-text-secondary/40 focus:outline-none no-spin ${tone === 'neutral' ? 'disabled:opacity-50' : ''} ${inputCls}`}
                 />
                 <span className={`text-[10px] font-medium shrink-0 ${unitCls}`}>{unit}</span>
                 {onBoxClick && <Info size={10} className="absolute right-1.5 text-text-dim pointer-events-none" />}

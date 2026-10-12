@@ -205,7 +205,7 @@ function CountBox({ unit, value, onChange, disabled }: { unit: string; value: st
                 value={value}
                 onChange={e => onChange(e.target.value)}
                 disabled={disabled}
-                className="flex-1 min-w-0 bg-transparent px-3 py-2 text-sm font-bold tabular-nums text-right text-text placeholder:text-text-dim/50 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:opacity-50"
+                className="flex-1 min-w-0 bg-transparent px-3 py-2 text-sm font-bold tabular-nums text-right text-text placeholder:text-text-dim/50 focus:outline-none no-spin disabled:opacity-50"
             />
             <span className="pr-3 text-[11px] font-bold text-text-dim shrink-0 max-w-[48px] truncate">{unit}</span>
         </div>

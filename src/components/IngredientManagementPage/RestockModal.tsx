@@ -262,7 +262,7 @@ export default function RestockModal({
                                             const v = e.target.value.replace(',', '.')
                                             if (v === '' || /^\d*\.?\d*$/.test(v)) setQty(v)
                                         }}
-                                        className="w-full bg-transparent px-3 py-2 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        className="w-full bg-transparent px-3 py-2 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none no-spin"
                                         onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
                                     />
                                     {hasPack ? (

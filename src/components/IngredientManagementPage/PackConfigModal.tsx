@@ -24,7 +24,7 @@ interface Props {
 const TEXT_INPUT = 'flex-1 min-w-0 bg-bg border border-border/60 rounded-[10px] px-3 py-2 text-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50'
 const CAPTION = 'text-[10px] font-black uppercase tracking-widest text-text-dim'
 const OP = 'text-text-secondary font-bold text-sm shrink-0'   // "1" và "=" — mờ hơn ô nhập để mắt dừng ở giá trị
-const NUM_INPUT = 'bg-bg border border-border/60 rounded-[10px] px-3 py-2 text-text text-sm font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
+const NUM_INPUT = 'bg-bg border border-border/60 rounded-[10px] px-3 py-2 text-text text-sm font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50 no-spin'
 
 /**
  * Modal cấu hình "quy cách đóng gói" cho 1 nguyên liệu.
