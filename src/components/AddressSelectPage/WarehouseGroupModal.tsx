@@ -8,7 +8,7 @@ interface Props {
     addr: Address
     addresses: Address[]
     warehouseGroups: WarehouseGroup[]
-    onCreateWarehouseGroup: (name: string, ownerId?: UUID | null) => Promise<UUID>
+    onCreateWarehouseGroup: (addressId: UUID, name: string) => Promise<UUID>
     onRenameWarehouseGroup: (groupId: UUID, name: string) => Promise<unknown>
     onRemoveWarehouseGroup: (groupId: UUID) => Promise<unknown>
     onSetAddressGroup: (addressId: UUID, groupId: UUID | null) => Promise<unknown>
@@ -49,8 +49,7 @@ export default function WarehouseGroupModal({
         const name = newGroupName.trim()
         if (!name || busy) return
         return run('Không thể tạo nhóm', async () => {
-            const groupId = await onCreateWarehouseGroup(name, addr.manager_id)
-            await onSetAddressGroup(addr.id, groupId)
+            await onCreateWarehouseGroup(addr.id, name)
             setNewGroupName('')
         })
     }

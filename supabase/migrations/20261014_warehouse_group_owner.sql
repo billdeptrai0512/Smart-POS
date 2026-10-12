@@ -1,31 +1,31 @@
 -- ==============================================================================================
--- Kho tổng chung: nhóm do ADMIN tạo phải thuộc về CHỦ CỦA ĐỊA CHỈ, không phải admin.
+-- Kho tổng chung: nhóm do ADMIN tạo phải thuộc về CHỦ CỦA ĐỊA CHỈ; tạo+gộp atomic; hub tự gỡ khi rời nhóm.
 --
--- Lỗi: upsert_warehouse_group gắn manager_id = auth_owner_id(người gọi). Admin tạo nhóm cho địa chỉ của
--- chủ khác → nhóm mang id admin, chủ thật không đọc được (RLS/fetch theo manager_id) → modal "Kho tổng chung"
--- trống dù địa chỉ vẫn nằm trong nhóm (đã gặp: 103 Hoàng Sa, 12/10/2026). set_address_warehouse_group lại cho
--- admin gắn địa chỉ của chủ A vào nhóm của chủ B mà không báo lỗi.
+-- Lỗi gốc: upsert_warehouse_group gắn manager_id = auth_owner_id(người gọi). Admin tạo nhóm cho địa chỉ của chủ khác →
+-- nhóm mang id admin, chủ thật không đọc được (RLS/fetch theo manager_id) → modal "Kho tổng chung" trống dù địa chỉ vẫn
+-- nằm trong nhóm (đã gặp: 103 Hoàng Sa, 12/10/2026). set_address_warehouse_group lại cho admin gắn địa chỉ của chủ A
+-- vào nhóm của chủ B mà không báo lỗi. Client gọi "tạo" rồi "gộp" thành 2 request → hỏng giữa chừng để lại nhóm rỗng.
 --
--- Fix: (1) upsert_warehouse_group nhận p_owner_id (chỉ admin được chỉ định; người khác luôn là chủ của chính mình).
---      (2) set_address_warehouse_group từ chối khi chủ nhóm ≠ chủ địa chỉ. Chỉ chặn lần gắn MỚI — dữ liệu cũ lệch
---          chủ (nhóm admin của 16 DBT Q8) không bị đụng.
--- Hàm đổi signature (thêm tham số) → DROP bản cũ + REVOKE PUBLIC/anon + GRANT authenticated. Client cũ gọi 2 tham số
--- vẫn chạy (p_owner_id có DEFAULT) → apply migration TRƯỚC khi deploy client.
+-- Fix: (1) create_warehouse_group_and_join (MỚI): tạo nhóm + gộp địa chỉ trong 1 transaction, chủ nhóm = chủ ĐỊA CHỈ.
+--      (2) set_address_warehouse_group: từ chối khi chủ nhóm ≠ chủ địa chỉ (chỉ chặn lần gắn MỚI — dữ liệu cũ lệch
+--          chủ không bị đụng); tự gỡ hub_address_id của nhóm cũ khi địa chỉ hub rời nhóm.
+--      (3) upsert_warehouse_group về lại 2 tham số (chỉ còn dùng để đổi tên). File này idempotent: chạy lại an toàn
+--          dù bản trước của nó (có p_owner_id) đã apply.
+-- Hàm mới → REVOKE PUBLIC/anon + GRANT authenticated. Apply TRƯỚC khi deploy client.
 -- ==============================================================================================
 
 BEGIN;
 
-DROP FUNCTION IF EXISTS public.upsert_warehouse_group(UUID, TEXT);
+DROP FUNCTION IF EXISTS public.upsert_warehouse_group(UUID, TEXT, UUID);
 
-CREATE OR REPLACE FUNCTION public.upsert_warehouse_group(p_group_id UUID DEFAULT NULL, p_name TEXT DEFAULT NULL, p_owner_id UUID DEFAULT NULL)
+CREATE OR REPLACE FUNCTION public.upsert_warehouse_group(p_group_id UUID DEFAULT NULL, p_name TEXT DEFAULT NULL)
 RETURNS UUID
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-    v_id    UUID;
-    v_owner UUID;
+    v_id UUID;
 BEGIN
     IF p_name IS NULL OR btrim(p_name) = '' THEN
         RAISE EXCEPTION 'p_name is required';
@@ -36,11 +36,8 @@ BEGIN
     END IF;
 
     IF p_group_id IS NULL THEN
-        -- Chỉ admin được tạo nhóm thay chủ khác; manager luôn tạo cho chính chủ của mình.
-        v_owner := CASE WHEN p_owner_id IS NOT NULL AND (auth.uid() IS NULL OR public.is_admin_auth(auth.uid()))
-                        THEN p_owner_id ELSE public.auth_owner_id(auth.uid()) END;
         INSERT INTO warehouse_groups (manager_id, name)
-        VALUES (v_owner, btrim(p_name))
+        VALUES (public.auth_owner_id(auth.uid()), btrim(p_name))
         RETURNING id INTO v_id;
     ELSE
         IF auth.uid() IS NOT NULL AND NOT EXISTS (
@@ -58,8 +55,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.upsert_warehouse_group(UUID, TEXT, UUID) FROM PUBLIC, anon;
-GRANT  EXECUTE ON FUNCTION public.upsert_warehouse_group(UUID, TEXT, UUID) TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.upsert_warehouse_group(UUID, TEXT) FROM PUBLIC, anon;
+GRANT  EXECUTE ON FUNCTION public.upsert_warehouse_group(UUID, TEXT) TO authenticated;
 
 -- Cùng signature với bản 20260714_4 → grant giữ nguyên. Thêm 1 guard: chủ nhóm phải trùng chủ địa chỉ.
 CREATE OR REPLACE FUNCTION public.set_address_warehouse_group(p_address_id UUID, p_group_id UUID DEFAULT NULL)
@@ -106,6 +103,8 @@ BEGIN
 
     SELECT warehouse_group_id INTO v_old_group_id FROM addresses WHERE id = p_address_id;
     UPDATE addresses SET warehouse_group_id = p_group_id WHERE id = p_address_id;
+    -- Hub rời nhóm (hoặc sang nhóm khác) → nhóm cũ không còn kho tổng; đừng để hub_address_id trỏ vào người ngoài nhóm.
+    UPDATE warehouse_groups SET hub_address_id = NULL WHERE hub_address_id = p_address_id AND id IS DISTINCT FROM p_group_id;
 
     -- Đồng bộ giá vốn cho nhóm MỚI (gồm cả địa chỉ vừa join, nếu có).
     FOR v_ingredient IN
@@ -129,5 +128,46 @@ BEGIN
     END IF;
 END;
 $$;
+
+-- Tạo nhóm + gộp địa chỉ vào đó trong 1 transaction. Chủ nhóm = chủ của ĐỊA CHỈ (admin tạo cho chủ khác vẫn đúng chủ).
+-- Guard quyền (manager-only, địa chỉ của mình / admin) nằm sẵn trong set_address_warehouse_group được gọi bên dưới;
+-- ở đây chỉ cần đủ để biết chủ địa chỉ. Hỏng bất kỳ bước nào → rollback, không để lại nhóm rỗng.
+CREATE OR REPLACE FUNCTION public.create_warehouse_group_and_join(p_address_id UUID, p_name TEXT)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $
+DECLARE
+    v_owner UUID;
+    v_id    UUID;
+BEGIN
+    IF p_address_id IS NULL THEN
+        RAISE EXCEPTION 'p_address_id is required';
+    END IF;
+    IF p_name IS NULL OR btrim(p_name) = '' THEN
+        RAISE EXCEPTION 'p_name is required';
+    END IF;
+
+    IF auth.uid() IS NOT NULL AND NOT public.is_manager_auth(auth.uid()) THEN
+        RAISE EXCEPTION 'Only managers can manage warehouse groups' USING ERRCODE = 'insufficient_privilege';
+    END IF;
+
+    SELECT manager_id INTO v_owner FROM addresses WHERE id = p_address_id;
+    IF v_owner IS NULL THEN
+        RAISE EXCEPTION 'Address % not found', p_address_id;
+    END IF;
+    IF auth.uid() IS NOT NULL AND NOT (public.is_admin_auth(auth.uid()) OR v_owner = public.auth_owner_id(auth.uid())) THEN
+        RAISE EXCEPTION 'Address % is not yours', p_address_id USING ERRCODE = 'insufficient_privilege';
+    END IF;
+
+    INSERT INTO warehouse_groups (manager_id, name) VALUES (v_owner, btrim(p_name)) RETURNING id INTO v_id;
+    PERFORM public.set_address_warehouse_group(p_address_id, v_id);
+    RETURN v_id;
+END;
+$;
+
+REVOKE EXECUTE ON FUNCTION public.create_warehouse_group_and_join(UUID, TEXT) FROM PUBLIC, anon;
+GRANT  EXECUTE ON FUNCTION public.create_warehouse_group_and_join(UUID, TEXT) TO authenticated;
 
 COMMIT;

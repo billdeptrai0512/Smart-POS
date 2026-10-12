@@ -368,8 +368,10 @@ export default function IngredientManagementPage() {
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
 
-            <WarehousePrepNotice onRestocked={loadStocks} onOpenIngredient={openIngredient} />
-            <GroupPrepNotice />
+            {/* Mỗi tab 1 dải, không hiện trùng: Kiểm kê → chia hàng cho chi nhánh; Lưu trữ → bổ sung tồn kho. */}
+            {activeView === 'stocking'
+                ? <WarehousePrepNotice onRestocked={loadStocks} onOpenIngredient={openIngredient} />
+                : <GroupPrepNotice />}
 
             <MenuPageHeader
                 title="Tồn kho"

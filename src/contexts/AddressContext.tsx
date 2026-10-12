@@ -6,7 +6,7 @@ import {
     setAddressTables as apiSetAddressTables,
     setAddressPrinters as apiSetAddressPrinters, fetchAddressPrinters,
     upsertSession,
-    fetchWarehouseGroups, upsertWarehouseGroup as apiUpsertWarehouseGroup,
+    fetchWarehouseGroups, upsertWarehouseGroup as apiUpsertWarehouseGroup, createWarehouseGroupAndJoin as apiCreateWarehouseGroupAndJoin,
     deleteWarehouseGroup as apiDeleteWarehouseGroup, setAddressWarehouseGroup as apiSetAddressWarehouseGroup,
     setWarehouseGroupHub as apiSetWarehouseGroupHub
 } from '../services/authService'
@@ -31,8 +31,8 @@ export interface AddressContextValue {
     warehouseGroups: WarehouseGroup[]
     /** addressId → các địa chỉ khác cùng nhóm kho tổng. */
     siblingsByAddress: Record<string, Address[]>
-    /** ownerId: chủ của địa chỉ đang gộp — admin tạo nhóm thay chủ khác thì nhóm phải thuộc chủ đó. */
-    createWarehouseGroup: (name: string, ownerId?: UUID | null) => Promise<UUID>
+    /** Tạo nhóm mới + gộp địa chỉ vào đó (1 transaction; chủ nhóm = chủ của địa chỉ). */
+    createWarehouseGroup: (addressId: UUID, name: string) => Promise<UUID>
     renameWarehouseGroup: (groupId: UUID, name: string) => Promise<void>
     removeWarehouseGroup: (groupId: UUID) => Promise<void>
     setAddressGroup: (addressId: UUID, groupId?: UUID | null) => Promise<void>
@@ -63,6 +63,10 @@ const normalizeName = (s?: string | null) => (s || '').trim().replace(/\s+/g, ' 
 // Cached selected-address object → lets the POS render on cold start without
 // waiting for the addresses network fetch (which can hang 5s behind the SW
 // NetworkFirst timeout on a flaky connection = "lag không bấm được order").
+// Chủ của danh sách địa chỉ/nhóm kho: admin xem tất cả ('ALL'); co-manager có manager_id trỏ về quản lý chính; nhân viên theo manager_id.
+const addressOwnerIdOf = (profile: { id: UUID; role?: string; manager_id?: UUID | null }) =>
+    profile.role === 'admin' ? 'ALL' : profile.role === 'manager' ? (profile.manager_id || profile.id) : (profile.manager_id ?? null)
+
 const readCachedAddress = () => readJSON<SelectedAddress | null>(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, null)
 
 export function AddressProvider() {
@@ -105,17 +109,9 @@ export function AddressProvider() {
             return
         }
 
-        let addressOwnerId = null
-        if (profile.role === 'admin') {
-            addressOwnerId = 'ALL'
-        } else if (profile.role === 'manager') {
-            // co-manager has manager_id pointing to the main manager
-            addressOwnerId = profile.manager_id || profile.id
-        } else {
-            addressOwnerId = profile.manager_id
-        }
+        const addressOwnerId = addressOwnerIdOf(profile)
 
-        if (!addressOwnerId && profile.role !== 'admin') {
+        if (!addressOwnerId) { // admin luôn là 'ALL' nên không rơi vào đây
             setLoading(false)
             return
         }
@@ -180,6 +176,33 @@ export function AddressProvider() {
         // chạy 4 lần. Chỉ 3 field này ảnh hưởng query bên dưới.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [profile?.id, profile?.role, profile?.manager_id, hasSession])
+
+    // Máy khác (điện thoại ↔ máy tính) đổi nhóm kho/địa chỉ thì máy này chỉ biết khi tải lại — tải lại nhẹ mỗi lần quay về tab
+    // (tối đa 30s/lần). selectedAddress là bản sao riêng nên cũng phải thay bằng bản mới (warehouse_group_id quyết định warehouseRole).
+    useEffect(() => {
+        const ownerId = profile?.id && hasSession && !isGuest ? addressOwnerIdOf(profile) : null
+        if (!ownerId) return
+        let last = Date.now()
+        const refresh = () => {
+            if (document.visibilityState !== 'visible' || Date.now() - last < 30_000) return
+            last = Date.now()
+            Promise.all([fetchAddresses(ownerId), fetchWarehouseGroups(ownerId)]).then(([a, g]) => {
+                if (a.error || g.error) return // lỗi mạng → giữ nguyên số đang có
+                setAddresses(a.data || [])
+                setWarehouseGroups(g.data || [])
+                setSelectedAddressState(prev => {
+                    const fresh = prev?.id ? a.data?.find(x => x.id === prev.id) : null
+                    if (!fresh) return prev
+                    writeJSON(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, fresh)
+                    return fresh
+                })
+            })
+        }
+        document.addEventListener('visibilitychange', refresh)
+        window.addEventListener('focus', refresh)
+        return () => { document.removeEventListener('visibilitychange', refresh); window.removeEventListener('focus', refresh) }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [profile?.id, profile?.role, profile?.manager_id, hasSession, isGuest])
 
     const setSelectedAddress = useCallback((addr: SelectedAddress | null) => {
         setSelectedAddressState(addr)
@@ -296,16 +319,17 @@ export function AddressProvider() {
     }, [profile, selectedAddress, isGuest])
 
     // Kho tổng dùng chung nhiều địa chỉ — 1 địa chỉ chỉ thuộc tối đa 1 nhóm (groupId=null = rời nhóm).
-    const createWarehouseGroup = useCallback(async (name: string, ownerId?: UUID | null) => {
+    const createWarehouseGroup = useCallback(async (addressId: UUID, name: string) => {
         if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
         if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể tạo nhóm kho tổng')
         const cleanName = (name || '').trim()
         if (!cleanName) throw new Error('Tên nhóm không được để trống')
-        const groupOwnerId = (profile.role === 'admin' && ownerId) || profile.manager_id || profile.id
-        const groupId = await apiUpsertWarehouseGroup(null, cleanName, profile.role === 'admin' ? ownerId : null)
-        setWarehouseGroups(prev => [...prev, { id: groupId, manager_id: groupOwnerId, name: cleanName, created_at: new Date().toISOString() }])
+        const groupId = await apiCreateWarehouseGroupAndJoin(addressId, cleanName)
+        const managerId = addresses.find(a => a.id === addressId)?.manager_id ?? profile.manager_id ?? profile.id
+        setWarehouseGroups(prev => [...prev, { id: groupId, manager_id: managerId, name: cleanName, created_at: new Date().toISOString() }])
+        syncAddressPatch(addressId, { warehouse_group_id: groupId })
         return groupId
-    }, [profile, isGuest])
+    }, [profile, isGuest, addresses, syncAddressPatch])
 
     const renameWarehouseGroup = useCallback(async (groupId: UUID, name: string) => {
         if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
@@ -326,8 +350,10 @@ export function AddressProvider() {
     const setAddressGroup = useCallback(async (addressId: UUID, groupId?: UUID | null) => {
         if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
         await apiSetAddressWarehouseGroup(addressId, groupId ?? null)
-        setAddresses(prev => prev.map(a => a.id === addressId ? { ...a, warehouse_group_id: groupId ?? null } : a))
-    }, [isGuest])
+        syncAddressPatch(addressId, { warehouse_group_id: groupId ?? null })
+        // Server gỡ hub khi địa chỉ hub rời nhóm — phản chiếu ở client.
+        setWarehouseGroups(prev => prev.map(g => g.hub_address_id === addressId && g.id !== groupId ? { ...g, hub_address_id: null } : g))
+    }, [isGuest, syncAddressPatch])
 
     // addressId null → bỏ đặt kho tổng của nhóm.
     const setGroupHub = useCallback(async (groupId: UUID, addressId: UUID | null) => {

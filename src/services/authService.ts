@@ -419,9 +419,16 @@ export async function fetchWarehouseGroups(managerId: UUID | 'ALL') {
     return { data: data || [], error: null }
 }
 
-// p_group_id null → tạo nhóm mới (ownerId: chỉ admin — nhóm thuộc chủ của địa chỉ, không thuộc admin); có giá trị → đổi tên. Trả về group id.
-export async function upsertWarehouseGroup(groupId: UUID | null, name: string, ownerId?: UUID | null) {
-    const { data, error } = await supabase.rpc('upsert_warehouse_group', { p_group_id: groupId, p_name: name, ...(ownerId ? { p_owner_id: ownerId } : {}) })
+// Đổi tên nhóm (tạo nhóm mới đi qua createWarehouseGroupAndJoin). Trả về group id.
+export async function upsertWarehouseGroup(groupId: UUID | null, name: string) {
+    const { data, error } = await supabase.rpc('upsert_warehouse_group', { p_group_id: groupId, p_name: name })
+    if (error) throw error
+    return data
+}
+
+// Tạo nhóm + gộp địa chỉ vào đó, 1 transaction; chủ nhóm = chủ của địa chỉ. Trả về group id.
+export async function createWarehouseGroupAndJoin(addressId: UUID, name: string) {
+    const { data, error } = await supabase.rpc('create_warehouse_group_and_join', { p_address_id: addressId, p_name: name })
     if (error) throw error
     return data
 }
