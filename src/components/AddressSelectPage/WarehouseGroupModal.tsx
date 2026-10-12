@@ -24,88 +24,54 @@ export default function WarehouseGroupModal({
     onCreateWarehouseGroup, onRenameWarehouseGroup, onRemoveWarehouseGroup, onSetAddressGroup, onSetGroupHub,
     onClose,
 }: Props) {
-    const [groupSaving, setGroupSaving] = useState(false)
+    const [busy, setBusy] = useState(false)
     const [groupError, setGroupError] = useState('')
     const [newGroupName, setNewGroupName] = useState('')
-    const [creatingGroup, setCreatingGroup] = useState(false)
     const [confirmDeleteGroupId, setConfirmDeleteGroupId] = useState<UUID | null>(null)
     const [renamingGroupId, setRenamingGroupId] = useState<UUID | null>(null)
     const [renameGroupName, setRenameGroupName] = useState('')
 
-    async function handleJoinGroup(groupId: UUID | null) {
-        if (groupSaving) return
-        setGroupSaving(true)
+    // Mọi thao tác nhóm cùng khuôn: bật busy, xoá lỗi, chạy, báo lỗi, tắt busy.
+    async function run(fallback: string, fn: () => Promise<unknown>) {
+        setBusy(true)
         setGroupError('')
-        try {
-            await onSetAddressGroup(addr.id, groupId)
-        } catch (err) {
-            setGroupError(errorMessage(err, 'Không thể đổi nhóm kho tổng'))
-        } finally {
-            setGroupSaving(false)
-        }
+        try { await fn() } catch (err) { setGroupError(errorMessage(err, fallback)) } finally { setBusy(false) }
     }
+
+    const handleJoinGroup = (groupId: UUID | null) =>
+        !busy && run('Không thể đổi nhóm kho tổng', () => onSetAddressGroup(addr.id, groupId))
 
     // Đặt / bỏ địa chỉ đang mở làm kho tổng (nơi giữ hàng thật) của nhóm.
-    async function handleToggleHub(group: WarehouseGroup) {
-        if (groupSaving) return
-        setGroupSaving(true)
-        setGroupError('')
-        try {
-            await onSetGroupHub(group.id, group.hub_address_id === addr.id ? null : addr.id)
-        } catch (err) {
-            setGroupError(errorMessage(err, 'Không thể đặt kho tổng'))
-        } finally {
-            setGroupSaving(false)
-        }
-    }
+    const handleToggleHub = (group: WarehouseGroup) =>
+        !busy && run('Không thể đặt kho tổng', () => onSetGroupHub(group.id, group.hub_address_id === addr.id ? null : addr.id))
 
-    async function handleCreateAndJoinGroup() {
+    function handleCreateAndJoinGroup() {
         const name = newGroupName.trim()
-        if (!name || creatingGroup) return
-        setCreatingGroup(true)
-        setGroupError('')
-        try {
+        if (!name || busy) return
+        return run('Không thể tạo nhóm', async () => {
             const groupId = await onCreateWarehouseGroup(name)
             await onSetAddressGroup(addr.id, groupId)
             setNewGroupName('')
-        } catch (err) {
-            setGroupError(errorMessage(err, 'Không thể tạo nhóm'))
-        } finally {
-            setCreatingGroup(false)
-        }
+        })
     }
 
-    async function handleRenameGroup(groupId: UUID) {
+    function handleRenameGroup(groupId: UUID) {
         const name = renameGroupName.trim()
-        if (!name || groupSaving) return
-        setGroupSaving(true)
-        setGroupError('')
-        try {
+        if (!name || busy) return
+        return run('Không thể đổi tên nhóm', async () => {
             await onRenameWarehouseGroup(groupId, name)
             setRenamingGroupId(null)
-        } catch (err) {
-            setGroupError(errorMessage(err, 'Không thể đổi tên nhóm'))
-        } finally {
-            setGroupSaving(false)
-        }
+        })
     }
 
-    async function handleDeleteGroup(groupId: UUID) {
-        setGroupSaving(true)
-        setGroupError('')
-        try {
-            await onRemoveWarehouseGroup(groupId)
-            setConfirmDeleteGroupId(null)
-        } catch (err) {
-            setGroupError(errorMessage(err, 'Không thể xoá nhóm'))
-        } finally {
-            setGroupSaving(false)
-        }
-    }
+    const handleDeleteGroup = (groupId: UUID) => run('Không thể xoá nhóm', async () => {
+        await onRemoveWarehouseGroup(groupId)
+        setConfirmDeleteGroupId(null)
+    })
 
     return (
         <Dialog
-            onClose={() => { if (!groupSaving && !creatingGroup) onClose() }}
+            onClose={() => { if (!busy) onClose() }}
             panelClassName="w-full max-w-sm mx-4 my-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden max-h-[calc(100dvh-2rem)] flex flex-col"
         >
             <ModalHeader icon={Warehouse} iconColorClass="text-warning" iconBgClass="bg-warning/10" title="Kho tổng chung" onClose={onClose} className="shrink-0" />
@@ -118,7 +84,7 @@ export default function WarehouseGroupModal({
 
                 <button
                     onClick={() => handleJoinGroup(null)}
-                    disabled={groupSaving || !addr.warehouse_group_id}
+                    disabled={busy || !addr.warehouse_group_id}
                     className={`flex items-center justify-between px-4 py-3 rounded-[12px] border text-sm font-bold transition-colors disabled:opacity-100 ${!addr.warehouse_group_id ? 'border-primary bg-primary/10 text-primary' : 'border-border/60 bg-bg text-text hover:bg-surface-light'}`}
                 >
                     Không gộp nhóm
@@ -139,20 +105,20 @@ export default function WarehouseGroupModal({
                                     type="text"
                                     value={renameGroupName}
                                     onChange={e => setRenameGroupName(e.target.value)}
-                                    disabled={groupSaving}
+                                    disabled={busy}
                                     autoFocus
                                     className="flex-1 min-w-0 px-4 py-2.5 rounded-[12px] bg-bg border border-primary/60 text-text text-sm font-medium focus:outline-none disabled:opacity-50"
                                 />
                                 <button
                                     onClick={() => handleRenameGroup(g.id)}
-                                    disabled={groupSaving || !renameGroupName.trim()}
+                                    disabled={busy || !renameGroupName.trim()}
                                     className="shrink-0 px-3 py-2.5 rounded-[12px] bg-primary text-black font-black text-xs disabled:opacity-50"
                                 >
                                     Lưu
                                 </button>
                                 <button
                                     onClick={() => setRenamingGroupId(null)}
-                                    disabled={groupSaving}
+                                    disabled={busy}
                                     className="shrink-0 p-2.5 rounded-[12px] bg-surface-light text-text-secondary"
                                 >
                                     <X size={14} />
@@ -168,7 +134,7 @@ export default function WarehouseGroupModal({
                         >
                             <button
                                 onClick={() => handleJoinGroup(g.id)}
-                                disabled={groupSaving || isCurrent}
+                                disabled={busy || isCurrent}
                                 className="flex-1 min-w-0 text-left disabled:opacity-100"
                             >
                                 <span className="truncate block">{g.name}</span>
@@ -179,7 +145,7 @@ export default function WarehouseGroupModal({
                             {isCurrent && (
                                 <button
                                     onClick={(e) => { e.stopPropagation(); handleToggleHub(g) }}
-                                    disabled={groupSaving}
+                                    disabled={busy}
                                     className={`shrink-0 px-2 py-1.5 rounded-lg text-[11px] font-black disabled:opacity-50 ${g.hub_address_id === addr.id ? 'bg-primary text-black' : 'bg-surface-light text-text-secondary'}`}
                                 >
                                     {g.hub_address_id === addr.id ? 'Là kho tổng ✓' : 'Đặt làm kho tổng'}
@@ -189,7 +155,7 @@ export default function WarehouseGroupModal({
                                 <div className="flex items-center gap-1.5 shrink-0">
                                     <button
                                         onClick={() => handleDeleteGroup(g.id)}
-                                        disabled={groupSaving}
+                                        disabled={busy}
                                         className="px-2 py-1.5 rounded-lg bg-danger text-white text-[11px] font-black disabled:opacity-50"
                                     >
                                         Xoá
@@ -229,15 +195,15 @@ export default function WarehouseGroupModal({
                         value={newGroupName}
                         onChange={e => setNewGroupName(e.target.value)}
                         placeholder="Tên nhóm mới…"
-                        disabled={creatingGroup}
+                        disabled={busy}
                         className="flex-1 min-w-0 px-4 py-2.5 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50"
                     />
                     <button
                         onClick={handleCreateAndJoinGroup}
-                        disabled={creatingGroup || !newGroupName.trim()}
+                        disabled={busy || !newGroupName.trim()}
                         className="shrink-0 px-4 py-2.5 rounded-[12px] bg-primary text-black font-black text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1.5"
                     >
-                        {creatingGroup ? <Loader size={14} className="animate-spin" /> : 'Tạo & gộp'}
+                        {busy ? <Loader size={14} className="animate-spin" /> : 'Tạo & gộp'}
                     </button>
                 </div>
 

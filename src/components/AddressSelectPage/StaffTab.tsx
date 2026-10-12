@@ -9,7 +9,7 @@ import { capitalizeWords } from '../../utils'
 import { dateFullVN } from '../../utils/dateVN'
 import type { StaffMember } from '../../contexts/AddressStatsContext'
 import type { Address, UUID } from '../../types/domain'
-import { fetchStaffRevokedAddresses, fetchTeamRevokedAddresses, fetchStaffLastLogins, setStaffAddressAccess, setStaffPassword } from '../../services/authService'
+import { fetchStaffRevokedAddresses, fetchTeamRevokedAddresses, fetchStaffLastLogins, setStaffAddressAccess, setStaffPassword, setTeamMemberName, setTeamMemberRole, removeTeamMember } from '../../services/authService'
 import { errorMessage } from '../../utils/errorMessage'
 import { isStrongPassword } from '../../utils/password'
 
@@ -32,13 +32,11 @@ interface MemberPanelProps {
     addresses: Pick<Address, 'id' | 'name'>[]
     initialRevoked: Set<string> | null
     onRevokedChange?: (userId: UUID, revoked: Set<string>) => void
-    onRename: (userId: UUID, name: string) => Promise<unknown>
-    onSetRole: (userId: UUID, role: string) => Promise<unknown>
-    onRemove: (userId: UUID) => Promise<unknown>
+    onChanged: () => Promise<unknown> | unknown // refetch danh sách nhân sự sau khi đổi tên/vai trò/xoá
     onClose: () => void
 }
 
-function MemberPanel({ member, addresses, initialRevoked, onRevokedChange, onRename, onSetRole, onRemove, onClose }: MemberPanelProps) {
+function MemberPanel({ member, addresses, initialRevoked, onRevokedChange, onChanged, onClose }: MemberPanelProps) {
     const isStaff = member.role === 'staff'
 
     // Name — savedName tracks the last committed value (member prop is stale until reopen).
@@ -89,46 +87,40 @@ function MemberPanel({ member, addresses, initialRevoked, onRevokedChange, onRen
         return () => { cancelled = true }
     }, [member.id, initialRevoked])
 
-    async function handleSaveName() {
+    // Mỗi vùng (tên/vai trò/mật khẩu/xoá) cùng khuôn: bật busy, xoá lỗi, chạy, báo lỗi, tắt busy.
+    async function run(setBusy: (b: boolean) => void, setErr: (m: string) => void, fallback: string, fn: () => Promise<unknown>) {
+        setBusy(true); setErr('')
+        try { await fn() } catch (e) { setErr(errorMessage(e, fallback)) } finally { setBusy(false) }
+    }
+
+    function handleSaveName() {
         const name = nameDraft.trim()
         if (!name || name === savedName) return
-        setSavingName(true); setNameErr(''); setNameSaved(false)
-        try {
-            await onRename(member.id, name)
+        setNameSaved(false)
+        return run(setSavingName, setNameErr, 'Không lưu được tên', async () => {
+            await setTeamMemberName(member.id, name)
+            await onChanged()
             setSavedName(name)
             setNameSaved(true)
             setTimeout(() => setNameSaved(false), 1500)
-        } catch (e) {
-            setNameErr(errorMessage(e, 'Không lưu được tên'))
-        } finally {
-            setSavingName(false)
-        }
+        })
     }
 
-    async function handleSetRole() {
-        setRoleBusy(true); setRoleErr('')
-        try {
-            await onSetRole(member.id, isStaff ? 'manager' : 'staff')
-            onClose()
-        } catch (e) {
-            setRoleErr(errorMessage(e, 'Không đổi được vai trò'))
-            setRoleBusy(false)
-        }
-    }
+    const handleSetRole = () => run(setRoleBusy, setRoleErr, 'Không đổi được vai trò', async () => {
+        await setTeamMemberRole(member.id, isStaff ? 'manager' : 'staff')
+        await onChanged()
+        onClose()
+    })
 
-    async function handleSetPassword() {
+    function handleSetPassword() {
         if (!pwValid) return
-        setSavingPw(true); setPwErr(''); setPwMsg('')
-        try {
+        setPwMsg('')
+        return run(setSavingPw, setPwErr, 'Không đổi được mật khẩu', async () => {
             await setStaffPassword(member.id, pwDraft)
             setPwMsg('✓ Đã đổi mật khẩu')
             setPwDraft('')
             setTimeout(() => setPwMsg(''), 2000)
-        } catch (e) {
-            setPwErr(errorMessage(e, 'Không đổi được mật khẩu'))
-        } finally {
-            setSavingPw(false)
-        }
+        })
     }
 
     async function handleToggleAccess(addrId: string) {
@@ -148,16 +140,11 @@ function MemberPanel({ member, addresses, initialRevoked, onRevokedChange, onRen
         }
     }
 
-    async function handleRemove() {
-        setRemoving(true); setRemoveErr('')
-        try {
-            await onRemove(member.id)
-            onClose()
-        } catch (e) {
-            setRemoveErr(errorMessage(e, 'Không xoá được'))
-            setRemoving(false)
-        }
-    }
+    const handleRemove = () => run(setRemoving, setRemoveErr, 'Không xoá được', async () => {
+        await removeTeamMember(member.id)
+        await onChanged()
+        onClose()
+    })
 
     return (
         <BottomSheet
@@ -337,26 +324,22 @@ interface StaffTabProps {
     staffList: StaffMember[]
     staffLoading?: boolean
     addresses?: Pick<Address, 'id' | 'name'>[]
-    onSetMemberRole: (userId: UUID, role: string) => Promise<unknown>
-    onRemoveMember: (userId: UUID) => Promise<unknown>
-    onRenameMember: (userId: UUID, name: string) => Promise<unknown>
+    onChanged: () => Promise<unknown> | unknown
 }
 
-export default function StaffTab({
-    staffList, staffLoading, addresses = [],
-    onSetMemberRole, onRemoveMember, onRenameMember,
-}: StaffTabProps) {
+export default function StaffTab({ staffList, staffLoading, addresses = [], onChanged }: StaffTabProps) {
     const navigate = useNavigate()
     const { isAdmin } = useAuth()
     const [actionMember, setActionMember] = useState<StaffMember | null>(null)
 
-    // Prefetch the whole team's revoked branches once so opening a panel is instant.
-    // Map<userId, Set<addressId>>; null until the first fetch resolves.
+    // Prefetch chi nhánh bị chặn + lần đăng nhập gần nhất của cả team một lần để mở panel là có ngay.
+    // revokedByUser: Map<userId, Set<addressId>>; null cho tới khi fetch đầu xong.
     const [revokedByUser, setRevokedByUser] = useState<Map<string, Set<string>> | null>(null)
+    const [lastLoginByUser, setLastLoginByUser] = useState<Map<string, string>>(new Map())
     const staffIdsKey = staffList.map(m => m.id).join('|')
     useEffect(() => {
         let cancelled = false
-        fetchTeamRevokedAddresses().then(rows => {
+        Promise.all([fetchTeamRevokedAddresses(), fetchStaffLastLogins(staffList.map(m => m.id))]).then(([rows, logins]) => {
             if (cancelled) return
             const map = new Map<string, Set<string>>()
             for (const r of rows) {
@@ -364,6 +347,7 @@ export default function StaffTab({
                 map.get(r.user_id)!.add(r.address_id)
             }
             setRevokedByUser(map)
+            setLastLoginByUser(logins)
         })
         return () => { cancelled = true }
     }, [staffIdsKey])
@@ -371,16 +355,6 @@ export default function StaffTab({
     const handleRevokedChange = useCallback((userId: UUID, set: Set<string>) => {
         setRevokedByUser(prev => new Map(prev ?? []).set(userId, set))
     }, [])
-
-    // Prefetch lần đăng nhập gần nhất của cả team, cùng nhịp với revokedByUser.
-    const [lastLoginByUser, setLastLoginByUser] = useState<Map<string, string>>(new Map())
-    useEffect(() => {
-        let cancelled = false
-        fetchStaffLastLogins(staffList.map(m => m.id)).then(map => {
-            if (!cancelled) setLastLoginByUser(map)
-        })
-        return () => { cancelled = true }
-    }, [staffIdsKey])
 
     // 1 danh sách gộp, quản lý trước rồi nhân viên.
     const members = [...staffList].sort((a, b) => Number(b.role === 'manager') - Number(a.role === 'manager'))
@@ -452,9 +426,7 @@ export default function StaffTab({
                     addresses={addresses}
                     initialRevoked={revokedByUser ? (revokedByUser.get(actionMember.id) ?? new Set()) : null}
                     onRevokedChange={handleRevokedChange}
-                    onRename={onRenameMember}
-                    onSetRole={onSetMemberRole}
-                    onRemove={onRemoveMember}
+                    onChanged={onChanged}
                     onClose={() => setActionMember(null)}
                 />
             )}

@@ -16,6 +16,10 @@ interface Props {
 // Modal cấu hình máy in (IP mạng, hoặc "usb" = máy in cắm USB thẳng vào tablet) — chỉ có tác
 // dụng trên app native (Capacitor), web vẫn window.print() bất kể có nhập gì ở đây. Xem
 // escposBitmap.ts.
+const FIELDS = [
+    { key: 'counterPrinterIp', label: 'Máy in quầy (Tính tiền)', placeholder: '192.168.1.100' },
+    { key: 'kitchenPrinterIp', label: 'Máy in bếp (Tạo đơn)', placeholder: '192.168.1.101' },
+] as const
 const USB_BTN = 'shrink-0 px-4 rounded-[12px] bg-surface-light border border-border/60 text-text-secondary text-xs font-black uppercase tracking-wide hover:text-primary hover:border-primary/40 disabled:opacity-50'
 export default function PrinterIpModal({ addr, onSetPrinters, onCancel, onClose, onSuccess, setError }: Props) {
     const [printerForm, setPrinterForm] = useState({
@@ -53,37 +57,24 @@ export default function PrinterIpModal({ addr, onSetPrinters, onCancel, onClose,
                     <p className="text-text-secondary text-xs font-medium -mt-1">
                         Nhập IP máy in mạng, hoặc bấm USB nếu máy in cắm dây thẳng vào tablet. Để trống nếu chưa có máy in — app sẽ dùng hộp in của trình duyệt như bình thường.
                     </p>
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-text-secondary text-xs font-bold uppercase tracking-wide">Máy in quầy (Tính tiền)</label>
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                inputMode="decimal"
-                                placeholder="192.168.1.100"
-                                value={printerForm.counterPrinterIp}
-                                onChange={e => setPrinterForm(f => ({ ...f, counterPrinterIp: e.target.value }))}
-                                disabled={savingPrinters}
-                                className="w-full px-4 py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50"
-                                autoFocus
-                            />
-                            <button type="button" onClick={() => setPrinterForm(f => ({ ...f, counterPrinterIp: 'usb' }))} disabled={savingPrinters} className={USB_BTN}>USB</button>
+                    {FIELDS.map(({ key, label, placeholder }, i) => (
+                        <div key={key} className="flex flex-col gap-1.5">
+                            <label className="text-text-secondary text-xs font-bold uppercase tracking-wide">{label}</label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    placeholder={placeholder}
+                                    value={printerForm[key]}
+                                    onChange={e => setPrinterForm(f => ({ ...f, [key]: e.target.value }))}
+                                    disabled={savingPrinters}
+                                    className="w-full px-4 py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50"
+                                    autoFocus={i === 0}
+                                />
+                                <button type="button" onClick={() => setPrinterForm(f => ({ ...f, [key]: 'usb' }))} disabled={savingPrinters} className={USB_BTN}>USB</button>
+                            </div>
                         </div>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-text-secondary text-xs font-bold uppercase tracking-wide">Máy in bếp (Tạo đơn)</label>
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                inputMode="decimal"
-                                placeholder="192.168.1.101"
-                                value={printerForm.kitchenPrinterIp}
-                                onChange={e => setPrinterForm(f => ({ ...f, kitchenPrinterIp: e.target.value }))}
-                                disabled={savingPrinters}
-                                className="w-full px-4 py-3 rounded-[12px] bg-bg border border-border/60 text-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50"
-                            />
-                            <button type="button" onClick={() => setPrinterForm(f => ({ ...f, kitchenPrinterIp: 'usb' }))} disabled={savingPrinters} className={USB_BTN}>USB</button>
-                        </div>
-                    </div>
+                    ))}
                     <ModalActions
                         confirmLabel="Lưu"
                         confirmType="submit"

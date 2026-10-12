@@ -4,52 +4,21 @@ import { useMonetizationEnabled } from '../../hooks/useEntitlement'
 import { computeSubscriptionStatus } from '../../utils/subscriptionStatus'
 
 /**
- * SubscriptionBadge — hiển thị trạng thái gói cước cho từng address card.
+ * Trạng thái gói cước của 1 address card — 1 dòng chấm màu + chữ. Ẩn hẳn khi monetization OFF.
  *
- * Khi monetization OFF → không render gì (ẩn hoàn toàn).
+ * Thứ tự ưu tiên:
+ *   - không bán hàng hôm nay (hasActivity=false) → "Không hoạt động", che mọi nhánh khác
+ *     (gate chỉ có mở/khoá báo cáo; trial/pending/paid chỉ là LÝ DO)
+ *   - pending (0 row address_subscriptions, chưa từng chốt ca) → "Đang dùng miễn phí", không đếm ngược;
+ *     cố tình KHÁC chữ "Đang dùng thử" (trial thật có deadline) — xem docs/MONETIZATION.md §1
+ *   - chưa có gói → "Chưa đăng ký"
+ *   - có gói → "Đang dùng thử" (note='trial') | "Đã đăng ký" + còn X ngày. Lấy dòng valid_to muộn nhất
+ *     làm gói hiệu lực nên paid nối tiếp trial hiện "Đã đăng ký". Chấm: ≤3 đỏ, ≤14 vàng, còn lại xanh.
  *
- * 1 dòng status mảnh dưới tên quán (subtitle) — chấm màu + chữ:
- *   - không hoạt động hôm nay → ● Không hoạt động   (bất kể trạng thái gói gì —
- *     xem hasActivity bên dưới, ưu tiên cao nhất, che hết mọi nhánh khác)
- *   - đã trả       → ● Đã đăng ký           còn X ngày (2 đầu hàng)
- *   - trial thật   → ● Đang dùng thử         còn X ngày (2 đầu hàng)
- *   - free tạm     → ● Đang dùng miễn phí   (pending, xem dưới)
- *   - chưa có gói  → ● Chưa đăng ký   (click → /subscription)
- * Chấm đổi màu theo độ gấp: ≤3 đỏ, ≤14 vàng, còn lại xanh.
- *
- * Trial = dòng note='trial'. Lấy dòng valid_to muộn nhất làm gói hiệu lực → paid
- * nối tiếp trial thì hiện "Đã đăng ký".
- *
- * `hasActivity` (có bán hàng hôm nay — từ cupsMap/revenueMap, đã fetch sẵn ở
- * BranchGrid) ưu tiên CAO HƠN trạng thái gói: gate chỉ có 2 trạng thái thực
- * (mở/khoá báo cáo), còn trial/pending/paid chỉ là LÝ DO — không quan trọng bằng
- * việc chi nhánh có đang thật sự vận hành hay không (xem thảo luận sort trong
- * AddressSelectPage.tsx). Không hoạt động → hiện "Không hoạt động" ngay, không
- * cần biết đang trial/paid/pending/khoá gì.
- *
- * `pending` = địa chỉ CHƯA từng chốt ca full lần nào (0 row address_subscriptions)
- * → đang free tạm, không đếm ngược (mỗi địa chỉ độc lập, không giới hạn theo SĐT —
- * xem docs/MONETIZATION.md §1 Trial + migration 20260717_trial_4_per_address_not_per_phone.sql).
- * Hiện "Đang dùng miễn phí" — cố tình KHÁC chữ với "Đang dùng thử" (trial thật) để không bị
- * nhầm 2 trạng thái có ý nghĩa hành động khác hẳn nhau: trial có deadline (còn X
- * ngày), pending thì không.
- *
- * ⚠️ Render bằng <span> (không phải <button>) vì badge nằm BÊN TRONG button card
- *    của BranchGrid — button lồng button gây hydration error. span + onClick hợp lệ.
- *
- * Props:
- *   addressId: UUID
- *   rows: [{valid_from, valid_to, note}] — address_subscriptions rows của address này,
- *     fetch 1 lần cho TẤT CẢ địa chỉ ở AddressStatsContext (không tự fetch per-card,
- *     tránh N+1 request khi danh sách có nhiều chi nhánh).
- *   pending: bool — từ subscriptionStatusMap[addressId] === 'pending' (suy ra
- *     trực tiếp từ rows rỗng trong fetchSubscriptionStatuses, không cần RPC riêng).
- *   hasActivity: bool — có bán hàng hôm nay (cupsMap/revenueMap > 0). Ưu tiên
- *     cao nhất, xem mô tả ở trên.
- *   loading: bool — chưa có kết quả fetch thật → không render (rows lúc này luôn
- *     rỗng/undefined nên nếu vẫn render sẽ sai thành "Chưa đăng ký"). Ẩn hẳn thay vì
- *     skeleton để footer không nhảy chiều cao khi badge xuất hiện.
- *   onRenewClick: () => void   — điều hướng tới /subscription (passed from parent)
+ * loading = rows thật chưa về (lúc này rỗng nên sẽ sai thành "Chưa đăng ký") → không render; ẩn
+ * hẳn thay vì skeleton để footer không nhảy chiều cao.
+ * rows lấy 1 lần cho TẤT CẢ địa chỉ ở AddressStatsContext (tránh N+1 request).
+ * Render bằng <span role="button"> vì có thể nằm trong button cha (button lồng button gây hydration error).
  */
 interface Props {
     addressId?: UUID | null

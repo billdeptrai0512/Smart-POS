@@ -3,6 +3,7 @@ import { ClipboardCopy, Check, ChevronRight, Loader, Share2, Copy } from 'lucide
 import { cloneAddressConfig, createAddressShareCode } from '../../services/backupService'
 import { useAddress } from '../../contexts/AddressContext'
 import { Dialog, ModalHeader } from '../common/ModalShell'
+import SegmentedControl from '../common/SegmentedControl'
 import { copyText } from '../../utils/clipboard'
 import type { Address } from '../../types/domain'
 import { errorMessage } from '../../utils/errorMessage'
@@ -30,9 +31,9 @@ function PhaseChecklist({ progress }: { progress: Progress | null }) {
                 return (
                     <div key={p.key} className="flex items-center gap-3">
                         <span className="w-5 h-5 flex items-center justify-center shrink-0">
-                            {status === 'done' && <Check size={16} className="text-success" />}
-                            {status === 'active' && <Loader size={15} className="animate-spin text-primary" />}
-                            {status === 'pending' && <span className="w-2 h-2 rounded-full bg-border" />}
+                            {status === 'done' ? <Check size={16} className="text-success" />
+                                : status === 'active' ? <Loader size={15} className="animate-spin text-primary" />
+                                : <span className="w-2 h-2 rounded-full bg-border" />}
                         </span>
                         <span className={`text-sm font-bold ${status === 'pending' ? 'text-text-secondary/50' : 'text-text'}`}>
                             {p.label}
@@ -64,8 +65,7 @@ export default function BackupModal({ sourceAddress, onClose, onBack }: { source
     const [shareCode, setShareCode] = useState('')
     const [sharing, setSharing] = useState(false)
     const [shareErr, setShareErr] = useState('')
-    const [codeCopied, setCodeCopied] = useState(false)
-    const [linkCopied, setLinkCopied] = useState(false)
+    const [copied, setCopied] = useState<'code' | 'link' | null>(null)
 
     const shareLink = shareCode ? `${window.location.origin}/signup?clone=${shareCode}` : ''
 
@@ -82,17 +82,10 @@ export default function BackupModal({ sourceAddress, onClose, onBack }: { source
         }
     }
 
-    async function handleCopyCode() {
-        if (await copyText(shareCode)) {
-            setCodeCopied(true)
-            setTimeout(() => setCodeCopied(false), 2000)
-        }
-    }
-
-    async function handleCopyLink() {
-        if (await copyText(shareLink)) {
-            setLinkCopied(true)
-            setTimeout(() => setLinkCopied(false), 2000)
+    async function handleCopy(kind: 'code' | 'link') {
+        if (await copyText(kind === 'code' ? shareCode : shareLink)) {
+            setCopied(kind)
+            setTimeout(() => setCopied(null), 2000)
         }
     }
 
@@ -163,22 +156,13 @@ export default function BackupModal({ sourceAddress, onClose, onBack }: { source
                     <div className="px-5 py-4 space-y-4">
                         {/* ── Tabs (ẩn khi đang chạy) ── */}
                         {!loading && (
-                            <div className="flex items-center gap-1 bg-bg border border-border/60 rounded-[14px] p-1">
-                                {[
-                                    { key: 'self', label: 'Cùng tài khoản' },
-                                    { key: 'other', label: 'Khác tài khoản' },
-                                ].map(t => (
-                                    <button
-                                        key={t.key}
-                                        onClick={() => { setTab(t.key); setError(''); setShareErr('') }}
-                                        className={`flex-1 py-2.5 rounded-[10px] text-xs font-black transition-all ${tab === t.key
-                                            ? 'bg-primary text-black shadow-sm'
-                                            : 'text-text-secondary hover:text-text'}`}
-                                    >
-                                        {t.label}
-                                    </button>
-                                ))}
-                            </div>
+                            <SegmentedControl
+                                options={[{ value: 'self', label: 'Cùng tài khoản' }, { value: 'other', label: 'Khác tài khoản' }]}
+                                value={tab}
+                                onChange={t => { setTab(t); setError(''); setShareErr('') }}
+                                className="w-full bg-bg border border-border/60 rounded-[14px]"
+                                buttonClassName="flex-1 py-2.5 text-xs"
+                            />
                         )}
 
                         {/* ════ TAB: trong tài khoản này ════ */}
@@ -246,11 +230,11 @@ export default function BackupModal({ sourceAddress, onClose, onBack }: { source
                                                 className="w-full px-3 py-2.5 pr-12 rounded-[12px] bg-bg border border-border/60 text-text-secondary text-xs font-medium focus:outline-none focus:border-primary/40 truncate"
                                             />
                                             <button
-                                                onClick={handleCopyLink}
+                                                onClick={() => handleCopy('link')}
                                                 className="absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center bg-primary text-black rounded-[9px] hover:bg-primary/90 active:scale-95 transition-all"
                                                 title="Sao chép link mời"
                                             >
-                                                {linkCopied ? <Check size={16} /> : <Copy size={16} />}
+                                                {copied === 'link' ? <Check size={16} /> : <Copy size={16} />}
                                             </button>
                                         </div>
                                         <div className="text-text-secondary text-[11px] space-y-1">
@@ -264,11 +248,11 @@ export default function BackupModal({ sourceAddress, onClose, onBack }: { source
                                             <span className="text-text-secondary text-[11px] shrink-0">Hoặc mã:</span>
                                             <code className="flex-1 min-w-0 text-text font-black tracking-widest text-sm truncate">{shareCode}</code>
                                             <button
-                                                onClick={handleCopyCode}
+                                                onClick={() => handleCopy('code')}
                                                 className="p-1.5 text-text-secondary hover:text-text rounded-lg hover:bg-surface-light transition-colors shrink-0"
                                                 title="Sao chép mã"
                                             >
-                                                {codeCopied ? <Check size={13} /> : <Copy size={13} />}
+                                                {copied === 'code' ? <Check size={13} /> : <Copy size={13} />}
                                             </button>
                                         </div>
                                     </div>

@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { fetchAdminDashboard, fetchAdminFunnelCohorts } from '../services/adminDashboardService'
 import { fetchGuestOnboardingFunnel } from '../services/onboardingFunnelService'
 import { openedLabelVN, dateShortVN, timeStringVN } from '../utils/dateVN'
-import MonetizationToggle from '../components/AddressSelectPage/MonetizationToggle'
+import MonetizationToggle from '../components/AdminDashboardPage/MonetizationToggle'
 import { errorMessage } from '../utils/errorMessage'
 
 // Hình dạng JSON của RPC admin_dashboard_overview / admin_funnel_cohorts / guest_onboarding_funnel_stats

@@ -4,9 +4,11 @@ import {
     Pencil, Trash2, ClipboardCopy, MoreVertical, X,
     Coffee, FileText, Package, ChevronRight, Eraser,
     Banknote, Receipt, Wallet, TrendingUp, ChefHat, Warehouse, Printer, Archive, LayoutGrid, BadgePercent,
+    type LucideIcon,
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
+import SegmentedControl from '../common/SegmentedControl'
 import { formatVND } from '../../utils'
 import { wipeAddressSalesData } from '../../services/adminService'
 import SubscriptionBadge from './SubscriptionBadge'
@@ -23,7 +25,35 @@ const [OVERALL_TAB, RECIPES_TAB] = RECIPE_TABS
 
 const isManagerRole = (role?: string) => (role === 'manager' || role === 'co-manager') ? 1 : 0
 
+// Số ly/doanh thu hôm qua tính đến cùng giờ này → delta %. prev = 0 (chưa migrate RPC /
+// hôm qua nghỉ) thì ẩn delta, tránh chia 0.
+const deltaPct = (cur: number, prev: number) => prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null
+
 type SubModal = { type: 'rename' | 'printers' | 'delete' | 'backup' | 'wipe' | 'group'; addressId: UUID }
+
+// Tab "Lối tắt": mỗi pill điều hướng tới `path` (bấm là đóng modal), riêng "Kho chung" (không
+// có path) mở sub-modal nhóm kho.
+interface Shortcut { icon: LucideIcon; label: string; tone: string; path?: string; wide?: boolean }
+const SHORTCUTS: { title: string; pills: Shortcut[] }[] = [
+    { title: 'Nhật ký', pills: [
+        { icon: Banknote, label: 'Bán hàng', tone: 'primary', path: '/history/sales' },
+        { icon: Receipt, label: 'Chi phí', tone: 'primary', path: '/history/expense' },
+    ] },
+    { title: 'Báo cáo', pills: [
+        { icon: Wallet, label: 'Dòng tiền', tone: 'success', path: '/report/cashflow' },
+        { icon: TrendingUp, label: 'Lợi nhuận', tone: 'success', path: '/report/revenue' },
+    ] },
+    { title: 'Tồn kho', pills: [
+        { icon: Package, label: 'Kiểm kê', tone: 'primary', path: '/inventory/management' },
+        { icon: Archive, label: 'Lưu trữ', tone: 'primary', path: '/inventory/stocking' },
+        { icon: Warehouse, label: 'Kho chung', tone: 'warning', wide: true },
+    ] },
+    { title: 'Danh mục', pills: [
+        { icon: LayoutGrid, label: OVERALL_TAB.label, tone: 'primary', path: `/category/${OVERALL_TAB.key}` },
+        { icon: ChefHat, label: RECIPES_TAB.label, tone: 'primary', path: `/category/${RECIPES_TAB.key}` },
+        { icon: BadgePercent, label: DISCOUNT_TAB.label, tone: 'primary', path: `/category/${DISCOUNT_TAB.key}`, wide: true },
+    ] },
+]
 
 interface Props {
     addresses: Address[]
@@ -42,10 +72,7 @@ interface Props {
     error?: string
     setError: (message: string) => void
     onSelect: (addr: Address) => void
-    onSelectReport?: (addr: Address, tab: string) => void
-    onSelectHistory?: (addr: Address, tab: string) => void
-    onSelectIngredients?: (addr: Address, tab: string) => void
-    onSelectRecipes?: (addr: Address, tab: string) => void
+    onNavigate: (addr: Address, path: string) => void
     onRename: (addressId: UUID, name: string) => Promise<unknown>
     onRemove: (addressId: UUID) => Promise<unknown>
     onDefaultTemplate?: () => void
@@ -62,16 +89,15 @@ interface Props {
 export default function BranchGrid({
     addresses, fetchError, cupsMap, revenueMap, prevCupsMap = {}, prevRevenueMap = {}, sessionsMap, subscriptionRowsMap = {}, subscriptionStatusMap = {}, subscriptionLoading, statsLoading,
     isStaff, isAdmin, error, setError,
-    onSelect, onSelectReport, onSelectHistory, onSelectIngredients, onSelectRecipes,
+    onSelect, onNavigate,
     onRename, onRemove, onDefaultTemplate, onSupportClick, onSetPrinters,
     warehouseGroups = [], onCreateWarehouseGroup, onRenameWarehouseGroup, onRemoveWarehouseGroup, onSetAddressGroup, onSetGroupHub,
 }: Props) {
     // Which per-card sub-modal (rename/delete/backup/wipe/group/printers) is open, and for which
     // address. Layers ON TOP of expandedActionsId's action-sheet (both can be open at once —
     // "Hủy" inside a sub-modal clears just this, returning to the sheet; X/backdrop clears
-    // both). Mỗi modal tự quản lý form state riêng (xem RenameAddressModal, PrinterIpModal,
-    // WarehouseGroupModal, ConfirmByNameModal) — BranchGrid chỉ còn giữ
-    // subModal (đang mở modal nào, cho địa chỉ nào) và error dùng chung cho ErrorBanner cuối trang.
+    // both). Mỗi modal tự quản lý form state riêng; BranchGrid chỉ giữ subModal và error dùng
+    // chung cho ErrorBanner cuối trang.
     const [subModal, setSubModal] = useState<SubModal | null>(null)
     const closeSubModal = () => setSubModal(null)
     const [expandedActionsId, setExpandedActionsId] = useState<UUID | null>(null) // which card has the 3-action menu open
@@ -110,16 +136,6 @@ export default function BranchGrid({
                 {addresses.map(addr => {
                     const cups = cupsMap[addr.id] || 0
                     const revenue = revenueMap[addr.id] || 0
-                    // Số ly hôm qua tính đến cùng giờ này → delta ↑/↓%. 0 (chưa migrate
-                    // RPC / hôm qua nghỉ) thì ẩn delta, tránh chia 0.
-                    const prevCups = prevCupsMap[addr.id] || 0
-                    const cupsDeltaPct = prevCups > 0
-                        ? Math.round(((cups - prevCups) / prevCups) * 100)
-                        : null
-                    const prevRevenue = prevRevenueMap[addr.id] || 0
-                    const revenueDeltaPct = prevRevenue > 0
-                        ? Math.round(((revenue - prevRevenue) / prevRevenue) * 100)
-                        : null
                     const sessionUsers = sessionsMap[addr.id] || []
                     const isEditing = subModal?.type === 'rename' && subModal.addressId === addr.id
                     const isEditingPrinters = subModal?.type === 'printers' && subModal.addressId === addr.id
@@ -133,103 +149,83 @@ export default function BranchGrid({
                             key={addr.id}
                             className="bg-surface border border-border/60 rounded-[20px] overflow-hidden shadow-sm group hover:border-border/80 hover:shadow-[0_4px_20px_rgba(0,0,0,0.15)] transition-all flex flex-col"
                         >
-                            <>
-                                {/* Main click area — bọc trong div.relative vì nút ⋮ góc phải KHÔNG được lồng
-                                    trong button này (HTML không cho button-trong-button). */}
-                                <div className="relative flex-1 min-w-0">
-                                    <button
-                                        onClick={() => onSelect(addr)}
-                                        className="group w-full p-3 pr-11 text-left hover:bg-surface-light active:bg-border/30 transition-colors"
-                                    >
-                                        <div className="mb-1.5">
-                                            <span className="text-text font-black text-sm transition-colors line-clamp-2 leading-tight">{addr.name}</span>
-                                        </div>
-
-                                        {/* Uniform label:value list — số liệu vận hành */}
-                                        <div className="flex flex-col gap-1.5 text-sm">
-                                            {/* Skeleton giữ chỗ 2 dòng stats trong lần load đầu — card không còn trống trơn */}
-                                            {statsLoading && !hasStats && (
-                                                <>
-                                                    <Skeleton className="h-4 w-32 rounded-md" />
-                                                    <Skeleton className="h-4 w-44 rounded-md" />
-                                                </>
-                                            )}
-                                            {/* Mỗi người đang trong ca một dòng — nhãn theo vai trò, quản lý trước */}
-                                            {hasStats && [...sessionUsers]
-                                                .sort((a, b) => isManagerRole(b.role) - isManagerRole(a.role))
-                                                .map((u, i) => (
-                                                    <div key={i} className="flex items-baseline gap-1.5 min-w-0">
-                                                        <span className="text-text-secondary shrink-0">{isManagerRole(u.role) ? 'Quản lý:' : 'Nhân viên:'}</span>
-                                                        <span className="text-text truncate">{u.name}</span>
-                                                    </div>
-                                                ))}
-                                            {hasStats && (
-                                                <>
-                                                    <div className="flex items-baseline gap-1.5">
-                                                        <span className="text-text-secondary">Hôm nay bán:</span>
-                                                        <span className="text-text">{cups} ly</span>
-                                                        {cupsDeltaPct !== null && cupsDeltaPct !== 0 && (
-                                                            <span
-                                                                title="So với hôm qua cùng giờ"
-                                                                className={`text-[12px] font-bold tabular-nums ${cupsDeltaPct > 0 ? 'text-success' : 'text-danger'}`}
-                                                            >
-                                                                {cupsDeltaPct > 0 ? '↑' : '↓'}{Math.abs(cupsDeltaPct)}%
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex items-baseline gap-1.5">
-                                                        <span className="text-text-secondary">Tổng doanh thu:</span>
-                                                        <span className="text-text">{formatVND(revenue)}</span>
-                                                        {revenueDeltaPct !== null && revenueDeltaPct !== 0 && (
-                                                            <span
-                                                                title="So với hôm qua cùng giờ"
-                                                                className={`text-[12px] font-bold tabular-nums ${revenueDeltaPct > 0 ? 'text-success' : 'text-danger'}`}
-                                                            >
-                                                                {revenueDeltaPct > 0 ? '↑' : '↓'}{Math.abs(revenueDeltaPct)}%
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </>
-                                            )}
-                                        </div>
-                                    </button>
-
-                                    {/* Góc trên phải: manager bấm mở thẳng modal Lối tắt/Quản lý. Staff không có
-                                        quyền vào modal đó nên vẫn giữ chevron làm tín hiệu "bấm card để vào quán".
-                                        shadow-sm + before:-inset-2 = nổi khối hơn nền card + vùng bấm vô hình
-                                        44px (chuẩn touch target tối thiểu) dù hình tròn hiển thị chỉ 28px. */}
-                                    {!isStaff ? (
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); setExpandedActionsId(addr.id); setActionsTab('shortcuts') }}
-                                            className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full bg-surface-light border border-border/50 shadow-sm text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all before:absolute before:-inset-2 before:content-['']"
-                                            title="Lối tắt & quản lý"
-                                            aria-label="Mở menu lối tắt và quản lý"
-                                        >
-                                            <MoreVertical size={16} />
-                                        </button>
-                                    ) : (
-                                        <ChevronRight size={18} strokeWidth={2.5} className="pointer-events-none absolute top-3.5 right-3 text-text-secondary" />
-                                    )}
-                                </div>
-
-                                {/* Footer: trạng thái gói (mọi role) — menu thao tác đã chuyển lên nút ⋮ góc trên.
-                                    px-3 khớp đúng p-3 của header phía trên → "Đã đăng ký" thẳng hàng với tên quán. */}
-                                <div className="border-t border-border/40 px-3 py-2">
-                                    <div className="flex items-center">
-                                        {/* Trạng thái gói — tự ẩn khi monetization OFF (badge return null) */}
-                                        <SubscriptionBadge
-                                            addressId={addr.id}
-                                            rows={subscriptionRowsMap[addr.id]}
-                                            pending={subscriptionStatusMap[addr.id] === 'pending'}
-                                            hasActivity={cups > 0 || revenue > 0}
-                                            loading={subscriptionLoading || !hasStats}
-                                            onRenewClick={() => navigate('/subscription', {
-                                                state: { preselectAddressId: addr.id, from: '/addresses' },
-                                            })}
-                                        />
+                            {/* Main click area — bọc trong div.relative vì nút ⋮ góc phải KHÔNG được lồng
+                                trong button này (HTML không cho button-trong-button). */}
+                            <div className="relative flex-1 min-w-0">
+                                <button
+                                    onClick={() => onSelect(addr)}
+                                    className="group w-full p-3 pr-11 text-left hover:bg-surface-light active:bg-border/30 transition-colors"
+                                >
+                                    <div className="mb-1.5">
+                                        <span className="text-text font-black text-sm transition-colors line-clamp-2 leading-tight">{addr.name}</span>
                                     </div>
-                                </div>
-                            </>
+
+                                    {/* Uniform label:value list — số liệu vận hành */}
+                                    <div className="flex flex-col gap-1.5 text-sm">
+                                        {/* Skeleton giữ chỗ 2 dòng stats trong lần load đầu — card không còn trống trơn */}
+                                        {statsLoading && !hasStats && (
+                                            <>
+                                                <Skeleton className="h-4 w-32 rounded-md" />
+                                                <Skeleton className="h-4 w-44 rounded-md" />
+                                            </>
+                                        )}
+                                        {/* Mỗi người đang trong ca một dòng — nhãn theo vai trò, quản lý trước */}
+                                        {hasStats && [...sessionUsers]
+                                            .sort((a, b) => isManagerRole(b.role) - isManagerRole(a.role))
+                                            .map((u, i) => (
+                                                <div key={i} className="flex items-baseline gap-1.5 min-w-0">
+                                                    <span className="text-text-secondary shrink-0">{isManagerRole(u.role) ? 'Quản lý:' : 'Nhân viên:'}</span>
+                                                    <span className="text-text truncate">{u.name}</span>
+                                                </div>
+                                            ))}
+                                        {hasStats && (
+                                            <>
+                                                <div className="flex items-baseline gap-1.5">
+                                                    <span className="text-text-secondary">Hôm nay bán:</span>
+                                                    <span className="text-text">{cups} ly</span>
+                                                    <Delta pct={deltaPct(cups, prevCupsMap[addr.id] || 0)} />
+                                                </div>
+                                                <div className="flex items-baseline gap-1.5">
+                                                    <span className="text-text-secondary">Tổng doanh thu:</span>
+                                                    <span className="text-text">{formatVND(revenue)}</span>
+                                                    <Delta pct={deltaPct(revenue, prevRevenueMap[addr.id] || 0)} />
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                </button>
+
+                                {/* Góc trên phải: manager bấm mở thẳng modal Lối tắt/Quản lý; staff không có
+                                    quyền vào modal đó nên giữ chevron. before:-inset-2 = vùng bấm vô hình 44px
+                                    dù hình tròn hiển thị chỉ 28px. */}
+                                {!isStaff ? (
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setExpandedActionsId(addr.id); setActionsTab('shortcuts') }}
+                                        className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full bg-surface-light border border-border/50 shadow-sm text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all before:absolute before:-inset-2 before:content-['']"
+                                        title="Lối tắt & quản lý"
+                                        aria-label="Mở menu lối tắt và quản lý"
+                                    >
+                                        <MoreVertical size={16} />
+                                    </button>
+                                ) : (
+                                    <ChevronRight size={18} strokeWidth={2.5} className="pointer-events-none absolute top-3.5 right-3 text-text-secondary" />
+                                )}
+                            </div>
+
+                            {/* Footer: trạng thái gói (mọi role). px-3 khớp p-3 của header → thẳng hàng với tên quán. */}
+                            <div className="border-t border-border/40 px-3 py-2">
+                                {/* Tự ẩn khi monetization OFF (badge return null) */}
+                                <SubscriptionBadge
+                                    addressId={addr.id}
+                                    rows={subscriptionRowsMap[addr.id]}
+                                    pending={subscriptionStatusMap[addr.id] === 'pending'}
+                                    hasActivity={cups > 0 || revenue > 0}
+                                    loading={subscriptionLoading || !hasStats}
+                                    onRenewClick={() => navigate('/subscription', {
+                                        state: { preselectAddressId: addr.id, from: '/addresses' },
+                                    })}
+                                />
+                            </div>
 
                             {/* Modal thao tác — Lối tắt (pill grid, điều hướng) tách riêng khỏi Quản lý (list, sửa/xoá địa chỉ). */}
                             {expandedActionsId === addr.id && (
@@ -237,124 +233,55 @@ export default function BranchGrid({
                                     onClose={() => setExpandedActionsId(null)}
                                     panelClassName="w-full max-w-sm mx-4 my-4 bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden max-h-[calc(100dvh-2rem)] flex flex-col"
                                 >
-                                        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40 shrink-0">
-                                            <p className="text-text font-black text-sm leading-none truncate pr-2">{addr.name}</p>
-                                            <button
-                                                onClick={() => setExpandedActionsId(null)}
-                                                className="p-1.5 text-text-secondary hover:text-text transition-colors rounded-lg hover:bg-surface-light shrink-0"
-                                            >
-                                                <X size={16} />
-                                            </button>
+                                    <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40 shrink-0">
+                                        <p className="text-text font-black text-sm leading-none truncate pr-2">{addr.name}</p>
+                                        <button
+                                            onClick={() => setExpandedActionsId(null)}
+                                            className="p-1.5 text-text-secondary hover:text-text transition-colors rounded-lg hover:bg-surface-light shrink-0"
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                    {!isStaff && (
+                                        <div className="px-3 pt-3 pb-2 shrink-0">
+                                            <SegmentedControl
+                                                options={[{ value: 'shortcuts', label: 'Lối tắt' }, { value: 'manage', label: 'Quản lý' }]}
+                                                value={actionsTab}
+                                                onChange={setActionsTab}
+                                                buttonClassName="flex-1 py-2 text-xs uppercase tracking-wider"
+                                            />
                                         </div>
-                                        {!isStaff && (
-                                            <div className="flex gap-1.5 px-3 pt-3 pb-2 shrink-0">
-                                                <button
-                                                    onClick={() => setActionsTab('shortcuts')}
-                                                    className={`flex-1 py-2 rounded-[10px] text-xs font-black uppercase tracking-wider transition-colors ${actionsTab === 'shortcuts' ? 'bg-primary/10 text-primary' : 'bg-surface-light text-text-secondary hover:text-text'}`}
-                                                >
-                                                    Lối tắt
-                                                </button>
-                                                <button
-                                                    onClick={() => setActionsTab('manage')}
-                                                    className={`flex-1 py-2 rounded-[10px] text-xs font-black uppercase tracking-wider transition-colors ${actionsTab === 'manage' ? 'bg-primary/10 text-primary' : 'bg-surface-light text-text-secondary hover:text-text'}`}
-                                                >
-                                                    Quản lý
-                                                </button>
+                                    )}
+                                    <div
+                                        className="overflow-y-auto"
+                                        ref={checkActionsScrollFade}
+                                        onScroll={(e) => checkActionsScrollFade(e.currentTarget)}
+                                    >
+                                        {!isStaff && actionsTab === 'shortcuts' && (
+                                            <div className="px-3 pt-3 pb-5 flex flex-col gap-4">
+                                                {SHORTCUTS.map(group => (
+                                                    <div key={group.title}>
+                                                        <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">{group.title}</p>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            {group.pills.map(p => (
+                                                                <ActionPill
+                                                                    key={p.label}
+                                                                    icon={<p.icon size={16} />}
+                                                                    label={p.label}
+                                                                    tone={p.tone}
+                                                                    className={p.wide ? 'col-span-2' : ''}
+                                                                    onClick={p.path
+                                                                        ? () => { onNavigate(addr, p.path!); setExpandedActionsId(null) }
+                                                                        : () => setSubModal({ type: 'group', addressId: addr.id })}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         )}
-                                        <div
-                                            className="overflow-y-auto"
-                                            ref={checkActionsScrollFade}
-                                            onScroll={(e) => checkActionsScrollFade(e.currentTarget)}
-                                        >
-                                            {!isStaff && actionsTab === 'shortcuts' && (
-                                                <div className="px-3 pt-3 pb-5 flex flex-col gap-4">
-                                                    <div>
-                                                        <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Nhật ký</p>
-                                                        <div className="grid grid-cols-2 gap-2">
-                                                            <ActionPill
-                                                                icon={<Banknote size={16} />}
-                                                                label="Bán hàng"
-                                                                tone="primary"
-                                                                onClick={() => { onSelectHistory?.(addr, 'sales'); setExpandedActionsId(null) }}
-                                                            />
-                                                            <ActionPill
-                                                                icon={<Receipt size={16} />}
-                                                                label="Chi phí"
-                                                                tone="primary"
-                                                                onClick={() => { onSelectHistory?.(addr, 'expense'); setExpandedActionsId(null) }}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Báo cáo</p>
-                                                        <div className="grid grid-cols-2 gap-2">
-                                                            <ActionPill
-                                                                icon={<Wallet size={16} />}
-                                                                label="Dòng tiền"
-                                                                tone="success"
-                                                                onClick={() => { onSelectReport?.(addr, 'cashflow'); setExpandedActionsId(null) }}
-                                                            />
-                                                            <ActionPill
-                                                                icon={<TrendingUp size={16} />}
-                                                                label="Lợi nhuận"
-                                                                tone="success"
-                                                                onClick={() => { onSelectReport?.(addr, 'revenue'); setExpandedActionsId(null) }}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Tồn kho</p>
-                                                        <div className="grid grid-cols-2 gap-2">
-                                                            <ActionPill
-                                                                icon={<Package size={16} />}
-                                                                label="Kiểm kê"
-                                                                tone="primary"
-                                                                onClick={() => { onSelectIngredients?.(addr, 'management'); setExpandedActionsId(null) }}
-                                                            />
-                                                            <ActionPill
-                                                                icon={<Archive size={16} />}
-                                                                label="Lưu trữ"
-                                                                tone="primary"
-                                                                onClick={() => { onSelectIngredients?.(addr, 'stocking'); setExpandedActionsId(null) }}
-                                                            />
-                                                            <ActionPill
-                                                                icon={<Warehouse size={16} />}
-                                                                label="Kho chung"
-                                                                tone="warning"
-                                                                className="col-span-2"
-                                                                onClick={() => setSubModal({ type: 'group', addressId: addr.id })}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Danh mục</p>
-                                                        <div className="grid grid-cols-2 gap-2">
-                                                            <ActionPill
-                                                                icon={<LayoutGrid size={16} />}
-                                                                label={OVERALL_TAB.label}
-                                                                tone="primary"
-                                                                onClick={() => { onSelectRecipes?.(addr, OVERALL_TAB.key); setExpandedActionsId(null) }}
-                                                            />
-                                                            <ActionPill
-                                                                icon={<ChefHat size={16} />}
-                                                                label={RECIPES_TAB.label}
-                                                                tone="primary"
-                                                                onClick={() => { onSelectRecipes?.(addr, RECIPES_TAB.key); setExpandedActionsId(null) }}
-                                                            />
-                                                            <ActionPill
-                                                                icon={<BadgePercent size={16} />}
-                                                                label={DISCOUNT_TAB.label}
-                                                                tone="primary"
-                                                                className="col-span-2"
-                                                                onClick={() => { onSelectRecipes?.(addr, DISCOUNT_TAB.key); setExpandedActionsId(null) }}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
 
-                                            {actionsTab === 'manage' && (
+                                        {actionsTab === 'manage' && (
                                             <div className="px-3 pt-3 pb-5">
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <ActionPill
@@ -370,7 +297,7 @@ export default function BranchGrid({
                                                         onClick={() => { setSubModal({ type: 'rename', addressId: addr.id }); setError('') }}
                                                     />
                                                     {/* Chỉ dùng cho app native (Capacitor) — máy in ESC/POS qua mạng, xem
-                                                        escposBitmap.ts. Web bỏ qua 2 cột này, vẫn window.print() như cũ. */}
+                                                        escposBitmap.ts. Web bỏ qua, vẫn window.print() như cũ. */}
                                                     <ActionPill
                                                         icon={<Printer size={16} />}
                                                         label="Máy in"
@@ -393,11 +320,11 @@ export default function BranchGrid({
                                                     />
                                                 </div>
                                             </div>
-                                            )}
-                                        </div>
-                                        {actionsScrollFade && (
-                                            <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-surface to-transparent" />
                                         )}
+                                    </div>
+                                    {actionsScrollFade && (
+                                        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-surface to-transparent" />
+                                    )}
                                 </Dialog>
                             )}
 
@@ -442,7 +369,7 @@ export default function BranchGrid({
                                 <BackupModal
                                     sourceAddress={addr}
                                     onClose={closeAll}
-                                    onBack={() => closeSubModal()}
+                                    onBack={closeSubModal}
                                 />
                             )}
 
@@ -524,6 +451,19 @@ export default function BranchGrid({
     )
 }
 
+// ↑/↓% so với hôm qua cùng giờ; null hoặc 0 thì ẩn.
+function Delta({ pct }: { pct: number | null }) {
+    if (!pct) return null
+    return (
+        <span
+            title="So với hôm qua cùng giờ"
+            className={`text-[12px] font-bold tabular-nums ${pct > 0 ? 'text-success' : 'text-danger'}`}
+        >
+            {pct > 0 ? '↑' : '↓'}{Math.abs(pct)}%
+        </span>
+    )
+}
+
 // Pill hành động — 2 cột, icon nhỏ + label 1 dòng. Dùng chung cho "Lối tắt" (điều hướng)
 // và "Quản lý" (sửa/xoá địa chỉ), tone danger cho các thao tác nguy hiểm.
 const PILL_TONES: Record<string, string> = {
@@ -532,7 +472,7 @@ const PILL_TONES: Record<string, string> = {
     warning: 'bg-warning/10 text-warning',
     danger: 'bg-danger/10 text-danger',
 }
-function ActionPill({ icon, label, tone = 'primary', onClick, className = '' }: { icon: ReactNode; label: string; tone?: keyof typeof PILL_TONES; onClick?: () => void; className?: string }) {
+function ActionPill({ icon, label, tone = 'primary', onClick, className = '' }: { icon: ReactNode; label: string; tone?: string; onClick?: () => void; className?: string }) {
     return (
         <button
             onClick={onClick}

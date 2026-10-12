@@ -3,7 +3,7 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAddressStats } from '../contexts/AddressStatsContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { fetchDefaultIngredientSort, setTeamMemberRole, removeTeamMember, setTeamMemberName } from '../services/authService'
+import { fetchDefaultIngredientSort } from '../services/authService'
 import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
 import { cloneFromShareCode, getSharedConfig } from '../services/backupService'
 import { Loader } from 'lucide-react'
@@ -155,26 +155,10 @@ export default function AddressSelectPage() {
         navigate('/pos', { replace: true })
     }
 
-    function handleSelectReport(addr: Address, view: string) {
+    function handleNavigate(addr: Address, path: string) {
         setSelectedAddress(addr)
-        navigate(`/report/${view}`, { state: { from: '/addresses' } })
+        navigate(path, { state: { from: '/addresses' } })
     }
-
-    function handleSelectHistory(addr: Address, tab: string) {
-        setSelectedAddress(addr)
-        navigate(`/history/${tab}`, { state: { from: '/addresses' } })
-    }
-
-    function handleSelectIngredients(addr: Address, tab: string) {
-        setSelectedAddress(addr)
-        navigate(`/inventory/${tab}`, { state: { from: '/addresses' } })
-    }
-
-    function handleSelectRecipes(addr: Address, tab: string) {
-        setSelectedAddress(addr)
-        navigate(`/category/${tab}`, { state: { from: '/addresses' } })
-    }
-
 
     async function handleCreate() {
         if (!newAddressName.trim()) return
@@ -203,23 +187,6 @@ export default function AddressSelectPage() {
             setCreating(false)
             createGuardRef.current = false
         }
-    }
-
-
-
-    async function handleSetMemberRole(memberId: UUID, role: string) {
-        await setTeamMemberRole(memberId, role)
-        await refreshStaff()
-    }
-
-    async function handleRemoveMember(memberId: UUID) {
-        await removeTeamMember(memberId)
-        await refreshStaff()
-    }
-
-    async function handleRenameMember(memberId: UUID, name: string) {
-        await setTeamMemberName(memberId, name)
-        await refreshStaff()
     }
 
     async function handleSignOut() {
@@ -282,10 +249,7 @@ export default function AddressSelectPage() {
                         error={error}
                         setError={setError}
                         onSelect={handleSelect}
-                        onSelectReport={handleSelectReport}
-                        onSelectHistory={handleSelectHistory}
-                        onSelectIngredients={handleSelectIngredients}
-                        onSelectRecipes={handleSelectRecipes}
+                        onNavigate={handleNavigate}
                         onRename={renameAddress}
                         onSetPrinters={setPrinters}
                         onRemove={removeAddress}
@@ -311,9 +275,7 @@ export default function AddressSelectPage() {
                         staffList={staffList}
                         staffLoading={staffLoading}
                         addresses={teamAddresses}
-                        onSetMemberRole={handleSetMemberRole}
-                        onRemoveMember={handleRemoveMember}
-                        onRenameMember={handleRenameMember}
+                        onChanged={refreshStaff}
                     />
                 )}
             </div>
