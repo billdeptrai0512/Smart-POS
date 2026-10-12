@@ -47,6 +47,13 @@ export function dayMonthVN(ts?: string | number | Date | null) {
     return isNaN(d.getTime()) ? '' : dateShortVN(d)
 }
 
+// Nhãn "Kiểm kê lần cuối": ngày đếm 'YYYY-MM-DD' (+ giờ đếm "HH:mm" nếu entry có — entry cũ chỉ có ngày).
+export function countedLabelVN(on: string, at?: string | null, withYear = false) {
+    const [y, m, d] = on.split('-')
+    const date = withYear ? `${d}/${m}/${y}` : `${d}/${m}`
+    return at ? `${timeStringVN(new Date(at))} ${date}` : date
+}
+
 // "dd/mm/yyyy" in Vietnam timezone.
 export function dateFullVN(date = new Date()) {
     const [y] = dateStringVN(date).split('-')

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { missingUsageDays, usageAfterCount, usageByDay } from './dailyUsage'
 import { estimateCounterRow } from './inventory'
+import { countedLabelVN } from './dateVN'
 
 describe('missingUsageDays', () => {
     it('chỉ ngày đã qua chưa lưu, không gồm hôm nay', () => {
@@ -68,5 +69,13 @@ describe('đếm giữa ngày: trừ đơn SAU giờ đếm', () => {
         const r = row({ counter_counted_on: '2026-10-11', counter_counted_at: '2026-10-11T15:00:00+07:00' })
         const e = estimateCounterRow(r, { '2026-10-11': { ly: 99 }, '2026-10-12': { ly: 4 } }, { today: '2026-10-12', fromDay: '2026-10-12', afterCount: { ly: 2 } })
         expect(e.counter_stock).toBe(14) // 20 − 2 (hôm qua sau 15h) − 4 (hôm nay); 99 là cả ngày hôm qua, không được trừ
+    })
+})
+
+describe('countedLabelVN', () => {
+    it('có giờ → "HH:mm dd/mm" theo giờ VN; không có → chỉ ngày; withYear thêm năm', () => {
+        expect(countedLabelVN('2026-10-12', '2026-10-12T03:05:00Z')).toBe('10:05 12/10')
+        expect(countedLabelVN('2026-10-12', null)).toBe('12/10')
+        expect(countedLabelVN('2026-10-12', null, true)).toBe('12/10/2026')
     })
 })
