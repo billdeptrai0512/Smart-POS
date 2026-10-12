@@ -2,12 +2,16 @@ import { describe, it, expect } from 'vitest'
 import { draftFromItems, draftToItems, draftTotals, fmtQty, isTrivialQty, parseQtyInput, shortNames, toQty } from './warehouseTransfer'
 
 describe('fmtQty', () => {
-    it('g/ml đủ lớn ghi thêm kg/lít, nhỏ hoặc đơn vị khác giữ nguyên', () => {
-        expect(fmtQty(10000, 'g')).toBe('10.000 g (10 kg)')
-        expect(fmtQty(1500, 'g')).toBe('1.500 g (1,5 kg)')
-        expect(fmtQty(2000, 'ml')).toBe('2.000 ml (2 lít)')
-        expect(fmtQty(900, 'g')).toBe('900 g')
+    it('không quy cách → số + đơn vị gốc, không tự quy đổi kg/lít', () => {
+        expect(fmtQty(10000, 'g')).toBe('10.000 g')
+        expect(fmtQty(2000, 'ml')).toBe('2.000 ml')
         expect(fmtQty(30, 'cái')).toBe('30 cái')
+    })
+    it('có quy cách → đọc theo đơn vị nhập kho (cả cấp 2)', () => {
+        const cfg = { pack_size: 380, pack_unit: 'lon' }
+        expect(fmtQty(7704, 'g', cfg)).toBe('20 lon + 104 g')
+        expect(fmtQty(760, 'g', cfg)).toBe('2 lon')
+        expect(fmtQty(9120, 'g', { ...cfg, pack2_size: 12, pack2_unit: 'thùng' })).toBe('2 thùng')
     })
 })
 

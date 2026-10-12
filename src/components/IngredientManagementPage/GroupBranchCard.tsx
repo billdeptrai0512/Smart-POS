@@ -1,10 +1,12 @@
 import Dropdown from '../common/Dropdown'
 import { fmtQty, parseQtyInput, toQty } from '../../utils/warehouseTransfer'
 import { ingredientLabel } from '../../utils/ingredients'
+import type { Row } from '../../types/domain'
 
 interface GroupBranchRow {
     ingredient: string
     unit: string
+    cfg?: Row // cấu hình đơn vị chung của kho (quy cách nhập) — mọi chi nhánh đọc cùng một cách
     value: string
     left: number // kho tổng còn lại của nguyên liệu này sau khi trừ mọi số đã chia (âm = chia vượt kho)
     suggest?: { qty: number; packs: number; packUnit?: string | null; sampleDays?: number } // dự báo cho ngày mai (đã trừ tồn quầy, làm tròn bịch)
@@ -42,7 +44,7 @@ export default function GroupBranchCard({ label, rows, options, onChange, onAdd 
                             <span className="block truncate text-[13px] font-medium text-text">{ingredientLabel(r.ingredient)}</span>
                             {s && toQty(r.value) !== s.qty && (
                                 <button type="button" onClick={() => onChange(r.ingredient, String(s.qty))} className="block text-left text-[11px] font-semibold text-primary">
-                                    Gợi ý {fmtQty(s.qty, r.unit)}{s.packs > 0 && s.packUnit ? ` (${s.packs} ${s.packUnit})` : ''}
+                                    Gợi ý {fmtQty(s.qty, r.unit, r.cfg)}
                                     {s.sampleDays !== undefined && s.sampleDays < 3 && <span className="font-normal text-text-dim"> · ước lượng từ {s.sampleDays} ngày bán</span>}
                                 </button>
                             )}
@@ -59,7 +61,7 @@ export default function GroupBranchCard({ label, rows, options, onChange, onAdd 
                             </div>
                             {toQty(r.value) > 0 && (
                                 <span className={`mr-[26px] text-[11px] tabular-nums ${r.left < 0 ? 'text-danger font-semibold' : 'text-text-dim'}`}>
-                                    {r.left < 0 ? `Thiếu ${fmtQty(-r.left, r.unit)}` : `Kho còn ${fmtQty(r.left, r.unit)}`}
+                                    {r.left < 0 ? `Thiếu ${fmtQty(-r.left, r.unit, r.cfg)}` : `Kho còn ${fmtQty(r.left, r.unit, r.cfg)}`}
                                 </span>
                             )}
                         </div>

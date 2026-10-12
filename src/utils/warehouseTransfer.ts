@@ -1,4 +1,5 @@
-import { r1 } from './inventory'
+import { formatPackedQty, pack2Of, r1 } from './inventory'
+import type { Row } from '../types/domain'
 
 export type Draft = Record<string, Record<string, string>>
 export interface TransferItem { address_id: string; ingredient: string; unit: string | null; qty: number }
@@ -18,13 +19,11 @@ export function parseQtyInput(v: string, unit?: string | null) {
 // Gợi ý chỉ vài gam/ml (vd. 8 g cacao) là nhiễu trong danh sách chia hàng — không gợi ý, quản lý muốn thì tự gõ.
 export const isTrivialQty = (qty: number, unit?: string | null) => (unit === 'g' || unit === 'ml') && qty < 10
 
-// Số kiểu Việt ("10.000") kèm đơn vị; g/ml đủ lớn thì ghi thêm kg/lít trong ngoặc ("10.000 g (10 kg)") vì chủ quán nghĩ bằng kg dễ hơn.
-// Chỉ để HIỂN THỊ — ô nhập và dữ liệu lưu vẫn theo đơn vị gốc.
-const vn = (n: number) => Number(n).toLocaleString('vi-VN')
-const BIG_UNIT: Record<string, string> = { g: 'kg', ml: 'lít' }
-export function fmtQty(n: number, unit?: string | null) {
-    const base = `${vn(n)} ${unit ?? ''}`.trim()
-    return unit && BIG_UNIT[unit] && Math.abs(n) >= 1000 ? `${base} (${vn(Math.round(n / 10) / 100)} ${BIG_UNIT[unit]})` : base
+// Số kiểu Việt kèm đơn vị. Có quy cách (cfg: pack_size/pack_unit/pack2_*) thì đọc theo đơn vị nhập kho thật ("2 thùng + 3 hộp"),
+// không thì "10.000 g". Mọi chi nhánh trong nhóm dùng CHUNG cfg của kho chung nên gọi tên giống nhau. Chỉ để HIỂN THỊ —
+// ô nhập và dữ liệu lưu vẫn theo đơn vị gốc.
+export function fmtQty(n: number, unit?: string | null, cfg?: Row | null) {
+    return formatPackedQty(n, cfg?.pack_size, cfg?.pack_unit, unit, { pack2: pack2Of(cfg), compact: true })
 }
 
 // Bỏ phần đầu chung của tên các chi nhánh ("KOPHIN 62 TRƯỜNG SA", "KOPHIN 34B XVNT" → "62 TRƯỜNG SA", "34B XVNT") cho ô nhập

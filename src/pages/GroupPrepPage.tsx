@@ -19,7 +19,7 @@ import { addDaysVN, dateFullVN, dateStringVN } from '../utils/dateVN'
 import { pack2Of, r1 } from '../utils/inventory'
 import Toast from '../components/POSPage/Toast'
 import IngredientDetailHeader from '../components/IngredientManagementPage/IngredientDetailHeader'
-import type { Address, SelectedAddress } from '../types/domain'
+import type { Address, Row, SelectedAddress } from '../types/domain'
 import RestockModal from '../components/IngredientManagementPage/RestockModal'
 import GroupBranchCard from '../components/IngredientManagementPage/GroupBranchCard'
 
@@ -91,11 +91,20 @@ function Page({ selectedAddress, siblings }: { selectedAddress: SelectedAddress;
     const cashClosedToday = useCashClosedToday(selectedAddress.id, !!restock)
 
     const locked = status === 'issued'
-    const unitOf = useMemo(() => {
-        const m: Record<string, string> = {}
-        for (const b of branches || []) for (const i of b.ingredientsList) m[i.ingredient] ??= i.unit
+    // Kho chung → MỘT cách gọi đơn vị cho mỗi nguyên liệu: lấy cấu hình (đơn vị gốc + quy cách nhập) của địa chỉ đang chọn
+    // (branches[0] = kho tổng), chi nhánh nào thiếu thì mượn của chi nhánh kế. Mọi con số trên trang đều đọc qua cfgOf.
+    const cfgOf = useMemo(() => {
+        const m: Record<string, Row> = {}
+        for (const b of branches || []) for (const i of b.ingredientsList) m[i.ingredient] ??= i
         return m
     }, [branches])
+    const unitOf = useMemo(() => Object.fromEntries(Object.entries(cfgOf).map(([k, c]) => [k, c.unit as string])), [cfgOf])
+    // Đơn vị gốc lệch giữa các chi nhánh → số gõ/số kho không cộng được với nhau; báo để sửa ở Quản lý nguyên liệu.
+    const unitMismatch = useMemo(() => {
+        const bad = new Set<string>()
+        for (const b of branches || []) for (const i of b.ingredientsList) if (i.unit !== unitOf[i.ingredient]) bad.add(ingredientLabel(i.ingredient))
+        return [...bad]
+    }, [branches, unitOf])
     const unitKeys = useMemo(() => Object.keys(unitOf).sort(byIngredientLabel), [unitOf])
 
     const update = useCallback((fn: (d: Draft) => Draft) => { setDraft(d => fn(d ?? {})); setDirty(true); setFailed(false) }, [])
@@ -178,27 +187,27 @@ function Page({ selectedAddress, siblings }: { selectedAddress: SelectedAddress;
         [unitKeys])
     const rowsOf = (addrId: string) => [...new Set([...Object.keys(suggestOf[addrId] || {}), ...Object.keys(draft?.[addrId] || {})])]
         .sort(byIngredientLabel)
-        .map(k => ({ ingredient: k, unit: unitOf[k] ?? '', value: draft?.[addrId]?.[k] ?? '', left: r1(poolOf(k, pool) - (totals[k] || 0)), suggest: suggestOf[addrId]?.[k] }))
+        .map(k => ({ ingredient: k, unit: unitOf[k] ?? '', cfg: cfgOf[k], value: draft?.[addrId]?.[k] ?? '', left: r1(poolOf(k, pool) - (totals[k] || 0)), suggest: suggestOf[addrId]?.[k] }))
     const overCards = cards.filter(c => c.total > c.pool)
     const hasOver = overCards.length > 0
     // Chia vượt kho vẫn cho chốt (quản lý toàn quyền) nhưng hỏi lại 1 lần để khỏi bấm nhầm.
     async function finish() {
         if (hasOver && !await confirm({
             title: 'Có nguyên liệu chia nhiều hơn số còn trong kho',
-            detail: overCards.map(c => `${ingredientLabel(c.ingredient)}: chia ${fmtQty(c.total, c.unit)}, kho còn ${fmtQty(c.pool, c.unit)}`).join('\n'),
+            detail: overCards.map(c => `${ingredientLabel(c.ingredient)}: chia ${fmtQty(c.total, c.unit, cfgOf[c.ingredient])}, kho còn ${fmtQty(c.pool, c.unit, cfgOf[c.ingredient])}`).join('\n'),
             confirmLabel: 'Vẫn chốt', danger: true,
         })) return
         save('issued')
     }
     const ready = draft !== null && !!branches
-    const restockCfg = restock ? branches?.[0]?.ingredientsList.find(i => i.ingredient === restock.ingredient) : undefined // branches[0] = địa chỉ đang chọn
+    const restockCfg = restock ? cfgOf[restock.ingredient] : undefined
 
     const sheet = useMemo(() => addresses.map((a, i) => ({
         id: a.id, label: labels[i],
         items: items.filter(it => it.address_id === a.id),
     })), [addresses, labels, items])
     // Mỗi chi nhánh thường có nhóm Zalo riêng → sao chép được từng chi nhánh, hoặc cả phiếu.
-    const linesOf = (b: (typeof sheet)[number]) => [b.label, ...b.items.map(it => `- ${ingredientLabel(it.ingredient)}: ${fmtQty(it.qty, it.unit)}`)]
+    const linesOf = (b: (typeof sheet)[number]) => [b.label, ...b.items.map(it => `- ${ingredientLabel(it.ingredient)}: ${fmtQty(it.qty, it.unit, cfgOf[it.ingredient])}`)]
     const copy = async (lines: string[]) => {
         const ok = await copyText([`CHIA HÀNG NGÀY ${dateFullVN(tomorrow)}`, ...lines].join('\n'))
         showToast(ok ? 'Đã sao chép — dán vào Zalo' : 'Không sao chép được', ok ? 'success' : 'warning')
@@ -222,6 +231,11 @@ function Page({ selectedAddress, siblings }: { selectedAddress: SelectedAddress;
                             <span className="text-[14px] font-bold text-danger">Không tải được số liệu kho</span>
                             <button type="button" onClick={reload} className="text-[13px] font-bold text-primary">Thử lại</button>
                         </div>
+                    )}
+                    {unitMismatch.length > 0 && (
+                        <p className="text-warning text-[13px] font-bold py-2 px-3 bg-warning-soft rounded-[12px] border border-warning/20">
+                            Đơn vị gốc lệch giữa các chi nhánh: {unitMismatch.join(', ')}. Đang hiện theo đơn vị của địa chỉ đang chọn — sửa cho đồng bộ ở Quản lý nguyên liệu.
+                        </p>
                     )}
                     {loadError && (
                         <p className="text-warning text-[13px] font-bold py-2 px-3 bg-warning-soft rounded-[12px] border border-warning/20">
@@ -260,7 +274,7 @@ function Page({ selectedAddress, siblings }: { selectedAddress: SelectedAddress;
                                                         {on && <Check size={13} strokeWidth={3} />}
                                                     </span>
                                                     <span className={`flex-1 min-w-0 truncate text-[13px] ${on ? 'text-text-dim' : 'text-text'}`}>{ingredientLabel(it.ingredient)}</span>
-                                                    <span className={`shrink-0 text-[14px] font-bold tabular-nums ${on ? 'text-text-dim' : 'text-text'}`}>{fmtQty(it.qty, it.unit)}</span>
+                                                    <span className={`shrink-0 text-[14px] font-bold tabular-nums ${on ? 'text-text-dim' : 'text-text'}`}>{fmtQty(it.qty, it.unit, cfgOf[it.ingredient])}</span>
                                                 </button>
                                             )
                                         })}
@@ -279,7 +293,7 @@ function Page({ selectedAddress, siblings }: { selectedAddress: SelectedAddress;
                                     {buyList.map(x => (
                                         <div key={x.ingredient} className="flex items-center gap-2 py-1.5 border-b border-border/20 last:border-0">
                                             <span className="flex-1 min-w-0 truncate text-[13px] font-medium text-text">{ingredientLabel(x.ingredient)}</span>
-                                            <span className="text-[13px] font-semibold tabular-nums text-text">{fmtQty(x.buy, x.unit)}</span>
+                                            <span className="text-[13px] font-semibold tabular-nums text-text">{fmtQty(x.buy, x.unit, cfgOf[x.ingredient])}</span>
                                             <button type="button" onClick={() => setRestock({ ingredient: x.ingredient, qty: x.buy })} className="shrink-0 px-2 py-1 rounded-[8px] bg-primary text-bg text-[11px] font-black">Nhập kho</button>
                                         </div>
                                     ))}
