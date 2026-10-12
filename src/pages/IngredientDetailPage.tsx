@@ -23,6 +23,7 @@ import IngredientDetailHeader from '../components/IngredientManagementPage/Ingre
 import PackConfigModal, { type PackConfigValues } from '../components/IngredientManagementPage/PackConfigModal'
 import IngredientDetailsTab, { IngredientStockPanel, IngredientCounterPanel, DeleteIngredientButton } from '../components/IngredientManagementPage/IngredientDetailsTab'
 import IngredientHistoryTab from '../components/IngredientManagementPage/IngredientHistoryTab'
+import IngredientHistoryFilterSheet, { kindOf, type HistoryKind } from '../components/IngredientManagementPage/IngredientHistoryFilterSheet'
 import InvoicePaymentSheet, { type InvoicePayment } from '../components/IngredientManagementPage/InvoicePaymentSheet'
 import RestockModal, { type RestockPayload } from '../components/IngredientManagementPage/RestockModal'
 import Toast from '../components/POSPage/Toast'
@@ -31,7 +32,10 @@ import { useSavingAction } from '../hooks/useSavingAction'
 import { useCashClosedToday } from '../hooks/useCashClosedToday'
 import { restockInitialFrom } from '../utils/restockInitial'
 import { useConfirm } from '../contexts/ConfirmContext'
-import { dateStringVN, startOfMonthVN, endOfMonthVN } from '../utils/dateVN'
+import { dateStringVN } from '../utils/dateVN'
+import { calcRangeWithLabel } from '../utils/rangeCalc'
+import { useDateScope } from '../hooks/useDateScope'
+import { DateRangePicker } from '../components/HistoryPage/HistoryHeader'
 import { fetchPackedConfirmations } from '../services/warehouseTransferService'
 import { findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
 import { isRecipeProgressDone, readOnboardingState, writeOnboardingState } from '../utils/onboardingStorage'
@@ -86,14 +90,13 @@ export default function IngredientDetailPage() {
     // Đã chốt ca tiền hôm nay chưa → default phân loại tiền mặt khi nhập kho.
     const cashClosedToday = useCashClosedToday(addressId, restockOpen)
 
-    // Month navigation (Nhật ký tab)
-    const [monthOffset, setMonthOffset] = useState(0)
-    const { targetMonth, fromDate, toDate } = useMemo(() => {
-        const from = startOfMonthVN(new Date(), monthOffset)
-        const to = endOfMonthVN(new Date(), monthOffset)
-        return { targetMonth: from, fromDate: from.toISOString(), toDate: to.toISOString() }
-    }, [monthOffset])
-    const monthLabel = targetMonth.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' })
+    // Khoảng ngày của tab Nhật ký — cùng hook với /history, /report; mặc định tháng này.
+    const dateScope = useDateScope({ scope: 'month', offset: 0 })
+    const { scope: dScope, offset: dOffset, customRange: dCustom } = dateScope
+    const { fromDate, toDate, rangeLabel } = useMemo(() => {
+        const { start, end, label } = calcRangeWithLabel(dScope, dOffset, dCustom)
+        return { fromDate: start.toISOString(), toDate: end.toISOString(), rangeLabel: label }
+    }, [dScope, dOffset, dCustom])
 
     // Derived view from context — single source of truth, never a local copy.
     const config = useMemo<Row>(
@@ -188,23 +191,27 @@ export default function IngredientDetailPage() {
 
     // Kho tổng chung: lọc nhật ký theo địa chỉ (mọi loại thẻ — nhập kho, hiệu chỉnh, rút ra quầy). null = tất cả.
     const [addressFilter, setAddressFilter] = useState<string | null>(null)
-    const shownHistory = useMemo(() => addressFilter ? history.filter(e => e.address_id === addressFilter) : history, [history, addressFilter])
+    const [kindFilter, setKindFilter] = useState<HistoryKind | null>(null)
+    const [filterOpen, setFilterOpen] = useState(false)
+    const shownHistory = useMemo(() => history.filter(e =>
+        (!addressFilter || e.address_id === addressFilter) && (!kindFilter || kindFilter === kindOf(e))
+    ), [history, addressFilter, kindFilter])
 
     const summary = useMemo(() => {
-        let totalSpent = 0, totalQty = 0, totalOwing = 0, totalPaidInMonth = 0
-        // `fromDate` / `toDate` xác định cửa sổ tháng đang xem — payments có paid_at
-        // trong cửa sổ này được tính vào "Đã trả" của tháng. Một payment có thể trả
-        // cho invoice tháng khác, nên paid không = invoice.amount khớp 1-1.
+        let totalQty = 0, totalSpent = 0, totalOwing = 0, totalPaidInMonth = 0
+        let importCount = 0, withdrawCount = 0, adjustCount = 0
+        // `fromDate` / `toDate` xác định cửa sổ đang xem — payments có paid_at
+        // trong cửa sổ này được tính vào "Đã trả". Một payment có thể trả
+        // cho invoice kỳ khác, nên paid không = invoice.amount khớp 1-1.
         const monthStartMs = new Date(fromDate).getTime()
         const monthEndMs = new Date(toDate).getTime()
-        let purchaseCount = 0
         shownHistory.forEach(e => {
-            // Lượt rút ra quầy không phải mua hàng — không tính vào tổng tiền/lượng nhập.
-            if (e.is_withdrawal) return
-            purchaseCount += 1
+            // Lượt rút ra quầy không phải mua hàng — chỉ đếm số lần, không tính tiền.
+            const kind = kindOf(e)
+            if (kind === 'withdrawal') { withdrawCount += 1; return }
+            if (kind === 'adjustment') adjustCount += 1
+            else if (kind === 'restock') { importCount += 1; totalQty += e.metadata?.qty || 0 }
             totalSpent += e.amount || 0
-            const qty = e.metadata?.qty || 0
-            totalQty += qty
             const paid = (e.payments || []).reduce((s: number, p: Row) => s + (p.amount || 0), 0)
             totalOwing += Math.max(0, (e.amount || 0) - paid)
             for (const p of e.payments || []) {
@@ -212,7 +219,7 @@ export default function IngredientDetailPage() {
                 if (t >= monthStartMs && t <= monthEndMs) totalPaidInMonth += p.amount || 0
             }
         })
-        return { totalSpent, totalQty, totalOwing, totalPaidInMonth, count: purchaseCount }
+        return { totalQty, totalSpent, totalOwing, totalPaidInMonth, importCount, withdrawCount, adjustCount }
     }, [shownHistory, fromDate, toDate])
 
     // ── Save callbacks for child rows ───────────────────────────────────────
@@ -487,11 +494,34 @@ export default function IngredientDetailPage() {
 
             <IngredientDetailHeader
                 title={titleLabel}
-                subtitle={costSubtitle}
+                subtitle={viewMode === 'history' ? undefined : costSubtitle}
                 onBack={() => navigate('/inventory/stocking', { state: location.state })}
                 viewMode={viewMode}
                 onViewModeChange={setViewMode}
                 onAdd={canEdit ? () => setRestockOpen(true) : undefined}
+                onFilter={viewMode === 'history' ? () => setFilterOpen(true) : undefined}
+                filterActive={!!addressFilter || !!kindFilter}
+                dateNav={viewMode === 'history' ? (
+                    <DateRangePicker
+                        scope={dScope}
+                        rangeLabel={rangeLabel}
+                        rangeStartISO={dateStringVN(new Date(fromDate))}
+                        rangeEndISO={dateStringVN(new Date(toDate))}
+                        dayInputValue={dateScope.dayInputValue}
+                        customRange={dCustom}
+                        todayISO={dateScope.todayISO}
+                        canGoForwardDay={dateScope.canGoForwardDay}
+                        canGoForward={dateScope.canGoForwardPeriod}
+                        onPrevDay={dateScope.goPrevDay}
+                        onNextDay={dateScope.goNextDay}
+                        onOffsetPrev={dateScope.goOffsetPrev}
+                        onOffsetNext={dateScope.goOffsetNext}
+                        onRangeChange={dateScope.applyRange}
+                        onShiftRange={dateScope.shiftRange}
+                        canShiftRangeForward={dateScope.canShiftRangeForward}
+                        onPresetSelect={dateScope.applyPreset}
+                    />
+                ) : undefined}
             />
 
             <main className="flex-1 overflow-y-auto px-4 py-4 pb-48 bg-bg space-y-4">
@@ -559,18 +589,25 @@ export default function IngredientDetailPage() {
                         packSize={packSize}
                         packUnit={packUnit}
                         pack2={pack2}
-                        monthLabel={monthLabel}
-                        monthOffset={monthOffset}
-                        onMonthChange={setMonthOffset}
+                        rangeLabel={rangeLabel}
                         onOpenPayment={canEdit ? setPaymentInvoice : undefined}
                         onCancelRestock={canEdit ? handleCancelRestock : undefined}
                         onEditRestock={canEdit ? setEditingEntry : undefined}
                         addressNameById={groupAddressIds.length > 1 ? addressNameById : null}
-                        addressFilter={addressFilter}
-                        onAddressFilter={setAddressFilter}
                     />
                 )}
             </main>
+
+            {filterOpen && (
+                <IngredientHistoryFilterSheet
+                    onClose={() => setFilterOpen(false)}
+                    kind={kindFilter}
+                    onKind={setKindFilter}
+                    addressNameById={groupAddressIds.length > 1 ? addressNameById : null}
+                    addressFilter={addressFilter}
+                    onAddressFilter={setAddressFilter}
+                />
+            )}
 
             {paymentInvoice && (
                 <InvoicePaymentSheet
@@ -620,6 +657,7 @@ export default function IngredientDetailPage() {
                     mode="edit"
                     initial={restockInitialFrom(editingEntry)}
                     onConfirm={(form) => handleEditRestock(editingEntry, form)}
+                    onDelete={() => { setEditingEntry(null); handleCancelRestock(editingEntry) }}
                     onClose={() => setEditingEntry(null)}
                 />
             )}

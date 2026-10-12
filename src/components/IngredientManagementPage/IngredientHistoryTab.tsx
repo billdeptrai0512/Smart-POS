@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react'
-import { ChevronLeft, ChevronRight, Trash2, Pencil } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
+import { TIME_PILL, ROUND_ICON_BTN } from '../common/ModalShell'
 import { formatVND } from '../../utils'
 import { formatPackedQty } from '../../utils/inventory'
 import { dateShortVN, timeStringVN } from '../../utils/dateVN'
 import type { Pack2 } from '../../utils/inventory'
 import type { Row } from '../../types/domain'
 
-/** Tổng hợp tháng đang xem (IngredientDetailPage tính từ history). */
-export interface RestockSummary { totalSpent: number; totalQty: number; totalOwing: number; totalPaidInMonth: number; count: number }
+/** Tổng hợp khoảng ngày đang xem (IngredientDetailPage tính từ history). */
+export interface RestockSummary { totalQty: number; totalSpent: number; totalOwing: number; totalPaidInMonth: number; importCount: number; withdrawCount: number; adjustCount: number }
 
 interface PackProps {
     unit: string
@@ -20,15 +21,11 @@ interface Props extends PackProps {
     loading: boolean
     summary: RestockSummary
     history: Row[]
-    monthLabel: string
-    monthOffset: number
-    onMonthChange: (offset: number) => void
+    rangeLabel: string
     onOpenPayment?: (entry: Row) => void
     onCancelRestock?: (entry: Row) => void
     onEditRestock?: (entry: Row) => void
     addressNameById?: Record<string, string> | null
-    addressFilter?: string | null
-    onAddressFilter?: (addressId: string | null) => void
 }
 
 // Monthly restock log for one ingredient. Card layout mirrors /history's
@@ -42,42 +39,13 @@ interface Props extends PackProps {
 export default function IngredientHistoryTab({
     loading, summary, history, unit,
     packSize, packUnit, pack2,
-    monthLabel, monthOffset, onMonthChange,
+    rangeLabel,
     onOpenPayment, onCancelRestock, onEditRestock,
     addressNameById, // {id: name} — chỉ truyền khi địa chỉ thuộc 1 warehouse group (kho tổng chung)
-    addressFilter = null, onAddressFilter,
 }: Props) {
-    const hasOwing = summary.totalOwing > 0
     return (
         <>
-            <MonthSummaryCard
-                monthLabel={monthLabel}
-                monthOffset={monthOffset}
-                onMonthChange={onMonthChange}
-                showStats={!loading && summary.count > 0}
-                summary={summary}
-                unit={unit}
-                packSize={packSize}
-                packUnit={packUnit}
-                pack2={pack2}
-                hasOwing={hasOwing}
-            />
-
-            {addressNameById && onAddressFilter && (
-                <div className="flex gap-2 overflow-x-auto hide-scrollbar -mx-1 px-1">
-                    {[[null, 'Tất cả'], ...Object.entries(addressNameById)].map(([id, name]) => (
-                        <button
-                            key={id ?? 'all'}
-                            type="button"
-                            onClick={() => onAddressFilter(id)}
-                            className={`shrink-0 px-3 py-1.5 rounded-full border text-[12px] font-bold whitespace-nowrap transition-colors ${
-                                addressFilter === id ? 'bg-primary/15 border-primary/40 text-primary' : 'bg-surface-light border-border/60 text-text-secondary'}`}
-                        >
-                            {name}
-                        </button>
-                    ))}
-                </div>
-            )}
+            <MonthSummaryCard showStats={!loading && history.length > 0} summary={summary} unit={unit} packSize={packSize} packUnit={packUnit} pack2={pack2} />
 
             {loading ? (
                 <div className="flex flex-col gap-3 animate-pulse">
@@ -85,7 +53,7 @@ export default function IngredientHistoryTab({
                 </div>
             ) : history.length === 0 ? (
                 <div className="text-center text-text-secondary text-[13px] py-10 bg-surface-light rounded-[14px] border border-border/40">
-                    Chưa có lịch sử nhập kho trong {monthLabel}.
+                    Chưa có lịch sử nhập kho trong {rangeLabel}.
                 </div>
             ) : (
                 <div className="flex flex-col gap-3">
@@ -109,52 +77,28 @@ export default function IngredientHistoryTab({
     )
 }
 
-// ── Month nav + summary (one card) ────────────────────────────────────────────
-// Nav row on top, stats below a divider. Stats keep p-4 so the left column lines
-// up with the history card titles underneath. Hàng 2 (Đã trả | Còn nợ) chỉ khi có nợ.
-interface MonthSummaryCardProps extends PackProps {
-    monthLabel: string
-    monthOffset: number
-    onMonthChange: (offset: number) => void
-    showStats: boolean
-    summary: RestockSummary
-    hasOwing: boolean
-}
-
-function MonthSummaryCard({ monthLabel, monthOffset, onMonthChange, showStats, summary, unit, packSize, packUnit, pack2, hasOwing }: MonthSummaryCardProps) {
+// ── Summary card ──────────────────────────────────────────────────────────────
+// Hàng 1: số lần nhập / xuất / hiệu chỉnh. Hàng 2: Khối lượng nhập | Tổng tiền nhập. Hàng 3 (chỉ khi có nợ): Đã trả | Còn nợ.
+function MonthSummaryCard({ showStats, summary, unit, packSize, packUnit, pack2 }: PackProps & { showStats: boolean; summary: RestockSummary }) {
+    if (!showStats) return null
     return (
         <div className="bg-surface rounded-[16px] border border-border/60 overflow-hidden">
-            <div className="flex items-center justify-between px-1.5 py-1.5">
-                <button
-                    onClick={() => onMonthChange(monthOffset - 1)}
-                    className="w-9 h-9 flex items-center justify-center rounded-[10px] text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all"
-                >
-                    <ChevronLeft size={18} />
-                </button>
-                <span className="text-[13px] font-black text-text capitalize">{monthLabel}</span>
-                <button
-                    onClick={() => onMonthChange(Math.min(0, monthOffset + 1))}
-                    disabled={monthOffset >= 0}
-                    className="w-9 h-9 flex items-center justify-center rounded-[10px] text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all disabled:opacity-20"
-                >
-                    <ChevronRight size={18} />
-                </button>
+            <div className="grid gap-3 grid-cols-3 p-4">
+                <Stat label="Lần nhập" value={String(summary.importCount)} align="start" />
+                <Stat label="Lần xuất" value={String(summary.withdrawCount)} />
+                <Stat label="Hiệu chỉnh" value={String(summary.adjustCount)} align="end" />
             </div>
-            {showStats && (
-                <>
-                    <div className="h-[1px] bg-border/60" />
-                    <div className="grid gap-3 grid-cols-2 p-4">
-                        <Stat label="Số lượng nhập" value={formatPackedQty(summary.totalQty, packSize, packUnit, unit, { compact: true, pack2 })} align="start" />
-                        <Stat label="Tổng tiền nhập" value={formatVND(summary.totalSpent)} align="end" />
-                        {hasOwing && (
-                            <>
-                                <Stat label="Đã trả" value={formatVND(summary.totalPaidInMonth)} tone="success" align="start" />
-                                <Stat label="Còn nợ" value={formatVND(summary.totalOwing)} tone="warning" align="end" />
-                            </>
-                        )}
-                    </div>
-                </>
-            )}
+            <div className="h-[1px] bg-border/60" />
+            <div className="grid gap-3 grid-cols-2 p-4">
+                <Stat label="Khối lượng nhập" value={formatPackedQty(summary.totalQty, packSize, packUnit, unit, { compact: true, pack2 })} align="start" />
+                <Stat label="Tổng tiền nhập" value={formatVND(summary.totalSpent)} align="end" />
+                {summary.totalOwing > 0 && (
+                    <>
+                        <Stat label="Đã trả" value={formatVND(summary.totalPaidInMonth)} tone="success" align="start" />
+                        <Stat label="Còn nợ" value={formatVND(summary.totalOwing)} tone="warning" align="end" />
+                    </>
+                )}
+            </div>
         </div>
     )
 }
@@ -213,7 +157,6 @@ function HistoryCard({ entry, unit, packSize, packUnit, pack2, onOpenPayment, on
     // When cancelled the row is zeroed in the DB; display the ORIGINAL figures.
     const qty = cancelled ? (Number(entry.metadata?.cancelled_qty) || 0) : (entry.metadata?.qty || 0)
     const amount = cancelled ? (Number(entry.metadata?.cancelled_amount) || 0) : (entry.amount || 0)
-    const unitPrice = qty > 0 && isRestock ? Math.round(amount / qty) : null
 
     // Hiệu chỉnh tồn ≥ 1 quy cách → ghi rõ quy đổi: "-2 hộp = -2568 ml". Dưới 1 quy cách
     // (hoặc không có quy cách) → giữ base unit. Phiếu nhập giữ hiển thị base như cũ.
@@ -237,11 +180,11 @@ function HistoryCard({ entry, unit, packSize, packUnit, pack2, onOpenPayment, on
         : owing <= 0 ? 'paid'
         : paid <= 0 ? 'unpaid'
         : 'partial'
-    const clickable = (status === 'unpaid' || status === 'partial') && !!onOpenPayment
-    // Lượt rút sửa ở báo cáo ca (field Nhập thêm), không Hủy được từ Nhật ký.
-    const cancellable = !!onCancelRestock && !cancelled && !isWithdrawal
-    // Chỉ hiện nút Sửa cho restock thật (không phải adjustment/withdrawal/cancelled).
+    // Chỉ restock thật (không phải adjustment/withdrawal/cancelled) sửa được: bấm cả card → modal Sửa
+    // (Hủy phiếu nằm trong modal đó). Pill nợ vẫn mở riêng sheet thanh toán.
     const editable = !!onEditRestock && isRestock && !cancelled
+    // Hiệu chỉnh tồn không có modal sửa → giữ nút Hủy trên card. Lượt rút sửa ở báo cáo ca (field Nhập thêm).
+    const cancellable = !!onCancelRestock && !cancelled && isAdjust
 
     // Kho tổng dùng chung nhiều địa chỉ — withdrawal ghi rõ ĐIỂM ĐẾN (rút vào quầy nào), còn
     // lại (nhập/hiệu chỉnh) ghi NƠI ghi nhận. addressName chỉ có giá trị khi có nhóm (xem cha).
@@ -254,12 +197,13 @@ function HistoryCard({ entry, unit, packSize, packUnit, pack2, onOpenPayment, on
     const qtyCls = cancelled ? 'text-text-dim line-through'
         : isWithdrawal ? 'text-text'
         : qty > 0 ? 'text-success' : qty < 0 ? 'text-danger' : 'text-text-dim'
-    const moneyCls = cancelled ? 'text-text-dim line-through' : 'text-danger'
+    const moneyCls = cancelled ? 'text-text-dim line-through' : 'text-text'
 
-    const innerCls = `bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden transition-all ${
+    const innerCls = `bg-surface border border-border/60 rounded-[20px] p-3 shadow-sm flex flex-col gap-2 relative overflow-hidden transition-all ${
         cancelled ? 'opacity-50 grayscale select-none' : ''
-    } ${clickable ? 'cursor-pointer hover:border-primary/40 active:scale-[0.99]' : ''}`
+    } ${editable ? 'cursor-pointer hover:border-primary/40 active:scale-[0.99]' : ''}`
 
+    // Cùng dáng card /history bán hàng: pills + số chính ở đầu · divider · thân · divider · pills + nút tròn.
     const Body = (
         <>
             {/* Cancelled corner badge — same treatment as a deleted order. */}
@@ -269,107 +213,82 @@ function HistoryCard({ entry, unit, packSize, packUnit, pack2, onOpenPayment, on
                 </div>
             )}
 
-            {/* Row 0 — type tag (left) + cancel (corner). Pushed down a touch when the
-                ĐÃ HỦY badge occupies the top-left. */}
-            <div className={`flex items-center justify-between gap-2 -mt-0.5 ${cancelled ? 'mt-4' : ''}`}>
-                <span className="flex items-baseline gap-1.5 min-w-0">
-                    <span className={`text-[11px] font-black uppercase tracking-wider ${typeTone}`}>
-                        {typeLabel}
-                    </span>
-                    {addressCaption && (
-                        <span className="text-[11px] font-medium text-text-dim truncate">{addressCaption}</span>
-                    )}
-                </span>
-                {(editable || cancellable) && (
-                    <div className="flex items-center gap-0.5 -mr-1 -mt-1">
-                        {editable && (
-                            <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); onEditRestock?.(entry) }}
-                                aria-label="Sửa phiếu"
-                                className="w-7 h-7 flex items-center justify-center rounded-lg text-text-dim hover:text-primary hover:bg-primary/10 active:scale-95 transition-all"
-                            >
-                                <Pencil size={13} />
-                            </button>
-                        )}
-                        {cancellable && (
-                            <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); onCancelRestock?.(entry) }}
-                                aria-label="Hủy phiếu"
-                                className="w-7 h-7 flex items-center justify-center rounded-lg text-text-dim hover:text-danger hover:bg-danger/10 active:scale-95 transition-all"
-                            >
-                                <Trash2 size={14} />
-                            </button>
-                        )}
-                    </div>
-                )}
+            {/* Header — loại + ngày·giờ (pills) | số lượng chính. Đẩy xuống khi có badge ĐÃ HỦY. */}
+            <div className={`flex items-center justify-between gap-2 ${cancelled ? 'mt-4' : ''}`}>
+                <div className="flex items-center gap-1.5 min-w-0">
+                    <span className={`h-[26px] inline-flex items-center rounded-full bg-surface-light border border-border/60 px-2.5 text-[11px] font-black uppercase tracking-wider leading-none whitespace-nowrap ${typeTone}`}>{typeLabel}</span>
+                    <span className={`${TIME_PILL} tabular-nums`}>{dateStr} · {timeStr}</span>
+                </div>
+                <span className={`text-[16px] font-black tabular-nums shrink-0 ${qtyCls}`}>{heroQty}</span>
             </div>
 
-            {/* Hero — qty delta (left) + money (right; restock only). */}
-            <div className="flex justify-between items-baseline -mt-1">
-                <span className={`text-[18px] font-black tabular-nums ${qtyCls}`}>
-                    {heroQty}
+            <div className="h-[1px] bg-border/40" />
+
+            {/* Thân — tồn kho trước → sau (trái) | tiền (phải, chỉ phiếu nhập). */}
+            <div className="flex justify-between items-baseline gap-2">
+                <span className="text-[12px] font-medium text-text-dim tabular-nums">
+                    {hasSnapshot ? (
+                        <>
+                            Tồn kho <span className="text-text-secondary">{Math.round(beforeStock * 10) / 10}</span>
+                            <span className="mx-1">→</span>
+                            <span className="text-text font-bold">{Math.round(afterStock * 10) / 10}</span> {unit}
+                        </>
+                    ) : '—'}
                 </span>
                 {isRestock && (
-                    <span className={`text-[14px] font-black tabular-nums ${moneyCls}`}>
-                        -{formatVND(amount)}
-                    </span>
+                    <span className={`text-[14px] font-black tabular-nums ${moneyCls}`}>{formatVND(amount)}</span>
                 )}
             </div>
-
-            {/* Tồn snapshot — "delta → resulting stock" in one downward scan. */}
-            {hasSnapshot && (
-                <div className="text-[11px] font-medium text-text-dim tabular-nums -mt-0.5">
-                    Tồn kho <span className="text-text-secondary">{Math.round(beforeStock * 10) / 10}</span>
-                    <span className="mx-1">→</span>
-                    <span className="text-text font-bold">{Math.round(afterStock * 10) / 10}</span> {unit}
-                </div>
-            )}
-
-            {/* Context pills — live restock only (payment status + unit price + method). */}
-            {isRestock && !cancelled && (
-                <div className="flex flex-wrap items-center gap-1.5">
-                    {status === 'paid' && <Pill tone="success">Đã trả</Pill>}
-                    {status === 'partial' && (
-                        <Pill tone="neutral">Trả 1 phần · {formatVND(paid)}/{formatVND(amount)}</Pill>
-                    )}
-                    {status === 'unpaid' && <Pill tone="warning">Còn nợ {formatVND(owing)}</Pill>}
-                    {unitPrice != null && <Pill tone="neutral">{formatVND(unitPrice)}/{unit}</Pill>}
-                    <Pill tone={isTransfer ? 'primary' : 'neutral'}>
-                        {isTransfer ? 'Chuyển khoản' : 'Tiền mặt'}
-                    </Pill>
-                </div>
-            )}
 
             {/* Rút ra quầy: ai SOẠN (xác nhận ở "Soạn cho ngày mai" hôm trước) — người NHẬN là staff ở footer. */}
             {isWithdrawal && packedBy && (
-                <div className="text-[11px] font-medium text-text-dim -mt-0.5">
+                <div className="text-[11px] font-medium text-text-dim">
                     Soạn: <span className="font-bold text-text-secondary">{packedBy.packed_by_name || '—'}</span>
                     {' · '}{dateShortVN(new Date(packedBy.packed_at))} {timeStringVN(new Date(packedBy.packed_at))}
                 </div>
             )}
 
-            {/* Footer — staff (left) + datetime (right), above a hairline divider. */}
-            <div className="flex justify-between items-center gap-2 border-t border-border/40 pt-2 mt-0.5">
-                <span className="text-[11px] font-bold text-text-secondary/70 truncate">
-                    {isWithdrawal && 'Nhận: '}{entry.staff_name || '—'}
-                </span>
-                <span className="text-[12px] font-bold text-text-dim tabular-nums shrink-0">
-                    {dateStr} · {timeStr}
-                </span>
+            <div className="h-[1px] bg-border/40" />
+
+            {/* Footer — người ghi nhận, địa chỉ, và (phiếu nhập) trạng thái trả / đơn giá / hình thức | Hủy (hiệu chỉnh). */}
+            <div className="flex justify-between items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                    <span className={`${TIME_PILL} truncate`}>{isWithdrawal && 'Nhận: '}{entry.staff_name || '—'}</span>
+                    {addressCaption && <span className={`${TIME_PILL} truncate`}>{addressCaption}</span>}
+                    {isRestock && !cancelled && (
+                        <>
+                            {status === 'partial' && (
+                                <Pill tone="neutral" onClick={onOpenPayment && (() => onOpenPayment(entry))}>Trả 1 phần · {formatVND(paid)}/{formatVND(amount)}</Pill>
+                            )}
+                            {status === 'unpaid' && (
+                                <Pill tone="warning" onClick={onOpenPayment && (() => onOpenPayment(entry))}>Còn nợ {formatVND(owing)}</Pill>
+                            )}
+                            <Pill tone={isTransfer ? 'primary' : 'neutral'}>{isTransfer ? 'Chuyển khoản' : 'Tiền mặt'}</Pill>
+                        </>
+                    )}
+                </div>
+                {cancellable && (
+                    <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onCancelRestock?.(entry) }}
+                        aria-label="Hủy phiếu"
+                        className={`${ROUND_ICON_BTN} text-text-dim hover:text-danger active:scale-95`}
+                    >
+                        <Trash2 size={13} />
+                    </button>
+                )}
             </div>
         </>
     )
 
-    // Clickable cards use div[role=button] (not <button>) so the corner cancel
-    // <button> nests validly. Keyboard-activatable via Enter/Space.
-    return clickable ? (
+    // Clickable cards use div[role=button] (not <button>) so the nested pill
+    // <button> is valid. Keyboard-activatable via Enter/Space.
+    return editable ? (
         <div
             role="button"
             tabIndex={0}
-            onClick={() => onOpenPayment?.(entry)}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenPayment?.(entry) } }}
+            onClick={() => onEditRestock?.(entry)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEditRestock?.(entry) } }}
             className={`text-left ${innerCls}`}
         >
             {Body}
@@ -388,13 +307,12 @@ const PILL_TONE = {
     neutral: 'bg-surface-light border-border/60 text-text-secondary',
 }
 
-function Pill({ tone, children }: { tone: 'success' | 'warning' | 'primary' | 'neutral'; children: ReactNode }) {
+// onClick → pill là nút (dừng nổi bọt để không mở modal Sửa của card). Cao 26px khớp TIME_PILL.
+function Pill({ tone, children, onClick }: { tone: 'success' | 'warning' | 'primary' | 'neutral'; children: ReactNode; onClick?: (() => void) | null }) {
     // Project palette has no separate "info" hue (warning ≡ primary literally),
     // so partial-status uses the neutral pill — clearly distinct from unpaid (amber).
-    const cls = PILL_TONE[tone]
-    return (
-        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${cls}`}>
-            {children}
-        </span>
-    )
+    const cls = `inline-flex items-center h-[26px] px-2.5 rounded-full text-[11px] font-bold leading-none whitespace-nowrap border ${PILL_TONE[tone]}`
+    return onClick
+        ? <button type="button" onClick={(e) => { e.stopPropagation(); onClick() }} className={`${cls} active:scale-95 transition-transform`}>{children}</button>
+        : <span className={cls}>{children}</span>
 }

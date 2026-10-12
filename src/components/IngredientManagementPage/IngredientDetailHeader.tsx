@@ -1,4 +1,5 @@
-import { ArrowLeft, Plus } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { ArrowLeft, Plus, SlidersHorizontal } from 'lucide-react'
 import { ICON_BTN, ICON_BTN_BASE } from '../common/ModalShell'
 
 interface Props {
@@ -9,6 +10,11 @@ interface Props {
     onViewModeChange?: (mode: string) => void
     onAdd?: () => void
     addTitle?: string
+    /** Bộ chọn khoảng ngày của tab Nhật ký (DateRangePicker) — nằm trong ô tiêu đề. */
+    dateNav?: ReactNode
+    /** Có = thay nút Nhập kho bằng nút Lọc (tab Nhật ký); filterActive = đang có bộ lọc. */
+    onFilter?: () => void
+    filterActive?: boolean
 }
 
 const TABS = [
@@ -27,6 +33,9 @@ export default function IngredientDetailHeader({
     onViewModeChange,
     onAdd,
     addTitle = 'Nhập kho',
+    dateNav,
+    onFilter,
+    filterActive = false,
 }: Props) {
     return (
         <header className="shrink-0 pt-6 pb-3 bg-surface border-b border-border/60 shadow-sm relative z-20 flex flex-col px-4 gap-3">
@@ -41,13 +50,22 @@ export default function IngredientDetailHeader({
 
                 <div className="flex-1 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-2 py-2 flex flex-col items-center justify-center text-center min-w-0">
                     <span className="text-[12px] font-black text-primary uppercase line-clamp-1 truncate w-full">{title}</span>
+                    {dateNav}
                     {subtitle && (
                         <span className="text-[12px] font-bold text-text/80 leading-none mt-1 tabular-nums">{subtitle}</span>
                     )}
                 </div>
 
                 {/* Không có nút thì giữ chỗ 40px để ô tiêu đề luôn cân tâm với nút Back. */}
-                {onAdd ? (
+                {onFilter ? (
+                    <button
+                        onClick={onFilter}
+                        className={`${ICON_BTN_BASE} border active:scale-95 transition-all ${filterActive ? 'bg-primary/15 border-primary/40 text-primary' : 'bg-surface-light border-border/60 text-text'}`}
+                        title="Lọc nhật ký"
+                    >
+                        <SlidersHorizontal size={18} strokeWidth={2.5} />
+                    </button>
+                ) : onAdd ? (
                     <button
                         onClick={onAdd}
                         className={`${ICON_BTN_BASE} bg-primary text-bg hover:bg-primary/90 active:scale-95 transition-all`}

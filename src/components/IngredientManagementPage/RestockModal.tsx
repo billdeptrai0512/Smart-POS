@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { X } from 'lucide-react'
+import { X, Trash2 } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
 import { unitTiersOf } from '../../utils/inventory'
 import MoneyInput from '../common/MoneyInput'
@@ -49,6 +49,8 @@ interface Props {
     cashClosedToday?: boolean
     onConfirm: (payload: RestockPayload) => unknown
     onClose: () => void
+    /** Chỉ mode 'edit': nút Hủy phiếu ở header (caller tự confirm + đóng modal). */
+    onDelete?: () => void
     mode?: 'create' | 'edit'
     initial?: RestockInitial | null
     initialQty?: number | null
@@ -63,6 +65,7 @@ export default function RestockModal({
     cashClosedToday = false,
     onConfirm,
     onClose,
+    onDelete,
     mode = 'create',
     initial = null,
     // Gợi ý số lượng cần mua (vd needPacks từ card "Chuẩn bị ngày mai") — mớm sẵn để
@@ -193,12 +196,24 @@ export default function RestockModal({
                         <span className="text-[11px] font-black text-text-secondary uppercase tracking-wider">{mode === 'edit' ? 'Sửa phiếu nhập' : 'Nhập kho'}</span>
                         <span className="text-[18px] font-black text-text leading-tight">{ingredientLabel(ingredient)}</span>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="w-9 h-9 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all"
-                    >
-                        <X size={18} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {mode === 'edit' && onDelete && (
+                            <button
+                                onClick={onDelete}
+                                disabled={submitting}
+                                aria-label="Hủy phiếu"
+                                className="w-9 h-9 flex items-center justify-center rounded-full bg-danger/10 border border-danger/30 text-danger hover:bg-danger/20 active:scale-95 transition-all disabled:opacity-50"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        )}
+                        <button
+                            onClick={onClose}
+                            className="w-9 h-9 flex items-center justify-center rounded-full bg-surface-light border border-border/60 text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all"
+                        >
+                            <X size={18} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Form */}
