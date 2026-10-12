@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { draftFromItems, draftToItems, draftTotals, fmtQty, isTrivialQty, parseQtyInput, shortNames, toQty } from './warehouseTransfer'
+import { ceilToBigUnit, draftFromItems, draftToItems, draftTotals, fmtQty, isTrivialQty, parseQtyInput, shortNames, toQty } from './warehouseTransfer'
 
 describe('fmtQty', () => {
     it('không quy cách → số + đơn vị gốc, không tự quy đổi kg/lít', () => {
@@ -12,6 +12,15 @@ describe('fmtQty', () => {
         expect(fmtQty(7704, 'g', cfg)).toBe('20 lon + 104 g')
         expect(fmtQty(760, 'g', cfg)).toBe('2 lon')
         expect(fmtQty(9120, 'g', { ...cfg, pack2_size: 12, pack2_unit: 'thùng' })).toBe('2 thùng')
+    })
+})
+
+describe('ceilToBigUnit', () => {
+    it('làm tròn lên theo đơn vị lớn nhất; không quy cách thì giữ nguyên', () => {
+        expect(ceilToBigUnit(7704, 'g')).toBe(7704)
+        expect(ceilToBigUnit(7704, 'g', { pack_size: 1000, pack_unit: 'hộp' })).toBe(8000)
+        expect(ceilToBigUnit(6, 'hộp', { pack_size: 1, pack_unit: 'hộp', pack2_size: 12, pack2_unit: 'thùng' })).toBe(12)
+        expect(ceilToBigUnit(24, 'hộp', { pack_size: 1, pack_unit: 'hộp', pack2_size: 12, pack2_unit: 'thùng' })).toBe(24)
     })
 })
 

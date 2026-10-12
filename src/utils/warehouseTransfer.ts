@@ -1,4 +1,4 @@
-import { formatPackedQty, pack2Of, r1 } from './inventory'
+import { formatPackedQty, pack2Of, r1, unitTiersOf } from './inventory'
 import type { Row } from '../types/domain'
 
 export type Draft = Record<string, Record<string, string>>
@@ -60,4 +60,11 @@ export function draftTotals(draft: Draft | null) {
     for (const row of Object.values(draft || {})) for (const [ing, v] of Object.entries(row)) totals[ing] = (totals[ing] || 0) + toQty(v)
     for (const ing in totals) totals[ing] = r1(totals[ing])
     return totals
+}
+
+// Làm tròn LÊN theo đơn vị nhập lớn nhất của nguyên liệu (thùng, không có thì hộp/bịch…) — dùng cho "Cần mua": mua nguyên đơn vị,
+// không mua lẻ. Chưa khai quy cách thì giữ nguyên số.
+export function ceilToBigUnit(qty: number, unit: string, cfg?: Row | null) {
+    const { mult } = unitTiersOf(cfg?.pack_size, cfg?.pack_unit, pack2Of(cfg), unit)[0]
+    return Math.ceil(qty / mult - 1e-9) * mult
 }

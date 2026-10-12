@@ -11,7 +11,7 @@ import { fetchWarehouseTransfer, saveWarehouseTransfer, setWarehouseTransferPack
 import { processIngredientRestock } from '../services/orderService'
 import { useCashClosedToday } from '../hooks/useCashClosedToday'
 import { poolOf } from '../utils/prepToday'
-import { draftFromItems, draftToItems, draftTotals, fmtQty, isTrivialQty, shortNames, toQty, type Draft } from '../utils/warehouseTransfer'
+import { ceilToBigUnit, draftFromItems, draftToItems, draftTotals, fmtQty, isTrivialQty, shortNames, toQty, type Draft } from '../utils/warehouseTransfer'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { byIngredientLabel, ingredientLabel, lookupByLabel } from '../utils/ingredients'
 import { copyText } from '../utils/clipboard'
@@ -178,9 +178,10 @@ function Page({ selectedAddress, siblings }: { selectedAddress: SelectedAddress;
         const minStock: Record<string, number> = {}
         for (const b of branches || []) for (const i of b.ingredientsList) minStock[i.ingredient] = Math.max(minStock[i.ingredient] || 0, r1(i.min_stock))
         return unitKeys
-            .map(k => ({ ingredient: k, unit: unitOf[k], buy: Math.max(0, r1((minStock[k] || 0) + (totals[k] || 0) - poolOf(k, pool))) }))
-            .filter(x => x.buy > 0)
-    }, [branches, unitKeys, unitOf, pool, totals])
+            .map(k => ({ ingredient: k, unit: unitOf[k], need: Math.max(0, r1((minStock[k] || 0) + (totals[k] || 0) - poolOf(k, pool))) }))
+            .filter(x => x.need > 0)
+            .map(({ need, ...x }) => ({ ...x, buy: ceilToBigUnit(need, x.unit, cfgOf[x.ingredient]) })) // mua nguyên đơn vị lớn nhất
+    }, [branches, unitKeys, unitOf, cfgOf, pool, totals])
     // Dòng của từng chi nhánh = nguyên liệu có gợi ý + nguyên liệu đã có ô (đã gõ/đã lưu/vừa thêm; xoá trắng số vẫn giữ dòng).
     const allOptions = useMemo(
         () => unitKeys.map(k => ({ value: k, label: ingredientLabel(k) })),
