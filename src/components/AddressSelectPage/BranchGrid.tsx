@@ -79,7 +79,7 @@ interface Props {
     onSupportClick?: () => void
     onSetPrinters: (addressId: UUID, printers: { counterPrinterIp: string; kitchenPrinterIp: string }) => Promise<unknown>
     warehouseGroups?: WarehouseGroup[]
-    onCreateWarehouseGroup: (name: string) => Promise<UUID>
+    onCreateWarehouseGroup: (name: string, ownerId?: UUID | null) => Promise<UUID>
     onRenameWarehouseGroup: (groupId: UUID, name: string) => Promise<unknown>
     onRemoveWarehouseGroup: (groupId: UUID) => Promise<unknown>
     onSetAddressGroup: (addressId: UUID, groupId: UUID | null) => Promise<unknown>

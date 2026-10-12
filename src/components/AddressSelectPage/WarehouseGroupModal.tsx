@@ -8,7 +8,7 @@ interface Props {
     addr: Address
     addresses: Address[]
     warehouseGroups: WarehouseGroup[]
-    onCreateWarehouseGroup: (name: string) => Promise<UUID>
+    onCreateWarehouseGroup: (name: string, ownerId?: UUID | null) => Promise<UUID>
     onRenameWarehouseGroup: (groupId: UUID, name: string) => Promise<unknown>
     onRemoveWarehouseGroup: (groupId: UUID) => Promise<unknown>
     onSetAddressGroup: (addressId: UUID, groupId: UUID | null) => Promise<unknown>
@@ -49,7 +49,7 @@ export default function WarehouseGroupModal({
         const name = newGroupName.trim()
         if (!name || busy) return
         return run('Không thể tạo nhóm', async () => {
-            const groupId = await onCreateWarehouseGroup(name)
+            const groupId = await onCreateWarehouseGroup(name, addr.manager_id)
             await onSetAddressGroup(addr.id, groupId)
             setNewGroupName('')
         })
@@ -90,7 +90,8 @@ export default function WarehouseGroupModal({
                     Không gộp nhóm
                 </button>
 
-                {warehouseGroups.map(g => {
+                {/* Admin tải nhóm của mọi chủ → chỉ hiện nhóm của chủ địa chỉ này, cộng nhóm địa chỉ đang ở (kể cả khi lệch chủ). */}
+                {warehouseGroups.filter(g => g.manager_id === addr.manager_id || g.id === addr.warehouse_group_id).map(g => {
                     const members = addresses.filter(a => a.warehouse_group_id === g.id)
                     const memberCount = members.length
                     const hub = members.find(a => a.id === g.hub_address_id) // hub đã rời nhóm → coi như chưa đặt

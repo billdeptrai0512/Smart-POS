@@ -408,12 +408,10 @@ export async function deleteAddress(id: UUID) {
 }
 
 // Kho tổng dùng chung nhiều địa chỉ — nhóm thuộc về 1 manager (RLS lọc theo manager_id/user_address_access).
-export async function fetchWarehouseGroups(managerId: UUID) {
-    const { data, error } = await supabase
-        .from('warehouse_groups')
-        .select('*')
-        .eq('manager_id', managerId)
-        .order('created_at')
+export async function fetchWarehouseGroups(managerId: UUID | 'ALL') {
+    let query = supabase.from('warehouse_groups').select('*').order('created_at')
+    if (managerId !== 'ALL') query = query.eq('manager_id', managerId)
+    const { data, error } = await query
     if (error) {
         console.error('fetchWarehouseGroups error:', error)
         return { data: [], error }
@@ -421,9 +419,9 @@ export async function fetchWarehouseGroups(managerId: UUID) {
     return { data: data || [], error: null }
 }
 
-// p_group_id null → tạo nhóm mới; có giá trị → đổi tên. Trả về group id.
-export async function upsertWarehouseGroup(groupId: UUID | null, name: string) {
-    const { data, error } = await supabase.rpc('upsert_warehouse_group', { p_group_id: groupId, p_name: name })
+// p_group_id null → tạo nhóm mới (ownerId: chỉ admin — nhóm thuộc chủ của địa chỉ, không thuộc admin); có giá trị → đổi tên. Trả về group id.
+export async function upsertWarehouseGroup(groupId: UUID | null, name: string, ownerId?: UUID | null) {
+    const { data, error } = await supabase.rpc('upsert_warehouse_group', { p_group_id: groupId, p_name: name, ...(ownerId ? { p_owner_id: ownerId } : {}) })
     if (error) throw error
     return data
 }

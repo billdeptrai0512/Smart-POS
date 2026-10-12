@@ -31,7 +31,8 @@ export interface AddressContextValue {
     warehouseGroups: WarehouseGroup[]
     /** addressId → các địa chỉ khác cùng nhóm kho tổng. */
     siblingsByAddress: Record<string, Address[]>
-    createWarehouseGroup: (name: string) => Promise<UUID>
+    /** ownerId: chủ của địa chỉ đang gộp — admin tạo nhóm thay chủ khác thì nhóm phải thuộc chủ đó. */
+    createWarehouseGroup: (name: string, ownerId?: UUID | null) => Promise<UUID>
     renameWarehouseGroup: (groupId: UUID, name: string) => Promise<void>
     removeWarehouseGroup: (groupId: UUID) => Promise<void>
     setAddressGroup: (addressId: UUID, groupId?: UUID | null) => Promise<void>
@@ -133,12 +134,8 @@ export function AddressProvider() {
             const addrs = data || []
             setAddresses(addrs)
 
-            if (addressOwnerId === 'ALL') {
-                setWarehouseGroups([]) // admin xem toàn hệ thống — nhóm kho tổng chỉ có ý nghĩa trong 1 manager
-                setGroupsLoaded(true)
-            } else {
-                fetchWarehouseGroups(addressOwnerId).then(({ data: groups }) => { setWarehouseGroups(groups || []); setGroupsLoaded(true) })
-            }
+            // Admin tải nhóm của mọi chủ (RLS cho phép) — nơi hiển thị lọc theo chủ của địa chỉ đang xét.
+            fetchWarehouseGroups(addressOwnerId).then(({ data: groups }) => { setWarehouseGroups(groups || []); setGroupsLoaded(true) })
 
             // "Mẫu mặc định" (id: null, admin-only) isn't a row in `addrs` — it can't be
             // looked up by id, so the reconcile-with-server-list logic below would always
@@ -299,14 +296,14 @@ export function AddressProvider() {
     }, [profile, selectedAddress, isGuest])
 
     // Kho tổng dùng chung nhiều địa chỉ — 1 địa chỉ chỉ thuộc tối đa 1 nhóm (groupId=null = rời nhóm).
-    const createWarehouseGroup = useCallback(async (name: string) => {
+    const createWarehouseGroup = useCallback(async (name: string, ownerId?: UUID | null) => {
         if (isGuest) throw new Error('Tính năng này chỉ dành cho tài khoản chính thức!')
         if (!profile?.id || (profile.role !== 'manager' && profile.role !== 'admin')) throw new Error('Chỉ quản lý mới có thể tạo nhóm kho tổng')
         const cleanName = (name || '').trim()
         if (!cleanName) throw new Error('Tên nhóm không được để trống')
-        const ownerId = profile.manager_id || profile.id
-        const groupId = await apiUpsertWarehouseGroup(null, cleanName)
-        setWarehouseGroups(prev => [...prev, { id: groupId, manager_id: ownerId, name: cleanName, created_at: new Date().toISOString() }])
+        const groupOwnerId = (profile.role === 'admin' && ownerId) || profile.manager_id || profile.id
+        const groupId = await apiUpsertWarehouseGroup(null, cleanName, profile.role === 'admin' ? ownerId : null)
+        setWarehouseGroups(prev => [...prev, { id: groupId, manager_id: groupOwnerId, name: cleanName, created_at: new Date().toISOString() }])
         return groupId
     }, [profile, isGuest])
 
