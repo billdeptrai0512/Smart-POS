@@ -1,20 +1,26 @@
-import { useState, useEffect } from 'react'
-import { Package } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Package, ChevronRight } from 'lucide-react'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useStats } from '../../contexts/StatsContext'
 import { useHistory } from '../../contexts/HistoryContext'
+import { useToast } from '../../hooks/useToast'
+import { useSavingAction } from '../../hooks/useSavingAction'
 import { useProducts } from '../../contexts/ProductContext'
 import { useWarehousePrep } from '../../hooks/usePrepNotice'
-import { processIngredientRestock } from '../../services/orderService'
+import { processIngredientRestock, recordInvoicePayment } from '../../services/orderService'
 import { fetchCashClosedToday } from '../../services/reportService'
-import { getIngredientUnit } from '../../utils/ingredients'
+import { fetchIngredientDebts } from '../../services/expenseService'
+import { formatVND } from '../../utils/money'
+import { getIngredientUnit, ingredientLabel } from '../../utils/ingredients'
 import { pack2Of } from '../../utils/inventory'
 import NoticeBar from '../common/NoticeBar'
 import NoticeSheet from '../common/NoticeSheet'
 import ShiftPrepCard from '../DailyReportPage/ShiftPrepCard'
 import RestockModal, { type RestockPayload } from './RestockModal'
+import InvoicePaymentSheet, { type InvoicePayment } from './InvoicePaymentSheet'
 import Toast from '../POSPage/Toast'
+import type { Row } from '../../types/domain'
 
 // Dải notice "Bổ sung tồn kho" ở đỉnh /inventory (Tồn kho): NVL/bao bì cần MUA thêm để đủ bán ngày
 // mai (target = max(dự báo mai, tồn tối thiểu) − tổng tồn kho + quầy). Bấm → danh sách; nút "Mua N …"
@@ -47,11 +53,26 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
     // Món đã mua đủ (done) vẫn nằm trong danh sách → đếm tiến độ "đã mua / tổng", mẫu số đứng yên suốt ngày.
     const total = items.length
     const doneCount = items.filter(it => it.done).length
-    const progress = `${doneCount}/${total}`
+    const [debts, setDebts] = useState<{ ingredient: string; owing: number; invoices: Row[] }[]>([])
+    const progress = total > 0 ? `${doneCount}/${total}` : debts.length // chỉ còn nợ (không món cần mua) → đếm số NVL nợ
     const [open, setOpen] = useState(reopenSheet)
     useEffect(() => { reopenSheet = false }, [])
     const [restock, setRestock] = useState<{ ingredient: string; qty: number | null } | null>(null)
     const [cashClosedToday, setCashClosedToday] = useState(false)
+    const loadDebts = useCallback(
+        () => fetchIngredientDebts(addressId).then(setDebts).catch(err => console.error('fetchIngredientDebts', err)),
+        [addressId])
+    useEffect(() => { loadDebts() }, [loadDebts])
+    // Nợ chỉ 1 phiếu → mở thẳng form trả nợ; nhiều phiếu thì sang trang chi tiết (Nhật ký) để chọn phiếu cần trả.
+    const [payInvoice, setPayInvoice] = useState<Row | null>(null)
+    const { toast: payToast, showToast, showError } = useToast()
+    const { saving, withSaving } = useSavingAction(showError)
+    const handlePay = ({ amount, paymentMethod, paidAt, cashPhase }: InvoicePayment) => withSaving('Ghi nhận thanh toán', async () => {
+        await recordInvoicePayment(payInvoice!.address_id || addressId, payInvoice!.id, amount, paymentMethod, profile?.name, paidAt, cashPhase)
+        await Promise.all([loadDebts(), refreshTodayExpenses?.()])
+        setPayInvoice(null)
+        showToast('Đã ghi nhận thanh toán', 'success')
+    })
 
     // Phân loại dòng tiền đúng (trước/sau chốt két) — refetch mỗi lần mở form nhập kho.
     useEffect(() => {
@@ -61,12 +82,12 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
         return () => { alive = false }
     }, [restock, addressId])
 
-    if (total === 0 && !open && !restock) return null
+    if (total === 0 && debts.length === 0 && !open && !restock) return null
     const cfg = restock && (ingredientsList || []).find(i => i.ingredient === restock.ingredient)
 
     return (
         <>
-            {total > 0 && (
+            {(total > 0 || debts.length > 0) && (
                 <NoticeBar
                     icon={<Package size={15} className="text-primary shrink-0" />}
                     label="Bổ sung tồn kho"
@@ -75,14 +96,36 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
                 />
             )}
             <Toast toast={toast} />
+            <Toast toast={payToast} />
 
-            {open && !restock && (ready || total > 0) && (
+            {open && !restock && !payInvoice && (ready || total > 0) && (
                 <NoticeSheet
                     icon={<Package size={18} className="text-primary shrink-0" />}
                     title="Bổ sung tồn kho"
                     count={progress}
                     onClose={() => setOpen(false)}
                 >
+                    {debts.length > 0 && (
+                        <>
+                            <SectionHeading first tone="warning" aside={debts.length > 1 ? `Tổng ${formatVND(debts.reduce((s, d) => s + d.owing, 0))}` : undefined}>Công nợ</SectionHeading>
+                            {debts.map(d => (
+                                <button
+                                    key={d.ingredient}
+                                    type="button"
+                                    onClick={d.invoices.length === 1 ? () => setPayInvoice(d.invoices[0]) : onOpenIngredient && (() => { reopenSheet = true; onOpenIngredient(d.ingredient) })}
+                                    className="w-full flex items-center gap-3 py-2.5 border-b border-border/20 text-left active:scale-[0.99] transition"
+                                >
+                                    <span className="flex-1 min-w-0">
+                                        <span className="block text-[14px] font-bold leading-tight text-text">{ingredientLabel(d.ingredient)}</span>
+                                        <span className="block mt-0.5 text-[11px] text-text-dim">{d.invoices.length} phiếu chưa trả đủ</span>
+                                    </span>
+                                    <span className="shrink-0 text-[15px] font-black text-warning tabular-nums">{formatVND(d.owing)}</span>
+                                    <ChevronRight size={15} className="shrink-0 text-text-dim -ml-1" />
+                                </button>
+                            ))}
+                            {total > 0 && <SectionHeading tone="neutral">Cần mua</SectionHeading>}
+                        </>
+                    )}
                     <ShiftPrepCard
                         packVerb="Mua"
                         haveLabel="Tồn quầy cuối ca"
@@ -93,6 +136,10 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
                         onRestock={(ingredient, qty) => setRestock({ ingredient, qty: qty > 0 ? qty : null })}
                     />
                 </NoticeSheet>
+            )}
+
+            {payInvoice && (
+                <InvoicePaymentSheet invoice={payInvoice} saving={saving} onClose={() => setPayInvoice(null)} onConfirm={handlePay} />
             )}
 
             {restock && (
@@ -112,11 +159,21 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
                             ...(wh != null ? { beforeStock: wh } : {}),
                         })
                         // Kho đổi → tươi lại: danh sách của hook, context sản phẩm/chi phí, và list tồn của trang cha.
-                        await Promise.all([reload(), refreshProducts?.(), refreshTodayExpenses?.(), onRestocked?.()])
+                        await Promise.all([reload(), refreshProducts?.(), refreshTodayExpenses?.(), onRestocked?.(), loadDebts()])
                         return result
                     }}
                 />
             )}
         </>
+    )
+}
+
+// Dải full-bleed (bù px-5 + pt-1 của NoticeSheet) cùng kiểu "Cần lấy ngay / Soạn đầu ca" của ShiftPrepCard.
+function SectionHeading({ children, tone, first, aside }: { children: string; tone: 'warning' | 'neutral'; first?: boolean; aside?: string }) {
+    return (
+        <div className={`-mx-5 px-5 py-1.5 flex items-baseline justify-between text-[12px] font-black uppercase tracking-wide ${first ? '-mt-1' : 'mt-3'} ${tone === 'warning' ? 'bg-warning/10 text-warning' : 'bg-surface-light text-text-secondary'}`}>
+            {children}
+            {aside && <span className="normal-case tracking-normal tabular-nums">{aside}</span>}
+        </div>
     )
 }

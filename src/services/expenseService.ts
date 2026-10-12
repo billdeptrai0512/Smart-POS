@@ -187,6 +187,38 @@ export async function fetchIngredientRestockHistory(addressIds: (UUID | null)[] 
         .map(e => ({ ...e, payments: e.expense_payments || [] }))
 }
 
+// Công nợ NCC theo nguyên liệu: Σ max(0, amount − Σ payments) trên các phiếu nhập còn hiệu lực của 1 địa chỉ.
+// Quét mọi phiếu nhập (nợ cũ vẫn nợ) theo trang vì PostgREST cắt 1000 dòng; chỉ trả nguyên liệu có nợ > 0, nợ lớn nhất lên đầu.
+// Phiếu hủy bị xóa (CASCADE payments) nên không còn dòng để tính nợ ma.
+export async function fetchIngredientDebts(addressId: UUID) {
+    const PAGE = 1000
+    const owingBy: Record<string, { owing: number; invoices: Row[] }> = {}
+    for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+            .from('expenses')
+            .select('id, address_id, name, amount, created_at, metadata, expense_payments(amount)')
+            .eq('address_id', addressId)
+            .eq('is_refill', true)
+            .order('created_at').order('id')
+            .range(from, from + PAGE - 1)
+        if (error) throw error
+        for (const e of (data || []) as Row[]) {
+            const ing = e.metadata?.ingredient
+            if (!ing || e.metadata?.cancelled || e.metadata?.adjustment || !(e.amount > 0)) continue
+            const paid = (e.expense_payments || []).reduce((s: number, p: Row) => s + (p.amount || 0), 0)
+            const owing = e.amount - paid
+            if (owing <= 0) continue
+            const cur = owingBy[ing] ||= { owing: 0, invoices: [] }
+            cur.owing += owing
+            cur.invoices.push({ ...e, payments: e.expense_payments }) // cùng dạng với fetchIngredientRestockHistory → InvoicePaymentSheet dùng được
+        }
+        if ((data?.length ?? 0) < PAGE) break
+    }
+    return Object.entries(owingBy)
+        .map(([ingredient, v]) => ({ ingredient, ...v }))
+        .sort((a, b) => b.owing - a.owing)
+}
+
 // ---- Expense Categories CRUD ----
 // Tags that group expenses on the profit report. Manager-managed inline through
 // the expense form. NVL refills intentionally don't get a category — they're
