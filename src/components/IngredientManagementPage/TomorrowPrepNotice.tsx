@@ -10,7 +10,7 @@ import { buildTomorrowPrepList } from '../../utils/prepToday'
 import { isTrivialQty } from '../../utils/warehouseTransfer'
 import { addDaysVN, dateStringVN } from '../../utils/dateVN'
 import NoticeBar from '../common/NoticeBar'
-import NoticeSheet from '../common/NoticeSheet'
+import NoticeSheet, { SheetBody } from '../common/NoticeSheet'
 import ShiftPrepCard from '../DailyReportPage/ShiftPrepCard'
 import Toast from '../POSPage/Toast'
 import type { UUID } from '../../types/domain'
@@ -67,17 +67,20 @@ function Sheet({ groupId, addressId, name, onClose }: { groupId: UUID; addressId
 
     async function toggle(ingredient: string) {
         const it = items.find(i => i.ingredient === ingredient)
-        if (!it?.fillQty || !confirmed) return
+        if (!it?.fillQty) return
+        const qty = it.fillQty
+        const apply = (on: boolean) => setConfirmed(c => {
+            const next = { ...c }
+            if (on) next[ingredient] = { qty, by: profile?.name }; else delete next[ingredient]
+            return next
+        })
         const on = !checked[ingredient]
-        const before = confirmed
-        const next = { ...confirmed }
-        if (on) next[ingredient] = { qty: it.fillQty, by: profile?.name }; else delete next[ingredient]
-        setConfirmed(next)
+        apply(on)
         try {
-            await setTomorrowPrepConfirmed(groupId, forDate, addressId, ingredient, it.unit ?? '', it.fillQty, on)
+            await setTomorrowPrepConfirmed(groupId, forDate, addressId, ingredient, it.unit ?? '', qty, on)
         } catch (err) {
             showError(err, 'Lưu xác nhận')
-            setConfirmed(before)
+            apply(!on)
         }
     }
 
@@ -85,14 +88,7 @@ function Sheet({ groupId, addressId, name, onClose }: { groupId: UUID; addressId
     return (
         <>
             <NoticeSheet icon={<CalendarClock size={18} className="text-primary shrink-0" />} title="Soạn cho ngày mai" count={loading ? '' : `${done}/${items.length}`} onClose={onClose}>
-                {error ? (
-                    <div className="py-6 text-center flex flex-col items-center gap-2">
-                        <span className="text-[14px] font-bold text-danger">Không tải được số liệu</span>
-                        <button type="button" onClick={reload} className="text-[13px] font-bold text-primary">Thử lại</button>
-                    </div>
-                ) : loading ? (
-                    <p className="py-8 text-center text-[14px] text-text-secondary">Đang tính…</p>
-                ) : (
+                <SheetBody error={error} loading={loading} onRetry={reload}>
                     <>
                         {items.length > 0 && <p className="py-2 text-[11px] text-text-dim">Tick để xác nhận đã soạn — không trừ kho.</p>}
                         <ShiftPrepCard
@@ -105,7 +101,7 @@ function Sheet({ groupId, addressId, name, onClose }: { groupId: UUID; addressId
                             onToggle={toggle}
                         />
                     </>
-                )}
+                </SheetBody>
             </NoticeSheet>
             <Toast toast={toast} />
         </>

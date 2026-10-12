@@ -6,6 +6,19 @@ import { BottomSheet } from './ModalShell'
 // bên phải, danh sách ngay bên dưới. Header đứng yên (nút X luôn trong tầm tay), chỉ danh sách cuộn.
 interface Props { icon: ReactNode; title: string; count: number | string; onClose: () => void; children: ReactNode }
 
+// Thân sheet tính bất đồng bộ: lỗi → nút "Thử lại"; đang tính → chữ chờ; xong thì vẽ children.
+export function SheetBody({ error, loading, onRetry, children }: { error: unknown; loading: boolean; onRetry: () => void; children: ReactNode }) {
+    if (error) {
+        return (
+            <div className="py-6 text-center flex flex-col items-center gap-2">
+                <span className="text-[14px] font-bold text-danger">Không tải được số liệu</span>
+                <button type="button" onClick={onRetry} className="text-[13px] font-bold text-primary">Thử lại</button>
+            </div>
+        )
+    }
+    return loading ? <p className="py-8 text-center text-[14px] text-text-secondary">Đang tính…</p> : <>{children}</>
+}
+
 export default function NoticeSheet({ icon, title, count, onClose, children }: Props) {
     return (
         <BottomSheet

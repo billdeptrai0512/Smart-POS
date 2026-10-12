@@ -10,9 +10,9 @@ import { processIngredientRestock } from '../../services/orderService'
 import { ceilToBigUnit } from '../../utils/warehouseTransfer'
 import { byIngredientLabel, lookupByLabel } from '../../utils/ingredients'
 import { pack2Of } from '../../utils/inventory'
-import type { PrepItem } from '../../utils/prepToday'
+import { toPrepItem, type PrepItem } from '../../utils/prepToday'
 import NoticeBar from '../common/NoticeBar'
-import NoticeSheet from '../common/NoticeSheet'
+import NoticeSheet, { SheetBody } from '../common/NoticeSheet'
 import ShiftPrepCard from '../DailyReportPage/ShiftPrepCard'
 import RestockModal from './RestockModal'
 
@@ -43,31 +43,19 @@ function Sheet({ addressId, addresses: all, onClose, onRestocked }: { addressId:
     const cashClosedToday = useCashClosedToday(addressId, !!restock)
 
     const items = useMemo<PrepItem[]>(() => (plan ?? [])
-        .map(r => {
+        .map((r): PrepItem | null => {
             const cfg = cfgOf[r.ingredient]
-            const need = ceilToBigUnit(r.buy, r.unit, cfg)
-            const packSize = Number(cfg?.pack_size) || 0
-            return {
-                ingredient: r.ingredient, unit: r.unit, need, needPacks: packSize > 0 ? Math.ceil(need / packSize) : 0,
-                packSize, packUnit: cfg?.pack_unit, pack2: pack2Of(cfg),
-                warehouse: r.pool, minStock: r.minStock, have: r.totalPull,
-            }
+            const item = toPrepItem(cfg, 0, ceilToBigUnit(r.buy, r.unit, cfg))
+            return item && { ...item, warehouse: r.pool, minStock: r.minStock, have: r.totalPull }
         })
-        .filter(it => it.need > 0)
+        .filter((it): it is PrepItem => !!it)
         .sort((a, b) => byIngredientLabel(a.ingredient, b.ingredient)), [plan, cfgOf])
     const cfg = restock ? cfgOf[restock.ingredient] : undefined
 
     return (
         <>
             <NoticeSheet icon={<Package size={18} className="text-primary shrink-0" />} title="Bổ sung tồn kho" count={plan ? items.length : ''} onClose={onClose}>
-                {error ? (
-                    <div className="py-6 text-center flex flex-col items-center gap-2">
-                        <span className="text-[14px] font-bold text-danger">Không tải được số liệu kho</span>
-                        <button type="button" onClick={reload} className="text-[13px] font-bold text-primary">Thử lại</button>
-                    </div>
-                ) : !plan ? (
-                    <p className="py-8 text-center text-[14px] text-text-secondary">Đang tính…</p>
-                ) : (
+                <SheetBody error={error} loading={!plan} onRetry={reload}>
                     <ShiftPrepCard
                         packVerb="Mua"
                         haveLabel="Cả nhóm rút ngày mai"
@@ -76,7 +64,7 @@ function Sheet({ addressId, addresses: all, onClose, onRestocked }: { addressId:
                         items={items}
                         onRestock={(ingredient, qty) => setRestock({ ingredient, qty: qty > 0 ? qty : null })}
                     />
-                )}
+                </SheetBody>
             </NoticeSheet>
 
             {restock && (

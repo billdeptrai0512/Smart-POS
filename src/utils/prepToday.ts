@@ -61,7 +61,7 @@ const forecastFor = (ingredient: string, usedMap: UsageMap, lastWeekMap: UsageMa
 
 // Item chung: { ingredient, have, need, needPacks, unit, packUnit, pack2, fillQty }.
 //   have = tồn hiện có ("Còn"); need = target − have ("Cần"); needPacks = quy đổi ra bịch.
-const toPrepItem = (ing: Row, have: number, target: number): PrepItem | null => {
+export const toPrepItem = (ing: Row, have: number, target: number): PrepItem | null => {
     const need = r1(target - have)
     if (need <= 0) return null
     const packSize = Number(ing.pack_size) || 0
@@ -248,9 +248,7 @@ export function buildGroupPrepPlan({ branches, pool }: { branches: GroupPrepBran
     const byIng = new Map<string, Omit<GroupPrepRow, 'pool' | 'totalPull' | 'buy'>>()
     for (const b of branches) {
         for (const ing of b.ingredientsList || []) {
-            const counterReal = Math.max(0, r1(r1(lookupByLabel(ing.ingredient, b.counterStock || {})) - r1(ing.tare_weight)))
-            const forecast = r1(lookupByLabel(ing.ingredient, b.forecast || {}))
-            const item = toPrepItem(ing, counterReal, Math.max(forecast, r1(ing.min_counter_stock)))
+            const item = tomorrowItem(ing, b.counterStock, b.forecast)
             const qty = item?.fillQty ?? 0
             const packs = item?.needPacks ?? 0
             let row = byIng.get(ing.ingredient)
@@ -274,18 +272,17 @@ export function buildGroupPrepPlan({ branches, pool }: { branches: GroupPrepBran
 
 // "Soạn cho ngày mai" của MỘT địa chỉ trong nhóm kho chung: cùng công thức "Soạn cho hôm nay" nhưng theo dự báo MAI —
 // rút mai = max(dự báo mai, min_counter_stock) − tồn quầy cuối ca (đã trừ bì). warehouse = kho tổng chung còn lại.
+const tomorrowItem = (ing: Row, counterStock: UsageMap, forecast: UsageMap) => {
+    const counterReal = Math.max(0, r1(r1(lookupByLabel(ing.ingredient, counterStock || {})) - r1(ing.tare_weight)))
+    return toPrepItem(ing, counterReal, Math.max(r1(lookupByLabel(ing.ingredient, forecast || {})), r1(ing.min_counter_stock)))
+}
 export function buildTomorrowPrepList({ ingredientsList, counterStock, forecast, pool }: {
     ingredientsList?: Row[] | null; counterStock: UsageMap; forecast: UsageMap; pool?: UsageMap | null
 }) {
     const out: PrepItem[] = []
     for (const ing of ingredientsList || []) {
-        const tare = r1(ing.tare_weight)
-        const counterReal = Math.max(0, r1(r1(lookupByLabel(ing.ingredient, counterStock || {})) - tare))
-        const item = toPrepItem(ing, counterReal, Math.max(r1(lookupByLabel(ing.ingredient, forecast || {})), r1(ing.min_counter_stock)))
-        if (!item) continue
-        item.warehouse = poolOf(ing.ingredient, pool)
-        item.tare = tare
-        out.push(item)
+        const item = tomorrowItem(ing, counterStock, forecast)
+        if (item) out.push(Object.assign(item, { warehouse: poolOf(ing.ingredient, pool), tare: r1(ing.tare_weight) }))
     }
     return out
 }

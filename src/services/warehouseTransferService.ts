@@ -15,18 +15,17 @@ export async function fetchWarehouseTransfer(groupId: UUID, forDate: string) {
     return data && { status: data.status, items: data.warehouse_transfer_items || [] }
 }
 
-// Hàng kho tổng ĐÃ SOẠN cho MỘT chi nhánh vào ngày `forDate` → { [ingredient]: { qty, packed, by } }: dòng đã xác nhận ở "Soạn cho ngày mai"
-// (packed_at) hoặc phiếu cũ đã chốt (status 'issued'). Địa chỉ ngoài nhóm kho chung / chưa có = {}. Ném khi lỗi (caller tự nuốt).
+// Hàng kho tổng ĐÃ SOẠN cho MỘT chi nhánh vào ngày `forDate` (dòng đã xác nhận ở "Soạn cho ngày mai") → { [ingredient]: { qty, packed, by } }.
+// Địa chỉ ngoài nhóm kho chung / chưa có = {}. Ném khi lỗi (caller tự nuốt).
 export async function fetchTransferToAddress(addressId: UUID, forDate: string) {
     const { data, error } = await supabase
         .from('warehouse_transfer_items')
-        .select('ingredient, qty, packed_at, packed_by_name, warehouse_transfers!inner(for_date, status)')
+        .select('ingredient, qty, packed_by_name, warehouse_transfers!inner(for_date)')
         .eq('address_id', addressId)
         .eq('warehouse_transfers.for_date', forDate)
+        .not('packed_at', 'is', null)
     if (error) throw error
-    return Object.fromEntries((data || [])
-        .filter(i => i.packed_at || (i.warehouse_transfers as unknown as { status: string }).status === 'issued')
-        .map(i => [i.ingredient, { qty: Number(i.qty), packed: !!i.packed_at, by: i.packed_by_name ?? undefined }]))
+    return Object.fromEntries((data || []).map(i => [i.ingredient, { qty: Number(i.qty), packed: true, by: i.packed_by_name ?? undefined }]))
 }
 
 // "Soạn cho ngày mai": xác nhận (confirmed=true, ghi số đã xác nhận) / bỏ xác nhận 1 dòng (địa chỉ, nguyên liệu, ngày). Chỉ là bằng chứng,
