@@ -32,6 +32,7 @@ import { useCashClosedToday } from '../hooks/useCashClosedToday'
 import { restockInitialFrom } from '../utils/restockInitial'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { dateStringVN, startOfMonthVN, endOfMonthVN } from '../utils/dateVN'
+import { fetchPackedConfirmations } from '../services/warehouseTransferService'
 import { findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
 import { isRecipeProgressDone, readOnboardingState, writeOnboardingState } from '../utils/onboardingStorage'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
@@ -141,10 +142,13 @@ export default function IngredientDetailPage() {
     // phiếu nhập/hiệu chỉnh (expenses) + lượt "Rút ra quầy" (restock trong phiếu
     // chốt ca). Lượt rút là chuyển kho nội bộ — không tiền, không payments.
     const loadHistory = useCallback(async () => {
-        const [hist, withdrawals] = await Promise.all([
+        const [hist, withdrawals, packed] = await Promise.all([
             fetchIngredientRestockHistory(groupAddressIds, ingredientKey, fromDate, toDate),
             fetchIngredientWithdrawals(groupAddressIds, ingredientKey, fromDate, toDate),
+            // Người xác nhận SOẠN (ngày trước) của từng lượt rút — chỉ nhóm kho chung có; lỗi/chưa có phiếu thì bỏ qua.
+            groupAddressIds.length > 1 ? fetchPackedConfirmations(groupAddressIds, ingredientKey, fromDate, toDate).catch(() => []) : Promise.resolve([]),
         ])
+        const packedBy = new Map(packed.map(p => [`${p.address_id}|${p.for_date}`, p]))
         const withdrawalEntries = withdrawals.map(w => ({
             id: `wd-${w.id}`,
             created_at: w.created_at,
@@ -154,7 +158,11 @@ export default function IngredientDetailPage() {
             staff_name: w.staff_name,
             address_id: w.address_id,
             // before/after kho — card vẽ "Tồn kho X → Y" y hệt phiếu nhập/hiệu chỉnh.
-            metadata: { qty: w.qty, before_stock: w.before_stock, after_stock: w.after_stock },
+            metadata: {
+                qty: w.qty, before_stock: w.before_stock, after_stock: w.after_stock,
+                // Soạn cho ngày này = phiếu "Soạn cho ngày mai" của hôm trước (for_date = ngày rút); staff_name = người nhận.
+                packed_by: packedBy.get(`${w.address_id}|${dateStringVN(new Date(w.created_at))}`),
+            },
         }))
         return ([...hist, ...withdrawalEntries] as Row[])
             .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -178,6 +186,10 @@ export default function IngredientDetailPage() {
             .finally(() => setLoading(false))
     }, [loadHistory, hasAddress, ingredientKey])
 
+    // Kho tổng chung: lọc nhật ký theo địa chỉ (mọi loại thẻ — nhập kho, hiệu chỉnh, rút ra quầy). null = tất cả.
+    const [addressFilter, setAddressFilter] = useState<string | null>(null)
+    const shownHistory = useMemo(() => addressFilter ? history.filter(e => e.address_id === addressFilter) : history, [history, addressFilter])
+
     const summary = useMemo(() => {
         let totalSpent = 0, totalQty = 0, totalOwing = 0, totalPaidInMonth = 0
         // `fromDate` / `toDate` xác định cửa sổ tháng đang xem — payments có paid_at
@@ -186,7 +198,7 @@ export default function IngredientDetailPage() {
         const monthStartMs = new Date(fromDate).getTime()
         const monthEndMs = new Date(toDate).getTime()
         let purchaseCount = 0
-        history.forEach(e => {
+        shownHistory.forEach(e => {
             // Lượt rút ra quầy không phải mua hàng — không tính vào tổng tiền/lượng nhập.
             if (e.is_withdrawal) return
             purchaseCount += 1
@@ -201,7 +213,7 @@ export default function IngredientDetailPage() {
             }
         })
         return { totalSpent, totalQty, totalOwing, totalPaidInMonth, count: purchaseCount }
-    }, [history, fromDate, toDate])
+    }, [shownHistory, fromDate, toDate])
 
     // ── Save callbacks for child rows ───────────────────────────────────────
     // category đi theo section của nhóm (trigger DB ép) — client chỉ gán group_id.
@@ -542,7 +554,7 @@ export default function IngredientDetailPage() {
                     <IngredientHistoryTab
                         loading={loading}
                         summary={summary}
-                        history={history}
+                        history={shownHistory}
                         unit={unit}
                         packSize={packSize}
                         packUnit={packUnit}
@@ -554,6 +566,8 @@ export default function IngredientDetailPage() {
                         onCancelRestock={canEdit ? handleCancelRestock : undefined}
                         onEditRestock={canEdit ? setEditingEntry : undefined}
                         addressNameById={groupAddressIds.length > 1 ? addressNameById : null}
+                        addressFilter={addressFilter}
+                        onAddressFilter={setAddressFilter}
                     />
                 )}
             </main>

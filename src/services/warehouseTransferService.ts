@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabaseClient'
 import type { UUID } from '../types/domain'
+import { dateStringVN } from '../utils/dateVN'
 
 // Phiếu soạn kho nội bộ của nhóm kho chung (migration 20261011_warehouse_transfers). 1 phiếu = (nhóm, ngày dùng).
 // Trả { status, items: [{ address_id, ingredient, unit, qty, packed_at }] } hoặc null nếu chưa có phiếu. Ném khi lỗi
@@ -36,4 +37,22 @@ export async function setTomorrowPrepConfirmed(groupId: UUID, forDate: string, a
     })
     if (error) throw error
     return data as string | null
+}
+
+// Ai đã xác nhận SOẠN cho 1 nguyên liệu (mọi địa chỉ trong nhóm) trong khoảng ngày — nhật ký ghép với lượt "Rút ra quầy" cùng
+// (địa chỉ, ngày dùng). → [{ address_id, for_date, packed_at, packed_by_name }]. Ném khi lỗi (vd. migration chưa apply; caller nuốt).
+export async function fetchPackedConfirmations(addressIds: UUID[], ingredient: string, fromDate: string | Date, toDate: string | Date) {
+    const { data, error } = await supabase
+        .from('warehouse_transfer_items')
+        .select('address_id, packed_at, packed_by_name, warehouse_transfers!inner(for_date)')
+        .in('address_id', addressIds)
+        .eq('ingredient', ingredient)
+        .not('packed_at', 'is', null)
+        .gte('warehouse_transfers.for_date', dateStringVN(new Date(fromDate)))
+        .lte('warehouse_transfers.for_date', dateStringVN(new Date(toDate)))
+    if (error) throw error
+    return (data || []).map(i => ({
+        address_id: i.address_id as UUID, packed_at: i.packed_at as string, packed_by_name: i.packed_by_name as string | null,
+        for_date: (i.warehouse_transfers as unknown as { for_date: string }).for_date,
+    }))
 }

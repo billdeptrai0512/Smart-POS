@@ -27,6 +27,8 @@ interface Props extends PackProps {
     onCancelRestock?: (entry: Row) => void
     onEditRestock?: (entry: Row) => void
     addressNameById?: Record<string, string> | null
+    addressFilter?: string | null
+    onAddressFilter?: (addressId: string | null) => void
 }
 
 // Monthly restock log for one ingredient. Card layout mirrors /history's
@@ -43,6 +45,7 @@ export default function IngredientHistoryTab({
     monthLabel, monthOffset, onMonthChange,
     onOpenPayment, onCancelRestock, onEditRestock,
     addressNameById, // {id: name} — chỉ truyền khi địa chỉ thuộc 1 warehouse group (kho tổng chung)
+    addressFilter = null, onAddressFilter,
 }: Props) {
     const hasOwing = summary.totalOwing > 0
     return (
@@ -59,6 +62,22 @@ export default function IngredientHistoryTab({
                 pack2={pack2}
                 hasOwing={hasOwing}
             />
+
+            {addressNameById && onAddressFilter && (
+                <div className="flex gap-2 overflow-x-auto hide-scrollbar -mx-1 px-1">
+                    {[[null, 'Tất cả'], ...Object.entries(addressNameById)].map(([id, name]) => (
+                        <button
+                            key={id ?? 'all'}
+                            type="button"
+                            onClick={() => onAddressFilter(id)}
+                            className={`shrink-0 px-3 py-1.5 rounded-full border text-[12px] font-bold whitespace-nowrap transition-colors ${
+                                addressFilter === id ? 'bg-primary/15 border-primary/40 text-primary' : 'bg-surface-light border-border/60 text-text-secondary'}`}
+                        >
+                            {name}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {loading ? (
                 <div className="flex flex-col gap-3 animate-pulse">
@@ -189,6 +208,7 @@ function HistoryCard({ entry, unit, packSize, packUnit, pack2, onOpenPayment, on
     const isAdjust = !!entry.metadata?.adjustment
     const isRestock = !isAdjust && !isWithdrawal
     const isTransfer = entry.payment_method === 'transfer'
+    const packedBy = entry.metadata?.packed_by as { packed_by_name: string | null; packed_at: string } | undefined
 
     // When cancelled the row is zeroed in the DB; display the ORIGINAL figures.
     const qty = cancelled ? (Number(entry.metadata?.cancelled_qty) || 0) : (entry.metadata?.qty || 0)
@@ -322,10 +342,18 @@ function HistoryCard({ entry, unit, packSize, packUnit, pack2, onOpenPayment, on
                 </div>
             )}
 
+            {/* Rút ra quầy: ai SOẠN (xác nhận ở "Soạn cho ngày mai" hôm trước) — người NHẬN là staff ở footer. */}
+            {isWithdrawal && packedBy && (
+                <div className="text-[11px] font-medium text-text-dim -mt-0.5">
+                    Soạn: <span className="font-bold text-text-secondary">{packedBy.packed_by_name || '—'}</span>
+                    {' · '}{dateShortVN(new Date(packedBy.packed_at))} {timeStringVN(new Date(packedBy.packed_at))}
+                </div>
+            )}
+
             {/* Footer — staff (left) + datetime (right), above a hairline divider. */}
             <div className="flex justify-between items-center gap-2 border-t border-border/40 pt-2 mt-0.5">
                 <span className="text-[11px] font-bold text-text-secondary/70 truncate">
-                    {entry.staff_name || '—'}
+                    {isWithdrawal && 'Nhận: '}{entry.staff_name || '—'}
                 </span>
                 <span className="text-[12px] font-bold text-text-dim tabular-nums shrink-0">
                     {dateStr} · {timeStr}
