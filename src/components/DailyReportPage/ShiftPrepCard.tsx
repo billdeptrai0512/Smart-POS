@@ -156,9 +156,9 @@ export default function ShiftPrepCard({
                                         </div>
                                         <div className="text-[11px] text-text-dim mt-0.5">
                                             {/* Tồn kho chỉ để biết còn đủ hàng mà lấy; xử lý xong rồi thì số đó chỉ còn gây nhiễu. */}
-                                            {!muted && it.warehouse != null && (
-                                                <span className={`block ${shortfall ? 'text-danger font-bold' : ''}`}>
-                                                    Tồn kho: {fmt(it.warehouse)}
+                                            {(!muted || it.taken != null) && it.warehouse != null && (
+                                                <span className="block">
+                                                    Tồn kho: <span className={(muted ? it.warehouse === 0 : shortfall) ? 'text-danger font-bold' : ''}>{fmt(it.warehouse)}</span>
                                                 </span>
                                             )}
                                             {it.reason && <span className="block text-warning font-bold">{it.reason}</span>}
@@ -176,7 +176,7 @@ export default function ShiftPrepCard({
                                             : isSkipped ? 'bg-border/30 text-text-dim'
                                                 : 'bg-primary/10 text-primary'}`}>
                                         {isDone && <Check size={13} strokeWidth={3} />}
-                                        {isDone ? `Đã ${packVerb.toLowerCase()} ${fmt(it.restock)}` : isSkipped ? 'Bỏ qua' : ctaLabel}
+                                        {isDone ? `Đã ${packVerb.toLowerCase()} ${fmt(it.taken ?? it.restock)}` : isSkipped ? 'Bỏ qua' : ctaLabel}
                                     </span>
                                 </button>
                                 </Fragment>

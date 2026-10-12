@@ -25,6 +25,7 @@ export interface PrepItem {
     kind?: 'depleted'
     haveLabel?: string
     low?: boolean
+    taken?: number // đã lấy bao nhiêu trong lần mở modal này (món hết giữa ca, giữ lại làm dòng "Đã lấy")
     // buildWarehousePrepList
     done?: boolean
     forecast?: number
@@ -109,15 +110,20 @@ export function buildPrepTodayList({ ingredientsList, openingInputs, openingStoc
     return out
 }
 
+export type PrepConfirmed = Record<string, { qty: number; warehouse: number | null }>
+
 // NVL ĐÃ HẾT (hoặc SẮP HẾT: dưới min_counter_stock) ở quầy giữa ca: có bán (used > 0) mà Lý thuyết
 // (Đầu kỳ + Nhập thêm − Sử dụng, trừ bì) ≤ 0 hoặc < tồn quầy ít nhất (đã đếm Cuối kỳ thì lấy số đếm thay Lý thuyết — đếm thực tế đúng hơn) — kể cả món sáng nay đã soạn. Cần lấy thêm từ kho dự trữ; bấm xác nhận = cộng thêm 1 lần
 // vào Nhập thêm, nên Lý thuyết > 0 lại thì tự rớt khỏi danh sách. Món đã "bỏ qua" thì thôi.
 // effectiveWarehouseStocks = kho TRƯỚC khi trừ restock ca này (xem useShiftInventoryState).
 // ponytail: NVL không có quy cách bịch thì lấy 25% lượng đã dùng (tối thiểu 1) — chưa có cấu hình
 // "lượng lấy mỗi lần"; thêm cột cấu hình nếu 25% không hợp.
-export function buildDepletedList({ ingredientsList, openingInputs, openingStock, restockInputs, inventoryInputs = {}, skipped, usedMap, warehouseStocks, effectiveWarehouseStocks }: {
+// confirmed = { [ingredient]: { qty: số vừa lấy, warehouse: kho còn lại ngay lúc lấy } } trong lần mở modal này: món đó
+// ở lại danh sách (dù Lý thuyết đã > 0) để hiện "Đã lấy", chỉ rớt sau khi đóng modal (qty 0 = đã hoàn tác). Kho đóng băng lúc bấm vì kho trước ca
+// (đổi ngay khi phiếu lưu) và kho server (tải lại sau) cập nhật lệch nhịp → tính sống thì số nhảy 1 → 0 → 1 → 0.
+export function buildDepletedList({ ingredientsList, openingInputs, openingStock, restockInputs, inventoryInputs = {}, skipped, usedMap, effectiveWarehouseStocks, confirmed = {} }: {
     ingredientsList?: Row[] | null; openingInputs: Inputs; openingStock: UsageMap; restockInputs: Inputs; inventoryInputs?: Inputs
-    skipped: Record<string, unknown>; usedMap: UsageMap; warehouseStocks?: UsageMap | null; effectiveWarehouseStocks: UsageMap
+    skipped: Record<string, unknown>; usedMap: UsageMap; effectiveWarehouseStocks: UsageMap; confirmed?: PrepConfirmed
 }) {
     const out: PrepItem[] = []
     for (const ing of ingredientsList || []) {
@@ -131,12 +137,14 @@ export function buildDepletedList({ ingredientsList, openingInputs, openingStock
             used,
         })
         const counted = inventoryInputs[ing.ingredient]
-        const balance = counted !== undefined && counted !== '' ? r1(counted) : lyThuyet
+        // Số đếm là mốc cố định — Nhập thêm tick SAU khi đếm không nằm trong đó, nên cộng phần vừa lấy lần này vào.
+        // (Chưa đếm thì lyThuyet đã gồm restock.)
+        const balance = counted !== undefined && counted !== '' ? r1(Number(counted) + (confirmed[ing.ingredient]?.qty || 0)) : lyThuyet
         const tare = r1(ing.tare_weight)
         const net = balance - tare
         const minCounter = r1(ing.min_counter_stock)
         const low = net > 0 && minCounter > 0 && net < minCounter
-        if (net > 0 && !low) continue
+        if (net > 0 && !low && !confirmed[ing.ingredient]) continue
 
         const packSize = Number(ing.pack_size) || 0
         // Lấy 1 bịch; nếu 1 bịch chưa đưa quầy lên lại sàn thì lấy đủ số bịch để lên sàn.
@@ -146,7 +154,7 @@ export function buildDepletedList({ ingredientsList, openingInputs, openingStock
         const need = packs > 0 ? r1(packs * packSize) : Math.max(base, toFloor)
         const avail = lookupByLabel<number | null>(ing.ingredient, effectiveWarehouseStocks, null) // null = không theo dõi kho
         const left = avail == null ? Infinity : r1(Number(avail || 0) - r1(restockInputs[ing.ingredient]))
-        const wh = (warehouseStocks || {})[ing.ingredient]
+        const done = confirmed[ing.ingredient]
         out.push({
             ingredient: ing.ingredient,
             kind: 'depleted' as const,
@@ -160,7 +168,9 @@ export function buildDepletedList({ ingredientsList, openingInputs, openingStock
             packUnit: ing.pack_unit,
             pack2: pack2Of(ing),
             fillQty: Math.max(0, Math.min(need, left)), // 0 = kho dự trữ cũng hết, không lấy thêm được
-            warehouse: wh != null ? r1(wh) : null,
+            // Kho còn lại = kho trước ca − Nhập thêm vừa tick → giảm ngay lúc tick, khỏi chờ lưu + tải lại từ server.
+            warehouse: done ? done.warehouse : avail == null ? null : Math.max(0, left),
+            taken: done?.qty || undefined, // qty 0 = đã hoàn tác trong lần mở này
         })
     }
     return out
@@ -178,7 +188,7 @@ export function mergePrepItems(prepList: PrepItem[], depletedList: PrepItem[], r
 
 // Đã xử lý? "Bỏ qua" luôn tính xong; đã nhập thêm tính xong, trừ món đang hết (cần lấy lần nữa).
 export const isPrepDone = (it: PrepItem, restockInputs: Inputs, skipped: Record<string, unknown>) =>
-    !!skipped[it.ingredient] || (it.kind !== 'depleted' && isPrepFilled(restockInputs[it.ingredient]))
+    !!skipped[it.ingredient] || it.taken != null || (it.kind !== 'depleted' && isPrepFilled(restockInputs[it.ingredient]))
 
 // Tổng đã "Nhập kho" (mua qua RestockModal, is_refill trên expenses) hôm nay theo NVL — hiển thị kèm dòng
 // "Đã mua hôm nay" để thấy đã mua bao nhiêu (số đó đã nằm trong tồn kho, chỉ là hiển thị thêm).

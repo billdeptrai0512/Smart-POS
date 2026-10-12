@@ -23,7 +23,7 @@ export default function PrepPinBar() {
 }
 
 function PinBar() {
-    const { items, checked, skipped, pendingCount, ready, confirmPrep, toggleSkip, toast } = usePrepNotice()
+    const { items, checked, skipped, pendingCount, ready, confirmPrep, toggleSkip, settle, toast } = usePrepNotice()
     const [open, setOpen] = useState(false)
 
     if (!open && pendingCount === 0) return null
@@ -45,7 +45,7 @@ function PinBar() {
                     icon={<CircleAlert size={18} className="text-primary shrink-0" />}
                     title="Chuẩn bị hôm nay"
                     count={`${doneCount}/${items.length}`}
-                    onClose={() => setOpen(false)}
+                    onClose={() => { setOpen(false); settle() }}
                 >
                     <ShiftPrepCard
                         packVerb="Lấy"
