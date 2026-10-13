@@ -174,8 +174,10 @@ export async function fetchIngredientWithdrawals(addressIds: UUID[] | UUID | nul
                 kind: 'withdrawal',
                 qty,
                 id: c.id || c.created_at,
-                created_at: c.created_at,
-                staff_name: c.closer?.name || null,
+                // restock_at/by: giờ + người của lần lấy (RPC ghi); phiếu cũ chưa có → rơi về giờ/người tạo phiếu.
+                // Thứ tự replay vẫn theo `t` = created_at phiếu (khớp cascade của RPC).
+                created_at: item?.restock_at || c.created_at,
+                staff_name: item?.restock_by_name || c.closer?.name || null,
                 address_id: c.address_id,
             })
         }
