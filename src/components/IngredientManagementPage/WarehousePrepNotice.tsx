@@ -11,6 +11,7 @@ import { useWarehousePrep } from '../../hooks/usePrepNotice'
 import { processIngredientRestock, recordInvoicePayment } from '../../services/orderService'
 import { useCashClosedToday } from '../../hooks/useCashClosedToday'
 import { fetchIngredientDebts, type IngredientDebt } from '../../services/expenseService'
+import { dateStringVN } from '../../utils/dateVN'
 import { formatVND } from '../../utils/money'
 import { getIngredientUnit, ingredientLabel } from '../../utils/ingredients'
 import { pack2Of } from '../../utils/inventory'
@@ -36,7 +37,7 @@ const debtSnapshots = new Map<string, IngredientDebt[]>()
 
 interface Props {
     onRestocked?: () => unknown
-    onOpenIngredient?: (ingredient: string, tab?: 'history') => void
+    onOpenIngredient?: (ingredient: string, tab?: 'history', sinceISO?: string) => void
 }
 
 export default function WarehousePrepNotice({ onRestocked, onOpenIngredient }: Props) {
@@ -112,8 +113,8 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
                                 <button
                                     key={d.ingredient}
                                     type="button"
-                                    onClick={d.invoices.length === 1 ? () => setPayInvoice(d.invoices[0]) : onOpenIngredient && (() => { reopenSheet = true; onOpenIngredient(d.ingredient, 'history') })}
-                                    className="w-full flex items-center gap-3 py-2.5 border-b border-border/20 text-left active:scale-[0.99] transition"
+                                    onClick={d.invoices.length === 1 ? () => setPayInvoice(d.invoices[0]) : onOpenIngredient && (() => { reopenSheet = true; onOpenIngredient(d.ingredient, 'history', dateStringVN(new Date(d.invoices[0].created_at))) })}
+                                    className="w-full flex items-center gap-3 py-2.5 border-b border-border/20 last:border-b-0 text-left active:scale-[0.99] transition"
                                 >
                                     <span className="flex-1 min-w-0">
                                         <span className="block text-[14px] font-bold leading-tight text-text">{ingredientLabel(d.ingredient)}</span>
@@ -171,7 +172,7 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
 // Dải full-bleed (bù px-5 + pt-1 của NoticeSheet) cùng kiểu "Cần lấy ngay / Soạn đầu ca" của ShiftPrepCard.
 function SectionHeading({ children, tone, first }: { children: string; tone: 'warning' | 'neutral'; first?: boolean }) {
     return (
-        <div className={`-mx-5 px-5 py-1.5 text-[12px] font-black uppercase tracking-wide ${first ? '-mt-1' : 'mt-3'} ${tone === 'warning' ? 'bg-warning/10 text-warning' : 'bg-surface-light text-text-secondary'}`}>
+        <div className={`-mx-5 px-5 py-1.5 text-[12px] font-black uppercase tracking-wide ${first ? '-mt-1' : ''} ${tone === 'warning' ? 'bg-warning/10 text-warning' : 'bg-surface-light text-text-secondary'}`}>
             {children}
         </div>
     )

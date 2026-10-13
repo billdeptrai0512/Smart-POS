@@ -21,9 +21,11 @@ interface Props {
     triggerClassName?: string
     ariaLabel?: string
     align?: 'left' | 'center' | 'right'
+    /** Mở panel LÊN trên — cho dropdown nằm sát đáy màn hình (bottom sheet). */
+    up?: boolean
 }
 
-export default function Dropdown({ value, items, onChange, triggerLabel, disabled, className = '', triggerClassName = '', ariaLabel, align = 'right' }: Props) {
+export default function Dropdown({ value, items, onChange, triggerLabel, disabled, className = '', triggerClassName = '', ariaLabel, align = 'right', up }: Props) {
     const [open, setOpen] = useState(false)
     const ref = useRef<HTMLDivElement>(null)
     useClickOutside(ref, () => setOpen(false), { active: open, escape: true })
@@ -44,7 +46,7 @@ export default function Dropdown({ value, items, onChange, triggerLabel, disable
                 <ChevronDown size={16} className={`text-text-secondary shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
             </button>
             {open && (
-                <div className={`absolute top-full ${align === 'left' ? 'left-0' : align === 'center' ? 'left-1/2 -translate-x-1/2' : 'right-0'} mt-1.5 z-30 min-w-full w-max max-w-[80vw] bg-surface border border-border/60 rounded-[12px] shadow-xl p-1.5 flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto hide-scrollbar`}>
+                <div className={`absolute ${up ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} ${align === 'left' ? 'left-0' : align === 'center' ? 'left-1/2 -translate-x-1/2' : 'right-0'} z-30 min-w-full w-max max-w-[80vw] bg-surface border border-border/60 rounded-[12px] shadow-xl p-1.5 flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto hide-scrollbar`}>
                     {items.map(it => 'action' in it ? (
                         <Fragment key={it.action}>
                         {it.divider && <div className="my-1 border-t border-border/40" />}

@@ -23,7 +23,7 @@ import IngredientDetailHeader from '../components/IngredientManagementPage/Ingre
 import PackConfigModal, { type PackConfigValues } from '../components/IngredientManagementPage/PackConfigModal'
 import IngredientDetailsTab, { IngredientStockPanel, IngredientCounterPanel, DeleteIngredientButton } from '../components/IngredientManagementPage/IngredientDetailsTab'
 import IngredientHistoryTab from '../components/IngredientManagementPage/IngredientHistoryTab'
-import IngredientHistoryFilterSheet, { kindOf, type HistoryKind } from '../components/IngredientManagementPage/IngredientHistoryFilterSheet'
+import IngredientHistoryFilterSheet, { kindOf, debtOf, type HistoryFilter } from '../components/IngredientManagementPage/IngredientHistoryFilterSheet'
 import InvoicePaymentSheet, { type InvoicePayment } from '../components/IngredientManagementPage/InvoicePaymentSheet'
 import RestockModal, { type RestockPayload } from '../components/IngredientManagementPage/RestockModal'
 import Toast from '../components/POSPage/Toast'
@@ -190,12 +190,13 @@ export default function IngredientDetailPage() {
     }, [loadHistory, hasAddress, ingredientKey])
 
     // Kho tổng chung: lọc nhật ký theo địa chỉ (mọi loại thẻ — nhập kho, hiệu chỉnh, rút ra quầy). null = tất cả.
-    const [addressFilter, setAddressFilter] = useState<string | null>(null)
-    const [kindFilter, setKindFilter] = useState<HistoryKind | null>(null)
+    const [filter, setFilter] = useState<HistoryFilter>({ kind: null, address: null, staff: null, debt: null })
     const [filterOpen, setFilterOpen] = useState(false)
+    const staffNames = useMemo(() => [...new Set(history.map(e => e.staff_name).filter(Boolean))].sort() as string[], [history])
     const shownHistory = useMemo(() => history.filter(e =>
-        (!addressFilter || e.address_id === addressFilter) && (!kindFilter || kindFilter === kindOf(e))
-    ), [history, addressFilter, kindFilter])
+        (!filter.address || e.address_id === filter.address) && (!filter.kind || filter.kind === kindOf(e))
+        && (!filter.staff || e.staff_name === filter.staff) && (!filter.debt || filter.debt === debtOf(e))
+    ), [history, filter])
 
     const summary = useMemo(() => {
         let totalQty = 0, totalSpent = 0, totalOwing = 0, totalPaidInMonth = 0
@@ -500,7 +501,7 @@ export default function IngredientDetailPage() {
                 onViewModeChange={setViewMode}
                 onAdd={canEdit ? () => setRestockOpen(true) : undefined}
                 onFilter={viewMode === 'history' ? () => setFilterOpen(true) : undefined}
-                filterActive={!!addressFilter || !!kindFilter}
+                filterActive={Object.values(filter).some(Boolean)}
                 dateNav={viewMode === 'history' ? (
                     <DateRangePicker
                         scope={dScope}
@@ -601,11 +602,10 @@ export default function IngredientDetailPage() {
             {filterOpen && (
                 <IngredientHistoryFilterSheet
                     onClose={() => setFilterOpen(false)}
-                    kind={kindFilter}
-                    onKind={setKindFilter}
+                    value={filter}
+                    staffNames={staffNames}
                     addressNameById={groupAddressIds.length > 1 ? addressNameById : null}
-                    addressFilter={addressFilter}
-                    onAddressFilter={setAddressFilter}
+                    onApply={setFilter}
                 />
             )}
 

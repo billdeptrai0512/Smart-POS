@@ -75,7 +75,7 @@ export default function IngredientHistoryTab({
 }
 
 // ── Summary card ──────────────────────────────────────────────────────────────
-// Hàng 1: số lần nhập / xuất / hiệu chỉnh. Hàng 2: Khối lượng nhập | Tổng tiền nhập. Hàng 3 (chỉ khi có nợ): Đã trả | Còn nợ.
+// Hàng 1: số lần nhập / xuất / hiệu chỉnh. Hàng 2: Tổng tiền nhập | Khối lượng nhập. Hàng 3 (chỉ khi có nợ): Đã trả | Còn nợ.
 function MonthSummaryCard({ showStats, summary, unit, packSize, packUnit, pack2 }: PackProps & { showStats: boolean; summary: RestockSummary }) {
     if (!showStats) return null
     return (
@@ -87,8 +87,8 @@ function MonthSummaryCard({ showStats, summary, unit, packSize, packUnit, pack2 
             </div>
             <div className="h-[1px] bg-border/60" />
             <div className="grid gap-3 grid-cols-2 p-4">
-                <Stat label="Khối lượng nhập" value={formatPackedQty(summary.totalQty, packSize, packUnit, unit, { compact: true, pack2 })} align="start" />
-                <Stat label="Tổng tiền nhập" value={formatVND(summary.totalSpent)} align="end" />
+                <Stat label="Tổng tiền nhập" value={formatVND(summary.totalSpent)} align="start" />
+                <Stat label="Khối lượng nhập" value={formatPackedQty(summary.totalQty, packSize, packUnit, unit, { compact: true, pack2 })} align="end" />
                 {summary.totalOwing > 0 && (
                     <>
                         <Stat label="Đã trả" value={formatVND(summary.totalPaidInMonth)} tone="success" align="start" />
@@ -206,7 +206,7 @@ function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock, onEditRestoc
             <div className={`flex items-start justify-between gap-2 ${cancelled ? 'mt-4' : ''}`}>
                 <div className="flex items-center gap-1.5 min-w-0">
                     <span className={`${TIME_PILL} min-w-0`}><span className="truncate">{isWithdrawal && 'Nhận: '}{entry.staff_name || '—'}</span></span>
-                    <span className={`h-[26px] inline-flex items-center rounded-full bg-surface-light border border-border/60 px-2.5 text-[11px] font-black uppercase tracking-wider leading-none whitespace-nowrap shrink-0 ${typeTone}`}>{typeLabel}</span>
+                    <span className={`h-[26px] inline-flex items-center rounded-full bg-surface-light border border-border/60 px-2.5 text-[11px] font-bold leading-none whitespace-nowrap shrink-0 ${typeTone}`}>{typeLabel}</span>
                 </div>
                 {isRestock && <span className={`h-[26px] inline-flex items-center text-[16px] font-black tabular-nums shrink-0 ${moneyCls}`}>{formatVND(amount)}</span>}
             </div>

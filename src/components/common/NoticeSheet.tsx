@@ -16,7 +16,24 @@ export function SheetBody({ error, loading, onRetry, children }: { error: unknow
             </div>
         )
     }
-    return loading ? <p className="py-8 text-center text-[14px] text-text-secondary">Đang tính…</p> : <>{children}</>
+    return loading ? <SheetSkeleton /> : <>{children}</>
+}
+
+// Khung xương mô phỏng dòng "tên + 2 dòng phụ | nút" của danh sách → đỡ cảm giác chờ so với chữ "Đang tính…".
+function SheetSkeleton() {
+    return (
+        <div className="flex flex-col animate-pulse" aria-busy="true" aria-label="Đang tính">
+            {[0, 1, 2, 3].map(i => (
+                <div key={i} className="flex items-center justify-between gap-4 py-3 border-b border-border/30 last:border-0">
+                    <div className="flex flex-col gap-2">
+                        <div className="h-4 w-28 rounded bg-surface-light" />
+                        <div className="h-3 w-40 rounded bg-surface-light" />
+                    </div>
+                    <div className="h-11 w-28 rounded-[14px] bg-surface-light" />
+                </div>
+            ))}
+        </div>
+    )
 }
 
 export default function NoticeSheet({ icon, title, count, onClose, children }: Props) {

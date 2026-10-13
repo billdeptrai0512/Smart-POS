@@ -111,9 +111,12 @@ export default function IngredientManagementPage() {
     const restoreScrollRef = useRef(saved?.scroll ?? null)
     useEffect(() => { saved = null }, [])
 
-    const openIngredient = (ingredient: string, tab?: 'history') => {
+    // sinceISO: mở Nhật ký từ ngày này → hôm nay (vd. phiếu nợ cũ nhất) thay vì mặc định tháng này.
+    const openIngredient = (ingredient: string, tab?: 'history', sinceISO?: string) => {
         saved = { scroll: mainRef.current?.scrollTop ?? 0, groupFilter, search }
-        navigate(`/inventory/stocking/${ingredient}${tab ? `?tab=${tab}` : ''}`, { state: location.state })
+        const today = dateStringVN()
+        const range = sinceISO && sinceISO < today ? `&scope=custom&start=${sinceISO}&end=${today}` : ''
+        navigate(`/inventory/stocking/${ingredient}${tab ? `?tab=${tab}${range}` : ''}`, { state: location.state })
     }
 
     // Stock & modals
