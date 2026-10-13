@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react'
 import type { PrepItem } from '../../utils/prepToday'
-import { Check, X, RotateCcw } from 'lucide-react'
+import { Check, X, RotateCcw, Pencil, ChevronUp, ChevronDown } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
 import { formatPackCount, formatPackedQty } from '../../utils/inventory'
 
@@ -16,7 +16,8 @@ const PILL = 'shrink-0 min-h-[44px] min-w-[124px] px-3 flex items-center justify
 interface Props {
     items?: PrepItem[]
     checked?: Record<string, boolean>
-    onToggle?: (ingredient: string) => void
+    // qty = số nhân viên sửa tay (không có → theo gợi ý). có onToggle → dòng CHƯA tick có chip ✎ mở ô sửa số; dòng đã lấy thì ẩn ✎ (bỏ tick rồi sửa lại).
+    onToggle?: (ingredient: string, qty?: number) => void
     onRestock?: (ingredient: string, qty: number) => void
     onOpen?: (ingredient: string) => void
     skipped?: Record<string, boolean>
@@ -70,6 +71,8 @@ export default function ShiftPrepCard({
     const [handledOnOpen] = useState(() => new Set(
         rows.filter(it => checked[it.ingredient] || skipped[it.ingredient] || it.done).map(it => it.ingredient)))
     const ordered = [...rows].sort((a, b) => Number(isUrgent(b)) - Number(isUrgent(a)) || Number(handledOnOpen.has(a.ingredient)) - Number(handledOnOpen.has(b.ingredient)))
+    const [editing, setEditing] = useState<string | null>(null)
+    const [draft, setDraft] = useState(0) // số đang sửa (đơn vị gốc) của dòng `editing`
     const split = skipMode && ordered.some(isUrgent) && ordered.some(it => !isUrgent(it))
 
     return (
@@ -125,20 +128,26 @@ export default function ShiftPrepCard({
                         // (không phải button) để tránh lồng button trong button; bấm cả dòng vẫn tick/bỏ tick.
                         if (skipMode) {
                             const groupStart = split && (i === 0 || isUrgent(ordered[i - 1]) !== isUrgent(it))
+                            // Dòng cuối của nhóm: dải tiêu đề nhóm sau đã là ranh giới, bỏ gạch chân để khỏi thành 2 đường liền nhau.
+                            const groupEnd = split && !!ordered[i + 1] && isUrgent(ordered[i + 1]) !== isUrgent(it)
                             // Dải full-bleed (bù px-5 + pt-1 của NoticeSheet); nhóm gấp nền đỏ nhạt, nhóm thường nền xám.
                             // Không kèm số đếm: tiến độ đã có ở "x/y" trên header sheet.
                             const heading = groupStart && (
-                                <div className={`-mx-5 px-5 py-1.5 text-[12px] font-black uppercase tracking-wide ${i === 0 ? '-mt-1' : 'mt-3'} ${isUrgent(it) ? 'bg-danger/10 text-danger' : 'bg-surface-light text-text-secondary'}`}>
+                                <div className={`-mx-5 px-5 py-1.5 text-[12px] font-black uppercase tracking-wide ${i === 0 ? '-mt-1' : ''} ${isUrgent(it) ? 'bg-danger/10 text-danger' : 'bg-surface-light text-text-secondary'}`}>
                                     {isUrgent(it) ? 'Cần lấy ngay' : 'Soạn đầu ca'}
                                 </div>
                             )
+                            // Đang sửa số: dòng thành div (ô nhập không được nằm trong button) và ô nhập thay cho chip ✎ + viên CTA.
+                            const ed = editing === it.ingredient && !isDone
+                            const meta = qtyMeta(it, draft)
+                            const shown = Math.round(draft / meta.step * 10) / 10
+                            const Row = (ed ? 'div' : 'button') as 'button'
                             return (
                                 <Fragment key={it.ingredient}>
                                 {heading}
-                                <button
-                                    type="button"
-                                    onClick={() => onToggle?.(it.ingredient)}
-                                    className={`flex items-start gap-3 py-2.5 border-b border-border/20 last:border-0 text-left active:scale-[0.99] transition ${isSkipped ? 'opacity-60' : ''}`}
+                                <Row
+                                    {...(ed ? {} : { type: 'button' as const, onClick: () => onToggle?.(it.ingredient) })}
+                                    className={`flex items-start gap-3 py-2.5 ${groupEnd ? '' : 'border-b border-border/20'} last:border-0 text-left active:scale-[0.99] transition ${isSkipped ? 'opacity-60' : ''}`}
                                 >
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-1">
@@ -169,7 +178,11 @@ export default function ShiftPrepCard({
                                                     Kho tổng chia: {fmt(it.sent)}{it.sentPacked && ` ✓ đã soạn${it.by ? ` bởi ${it.by}` : ''}`}{isDone && it.restock !== it.sent && ` · nhận ${fmt(it.restock)}`}
                                                 </span>
                                             )}
+                                            {isDone && it.kind !== 'depleted' && it.sent == null && it.fillQty != null && (it.taken ?? it.restock) !== it.fillQty && (
+                                                <span className="block text-warning font-bold">Gợi ý: {fmt(it.fillQty)}</span>
+                                            )}
                                             {it.reason && <span className="block text-warning font-bold">{it.reason}</span>}
+                                            {ed && meta.over && <span className="block text-danger font-bold">Vượt kho — chỉ lấy tối đa {fmt(meta.out)}</span>}
                                             <span className="block">
                                                 {it.haveLabel || haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}
                                             </span>
@@ -180,6 +193,54 @@ export default function ShiftPrepCard({
                                             {muted && it.counted != null && <span className="block">Tồn quầy cuối ca: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.counted)}</span>}
                                         </div>
                                     </div>
+                                    {ed ? (
+                                        // [ 1 hộp ✓ ] ▲▼ — ✓ trong ô, ▲▼ ngoài ô. Chạm ra ngoài / Esc = đóng, chưa ✓ thì chưa ghi gì.
+                                        <div
+                                            className="self-center shrink-0 flex items-center gap-1.5"
+                                            onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setEditing(null) }}
+                                            onKeyDown={(e) => { if (e.key === 'Escape') setEditing(null) }}
+                                        >
+                                            <div className={`flex items-center w-[132px] h-11 pl-3 pr-1 gap-1 rounded-xl bg-surface border ${meta.over ? 'border-danger' : 'border-border/60 focus-within:border-primary/60'}`}>
+                                                <input
+                                                    type="number" inputMode="decimal" min={0} step="any" autoFocus
+                                                    value={shown}
+                                                    style={{ width: `${String(shown).length}ch` }}
+                                                    onChange={(e) => setDraft(Math.max(0, Math.round(Number(e.target.value) * meta.step * 10) / 10))}
+                                                    className="min-w-0 bg-transparent text-left text-[16px] font-black outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                                                />
+                                                <span className="text-[12px] text-text-secondary">{meta.unitLabel}</span>
+                                                <button
+                                                    type="button" title={`${packVerb} ${fmt(meta.out)}`} disabled={meta.out <= 0}
+                                                    onMouseDown={(e) => e.preventDefault()} // giữ focus ở ô nhập để onBlur không đóng trước khi click
+                                                    onClick={() => { setEditing(null); onToggle?.(it.ingredient, meta.out) }}
+                                                    className="ml-auto shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-primary disabled:opacity-40 active:scale-95 transition"
+                                                >
+                                                    <Check size={20} strokeWidth={3} />
+                                                </button>
+                                            </div>
+                                            <div className="flex flex-col gap-0.5">
+                                                {[1, -1].map(dir => (
+                                                    <button
+                                                        key={dir} type="button" title={dir > 0 ? 'Tăng' : 'Giảm'}
+                                                        onMouseDown={(e) => e.preventDefault()}
+                                                        onClick={() => setDraft(Math.max(0, Math.round((draft + dir * meta.step) * 10) / 10))}
+                                                        className="w-8 h-[21px] flex items-center justify-center rounded-md bg-surface border border-border/40 text-text-secondary active:scale-95"
+                                                    >
+                                                        {dir > 0 ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ) : <>
+                                    {!isDone && !isSkipped && (
+                                        <span
+                                            onClick={(e) => { e.stopPropagation(); setEditing(it.ingredient); setDraft(it.sent ?? it.fillQty ?? it.need) }}
+                                            title="Sửa số lượng"
+                                            className="self-center shrink-0 w-11 h-11 flex items-center justify-center rounded-xl border active:scale-95 transition text-text-dim border-border/40 hover:text-text"
+                                        >
+                                            <Pencil size={16} />
+                                        </span>
+                                    )}
                                     <span className={`self-center ${PILL} ${
                                         isDone ? 'bg-success/15 text-success'
                                             : isSkipped ? 'bg-border/30 text-text-dim'
@@ -187,7 +248,8 @@ export default function ShiftPrepCard({
                                         {isDone && <Check size={13} strokeWidth={3} />}
                                         {isDone ? `Đã ${packVerb.toLowerCase()} ${fmt(it.taken ?? it.restock)}` : isSkipped ? 'Bỏ qua' : ctaLabel}
                                     </span>
-                                </button>
+                                    </>}
+                                </Row>
                                 </Fragment>
                             )
                         }
@@ -236,4 +298,12 @@ export default function ShiftPrepCard({
                 </div>
             )
     )
+}
+
+// Đơn vị bước (1 bịch, hoặc 1 đơn vị gốc nếu không có quy cách) + số thực sự ghi (kẹp theo kho) của ô sửa số.
+// ponytail: chỉ 1 ô số (bịch có thể lẻ), chưa tách ô "bịch + lẻ g" của pack2 — thêm khi nhân viên cần.
+function qtyMeta(it: Item, draft: number) {
+    const packed = !!it.packSize && it.packSize > 0
+    const over = it.warehouse != null && draft > it.warehouse
+    return { step: packed ? it.packSize! : 1, unitLabel: packed ? (it.packUnit || 'bịch') : (it.unit || ''), over, out: over ? it.warehouse! : draft }
 }
