@@ -178,13 +178,13 @@ export function usePrepNotice() {
     // Xác nhận "đã lấy từ kho ra quầy". Món sáng nay: tick/untick như /report (đổ số quy đổi nguyên
     // bịch, kẹp theo kho). Món đã hết giữa ca: CỘNG THÊM 1 lần vào Nhập thêm (không bỏ tick — Lý thuyết
     // > 0 lại thì tự rớt khỏi danh sách).
-    const confirmPrep = useCallback((ingredient: string) => {
+    const confirmPrep = useCallback((ingredient: string, qty?: number) => {
         const it = items.find(i => i.ingredient === ingredient)
         if (!it) return
         const filled = isPrepFilled(restockInputs[ingredient])
         const noStock = () => showToast(`${ingredientLabel(ingredient)}: kho dự trữ đã hết, nhập kho trước`, 'error')
         let next: number | string
-        const fillQty = it.fillQty ?? 0
+        const fillQty = qty ?? it.fillQty ?? 0 // qty = số nhân viên sửa tay, không có thì theo gợi ý
         if (it.kind === 'depleted') {
             if (it.taken != null) {
                 const back = r1(Number(restockInputs[ingredient] || 0) - it.taken)

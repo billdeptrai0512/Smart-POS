@@ -51,7 +51,7 @@ function Sheet({ groupId, addressId, name, onClose }: { groupId: UUID; addressId
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [groupId, addressId, forDate])
 
-    // Đổi số sau khi đã xác nhận thì dấu cũ không còn đúng → coi như chưa xác nhận.
+    // Số đã xác nhận (kể cả sửa tay khác gợi ý) vẫn tính là đã soạn — card hiện thêm "Gợi ý" khi lệch.
     const items = useMemo(() => {
         const b = branches?.[0]
         if (!b || !confirmed) return []
@@ -59,28 +59,30 @@ function Sheet({ groupId, addressId, name, onClose }: { groupId: UUID; addressId
             .filter(it => !isTrivialQty(it.fillQty ?? 0, it.unit))
             .map(it => {
                 const c = confirmed[it.ingredient]
-                return c && c.qty === it.fillQty ? { ...it, taken: it.fillQty, by: c.by } : it
+                return c ? { ...it, taken: c.qty, by: c.by } : it
             })
     }, [branches, pool, confirmed])
     const checked = useMemo(() => Object.fromEntries(items.filter(it => it.taken != null).map(it => [it.ingredient, true])), [items])
     const done = Object.keys(checked).length
 
-    async function toggle(ingredient: string) {
+    // qty = số nhân viên sửa tay (không có → số đã xác nhận / gợi ý). Tick ↔ bỏ tick; lỗi thì trả về trạng thái cũ.
+    async function toggle(ingredient: string, qty?: number) {
         const it = items.find(i => i.ingredient === ingredient)
         if (!it?.fillQty) return
-        const qty = it.fillQty
-        const apply = (on: boolean) => setConfirmed(c => {
+        const on = !checked[ingredient]
+        const q = qty ?? it.taken ?? it.fillQty
+        const prev = confirmed?.[ingredient]
+        const apply = (v?: { qty: number; by?: string }) => setConfirmed(c => {
             const next = { ...c }
-            if (on) next[ingredient] = { qty, by: profile?.name }; else delete next[ingredient]
+            if (v) next[ingredient] = v; else delete next[ingredient]
             return next
         })
-        const on = !checked[ingredient]
-        apply(on)
+        apply(on ? { qty: q, by: profile?.name } : undefined)
         try {
-            await setTomorrowPrepConfirmed(groupId, forDate, addressId, ingredient, it.unit ?? '', qty, on)
+            await setTomorrowPrepConfirmed(groupId, forDate, addressId, ingredient, it.unit ?? '', q, on)
         } catch (err) {
             showError(err, 'Lưu xác nhận')
-            apply(!on)
+            apply(prev)
         }
     }
 
