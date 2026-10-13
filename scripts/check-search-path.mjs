@@ -56,6 +56,7 @@ const INTERNAL_ONLY = [
     'bump_order_sync_mark',
     'sync_ingredient_group_category',
     'address_config_snapshot',
+    'shift_closing_cash_guard',
 ]
 
 // Hai cách viết REVOKE trong repo này: gọi thẳng theo signature, hoặc vòng DO $$ quét proname
