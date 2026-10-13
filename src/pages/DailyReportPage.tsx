@@ -200,11 +200,13 @@ export default function DailyReportPage() {
     // sticky after midnight. If closed_at isn't today, treat as no row → blank.
     const isTodaysClosing = shiftClosing?.closed_at
         && dateStringVN(new Date(shiftClosing.closed_at)) === todayISO
-    // Quản lý sửa được Thực thu ngày quá khứ (chỉ khi đã có phiếu); nhân viên chỉ sửa hôm nay.
+    // Chỉ CHỦ quán (manager_id của địa chỉ) sửa được Thực thu ngày quá khứ (chỉ khi đã có phiếu);
+    // đồng quản lý và nhân viên chỉ sửa hôm nay.
+    const isOwner = isGuest || (!!profile?.id && selectedAddress?.manager_id === profile.id)
     // Phiếu phải đúng ngày đang xem (lúc đổi ngày shiftClosing còn là phiếu ngày trước → blur ghi nhầm);
     // hôm nay lấy từ todayISO vì rangeStart không tự nhích qua nửa đêm.
     const cashClosing = !!shiftClosing?.id && dateStringVN(new Date(shiftClosing.closed_at)) === (isTodayScope ? todayISO : dateStringVN(rangeStart))
-    const cashEditable = isTodayScope || (scope === 'day' && !isStaff && cashClosing)
+    const cashEditable = isTodayScope || (scope === 'day' && isOwner && cashClosing)
     const persistedCash = cashClosing && shiftClosing?.actual_cash != null
         ? Number(shiftClosing.actual_cash) : 0
     const persistedTransfer = cashClosing && shiftClosing?.actual_transfer != null
