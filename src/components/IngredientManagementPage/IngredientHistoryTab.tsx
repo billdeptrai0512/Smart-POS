@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Trash2 } from 'lucide-react'
+import { ArrowRight, Trash2 } from 'lucide-react'
 import { TIME_PILL, ROUND_ICON_BTN } from '../common/ModalShell'
 import { formatVND } from '../../utils'
 import { formatPackedQty } from '../../utils/inventory'
@@ -62,9 +62,6 @@ export default function IngredientHistoryTab({
                             key={entry.id}
                             entry={entry}
                             unit={unit}
-                            packSize={packSize}
-                            packUnit={packUnit}
-                            pack2={pack2}
                             onOpenPayment={onOpenPayment}
                             onCancelRestock={onCancelRestock}
                             onEditRestock={onEditRestock}
@@ -133,7 +130,8 @@ function Stat({ label, value, tone, align = 'center' }: { label: string; value: 
 //
 // Layout: ĐÃ HỦY badge (if cancelled) · type tag + Hủy (corner) · hero qty + money ·
 // Tồn X→Y · context pills (restock only) · staff + datetime above a hairline divider.
-interface HistoryCardProps extends PackProps {
+interface HistoryCardProps {
+    unit: string
     entry: Row
     onOpenPayment?: (entry: Row) => void
     onCancelRestock?: (entry: Row) => void
@@ -141,7 +139,7 @@ interface HistoryCardProps extends PackProps {
     addressName?: string
 }
 
-function HistoryCard({ entry, unit, packSize, packUnit, pack2, onOpenPayment, onCancelRestock, onEditRestock, addressName }: HistoryCardProps) {
+function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock, onEditRestock, addressName }: HistoryCardProps) {
     const d = new Date(entry.created_at)
     const dateStr = dateShortVN(d)
     const timeStr = timeStringVN(d)
@@ -158,17 +156,6 @@ function HistoryCard({ entry, unit, packSize, packUnit, pack2, onOpenPayment, on
     const qty = cancelled ? (Number(entry.metadata?.cancelled_qty) || 0) : (entry.metadata?.qty || 0)
     const amount = cancelled ? (Number(entry.metadata?.cancelled_amount) || 0) : (entry.amount || 0)
 
-    // Hiệu chỉnh tồn ≥ 1 quy cách → ghi rõ quy đổi: "-2 hộp = -2568 ml". Dưới 1 quy cách
-    // (hoặc không có quy cách) → giữ base unit. Phiếu nhập giữ hiển thị base như cũ.
-    const ps = Number(packSize) || 0
-    const showPackAdjust = isAdjust && ps > 0 && !!packUnit && Math.abs(qty) >= ps
-    // Rút ra quầy là chuyển nội bộ — không dấu +/− (tổng tồn không đổi).
-    const heroQty = isWithdrawal
-        ? `${qty} ${unit}`
-        : showPackAdjust
-        ? `${qty > 0 ? '+' : ''}${formatPackedQty(qty, packSize, packUnit, unit, { compact: true, pack2 })} = ${qty > 0 ? '+' : ''}${qty} ${unit}`
-        : `${qty > 0 ? '+' : ''}${qty} ${unit}`
-
     const beforeStock = entry.metadata?.before_stock
     const afterStock = entry.metadata?.after_stock
     const hasSnapshot = Number.isFinite(beforeStock) && Number.isFinite(afterStock)
@@ -183,23 +170,25 @@ function HistoryCard({ entry, unit, packSize, packUnit, pack2, onOpenPayment, on
     // Chỉ restock thật (không phải adjustment/withdrawal/cancelled) sửa được: bấm cả card → modal Sửa
     // (Hủy phiếu nằm trong modal đó). Pill nợ vẫn mở riêng sheet thanh toán.
     const editable = !!onEditRestock && isRestock && !cancelled
+    const liveRestock = isRestock && !cancelled
     // Hiệu chỉnh tồn không có modal sửa → giữ nút Hủy trên card. Lượt rút sửa ở báo cáo ca (field Nhập thêm).
     const cancellable = !!onCancelRestock && !cancelled && isAdjust
-
-    // Kho tổng dùng chung nhiều địa chỉ — withdrawal ghi rõ ĐIỂM ĐẾN (rút vào quầy nào), còn
-    // lại (nhập/hiệu chỉnh) ghi NƠI ghi nhận. addressName chỉ có giá trị khi có nhóm (xem cha).
-    const addressCaption = addressName ? (isWithdrawal ? `vào ${addressName}` : `tại ${addressName}`) : null
 
     const typeLabel = isWithdrawal ? 'Rút ra quầy' : isAdjust ? 'Hiệu chỉnh tồn' : 'Nhập kho'
     const typeTone = cancelled ? 'text-text-dim'
         : isWithdrawal ? 'text-text-secondary'
         : isAdjust ? 'text-warning' : 'text-primary'
-    const qtyCls = cancelled ? 'text-text-dim line-through'
+    // Màu số tồn SAU: tăng xanh / giảm đỏ (rút ra quầy là chuyển nội bộ → trung tính).
+    const delta = hasSnapshot ? afterStock - beforeStock : qty
+    const afterCls = cancelled ? 'text-text-dim line-through'
         : isWithdrawal ? 'text-text'
-        : qty > 0 ? 'text-success' : qty < 0 ? 'text-danger' : 'text-text-dim'
+        : delta > 0 ? 'text-success' : delta < 0 ? 'text-danger' : 'text-text'
     const moneyCls = cancelled ? 'text-text-dim line-through' : 'text-text'
+    const openPayment = onOpenPayment && (() => onOpenPayment(entry))
+    // Pill phụ ở chân card nhỏ hơn pill ở đầu (22px vs 26px) để đầu card đọc trước.
+    const META_PILL = 'h-[22px] px-2 text-[10px] font-bold text-text-secondary/70 inline-flex items-center rounded-full bg-surface-light border border-border/60 leading-none whitespace-nowrap'
 
-    const innerCls = `bg-surface border border-border/60 rounded-[20px] p-3 shadow-sm flex flex-col gap-2 relative overflow-hidden transition-all ${
+    const innerCls = `bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-3 relative overflow-hidden transition-all ${
         cancelled ? 'opacity-50 grayscale select-none' : ''
     } ${editable ? 'cursor-pointer hover:border-primary/40 active:scale-[0.99]' : ''}`
 
@@ -213,55 +202,53 @@ function HistoryCard({ entry, unit, packSize, packUnit, pack2, onOpenPayment, on
                 </div>
             )}
 
-            {/* Header — loại + ngày·giờ (pills) | số lượng chính. Đẩy xuống khi có badge ĐÃ HỦY. */}
-            <div className={`flex items-center justify-between gap-2 ${cancelled ? 'mt-4' : ''}`}>
+            {/* Header — người ghi nhận → loại (pills) | tiền (chỉ phiếu nhập). Đẩy xuống khi có badge ĐÃ HỦY. */}
+            <div className={`flex items-start justify-between gap-2 ${cancelled ? 'mt-4' : ''}`}>
                 <div className="flex items-center gap-1.5 min-w-0">
-                    <span className={`h-[26px] inline-flex items-center rounded-full bg-surface-light border border-border/60 px-2.5 text-[11px] font-black uppercase tracking-wider leading-none whitespace-nowrap ${typeTone}`}>{typeLabel}</span>
-                    <span className={`${TIME_PILL} tabular-nums`}>{dateStr} · {timeStr}</span>
+                    <span className={`${TIME_PILL} min-w-0`}><span className="truncate">{isWithdrawal && 'Nhận: '}{entry.staff_name || '—'}</span></span>
+                    <span className={`h-[26px] inline-flex items-center rounded-full bg-surface-light border border-border/60 px-2.5 text-[11px] font-black uppercase tracking-wider leading-none whitespace-nowrap shrink-0 ${typeTone}`}>{typeLabel}</span>
                 </div>
-                <span className={`text-[16px] font-black tabular-nums shrink-0 ${qtyCls}`}>{heroQty}</span>
+                {isRestock && <span className={`h-[26px] inline-flex items-center text-[16px] font-black tabular-nums shrink-0 ${moneyCls}`}>{formatVND(amount)}</span>}
             </div>
 
             <div className="h-[1px] bg-border/40" />
 
-            {/* Thân — tồn kho trước → sau (trái) | tiền (phải, chỉ phiếu nhập). */}
-            <div className="flex justify-between items-baseline gap-2">
-                <span className="text-[12px] font-medium text-text-dim tabular-nums">
-                    {hasSnapshot ? (
-                        <>
-                            Tồn kho <span className="text-text-secondary">{Math.round(beforeStock * 10) / 10}</span>
-                            <span className="mx-1">→</span>
-                            <span className="text-text font-bold">{Math.round(afterStock * 10) / 10}</span> {unit}
-                        </>
-                    ) : '—'}
-                </span>
-                {isRestock && (
-                    <span className={`text-[14px] font-black tabular-nums ${moneyCls}`}>{formatVND(amount)}</span>
+            {/* Thân — số chính của card: tồn kho trước (trái) → sau (phải). */}
+            <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-black uppercase tracking-wider text-text-secondary">Tồn kho</span>
+                {hasSnapshot ? (
+                    <div className="flex justify-between items-baseline gap-2 text-[22px] font-black tabular-nums leading-tight">
+                        <span className="text-text-secondary">{Math.round(beforeStock * 10) / 10}<span className="text-[12px] font-bold ml-1">{unit}</span></span>
+                        <ArrowRight size={18} className="text-text-dim self-center shrink-0" />
+                        <span className={afterCls}>{Math.round(afterStock * 10) / 10}<span className="text-[12px] font-bold ml-1">{unit}</span></span>
+                    </div>
+                ) : (
+                    <span className={`text-[22px] font-black tabular-nums leading-tight ${afterCls}`}>{qty > 0 ? '+' : ''}{qty} {unit}</span>
+                )}
+                {/* Rút ra quầy: ai SOẠN (xác nhận ở "Soạn cho ngày mai" hôm trước) — người NHẬN là staff ở đầu card. */}
+                {isWithdrawal && packedBy && (
+                    <div className="text-[11px] font-medium text-text-dim mt-1">
+                        Soạn: <span className="font-bold text-text-secondary">{packedBy.packed_by_name || '—'}</span>
+                        {' · '}{dateShortVN(new Date(packedBy.packed_at))} {timeStringVN(new Date(packedBy.packed_at))}
+                    </div>
                 )}
             </div>
 
-            {/* Rút ra quầy: ai SOẠN (xác nhận ở "Soạn cho ngày mai" hôm trước) — người NHẬN là staff ở footer. */}
-            {isWithdrawal && packedBy && (
-                <div className="text-[11px] font-medium text-text-dim">
-                    Soạn: <span className="font-bold text-text-secondary">{packedBy.packed_by_name || '—'}</span>
-                    {' · '}{dateShortVN(new Date(packedBy.packed_at))} {timeStringVN(new Date(packedBy.packed_at))}
-                </div>
-            )}
-
             <div className="h-[1px] bg-border/40" />
 
-            {/* Footer — người ghi nhận, địa chỉ, và (phiếu nhập) trạng thái trả / đơn giá / hình thức | Hủy (hiệu chỉnh). */}
+            {/* Footer — địa chỉ · ngày · giờ (pills) + trạng thái trả / hình thức (phiếu nhập) | Hủy (hiệu chỉnh). */}
             <div className="flex justify-between items-center gap-2">
                 <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                    <span className={`${TIME_PILL} truncate`}>{isWithdrawal && 'Nhận: '}{entry.staff_name || '—'}</span>
-                    {addressCaption && <span className={`${TIME_PILL} truncate`}>{addressCaption}</span>}
-                    {isRestock && !cancelled && (
+                    {addressName && <span className={`${META_PILL} max-w-full`}><span className="truncate">{addressName}</span></span>}
+                    <span className={`${META_PILL} tabular-nums`}>{dateStr}</span>
+                    <span className={`${META_PILL} tabular-nums`}>{timeStr}</span>
+                    {liveRestock && (
                         <>
                             {status === 'partial' && (
-                                <Pill tone="neutral" onClick={onOpenPayment && (() => onOpenPayment(entry))}>Trả 1 phần · {formatVND(paid)}/{formatVND(amount)}</Pill>
+                                <Pill tone="neutral" onClick={openPayment}>Trả 1 phần · {formatVND(paid)}/{formatVND(amount)}</Pill>
                             )}
                             {status === 'unpaid' && (
-                                <Pill tone="warning" onClick={onOpenPayment && (() => onOpenPayment(entry))}>Còn nợ {formatVND(owing)}</Pill>
+                                <Pill tone="warning" onClick={openPayment}>Còn nợ {formatVND(owing)}</Pill>
                             )}
                             <Pill tone={isTransfer ? 'primary' : 'neutral'}>{isTransfer ? 'Chuyển khoản' : 'Tiền mặt'}</Pill>
                         </>
@@ -307,11 +294,11 @@ const PILL_TONE = {
     neutral: 'bg-surface-light border-border/60 text-text-secondary',
 }
 
-// onClick → pill là nút (dừng nổi bọt để không mở modal Sửa của card). Cao 26px khớp TIME_PILL.
+// onClick → pill là nút (dừng nổi bọt để không mở modal Sửa của card). Cao 22px khớp META_PILL.
 function Pill({ tone, children, onClick }: { tone: 'success' | 'warning' | 'primary' | 'neutral'; children: ReactNode; onClick?: (() => void) | null }) {
     // Project palette has no separate "info" hue (warning ≡ primary literally),
     // so partial-status uses the neutral pill — clearly distinct from unpaid (amber).
-    const cls = `inline-flex items-center h-[26px] px-2.5 rounded-full text-[11px] font-bold leading-none whitespace-nowrap border ${PILL_TONE[tone]}`
+    const cls = `inline-flex items-center h-[22px] px-2 rounded-full text-[10px] font-bold leading-none whitespace-nowrap border ${PILL_TONE[tone]}`
     return onClick
         ? <button type="button" onClick={(e) => { e.stopPropagation(); onClick() }} className={`${cls} active:scale-95 transition-transform`}>{children}</button>
         : <span className={cls}>{children}</span>
