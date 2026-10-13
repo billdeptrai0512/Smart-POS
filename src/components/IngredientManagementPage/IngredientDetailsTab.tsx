@@ -369,6 +369,7 @@ function QtyRow({ label, value, unit, hasPack, packSize, packUnit, pack2, canEdi
     const [editing, setEditing] = useState(false)
     const [input, setInput] = useState('')
     const tappable = editable && canEdit
+    const negative = value != null && value < 0
     const start = () => {
         setInput(String(value != null ? Math.round(value * 10) / 10 : 0))
         setEditing(true)
@@ -403,7 +404,7 @@ function QtyRow({ label, value, unit, hasPack, packSize, packUnit, pack2, canEdi
                 <div className={`flex flex-col items-end gap-0.5 leading-tight ${hasPack ? 'min-h-[32px] justify-center' : ''}`}>
                     <button
                         onClick={tappable ? start : undefined}
-                        className={`inline-flex items-baseline gap-1 text-[13px] font-bold tabular-nums rounded-md px-2 -mx-2 py-1 -my-1 ${tappable ? 'text-primary cursor-pointer hover:brightness-110' : `${valueClass} cursor-default`} ${onboardingHintClass(hint)}`}
+                        className={`inline-flex items-baseline gap-1 text-[13px] font-bold tabular-nums rounded-md px-2 -mx-2 py-1 -my-1 ${negative ? 'text-danger' : tappable ? 'text-primary' : valueClass} ${tappable ? 'cursor-pointer hover:brightness-110' : 'cursor-default'} ${onboardingHintClass(hint)}`}
                     >
                         {value != null ? Math.round(value * 10) / 10 : '—'}
                         <span className="text-text-dim font-medium">{unit}</span>

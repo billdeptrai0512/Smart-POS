@@ -155,10 +155,6 @@ export function usePrepNotice() {
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     pushRef.current = async () => {
         if (!inventory.isDirty) return
-        if (inventory.restockOverflowIngredients.length > 0) {
-            showToast('Số lấy ra vượt kho dự trữ — nhập kho trước', 'error')
-            return
-        }
         try {
             const row = await inventory.pushInventory(profile?.id, systemTotalRevenue)
             if (row) await inventory.reloadStocks() // kho dự trữ đã trừ → số "Tồn kho" trong modal tươi lại

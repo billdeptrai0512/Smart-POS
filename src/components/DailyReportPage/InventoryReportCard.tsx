@@ -1,5 +1,5 @@
 import { Fragment, memo, useCallback, useMemo, useState, type ReactNode } from 'react'
-import { AlertTriangle, Check, ChevronDown, ChevronUp, ClipboardList, Info } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, ClipboardList, Info } from 'lucide-react'
 import { ingredientLabel, getIngredientUnit, lookupByLabel } from '../../utils/ingredients'
 import { formatPackedQty, pack2Of, computeBalance, computeHaoHut, r1, type UsageMap, type buildIngredientToProduct, type calculateConsumptionBreakdown } from '../../utils/inventory'
 import type { IngredientConfig } from '../../types/domain'
@@ -302,7 +302,6 @@ const IngredientRow = memo(function IngredientRow({
     const restockNum = r1(restockValue)
     const warehouseNum = Number(warehouseAvailable || 0)
     const restockOverflow = warehouseAvailable !== undefined && restockNum > warehouseNum
-    const overBy = restockOverflow ? restockNum - warehouseNum : 0
 
     // Live computed balances — counter-side only. Tồn kho được tách ra khỏi
     // công thức để Lý thuyết / Thực tế cùng quy chiếu về lượng đứng tại quầy.
@@ -516,16 +515,6 @@ const IngredientRow = memo(function IngredientRow({
                         <TextCell label="Tương đương" text={tuongDuongText} tone={haoHutTone} />
                     </div>
                 </div>
-
-                {restockOverflow && (
-                    <div className="flex items-start gap-1.5 mt-1.5 text-[10px] font-bold text-danger leading-tight">
-                        <AlertTriangle size={11} className="mt-[1px] shrink-0" />
-                        <span>
-                            Vượt kho tổng {fmt(overBy)}.
-                            Nếu hàng được mua mới, vào <span className="underline">Tồn kho → Lưu trữ → + Nhập kho</span> trước.
-                        </span>
-                    </div>
-                )}
             </div>)}
         </div>
     )

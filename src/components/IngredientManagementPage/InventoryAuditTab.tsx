@@ -139,10 +139,6 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     // phím — autosave sẽ ghi Cuối kỳ lên DB và Đầu kỳ bị carry-forward thành đúng số đó.
     const handleSaveInventory = async () => {
         if (!selectedAddress) return
-        if (inventory.restockOverflowIngredients.length > 0) {
-            window.alert(`Không thể lưu: ${inventory.restockOverflowIngredients.length} nguyên liệu có "Lấy ra" vượt quá kho tổng. Sang tab Lưu trữ → mở nguyên liệu → + Nhập kho trước, hoặc giảm số "Lấy ra".`)
-            return
-        }
         if (inventory.restockDirty
             && !await confirm({ title: inventory.existingClosing?.id ? 'Cập nhật báo cáo (có chuyển kho ra quầy)?' : 'Lưu báo cáo (có chuyển kho ra quầy)?' })) return
 
