@@ -200,9 +200,14 @@ export default function DailyReportPage() {
     // sticky after midnight. If closed_at isn't today, treat as no row → blank.
     const isTodaysClosing = shiftClosing?.closed_at
         && dateStringVN(new Date(shiftClosing.closed_at)) === todayISO
-    const persistedCash = isTodaysClosing && shiftClosing.actual_cash != null
+    // Quản lý sửa được Thực thu ngày quá khứ (chỉ khi đã có phiếu); nhân viên chỉ sửa hôm nay.
+    // Phiếu phải đúng ngày đang xem (lúc đổi ngày shiftClosing còn là phiếu ngày trước → blur ghi nhầm);
+    // hôm nay lấy từ todayISO vì rangeStart không tự nhích qua nửa đêm.
+    const cashClosing = !!shiftClosing?.id && dateStringVN(new Date(shiftClosing.closed_at)) === (isTodayScope ? todayISO : dateStringVN(rangeStart))
+    const cashEditable = isTodayScope || (scope === 'day' && !isStaff && cashClosing)
+    const persistedCash = cashClosing && shiftClosing?.actual_cash != null
         ? Number(shiftClosing.actual_cash) : 0
-    const persistedTransfer = isTodaysClosing && shiftClosing.actual_transfer != null
+    const persistedTransfer = cashClosing && shiftClosing?.actual_transfer != null
         ? Number(shiftClosing.actual_transfer) : 0
     // Ô nào đang lệch bản đã lưu — một chỗ tính cho cả nút "Lưu thực thu" (cashDirty),
     // confirm rời trang, và payload lúc ghi. hasExistingRow = true ở đây chỉ để lấy phép so
@@ -219,11 +224,11 @@ export default function DailyReportPage() {
     // Chỉ seed khi ĐỔI PHIẾU (load lần đầu / sang ngày mới / đổi scope) — cố ý KHÔNG nghe
     // actual_cash/actual_transfer: lưu xong 2 cột đó đổi, effect này mà chạy sẽ xoá trắng số đang gõ dở.
     useEffect(() => {
-        if (!isTodayScope) return
-        setCashInput(isTodaysClosing && shiftClosing.actual_cash ? formatVNDInput(shiftClosing.actual_cash) : '')
-        setTransferInput(isTodaysClosing && shiftClosing.actual_transfer ? formatVNDInput(shiftClosing.actual_transfer) : '')
+        if (!cashEditable) return
+        setCashInput(cashClosing && shiftClosing?.actual_cash ? formatVNDInput(shiftClosing.actual_cash) : '')
+        setTransferInput(cashClosing && shiftClosing?.actual_transfer ? formatVNDInput(shiftClosing.actual_transfer) : '')
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isTodayScope, isTodaysClosing, todayISO, shiftClosing?.id, shiftClosing?.closed_at])
+    }, [cashEditable, cashClosing, todayISO, shiftClosing?.id, shiftClosing?.closed_at])
 
     // Hint spotlight cho phase 3 — xem CashFlowCard. Phase 4 (Kiểm kê) nằm ở /inventory.
     const showOnboardingHints = isGuest && !!addressId
@@ -512,7 +517,7 @@ export default function DailyReportPage() {
     )
 
     // Có thay đổi chưa lưu ở ô Thực thu → cảnh báo trước khi rời, chống mất số đang gõ dở.
-    const hasUnsaved = isTodayScope && cashDirty
+    const hasUnsaved = cashEditable && cashDirty
     useEffect(() => {
         if (!hasUnsaved) return
         const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
@@ -566,7 +571,8 @@ export default function DailyReportPage() {
         const payload = {
             address_id: addressId,
             closed_by: profile?.id || null,
-            system_total_revenue: systemTotalRevenue,
+            // Phiếu quá khứ đã có snapshot doanh thu — đừng ghi đè bằng 0.
+            ...(isTodayScope && { system_total_revenue: systemTotalRevenue }),
             ...cashPayload,
         }
         try {
@@ -575,7 +581,7 @@ export default function DailyReportPage() {
             // Thực thu hiện trống (đúng), nhưng ghi theo id này là UPDATE tiền hôm nay
             // đè lên phiếu hôm qua: hôm qua sai số, hôm nay vẫn trống. Bỏ id ⇒ đi đường
             // INSERT, và insertShiftClosing đã tự lành khi đụng unique index cùng ngày.
-            const existingId = isTodaysClosing ? shiftClosing?.id : undefined
+            const existingId = cashClosing ? shiftClosing?.id : undefined
             const saved = existingId
                 ? await updateShiftClosing(existingId, payload)
                 : await insertShiftClosing(payload)
@@ -595,8 +601,12 @@ export default function DailyReportPage() {
             // inside the hook already cleared the cache, so the network is hit fresh.
             // Fallback về `saved` (row vừa ghi, có id) để giữ id phòng refetch trễ/null →
             // tránh INSERT phiếu trùng ở lần lưu kế.
-            const fresh = await fetchDailyReportContext(addressId)
-            setShiftClosing(fresh?.shift_closing || saved)
+            if (isTodayScope) {
+                const fresh = await fetchDailyReportContext(addressId)
+                setShiftClosing(fresh?.shift_closing || saved)
+            } else {
+                await refetchReport()
+            }
         } catch (err) {
             showError(err, 'Lưu thực thu')
         } finally {
@@ -690,7 +700,7 @@ export default function DailyReportPage() {
                                 expenses={displayExpenses}
                                 payments={displayPayments}
                                 expenseCategories={expenseCategories}
-                                editable={isTodayScope}
+                                editable={cashEditable}
                                 cashInput={cashInput}
                                 transferInput={transferInput}
                                 onCashChange={(v) => setCashInput(formatVNDInput(v))}
