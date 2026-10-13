@@ -4,7 +4,6 @@ import { fetchTodayShiftClosing } from '../services/orderService'
 import { mergeShiftClosingInventory } from '../services/reportService'
 import { supabase } from '../lib/supabaseClient'
 import { isGuest } from '../services/localRepository'
-import { lookupByLabel } from '../utils/ingredients'
 import { parseInventoryReport } from '../utils/inventory'
 import { dateStringVN } from '../utils/dateVN'
 import { onTabReturn } from '../utils/tabVisibility'
@@ -375,23 +374,6 @@ export function useShiftInventoryState(
         return adjusted
     }, [warehouseStocks, existingClosing])
 
-    // ── Derived: restock-overflow detection ──────────────────────────────────
-    // Any row where typed restock > kho tổng available. Submitting through this would
-    // clamp warehouse_stock to 0 on the server and corrupt /inventory tồn đầu math.
-    const restockOverflowIngredients = useMemo(() => {
-        const list: string[] = []
-        for (const ing of ingredientsList) {
-            const r = Number(restockInputs[ing.ingredient] || 0)
-            // Tra kèm fallback theo label (giống buildWarehousePrepList) — nếu chỉ tra key trực tiếp,
-            // NVL lưu key biến thể sẽ ra null → bỏ qua guard → restock vượt kho lọt qua,
-            // server clamp warehouse về 0. null = "không theo dõi kho" (bỏ kiểm). KHÔNG truyền undefined:
-            // tham số mặc định của lookupByLabel biến nó thành 0 → NVL không có dòng kho bị báo vượt kho oan.
-            const avail = lookupByLabel<number | null>(ing.ingredient, effectiveWarehouseStocks, null)
-            if (avail != null && r > Number(avail || 0)) list.push(ing.ingredient)
-        }
-        return list
-    }, [ingredientsList, restockInputs, effectiveWarehouseStocks])
-
     // Empty inputs are preserved as `null`, NOT coerced to 0 — a blank "+ Cuối kỳ"
     // means "staff didn't count this ingredient at end of shift", not "0g remaining".
     // Audit cards must skip diff calc for null `remaining` so they don't surface
@@ -485,7 +467,6 @@ export function useShiftInventoryState(
         ingredientsList, isLoadingIngredients,
         openingStock, openingPeriods, warehouseStocks, effectiveWarehouseStocks, reloadStocks, reloadIngredients,
         existingClosing, setExistingClosing, closingLoaded, stocksLoaded,
-        restockOverflowIngredients,
         // dirty tracking (derived from baseline comparison; baseline advances on push/remote merge)
         isDirty, restockDirty, dirtySummary,
         // last-persisted snapshot (bumps on load / save / lock) — used by the card to

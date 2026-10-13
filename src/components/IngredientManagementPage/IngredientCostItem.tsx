@@ -106,7 +106,7 @@ export default function IngredientCostItem({
                 {(todayRestock > 0 || todayRefill > 0) && <Row label="Tồn kho đầu ngày" value={fmt(warehouseStart)} />}
                 {todayRestock > 0 && <Row label="Lấy ra" value={fmt(todayRestock)} sign="-" accent="text-warning" />}
                 {todayRefill > 0 && <Row label="Nhập mới" value={fmt(todayRefill)} sign="+" accent="text-success" />}
-                <Row label="Tồn kho cuối ngày" value={fmt(warehouseNow)} bold />
+                <Row label="Tồn kho cuối ngày" value={fmt(warehouseNow)} bold accent={warehouseNow < 0 ? "text-danger" : undefined} />
 
                 {/* Tồn quầy (manager only) — divider riêng tách khỏi cụm tồn kho để mắt quét 2 nơi chứa hàng.
                      Nhóm + Quy đổi đã chuyển sang trang chi tiết của ingredient. */}

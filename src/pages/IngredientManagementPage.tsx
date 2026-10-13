@@ -10,7 +10,7 @@ import { useAuth } from '../contexts/AuthContext'
 import {
     upsertIngredientCost,
     syncIngredientKey, setIngredientsGroup,
-    fetchIngredientStocks, fetchIngredientDeficits, fetchIngredientDailyContext,
+    fetchIngredientStocks, fetchIngredientDailyContext,
 } from '../services/orderService'
 import { sortIngredients, ingredientLabel, normalizeSearchText, getIngredientUnit, normalizeIngredientKey } from '../utils/ingredients'
 import { netStockOf, pack2Of, isLowStockOf } from '../utils/inventory'
@@ -18,7 +18,6 @@ import { formatVND } from '../utils/money'
 import { readJSON, writeJSON } from '../utils/storage'
 import IngredientCostItem from '../components/IngredientManagementPage/IngredientCostItem'
 import KeySyncModal from '../components/IngredientManagementPage/KeySyncModal'
-import StockDeficitBanner from '../components/IngredientManagementPage/StockDeficitBanner'
 import KeyMismatchBanner from '../components/IngredientManagementPage/KeyMismatchBanner'
 import MenuPageHeader from '../components/common/MenuPageHeader'
 import WarehousePrepNotice from '../components/IngredientManagementPage/WarehousePrepNotice'
@@ -48,7 +47,6 @@ import { isRecipeProgressDone, isInventoryProgressDone } from '../utils/onboardi
 import { isRecipeStepActive } from '../components/common/onboarding/steps'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import type { IngredientConfig, Row } from '../types/domain'
-import type { StockDeficit } from '../components/IngredientManagementPage/StockDeficitBanner'
 
 // Module-level cache { scroll, groupFilter, search }. Set when user opens a card to drill into
 // /inventory/stocking/:key; consumed once on next mount of /inventory (back nav).
@@ -65,16 +63,7 @@ export default function IngredientManagementPage() {
         productExtras: contextProductExtras, extraIngredients: contextExtraIngs,
         ingredientGroups, refreshProducts,
     } = useProducts()
-    const { addressId, selectedAddress, siblingsByAddress } = useAddress()
-    const warehouseSiblings = addressId ? siblingsByAddress[addressId] : null
-    // Khoá theo id (không theo mảng/đối tượng): `siblingsByAddress` và `selectedAddress` đổi tham chiếu mỗi lần addresses refetch,
-    // mà groupAddressIds là dep của loadStocks (quét deficits toàn lịch sử) — đổi tham chiếu = tải lại cả trang.
-    const hasAddress = !!selectedAddress
-    const siblingKey = (warehouseSiblings || []).map(a => a.id).join(',')
-    const groupAddressIds = useMemo(
-        () => hasAddress ? [addressId, ...(siblingKey ? siblingKey.split(',') : [])] : [null],
-        [hasAddress, addressId, siblingKey]
-    )
+    const { addressId, selectedAddress } = useAddress()
     const { isManager, isAdmin, profile, isGuest } = useAuth()
     const { toast, showToast, showError } = useToast()
     const confirm = useConfirm()
@@ -130,7 +119,6 @@ export default function IngredientManagementPage() {
     }, [stocksLoaded])
     const [showKeySync, setShowKeySync] = useState(false)
     const [dismissedSig, setDismissedSig] = useState('')
-    const [stockDeficits, setStockDeficits] = useState<StockDeficit[]>([])
     const [dailyContext, setDailyContext] = useState<Record<string, Row>>({})
 
     // Filter recipes to only those referencing currently active products.
@@ -237,9 +225,6 @@ export default function IngredientManagementPage() {
         // Tab Kiểm kê không dùng kết quả (tự tải tồn qua useShiftInventoryState) — chỉ tải khi ở Lưu trữ;
         // activeView trong deps nên chuyển sang tab Lưu trữ sẽ tự tải lại (cũng là bản tươi sau khi Kiểm kê lưu).
         if (!selectedAddress || activeView !== 'stocking') return
-        // Deficits quét TOÀN BỘ lịch sử expenses + shift_closings (nặng nhất) mà chỉ phục vụ banner của quản lý
-        // → không chặn danh sách: banner hiện sau, nhân viên thì khỏi tải.
-        if (canEdit) fetchIngredientDeficits(groupAddressIds).then(d => setStockDeficits(d as StockDeficit[])).catch(err => console.error('fetchIngredientDeficits', err))
         const [stocks, daily] = await Promise.all([
             // Tồn quầy NVL chưa đếm hôm nay = ước tính theo lý thuyết (withCounterEstimate).
             fetchIngredientStocks(addressId).then(s => withCounterEstimate(s, addressId, calcRef.current)),
@@ -251,7 +236,7 @@ export default function IngredientManagementPage() {
         // gets a new reference on every context refetch even when nothing relevant changed
         // (e.g. ingredient_sort_order edits), which would refire this on every such update.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [addressId, selectedAddress?.name, groupAddressIds, activeView, canEdit, recipesReady])
+    }, [addressId, selectedAddress?.name, activeView, recipesReady])
     useEffect(() => { loadStocks().finally(() => { if (activeView === 'stocking') setStocksLoaded(true) }) }, [loadStocks])
 
     const allIngredients = useMemo(
@@ -459,16 +444,6 @@ export default function IngredientManagementPage() {
                         )}
                     </div>
                 </div>
-                {canEdit && stockDeficits.length > 0 && (
-                    <StockDeficitBanner
-                        deficits={stockDeficits}
-                        ingredientUnits={ingredientUnits}
-                        configByIngredient={configByIngredient}
-                        addressId={addressId}
-                        staffName={profile?.name}
-                        onResolved={() => loadStocks()}
-                    />
-                )}
                 {canEdit && keyMismatches.hasIssues && !isDismissed && (
                     <KeyMismatchBanner
                         mismatches={keyMismatches}
