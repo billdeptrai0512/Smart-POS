@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import ErrorBanner from '../components/common/ErrorBanner'
 import FloatingLabelInput from '../components/common/FloatingLabelInput'
 import PasswordInput from '../components/common/PasswordInput'
@@ -23,8 +23,9 @@ const suggestEmailFix = (value: string) => {
 }
 
 export default function SignUpPage() {
-    const { signUp } = useAuth()
+    const { signUp, isGuest } = useAuth()
     const navigate = useNavigate()
+    const location = useLocation()
     const [name, setName] = useState('')
     const [email, setEmail] = useState('')
     const [username, setUsername] = useState('')
@@ -122,6 +123,17 @@ export default function SignUpPage() {
                     >
                         {loading ? 'Đang tạo...' : 'Tạo tài khoản'}
                     </button>
+
+                    {/* Phiên dùng thử chỉ bị xoá SAU khi đăng ký/đăng nhập thành công — chưa thì quay lại demo vẫn còn nguyên. */}
+                    {isGuest && (
+                        <button
+                            type="button"
+                            onClick={() => (location.key !== 'default' ? navigate(-1) : navigate('/pos'))}
+                            className="w-full py-3 rounded-[14px] border border-border/60 text-text font-bold text-sm hover:bg-surface-light active:bg-border/40 transition-colors"
+                        >
+                            Tiếp tục dùng thử
+                        </button>
+                    )}
 
                     <p className="text-center text-text-secondary text-xs mt-2">
                         {' '}
