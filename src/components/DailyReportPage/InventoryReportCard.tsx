@@ -209,7 +209,7 @@ export default function InventoryReportCard({
     // Footer tổng — tiền hao hụt cộng dồn, chỉ hiện khi đã kiểm ít nhất 1 NVL.
     const totalRow = countedCount > 0 && (
         <div className="flex items-center justify-between">
-            <span className="text-[14px] font-black text-text">Tổng cộng</span>
+            <span className="text-[14px] font-black text-text uppercase">Tổng hao hụt</span>
             <span className={`text-[14px] font-black tabular-nums ${totalLossValue > 0 ? 'text-danger' : 'text-text-secondary'}`}>
                 {totalLossValue > 0 ? '-' : ''}{formatVND(Math.round(totalLossValue))}
             </span>
