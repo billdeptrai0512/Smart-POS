@@ -1,4 +1,4 @@
-import { isRecipeProgressDone, reachedCashCard, type OnboardingState } from '../../../utils/onboardingStorage'
+import { isRecipeProgressDone, reachedCashCard, INVENTORY_ONBOARDING_ITEMS, type OnboardingState } from '../../../utils/onboardingStorage'
 import { INGREDIENT_SETUP_FIELDS, type IngredientSetupConfig } from '../../../utils/onboardingHint'
 
 export interface StepCtx extends OnboardingState { coffeeConfig: IngredientSetupConfig | null | undefined }
@@ -27,9 +27,9 @@ export const orderStep = {
         const n = sent >= 2 ? 4 : sent === 1 ? 1 + Math.min(picked, 2) : 0
         return [
             'Khách gọi 1 cà phê sữa',
-            '1 ly bạc xỉu ít ngọt',
-            '1 ly cacao cà phê lớn',
-            '1 ly matcha cà phê lớn, hơi ngọt nha',
+            'Cho mình 1 ly bạc xỉu ít ngọt',
+            'và 1 ly cacao cà phê lớn',
+            'và 1 matcha cà phê lớn, hơi ngọt nha',
         ].map((label, i) => ({ label, done: i < n }))
     },
 } satisfies Step
@@ -47,9 +47,9 @@ export const STEPS: Step[] = [
     {
         title: 'Nhật ký',
         items: (ctx) => [
-            { label: 'Xem nhật ký doanh thu', done: ctx.journalProgress.viewedIncome },
+            { label: 'Xem nhật ký bán hàng', done: ctx.journalProgress.viewedIncome },
             { label: 'Xem chi phí', done: ctx.journalProgress.viewedExpense },
-            { label: 'Xem báo cáo', done: ctx.journalProgress.viewedReport },
+            { label: 'Xem báo cáo dòng tiền', done: ctx.journalProgress.viewedReport },
         ],
     },
     // 3-4. Kết ca thực thu / tồn quầy — ghi từ DailyReportPage.tsx. Thẻ Thực thu nằm dưới mép
@@ -60,13 +60,14 @@ export const STEPS: Step[] = [
             { label: 'Kéo xuống', done: reachedCashCard(ctx.cashFlowProgress) },
             { label: 'Nhập 60.000đ tiền mặt', done: ctx.cashFlowProgress.cash },
             { label: 'Nhập 40.000đ chuyển khoản', done: ctx.cashFlowProgress.transfer },
+            { label: 'Xem báo cáo lợi nhuận', done: ctx.journalProgress.viewedProfit },
         ],
     },
     {
         title: 'Tồn kho',
         items: (ctx) => [
-            { label: 'Nhập tồn cuối kỳ cà phê', done: ctx.inventoryProgress.coffee },
-            { label: 'Nhập tồn cuối kỳ cacao', done: ctx.inventoryProgress.cacao },
+            { label: 'Kiểm kê nguyên liệu cuối ngày', done: ctx.inventoryProgress.visited || ctx.inventoryProgress.coffee },
+            ...INVENTORY_ONBOARDING_ITEMS.map(i => ({ label: `Nhập tồn ${i.label} cuối kỳ`, done: ctx.inventoryProgress[i.key] })),
         ],
     },
     // 5. Công thức "Cà phê đen" — không có nút riêng: hint mũi tên "tiến" ở header /history +

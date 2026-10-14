@@ -19,8 +19,8 @@ import { useVisualViewportBox } from '../../hooks/useVisualViewportBox'
 import { getPendingOrders } from '../../hooks/useOfflineSync'
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown, buildIngredientToProduct, orderItemsOf, isLiveOrder, sumLiveRevenue } from '../../utils/inventory'
 import { ingredientLabel } from '../../utils/ingredients'
-import { findCoffeeIngredient, findIngredientByLabel } from '../../utils/onboardingHint'
-import { isCashFlowProgressDone, isInventoryProgressDone } from '../../utils/onboardingStorage'
+import { findIngredientByLabel } from '../../utils/onboardingHint'
+import { isCashFlowProgressDone, isInventoryProgressDone, INVENTORY_ONBOARDING_ITEMS } from '../../utils/onboardingStorage'
 import { dateStringVN, isSameDayVN } from '../../utils/dateVN'
 import InventoryReportCard from '../DailyReportPage/InventoryReportCard'
 import PastInventoryEditor from '../DailyReportPage/PastInventoryEditor'
@@ -124,12 +124,16 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     const cashFlowProgress = useOnboardingProgress('cashFlowProgress', { isGuest, addressId })
     const hintInventory = isGuest && !!addressId
         && isCashFlowProgressDone(cashFlowProgress) && !isInventoryProgressDone(inventoryProgress)
-    const coffeeIngredient = useMemo(() => (isGuest ? findCoffeeIngredient(inventory.ingredientsList) : null), [isGuest, inventory.ingredientsList])
-    const cacaoIngredient = useMemo(() => (isGuest ? findIngredientByLabel(inventory.ingredientsList, 'cacao') : null), [isGuest, inventory.ingredientsList])
-    const coffeeInputValue = coffeeIngredient ? inventory.inventoryInputs[coffeeIngredient.ingredient] : undefined
-    const cacaoInputValue = cacaoIngredient ? inventory.inventoryInputs[cacaoIngredient.ingredient] : undefined
+    // Việc "Kiểm kê nguyên liệu cuối ngày": tick khi user đã điều hướng tới tab này (mũi tên từ /report).
+    useEffect(() => {
+        if (hintInventory && !inventoryProgress.visited) setInventoryProgress(prev => ({ ...prev, visited: true }))
+    }, [hintInventory, inventoryProgress.visited, setInventoryProgress])
+    // Mỗi NVL của bước onboarding: hint dừng ở NVL đầu tiên chưa tick.
+    const onboardingTargets = useMemo(() => (isGuest
+        ? INVENTORY_ONBOARDING_ITEMS.map(i => ({ key: i.key, ingredient: findIngredientByLabel(inventory.ingredientsList, i.label)?.ingredient }))
+        : []), [isGuest, inventory.ingredientsList])
     const hintInventoryIngredient = hintInventory
-        ? (!inventoryProgress.coffee ? coffeeIngredient?.ingredient : cacaoIngredient?.ingredient) ?? null
+        ? onboardingTargets.find(t => !inventoryProgress[t.key])?.ingredient ?? null
         : null
 
     const [isSaving, setIsSaving] = useState(false)
@@ -148,12 +152,11 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
             if (!row) return // không có gì đổi (hoặc đang có push khác chạy) → isDirty giữ để thử lại
             showToast('Đã lưu báo cáo tồn kho', 'success')
             if (isGuest) {
-                if (coffeeInputValue !== undefined && coffeeInputValue !== '' && !inventoryProgress.coffee) {
-                    setInventoryProgress(prev => ({ ...prev, coffee: true }))
-                }
-                if (cacaoInputValue !== undefined && cacaoInputValue !== '' && !inventoryProgress.cacao) {
-                    setInventoryProgress(prev => ({ ...prev, cacao: true }))
-                }
+                const filled = onboardingTargets.filter(t => {
+                    const v = t.ingredient ? inventory.inventoryInputs[t.ingredient] : undefined
+                    return v !== undefined && v !== '' && !inventoryProgress[t.key]
+                })
+                if (filled.length) setInventoryProgress(prev => ({ ...prev, ...Object.fromEntries(filled.map(t => [t.key, true])) }))
             }
             const [fresh] = await Promise.all([
                 fetchDailyReportContext(addressId),

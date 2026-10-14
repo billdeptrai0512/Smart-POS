@@ -15,6 +15,7 @@ import CheckoutBar from '../components/POSPage/CheckoutBar'
 import TableModal from '../components/POSPage/TableModal'
 import Toast from '../components/POSPage/Toast'
 import PrepPinBar from '../components/common/PrepPinBar'
+import OnboardingGuide from '../components/common/onboarding/OnboardingGuide'
 
 export default function POSPage() {
     const navigate = useNavigate()
@@ -76,7 +77,7 @@ export default function POSPage() {
     return (
         <div className="pos-dine-grid h-full">
             {/* Header phủ cả 2 cột ở dine-split (4 cột bên trong, xem Header.tsx). */}
-            <div className="[grid-area:header] w-full max-w-lg mx-auto dine-split:max-w-none">
+            <div className="[grid-area:header] min-w-0 w-full max-w-lg mx-auto dine-split:max-w-none">
                 <Header
                     dayName={DAY_NAMES[today.getDay()]}
                     dateOnly={dateFullVN(today)}
@@ -87,7 +88,10 @@ export default function POSPage() {
                     enterKey={enterKey}
                     showOnboardingHint={showHistoryHint}
                     takeawaySlotRef={setTakeawaySlot}
-                    notice={<PrepPinBar />}
+                    notice={<>
+                        {isGuest && <div className="mb-2 rounded-[14px] overflow-hidden"><OnboardingGuide /></div>}
+                        <PrepPinBar />
+                    </>}
                 />
             </div>
 

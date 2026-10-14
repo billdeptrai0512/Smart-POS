@@ -77,11 +77,15 @@ export default function HistoryPage() {
     // lại mỗi render vì user có thể bấm qua tab đó bất cứ lúc nào (render-time-adjust, cùng
     // pattern với useOrderOnboardingProgress.ts). Persist dùng chung
     // useOnboardingProgressPersist với orderProgress.
+    // Cả 3 cờ chỉ tick khi bước "Tạo đơn" đã xong: guide đi tuần tự, ghé /history sớm (khi còn đang
+    // tạo đơn) mà tick luôn thì tới lượt bước Nhật ký guide nhảy cóc qua việc user chưa từng làm.
+    const orderStored = useOnboardingProgress('orderProgress', { isGuest, addressId })
+    const orderDone = orderStep.items({ orderProgress: orderStored }).every(i => i.done)
     const [journalProgress, setJournalProgress] = useState(() => {
         const stored = isGuest && addressId ? readOnboardingState(addressId).journalProgress : DEFAULT_ONBOARDING_STATE.journalProgress
-        return activeTab === 'sales' && !stored.viewedIncome ? { ...stored, viewedIncome: true } : stored
+        return orderDone && activeTab === 'sales' && !stored.viewedIncome ? { ...stored, viewedIncome: true } : stored
     })
-    if (isGuest && activeTab === 'expense' && !journalProgress.viewedExpense) {
+    if (isGuest && orderDone && activeTab === 'expense' && !journalProgress.viewedExpense) {
         setJournalProgress(prev => ({ ...prev, viewedExpense: true }))
     }
     useOnboardingProgressPersist('journalProgress', journalProgress, { isGuest, addressId })
@@ -320,7 +324,7 @@ export default function HistoryPage() {
         // luôn nên không có effect nào bắt được như 2 tab kia — ghi thẳng ở đây).
         // dateNavState ({ scope, offset, customRange }) carries the full window so
         // /report opens on the same selection instead of resetting to "hôm nay".
-        if (isGuest && addressId && !journalProgress.viewedReport) {
+        if (isGuest && addressId && orderDone && !journalProgress.viewedReport) {
             writeOnboardingState(addressId, { journalProgress: { ...journalProgress, viewedReport: true } })
         }
         goToMenuStep(activeTab, +1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard })

@@ -6,10 +6,11 @@ import { ingredientLabel } from './ingredients'
 // class — no JS timer/state needed. Plain function (not a hook — safe to call per-item inside
 // a .map(), e.g. once per extra button) despite being React-render-time logic.
 // variant 'solid' (.onboarding-hint-solid, also in index.css) is a detached ring + glow, for targets
-// that are themselves primary-colored (Tạo đơn).
+// that are themselves primary-colored (Tạo đơn). variant 'soft' (.onboarding-hint-soft) is a pulsing icon (colour + scale) for
+// secondary suggestions that sit next to the main hint — put it on the icon, not the whole box.
 export function onboardingHintClass(active: unknown, variant = 'default') {
     if (!active) return ''
-    return variant === 'solid' ? 'onboarding-hint-solid' : 'onboarding-hint'
+    return variant === 'solid' ? 'onboarding-hint-solid' : variant === 'soft' ? 'onboarding-hint-soft' : 'onboarding-hint'
 }
 
 // Shared by every onboarding step that matches a target by name (product/extra names) —

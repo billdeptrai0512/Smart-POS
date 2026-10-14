@@ -19,9 +19,9 @@ export const ONBOARDING_STORAGE_PREFIX = 'onboarding_v4_'
 // tạo tùy chọn thêm cho công thức "Cà phê đen" — xem onboarding/steps.ts.
 export const DEFAULT_ONBOARDING_STATE = {
     orderProgress: { sent: 0, picked: 0, viewedHistory: false },
-    journalProgress: { viewedIncome: false, viewedExpense: false, viewedReport: false },
+    journalProgress: { viewedIncome: false, viewedExpense: false, viewedReport: false, viewedProfit: false },
     cashFlowProgress: { scrolled: false, cash: false, transfer: false },
-    inventoryProgress: { coffee: false, cacao: false },
+    inventoryProgress: { visited: false, coffee: false, cacao: false, matcha: false, cup: false, lid: false },
     recipeProgress: { filledAmount: false, addedExtra: false },
     // Bước 6: kho Cà phê đã nhập — ghi từ IngredientDetailPage.tsx.
     stockProgress: { coffeeWarehouseSet: false },
@@ -55,8 +55,16 @@ export function reachedCashCard(cashFlowProgress: { scrolled: boolean; cash: boo
 
 // Phase 4 "Kiểm kê tồn kho" — shared by DailyReportPage.tsx (same
 // reason as isCashFlowProgressDone above).
-export function isInventoryProgressDone(inventoryProgress: { coffee: boolean; cacao: boolean }) {
-    return inventoryProgress.coffee && inventoryProgress.cacao
+export const INVENTORY_ONBOARDING_ITEMS = [
+    { key: 'coffee', label: 'cà phê' },
+    { key: 'cacao', label: 'cacao' },
+    { key: 'matcha', label: 'matcha' },
+    { key: 'cup', label: 'ly' },
+    { key: 'lid', label: 'nắp' },
+] as const
+
+export function isInventoryProgressDone(inventoryProgress: Pick<OnboardingState['inventoryProgress'], typeof INVENTORY_ONBOARDING_ITEMS[number]['key']>) {
+    return INVENTORY_ONBOARDING_ITEMS.every(i => inventoryProgress[i.key])
 }
 
 export function readOnboardingState(addressId: string, fallback = DEFAULT_ONBOARDING_STATE): typeof DEFAULT_ONBOARDING_STATE {

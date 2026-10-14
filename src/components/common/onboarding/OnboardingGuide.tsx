@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { Lightbulb } from 'lucide-react'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useAddress } from '../../../contexts/AddressContext'
 import { useProducts } from '../../../contexts/ProductContext'
@@ -10,8 +11,8 @@ import { STEPS } from './steps'
 
 // Hướng dẫn "Bắt đầu bán hàng" — 1 dải IN-FLOW trên đỉnh layout (App.tsx OnboardingLayout đặt
 // nó trên <Outlet/>), chiếm chỗ thật nên không đè lên gì và cùng 1 chỗ trên mọi trang — khỏi né
-// thanh đáy riêng của từng trang (Tạo đơn, footer tab, FAB). Chỉ ghi việc cần làm ngay + tiến độ
-// bước hiện tại (x/n); không liệt kê cả checklist vì mỗi việc đã có spotlight nhấp nháy ngay trên
+// thanh đáy riêng của từng trang (Tạo đơn, footer tab, FAB). Chỉ ghi việc cần làm ngay + số việc đã xong
+// trên tổng (done/total); không liệt kê cả checklist vì mỗi việc đã có spotlight nhấp nháy ngay trên
 // nút/món cần bấm. Hết 6 bước → dải thành nút đăng ký tài khoản thật (guest data chỉ sống trong
 // localStorage).
 export default function OnboardingGuide() {
@@ -51,9 +52,9 @@ export default function OnboardingGuide() {
 
     if (!isGuest || !addressId) return null
 
-    // Nền cam nhạt + chip "Bước x/6" để tách hẳn khỏi header (bg-surface) ngay bên dưới — cùng
+    // Nền cam nhạt + icon để tách hẳn khỏi header (bg-surface) ngay bên dưới — cùng
     // màu nền với header thì dải bị đọc như 1 phần header và dễ bị lướt qua.
-    const bar = 'relative shrink-0 flex items-center gap-2.5 h-10 px-4 text-[14px] font-bold'
+    const bar = 'shrink-0 flex items-center gap-2.5 min-h-10 py-1.5 px-4 text-[14px] font-bold'
 
     if (idx === -1) {
         return (
@@ -67,18 +68,13 @@ export default function OnboardingGuide() {
     }
 
     const items = STEPS[idx].items(ctx)
-    const doneCount = items.filter(i => i.done).length
-    // Vạch đáy = tiến độ cả 6 bước (bước đang làm tính theo phần item đã xong).
-    const overallPct = (idx + doneCount / items.length) / STEPS.length * 100
+    // Đếm theo từng việc (không theo bước) để số nhích sau mỗi thao tác.
+    const all = STEPS.flatMap(s => s.items(ctx))
     return (
         <div className={`${bar} bg-primary/15 text-text`}>
-            <span className="shrink-0 rounded-full bg-primary text-bg text-[11px] font-black uppercase px-2 py-0.5 tabular-nums">
-                Bước {idx + 1}: {STEPS[idx].title}
-            </span>
-            <span className="flex-1 truncate">{items.find(i => !i.done)?.label}</span>
-            <span className="absolute inset-x-0 bottom-0 h-[3px] bg-primary/20">
-                <span className="block h-full bg-primary transition-[width] duration-500" style={{ width: `${overallPct}%` }} />
-            </span>
+            <span className="shrink-0 grid place-items-center size-6 rounded-full bg-primary/20 text-primary"><Lightbulb size={14} /></span>
+            <span className="flex-1 line-clamp-2 uppercase tracking-wider text-[12px] font-black">{items.find(i => !i.done)?.label}</span>
+            <span className="text-[12px] font-bold text-text-secondary tabular-nums">{all.filter(i => i.done).length}/{all.length}</span>
         </div>
     )
 }

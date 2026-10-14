@@ -171,6 +171,14 @@ export default function DailyReportPage() {
     // inventoryProgress do tab Kiểm kê của /inventory ghi — ở đây chỉ đọc để biết lúc nào hint mũi tên "tiến".
     const { inventoryProgress } = initialOnboardingState
     useOnboardingProgressPersist('cashFlowProgress', cashFlowProgress, { isGuest, addressId })
+    // Việc "Xem báo cáo lợi nhuận" của phase 3 (sau khi nhập thực thu): tick khi user tự bấm sang tab Lợi nhuận.
+    const [journalProgress, setJournalProgress] = useState(initialOnboardingState.journalProgress)
+    useOnboardingProgressPersist('journalProgress', journalProgress, { isGuest, addressId })
+    const { viewedProfit } = journalProgress
+    useEffect(() => {
+        if (!isGuest || !addressId || view !== VIEW_PROFIT || viewedProfit || !isCashFlowProgressDone(cashFlowProgress)) return
+        setJournalProgress(prev => ({ ...prev, viewedProfit: true }))
+    }, [isGuest, addressId, view, viewedProfit, cashFlowProgress])
 
     // Báo cáo chỉ còn nhập thực thu (tiền mặt + chuyển khoản) nên không mở kênh realtime kiểm kê —
     // realtime thuộc tab Kiểm kê của /inventory. Catalog NVL chỉ để biết ca đã đếm đủ chưa (cờ "Sau ca").
@@ -243,8 +251,9 @@ export default function DailyReportPage() {
     const markCashCardSeen = useCallback(() => setCashFlowProgress(prev => ({ ...prev, scrolled: true })), [])
     const cashFlowDone = isCashFlowProgressDone(cashFlowProgress)
     const inventoryDone = isInventoryProgressDone(inventoryProgress)
-    // Xong dòng tiền → mũi tên "tiến" dẫn sang Tồn kho (tab Kiểm kê) để đếm tồn.
-    const hintGoToInventory = showOnboardingHints && cashFlowDone && !inventoryDone
+    // Xong dòng tiền + đã xem Lợi nhuận → mũi tên "tiến" dẫn sang Tồn kho (tab Kiểm kê) để đếm tồn.
+    // Chờ viewedProfit để không sáng cùng lúc với tab Lợi nhuận.
+    const hintGoToInventory = showOnboardingHints && cashFlowDone && viewedProfit && !inventoryDone
 
     // Phase 5 "Điều chỉnh công thức" không còn nút riêng trong guide — hint thẳng vào mũi tên
     // "tiến" ở header, đi xuyên page tới /category qua menuSequence.ts (xem onboarding/steps.ts).
@@ -659,7 +668,7 @@ export default function DailyReportPage() {
                 onShiftRange={(d) => guardLeave(() => shiftRange(d))}
                 canShiftRangeForward={canShiftRangeForward}
                 onPresetSelect={(p) => guardLeave(() => applyPreset(p))}
-                belowTabs={<ReportViewFilter value={view} onChange={setView} isStaff={isStaff} />}
+                belowTabs={<ReportViewFilter value={view} onChange={setView} isStaff={isStaff} hintProfit={showOnboardingHints && cashFlowDone && !viewedProfit} />}
             />
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-6 pb-6 space-y-4 bg-bg">
