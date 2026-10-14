@@ -26,8 +26,9 @@ import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
 import { RECIPE_TABS, DISCOUNT_TAB } from '../constants/menuTabs'
 import { norm, findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
-import { isRecipeProgressDone } from '../utils/onboardingStorage'
+import { isRecipeProgressDone, isInventoryProgressDone, readOnboardingState, DEFAULT_ONBOARDING_STATE } from '../utils/onboardingStorage'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
+import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
 import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps'
 import type { Row } from '../types/domain'
 import { groupRecipesByProduct } from '../utils/inventory'
@@ -89,7 +90,13 @@ export default function RecipeMenuPage() {
 
     // Onboarding phase 5 (Công thức) — hint thẻ "Cà phê đen" cho tới khi đã điền định lượng
     // + tạo tùy chọn thêm.
-    const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId })
+    // recipeProgress do trang này ghi viewedMenu/viewedRecipes (cùng pattern RecipeIngredientPage):
+    // chỉ tính khi đã xong Tồn kho — nếu không guide nhảy qua bước đang đứng. viewedRecipes cần viewedMenu trước.
+    const inventoryDone = isInventoryProgressDone(useOnboardingProgress('inventoryProgress', { isGuest, addressId }))
+    const [recipeProgress, setRecipeProgress] = useState(() =>
+        (isGuest && addressId ? readOnboardingState(addressId) : DEFAULT_ONBOARDING_STATE).recipeProgress
+    )
+    useOnboardingProgressPersist('recipeProgress', recipeProgress, { isGuest, addressId })
     const cafeDenProduct = useMemo(
         () => (isGuest ? products.find(p => norm(p.name) === RECIPE_TARGET_PRODUCT) : null),
         [isGuest, products]
@@ -122,6 +129,10 @@ export default function RecipeMenuPage() {
     // Tab nằm trên URL: /category/overall = Menu (menu chia theo danh mục, lọc theo danh mục, kéo-thả sắp xếp),
     // /category/recipes = Công thức (chi tiết từng món, tìm kiếm, thêm công thức, topping).
     const [view, setView] = useTabRoute('/category')
+    if (isGuest && addressId) {
+        if (inventoryDone && view === 'overall' && !recipeProgress.viewedMenu) setRecipeProgress(prev => ({ ...prev, viewedMenu: true }))
+        if (recipeProgress.viewedMenu && view === 'recipes' && !recipeProgress.viewedRecipes) setRecipeProgress(prev => ({ ...prev, viewedRecipes: true }))
+    }
     // Lọc danh mục ở tab Menu: 'all' | 'none' (món chưa thuộc mục nào) | id của mục (divider). Id lạ (mục đã xoá) rơi về 'all'.
     const [categoryFilter, setCategoryFilter] = useState('all')
     const [search, setSearch] = useState('')

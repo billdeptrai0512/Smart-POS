@@ -61,6 +61,9 @@ export default function FastIngredientFill({
         return [...set]
     }, [entries, revealed])
 
+    // Chỉ 1 ô nhấp nháy mỗi lúc: dòng đầu tiên chưa có định lượng.
+    const hintKey = hint ? rowKeys.find(k => !(amountByKey[k] > 0)) : undefined
+
     const reveal = (k: string) => setRevealed(prev => new Set(prev).add(k))
     const drop = (k: string) => setRevealed(prev => { const n = new Set(prev); n.delete(k); return n })
 
@@ -86,7 +89,7 @@ export default function FastIngredientFill({
                             autoFocus={revealed.has(k) && !(amountByKey[k] != null)}
                             onCommit={onSetAmount}
                             onRemove={() => { onRemove(k); drop(k) }}
-                            hint={hint}
+                            hint={k === hintKey}
                         />
                     ))}
                 </div>

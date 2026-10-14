@@ -1,7 +1,12 @@
 import { isRecipeProgressDone, reachedCashCard, INVENTORY_ONBOARDING_ITEMS, type OnboardingState } from '../../../utils/onboardingStorage'
+import { ingredientLabel } from '../../../utils/ingredients'
 import { INGREDIENT_SETUP_FIELDS, type IngredientSetupConfig } from '../../../utils/onboardingHint'
 
-export interface StepCtx extends OnboardingState { coffeeConfig: IngredientSetupConfig | null | undefined }
+// recipeRows: các dòng định lượng hiện có của công thức RECIPE_TARGET_PRODUCT (đã xếp theo thứ tự hiển thị).
+export interface StepCtx extends OnboardingState {
+    coffeeConfig: IngredientSetupConfig | null | undefined
+    recipeRows: { ingredient: string; amount: number }[]
+}
 export interface Step { title: string; items: (ctx: StepCtx) => { label: string; done: boolean }[] }
 
 // Single source of truth for phase 5's anchor product — RecipeMenuPage.tsx (card hint) and
@@ -71,13 +76,19 @@ export const STEPS: Step[] = [
         ],
     },
     // 5. Công thức "Cà phê đen" — không có nút riêng: hint mũi tên "tiến" ở header /history +
-    // /report dẫn tới /category (hintGoToRecipes, menuSequence.ts), rồi card Cà phê đen →
-    // input định lượng → "+ Thêm tùy chọn" (RecipeMenuPage.tsx/RecipeIngredientPage.tsx).
+    // /report dẫn tới /category (hintGoToRecipes, menuSequence.ts) → xem Menu → tab Công thức → card
+    // Cà phê đen → mỗi dòng định lượng có sẵn 1 việc (xoá bớt dòng thì bớt việc) → "+ Thêm tùy chọn"
+    // (RecipeMenuPage.tsx/RecipeIngredientPage.tsx). Chưa có dòng nào (chưa tải xong / đã xoá hết)
+    // thì gộp thành 1 việc "Thêm định lượng".
     {
         title: 'Công thức',
-        items: (ctx) => [
-            { label: 'Thêm định lượng', done: ctx.recipeProgress.filledAmount },
-            { label: 'Tạo tùy chọn thêm', done: ctx.recipeProgress.addedExtra },
+        items: ({ recipeProgress, recipeRows }) => [
+            { label: 'Xem menu', done: recipeProgress.viewedMenu },
+            { label: 'Xem công thức', done: recipeProgress.viewedRecipes },
+            ...(recipeRows.length
+                ? recipeRows.map(r => ({ label: `Nhập định lượng ${ingredientLabel(r.ingredient)}`, done: recipeProgress.filledAmount || r.amount > 0 }))
+                : [{ label: 'Thêm định lượng', done: recipeProgress.filledAmount }]),
+            { label: 'Tạo tùy chọn thêm', done: recipeProgress.addedExtra },
         ],
     },
     // 6. (CUỐI CÙNG) Cài đặt 1 nguyên liệu mẫu (Cà phê) — mũi tên "trở về" ở header /category tự

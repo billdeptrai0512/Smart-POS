@@ -15,14 +15,15 @@ export const ONBOARDING_STORAGE_PREFIX = 'onboarding_v4_'
 // xem onboarding/steps.ts. Cờ chỉ set true, không bao giờ revert, để tránh
 // guide tái xuất hiện khi dữ liệu hôm sau reset (actual_cash/inventory_report chỉ có nghĩa
 // "hôm nay").
-// recipeProgress (phase 5) tracked from RecipeIngredientPage.tsx khi user điền định lượng +
-// tạo tùy chọn thêm cho công thức "Cà phê đen" — xem onboarding/steps.ts.
+// recipeProgress (phase 5): viewedMenu/viewedRecipes ghi từ RecipeMenuPage.tsx (vào tab Menu/Công
+// thức, chỉ tính sau khi xong Tồn kho); filledAmount (điền đủ MỌI dòng định lượng) + addedExtra ghi
+// từ RecipeIngredientPage.tsx cho công thức "Cà phê đen" — xem onboarding/steps.ts.
 export const DEFAULT_ONBOARDING_STATE = {
     orderProgress: { sent: 0, picked: 0, viewedHistory: false },
     journalProgress: { viewedIncome: false, viewedExpense: false, viewedReport: false, viewedProfit: false },
     cashFlowProgress: { scrolled: false, cash: false, transfer: false },
     inventoryProgress: { visited: false, coffee: false, cacao: false, matcha: false, cup: false, lid: false },
-    recipeProgress: { filledAmount: false, addedExtra: false },
+    recipeProgress: { viewedMenu: false, viewedRecipes: false, filledAmount: false, addedExtra: false },
     // Bước 6: kho Cà phê đã nhập — ghi từ IngredientDetailPage.tsx.
     stockProgress: { coffeeWarehouseSet: false },
 }
@@ -37,7 +38,7 @@ export const ONBOARDING_EVENT = 'onboarding-change'
 
 // Phase 5 "Công thức" is done once both sub-goals are ticked — shared by onboarding/steps.ts and
 // every page (phase 7) that gates a hint on "has phase 5 finished".
-export function isRecipeProgressDone(recipeProgress: { filledAmount: boolean; addedExtra: boolean }) {
+export function isRecipeProgressDone(recipeProgress: Pick<OnboardingState['recipeProgress'], 'filledAmount' | 'addedExtra'>) {
     return recipeProgress.filledAmount && recipeProgress.addedExtra
 }
 

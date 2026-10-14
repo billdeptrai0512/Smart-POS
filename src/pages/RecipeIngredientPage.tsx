@@ -109,7 +109,7 @@ export default function RecipeIngredientPage() {
 
     // Render-time-adjust (cùng pattern DailyReportPage.tsx) — track hành động thật, không cần
     // nút Lưu riêng vì FastIngredientFill/ExtrasSection đã ghi DB ngay khi user nhập.
-    if (isCafeDen && prodRecipes.some(r => r.amount > 0) && !recipeProgress.filledAmount) {
+    if (isCafeDen && prodRecipes.length > 0 && prodRecipes.every(r => r.amount > 0) && !recipeProgress.filledAmount) {
         setRecipeProgress(prev => ({ ...prev, filledAmount: true }))
     }
     if (isCafeDen && extras.length > 0 && !recipeProgress.addedExtra) {
@@ -132,6 +132,8 @@ export default function RecipeIngredientPage() {
                 if (exists) return prev.map(r => r.product_id === productId && r.ingredient === ingredient ? { ...r, amount } : r)
                 return [...prev, { product_id: productId, ingredient, amount, unit: unit || getIngredientUnit(ingredient) }]
             })
+            // Guide onboarding đọc định lượng từ context nên guest phải đồng bộ ngay (user thật thì không cần refetch).
+            if (isGuest) refreshProducts?.()
         })
     }
 

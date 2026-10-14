@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Lightbulb } from 'lucide-react'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useAddress } from '../../../contexts/AddressContext'
 import { useProducts } from '../../../contexts/ProductContext'
 import { trackGuestOnboardingStage } from '../../../services/onboardingFunnelService'
-import { findCoffeeIngredient, type IngredientSetupConfig } from '../../../utils/onboardingHint'
+import { sortIngredients } from '../../../utils/ingredients'
+import { findCoffeeIngredient, norm, type IngredientSetupConfig } from '../../../utils/onboardingHint'
 import { readOnboardingState, DEFAULT_ONBOARDING_STATE, ONBOARDING_EVENT } from '../../../utils/onboardingStorage'
-import { STEPS } from './steps'
+import { STEPS, RECIPE_TARGET_PRODUCT } from './steps'
 
 // Hướng dẫn "Bắt đầu bán hàng" — 1 dải IN-FLOW trên đỉnh layout (App.tsx OnboardingLayout đặt
 // nó trên <Outlet/>), chiếm chỗ thật nên không đè lên gì và cùng 1 chỗ trên mọi trang — khỏi né
@@ -17,8 +18,8 @@ import { STEPS } from './steps'
 // localStorage).
 export default function OnboardingGuide() {
     const { isGuest } = useAuth()
-    const { addressId } = useAddress()
-    const { ingredientConfigs } = useProducts()
+    const { addressId, selectedAddress } = useAddress()
+    const { ingredientConfigs, products, recipes } = useProducts()
     // Cấu hình (pack/min_stock/tare_weight) có sẵn trong ingredientConfigs (ProductContext).
     const coffeeConfig = findCoffeeIngredient(ingredientConfigs as (IngredientSetupConfig & { ingredient: string })[])
 
@@ -36,7 +37,17 @@ export default function OnboardingGuide() {
 
     // ctx/idx tính TRƯỚC guard bên dưới vì useEffect phễu cần idx — hook không được nằm sau
     // early-return (Rules of Hooks). Cả 2 đều thuần tính toán, không side effect.
-    const ctx = { ...local, coffeeConfig }
+    // Dòng định lượng của công thức mục tiêu — cùng thứ tự với trang chi tiết công thức để việc đầu
+    // tiên chưa xong khớp đúng ô đang nhấp nháy.
+    const recipeRows = useMemo(() => {
+        const target = products.find(p => norm(p.name) === RECIPE_TARGET_PRODUCT)
+        if (!target) return []
+        return recipes
+            .filter(r => r.product_id === target.id)
+            .sort((a, b) => sortIngredients(a.ingredient, b.ingredient, selectedAddress?.ingredient_sort_order))
+            .map(r => ({ ingredient: r.ingredient, amount: r.amount }))
+    }, [products, recipes, selectedAddress?.ingredient_sort_order])
+    const ctx = { ...local, coffeeConfig, recipeRows }
     const idx = STEPS.findIndex(s => !s.items(ctx).every(i => i.done))
     // 0 = vào dùng thử nhưng chưa xong phase nào; 1-5 = xong bấy nhiêu phase; 6 = xong hết.
     const stageReached = idx === -1 ? STEPS.length : idx
