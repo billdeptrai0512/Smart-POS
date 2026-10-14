@@ -15,11 +15,11 @@ export async function fetchAdminDashboard() {
     return data
 }
 
-// Cohort funnel theo tuần (admin_funnel_cohorts, migration 20260824). RPC RIÊNG
-// vì cùng lý do như guest funnel ở trên: overview() body 400+ dòng, quy ước
-// CREATE OR REPLACE nguyên body. Ném lỗi để caller tự ẩn thẻ khi chưa apply.
-export async function fetchAdminFunnelCohorts() {
-    const { data, error } = await supabase.rpc('admin_funnel_cohorts')
+
+// Số chi nhánh theo giai đoạn (admin_branch_stages, migration 20261020). RPC RIÊNG vì cùng lý do như
+// trên. Ném lỗi để caller tự ẩn thẻ khi chưa apply.
+export async function fetchAdminBranchStages() {
+    const { data, error } = await supabase.rpc('admin_branch_stages')
     if (error) throw error
-    return data
+    return data as Record<string, number>
 }

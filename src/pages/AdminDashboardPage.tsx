@@ -1,49 +1,29 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
-import { ArrowLeft, Loader2, RefreshCw } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { fetchAdminDashboard, fetchAdminFunnelCohorts } from '../services/adminDashboardService'
+import { fetchAdminDashboard, fetchAdminBranchStages } from '../services/adminDashboardService'
 import { fetchGuestOnboardingFunnel } from '../services/onboardingFunnelService'
-import { openedLabelVN, dateShortVN, timeStringVN } from '../utils/dateVN'
+import { timeStringVN } from '../utils/dateVN'
 import MonetizationToggle from '../components/AdminDashboardPage/MonetizationToggle'
 import { errorMessage } from '../utils/errorMessage'
-import { ICON_BTN, ICON_BTN_MUTED } from '../components/common/ModalShell'
+import AdminPageHeader from '../components/common/AdminPageHeader'
 
-// Hình dạng JSON của RPC admin_dashboard_overview / admin_funnel_cohorts / guest_onboarding_funnel_stats
+// Hình dạng JSON của RPC admin_dashboard_overview / guest_onboarding_funnel_stats
 // (supabase.rpc không có type) — chỉ khai các trường trang này đọc.
-interface Subscription {
-    conversion_rate_30d: number | null
-    trial_30d: number
-    converted_30d: number
-    churned_recent_count?: number
-    active_rate_7d: number | null
-    expiring_soon_count: number
-    trial_count: number
-    paid_count: number
-    paid_count_prev: number
-    new_paid_this_month: number
-    churn_rate_30d: number | null
-    total_addresses: number
-}
 interface ActivityItem { type: string; address_name: string; detail: string; at: string }
 interface DashboardData {
     generated_at: string
-    subscription: Subscription
     attention: { reason: string }[]
     activity: ActivityItem[]
     attention_total_count?: number
-    payment_issue_total_count?: number
 }
 interface FunnelStage { stage: number; label: string; count: number; step_median_seconds?: number | null }
-interface FunnelVisitor { visitor_id: string; max_stage: number; signed_up_at?: string | null; last_seen_at: string }
 interface GuestFunnel {
     stages: FunnelStage[]
     signup: { after_complete: number; early: number }
-    total_median_seconds?: number | null
-    recent_visitors?: FunnelVisitor[]
     prev?: { entered: number; signed_up: number } | null
 }
-interface Cohorts { weeks: Record<string, any>[]; stuck: Record<string, number> }
 type Delta = { text: string; cls: string }
 
 const CARD = 'bg-surface border border-border/60 rounded-[20px] p-4'
@@ -76,7 +56,6 @@ function delta(diff: number, unit: string, period: string, noChange: string): De
         cls: diff > 0 ? 'text-success' : 'text-danger',
     }
 }
-const countDelta = (current: number, prev: number) => delta(current - prev, '', 'tháng trước', 'Không đổi so với tháng trước')
 
 // So tỷ lệ chuyển đổi (dùng thử → đăng ký) với đúng kỳ liền trước (hôm qua/tuần
 // trước) — trả lời "sửa guide có thật sự giúp không" thay vì chỉ nhìn 1 ảnh chụp.
@@ -104,15 +83,15 @@ export default function AdminDashboardPage() {
     const { isAdmin, loading: authLoading } = useAuth()
     const [data, setData] = useState<DashboardData | null>(null)
     const [error, setError] = useState<string | null>(null)
-    // Phễu guest (byRange: 1 lần gọi trả cả today/week/all) và cohort fetch song song với overview.
+    // Phễu guest (byRange: 1 lần gọi trả cả today/week/all) và giai đoạn chi nhánh fetch song song với overview.
     // Hai RPC này lỗi/chưa apply → null → ẩn hẳn thẻ, không hỏng phần còn lại của dashboard.
     const [byRange, setByRange] = useState<Record<string, GuestFunnel> | null>(null)
-    const [cohorts, setCohorts] = useState<Cohorts | null>(null)
+    const [stages, setStages] = useState<Record<string, number> | null>(null)
 
     const reload = useCallback(() => {
         fetchAdminDashboard().then(setData).catch((e) => setError(errorMessage(e, '')))
         fetchGuestOnboardingFunnel().then(setByRange).catch(() => setByRange(null))
-        fetchAdminFunnelCohorts().then(setCohorts).catch(() => setCohorts(null))
+        fetchAdminBranchStages().then(setStages).catch(() => setStages(null))
     }, [])
 
     useEffect(() => {
@@ -124,28 +103,12 @@ export default function AdminDashboardPage() {
 
     return (
         <div className="flex flex-col h-[100dvh] bg-bg">
-            <header className="shrink-0 bg-surface border-b border-border/60 shadow-sm px-4 py-3 xl:px-8 flex items-center gap-3">
-                <button
-                    onClick={() => navigate('/addresses')}
-                    className={ICON_BTN}
-                >
-                    <ArrowLeft size={20} strokeWidth={2.5} />
-                </button>
-                <div className="flex-1 min-w-0">
-                    <h1 className="text-[14px] font-black text-text uppercase tracking-wide">Admin Dashboard</h1>
-                    {data && (
-                        <p className="text-[10.5px] text-text-dim">
-                            Cập nhật {timeStringVN(new Date(data.generated_at))}
-                        </p>
-                    )}
-                </div>
-                <button
-                    onClick={reload}
-                    className={ICON_BTN_MUTED}
-                >
-                    <RefreshCw size={16} strokeWidth={2.5} />
-                </button>
-            </header>
+            <AdminPageHeader
+                title="Admin Dashboard"
+                subtitle={data ? `Cập nhật ${timeStringVN(new Date(data.generated_at))}` : undefined}
+                onBack={() => navigate('/addresses')}
+                onRefresh={reload}
+            />
 
             <div className="flex-1 overflow-y-auto">
                 <div className="max-w-[1400px] mx-auto px-4 py-5 xl:px-8">
@@ -157,7 +120,7 @@ export default function AdminDashboardPage() {
                             <Loader2 size={24} className="animate-spin text-text-dim" />
                         </div>
                     ) : (
-                        <DashboardBody data={data} byRange={byRange} cohorts={cohorts} />
+                        <DashboardBody data={data} byRange={byRange} stages={stages} />
                     )}
                 </div>
             </div>
@@ -165,27 +128,23 @@ export default function AdminDashboardPage() {
     )
 }
 
-function DashboardBody({ data, byRange, cohorts }: { data: DashboardData; byRange: Record<string, GuestFunnel> | null; cohorts: Cohorts | null }) {
-    const { subscription, attention, activity, attention_total_count, payment_issue_total_count } = data
-    // total_count = đếm không giới hạn (đã dedupe theo chi nhánh) từ RPC; attention
-    // (mảng) chỉ là top-20 hiển thị nên KHÔNG dùng .length làm KPI — sẽ undercount
-    // khi thực tế > 20 chi nhánh cần chú ý.
+function DashboardBody({ data, byRange, stages }: { data: DashboardData; byRange: Record<string, GuestFunnel> | null; stages: Record<string, number> | null }) {
+    const { attention, activity, attention_total_count } = data
+    // total_count = đếm không giới hạn (đã dedupe theo chi nhánh) từ RPC; attention (mảng) chỉ là top-20
+    // hiển thị nên KHÔNG dùng .length làm KPI — sẽ undercount khi > 20 chi nhánh cần chú ý.
     const attentionCount = attention_total_count ?? attention.length
-    const paymentIssueCount = payment_issue_total_count ?? attention.filter((a) => a.reason === 'payment_review' || a.reason === 'payment_stale').length
-
     return (
         <>
-            {/* OMTM: dùng thử → trả phí — số DUY NHẤT trả lời "lớp report 888k/6th có
-                đáng tiền không". Mọi số khác trên trang này chỉ là bối cảnh hoặc danh
-                sách hành động, không cái nào thay được câu hỏi này. */}
-            <ConversionHeroCard subscription={subscription} />
-            <KpiRow subscription={subscription} attentionCount={attentionCount} paymentIssueCount={paymentIssueCount} />
-            {/* Kể một chiều theo đường đi của khách. Trước đây Snapshot (đích) đứng
-                trên Onboarding (đầu phễu) nên trang kể ngược. */}
+            <ActiveTodayHeroCard stages={stages} />
+            <KpiRow stages={stages} attentionCount={attentionCount} />
+            {/* Tổng 16 chi nhánh chia theo giai đoạn — đứng ngay dưới con số tổng. */}
+            {stages && (
+                <div className="mb-4">
+                    <BranchStageCard stages={stages} />
+                </div>
+            )}
             <div className="flex flex-col gap-4">
                 <OnboardingFunnelCard byRange={byRange} />
-                {cohorts && <CohortFunnelCard data={cohorts} />}
-                <SubscriptionSnapshotCard subscription={subscription} />
                 <ActivityCard items={activity} />
             </div>
             {/* Công tắc cấu hình, không phải số liệu — xuống cuối, đứng đầu trang chỉ
@@ -197,77 +156,45 @@ function DashboardBody({ data, byRange, cohorts }: { data: DashboardData; byRang
     )
 }
 
-// Số to là n/m chứ KHÔNG phải %: ở quy mô vài khách/tuần, mẫu số một chữ số làm
-// % nhảy 20-30% mỗi khi thêm đúng 1 chi nhánh — đọc như biến động lớn trong khi
-// thực tế chỉ là 1 người. Đảo lại khi mẫu số đủ lớn để % tự đứng được.
-function ConversionHeroCard({ subscription }: { subscription: Subscription }) {
-    const { conversion_rate_30d, trial_30d, converted_30d } = subscription
+// OMTM: số chi nhánh có đơn/ca HÔM NAY (admin_branch_stages.active_today) — mức dùng thật, đủ mẫu và
+// phản hồi trong ngày; chuyển đổi trả phí/kích hoạt chỉ là bối cảnh ở các thẻ bên dưới.
+function ActiveTodayHeroCard({ stages }: { stages: Record<string, number> | null }) {
     return (
-        <div className="relative bg-primary text-white rounded-[20px] px-5 py-4 mb-3 overflow-hidden">
-            <p className="text-[10.5px] font-black uppercase tracking-wide text-white/70">Chuyển đổi dùng thử → trả phí (30 ngày)</p>
-            {conversion_rate_30d != null ? (
-                <>
-                    <p className="text-[34px] font-black tabular-nums leading-tight mt-0.5">{converted_30d}/{trial_30d}</p>
-                    <p className="text-[11px] font-bold text-white/80 mt-0.5">chi nhánh dùng thử đã trả phí · {conversion_rate_30d}%</p>
-                </>
-            ) : (
-                <p className="text-[13px] font-bold text-white/80 mt-1.5">Chưa đủ dữ liệu 30 ngày qua</p>
-            )}
+        <div className="relative bg-success-soft border border-success/30 rounded-[20px] px-5 py-4 mb-3 overflow-hidden">
+            <p className="text-[10.5px] font-black uppercase tracking-wide text-success">Hôm nay hoạt động</p>
+            <p className="text-[34px] font-black tabular-nums leading-tight mt-0.5 text-text">
+                {stages ? stages.active_today : '—'}
+                {stages && <span className="text-[14px] font-bold text-text-secondary ml-1.5">chi nhánh</span>}
+                {stages?.active_yesterday != null && <span className="text-[12px] font-bold text-text-dim ml-3">hôm qua {stages.active_yesterday}</span>}
+            </p>
         </div>
     )
 }
 
-function KpiCard({ stripe, label, value, delta, deltaClass, onClick }: { stripe: string; label: string; value: string; delta?: string; deltaClass?: string; onClick?: () => void }) {
+function KpiCard({ label, value, onClick }: { label: string; value: string; onClick?: () => void }) {
     const Tag = onClick ? 'button' : 'div'
     return (
         <Tag
             onClick={onClick}
-            className={`relative bg-surface border border-border/60 rounded-[16px] pl-4 pr-3.5 py-3.5 overflow-hidden text-left ${onClick ? 'hover:bg-border/10 active:scale-[0.99] transition-all' : ''}`}
+            className={`relative bg-surface border border-border/60 rounded-[16px] px-4 py-3.5 overflow-hidden text-left ${onClick ? 'hover:bg-border/10 active:scale-[0.99] transition-all' : ''}`}
         >
-            <span className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-full ${stripe}`} />
             <p className="text-[10px] font-black uppercase tracking-wide text-text-dim mb-1">{label}</p>
             <p className="text-[19px] xl:text-[22px] font-black text-text tabular-nums leading-tight truncate">{value}</p>
-            {delta && <p className={`text-[11px] font-bold mt-1 truncate ${deltaClass}`}>{delta}</p>}
         </Tag>
     )
 }
 
-function KpiRow({ subscription, attentionCount, paymentIssueCount }: { subscription: Subscription; attentionCount: number; paymentIssueCount: number }) {
+function KpiRow({ stages, attentionCount }: { stages: Record<string, number> | null; attentionCount: number }) {
     const navigate = useNavigate()
-    const { churned_recent_count = 0, active_rate_7d, expiring_soon_count, trial_count } = subscription
-    const needsAction = expiring_soon_count + trial_count
+    const total = stages ? BRANCH_STAGES.reduce((n, s) => n + (stages[s.key] ?? 0), 0) : null
 
     return (
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
+        <div className="grid grid-cols-2 gap-3 mb-4">
+            <KpiCard label="Tổng cộng có" value={total != null ? `${total} chi nhánh` : '—'} />
             <KpiCard
-                stripe="bg-danger"
                 label="Cần chú ý"
                 value={`${attentionCount} chi nhánh`}
-                delta={paymentIssueCount > 0 ? `${paymentIssueCount} cần đối soát` : attentionCount > 0 ? 'Xem tại đối soát' : 'Đang ổn'}
-                deltaClass={paymentIssueCount > 0 ? 'text-danger' : attentionCount > 0 ? 'text-warning' : 'text-text-dim'}
                 onClick={() => navigate('/admin/reconciliation')}
-            />
-            <KpiCard
-                stripe="bg-warning"
-                label="Rời bỏ gần đây (30 ngày)"
-                value={`${churned_recent_count} chi nhánh`}
-                delta={churned_recent_count > 0 ? 'Đã từng trả tiền — dễ cứu nhất' : 'Không có'}
-                deltaClass={churned_recent_count > 0 ? 'text-warning' : 'text-text-dim'}
-                onClick={churned_recent_count > 0 ? () => navigate('/admin/reconciliation') : undefined}
-            />
-            <KpiCard
-                stripe="bg-success"
-                label="Đang hoạt động (7 ngày)"
-                value={active_rate_7d != null ? `${active_rate_7d}%` : '—'}
-                delta="Chi nhánh trả phí có đơn/ca gần đây"
-                deltaClass="text-text-dim"
-            />
-            <KpiCard
-                stripe="bg-primary"
-                label="Sắp hết hạn (≤7 ngày)"
-                value={`${needsAction} chi nhánh`}
-                delta={needsAction > 0 ? 'Trả phí hết hạn hoặc dùng thử sắp hết' : 'Không có'}
-                deltaClass={needsAction > 0 ? 'text-warning' : 'text-text-dim'}
             />
         </div>
     )
@@ -286,31 +213,6 @@ function StatRow({ dotClass, label, value, onClick }: { dotClass?: string; label
             </span>
             <span className={`font-black tabular-nums ${onClick ? 'text-warning' : 'text-text'}`}>{value}</span>
         </Tag>
-    )
-}
-
-// v3: bỏ thanh Subscription Health cũ (paid/trial/churned chia theo TỔNG lịch sử
-// — dải "churned" cộng dồn vĩnh viễn nên càng lâu càng đỏ, không phản ánh sức khoẻ
-// hiện tại). Thay bằng snapshot dạng số: paid/trial vẫn hữu ích làm bối cảnh, còn
-// churn giờ là RATE 30 ngày (đã có card riêng ở KpiRow) nên ở đây chỉ liệt kê gọn.
-function SubscriptionSnapshotCard({ subscription }: { subscription: Subscription }) {
-    const { paid_count, paid_count_prev, trial_count, new_paid_this_month, churn_rate_30d, total_addresses } = subscription
-    const paidDelta = countDelta(paid_count, paid_count_prev)
-
-    return (
-        <div className={CARD}>
-            <h3 className={CARD_TITLE}>Subscription</h3>
-            <p className={`text-[11px] font-bold mb-3 ${paidDelta.cls}`}>{paidDelta.text}</p>
-            <div className="flex flex-col gap-2">
-                <StatRow dotClass="bg-success" label="Đã đăng ký" value={paid_count} />
-                <StatRow dotClass="bg-warning" label="Dùng thử" value={trial_count} />
-                <StatRow label="Mới trả phí trong tháng" value={`+${new_paid_this_month}`} />
-                <StatRow label="Tỷ lệ rời bỏ (30 ngày)" value={churn_rate_30d != null ? `${churn_rate_30d}%` : '—'} />
-                <div className="border-t border-border/60 mt-1 pt-2">
-                    <StatRow label="Tổng số địa chỉ (kể cả free)" value={total_addresses} />
-                </div>
-            </div>
-        </div>
     )
 }
 
@@ -333,15 +235,15 @@ function OnboardingFunnelCard({ byRange }: { byRange: Record<string, GuestFunnel
 
     return (
         <div className={CARD}>
-            <div className="flex items-center justify-between gap-2 mb-1">
+            <div className="flex items-center justify-between gap-2 mb-3 pb-3 border-b border-border/60">
                 <h3 className={CARD_TITLE}>Onboarding</h3>
                 {byRange && (
-                    <div className="flex gap-1 shrink-0">
+                    <div className="flex gap-0.5 shrink-0 p-0.5 rounded-[10px] bg-surface-light">
                         {RANGE_TABS.map((t) => (
                             <button
                                 key={t.key}
                                 onClick={() => setRange(t.key)}
-                                className={`text-[10px] font-bold px-2 py-1 rounded-[8px] transition-colors ${range === t.key ? 'bg-primary text-white' : 'bg-surface-light text-text-dim hover:text-text-secondary'}`}
+                                className={`text-[10px] font-bold px-2.5 py-1 rounded-[8px] transition-colors ${range === t.key ? 'bg-primary text-white' : 'text-text-dim hover:text-text-secondary'}`}
                             >
                                 {t.label}
                             </button>
@@ -363,60 +265,35 @@ function OnboardingFunnelCard({ byRange }: { byRange: Record<string, GuestFunnel
 // Thanh % thay cho chỉ đọc số — nhìn 1 phát ra chỗ thắt cổ chai (thanh nào
 // ngắn hẳn so với thanh ngay trên nó) thay vì phải so từng dòng "N (X%)"
 // trong đầu. Cùng pattern thanh progress ở ChangeCategorySheet.tsx.
-function FunnelStageRow({ dotClass, label, count, pct, seconds, dropped }: { dotClass: string; label: string; count: number; pct: number; seconds?: number | null; dropped: number }) {
+// Nhãn mốc do RPC trả (xem 20261018_guest_onboarding_funnel_five_steps.sql) — đổi chữ ở client
+// thay vì viết lại cả hàm SQL chỉ để đổi nhãn hiển thị.
+const stageLabel = (raw: string) =>
+    raw.replace(/^Xong: /, '').replace('Cài công thức (hết guide)', 'Nhập định lượng')
+
+function FunnelStageRow({ dotClass, label, count, pct, seconds }: { dotClass: string; label: string; count: number; pct: number; seconds?: number | null }) {
     return (
-        <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between text-[12.5px]">
-                <span className="flex items-center gap-2 text-text-secondary">
-                    <i className={`w-[7px] h-[7px] rounded-full inline-block ${dotClass}`} />
-                    {label}
+        <div className="flex flex-col gap-1.5">
+            <div className="flex items-baseline justify-between gap-2">
+                <span className="min-w-0 truncate">
+                    <span className="text-[13px] font-bold text-text">{label}</span>
+                    {seconds != null && <span className="text-[10.5px] text-text-dim font-medium ml-2">+{formatStepDuration(seconds)}</span>}
                 </span>
-                <span className="font-black tabular-nums text-text">
-                    {seconds != null && <span className="text-text-dim font-medium">+{formatStepDuration(seconds)} · </span>}
-                    {count} ({pct}%)
+                <span className="shrink-0 tabular-nums flex items-baseline gap-1.5">
+                    <span className="text-[15px] font-black text-text">{count}</span>
+                    <span className="text-[11px] text-text-dim font-bold inline-block w-8 text-right">{pct}%</span>
                 </span>
             </div>
-            <div className="h-1.5 rounded-full bg-surface-light overflow-hidden">
-                <div className={`h-full ${dotClass} transition-all`} style={{ width: `${pct}%` }} />
-            </div>
-            {/* Số dừng ĐÚNG tại bước này (không đi tiếp được bước sau) — trừ ra từ 2 count
-                cạnh nhau, không cần query riêng. Chỉ nói lên chỗ nào rớt, không suy đoán
-                bỏ cuộc hẳn hay đang làm dở (xem "Từng khách" bên dưới để soi từng người). */}
-            {dropped > 0 && <span className="self-end text-[10px] font-bold text-danger/70">−{dropped} dừng lại ở đây</span>}
-        </div>
-    )
-}
-
-// Danh sách thô từng khách — thay cho ngưỡng "stuck > N ngày" tự động: ở quy mô
-// vài khách/tuần, mẫu quá nhỏ để thống kê có ý nghĩa, tự đọc từng dòng vừa nhanh
-// vừa chính xác hơn. Trả tối đa 20 dòng/khoảng (server đã giới hạn + sắp xếp).
-function RecentVisitorsList({ visitors, stages }: { visitors?: FunnelVisitor[]; stages: FunnelStage[] }) {
-    if (!visitors?.length) return null
-    const labelOf = (stage: number) => stages.find(s => s.stage === stage)?.label.replace(/^Xong: /, '') || `Bước ${stage}`
-
-    return (
-        <div className="border-t border-border/60 mt-3 pt-3">
-            <p className="text-[10.5px] font-black uppercase tracking-wide text-text-dim mb-2">Từng khách (mới hoạt động trước)</p>
-            <div className="flex flex-col">
-                {visitors.map(v => (
-                    <div key={v.visitor_id} className="flex items-center justify-between gap-2 text-[11px] py-1.5 border-b border-border/30 last:border-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <span className="shrink-0 bg-surface-light border border-border/60 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-text-secondary tabular-nums">#{v.visitor_id.slice(0, 8)}</span>
-                            <span className="text-text-secondary truncate">{labelOf(v.max_stage)}</span>
-                            {v.signed_up_at && <span className="shrink-0 text-success font-bold">✓ đăng ký</span>}
-                        </div>
-                        <span className="shrink-0 text-text-dim tabular-nums">{openedLabelVN(v.last_seen_at)}</span>
-                    </div>
-                ))}
+            {/* Chỗ rớt tự đọc được từ độ ngắn đi của thanh so với thanh ngay trên — không ghi thêm số. */}
+            <div className="h-2 rounded-full bg-surface-light overflow-hidden">
+                <div className={`h-full rounded-full ${dotClass} transition-all`} style={{ width: `${pct}%` }} />
             </div>
         </div>
     )
 }
 
 function GuestFunnelBody({ funnel }: { funnel: GuestFunnel }) {
-    const { stages, signup, total_median_seconds, recent_visitors, prev } = funnel
+    const { stages, signup, prev } = funnel
     const entered = stages[0].count
-    const completed = stages[stages.length - 1].count
     const totalSignup = signup.after_complete + signup.early
     const currentPct = entered > 0 ? Math.round((totalSignup / entered) * 100) : null
     // prev = null cho khoảng "Tất cả" (không có "kỳ trước" tự nhiên) và cho
@@ -426,96 +303,56 @@ function GuestFunnelBody({ funnel }: { funnel: GuestFunnel }) {
 
     return (
         <>
-            <p className="text-[11px] text-text-dim mb-3">
-                {entered > 0
-                    ? `${entered} khách vào dùng thử → ${totalSignup} đăng ký (${currentPct}%)`
-                    : 'Chưa có khách nào vào dùng thử'}
-                {total_median_seconds != null && ` · hết guide trung vị ${formatStepDuration(total_median_seconds)}`}
-                {delta && <span className={`font-bold ${delta.cls}`}> · {delta.text}</span>}
-            </p>
+            {delta && <p className={`text-[11px] font-bold mb-3 ${delta.cls}`}>Đăng ký {delta.text}</p>}
             <div className="flex flex-col gap-3">
-                {stages.map((f, i) => (
+                {stages.map((f) => (
                     // step_median_seconds = thời gian trung vị TỪ BƯỚC TRƯỚC tới bước này —
                     // chỗ nào số này to là chỗ khách khựng lại lâu nhất, đáng sửa guide trước.
                     <FunnelStageRow
                         key={f.stage}
                         dotClass={f.stage === 0 ? 'bg-primary' : 'bg-warning'}
-                        label={f.label.replace(/^Xong: /, '')}
+                        label={stageLabel(f.label)}
                         count={f.count}
                         pct={entered > 0 ? Math.round((f.count / entered) * 100) : 0}
                         seconds={f.step_median_seconds}
-                        dropped={i < stages.length - 1 ? f.count - stages[i + 1].count : 0}
                     />
                 ))}
-                {/* Đăng ký tách khỏi chuỗi stage: after_complete nối tiếp được vào phễu (mẫu số là
-                    nhóm xong hết → hiển thị n/m cho khỏi nhầm với % trên tổng khách), còn early nằm
-                    NGOÀI phễu nên không gắn % vào đâu cả. */}
-                <div className="border-t border-border/60 mt-1 pt-2 flex flex-col gap-2">
-                    <StatRow dotClass="bg-success" label="Xong hết rồi đăng ký" value={`${signup.after_complete}/${completed}`} />
-                    <StatRow dotClass="bg-success" label="Đăng ký sớm (bỏ guide giữa chừng)" value={signup.early} />
-                </div>
+                {/* Bước cuối của phễu: đăng ký tài khoản (gồm cả đăng ký sớm, bỏ guide giữa chừng). */}
+                <FunnelStageRow
+                    dotClass="bg-success"
+                    label="Đăng ký tài khoản"
+                    count={totalSignup}
+                    pct={currentPct ?? 0}
+                />
             </div>
-            <RecentVisitorsList visitors={recent_visitors} stages={stages} />
         </>
     )
 }
 
-const COHORT_COLS = [
-    { key: 'created', label: 'Tạo' },
-    { key: 'first_order', label: 'Đơn' },
-    { key: 'trial_started', label: 'Trial' },
-    { key: 'paid', label: 'Trả phí' },
-]
+// Phễu chi nhánh theo giai đoạn (admin_branch_stages, migration 20261020): mỗi địa chỉ CÒN SỐNG nằm
+// đúng 1 nhóm nên các nhóm cộng lại = tổng địa chỉ; thanh = tỷ lệ trên tổng. RPC riêng như các thẻ
+// khác; lỗi/chưa apply → stages = null → ẩn thẻ.
+const BRANCH_STAGES = [
+    { key: 'never', label: 'Chưa hoạt động', cls: 'bg-text-dim' },
+    { key: 'ordered', label: 'Có hoạt động, chưa nhập thực thu', cls: 'bg-warning' },
+    { key: 'cash_closed', label: 'Nhập thực thu nhưng chưa bắt đầu trial', cls: 'bg-danger' },
+    { key: 'trial', label: 'Đang dùng thử', cls: 'bg-primary' },
+    { key: 'paid', label: 'Đã đăng ký', cls: 'bg-success' },
+    { key: 'expired', label: 'Hết hạn, chưa gia hạn', cls: 'bg-text-dim' },
+] as const
 
-// Cohort theo TUẦN TẠO ĐỊA CHỈ — khác mọi số còn lại trên trang này (ảnh chụp
-// hôm nay): trả lời "tuần này có khá hơn tuần trước không". Fetch riêng như
-// OnboardingFunnelCard; RPC lỗi/chưa apply → cohorts = null → thẻ không được render.
-//
-// ponytail: ở quy mô hiện tại (vài chi nhánh/tuần) mỗi ô trong bảng là 1-3 người,
-// xu hướng theo cột chưa đọc được — phần đọc được ngay là khối "Kẹt" bên dưới.
-// Bảng bắt đầu nói được điều gì từ khoảng 30 địa chỉ mới/tuần trở lên.
-function CohortFunnelCard({ data: { weeks, stuck } }: { data: Cohorts }) {
+function BranchStageCard({ stages }: { stages: Record<string, number> }) {
+    const total = BRANCH_STAGES.reduce((n, s) => n + (stages[s.key] ?? 0), 0)
 
     return (
         <div className={CARD}>
-            {/* Khối "Kẹt" lên TRƯỚC bảng: đây là phần hành động được ngay (gọi ai),
-                bảng cohort là bối cảnh xu hướng — ở quy mô hiện tại thì bối cảnh
-                đứng sau. Đảo lại khi bảng đủ dày để dẫn chuyện. */}
-            <h3 className={`${CARD_TITLE} mb-2`}>Kẹt &gt;3 ngày, chưa được cấp trial</h3>
-            <div className="flex flex-col gap-2">
-                <StatRow dotClass="bg-text-dim" label="Chưa bán đơn nào" value={stuck.never_ordered} />
-                <StatRow dotClass="bg-warning" label="Có bán, chưa nhập thực thu" value={stuck.ordered_no_cash_close} />
-                <StatRow dotClass="bg-danger" label="Đã nhập thực thu, chưa được cấp trial" value={stuck.cash_closed_no_trial} />
+            <h3 className={`${CARD_TITLE} mb-3 pb-3 border-b border-border/60`}>Trong đó</h3>
+            <div className="flex flex-col gap-3">
+                {BRANCH_STAGES.map((s) => {
+                    const count = stages[s.key] ?? 0
+                    return <FunnelStageRow key={s.key} dotClass={s.cls} label={s.label} count={count} pct={total > 0 ? Math.round((count / total) * 100) : 0} />
+                })}
             </div>
-
-            {weeks.length > 0 && <div className="border-t border-border/60 mt-3 pt-3">
-                <p className="text-[10.5px] font-black uppercase tracking-wide text-text-dim">Cohort theo tuần tạo chi nhánh</p>
-                {/* Đếm luỹ kế tới hôm nay: cohort tuần cuối chưa đủ thời gian đi hết phễu
-                    nên LUÔN thấp giả — nói thẳng ra đây thay vì để admin đọc nhầm là tụt. */}
-                <p className="text-[10.5px] text-text-dim mb-2">Tuần mới nhất chưa chín, đọc theo các tuần trước</p>
-                <div className="overflow-x-auto -mx-1 px-1">
-                    <table className="w-full text-[12px] tabular-nums">
-                        <thead>
-                            <tr className="text-text-dim text-[10px] font-black uppercase tracking-wide">
-                                <th className="text-left font-black pb-1.5">Tuần</th>
-                                {COHORT_COLS.map((c) => (
-                                    <th key={c.key} className="text-right font-black pb-1.5 pl-3">{c.label}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {weeks.map((w, i) => (
-                                <tr key={w.week} className={`border-t border-border/30 ${i === weeks.length - 1 ? 'text-text-dim' : 'text-text-secondary'}`}>
-                                    <td className="py-1.5 whitespace-nowrap">{dateShortVN(new Date(w.week))}</td>
-                                    {COHORT_COLS.map((c) => (
-                                        <td key={c.key} className="py-1.5 pl-3 text-right font-black">{w[c.key]}</td>
-                                    ))}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>}
         </div>
     )
 }
@@ -523,7 +360,7 @@ function CohortFunnelCard({ data: { weeks, stuck } }: { data: Cohorts }) {
 function ActivityCard({ items }: { items: ActivityItem[] }) {
     return (
         <div className={CARD}>
-            <h3 className={`${CARD_TITLE} mb-3`}>Hoạt động gần đây</h3>
+            <h3 className={`${CARD_TITLE} mb-3 pb-3 border-b border-border/60`}>Hoạt động gần đây</h3>
             {items.length === 0 ? (
                 <p className="text-[12px] text-text-secondary py-2">Chưa có hoạt động nào.</p>
             ) : (

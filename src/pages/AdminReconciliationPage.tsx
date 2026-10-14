@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
-import { ArrowLeft, Loader2, AlertTriangle, RefreshCw } from 'lucide-react'
+import { Loader2, AlertTriangle } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { formatVND } from '../utils/money'
 import { dateStringVN, timeStringVN } from '../utils/dateVN'
 import { fetchAdminDashboard } from '../services/adminDashboardService'
-import { resolvePaymentIntent } from '../services/reconciliationService'
+import { resolvePaymentIntent, dismissAttention } from '../services/reconciliationService'
+import { grantSubscription } from '../services/adminService'
+import { ALL_TIER } from '../constants/monetization'
 import { errorMessage } from '../utils/errorMessage'
-import { ICON_BTN, ICON_BTN_MUTED } from '../components/common/ModalShell'
+import AdminPageHeader from '../components/common/AdminPageHeader'
 
 // Một dòng của admin_dashboard_overview().attention / dormant_addresses. Trường nào có tuỳ theo `reason`.
 interface AttentionItem {
@@ -29,6 +31,7 @@ interface AttentionItem {
 interface Overview {
     attention: AttentionItem[]
     attention_total_count?: number
+    payment_issues?: AttentionItem[] // v8: giao dịch cần đối soát, không tính vào attention_total_count
     dormant_addresses?: AttentionItem[]
     dormant_count?: number
 }
@@ -42,8 +45,7 @@ const REASON: Record<string, { label: string; cls: string }> = {
     expiring: { label: 'Sắp hết hạn', cls: WARN },
     inactive: { label: 'Không hoạt động', cls: DANGER },
     churned_recent: { label: 'Đã rời bỏ', cls: DANGER },
-    trial_inactive: { label: 'Trial chưa dùng', cls: WARN },
-    never_activated: { label: 'Chưa kích hoạt', cls: WARN },
+    trial_missing: { label: 'Chưa bắt đầu trial', cls: WARN },
     dormant: { label: 'Đã bỏ (>90 ngày)', cls: 'bg-border/60 text-text-dim' },
 }
 
@@ -74,14 +76,8 @@ function attentionDetail(item: AttentionItem) {
         const d = daysSince(item.valid_to)
         return d <= 0 ? 'Vừa hết hạn hôm nay' : `Hết hạn ${d} ngày trước — chưa gia hạn`
     }
-    if (item.reason === 'trial_inactive') {
-        return 'Dùng thử nhưng chưa phát sinh đơn hàng nào'
-    }
-    if (item.reason === 'never_activated') {
-        // v4: valid_to tái dùng để chứa NGÀY TẠO địa chỉ cho reason này (không phải hạn),
-        // xem 20260815_admin_dashboard_overview_v4.sql.
-        const days = daysSince(item.valid_to)
-        return `Đăng ký ${days} ngày trước, chưa chốt ca nào`
+    if (item.reason === 'trial_missing') {
+        return 'Đã nhập thực thu nhưng chưa được tính trial — đang dùng miễn phí'
     }
     if (item.reason === 'dormant') {
         return item.last_active_at
@@ -125,26 +121,37 @@ export default function AdminReconciliationPage() {
         if (isAdmin) reload()
     }, [isAdmin, reload])
 
-    const items = data?.attention ?? null
+    const payments = data?.payment_issues ?? []
+    const branches = data?.attention ?? []
+    const items = data ? [...payments, ...branches] : null
     const dormant = data?.dormant_addresses ?? []
-    const totalCount = data?.attention_total_count ?? items?.length ?? 0 // đếm thật (đã dedupe), items chỉ là top-20 hiển thị
+    const totalCount = data?.attention_total_count ?? branches.length // đếm thật chi nhánh (đã dedupe), branches chỉ là top-20 hiển thị
     const dormantCount = data?.dormant_count ?? 0
+    const countHint = items ? (totalCount > branches.length ? `${items.length}/${totalCount + payments.length} mục` : `${items.length} mục`) : undefined
 
     if (authLoading) return null
     if (!isAdmin) return <Navigate to="/addresses" />
 
-    const handleResolve = async (id: string, grant: boolean) => {
-        if (grant && confirmId !== id) {
-            setConfirmId(id)
-            setTimeout(() => setConfirmId((c) => (c === id ? null : c)), 4000)
+    // grant=true: giao dịch → Cấp gói (2 bước xác nhận) / chi nhánh trial_missing → Cấp trial 7 ngày (2 bước).
+    // grant=false: Bỏ qua — giao dịch thì đóng intent, trial_missing thì chỉ ẩn khỏi danh sách (trigger vẫn cấp
+    // trial bình thường nếu họ chốt thực thu đủ điều kiện sau này).
+    const handleAction = async (item: AttentionItem, grant: boolean) => {
+        const key = itemKey(item)
+        if (grant && confirmId !== key) {
+            setConfirmId(key)
+            setTimeout(() => setConfirmId((c) => (c === key ? null : c)), 4000)
             return
         }
         setConfirmId(null)
-        setBusyId(id)
+        setBusyId(key)
         setError(null)
         try {
-            await resolvePaymentIntent(id, grant)
-            setData((d) => d && { ...d, attention: d.attention.filter((i) => i.intent_id !== id), attention_total_count: Math.max(0, totalCount - 1) })
+            if (item.intent_id) await resolvePaymentIntent(item.intent_id, grant)
+            else if (grant) await grantSubscription([item.address_id!], [ALL_TIER], 1, 0, 'trial')
+            else await dismissAttention(item.address_id!, item.reason)
+            setData((d) => d && (item.intent_id
+                ? { ...d, payment_issues: (d.payment_issues ?? []).filter((i) => i.intent_id !== item.intent_id) }
+                : { ...d, attention: d.attention.filter((i) => itemKey(i) !== key), attention_total_count: Math.max(0, totalCount - 1) }))
         } catch (e) {
             setError(errorMessage(e, ''))
         } finally {
@@ -154,23 +161,7 @@ export default function AdminReconciliationPage() {
 
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg">
-            <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex items-center px-4 gap-3">
-                <button
-                    onClick={() => navigate('/admin/dashboard')}
-                    className={ICON_BTN}
-                >
-                    <ArrowLeft size={20} strokeWidth={2.5} />
-                </button>
-                <div className="flex-1 min-w-0 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-3 py-2.5 flex items-center justify-center">
-                    <span className="text-[12px] font-black text-primary uppercase tracking-wide">Đối soát thanh toán</span>
-                </div>
-                <button
-                    onClick={reload}
-                    className={ICON_BTN_MUTED}
-                >
-                    <RefreshCw size={16} strokeWidth={2.5} />
-                </button>
-            </header>
+            <AdminPageHeader title="Cần chú ý" subtitle={countHint} onBack={() => navigate('/admin/dashboard')} onRefresh={reload} />
 
             <div className="flex-1 overflow-y-auto px-4 pt-4 pb-8 flex flex-col gap-5">
                 {error && (
@@ -181,11 +172,6 @@ export default function AdminReconciliationPage() {
 
                 {/* ── Cần chú ý ─────────────────────────────────────────────── */}
                 <section className="flex flex-col gap-2.5">
-                    <SectionHeader
-                        icon={<AlertTriangle size={14} className="text-warning" />}
-                        title="Cần chú ý"
-                        hint={items ? (totalCount > items.length ? `${items.length}/${totalCount} chi nhánh` : `${items.length} chi nhánh`) : undefined}
-                    />
                     {items === null ? (
                         <Loader2 size={20} className="animate-spin text-text-dim mx-auto my-4" />
                     ) : items.length === 0 ? (
@@ -201,8 +187,8 @@ export default function AdminReconciliationPage() {
                                     item={it}
                                     busy={busyId === key}
                                     confirming={confirmId === key}
-                                    onGrant={() => handleResolve(key, true)}
-                                    onDismiss={() => handleResolve(key, false)}
+                                    onGrant={() => handleAction(it, true)}
+                                    onDismiss={() => handleAction(it, false)}
                                 />
                             )
                         })
@@ -229,7 +215,18 @@ export default function AdminReconciliationPage() {
 
 function AttentionItemCard({ item, busy, confirming, onGrant, onDismiss }: { item: AttentionItem; busy?: boolean; confirming?: boolean; onGrant?: () => void; onDismiss?: () => void }) {
     const isPayment = item.reason === 'payment_review' || item.reason === 'payment_stale'
+    const hasActions = isPayment || (item.reason === 'trial_missing' && !!onGrant)
     const tagLabel = item.reason === 'payment_stale' ? `Pending ${elapsedMinutes(item.intent_created_at)}'` : REASON[item.reason].label
+    const call = item.owner_phone ? (
+        <a
+            href={`tel:${item.owner_phone}`}
+            className={`py-2 rounded-[10px] text-[11px] font-bold text-center bg-primary/10 text-primary hover:bg-primary/20 active:scale-[0.98] transition-all ${hasActions ? 'px-3' : 'flex-1'}`}
+        >
+            Gọi {item.owner_name ? item.owner_name.split(' ').slice(-1)[0] : 'chủ quán'}
+        </a>
+    ) : hasActions ? null : (
+        <span className="flex-1 py-2 text-[11px] text-text-dim text-center">Không có SĐT liên hệ</span>
+    )
 
     return (
         <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2">
@@ -247,7 +244,8 @@ function AttentionItemCard({ item, busy, confirming, onGrant, onDismiss }: { ite
                 {isPayment && <span className="font-black text-text shrink-0">{formatVND(item.amount ?? 0)}</span>}
             </div>
             <div className="flex gap-2 pt-1">
-                {isPayment ? (
+                {!isPayment && call}
+                {hasActions && (
                     <>
                         <button
                             onClick={onGrant}
@@ -255,7 +253,7 @@ function AttentionItemCard({ item, busy, confirming, onGrant, onDismiss }: { ite
                             className={`flex-1 py-2 rounded-[10px] text-[11px] font-bold active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-1.5
                                 ${confirming ? 'bg-success/20 text-success' : 'bg-success-soft/60 text-success hover:bg-success/20'}`}
                         >
-                            {busy ? <Loader2 size={13} className="animate-spin" /> : confirming ? 'Bấm lần nữa để cấp' : 'Đã nhận tiền — Cấp gói'}
+                            {busy ? <Loader2 size={13} className="animate-spin" /> : confirming ? 'Bấm lần nữa để cấp' : isPayment ? 'Đã nhận tiền — Cấp gói' : 'Cấp trial 7 ngày'}
                         </button>
                         <button
                             onClick={onDismiss}
@@ -265,15 +263,6 @@ function AttentionItemCard({ item, busy, confirming, onGrant, onDismiss }: { ite
                             Bỏ qua
                         </button>
                     </>
-                ) : item.owner_phone ? (
-                    <a
-                        href={`tel:${item.owner_phone}`}
-                        className="flex-1 py-2 rounded-[10px] text-[11px] font-bold text-center bg-primary/10 text-primary hover:bg-primary/20 active:scale-[0.98] transition-all"
-                    >
-                        Gọi {item.owner_name ? item.owner_name.split(' ').slice(-1)[0] : 'chủ quán'}
-                    </a>
-                ) : (
-                    <span className="flex-1 py-2 text-[11px] text-text-dim text-center">Không có SĐT liên hệ</span>
                 )}
             </div>
         </div>

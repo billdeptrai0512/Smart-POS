@@ -9,3 +9,9 @@ export async function resolvePaymentIntent(intentId: string, grant: boolean) {
     if (error) throw error
     return data
 }
+
+// Ẩn 1 dòng "Cần chú ý" (vd 'trial_missing') — chỉ ẩn khỏi danh sách, không đụng gói/trial của chi nhánh.
+export async function dismissAttention(addressId: string, reason: string) {
+    const { error } = await supabase.rpc('admin_dismiss_attention', { p_address_id: addressId, p_reason: reason })
+    if (error) throw error
+}
