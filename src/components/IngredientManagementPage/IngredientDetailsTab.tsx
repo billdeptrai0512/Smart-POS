@@ -2,7 +2,6 @@ import { useState, type ReactNode } from 'react'
 import { Check, Trash2 } from 'lucide-react'
 import { formatPackedQty, netStockOf } from '../../utils/inventory'
 import { INGREDIENT_CATEGORIES } from '../../utils/ingredients'
-import { onboardingHintClass } from '../../utils/onboardingHint'
 import { countedLabelVN } from '../../utils/dateVN'
 import Dropdown from '../common/Dropdown'
 import type { Pack2 } from '../../utils/inventory'
@@ -38,7 +37,6 @@ interface DetailsProps extends PackProps {
     groups?: Pick<IngredientGroup, 'id' | 'name'>[] | null
     countInAudit?: boolean
     onToggleAudit?: (countInAudit: boolean) => void
-    hintPack?: boolean
     canEdit?: boolean
     saving?: boolean
     onSaveName?: (name: string) => unknown
@@ -50,7 +48,6 @@ interface DetailsProps extends PackProps {
 export default function IngredientDetailsTab({
     nameLabel, unit, category, groupId = null, groups = null, packSize, packUnit, pack2,
     countInAudit, onToggleAudit,   // toggle "Kiểm kê" — rút gọn từ panel Kiểm kê cũ thành 1 row
-    hintPack = false,
     canEdit, saving,
     onSaveName,         // (newDisplayName: string) => Promise
     onSaveUnit,         // (newUnit: string)       => Promise
@@ -92,7 +89,6 @@ export default function IngredientDetailsTab({
                     unit={unit}
                     canEdit={canEdit}
                     onConfigure={onConfigurePack}
-                    hint={hintPack}
                 />
             </Panel>
         </div>
@@ -119,9 +115,7 @@ interface StockPanelProps extends PackProps {
     unit: string
     warehouseStock?: number | null
     warehouseGroupNote?: string | null
-    hintWarehouse?: boolean
     minStock?: number | null
-    hintMinStock?: boolean
     dailyContext?: { today_refill?: number | null; today_restock?: number | null } | null
     canEdit?: boolean
     onSaveWarehouse?: SaveNumber
@@ -130,8 +124,8 @@ interface StockPanelProps extends PackProps {
 
 export function IngredientStockPanel({
     unit, packSize, packUnit, pack2,
-    warehouseStock, warehouseGroupNote, hintWarehouse = false,
-    minStock, hintMinStock = false,   // tồn KHO ít nhất (= min_stock)
+    warehouseStock, warehouseGroupNote,
+    minStock,   // tồn KHO ít nhất (= min_stock)
     dailyContext,       // { today_refill, today_restock } | null — Đầu ngày/Lấy ra/Nhập mới
     canEdit,
     onSaveWarehouse,    // (newWarehouse: number)  => Promise  (Kho sau)
@@ -149,7 +143,7 @@ export function IngredientStockPanel({
                     <MinStockRow
                         label="Tồn kho ít nhất" minStock={minStock} unit={unit}
                         hasPack={hasPack} packSize={packSize} packUnit={packUnit} pack2={pack2}
-                        canEdit={canEdit} onSave={onSaveMinStock} hint={hintMinStock}
+                        canEdit={canEdit} onSave={onSaveMinStock}
                     />
                 </Panel>
             )}
@@ -168,7 +162,7 @@ export function IngredientStockPanel({
                         label="Tồn kho cuối ngày" value={warehouseStock} unit={unit}
                         hasPack={hasPack} packSize={packSize} packUnit={packUnit} pack2={pack2}
                         canEdit={canEdit} editable onSave={onSaveWarehouse}
-                        groupNote={warehouseGroupNote} hint={hintWarehouse}
+                        groupNote={warehouseGroupNote}
                     />
                 </div>
             </Panel>
@@ -181,7 +175,6 @@ export function IngredientStockPanel({
 interface CounterPanelProps extends PackProps {
     unit: string
     tareWeight?: number | null
-    hintTare?: boolean
     minCounterStock?: number | null
     counterStock?: number | null
     currentStock?: number | null
@@ -194,7 +187,7 @@ interface CounterPanelProps extends PackProps {
 }
 
 export function IngredientCounterPanel({
-    unit, packSize, packUnit, pack2, tareWeight, hintTare = false,
+    unit, packSize, packUnit, pack2, tareWeight,
     minCounterStock,        // tồn QUẦY ít nhất
     counterStock, currentStock,
     counterCountedOn,       // 'YYYY-MM-DD' | null — ngày kiểm kê gần nhất của tồn quầy
@@ -235,7 +228,7 @@ export function IngredientCounterPanel({
                     note={counterCountedOn ? `Kiểm kê lần cuối: ${countedLabelVN(counterCountedOn, counterCountedAt, true)}` : null}
                 />
                 {showTare && (
-                    <TareRow tareWeight={tareWeight} unit={unit} canEdit={canEdit} onSave={onSaveTareWeight} hint={hintTare} />
+                    <TareRow tareWeight={tareWeight} unit={unit} canEdit={canEdit} onSave={onSaveTareWeight} />
                 )}
                 {/* Kết quả của phép trừ: số cân − bì. Chỉ hiện khi đã có bì và đã có số tồn quầy. */}
                 {counterReal != null && (
@@ -362,10 +355,9 @@ interface QtyRowProps extends QtyPackProps {
     valueClass?: string
     note?: string | null
     groupNote?: string | null
-    hint?: boolean
 }
 
-function QtyRow({ label, value, unit, hasPack, packSize, packUnit, pack2, canEdit, editable = true, onSave, valueClass = 'text-text', note = null, groupNote = null, hint = false }: QtyRowProps) {
+function QtyRow({ label, value, unit, hasPack, packSize, packUnit, pack2, canEdit, editable = true, onSave, valueClass = 'text-text', note = null, groupNote = null }: QtyRowProps) {
     const [editing, setEditing] = useState(false)
     const [input, setInput] = useState('')
     const tappable = editable && canEdit
@@ -394,7 +386,7 @@ function QtyRow({ label, value, unit, hasPack, packSize, packUnit, pack2, canEdi
                             if (e.key === 'Enter') commit()
                             if (e.key === 'Escape') setEditing(false)
                         }}
-                        className={`w-24 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50 ${onboardingHintClass(hint)}`}
+                        className={`w-24 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50`}
                     />
                     <span className="text-[12px] text-text-dim font-medium">{unit}</span>
                 </div>
@@ -404,7 +396,7 @@ function QtyRow({ label, value, unit, hasPack, packSize, packUnit, pack2, canEdi
                 <div className={`flex flex-col items-end gap-0.5 leading-tight ${hasPack ? 'min-h-[32px] justify-center' : ''}`}>
                     <button
                         onClick={tappable ? start : undefined}
-                        className={`inline-flex items-baseline gap-1 text-[13px] font-bold tabular-nums rounded-md px-2 -mx-2 py-1 -my-1 ${negative ? 'text-danger' : tappable ? 'text-primary' : valueClass} ${tappable ? 'cursor-pointer hover:brightness-110' : 'cursor-default'} ${onboardingHintClass(hint)}`}
+                        className={`inline-flex items-baseline gap-1 text-[13px] font-bold tabular-nums rounded-md px-2 -mx-2 py-1 -my-1 ${negative ? 'text-danger' : tappable ? 'text-primary' : valueClass} ${tappable ? 'cursor-pointer hover:brightness-110' : 'cursor-default'}`}
                     >
                         {value != null ? Math.round(value * 10) / 10 : '—'}
                         <span className="text-text-dim font-medium">{unit}</span>
@@ -451,14 +443,14 @@ function CategoryRow({ value, groupId, groups, canEdit, saving, onChange }: { va
 }
 
 // ── Pack (opens modal) ──────────────────────────────────────────────────────
-function PackRow({ hasPack, packSize, packUnit, pack2, unit, canEdit, onConfigure, hint = false }: QtyPackProps & { canEdit?: boolean; onConfigure?: () => void; hint?: boolean }) {
+function PackRow({ hasPack, packSize, packUnit, pack2, unit, canEdit, onConfigure }: QtyPackProps & { canEdit?: boolean; onConfigure?: () => void }) {
     if (!hasPack) {
         return (
             <Row label="Đơn vị quy đổi">
                 {canEdit ? (
                     <button
                         onClick={onConfigure}
-                        className={`${ADD_BTN} ${onboardingHintClass(hint)}`}
+                        className={ADD_BTN}
                     >
                         +
                     </button>
@@ -490,7 +482,7 @@ function PackRow({ hasPack, packSize, packUnit, pack2, unit, canEdit, onConfigur
 }
 
 // ── Min stock ───────────────────────────────────────────────────────────────
-function MinStockRow({ label, minStock, unit, hasPack, packSize, packUnit, pack2, canEdit, onSave, hint = false }: QtyPackProps & { label: string; minStock?: number | null; canEdit?: boolean; onSave?: SaveNumber; hint?: boolean }) {
+function MinStockRow({ label, minStock, unit, hasPack, packSize, packUnit, pack2, canEdit, onSave }: QtyPackProps & { label: string; minStock?: number | null; canEdit?: boolean; onSave?: SaveNumber }) {
     const [editing, setEditing] = useState(false)
     const [input, setInput] = useState('')
     const start = () => {
@@ -523,7 +515,7 @@ function MinStockRow({ label, minStock, unit, hasPack, packSize, packUnit, pack2
                             if (e.key === 'Enter') commit()
                             if (e.key === 'Escape') setEditing(false)
                         }}
-                        className={`w-20 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50 ${onboardingHintClass(hint)}`}
+                        className={`w-20 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50`}
                     />
                     <span className="text-[12px] text-text-dim font-medium">{unit}</span>
                 </div>
@@ -544,7 +536,7 @@ function MinStockRow({ label, minStock, unit, hasPack, packSize, packUnit, pack2
             ) : (
                 <button
                     onClick={start}
-                    className={`${ADD_BTN} ${onboardingHintClass(hint)}`}
+                    className={ADD_BTN}
                 >
                     +
                 </button>
@@ -562,7 +554,7 @@ function MinStockRow({ label, minStock, unit, hasPack, packSize, packUnit, pack2
 // ml quy 1:1 như g (tồn quầy ml cũng trừ bì theo số cân) — cho NVL lỏng nhập bì theo ml.
 const TARE_UNITS: Record<string, number> = { g: 1, kg: 1000, ml: 1 }
 const TARE_UNIT_KEYS = Object.keys(TARE_UNITS)
-function TareRow({ tareWeight, unit, canEdit, onSave, hint = false }: { tareWeight?: number | null; unit: string; canEdit?: boolean; onSave?: SaveNumber; hint?: boolean }) {
+function TareRow({ tareWeight, unit, canEdit, onSave }: { tareWeight?: number | null; unit: string; canEdit?: boolean; onSave?: SaveNumber }) {
     const [editing, setEditing] = useState(false)
     const [input, setInput] = useState('')
     const [tareUnit, setTareUnit] = useState('g')
@@ -597,7 +589,7 @@ function TareRow({ tareWeight, unit, canEdit, onSave, hint = false }: { tareWeig
                             if (e.key === 'Enter') commit()
                             if (e.key === 'Escape') setEditing(false)
                         }}
-                        className={`w-20 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50 ${onboardingHintClass(hint)}`}
+                        className={`w-20 bg-surface-light border border-border/60 rounded-[8px] px-2 py-1 text-[13px] font-bold text-text text-right tabular-nums focus:outline-none focus:border-primary/50`}
                     />
                     {/* mousedown preventDefault: giữ focus ở ô số, không để blur → commit trước khi đổi đơn vị */}
                     <button
@@ -620,7 +612,7 @@ function TareRow({ tareWeight, unit, canEdit, onSave, hint = false }: { tareWeig
             ) : (
                 <button
                     onClick={start}
-                    className={`${ADD_BTN} ${onboardingHintClass(hint)}`}
+                    className={ADD_BTN}
                 >
                     +
                 </button>

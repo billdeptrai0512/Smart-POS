@@ -22,10 +22,8 @@ export const DEFAULT_ONBOARDING_STATE = {
     orderProgress: { sent: 0, picked: 0, viewedHistory: false },
     journalProgress: { viewedIncome: false, viewedExpense: false, viewedReport: false, viewedProfit: false },
     cashFlowProgress: { scrolled: false, cash: false, transfer: false },
-    inventoryProgress: { visited: false, coffee: false, cacao: false, matcha: false, cup: false, lid: false },
+    inventoryProgress: { visited: false, coffee: false, cup: false, lid: false },
     recipeProgress: { viewedMenu: false, viewedRecipes: false, filledAmount: false, addedExtra: false },
-    // Bước 6: kho Cà phê đã nhập — ghi từ IngredientDetailPage.tsx.
-    stockProgress: { coffeeWarehouseSet: false },
 }
 
 export type OnboardingState = typeof DEFAULT_ONBOARDING_STATE
@@ -58,8 +56,6 @@ export function reachedCashCard(cashFlowProgress: { scrolled: boolean; cash: boo
 // reason as isCashFlowProgressDone above).
 export const INVENTORY_ONBOARDING_ITEMS = [
     { key: 'coffee', label: 'cà phê' },
-    { key: 'cacao', label: 'cacao' },
-    { key: 'matcha', label: 'matcha' },
     { key: 'cup', label: 'ly' },
     { key: 'lid', label: 'nắp' },
 ] as const

@@ -25,7 +25,7 @@ import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
 import { RECIPE_TABS, DISCOUNT_TAB } from '../constants/menuTabs'
-import { norm, findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
+import { norm } from '../utils/onboardingHint'
 import { isRecipeProgressDone, isInventoryProgressDone, readOnboardingState, DEFAULT_ONBOARDING_STATE } from '../utils/onboardingStorage'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
@@ -83,7 +83,7 @@ export default function RecipeMenuPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const backTo = location.state?.from || '/history/sales'
-    const { products, recipes, ingredientCosts, ingredientUnits, ingredientConfigs, discountPrograms, refreshProducts } = useProducts()
+    const { products, recipes, ingredientCosts, ingredientUnits, discountPrograms, refreshProducts } = useProducts()
     const { addressId } = useAddress()
     const { isManager, isAdmin, isGuest } = useAuth()
     const canEdit = isManager || isAdmin
@@ -106,18 +106,6 @@ export default function RecipeMenuPage() {
     // `hintCafeDen && product.id === cafeDenProduct?.id` ở từng chỗ.
     const hintCafeDenId = hintCafeDen ? cafeDenProduct!.id : null
 
-    // Onboarding phase 6 (CUỐI CÙNG, "Cài đặt nguyên liệu") — sau khi phase 5 xong, hint mũi tên
-    // "trở về" trên header (về Tồn kho khi đi theo wizard) để dẫn qua đó. Chỉ xét 3/4 việc
-    // đọc được từ ingredientConfigs (bỏ qua warehouse_stock_set — cần RPC riêng, không đáng fetch
-    // thêm chỉ để tắt 1 hint trang trí) — vì warehouse luôn được hint TRƯỚC theo đúng thứ tự
-    // nextIngredientSetupField, tới lúc cả 3 field còn lại xong thì warehouse chắc chắn cũng đã
-    // xong theo hint sequence, nên xấp xỉ này khớp trong mọi trường hợp đi đúng theo hint.
-    const coffeeConfig = useMemo(() => findCoffeeIngredient(ingredientConfigs), [ingredientConfigs])
-    // !!coffeeConfig: shop xoá/đổi tên NVL "Cà phê" thì phase 6 vacuously done (xem
-    // bước 6 onboarding/steps.ts) — thiếu guard này tab sẽ nhấp nháy hoài vì
-    // nextIngredientSetupField(undefined) luôn trả 'pack'.
-    const hintIngredientsTab = isGuest && isRecipeProgressDone(recipeProgress)
-        && !!coffeeConfig && nextIngredientSetupField(coffeeConfig, true) !== null
     // Chỉ Admin được sắp xếp menu mặc định (chưa chọn địa chỉ) — giống rule cũ của saveSortOrder.
     const canSort = canEdit && !!(addressId || isAdmin)
     const { toast, showToast, showError } = useToast()
@@ -336,7 +324,6 @@ export default function RecipeMenuPage() {
                 activeTab={view}
                 onTabSelect={setView}
                 hintTab={hintCafeDen && view !== 'recipes' ? 'recipes' : undefined}
-                hintBack={hintIngredientsTab}
             />
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-8 space-y-3 bg-bg">

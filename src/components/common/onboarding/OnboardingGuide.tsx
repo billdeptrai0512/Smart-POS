@@ -6,7 +6,7 @@ import { useAddress } from '../../../contexts/AddressContext'
 import { useProducts } from '../../../contexts/ProductContext'
 import { trackGuestOnboardingStage } from '../../../services/onboardingFunnelService'
 import { sortIngredients } from '../../../utils/ingredients'
-import { findCoffeeIngredient, norm, type IngredientSetupConfig } from '../../../utils/onboardingHint'
+import { norm } from '../../../utils/onboardingHint'
 import { readOnboardingState, DEFAULT_ONBOARDING_STATE, ONBOARDING_EVENT } from '../../../utils/onboardingStorage'
 import { STEPS, RECIPE_TARGET_PRODUCT } from './steps'
 
@@ -14,14 +14,12 @@ import { STEPS, RECIPE_TARGET_PRODUCT } from './steps'
 // nó trên <Outlet/>), chiếm chỗ thật nên không đè lên gì và cùng 1 chỗ trên mọi trang — khỏi né
 // thanh đáy riêng của từng trang (Tạo đơn, footer tab, FAB). Chỉ ghi việc cần làm ngay + số việc đã xong
 // trên tổng (done/total); không liệt kê cả checklist vì mỗi việc đã có spotlight nhấp nháy ngay trên
-// nút/món cần bấm. Hết 6 bước → dải thành nút đăng ký tài khoản thật (guest data chỉ sống trong
+// nút/món cần bấm. Hết 5 bước → dải thành nút đăng ký tài khoản thật (guest data chỉ sống trong
 // localStorage).
 export default function OnboardingGuide() {
     const { isGuest } = useAuth()
     const { addressId, selectedAddress } = useAddress()
-    const { ingredientConfigs, products, recipes } = useProducts()
-    // Cấu hình (pack/min_stock/tare_weight) có sẵn trong ingredientConfigs (ProductContext).
-    const coffeeConfig = findCoffeeIngredient(ingredientConfigs as (IngredientSetupConfig & { ingredient: string })[])
+    const { products, recipes } = useProducts()
 
     // Mọi tiến độ nằm trong localStorage — writeOnboardingState phát ONBOARDING_EVENT sau mỗi
     // lần ghi, guide (mount 1 lần ở layout) nghe để đọc lại.
@@ -47,9 +45,9 @@ export default function OnboardingGuide() {
             .sort((a, b) => sortIngredients(a.ingredient, b.ingredient, selectedAddress?.ingredient_sort_order))
             .map(r => ({ ingredient: r.ingredient, amount: r.amount }))
     }, [products, recipes, selectedAddress?.ingredient_sort_order])
-    const ctx = { ...local, coffeeConfig, recipeRows }
+    const ctx = { ...local, recipeRows }
     const idx = STEPS.findIndex(s => !s.items(ctx).every(i => i.done))
-    // 0 = vào dùng thử nhưng chưa xong phase nào; 1-5 = xong bấy nhiêu phase; 6 = xong hết.
+    // 0 = vào dùng thử nhưng chưa xong phase nào; 1-4 = xong bấy nhiêu phase; 5 = xong hết.
     const stageReached = idx === -1 ? STEPS.length : idx
 
     // Phễu onboarding cho /admin/dashboard — chỉ gửi khi stageReached ĐỔI (component này
@@ -65,13 +63,13 @@ export default function OnboardingGuide() {
 
     // Nền cam nhạt + icon để tách hẳn khỏi header (bg-surface) ngay bên dưới — cùng
     // màu nền với header thì dải bị đọc như 1 phần header và dễ bị lướt qua.
-    const bar = 'shrink-0 flex items-center gap-2.5 min-h-10 py-1.5 px-4 text-[14px] font-bold'
+    const bar = 'shrink-0 flex items-center gap-2.5 min-h-10 py-1.5 px-4 text-[14px]'
 
     if (idx === -1) {
         return (
             <Link
                 to="/signup"
-                className={`${bar} justify-center bg-primary text-bg uppercase hover:bg-primary/90 active:bg-primary/80 transition-colors`}
+                className={`${bar} justify-center bg-primary text-bg uppercase font-black tracking-wider hover:bg-primary/90 active:bg-primary/80 transition-colors`}
             >
                 Đăng ký tài khoản
             </Link>
@@ -79,13 +77,19 @@ export default function OnboardingGuide() {
     }
 
     const items = STEPS[idx].items(ctx)
-    // Đếm theo từng việc (không theo bước) để số nhích sau mỗi thao tác.
-    const all = STEPS.flatMap(s => s.items(ctx))
+    const flat = STEPS.flatMap(s => s.items(ctx))
+    const offerFrom = flat.findIndex(i => i.offerSignup)
+    const showSignup = offerFrom >= 0 && flat.findIndex(i => !i.done) >= offerFrom
     return (
         <div className={`${bar} bg-primary/15 text-text`}>
             <span className="shrink-0 grid place-items-center size-6 rounded-full bg-primary/20 text-primary"><Lightbulb size={14} /></span>
             <span className="flex-1 line-clamp-2 uppercase tracking-wider text-[12px] font-black">{items.find(i => !i.done)?.label}</span>
-            <span className="text-[12px] font-bold text-text-secondary tabular-nums">{all.filter(i => i.done).length}/{all.length}</span>
+            {/* Tới việc có cờ offerSignup (steps.ts) thì cho đăng ký sớm — guide vẫn chạy tiếp. */}
+            {showSignup && (
+                <Link to="/signup" className="shrink-0 text-[12px] font-black uppercase tracking-wider text-primary border border-primary/60 rounded-full px-3 py-0.5 active:bg-primary/15 transition-colors">
+                    Đăng ký
+                </Link>
+            )}
         </div>
     )
 }

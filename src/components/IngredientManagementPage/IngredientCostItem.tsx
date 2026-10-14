@@ -1,6 +1,5 @@
 import { formatPackedQty, netStockOf, isLowStockOf } from '../../utils/inventory'
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
-import { onboardingHintClass } from '../../utils/onboardingHint'
 import { countedLabelVN } from '../../utils/dateVN'
 import type { Pack2 } from '../../utils/inventory'
 import type { Row } from '../../types/domain'
@@ -18,7 +17,6 @@ interface Props {
     stockData?: Row | null
     dailyContext?: { today_refill?: number | null; today_restock?: number | null } | null
     onOpen?: (ingredient: string) => void
-    hint?: boolean
 }
 
 /**
@@ -52,7 +50,6 @@ export default function IngredientCostItem({
     dailyContext,
     // Navigation — parent owns scroll-cache save before navigating to detail
     onOpen,
-    hint = false,
 }: Props) {
     const displayUnit = getIngredientUnit(ingredient, storedUnit)
 
@@ -82,7 +79,7 @@ export default function IngredientCostItem({
 
     return (
         <div
-            className={`bg-surface border rounded-[14px] p-3 flex flex-col gap-2 min-w-0 cursor-pointer hover:bg-surface-light/40 transition-colors ${borderClass} ${onboardingHintClass(hint)}`}
+            className={`bg-surface border rounded-[14px] p-3 flex flex-col gap-2 min-w-0 cursor-pointer hover:bg-surface-light/40 transition-colors ${borderClass}`}
             onClick={() => onOpen?.(ingredient)}
         >
             {/* Row 1: name + status badge (chiếm chỗ nút [+] nhập kho cũ) */}

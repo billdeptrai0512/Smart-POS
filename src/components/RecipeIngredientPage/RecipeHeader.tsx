@@ -2,7 +2,6 @@ import { CupSoda } from 'lucide-react'
 import type { Row } from '../../types/domain'
 import { capitalizeWords } from '../../utils'
 import EditableEntityHeader from '../common/EditableEntityHeader'
-import { onboardingHintClass } from '../../utils/onboardingHint'
 import { ICON_BTN_BASE } from '../common/ModalShell'
 
 interface Props {
@@ -11,14 +10,13 @@ interface Props {
     onBack: () => void
     onSavePrice: (price: number) => void
     onSaveName: (name: string) => void
-    hintBack?: boolean
     countAsCup: boolean
     onToggleCountAsCup: () => void
     toggleDisabled?: boolean
 }
 
 export default function RecipeHeader({
-    product, canEdit, onBack, onSavePrice, onSaveName, hintBack,
+    product, canEdit, onBack, onSavePrice, onSaveName,
     countAsCup, onToggleCountAsCup, toggleDisabled,
 }: Props) {
     return (
@@ -31,7 +29,6 @@ export default function RecipeHeader({
             price={product.price}
             priceLabel="Giá bán:"
             onSavePrice={onSavePrice}
-            backClassName={onboardingHintClass(hintBack)}
             action={canEdit && (
                 // Bật = món này được cộng vào tổng số ly bán/ngày; tắt = không cộng (vd topping, đồ ăn).
                 <button

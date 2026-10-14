@@ -4,8 +4,8 @@ import { useProducts } from '../contexts/ProductContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
-import { readOnboardingState, DEFAULT_ONBOARDING_STATE, isRecipeProgressDone } from '../utils/onboardingStorage'
-import { norm, findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
+import { readOnboardingState, DEFAULT_ONBOARDING_STATE } from '../utils/onboardingStorage'
+import { norm } from '../utils/onboardingHint'
 import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps'
 import {
     upsertRecipe,
@@ -68,15 +68,6 @@ export default function RecipeIngredientPage() {
 
     // Onboarding phase 5 — chỉ hint/track trên đúng công thức "Cà phê đen".
     const isCafeDen = isGuest && norm(product?.name) === RECIPE_TARGET_PRODUCT
-
-    // Phase 5 xong nhưng user vẫn đứng ở trang chi tiết công thức — tab "Nguyên liệu" của
-    // phase 6 chỉ có ở /category (trang này không render MenuTabsBar), nên hint nút trở về
-    // trước, rồi RecipeMenuPage.tsx (hintIngredientsTab) tiếp quản. Cùng điều kiện với nó,
-    // kể cả guard coffeeConfig: không còn NVL "Cà phê" thì phase 6 tự done (bước 6, onboarding/steps.ts)
-    // → không được hint nữa, nếu không nút trở về nhấp nháy vĩnh viễn.
-    const coffeeConfig = useMemo(() => findCoffeeIngredient(ingredientConfigs), [ingredientConfigs])
-    const hintBack = isGuest && isRecipeProgressDone(recipeProgress)
-        && !!coffeeConfig && nextIngredientSetupField(coffeeConfig, true) !== null
 
     // Index recipes by product — used by the "copy from" picker and to count rows.
     const recipesByProduct = useMemo(() => groupRecipesByProduct(recipes || []), [recipes])
@@ -366,7 +357,6 @@ export default function RecipeIngredientPage() {
                 product={product}
                 canEdit={canEdit}
                 onBack={() => navigate('/category/recipes', { state: location.state })}
-                hintBack={hintBack}
                 onSavePrice={saveProductPrice}
                 onSaveName={saveProductName}
                 countAsCup={product.count_as_cup !== false}
@@ -408,16 +398,16 @@ export default function RecipeIngredientPage() {
                 {canEdit && (
                     <div className="mt-4 pt-4 border-t border-border/40 flex justify-between">
                         <button
-                            onClick={() => setShowCopyFrom(true)}
-                            className="text-primary hover:bg-primary/10 rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
-                        >
-                            Sao chép công thức
-                        </button>
-                        <button
                             onClick={handleDeleteFromMenu}
                             className="text-danger hover:bg-danger/10 rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
                         >
                             Xóa công thức
+                        </button>
+                        <button
+                            onClick={() => setShowCopyFrom(true)}
+                            className="text-primary hover:bg-primary/10 rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
+                        >
+                            Sao chép công thức
                         </button>
                     </div>
                 )}
