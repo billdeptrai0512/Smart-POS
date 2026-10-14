@@ -87,7 +87,7 @@ export const STEPS: Step[] = [
             { label: 'Xem menu', done: recipeProgress.viewedMenu },
             { label: 'Xem công thức', done: recipeProgress.viewedRecipes },
             // Mọi dòng định lượng gộp thành 1 việc; cờ filledAmount chỉ lên không xuống nên xong là xong.
-            { label: `Nhập định lượng ${RECIPE_TARGET_PRODUCT}`, done: recipeProgress.filledAmount || (recipeRows.length > 0 && recipeRows.every(r => r.amount > 0)) },
+            { label: 'Nhập định lượng', done: recipeProgress.filledAmount || (recipeRows.length > 0 && recipeRows.every(r => r.amount > 0)) },
             { label: 'Tạo tùy chọn thêm', done: recipeProgress.addedExtra },
         ],
     },

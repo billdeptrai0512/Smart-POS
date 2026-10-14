@@ -160,7 +160,7 @@ interface FillRowProps {
 
 function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowNegative, baseAmount, autoFocus, onCommit, onRemove, hint = false }: FillRowProps) {
     // Khi có nút ±, dấu chỉ sống ở nút — ô số luôn là trị tuyệt đối, tránh đọc thành "− (−1)".
-    const toDraft = (a?: number | null) => a == null ? '' : String(allowNegative ? Math.abs(a) : a)
+    const toDraft = (a?: number | null) => a ? String(allowNegative ? Math.abs(a) : a) : '' // 0/chưa có → ô trống (placeholder —), không phải số 0
     const [draft, setDraft] = useState(() => toDraft(amount))
     const [negative, setNegative] = useState((amount || 0) < 0)
     // Re-sync when the saved amount changes elsewhere (copy-from, context refresh).
