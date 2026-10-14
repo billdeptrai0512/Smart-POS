@@ -89,7 +89,7 @@ export default function POSPage() {
                     showOnboardingHint={showHistoryHint}
                     takeawaySlotRef={setTakeawaySlot}
                     notice={<>
-                        {isGuest && <div className="mb-2 rounded-[14px] overflow-hidden"><OnboardingGuide /></div>}
+                        {isGuest && <div className="mb-2 last:mb-0 rounded-[14px] overflow-hidden"><OnboardingGuide /></div>}
                         <PrepPinBar />
                     </>}
                 />
