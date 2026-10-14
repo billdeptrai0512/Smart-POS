@@ -115,6 +115,23 @@ export const initializeGuestFromGlobal = (data: Row) => {
             metadata: { ingredient: s.ingredient, qty: Number(s.warehouse_stock), totalCost: 0, seeded: true },
             created_at: seedTime
         }));
+    // 1 chi phí vận hành thật (khác các dòng "Tồn ban đầu" amount=0) để Nhật ký/Báo cáo của demo
+    // luôn có sẵn 1 dòng chi — tạo lúc vào demo nên luôn thuộc "hôm nay". Nhãn nhóm Vận hành.
+    const operatingCategory = seedLocalExpenseCategoriesIfNeeded(addressId)
+        .find(c => c.address_id === addressId && c.group_section === 'operating' && c.name === 'Chi phí khác');
+    seededExpenses.push({
+        id: generateId(),
+        name: 'Nhân viên ăn sáng',
+        amount: 50000,
+        address_id: addressId,
+        is_fixed: false,
+        is_refill: false,
+        payment_method: 'cash',
+        staff_name: null,
+        metadata: { seeded: true },
+        category_id: operatingCategory?.id ?? null,
+        created_at: new Date().toISOString()
+    });
     set(KEYS.EXPENSES, seededExpenses);
 
     // Seed a "yesterday" shift closing carrying the counter portion, so counter_stock
