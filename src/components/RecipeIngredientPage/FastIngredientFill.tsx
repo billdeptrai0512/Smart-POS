@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { formatVND } from '../../utils'
 import { ingredientLabel } from '../../utils/ingredients'
 import { onboardingHintClass } from '../../utils/onboardingHint'
+import { SignedBox, SIGNED_INPUT_CLASS } from './SignedMoneyInput'
 import IngredientPicker from './IngredientPicker'
 
 export interface CustomIngredient { key: string; unit: string; category: string }
@@ -21,6 +22,9 @@ interface Props {
     onRemove: (ingredient: string) => void
     onAddCustom: (ingredient: CustomIngredient) => void
     hint?: boolean
+    /** Có cặp này = cha điều khiển bảng thêm nguyên liệu và tự đặt nút "Thu gọn" (ExtraCard thay vào chỗ Xóa/Nhân bản). */
+    addOpen?: boolean
+    onAddOpenChange?: (open: boolean) => void
 }
 
 const CATS = [
@@ -36,10 +40,13 @@ export default function FastIngredientFill({
     entries, dbIngredients, getUnit, categoryOf = () => 'main',
     ingredientCosts, canEdit, showCost = false, allowNegative = false,
     baseAmounts, onSetAmount, onRemove, onAddCustom, hint = false,
+    addOpen: addOpenProp, onAddOpenChange,
 }: Props) {
     const [revealed, setRevealed] = useState<Set<string>>(() => new Set()) // chip-tapped, not yet saved
     const [creatingCat, setCreatingCat] = useState<string | null>(null) // 'main' | 'packaging' while typing a new name
-    const [addOpen, setAddOpen] = useState(false) // chip palette hidden until tapped — keeps the screen tidy
+    const [addOpenLocal, setAddOpenLocal] = useState(false) // chip palette hidden until tapped — keeps the screen tidy
+    const addOpen = addOpenProp ?? addOpenLocal
+    const setAddOpen = onAddOpenChange ?? setAddOpenLocal
 
     const amountByKey = useMemo(() => {
         const m: Record<string, number> = {}
@@ -63,25 +70,27 @@ export default function FastIngredientFill({
 
     return (
         <div className="space-y-2">
-            <div className="space-y-1.5">
-                {rowKeys.map(k => (
-                    <FillRow
-                        key={k}
-                        ingredient={k}
-                        amount={amountByKey[k]}
-                        unit={getUnit(k)}
-                        unitCost={ingredientCosts?.[k] || 0}
-                        canEdit={canEdit}
-                        showCost={showCost}
-                        allowNegative={allowNegative}
-                        baseAmount={baseAmounts && (baseAmounts[k] ?? 0)}
-                        autoFocus={revealed.has(k) && !(amountByKey[k] != null)}
-                        onCommit={onSetAmount}
-                        onRemove={() => { onRemove(k); drop(k) }}
-                        hint={hint}
-                    />
-                ))}
-            </div>
+            {rowKeys.length > 0 && (
+                <div className="space-y-1.5">
+                    {rowKeys.map(k => (
+                        <FillRow
+                            key={k}
+                            ingredient={k}
+                            amount={amountByKey[k]}
+                            unit={getUnit(k)}
+                            unitCost={ingredientCosts?.[k] || 0}
+                            canEdit={canEdit}
+                            showCost={showCost}
+                            allowNegative={allowNegative}
+                            baseAmount={baseAmounts && (baseAmounts[k] ?? 0)}
+                            autoFocus={revealed.has(k) && !(amountByKey[k] != null)}
+                            onCommit={onSetAmount}
+                            onRemove={() => { onRemove(k); drop(k) }}
+                            hint={hint}
+                        />
+                    ))}
+                </div>
+            )}
 
             {canEdit && !addOpen && (
                 <button onClick={() => setAddOpen(true)}
@@ -119,7 +128,7 @@ export default function FastIngredientFill({
                 </div>
             ))}
 
-            {canEdit && addOpen && (
+            {canEdit && addOpen && !onAddOpenChange && (
                 <div className="flex justify-end">
                     <button onClick={() => setAddOpen(false)}
                         className="text-[12px] text-text-secondary px-1 py-0.5 font-medium hover:text-text transition-colors">
@@ -159,17 +168,28 @@ function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowN
     const parseDraft = () => parseFloat(draft.replace(',', '.')) || 0 // VN keyboards send "0,5"
     const signed = (n: number, neg: boolean) => neg ? -Math.abs(n) : n // gõ tay "-1" ở chế độ + vẫn ra âm
 
+    // Phản hồi sau khi lưu: viền xanh + dấu ✓ ~1.2s (Enter chỉ blur ô nhập nên không có gì đổi trên màn).
+    const [saved, setSaved] = useState(false)
+    const savedTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+    useEffect(() => () => clearTimeout(savedTimer.current), [])
+    const flashSaved = () => {
+        setSaved(true)
+        clearTimeout(savedTimer.current)
+        savedTimer.current = setTimeout(() => setSaved(false), 1200)
+    }
+
     const commit = () => {
         const v = signed(parseDraft(), negative)
         if (v === (amount || 0)) return // unchanged — skip the write
         onCommit(ingredient, v, unit)
+        flashSaved()
     }
 
     const toggleSign = () => {
         const next = !negative
         setNegative(next)
         const n = Math.abs(parseDraft())
-        if (n) onCommit(ingredient, next ? -n : n, unit) // ghi ngay: bấm nút không gây blur
+        if (n) { onCommit(ingredient, next ? -n : n, unit); flashSaved() } // ghi ngay: bấm nút không gây blur
     }
 
     const val = amount || 0
@@ -177,31 +197,37 @@ function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowN
     return (
         <div className="flex items-center gap-2 max-[329px]:gap-1.5 px-3 max-[329px]:px-2 py-2 rounded-[12px] bg-surface-light">
             <span className="flex-1 min-w-0 text-[13px] text-text truncate">{ingredientLabel(ingredient)}</span>
-            {allowNegative && canEdit && (
-                // ± toggle: bàn phím decimal trên mobile không có phím "-". Dùng cho extra
-                // "bớt nguyên liệu". preventDefault để không blur→commit khi bấm.
-                <button
-                    type="button"
-                    onMouseDown={e => e.preventDefault()}
-                    onClick={toggleSign}
-                    className={`shrink-0 w-6 h-6 flex items-center justify-center rounded text-[14px] font-bold ${negative ? 'bg-danger/15 text-danger' : 'bg-primary/10 text-primary hover:bg-primary/20'}`}
-                    title="Đổi dấu âm/dương"
-                >
-                    {negative ? '−' : '+'}
-                </button>
+            {allowNegative && canEdit ? (
+                // ± + ô số gom 1 khối (bàn phím decimal trên mobile không có phím "-"). Dùng cho extra
+                // "bớt nguyên liệu". Nút dấu chặn mousedown để không blur→commit khi bấm.
+                <SignedBox negative={negative} onToggle={toggleSign} saved={saved} className="w-[96px] max-[329px]:w-[84px]">
+                    <input
+                                type="text"
+                                inputMode="decimal"
+                                autoFocus={autoFocus}
+                                value={draft}
+                                disabled={!canEdit}
+                                onChange={e => setDraft(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                                onBlur={commit}
+                                placeholder="—"
+                                className={`${SIGNED_INPUT_CLASS} ${onboardingHintClass(hint)}`}
+                            />
+                </SignedBox>
+            ) : (
+                <input
+                            type="text"
+                            inputMode="decimal"
+                            autoFocus={autoFocus}
+                            value={draft}
+                            disabled={!canEdit}
+                            onChange={e => setDraft(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                            onBlur={commit}
+                            placeholder="—"
+                            className={`w-[60px] max-[329px]:w-11 bg-bg border ${saved ? 'border-success' : 'border-border/60'} rounded-lg px-2 py-1.5 text-[13px] text-text text-right focus:outline-none focus:border-primary disabled:opacity-60 no-spin ${onboardingHintClass(hint)}`}
+                        />
             )}
-            <input
-                type="text"
-                inputMode="decimal"
-                autoFocus={autoFocus}
-                value={draft}
-                disabled={!canEdit}
-                onChange={e => setDraft(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-                onBlur={commit}
-                placeholder="—"
-                className={`w-[60px] max-[329px]:w-11 bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[13px] text-text text-right focus:outline-none focus:border-primary disabled:opacity-60 no-spin ${onboardingHintClass(hint)}`}
-            />
             {baseAmount != null ? (
                 // Tổng thực pha = định mức gốc + mức lệch của tùy chọn. Chỉ hiện ở extra;
                 // ô này mang luôn đơn vị nên hàng không lặp đơn vị lần nữa.
@@ -216,11 +242,13 @@ function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowN
                     {val ? formatVND(val * unitCost) : ''}
                 </span>
             )}
-            {canEdit && (
+            {canEdit && (saved ? (
+                <span className="text-success text-[13px] font-bold shrink-0 w-5 flex items-center justify-center" aria-label="Đã lưu">✓</span>
+            ) : (
                 <button onClick={onRemove} className="text-danger/60 hover:text-danger text-[13px] shrink-0 w-5 flex items-center justify-center" title="Bỏ khỏi công thức">
                     ✕
                 </button>
-            )}
+            ))}
         </div>
     )
 }
