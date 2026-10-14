@@ -42,8 +42,7 @@ import { calcRangeWithPrev } from '../utils/rangeCalc'
 import { dateStringVN, dateShortVN, dateFullVN } from '../utils/dateVN'
 import { DateRangePicker } from '../components/HistoryPage/HistoryHeader'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
-import { findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
-import { isRecipeProgressDone, isInventoryProgressDone } from '../utils/onboardingStorage'
+import { isInventoryProgressDone } from '../utils/onboardingStorage'
 import { isRecipeStepActive } from '../components/common/onboarding/steps'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import type { IngredientConfig, Row } from '../types/domain'
@@ -252,21 +251,14 @@ export default function IngredientManagementPage() {
         return map
     }, [ingredientStocks])
 
-    // Onboarding phase 6 (CUỐI CÙNG, "Cài đặt nguyên liệu") — hint thẻ "Cà phê" sau khi phase 5
-    // (công thức) đã xong, cho tới khi đủ cả 4 việc (tồn kho cuối ngày/quy đổi/tồn kho tối
-    // thiểu/khối lượng bì) — xem nextIngredientSetupField trong onboardingHint.ts.
-    const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId })
-    const recipeDone = isRecipeProgressDone(recipeProgress)
     // Phase 5 (công thức) — từ /history mũi tên "tiến" giờ rơi vào Kiểm kê trước, nên sáng mũi tên "tiến" ở đây.
     // State (không chỉ đọc): InventoryAuditTab tick coffee/cacao khi bấm Lưu, hint mũi tên "tiến" phải tươi ngay.
     const storedInventoryProgress = useOnboardingProgress('inventoryProgress', { isGuest, addressId })
     const [inventoryProgress, setInventoryProgress] = useState(storedInventoryProgress)
     useOnboardingProgressPersist('inventoryProgress', inventoryProgress, { isGuest, addressId })
+    // Chỉ đọc (RecipeIngredientPage/RecipeMenuPage ghi) — để biết khi nào sáng mũi tên "tiến" sang Công thức.
+    const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId })
     const hintRecipesTab = isGuest && isRecipeStepActive(isInventoryProgressDone(inventoryProgress), recipeProgress)
-    const coffeeConfig = useMemo(() => findCoffeeIngredient(ingredientConfigs) ?? null, [ingredientConfigs])
-    const coffeeKey = coffeeConfig?.ingredient ?? null
-    const hintCoffee = isGuest && recipeDone && !!coffeeKey
-        && nextIngredientSetupField(coffeeConfig, stockByIngredient.get(coffeeKey)?.warehouse_stock_set) !== null
 
     // PERF: index configs by ingredient ONCE.
     // Was: ingredientConfigs.find() called THREE times per ingredient (packSize, packUnit, minStock).
@@ -471,7 +463,6 @@ export default function IngredientManagementPage() {
                                 stockData={stockByIngredient.get(ingredient)}
                                 dailyContext={dailyContext[ingredient]}
                                 onOpen={openIngredient}
-                                hint={hintCoffee && ingredient === coffeeKey}
                             />
                         )
                     })}

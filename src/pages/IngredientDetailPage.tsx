@@ -37,9 +37,6 @@ import { calcRangeWithLabel } from '../utils/rangeCalc'
 import { useDateScope } from '../hooks/useDateScope'
 import { DateRangePicker } from '../components/HistoryPage/HistoryHeader'
 import { fetchPackedConfirmations } from '../services/warehouseTransferService'
-import { findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
-import { isRecipeProgressDone, readOnboardingState, writeOnboardingState } from '../utils/onboardingStorage'
-import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import type { Row, UUID } from '../types/domain'
 
 // Page-level orchestrator: fetches data, owns the canonical state (stock, history,
@@ -70,7 +67,7 @@ export default function IngredientDetailPage() {
         for (const a of warehouseSiblings || []) map[a.id] = a.name
         return map
     }, [addressId, selectedAddress, warehouseSiblings])
-    const { isManager, isAdmin, profile, isGuest } = useAuth()
+    const { isManager, isAdmin, profile } = useAuth()
     const { refreshTodayExpenses } = useHistory()
     const canEdit = isManager || isAdmin
     const { toast, showToast, showError } = useToast()
@@ -467,28 +464,6 @@ export default function IngredientDetailPage() {
         ? `1 ${packUnit} = ${formatVND(cost * packSize)}`
         : `1 ${unit} = ${formatVND(cost)}`
 
-    // Onboarding phase 6 (CUỐI CÙNG, "Cài đặt nguyên liệu") — hint lần lượt 4 field trên đúng
-    // ingredient "Cà phê", sau khi phase 5 (công thức) đã xong. nextIngredientSetupField trả về
-    // field ĐẦU TIÊN chưa xong theo đúng thứ tự hiện trên UI — xem onboardingHint.ts.
-    const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId })
-    const isCoffee = isGuest && findCoffeeIngredient(ingredientConfigs)?.ingredient === ingredientKey
-    // Tick "Nhập tồn kho cuối ngày" của guide. Mọi đường lưu kho đều reloadStock() → stockData
-    // mới nên 1 effect phủ hết. ponytail: kho Cà phê nhập ở trang khác thì chỉ tick khi mở
-    // trang này — hint bước 6 vốn dẫn khách vào đây.
-    const warehouseSet = !!stockData?.warehouse_stock_set
-    useEffect(() => {
-        const id = addressId
-        if (!isCoffee || !warehouseSet || !id || readOnboardingState(id).stockProgress.coffeeWarehouseSet) return
-        writeOnboardingState(id, { stockProgress: { coffeeWarehouseSet: true } })
-    }, [isCoffee, warehouseSet, addressId])
-    const setupField = isCoffee && isRecipeProgressDone(recipeProgress)
-        ? nextIngredientSetupField(config, stockData?.warehouse_stock_set)
-        : null
-    const hintWarehouse = setupField === 'warehouse'
-    const hintPack = setupField === 'pack'
-    const hintMinStock = setupField === 'minStock'
-    const hintTare = setupField === 'tare'
-
     return (
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
@@ -539,7 +514,6 @@ export default function IngredientDetailPage() {
                             pack2={pack2}
                             countInAudit={countInAudit}
                             onToggleAudit={saveCountInAudit}
-                            hintPack={hintPack}
                             canEdit={canEdit}
                             saving={saving}
                             onSaveName={saveName}
@@ -554,9 +528,7 @@ export default function IngredientDetailPage() {
                             pack2={pack2}
                             warehouseStock={stockData?.warehouse_stock ?? null}
                             warehouseGroupNote={warehouseGroupNote}
-                            hintWarehouse={hintWarehouse}
                             minStock={minStock}
-                            hintMinStock={hintMinStock}
                             dailyContext={dailyContext}
                             canEdit={canEdit}
                             onSaveWarehouse={saveWarehouse}
@@ -568,7 +540,6 @@ export default function IngredientDetailPage() {
                             packUnit={packUnit}
                             pack2={pack2}
                             tareWeight={tareWeight}
-                            hintTare={hintTare}
                             onSaveTareWeight={saveTareWeight}
                             minCounterStock={minCounterStock}
                             onSaveMinCounter={saveMinCounter}

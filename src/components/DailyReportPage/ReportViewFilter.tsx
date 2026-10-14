@@ -1,3 +1,5 @@
+import { onboardingHintClass } from '../../utils/onboardingHint'
+
 export const VIEW_ALL = 'all'
 export const VIEW_PROFIT = 'revenue' // = đoạn URL /report/revenue (tab Lợi nhuận)
 export const VIEW_CASHFLOW = 'cashflow'
@@ -8,9 +10,9 @@ const MENU = [
 ]
 
 // Card-style segmented control — visually part of the main panel family.
-interface Props { value: string; onChange: (view: string) => void; isStaff?: boolean }
+interface Props { value: string; onChange: (view: string) => void; isStaff?: boolean; hintProfit?: boolean }
 
-export default function ReportViewFilter({ value, onChange, isStaff }: Props) {
+export default function ReportViewFilter({ value, onChange, isStaff, hintProfit }: Props) {
     const menu = MENU.filter(item => !(isStaff && item.key === VIEW_PROFIT))
     return (
         <div className="bg-surface border border-border/60 rounded-[14px] p-1 shadow-sm flex gap-1">
@@ -21,7 +23,7 @@ export default function ReportViewFilter({ value, onChange, isStaff }: Props) {
                         key={item.key}
                         type="button"
                         onClick={() => onChange(item.key)}
-                        className={`flex-1 py-2 rounded-[10px] text-[11px] font-black uppercase tracking-wider transition-all duration-150
+                        className={`flex-1 py-2 rounded-[10px] text-[11px] font-black uppercase tracking-wider transition-all duration-150 ${onboardingHintClass(hintProfit && item.key === VIEW_PROFIT)}
                             ${active
                                 ? 'bg-primary text-bg shadow-sm'
                                 : 'text-text-secondary hover:text-text hover:bg-border/30'

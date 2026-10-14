@@ -1,25 +1,25 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
+import { Lightbulb } from 'lucide-react'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useAddress } from '../../../contexts/AddressContext'
 import { useProducts } from '../../../contexts/ProductContext'
 import { trackGuestOnboardingStage } from '../../../services/onboardingFunnelService'
-import { findCoffeeIngredient, type IngredientSetupConfig } from '../../../utils/onboardingHint'
+import { sortIngredients } from '../../../utils/ingredients'
+import { norm } from '../../../utils/onboardingHint'
 import { readOnboardingState, DEFAULT_ONBOARDING_STATE, ONBOARDING_EVENT } from '../../../utils/onboardingStorage'
-import { STEPS } from './steps'
+import { STEPS, RECIPE_TARGET_PRODUCT } from './steps'
 
 // Hướng dẫn "Bắt đầu bán hàng" — 1 dải IN-FLOW trên đỉnh layout (App.tsx OnboardingLayout đặt
 // nó trên <Outlet/>), chiếm chỗ thật nên không đè lên gì và cùng 1 chỗ trên mọi trang — khỏi né
-// thanh đáy riêng của từng trang (Tạo đơn, footer tab, FAB). Chỉ ghi việc cần làm ngay + tiến độ
-// bước hiện tại (x/n); không liệt kê cả checklist vì mỗi việc đã có spotlight nhấp nháy ngay trên
-// nút/món cần bấm. Hết 6 bước → dải thành nút đăng ký tài khoản thật (guest data chỉ sống trong
+// thanh đáy riêng của từng trang (Tạo đơn, footer tab, FAB). Chỉ ghi việc cần làm ngay + số việc đã xong
+// trên tổng (done/total); không liệt kê cả checklist vì mỗi việc đã có spotlight nhấp nháy ngay trên
+// nút/món cần bấm. Hết 5 bước → dải thành nút đăng ký tài khoản thật (guest data chỉ sống trong
 // localStorage).
 export default function OnboardingGuide() {
     const { isGuest } = useAuth()
-    const { addressId } = useAddress()
-    const { ingredientConfigs } = useProducts()
-    // Cấu hình (pack/min_stock/tare_weight) có sẵn trong ingredientConfigs (ProductContext).
-    const coffeeConfig = findCoffeeIngredient(ingredientConfigs as (IngredientSetupConfig & { ingredient: string })[])
+    const { addressId, selectedAddress } = useAddress()
+    const { products, recipes } = useProducts()
 
     // Mọi tiến độ nằm trong localStorage — writeOnboardingState phát ONBOARDING_EVENT sau mỗi
     // lần ghi, guide (mount 1 lần ở layout) nghe để đọc lại.
@@ -35,9 +35,19 @@ export default function OnboardingGuide() {
 
     // ctx/idx tính TRƯỚC guard bên dưới vì useEffect phễu cần idx — hook không được nằm sau
     // early-return (Rules of Hooks). Cả 2 đều thuần tính toán, không side effect.
-    const ctx = { ...local, coffeeConfig }
+    // Dòng định lượng của công thức mục tiêu — cùng thứ tự với trang chi tiết công thức để việc đầu
+    // tiên chưa xong khớp đúng ô đang nhấp nháy.
+    const recipeRows = useMemo(() => {
+        const target = products.find(p => norm(p.name) === RECIPE_TARGET_PRODUCT)
+        if (!target) return []
+        return recipes
+            .filter(r => r.product_id === target.id)
+            .sort((a, b) => sortIngredients(a.ingredient, b.ingredient, selectedAddress?.ingredient_sort_order))
+            .map(r => ({ ingredient: r.ingredient, amount: r.amount }))
+    }, [products, recipes, selectedAddress?.ingredient_sort_order])
+    const ctx = { ...local, recipeRows }
     const idx = STEPS.findIndex(s => !s.items(ctx).every(i => i.done))
-    // 0 = vào dùng thử nhưng chưa xong phase nào; 1-5 = xong bấy nhiêu phase; 6 = xong hết.
+    // 0 = vào dùng thử nhưng chưa xong phase nào; 1-4 = xong bấy nhiêu phase; 5 = xong hết.
     const stageReached = idx === -1 ? STEPS.length : idx
 
     // Phễu onboarding cho /admin/dashboard — chỉ gửi khi stageReached ĐỔI (component này
@@ -51,15 +61,15 @@ export default function OnboardingGuide() {
 
     if (!isGuest || !addressId) return null
 
-    // Nền cam nhạt + chip "Bước x/6" để tách hẳn khỏi header (bg-surface) ngay bên dưới — cùng
+    // Nền cam nhạt + icon để tách hẳn khỏi header (bg-surface) ngay bên dưới — cùng
     // màu nền với header thì dải bị đọc như 1 phần header và dễ bị lướt qua.
-    const bar = 'relative shrink-0 flex items-center gap-2.5 h-10 px-4 text-[14px] font-bold'
+    const bar = 'shrink-0 flex items-center gap-2.5 min-h-10 py-1.5 px-4 text-[14px]'
 
     if (idx === -1) {
         return (
             <Link
                 to="/signup"
-                className={`${bar} justify-center bg-primary text-bg uppercase hover:bg-primary/90 active:bg-primary/80 transition-colors`}
+                className={`${bar} justify-center bg-primary text-bg uppercase font-black tracking-wider hover:bg-primary/90 active:bg-primary/80 transition-colors`}
             >
                 Đăng ký tài khoản
             </Link>
@@ -67,18 +77,19 @@ export default function OnboardingGuide() {
     }
 
     const items = STEPS[idx].items(ctx)
-    const doneCount = items.filter(i => i.done).length
-    // Vạch đáy = tiến độ cả 6 bước (bước đang làm tính theo phần item đã xong).
-    const overallPct = (idx + doneCount / items.length) / STEPS.length * 100
+    const flat = STEPS.flatMap(s => s.items(ctx))
+    const offerFrom = flat.findIndex(i => i.offerSignup)
+    const showSignup = offerFrom >= 0 && flat.findIndex(i => !i.done) >= offerFrom
     return (
         <div className={`${bar} bg-primary/15 text-text`}>
-            <span className="shrink-0 rounded-full bg-primary text-bg text-[11px] font-black uppercase px-2 py-0.5 tabular-nums">
-                Bước {idx + 1}: {STEPS[idx].title}
-            </span>
-            <span className="flex-1 truncate">{items.find(i => !i.done)?.label}</span>
-            <span className="absolute inset-x-0 bottom-0 h-[3px] bg-primary/20">
-                <span className="block h-full bg-primary transition-[width] duration-500" style={{ width: `${overallPct}%` }} />
-            </span>
+            <span className="shrink-0 grid place-items-center size-6 rounded-full bg-primary/20 text-primary"><Lightbulb size={14} /></span>
+            <span className="flex-1 line-clamp-2 uppercase tracking-wider text-[12px] font-black">{items.find(i => !i.done)?.label}</span>
+            {/* Tới việc có cờ offerSignup (steps.ts) thì cho đăng ký sớm — guide vẫn chạy tiếp. */}
+            {showSignup && (
+                <Link to="/signup" className="shrink-0 text-[12px] font-black uppercase tracking-wider text-primary border border-primary/60 rounded-full px-3 py-0.5 active:bg-primary/15 transition-colors">
+                    Đăng ký
+                </Link>
+            )}
         </div>
     )
 }

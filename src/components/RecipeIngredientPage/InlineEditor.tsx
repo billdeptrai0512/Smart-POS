@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import SignedMoneyInput from './SignedMoneyInput'
 
 // Self-contained click-to-edit editor. Parent passes value + onSave;
 // internal state handles the edit toggle and draft string.
@@ -40,7 +41,8 @@ export default function InlineEditor({
 
     const begin = () => {
         if (!canEdit) return
-        setDraft(value != null ? String(value) : '')
+        const raw = value != null ? String(value) : ''
+        setDraft(transform ? transform(raw) : raw)
         setEditing(true)
     }
 
@@ -54,36 +56,29 @@ export default function InlineEditor({
         onSave(parsed)
     }
 
+    const onKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') commit()
+        if (e.key === 'Escape') setEditing(false)
+    }
+
     if (editing) {
         return (
             <span className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                {allowNegative && (
-                    // ± toggle: some phones' numeric keyboards have no reachable "-".
-                    // preventDefault keeps the input focused so onBlur doesn't commit+close.
-                    <button
-                        type="button"
-                        onMouseDown={e => e.preventDefault()}
-                        onClick={() => setDraft(d => d.startsWith('-') ? d.slice(1) : '-' + d)}
-                        className={`shrink-0 w-6 h-6 flex items-center justify-center rounded border text-[14px] font-bold ${draft.startsWith('-') ? 'border-danger/50 text-danger' : 'border-border/60 text-text-secondary hover:text-primary hover:border-primary/50'}`}
-                        title="Đổi dấu âm/dương"
-                    >
-                        {draft.startsWith('-') ? '−' : '+'}
-                    </button>
+                {allowNegative ? (
+                    <SignedMoneyInput value={draft} onChange={setDraft} onKeyDown={onKeyDown} onBlur={commit} autoFocus />
+                ) : (
+                    <input
+                        type={type === 'number' ? 'text' : type}
+                        inputMode={type === 'number' ? 'decimal' : undefined}
+                        autoFocus
+                        value={draft}
+                        onChange={e => setDraft(transform ? transform(e.target.value) : e.target.value)}
+                        onKeyDown={onKeyDown}
+                        onBlur={commit}
+                        className={`${inputWidthClassName} bg-bg border border-primary/60 rounded-lg px-2 py-1 text-[13px] text-text text-right focus:outline-none focus:border-primary no-spin ${inputClassName}`}
+                    />
                 )}
-                <input
-                    type={type === 'number' ? 'text' : type}
-                    inputMode={type === 'number' ? 'decimal' : undefined}
-                    autoFocus
-                    value={draft}
-                    onChange={e => setDraft(transform ? transform(e.target.value) : e.target.value)}
-                    onKeyDown={e => {
-                        if (e.key === 'Enter') commit()
-                        if (e.key === 'Escape') setEditing(false)
-                    }}
-                    onBlur={commit}
-                    className={`${inputWidthClassName} bg-bg border border-primary/60 rounded-lg px-2 py-1 text-[13px] text-text text-right focus:outline-none focus:border-primary no-spin ${inputClassName}`}
-                />
-                {suffix && <span className="text-[12px] text-text-dim">{suffix}</span>}
+                {!allowNegative && suffix && <span className="text-[12px] text-text-dim">{suffix}</span>}
             </span>
         )
     }

@@ -196,6 +196,13 @@ body {
   outline-offset: -3px;
   animation: onboarding-hint 0.9s ease-in-out infinite;
 }
+@keyframes onboarding-hint-soft {
+  0%, 100% { color: var(--color-text-dim); transform: scale(1); }
+  50% { color: var(--color-primary); transform: scale(1.7); }
+}
+.onboarding-hint-soft {
+  animation: onboarding-hint-soft 1.2s ease-in-out infinite;
+}
 @keyframes onboarding-hint-solid {
   0%, 100% { outline-color: transparent; outline-offset: 2px; box-shadow: 0 0 0 transparent; }
   50% { outline-color: var(--color-primary); outline-offset: 5px; box-shadow: 0 0 20px 3px color-mix(in srgb, var(--color-primary) 45%, transparent); }

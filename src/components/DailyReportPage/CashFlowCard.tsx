@@ -661,6 +661,10 @@ function MoneyInputRow({ label, value, onChange, onBlur, hint }: { label: string
                     value={value}
                     onChange={e => onChange?.(e.target.value)}
                     onBlur={onBlur}
+                    // Lưu chỉ chạy ở onBlur — Enter / phím "Đi" của bàn phím điện thoại không làm mất focus,
+                    // nên phải tự blur để kích hoạt lưu (và hạ bàn phím).
+                    enterKeyHint="done"
+                    onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
                     className="flex-1 w-0 min-w-0 bg-transparent text-right text-[13px] font-bold text-text tabular-nums placeholder:text-text-secondary/40 focus:outline-none"
                 />
                 {/* "đ" đi theo màu của con số: mờ như placeholder khi chưa ai nhập,

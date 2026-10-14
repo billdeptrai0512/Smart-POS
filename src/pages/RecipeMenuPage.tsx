@@ -1,13 +1,11 @@
-import { useState, useEffect, useMemo, useRef, Fragment, lazy, Suspense } from 'react'
+import { useState, useEffect, useMemo, useRef, Fragment, lazy, Suspense, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Plus, BadgePercent } from 'lucide-react'
+import { Plus, BadgePercent, GripVertical } from 'lucide-react'
 import {
     type DragEndEvent,
-    DndContext, DragOverlay, PointerSensor, KeyboardSensor,
-    closestCenter, useSensor, useSensors,
+    DndContext, DragOverlay, MouseSensor, TouchSensor,
+    closestCenter, pointerWithin, useDraggable, useDroppable, useSensor, useSensors, type CollisionDetection,
 } from '@dnd-kit/core'
-import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
-import { restrictToFirstScrollableAncestor } from '@dnd-kit/modifiers'
 import { BottomSheet, SheetHeader, SHEET_PANEL } from '../components/common/ModalShell'
 import MenuDivider from '../components/common/MenuDivider'
 import Dropdown from '../components/common/Dropdown'
@@ -21,16 +19,16 @@ import { parseVNDInput } from '../utils'
 import { useToast } from '../hooks/useToast'
 import { useSavingAction } from '../hooks/useSavingAction'
 import Toast from '../components/POSPage/Toast'
-import SortableItem from '../components/RecipeMenuPage/SortableItem'
 import MenuPageHeader from '../components/common/MenuPageHeader'
 import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
 import { RECIPE_TABS, DISCOUNT_TAB } from '../constants/menuTabs'
-import { norm, findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
-import { isRecipeProgressDone } from '../utils/onboardingStorage'
+import { norm } from '../utils/onboardingHint'
+import { isRecipeProgressDone, isInventoryProgressDone, readOnboardingState, DEFAULT_ONBOARDING_STATE } from '../utils/onboardingStorage'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
+import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
 import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps'
 import type { Row } from '../types/domain'
 import { groupRecipesByProduct } from '../utils/inventory'
@@ -58,18 +56,47 @@ function groupBySections(products: Row[]) {
     return sections
 }
 
+// Con trỏ nằm trong ô nào thì ô đó là đích; kẽ hở giữa các ô thì lấy ô gần tâm nhất.
+const collision: CollisionDetection = args => {
+    const hit = pointerWithin(args)
+    return hit.length ? hit : closestCenter(args)
+}
+
+// 1 ô kéo được + cũng là ô đích thả (lit = đang là đích, do trang quyết định vì kéo danh mục thì
+// sáng cả hàng). Không dùng useSortable: không cần animation nhường chỗ.
+function DragRow({ id, enabled, lit, children }: { id: string; enabled: boolean; lit: boolean; children: ReactNode }) {
+    const { setNodeRef: dragRef, listeners, isDragging } = useDraggable({ id, disabled: !enabled })
+    const { setNodeRef: dropRef } = useDroppable({ id, disabled: !enabled })
+    return (
+        <div
+            ref={node => { dragRef(node); dropRef(node) }}
+            {...listeners}
+            onContextMenu={enabled ? e => e.preventDefault() : undefined}
+            className={`select-none [-webkit-touch-callout:none] rounded-[1.5rem] ${isDragging ? 'opacity-30' : lit ? 'ring-2 ring-primary' : ''}`}
+        >
+            {children}
+        </div>
+    )
+}
+
 export default function RecipeMenuPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const backTo = location.state?.from || '/history/sales'
-    const { products, recipes, ingredientCosts, ingredientUnits, ingredientConfigs, discountPrograms, refreshProducts } = useProducts()
+    const { products, recipes, ingredientCosts, ingredientUnits, discountPrograms, refreshProducts } = useProducts()
     const { addressId } = useAddress()
     const { isManager, isAdmin, isGuest } = useAuth()
     const canEdit = isManager || isAdmin
 
     // Onboarding phase 5 (Công thức) — hint thẻ "Cà phê đen" cho tới khi đã điền định lượng
     // + tạo tùy chọn thêm.
-    const recipeProgress = useOnboardingProgress('recipeProgress', { isGuest, addressId })
+    // recipeProgress do trang này ghi viewedMenu/viewedRecipes (cùng pattern RecipeIngredientPage):
+    // chỉ tính khi đã xong Tồn kho — nếu không guide nhảy qua bước đang đứng. viewedRecipes cần viewedMenu trước.
+    const inventoryDone = isInventoryProgressDone(useOnboardingProgress('inventoryProgress', { isGuest, addressId }))
+    const [recipeProgress, setRecipeProgress] = useState(() =>
+        (isGuest && addressId ? readOnboardingState(addressId) : DEFAULT_ONBOARDING_STATE).recipeProgress
+    )
+    useOnboardingProgressPersist('recipeProgress', recipeProgress, { isGuest, addressId })
     const cafeDenProduct = useMemo(
         () => (isGuest ? products.find(p => norm(p.name) === RECIPE_TARGET_PRODUCT) : null),
         [isGuest, products]
@@ -79,31 +106,21 @@ export default function RecipeMenuPage() {
     // `hintCafeDen && product.id === cafeDenProduct?.id` ở từng chỗ.
     const hintCafeDenId = hintCafeDen ? cafeDenProduct!.id : null
 
-    // Onboarding phase 6 (CUỐI CÙNG, "Cài đặt nguyên liệu") — sau khi phase 5 xong, hint mũi tên
-    // "trở về" trên header (về Tồn kho khi đi theo wizard) để dẫn qua đó. Chỉ xét 3/4 việc
-    // đọc được từ ingredientConfigs (bỏ qua warehouse_stock_set — cần RPC riêng, không đáng fetch
-    // thêm chỉ để tắt 1 hint trang trí) — vì warehouse luôn được hint TRƯỚC theo đúng thứ tự
-    // nextIngredientSetupField, tới lúc cả 3 field còn lại xong thì warehouse chắc chắn cũng đã
-    // xong theo hint sequence, nên xấp xỉ này khớp trong mọi trường hợp đi đúng theo hint.
-    const coffeeConfig = useMemo(() => findCoffeeIngredient(ingredientConfigs), [ingredientConfigs])
-    // !!coffeeConfig: shop xoá/đổi tên NVL "Cà phê" thì phase 6 vacuously done (xem
-    // bước 6 onboarding/steps.ts) — thiếu guard này tab sẽ nhấp nháy hoài vì
-    // nextIngredientSetupField(undefined) luôn trả 'pack'.
-    const hintIngredientsTab = isGuest && isRecipeProgressDone(recipeProgress)
-        && !!coffeeConfig && nextIngredientSetupField(coffeeConfig, true) !== null
     // Chỉ Admin được sắp xếp menu mặc định (chưa chọn địa chỉ) — giống rule cũ của saveSortOrder.
     const canSort = canEdit && !!(addressId || isAdmin)
     const { toast, showToast, showError } = useToast()
 
     const { saving, withSaving } = useSavingAction(showError)
-    // Kéo-thả trực tiếp trên lưới chính — không có "chế độ sắp xếp" riêng.
-    const [activeId, setActiveId] = useState<string | null>(null)
     // Bản sao local để phản hồi ngay khi thả tay, trước khi round-trip lưu server xong.
     const [orderedProducts, setOrderedProducts] = useState(products)
     useEffect(() => { setOrderedProducts(products) }, [products])
     // Tab nằm trên URL: /category/overall = Menu (menu chia theo danh mục, lọc theo danh mục, kéo-thả sắp xếp),
     // /category/recipes = Công thức (chi tiết từng món, tìm kiếm, thêm công thức, topping).
     const [view, setView] = useTabRoute('/category')
+    if (isGuest && addressId) {
+        if (inventoryDone && view === 'overall' && !recipeProgress.viewedMenu) setRecipeProgress(prev => ({ ...prev, viewedMenu: true }))
+        if (recipeProgress.viewedMenu && view === 'recipes' && !recipeProgress.viewedRecipes) setRecipeProgress(prev => ({ ...prev, viewedRecipes: true }))
+    }
     // Lọc danh mục ở tab Menu: 'all' | 'none' (món chưa thuộc mục nào) | id của mục (divider). Id lạ (mục đã xoá) rơi về 'all'.
     const [categoryFilter, setCategoryFilter] = useState('all')
     const [search, setSearch] = useState('')
@@ -195,16 +212,39 @@ export default function RecipeMenuPage() {
         ingredientUnits,
     })
 
+    // Kéo-thả: bấm giữ 1 món/danh mục rồi kéo (chuột: kéo luôn). Các mục KHÔNG nhích chỗ khi kéo —
+    // lưới 2 cột lẫn danh mục rộng gấp đôi làm animation "nhường chỗ" của dnd-kit tính sai — mà chỉ
+    // sáng viền ô đích; thả tay = commit luôn, rollback nếu lưu server lỗi.
+    // Bấm giữ (thay vì có tay nắm nhỏ) để vuốt thường vẫn cuộn trang.
     const sensors = useSensors(
-        useSensor(PointerSensor),
-        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+        useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+        useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
     )
+    const [activeId, setActiveId] = useState<string | null>(null)
+    const [overId, setOverId] = useState<string | null>(null)
+    // Danh mục là 1 HÀNG ngang nên chỉ được rơi vào ranh giới giữa các hàng, không chen giữa 2 card
+    // cùng hàng: thả lên card nào thì tính theo cả hàng 2 ô chứa card đó (rowOf), đích là đầu hàng
+    // (kéo lên) hoặc cuối hàng (kéo xuống).
+    const activeProduct = activeId ? orderedProducts.find(p => p.id === activeId) : null
+    const activeIsDivider = !!activeProduct?.is_divider
+    function rowOf(id: string) {
+        const items = sections.find(s => s.items.some(p => p.id === id))?.items
+        if (!items) return [id]
+        const start = items.findIndex(p => p.id === id) & ~1
+        return items.slice(start, start + 2).map(p => p.id)
+    }
     async function handleDragEnd({ active, over }: DragEndEvent) {
         setActiveId(null)
+        setOverId(null)
         if (!over || active.id === over.id) return
-        const keys = orderedProducts.map(p => p.id)
-        const from = keys.indexOf(String(active.id))
-        const to = keys.indexOf(String(over.id))
+        const from = orderedProducts.findIndex(p => p.id === active.id)
+        let overKey = String(over.id)
+        if (activeIsDivider) {
+            const row = rowOf(overKey)
+            const down = from < orderedProducts.findIndex(p => p.id === overKey)
+            overKey = down ? row[row.length - 1] : row[0]
+        }
+        const to = orderedProducts.findIndex(p => p.id === overKey)
         const updated = [...orderedProducts]
         const [moved] = updated.splice(from, 1)
         updated.splice(to, 0, moved)
@@ -219,8 +259,9 @@ export default function RecipeMenuPage() {
         }
     }
 
-    const activeProduct = activeId ? orderedProducts.find(p => p.id === activeId) : null
     const sections = useMemo(() => groupBySections(orderedProducts), [orderedProducts])
+    // Ô đang là đích: kéo danh mục thì sáng cả hàng chứa card đích.
+    const litIds = new Set(!overId || overId === activeId ? [] : activeIsDivider ? rowOf(overId) : [overId])
     const realProducts = useMemo(() => orderedProducts.filter(p => !p.is_divider), [orderedProducts])
     // Chip lọc theo mục: mỗi divider 1 chip; món đứng trước mục đầu tiên gom vào 'none'. Không có mục nào → ẩn dropdown.
     const categoryChips = useMemo(() => {
@@ -242,18 +283,12 @@ export default function RecipeMenuPage() {
         const q = normalizeSearchText(search.trim())
         return q ? realProducts.filter(p => normalizeSearchText(p.name).includes(q)) : realProducts
     }, [realProducts, search])
-    // Card và mục kéo trong 2 SortableContext riêng — mỗi context chỉ chứa item
-    // cùng cỡ nên animate "nhường chỗ" không còn phải né kích thước lẫn nhau.
-    // handleDragEnd vẫn tính từ danh sách phẳng orderedProducts nên món vẫn đổi
-    // được qua mục khác bình thường (over có thể là id của mục hoặc card khác).
-    const cardIds = useMemo(() => visibleSections.flatMap(s => s.items.map(p => p.id)), [visibleSections])
-    const dividerIds = useMemo(() => visibleSections.flatMap(s => s.divider ? [s.divider.id] : []), [visibleSections])
 
     return (
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
 
-            {canEdit && (
+            {canEdit && !isGuest && (
                 <NoticeBar
                     icon={<BadgePercent size={15} className="text-primary shrink-0" />}
                     label={DISCOUNT_TAB.label}
@@ -289,7 +324,6 @@ export default function RecipeMenuPage() {
                 activeTab={view}
                 onTabSelect={setView}
                 hintTab={hintCafeDen && view !== 'recipes' ? 'recipes' : undefined}
-                hintBack={hintIngredientsTab}
             />
 
             <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-4 pb-8 space-y-3 bg-bg">
@@ -343,92 +377,51 @@ export default function RecipeMenuPage() {
                             </p>
                         )}
                     </div>
-                ) : canSort ? (
+                ) : (
                     <DndContext
                         sensors={sensors}
-                        collisionDetection={closestCenter}
-                        modifiers={[restrictToFirstScrollableAncestor]}
+                        collisionDetection={collision}
                         onDragStart={({ active }) => setActiveId(String(active.id))}
-                        onDragCancel={() => setActiveId(null)}
+                        onDragOver={({ over }) => setOverId(over ? String(over.id) : null)}
+                        onDragCancel={() => { setActiveId(null); setOverId(null) }}
                         onDragEnd={handleDragEnd}
                     >
                         <div className="flex flex-col gap-3">
+                            {canSort && (
+                                <p className="text-[12px] text-text-secondary text-center -mb-1">Bấm giữ một món hoặc danh mục rồi kéo để sắp xếp</p>
+                            )}
                             {visibleSections.map((section, si) => (
                                 <Fragment key={section.divider?.id ?? `_first_${si}`}>
                                     {section.divider && (
-                                        <SortableContext items={dividerIds} strategy={rectSortingStrategy}>
-                                            <SortableItem id={section.divider.id} noAnimate>
-                                                {({ dragHandleProps }) => (
-                                                    <MenuDivider
-                                                        name={section.divider!.name}
-                                                        onClick={() => editDivider(section.divider!)}
-                                                        dragHandleProps={dragHandleProps}
-                                                    />
-                                                )}
-                                            </SortableItem>
-                                        </SortableContext>
+                                        <DragRow id={section.divider.id} enabled={canSort} lit={litIds.has(section.divider.id)}>
+                                            <MenuDivider
+                                                name={section.divider.name}
+                                                onClick={canEdit ? () => editDivider(section.divider!) : undefined}
+                                            />
+                                        </DragRow>
                                     )}
                                     {section.items.length > 0 && (
-                                        <SortableContext items={cardIds} strategy={rectSortingStrategy}>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                {section.items.map(product => (
-                                                    <SortableItem key={product.id} id={product.id}>
-                                                        {({ handle }) => (
-                                                            <ProductCard
-                                                                {...cardProps(product)}
-                                                                dragHandle={handle}
-                                                                sortMode
-                                                            />
-                                                        )}
-                                                    </SortableItem>
-                                                ))}
-                                            </div>
-                                        </SortableContext>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {section.items.map(product => (
+                                                <DragRow key={product.id} id={product.id} enabled={canSort} lit={litIds.has(product.id)}>
+                                                    <ProductCard {...cardProps(product)} dragHandle={canSort ? <GripVertical size={18} className="shrink-0 text-text-secondary/70" aria-hidden /> : undefined} sortMode />
+                                                </DragRow>
+                                            ))}
+                                        </div>
                                     )}
                                 </Fragment>
                             ))}
                         </div>
-                        {/* Ảnh kéo nổi theo con trỏ khi kéo mục — mục không tự nhường chỗ
-                            (xem SortableItem's noAnimate). */}
                         <DragOverlay>
                             {activeProduct && (activeProduct.is_divider ? (
-                                <div className="opacity-90 rotate-1 w-[calc(50vw-1.25rem)] max-w-[280px]">
-                                    <MenuDivider name={activeProduct.name} />
-                                </div>
+                                <div className="opacity-90 w-[calc(100vw-2rem)] max-w-[28rem]"><MenuDivider name={activeProduct.name} /></div>
                             ) : (
                                 <div className="opacity-90 rotate-2 shadow-2xl shadow-black/40 rounded-[1.5rem]">
-                                    <ProductCard
-                                        {...cardProps(activeProduct)}
-                                        sortMode
-                                    />
+                                    <ProductCard {...cardProps(activeProduct)} sortMode />
                                 </div>
                             ))}
                         </DragOverlay>
                     </DndContext>
-                ) : (
-                    <div className="flex flex-col gap-3">
-                        {visibleSections.map((section, si) => (
-                            <Fragment key={section.divider?.id ?? `_first_${si}`}>
-                                {section.divider && (
-                                    <MenuDivider
-                                        name={section.divider.name}
-                                        onClick={canEdit ? () => editDivider(section.divider!) : undefined}
-                                    />
-                                )}
-                                {section.items.length > 0 && (
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {section.items.map(product => (
-                                            <ProductCard
-                                                key={product.id}
-                                                {...cardProps(product)}
-                                                sortMode
-                                            />
-                                        ))}
-                                    </div>
-                                )}
-                            </Fragment>
-                        ))}
-                    </div>
                 )}
             </main>
 

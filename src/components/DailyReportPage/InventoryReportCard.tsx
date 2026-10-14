@@ -1,6 +1,6 @@
 import { Fragment, memo, useCallback, useMemo, useState, type ReactNode } from 'react'
 import { Check, ChevronDown, ChevronUp, ClipboardList, Info } from 'lucide-react'
-import { ingredientLabel, getIngredientUnit, lookupByLabel } from '../../utils/ingredients'
+import { ingredientLabel, getIngredientUnit, lookupByLabel, normalizeIngredientCategory, INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 import { formatPackedQty, pack2Of, computeBalance, computeHaoHut, r1, type UsageMap, type buildIngredientToProduct, type calculateConsumptionBreakdown } from '../../utils/inventory'
 import type { IngredientConfig } from '../../types/domain'
 import type { Inputs } from '../../utils/prepToday'
@@ -8,6 +8,8 @@ import { formatVND } from '../../utils'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import { countedLabelVN } from '../../utils/dateVN'
 import { useProducts } from '../../contexts/ProductContext'
+import { useAuth } from '../../contexts/AuthContext'
+import { useAddress } from '../../contexts/AddressContext'
 import type { OpeningPeriods } from '../../services/counterEstimate'
 import CollapsibleCard from './CollapsibleCard'
 
@@ -114,30 +116,37 @@ export default function InventoryReportCard({
         openingFallback: openingStock[ing.ingredient],
         used: lookupByLabel(ing.ingredient, usedMap),
     }), [sortOpening, sortRestock, sortInventory, warehouseStocks, openingStock, usedMap])
+    // Demo (guest) và Mẫu mặc định (addressId null) không có bảng ingredient_groups → chia theo 2 danh mục
+    // (Nguyên liệu chính / Bao bì) và theo thứ tự ingredient_sort_order. Địa chỉ thật giữ nguyên: nhóm DB + A→Z.
+    const { ingredientGroups: dbGroups } = useProducts()
+    const { isGuest } = useAuth()
+    const { addressId } = useAddress()
+    const byCategory = isGuest || !addressId
     const sortedList = useMemo(() => [...ingredientsList].sort((a, b) => {
         const pa = STATUS_PRIORITY[baseStatus(a)]
         const pb = STATUS_PRIORITY[baseStatus(b)]
         if (pa !== pb) return pa - pb
+        if (byCategory) return 0 // giữ thứ tự ingredientsList, sort ổn định
         return ingredientLabel(a.ingredient).localeCompare(ingredientLabel(b.ingredient))
-    }), [ingredientsList, baseStatus])
+    }), [ingredientsList, baseStatus, byCategory])
 
     // Chia section theo nhóm nguyên liệu (ingredient_groups). Địa chỉ chưa chia nhóm → sections null = danh sách phẳng như cũ.
     // Mặc định chỉ mở 1 section (nhân viên đếm theo từng kệ): section chứa NVL onboarding đang gợi ý, không thì
     // section đầu tiên còn "Chưa nhập". Tính theo baseline nên gõ số không làm section tự đóng giữa chừng;
     // lưu xong baseline đổi → mở sang section kế. `toggled` là phần người dùng bấm tay, đè mặc định.
-    const { ingredientGroups } = useProducts()
     const [toggled, setToggled] = useState<Record<string, boolean>>({})
     const { sections, defaultOpenId } = useMemo(() => {
-        if (!ingredientGroups?.length) return { sections: null, defaultOpenId: null }
+        const ingredientGroups = dbGroups?.length ? dbGroups : byCategory ? INGREDIENT_CATEGORIES.map(c => ({ id: c.key, name: c.label })) : null
+        if (!ingredientGroups) return { sections: null, defaultOpenId: null }
         type Section = { id: string; name: string; items: IngredientConfig[] }
         const byId = new Map<string, Section>(ingredientGroups.map(g => [g.id, { id: g.id, name: g.name, items: [] }]))
         const none: Section = { id: 'none', name: 'Chưa phân nhóm', items: [] }
-        for (const ing of sortedList) (byId.get(ing.group_id) || none).items.push(ing)
+        for (const ing of sortedList) (byId.get(dbGroups?.length ? ing.group_id : normalizeIngredientCategory(ing.category)) || none).items.push(ing)
         const sections = [...byId.values(), none].filter(sec => sec.items.length)
         const target = (hintIngredient && sections.find(sec => sec.items.some(i => i.ingredient === hintIngredient)))
             || sections.find(sec => sec.items.some(i => baseStatus(i) === 'pending'))
         return { sections, defaultOpenId: target?.id ?? null }
-    }, [ingredientGroups, sortedList, baseStatus, hintIngredient])
+    }, [dbGroups, byCategory, sortedList, baseStatus, hintIngredient])
 
     // Tổng giá trị hao hụt — sum |Hao hụt × unit_cost| over rows that came up short,
     // computed against LIVE inputs so the header summary tracks what staff is counting now.
@@ -200,7 +209,7 @@ export default function InventoryReportCard({
     // Footer tổng — tiền hao hụt cộng dồn, chỉ hiện khi đã kiểm ít nhất 1 NVL.
     const totalRow = countedCount > 0 && (
         <div className="flex items-center justify-between">
-            <span className="text-[14px] font-black text-text">Tổng cộng</span>
+            <span className="text-[14px] font-black text-text uppercase">Tổng hao hụt</span>
             <span className={`text-[14px] font-black tabular-nums ${totalLossValue > 0 ? 'text-danger' : 'text-text-secondary'}`}>
                 {totalLossValue > 0 ? '-' : ''}{formatVND(Math.round(totalLossValue))}
             </span>
@@ -288,7 +297,10 @@ const IngredientRow = memo(function IngredientRow({
     // Inline help bubble for the Lý thuyết formula — tap the (i) to toggle.
     const [showLyThuyetInfo, setShowLyThuyetInfo] = useState(false)
     const hasBreakdown = breakdown && Object.keys(breakdown).length > 0
-    const toggleExpanded = () => hasBreakdown && setExpanded(e => !e)
+    const toggleExpanded = () => { if (hasBreakdown) { setExpanded(e => !e); setSeenUsed(true) } }
+    // Onboarding: dẫn user mở xem chi tiết (Sử dụng + Lý thuyết) — gợi ý phụ (soft) sáng cùng hint chính ở Cuối kỳ, tắt khi đã bấm.
+    const [seenUsed, setSeenUsed] = useState(false)
+    const [seenTheory, setSeenTheory] = useState(false)
 
     const unit = getIngredientUnit(ing.ingredient, ing.unit, ingredientUnits)
     const packSize = Number(ing.pack_size || 0)
@@ -314,6 +326,8 @@ const IngredientRow = memo(function IngredientRow({
     // Kỳ kiểm kê (lần đếm trước cách từ 2 ngày, đầu kỳ chưa bị sửa tay): hiển thị CỘNG DỒN từ lần đếm — Đầu kỳ = số đã đếm,
     // Sử dụng = dùng cả kỳ + hôm nay, nhập thêm = đã nhập trong kỳ + nhập hôm nay. Chỉ là cách hiện; số lưu vẫn theo ngày.
     const p = isLocked ? undefined : period
+    const hintUsed = hint && open && !!hasBreakdown && !p && !seenUsed
+    const hintTheory = hint && open && !seenTheory
     const restockTotal = p ? restockNum + p.restock : restockNum
     const { openingNum, usedNum, lyThuyet, haoHut } = p
         ? computeBalance({ inventoryValue, restockValue: restockTotal, openingValue: p.counted, used: r1(used) + p.used })
@@ -440,6 +454,7 @@ const IngredientRow = memo(function IngredientRow({
                             text={`${usedNum} ${unit}`}
                             onClick={hasBreakdown && !p ? toggleExpanded : undefined}
                             expanded={expanded}
+                            hint={hintUsed && 'soft'}
                         />
                     </div>
 
@@ -476,7 +491,8 @@ const IngredientRow = memo(function IngredientRow({
                         value={lyThuyet}
                         unit={unit}
                         disabled
-                        onBoxClick={() => setShowLyThuyetInfo(s => !s)}
+                        onBoxClick={() => { setShowLyThuyetInfo(s => !s); setSeenTheory(true) }}
+                        hint={hintTheory && 'soft'}
                     />
                     <ColumnInput
                         label="Cuối kỳ"
@@ -540,7 +556,7 @@ interface ColumnInputProps {
     overflow?: boolean
     tone?: string
     onBoxClick?: () => void
-    hint?: boolean
+    hint?: boolean | 'soft'
 }
 
 function ColumnInput({ label, value, unit, disabled, locked, onChange, overflow, tone = 'neutral', onBoxClick, hint = false }: ColumnInputProps) {
@@ -569,7 +585,7 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, overflow,
                 Ô bấm được phải là <div>: Chrome nuốt click trên <label> khi input bên trong disabled. */}
             <Box
                 onClick={onBoxClick}
-                className={`relative flex items-center justify-center rounded-[10px] overflow-hidden transition-all gap-1 px-1.5 py-1.5 ${wrapCls} ${onBoxClick ? 'pr-3 cursor-pointer' : ''} ${onboardingHintClass(hint)}`}
+                className={`relative flex items-center justify-center rounded-[10px] overflow-hidden transition-all gap-1 px-1.5 py-1.5 ${wrapCls} ${onBoxClick ? 'pr-3 cursor-pointer' : ''} ${onboardingHintClass(hint === true)}`}
             >
                 <input
                     type="number"
@@ -581,7 +597,7 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, overflow,
                     className={`min-w-0 bg-transparent text-[13px] font-bold text-center placeholder:text-text-secondary/40 focus:outline-none no-spin ${tone === 'neutral' ? 'disabled:opacity-50' : ''} ${inputCls}`}
                 />
                 <span className={`text-[10px] font-medium shrink-0 ${unitCls}`}>{unit}</span>
-                {onBoxClick && <Info size={10} className="absolute right-1.5 text-text-dim pointer-events-none" />}
+                {onBoxClick && <Info size={10} className={`absolute right-1.5 text-text-dim pointer-events-none ${onboardingHintClass(hint === 'soft', 'soft')}`} />}
             </Box>
         </div>
     )
@@ -589,7 +605,7 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, overflow,
 
 // Read-only text cell that visually matches ColumnInput (same label+box rhythm) but
 // renders a string instead of a number input. Used for "Tương đương N ly <product>".
-function TextCell({ label, text, tone = 'neutral', onClick, expanded = false }: { label: string; text: ReactNode; tone?: string; onClick?: () => void; expanded?: boolean }) {
+function TextCell({ label, text, tone = 'neutral', onClick, expanded = false, hint = false }: { label: string; text: ReactNode; tone?: string; onClick?: () => void; expanded?: boolean; hint?: boolean | 'soft' }) {
     const t: Partial<ToneCls> = TONE[tone] || { wrap: 'bg-surface-light border-border/60', text: 'text-text-secondary' }
     const interactive = typeof onClick === 'function'
     const boxClasses = `w-full rounded-[10px] py-1.5 px-2 text-[13px] text-center font-bold border ${t.wrap} ${t.text}${interactive ? ' relative flex items-center justify-center hover:brightness-110 active:scale-[0.99] transition' : ''}`
@@ -601,7 +617,7 @@ function TextCell({ label, text, tone = 'neutral', onClick, expanded = false }: 
             {interactive ? (
                 <button type="button" onClick={onClick} className={boxClasses}>
                     <span className="truncate">{text}</span>
-                    <ChevronDown size={11} className={`absolute right-2 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                    <ChevronDown size={11} className={`absolute right-2 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''} ${onboardingHintClass(hint, 'soft')}`} />
                 </button>
             ) : (
                 <div className={boxClasses}>{text}</div>

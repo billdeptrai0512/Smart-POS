@@ -1,8 +1,12 @@
-import { isRecipeProgressDone, reachedCashCard, type OnboardingState } from '../../../utils/onboardingStorage'
-import { INGREDIENT_SETUP_FIELDS, type IngredientSetupConfig } from '../../../utils/onboardingHint'
+import { isRecipeProgressDone, isInventoryProgressDone, reachedCashCard, type OnboardingState } from '../../../utils/onboardingStorage'
 
-export interface StepCtx extends OnboardingState { coffeeConfig: IngredientSetupConfig | null | undefined }
-export interface Step { title: string; items: (ctx: StepCtx) => { label: string; done: boolean }[] }
+// recipeRows: các dòng định lượng hiện có của công thức RECIPE_TARGET_PRODUCT (đã xếp theo thứ tự hiển thị).
+export interface StepCtx extends OnboardingState {
+    recipeRows: { ingredient: string; amount: number }[]
+}
+// offerSignup: từ việc này trở đi dải guide hiện nút "Đăng ký" (OnboardingGuide.tsx) — khách đã đi đủ vòng để thấy giá trị.
+export interface StepItem { label: string; done: boolean; offerSignup?: boolean }
+export interface Step { title: string; items: (ctx: StepCtx) => StepItem[] }
 
 // Single source of truth for phase 5's anchor product — RecipeMenuPage.tsx (card hint) and
 // RecipeIngredientPage.tsx (input/extras hints) both match against this instead of each
@@ -27,18 +31,19 @@ export const orderStep = {
         const n = sent >= 2 ? 4 : sent === 1 ? 1 + Math.min(picked, 2) : 0
         return [
             'Khách gọi 1 cà phê sữa',
-            '1 ly bạc xỉu ít ngọt',
-            '1 ly cacao cà phê lớn',
-            '1 ly matcha cà phê lớn, hơi ngọt nha',
+            'Cho mình 1 ly bạc xỉu ít ngọt',
+            'và 1 ly cacao cà phê lớn',
+            'và 1 matcha cà phê lớn, hơi ngọt nha',
         ].map((label, i) => ({ label, done: i < n }))
     },
 } satisfies Step
 
-// 6 bước onboarding khách dùng thử — mỗi bước là items(ctx) → [{ label, done }], xong khi mọi
+// 5 bước onboarding khách dùng thử — mỗi bước là items(ctx) → [{ label, done }], xong khi mọi
 // item done. Tiến độ do từng trang ghi vào localStorage (xem onboardingStorage.ts).
-// ⚠ Thêm/bớt bước ở đây → phải sửa 20260801_guest_onboarding_funnel.sql (CHECK 0..6,
-// generate_series(0,6), CASE nhãn) rồi chạy lại. Không sửa thì stage vượt 6 bị RPC bỏ qua
-// IM LẶNG — phễu chết mà không báo lỗi gì.
+// ⚠ Thêm/bớt bước ở đây → phải sửa guest_onboarding_funnel_stats() (CASE nhãn, generate_series,
+// max_stage >= N — bản mới nhất: 20261018_guest_onboarding_funnel_five_steps.sql) rồi chạy lại.
+// CHECK 0..6 của track_guest_onboarding_stage cố ý giữ nguyên (client cũ còn gửi 6); stage vượt 6
+// thì bị RPC bỏ qua IM LẶNG — phễu chết mà không báo lỗi gì.
 export const STEPS: Step[] = [
     orderStep,
     // 2. Nhật ký — 3 tab của /history (HistoryTabsBar.tsx). viewedIncome tick ngay khi vào
@@ -47,9 +52,9 @@ export const STEPS: Step[] = [
     {
         title: 'Nhật ký',
         items: (ctx) => [
-            { label: 'Xem nhật ký doanh thu', done: ctx.journalProgress.viewedIncome },
+            { label: 'Xem nhật ký bán hàng', done: ctx.journalProgress.viewedIncome },
             { label: 'Xem chi phí', done: ctx.journalProgress.viewedExpense },
-            { label: 'Xem báo cáo', done: ctx.journalProgress.viewedReport },
+            { label: 'Xem báo cáo dòng tiền', done: ctx.journalProgress.viewedReport },
         ],
     },
     // 3-4. Kết ca thực thu / tồn quầy — ghi từ DailyReportPage.tsx. Thẻ Thực thu nằm dưới mép
@@ -58,33 +63,32 @@ export const STEPS: Step[] = [
         title: 'Kết ca',
         items: (ctx) => [
             { label: 'Kéo xuống', done: reachedCashCard(ctx.cashFlowProgress) },
-            { label: 'Nhập 60.000đ tiền mặt', done: ctx.cashFlowProgress.cash },
-            { label: 'Nhập 40.000đ chuyển khoản', done: ctx.cashFlowProgress.transfer },
+            { label: 'Bạn thu 60.000đ tiền mặt', done: ctx.cashFlowProgress.cash },
+            { label: 'Bạn thu 40.000đ tiền chuyển khoản', done: ctx.cashFlowProgress.transfer },
+            { label: 'Xem báo cáo lợi nhuận', done: ctx.journalProgress.viewedProfit, offerSignup: true },
         ],
     },
     {
         title: 'Tồn kho',
         items: (ctx) => [
-            { label: 'Nhập tồn cuối kỳ cà phê', done: ctx.inventoryProgress.coffee },
-            { label: 'Nhập tồn cuối kỳ cacao', done: ctx.inventoryProgress.cacao },
+            { label: 'Kiểm kê nguyên liệu', done: ctx.inventoryProgress.visited || ctx.inventoryProgress.coffee },
+            // Các ô nhập (cà phê/ly/nắp) gộp thành 1 việc — ô nào còn lại được nhấp nháy trên trang.
+            { label: 'Nhập tồn cuối kỳ', done: isInventoryProgressDone(ctx.inventoryProgress) },
         ],
     },
     // 5. Công thức "Cà phê đen" — không có nút riêng: hint mũi tên "tiến" ở header /history +
-    // /report dẫn tới /category (hintGoToRecipes, menuSequence.ts), rồi card Cà phê đen →
-    // input định lượng → "+ Thêm tùy chọn" (RecipeMenuPage.tsx/RecipeIngredientPage.tsx).
+    // /report dẫn tới /category (hintGoToRecipes, menuSequence.ts) → xem Menu → tab Công thức → card
+    // Cà phê đen → các dòng định lượng có sẵn gộp thành 1 việc → "+ Thêm tùy chọn"
+    // (RecipeMenuPage.tsx/RecipeIngredientPage.tsx). Chưa có dòng nào (chưa tải xong / đã xoá hết) thì
+    // chưa xong cho tới khi cờ filledAmount bật.
     {
         title: 'Công thức',
-        items: (ctx) => [
-            { label: 'Thêm định lượng', done: ctx.recipeProgress.filledAmount },
-            { label: 'Tạo tùy chọn thêm', done: ctx.recipeProgress.addedExtra },
+        items: ({ recipeProgress, recipeRows }) => [
+            { label: 'Xem menu', done: recipeProgress.viewedMenu },
+            { label: 'Xem công thức', done: recipeProgress.viewedRecipes },
+            // Mọi dòng định lượng gộp thành 1 việc; cờ filledAmount chỉ lên không xuống nên xong là xong.
+            { label: 'Nhập định lượng', done: recipeProgress.filledAmount || (recipeRows.length > 0 && recipeRows.every(r => r.amount > 0)) },
+            { label: 'Tạo tùy chọn thêm', done: recipeProgress.addedExtra },
         ],
-    },
-    // 6. (CUỐI CÙNG) Cài đặt 1 nguyên liệu mẫu (Cà phê) — mũi tên "trở về" ở header /category tự
-    // sáng hint (hintIngredientsTab) để dẫn về Tồn kho. Chưa có ingredient "Cà phê" → [] = vacuously done.
-    {
-        title: 'Nguyên liệu',
-        items: ({ coffeeConfig, stockProgress }) => coffeeConfig
-            ? INGREDIENT_SETUP_FIELDS.map(f => ({ label: f.label, done: f.done(coffeeConfig, stockProgress.coffeeWarehouseSet) }))
-            : [],
     },
 ]

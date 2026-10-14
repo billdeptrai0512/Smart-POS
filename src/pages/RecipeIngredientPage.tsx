@@ -4,8 +4,8 @@ import { useProducts } from '../contexts/ProductContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
-import { readOnboardingState, DEFAULT_ONBOARDING_STATE, isRecipeProgressDone } from '../utils/onboardingStorage'
-import { norm, findCoffeeIngredient, nextIngredientSetupField } from '../utils/onboardingHint'
+import { readOnboardingState, DEFAULT_ONBOARDING_STATE } from '../utils/onboardingStorage'
+import { norm } from '../utils/onboardingHint'
 import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps'
 import {
     upsertRecipe,
@@ -35,7 +35,6 @@ import RecipeHeader from '../components/RecipeIngredientPage/RecipeHeader'
 import FastIngredientFill, { type CustomIngredient } from '../components/RecipeIngredientPage/FastIngredientFill'
 import ExtrasSection, { type ExtraHandlers } from '../components/RecipeIngredientPage/ExtrasSection'
 import CopyRecipeModal from '../components/RecipeIngredientPage/CopyRecipeModal'
-import { Trash2 } from 'lucide-react'
 import type { CartExtra } from '../types/domain'
 import { groupRecipesByProduct } from '../utils/inventory'
 
@@ -70,15 +69,6 @@ export default function RecipeIngredientPage() {
     // Onboarding phase 5 — chỉ hint/track trên đúng công thức "Cà phê đen".
     const isCafeDen = isGuest && norm(product?.name) === RECIPE_TARGET_PRODUCT
 
-    // Phase 5 xong nhưng user vẫn đứng ở trang chi tiết công thức — tab "Nguyên liệu" của
-    // phase 6 chỉ có ở /category (trang này không render MenuTabsBar), nên hint nút trở về
-    // trước, rồi RecipeMenuPage.tsx (hintIngredientsTab) tiếp quản. Cùng điều kiện với nó,
-    // kể cả guard coffeeConfig: không còn NVL "Cà phê" thì phase 6 tự done (bước 6, onboarding/steps.ts)
-    // → không được hint nữa, nếu không nút trở về nhấp nháy vĩnh viễn.
-    const coffeeConfig = useMemo(() => findCoffeeIngredient(ingredientConfigs), [ingredientConfigs])
-    const hintBack = isGuest && isRecipeProgressDone(recipeProgress)
-        && !!coffeeConfig && nextIngredientSetupField(coffeeConfig, true) !== null
-
     // Index recipes by product — used by the "copy from" picker and to count rows.
     const recipesByProduct = useMemo(() => groupRecipesByProduct(recipes || []), [recipes])
 
@@ -110,7 +100,7 @@ export default function RecipeIngredientPage() {
 
     // Render-time-adjust (cùng pattern DailyReportPage.tsx) — track hành động thật, không cần
     // nút Lưu riêng vì FastIngredientFill/ExtrasSection đã ghi DB ngay khi user nhập.
-    if (isCafeDen && prodRecipes.some(r => r.amount > 0) && !recipeProgress.filledAmount) {
+    if (isCafeDen && prodRecipes.length > 0 && prodRecipes.every(r => r.amount > 0) && !recipeProgress.filledAmount) {
         setRecipeProgress(prev => ({ ...prev, filledAmount: true }))
     }
     if (isCafeDen && extras.length > 0 && !recipeProgress.addedExtra) {
@@ -133,6 +123,8 @@ export default function RecipeIngredientPage() {
                 if (exists) return prev.map(r => r.product_id === productId && r.ingredient === ingredient ? { ...r, amount } : r)
                 return [...prev, { product_id: productId, ingredient, amount, unit: unit || getIngredientUnit(ingredient) }]
             })
+            // Guide onboarding đọc định lượng từ context nên guest phải đồng bộ ngay (user thật thì không cần refetch).
+            if (isGuest) refreshProducts?.()
         })
     }
 
@@ -197,6 +189,7 @@ export default function RecipeIngredientPage() {
         await withSaving('Cập nhật cờ đếm ly', async () => {
             await updateProductCountAsCup(productId, next)
             refreshProducts?.()
+            showToast(next ? 'Cộng vào tổng số ly bán mỗi ngày' : 'Không cộng vào tổng số ly bán mỗi ngày', 'success')
         })
     }
 
@@ -364,10 +357,11 @@ export default function RecipeIngredientPage() {
                 product={product}
                 canEdit={canEdit}
                 onBack={() => navigate('/category/recipes', { state: location.state })}
-                hintBack={hintBack}
                 onSavePrice={saveProductPrice}
                 onSaveName={saveProductName}
-                onCopyFrom={() => setShowCopyFrom(true)}
+                countAsCup={product.count_as_cup !== false}
+                onToggleCountAsCup={toggleCountAsCup}
+                toggleDisabled={saving}
             />
 
             <main className="flex-1 overflow-y-auto px-4 max-[329px]:px-2 py-4 space-y-3 bg-bg">
@@ -385,6 +379,7 @@ export default function RecipeIngredientPage() {
                     hint={isCafeDen && !recipeProgress.filledAmount}
                 />
 
+
                 <ExtrasSection
                     extras={extras}
                     extraIngs={extraIngs}
@@ -401,25 +396,18 @@ export default function RecipeIngredientPage() {
                 />
 
                 {canEdit && (
-                    <div className="mt-4 pt-4 border-t border-border/40">
-                        <label className="flex items-center justify-between gap-3 bg-surface border border-border/60 rounded-[14px] px-4 py-3 cursor-pointer select-none">
-                            <span className="flex flex-col min-w-0">
-                                <span className="text-[13px] font-bold text-text">Cộng vào tổng số ly bán/ngày</span>
-                            </span>
-                            <input
-                                type="checkbox"
-                                checked={product.count_as_cup !== false}
-                                onChange={toggleCountAsCup}
-                                disabled={saving}
-                                className="w-5 h-5 accent-primary cursor-pointer shrink-0"
-                            />
-                        </label>
-
+                    <div className="mt-4 pt-4 border-t border-border/40 flex justify-between">
                         <button
                             onClick={handleDeleteFromMenu}
-                            className="mt-2 flex items-center justify-center gap-1.5 w-full text-[12px] font-bold text-danger/80 bg-danger/5 border border-danger/20 rounded-[12px] px-3 py-2.5 hover:bg-danger/10 hover:text-danger active:scale-[0.99] transition-all"
+                            className="text-danger hover:bg-danger/10 rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
                         >
-                            <Trash2 size={14} /> Xóa món khỏi menu
+                            Xóa công thức
+                        </button>
+                        <button
+                            onClick={() => setShowCopyFrom(true)}
+                            className="text-primary hover:bg-primary/10 rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
+                        >
+                            Sao chép công thức
                         </button>
                     </div>
                 )}

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import type { CartExtra } from '../../types/domain'
 import type { ExtraIngRow } from '../../utils/inventory'
-import { formatVND } from '../../utils'
+import { formatVND, formatSignedVNDInput, parseSignedVNDInput } from '../../utils'
 import { getIngredientUnit } from '../../utils/ingredients'
 import InlineEditor from './InlineEditor'
 import FastIngredientFill, { type CustomIngredient } from './FastIngredientFill'
@@ -31,6 +31,7 @@ export default function ExtraCard({
     categoryOf, baseAmounts,
 }: Props) {
     const [duplicating, setDuplicating] = useState(false)
+    const [addingIngredient, setAddingIngredient] = useState(false)
     const [duplicateName, setDuplicateName] = useState('')
 
     const unitByKey = useMemo(() => {
@@ -76,29 +77,18 @@ export default function ExtraCard({
                     value={extra.price}
                     canEdit={canEdit}
                     onSave={onSavePrice}
-                    type="number"
                     allowNegative
-                    suffix="đ"
-                    inputWidthClassName="w-[80px]"
+                    transform={formatSignedVNDInput}
+                    parse={parseSignedVNDInput}
                     renderDisplay={(v) => (
                         <span className={`text-[12px] font-bold tabular-nums ${v < 0 ? 'text-danger' : v > 0 ? 'text-success' : 'text-text-dim'}`}>
                             {v > 0 ? `+${formatVND(v)}` : v < 0 ? `-${formatVND(Math.abs(v))}` : 'Miễn phí'}
                         </span>
                     )}
                 />
-
-                {canEdit && (
-                    <button
-                        onClick={() => setDuplicating(true)}
-                        className="text-primary hover:bg-primary/10 text-[14px] shrink-0 w-6 h-6 flex items-center justify-center rounded-[8px] transition-colors"
-                        title="Tạo một tùy chọn giống hệt cái này để chỉnh"
-                    >
-                        ⧉
-                    </button>
-                )}
             </div>
 
-            <div className="border-t border-border/40 pt-2 flex flex-col gap-2">
+            <div className="border-t border-border/40 pt-2">
                 <FastIngredientFill
                     entries={extraIngs}
                     dbIngredients={dbIngredients}
@@ -107,38 +97,61 @@ export default function ExtraCard({
                     canEdit={canEdit}
                     allowNegative
                     baseAmounts={baseAmounts}
+                    addOpen={addingIngredient}
+                    onAddOpenChange={setAddingIngredient}
                     onSetAmount={(ing, v) => onSaveExtraAmount(ing, v)}
                     onRemove={(ing) => onDeleteExtraIngredient(ing)}
                     onAddCustom={onAddExtraIngredients}
                 />
-
-                {canEdit && (duplicating ? (
-                    <div className="flex gap-1.5 pt-2 border-t border-border/30">
-                        <input
-                            type="text"
-                            autoFocus
-                            placeholder="Tên tùy chọn mới…"
-                            value={duplicateName}
-                            onChange={e => setDuplicateName(e.target.value)}
-                            onKeyDown={e => {
-                                if (e.key === 'Enter') submitDuplicate()
-                                if (e.key === 'Escape') setDuplicating(false)
-                            }}
-                            className="flex-1 min-w-0 bg-bg border border-primary/60 rounded-lg px-2 py-1 text-[12px] text-text focus:outline-none focus:border-primary"
-                        />
-                        <button onClick={submitDuplicate} className="bg-primary text-bg px-3 py-1.5 rounded-lg text-[12px] font-bold">Tạo</button>
-                        <button onClick={() => { setDuplicating(false); setDuplicateName('') }} className="shrink-0 bg-surface-light border border-border/60 text-text px-2 py-1.5 rounded-lg text-[12px] font-bold">Hủy</button>
-                    </div>
-                ) : (
-                    <button
-                        onClick={onDelete}
-                        className="text-danger hover:bg-danger/10 rounded-full px-3 py-1 text-[11px] font-medium self-end transition-colors"
-                        title="Xóa tùy chọn"
-                    >
-                        Xóa tùy chọn
-                    </button>
-                ))}
             </div>
+
+            {/* Phần 3: xóa (trái) / nhân bản (phải) — tách riêng bằng 1 đường kẻ dưới danh sách nguyên liệu. */}
+            {canEdit && (
+                <div className="border-t border-border/40 pt-2 flex flex-col">
+                    {addingIngredient ? (
+                        <button
+                            onClick={() => setAddingIngredient(false)}
+                            className="self-end text-[12px] text-text-secondary hover:text-text px-3 py-1 font-medium transition-colors"
+                        >
+                            Thu gọn
+                        </button>
+                    ) : duplicating ? (
+                        <div className="flex gap-1.5">
+                            <input
+                                type="text"
+                                autoFocus
+                                placeholder="Tên tùy chọn mới…"
+                                value={duplicateName}
+                                onChange={e => setDuplicateName(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') submitDuplicate()
+                                    if (e.key === 'Escape') setDuplicating(false)
+                                }}
+                                className="flex-1 min-w-0 bg-bg border border-primary/60 rounded-lg px-2 py-1 text-[12px] text-text focus:outline-none focus:border-primary"
+                            />
+                            <button onClick={submitDuplicate} className="bg-primary text-bg px-3 py-1.5 rounded-lg text-[12px] font-bold">Tạo</button>
+                            <button onClick={() => { setDuplicating(false); setDuplicateName('') }} className="shrink-0 bg-surface-light border border-border/60 text-text px-2 py-1.5 rounded-lg text-[12px] font-bold">Hủy</button>
+                        </div>
+                    ) : (
+                        <div className="flex justify-between">
+                            <button
+                                onClick={onDelete}
+                                className="text-danger hover:bg-danger/10 rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
+                                title="Xóa tùy chọn"
+                            >
+                                Xóa tùy chọn
+                            </button>
+                            <button
+                                onClick={() => setDuplicating(true)}
+                                className="text-primary hover:bg-primary/10 rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
+                                title="Tạo một tùy chọn giống hệt cái này để chỉnh"
+                            >
+                                Nhân bản tùy chọn
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     )
 }

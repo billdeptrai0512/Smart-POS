@@ -16,6 +16,15 @@ export function formatVNDInput(value: string | number): string {
     return new Intl.NumberFormat('vi-VN').format(Number(numStr))
 }
 
+// Như formatVNDInput nhưng giữ dấu "-" đứng đầu (ô giá cộng/trừ): "-10000" → "-10.000"
+export function formatSignedVNDInput(raw: string): string {
+    return (raw.startsWith('-') ? '-' : '') + formatVNDInput(raw)
+}
+
+export function parseSignedVNDInput(draft: string): number {
+    return (draft.startsWith('-') ? -1 : 1) * parseVNDInput(draft)
+}
+
 // Parse a formatted VND input string back to a number
 // e.g. "1.000.000" → 1000000
 export function parseVNDInput(formatted: string | number): number {

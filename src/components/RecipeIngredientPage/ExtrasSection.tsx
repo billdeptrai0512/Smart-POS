@@ -2,6 +2,8 @@ import { useState } from 'react'
 import type { CartExtra } from '../../types/domain'
 import type { ExtraIngredients } from '../../utils/inventory'
 import ExtraCard from './ExtraCard'
+import { parseSignedVNDInput } from '../../utils'
+import SignedMoneyInput from './SignedMoneyInput'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import type { CustomIngredient } from './FastIngredientFill'
 
@@ -60,7 +62,7 @@ export default function ExtrasSection({
 
     const submitAddExtra = () => {
         if (!newExtraName.trim()) return
-        onAddExtra(newExtraName.trim(), parseInt(newExtraPrice) || 0)
+        onAddExtra(newExtraName.trim(), parseSignedVNDInput(newExtraPrice))
         setAddingExtra(false)
         setNewExtraName('')
         setNewExtraPrice('')
@@ -122,38 +124,36 @@ export default function ExtrasSection({
             {canEdit && !sorting && (addingExtra ? (
                 <div className="mt-2 bg-surface border border-border/60 rounded-[14px] px-4 py-3 space-y-2">
                     <span className="text-[11px] text-text-dim font-bold uppercase">Thêm tùy chọn</span>
-                    <div className="flex gap-2">
+                    {/* 3 phần như ExtraCard: tiêu đề / ô nhập / nút — ngăn bằng đường kẻ. */}
+                    <div className="flex gap-2 border-t border-border/40 pt-2">
                         <input
                             type="text"
-                            placeholder="Tên (VD: Lớn)"
+                            placeholder="Lớn"
                             autoFocus
-                            className="flex-1 min-w-0 bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[13px] text-text focus:outline-none focus:border-primary"
+                            className="flex-1 min-w-0 h-9 bg-bg border border-border/60 rounded-lg px-3 text-[13px] text-text focus:outline-none focus:border-primary"
                             value={newExtraName}
                             onChange={e => setNewExtraName(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter') submitAddExtra() }}
                         />
-                        <input
-                            type="text"
-                            placeholder="Giá"
-                            className="w-[80px] bg-bg border border-border/60 rounded-lg px-2 py-1.5 text-[13px] text-text focus:outline-none focus:border-primary no-spin"
+                        <SignedMoneyInput
                             value={newExtraPrice}
-                            onChange={e => setNewExtraPrice(e.target.value)}
+                            onChange={setNewExtraPrice}
                             onKeyDown={e => { if (e.key === 'Enter') submitAddExtra() }}
                         />
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex justify-between gap-2 border-t border-border/40 pt-2">
+                        <button
+                            onClick={() => { setAddingExtra(false); setNewExtraName(''); setNewExtraPrice('') }}
+                            className="bg-surface-light text-text px-3 py-1.5 rounded-lg text-[12px] font-bold"
+                        >
+                            Hủy
+                        </button>
                         <button
                             onClick={submitAddExtra}
                             disabled={!newExtraName.trim()}
                             className="bg-primary text-bg px-3 py-1.5 rounded-lg text-[12px] font-bold disabled:opacity-50"
                         >
                             Lưu
-                        </button>
-                        <button
-                            onClick={() => { setAddingExtra(false); setNewExtraName(''); setNewExtraPrice('') }}
-                            className="bg-surface-light text-text px-2 py-1.5 rounded-lg text-[12px] font-bold"
-                        >
-                            Hủy
                         </button>
                     </div>
                 </div>
