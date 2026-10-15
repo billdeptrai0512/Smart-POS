@@ -8,7 +8,7 @@ import type { Pack2 } from '../../utils/inventory'
 import type { Row } from '../../types/domain'
 
 /** Tổng hợp khoảng ngày đang xem (IngredientDetailPage tính từ history). */
-export interface RestockSummary { totalQty: number; totalSpent: number; totalOwing: number; totalPaidInMonth: number; importCount: number; withdrawCount: number; adjustCount: number }
+export interface RestockSummary { totalQty: number; totalSpent: number; totalOwing: number; totalPaidInMonth: number }
 
 interface PackProps {
     unit: string
@@ -75,20 +75,14 @@ export default function IngredientHistoryTab({
 }
 
 // ── Summary card ──────────────────────────────────────────────────────────────
-// Hàng 1: số lần nhập / xuất / hiệu chỉnh. Hàng 2: Tổng tiền nhập | Khối lượng nhập. Hàng 3 (chỉ khi có nợ): Đã trả | Còn nợ.
+// Hàng 1: Tổng tiền | Khối lượng. Hàng 2 (chỉ khi có nợ): Đã trả | Còn nợ.
 function MonthSummaryCard({ showStats, summary, unit, packSize, packUnit, pack2 }: PackProps & { showStats: boolean; summary: RestockSummary }) {
     if (!showStats) return null
     return (
         <div className="bg-surface rounded-[16px] border border-border/60 overflow-hidden">
-            <div className="grid gap-3 grid-cols-3 p-4">
-                <Stat label="Lần nhập" value={String(summary.importCount)} align="start" />
-                <Stat label="Lần xuất" value={String(summary.withdrawCount)} />
-                <Stat label="Hiệu chỉnh" value={String(summary.adjustCount)} align="end" />
-            </div>
-            <div className="h-[1px] bg-border/60" />
             <div className="grid gap-3 grid-cols-2 p-4">
-                <Stat label="Tổng tiền nhập" value={formatVND(summary.totalSpent)} align="start" />
-                <Stat label="Khối lượng nhập" value={formatPackedQty(summary.totalQty, packSize, packUnit, unit, { compact: true, pack2 })} align="end" />
+                <Stat label="Tổng tiền" value={formatVND(summary.totalSpent)} align="start" />
+                <Stat label="Khối lượng" value={formatPackedQty(summary.totalQty, packSize, packUnit, unit, { compact: true, pack2 })} align="end" />
                 {summary.totalOwing > 0 && (
                     <>
                         <Stat label="Đã trả" value={formatVND(summary.totalPaidInMonth)} tone="success" align="start" />
@@ -128,8 +122,8 @@ function Stat({ label, value, tone, align = 'center' }: { label: string; value: 
 //                  ORIGINAL numbers live in metadata.cancelled_qty/_amount, shown struck-
 //                  through under a "ĐÃ HỦY" corner badge + grayscale. Not cancellable again.
 //
-// Layout: ĐÃ HỦY badge (if cancelled) · type tag + Hủy (corner) · hero qty + money ·
-// Tồn X→Y · context pills (restock only) · staff + datetime above a hairline divider.
+// Layout: ĐÃ HỦY badge (if cancelled) · datetime (trái) | type tag + qty rút / money (phải) ·
+// Tồn X→Y · footer: address + staff + context pills (restock only) + Hủy.
 interface HistoryCardProps {
     unit: string
     entry: Row
@@ -186,7 +180,10 @@ function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock, onEditRestoc
     const moneyCls = cancelled ? 'text-text-dim line-through' : 'text-text'
     const openPayment = onOpenPayment && (() => onOpenPayment(entry))
     // Pill phụ ở chân card nhỏ hơn pill ở đầu (22px vs 26px) để đầu card đọc trước.
-    const META_PILL = 'h-[22px] px-2 text-[10px] font-bold text-text-secondary/70 inline-flex items-center rounded-full bg-surface-light border border-border/60 leading-none whitespace-nowrap'
+    const TYPE_PILL = 'h-[26px] inline-flex items-center rounded-full bg-surface-light border border-border/60 px-2.5 text-[11px] font-bold leading-none whitespace-nowrap shrink-0'
+    // Cụm header: 1 hàng khi card rộng, xếp dọc khi hẹp (container query).
+    const CLUSTER = 'flex flex-col @[20rem]:flex-row @[20rem]:items-center gap-1.5'
+    const META_PILL ='h-[22px] px-2 text-[10px] font-bold text-text-secondary/70 inline-flex items-center rounded-full bg-surface-light border border-border/60 leading-none whitespace-nowrap'
 
     const innerCls = `bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-3 relative overflow-hidden transition-all ${
         cancelled ? 'opacity-50 grayscale select-none' : ''
@@ -202,13 +199,21 @@ function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock, onEditRestoc
                 </div>
             )}
 
-            {/* Header — người ghi nhận → loại (pills) | tiền (chỉ phiếu nhập). Đẩy xuống khi có badge ĐÃ HỦY. */}
-            <div className={`flex items-start justify-between gap-2 ${cancelled ? 'mt-4' : ''}`}>
-                <div className="flex items-center gap-1.5 min-w-0">
-                    <span className={`${TIME_PILL} min-w-0`}><span className="truncate">{isWithdrawal && 'Nhận: '}{entry.staff_name || '—'}</span></span>
-                    <span className={`h-[26px] inline-flex items-center rounded-full bg-surface-light border border-border/60 px-2.5 text-[11px] font-bold leading-none whitespace-nowrap shrink-0 ${typeTone}`}>{typeLabel}</span>
+            {/* Header — ngày giờ (trái) | loại + số lượng rút / tiền (phải). Hẹp (<20rem) → mỗi cụm xếp dọc. Đẩy xuống khi có badge ĐÃ HỦY. */}
+            <div className={`@container flex items-start justify-between gap-2 ${cancelled ? 'mt-4' : ''}`}>
+                <div className={`${CLUSTER} items-start`}>
+                    <span className={`${TIME_PILL} tabular-nums`}>{dateStr}</span>
+                    <span className={`${TIME_PILL} tabular-nums`}>{timeStr}</span>
                 </div>
-                {isRestock && <span className={`h-[26px] inline-flex items-center text-[16px] font-black tabular-nums shrink-0 ${moneyCls}`}>{formatVND(amount)}</span>}
+                <div className={`${CLUSTER} items-end`}>
+                    <span className={`${TYPE_PILL} ${typeTone}`}>{typeLabel}</span>
+                    {isWithdrawal && delta !== 0 && (
+                        <span className={`${TYPE_PILL} tabular-nums text-text`}>
+                            {Math.round(Math.abs(delta) * 10) / 10} {unit}
+                        </span>
+                    )}
+                    {isRestock && <span className={`h-[26px] inline-flex items-center text-[16px] font-black tabular-nums shrink-0 ${moneyCls}`}>{formatVND(amount)}</span>}
+                </div>
             </div>
 
             <div className="h-[1px] bg-border/40" />
@@ -236,12 +241,11 @@ function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock, onEditRestoc
 
             <div className="h-[1px] bg-border/40" />
 
-            {/* Footer — địa chỉ · ngày · giờ (pills) + trạng thái trả / hình thức (phiếu nhập) | Hủy (hiệu chỉnh). */}
+            {/* Footer — địa chỉ · nhân viên (pills) + trạng thái trả / hình thức (phiếu nhập) | Hủy (hiệu chỉnh). */}
             <div className="flex justify-between items-center gap-2">
                 <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                     {addressName && <span className={`${META_PILL} max-w-full`}><span className="truncate">{addressName}</span></span>}
-                    <span className={`${META_PILL} tabular-nums`}>{dateStr}</span>
-                    <span className={`${META_PILL} tabular-nums`}>{timeStr}</span>
+                    <span className={`${META_PILL} max-w-full`}><span className="truncate">{entry.staff_name || '—'}</span></span>
                     {liveRestock && (
                         <>
                             {status === 'partial' && (

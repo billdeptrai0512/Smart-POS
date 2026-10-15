@@ -197,18 +197,16 @@ export default function IngredientDetailPage() {
 
     const summary = useMemo(() => {
         let totalQty = 0, totalSpent = 0, totalOwing = 0, totalPaidInMonth = 0
-        let importCount = 0, withdrawCount = 0, adjustCount = 0
         // `fromDate` / `toDate` xác định cửa sổ đang xem — payments có paid_at
         // trong cửa sổ này được tính vào "Đã trả". Một payment có thể trả
         // cho invoice kỳ khác, nên paid không = invoice.amount khớp 1-1.
         const monthStartMs = new Date(fromDate).getTime()
         const monthEndMs = new Date(toDate).getTime()
         shownHistory.forEach(e => {
-            // Lượt rút ra quầy không phải mua hàng — chỉ đếm số lần, không tính tiền.
+            // Lượt rút ra quầy không phải mua hàng — không tính tiền.
             const kind = kindOf(e)
-            if (kind === 'withdrawal') { withdrawCount += 1; return }
-            if (kind === 'adjustment') adjustCount += 1
-            else if (kind === 'restock') { importCount += 1; totalQty += e.metadata?.qty || 0 }
+            if (kind === 'withdrawal') return
+            if (kind === 'restock') totalQty += e.metadata?.qty || 0
             totalSpent += e.amount || 0
             const paid = (e.payments || []).reduce((s: number, p: Row) => s + (p.amount || 0), 0)
             totalOwing += Math.max(0, (e.amount || 0) - paid)
@@ -217,8 +215,8 @@ export default function IngredientDetailPage() {
                 if (t >= monthStartMs && t <= monthEndMs) totalPaidInMonth += p.amount || 0
             }
         })
-        return { totalQty, totalSpent, totalOwing, totalPaidInMonth, importCount, withdrawCount, adjustCount }
-    }, [shownHistory, fromDate, toDate])
+        return { totalQty, totalSpent, totalOwing, totalPaidInMonth }
+    },[shownHistory, fromDate, toDate])
 
     // ── Save callbacks for child rows ───────────────────────────────────────
     // category đi theo section của nhóm (trigger DB ép) — client chỉ gán group_id.
