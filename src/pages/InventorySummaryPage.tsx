@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAddress } from '../contexts/AddressContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useAuth } from '../contexts/AuthContext'
-import { fetchRestockSummary, type RestockSummaryRow } from '../services/restockSummaryService'
+import { fetchRestockSummary, groupByIngredient, type RestockSummaryRow } from '../services/restockSummaryService'
 import { formatVND } from '../utils'
 import { packHint, pack2Of } from '../utils/inventory'
 import { ingredientLabel, getIngredientUnit } from '../utils/ingredients'
@@ -13,7 +13,7 @@ import { useDateScope } from '../hooks/useDateScope'
 import { DateRangePicker } from '../components/HistoryPage/HistoryHeader'
 import IngredientDetailHeader from '../components/IngredientManagementPage/IngredientDetailHeader'
 import Skeleton from '../components/common/Skeleton'
-import type { Row } from '../types/domain'
+import type { Row, UUID } from '../types/domain'
 
 const LABEL = 'text-[11px] font-black uppercase tracking-wide text-text-secondary'
 const PILL = 'h-[22px] px-2 text-[11px] font-bold text-text-secondary/70 inline-flex items-center rounded-full bg-surface-light border border-border/60 leading-none whitespace-nowrap'
@@ -58,12 +58,12 @@ export default function InventorySummaryPage() {
         return () => { stale = true }
     }, [groupIds, fromDate, toDate])
 
+    // Kho tổng chung: chọn 1 địa chỉ → chỉ số của địa chỉ đó (rút bao nhiêu, trị giá bao nhiêu) cho mọi nguyên liệu.
+    const [filterAddr, setFilterAddr] = useState<UUID | null>(null)
+    // value = trị giá rút ra quầy: không có tiền thật → lượng × giá vốn hiện tại (ước tính).
+    const list = useMemo(() => groupByIngredient(rows || [], filterAddr).map(g => ({ ...g, value: g.withdrawnQty * (ingredientCosts[g.ingredient] || 0) })), [rows, filterAddr, ingredientCosts])
     const cfgByKey = useMemo(() => new Map((ingredientConfigs || []).map((c: Row) => [c.ingredient, c])), [ingredientConfigs])
-    // Rút ra quầy không có tiền thật → trị giá = lượng × giá vốn hiện tại (ước tính).
-    const valueOf = (r: RestockSummaryRow) => r.withdrawnQty * (ingredientCosts[r.ingredient] || 0)
-    const totals = useMemo(() => (rows || []).reduce((t, r) => ({
-        spent: t.spent + r.spent, owing: t.owing + r.owing, withdrawn: t.withdrawn + r.withdrawnQty * (ingredientCosts[r.ingredient] || 0),
-    }), { spent: 0, owing: 0, withdrawn: 0 }), [rows, ingredientCosts])
+    const totals = useMemo(() => list.reduce((t, r) => ({ spent: t.spent + r.spent, owing: t.owing + r.owing, withdrawn: t.withdrawn + r.value }), { spent: 0, owing: 0, withdrawn: 0 }), [list])
 
     const open = (key: string) => {
         const q = new URLSearchParams(location.search)
@@ -108,9 +108,21 @@ export default function InventorySummaryPage() {
                     <p className="text-danger text-[13px] text-center py-10">Không tải được dữ liệu. Thử lại sau.</p>
                 ) : rows === null ? (
                     [0, 1, 2, 3].map(i => <Skeleton key={i} className="h-[96px] rounded-[16px]" />)
-                ) : rows.length === 0 ? (
-                    <p className="text-text-secondary text-[13px] text-center py-10 bg-surface-light rounded-[14px] border border-border/40">Chưa có nhập kho nào trong {rangeLabel}.</p>
                 ) : (<>
+                    {groupIds.length > 1 && (
+                        <div className="flex flex-wrap gap-1.5">
+                            {[{ id: null, name: 'Tất cả' }, ...groupIds.map(id => ({ id, name: nameById[id] || 'Địa chỉ' }))].map(c => (
+                                <button
+                                    key={c.id ?? 'all'}
+                                    onClick={() => setFilterAddr(c.id)}
+                                    className={`h-[30px] px-3 rounded-full border text-[12px] font-bold whitespace-nowrap transition-colors active:scale-95 ${filterAddr === c.id ? 'bg-primary/15 border-primary/40 text-primary' : 'bg-surface-light border-border/60 text-text-secondary'}`}
+                                >{c.name}</button>
+                            ))}
+                        </div>
+                    )}
+                    {list.length === 0 ? (
+                        <p className="text-text-secondary text-[13px] text-center py-10 bg-surface-light rounded-[14px] border border-border/40">Chưa có nhập kho nào trong {rangeLabel}.</p>
+                    ) : (<>
                     <div className="bg-surface rounded-[16px] border border-border/60 grid grid-cols-2 gap-3 p-4">
                         <div className="flex flex-col items-start">
                             <span className={LABEL}>Tổng tiền</span>
@@ -128,14 +140,14 @@ export default function InventorySummaryPage() {
                         )}
                     </div>
 
-                    {rows.map(r => {
+                    {list.map(r => {
                         const cfg = cfgByKey.get(r.ingredient)
                         const unit = getIngredientUnit(r.ingredient, ingredientUnits[r.ingredient])
                         // Số chính = đơn vị nhỏ nhất (như Nhật ký / Thông tin); "= 20 bịch" chỉ là gợi ý nhỏ.
                         const fmt = (n: number) => `${Math.round(n * 10) / 10} ${unit}`
                         const hint = (n: number) => packHint(n, cfg?.pack_size, cfg?.pack_unit, unit, pack2Of(cfg))
                         const withdrawnTotal = r.withdrawnQty
-                        const perAddress = groupIds.length > 1 ? groupIds.filter(id => r.withdrawn[id]) : []
+                        const perAddress = groupIds.length > 1 && !filterAddr ? groupIds.filter(id => r.withdrawn[id]) : []
                         return (
                             <button
                                 key={r.ingredient}
@@ -148,7 +160,7 @@ export default function InventorySummaryPage() {
                                 </div>
                                 <div className={`grid gap-3 ${r.owing > 0 ? "grid-cols-3" : "grid-cols-2"}`}>
                                     <div className="flex flex-col"><span className={LABEL}>Đã nhập</span><span className={`text-[14px] font-bold tabular-nums mt-0.5 ${r.qty ? 'text-text' : 'text-text-dim'}`}>{r.qty ? fmt(r.qty) : '—'}</span>{hint(r.qty) && <span className="text-[11px] font-medium tabular-nums text-text-dim">{hint(r.qty)}</span>}</div>
-                                    <div className="flex flex-col"><span className={LABEL}>Rút ra quầy</span><span className="text-[14px] font-bold tabular-nums text-text mt-0.5">{withdrawnTotal ? fmt(withdrawnTotal) : '—'}</span>{hint(withdrawnTotal) && <span className="text-[11px] font-medium tabular-nums text-text-dim">{hint(withdrawnTotal)}</span>}{valueOf(r) > 0 && <span className="text-[11px] font-medium tabular-nums text-text-dim">≈ {formatVND(Math.round(valueOf(r)))} giá vốn</span>}</div>
+                                    <div className="flex flex-col"><span className={LABEL}>Rút ra quầy</span><span className="text-[14px] font-bold tabular-nums text-text mt-0.5">{withdrawnTotal ? fmt(withdrawnTotal) : '—'}</span>{hint(withdrawnTotal) && <span className="text-[11px] font-medium tabular-nums text-text-dim">{hint(withdrawnTotal)}</span>}{r.value > 0 && <span className="text-[11px] font-medium tabular-nums text-text-dim">≈ {formatVND(Math.round(r.value))} giá vốn</span>}</div>
                                     {r.owing > 0 && <div className="flex flex-col items-end"><span className={`${LABEL} text-warning`}>Còn nợ</span><span className="text-[14px] font-bold tabular-nums mt-0.5 text-warning">{formatVND(r.owing)}</span></div>}
                                 </div>
                                 {perAddress.length > 0 && (
@@ -161,6 +173,7 @@ export default function InventorySummaryPage() {
                             </button>
                         )
                     })}
+                    </>)}
                 </>)}
             </main>
         </div>
