@@ -105,8 +105,8 @@ function Stat({ label, value, tone, align = 'center' }: { label: string; value: 
     const [labelCls, valueCls] = STAT_TONE[tone ?? ''] ?? ['text-text-secondary', 'text-text']
     return (
         <div className={`flex flex-col ${align === 'start' ? 'items-start' : align === 'end' ? 'items-end' : 'items-center'}`}>
-            <span className={`text-[10px] font-black uppercase tracking-wider ${labelCls}`}>{label}</span>
-            <span className={`text-[15px] font-black tabular-nums mt-1 ${valueCls}`}>{value}</span>
+            <span className={`text-[11px] font-black uppercase tracking-wide ${labelCls}`}>{label}</span>
+            <span className={`text-[18px] font-black tabular-nums mt-1 ${valueCls}`}>{value}</span>
         </div>
     )
 }
@@ -177,13 +177,12 @@ function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock, onEditRestoc
     const afterCls = cancelled ? 'text-text-dim line-through'
         : isWithdrawal ? 'text-text'
         : delta > 0 ? 'text-success' : delta < 0 ? 'text-danger' : 'text-text'
-    const moneyCls = cancelled ? 'text-text-dim line-through' : 'text-text'
     const openPayment = onOpenPayment && (() => onOpenPayment(entry))
     // Pill phụ ở chân card nhỏ hơn pill ở đầu (22px vs 26px) để đầu card đọc trước.
-    const TYPE_PILL = 'h-[26px] inline-flex items-center rounded-full bg-surface-light border border-border/60 px-2.5 text-[11px] font-bold leading-none whitespace-nowrap shrink-0'
+    const TYPE_PILL = 'h-[26px] inline-flex items-center rounded-full bg-surface-light border border-border/60 px-2.5 text-[12px] font-bold leading-none whitespace-nowrap shrink-0'
     // Cụm header: 1 hàng khi card rộng, xếp dọc khi hẹp (container query).
     const CLUSTER = 'flex flex-col @[20rem]:flex-row @[20rem]:items-center gap-1.5'
-    const META_PILL ='h-[22px] px-2 text-[10px] font-bold text-text-secondary/70 inline-flex items-center rounded-full bg-surface-light border border-border/60 leading-none whitespace-nowrap'
+    const META_PILL ='h-[22px] px-2 text-[11px] font-bold text-text-secondary/50 inline-flex items-center rounded-full bg-surface-light border border-border/60 leading-none whitespace-nowrap'
 
     const innerCls = `bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-3 relative overflow-hidden transition-all ${
         cancelled ? 'opacity-50 grayscale select-none' : ''
@@ -206,13 +205,12 @@ function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock, onEditRestoc
                     <span className={`${TIME_PILL} tabular-nums`}>{timeStr}</span>
                 </div>
                 <div className={`${CLUSTER} items-end`}>
-                    <span className={`${TYPE_PILL} ${typeTone}`}>{typeLabel}</span>
-                    {isWithdrawal && delta !== 0 && (
+                    <span className={`${TYPE_PILL} uppercase tracking-wide ${typeTone}`}>{typeLabel}</span>
+                    {!isAdjust && delta !== 0 && (
                         <span className={`${TYPE_PILL} tabular-nums text-text`}>
                             {Math.round(Math.abs(delta) * 10) / 10} {unit}
                         </span>
                     )}
-                    {isRestock && <span className={`h-[26px] inline-flex items-center text-[16px] font-black tabular-nums shrink-0 ${moneyCls}`}>{formatVND(amount)}</span>}
                 </div>
             </div>
 
@@ -220,20 +218,20 @@ function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock, onEditRestoc
 
             {/* Thân — số chính của card: tồn kho trước (trái) → sau (phải). */}
             <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-black uppercase tracking-wider text-text-secondary">Tồn kho</span>
+                <span className="text-[11px] font-black uppercase tracking-wide text-text-secondary">Tồn kho</span>
                 {hasSnapshot ? (
                     <div className="flex justify-between items-baseline gap-2 text-[22px] font-black tabular-nums leading-tight">
-                        <span className="text-text-secondary">{Math.round(beforeStock * 10) / 10}<span className="text-[12px] font-bold ml-1">{unit}</span></span>
+                        <span className="font-bold text-text-secondary">{Math.round(beforeStock * 10) / 10}<span className="text-[12px] font-bold ml-1">{unit}</span></span>
                         <ArrowRight size={18} className="text-text-dim self-center shrink-0" />
-                        <span className={afterCls}>{Math.round(afterStock * 10) / 10}<span className="text-[12px] font-bold ml-1">{unit}</span></span>
+                        <span className={afterCls}>{Math.round(afterStock * 10) / 10}<span className="text-[12px] font-bold ml-1 text-text-secondary">{unit}</span></span>
                     </div>
                 ) : (
                     <span className={`text-[22px] font-black tabular-nums leading-tight ${afterCls}`}>{qty > 0 ? '+' : ''}{qty} {unit}</span>
                 )}
                 {/* Rút ra quầy: ai SOẠN (xác nhận ở "Soạn cho ngày mai" hôm trước) — người NHẬN là staff ở đầu card. */}
                 {isWithdrawal && packedBy && (
-                    <div className="text-[11px] font-medium text-text-dim mt-1">
-                        Soạn: <span className="font-bold text-text-secondary">{packedBy.packed_by_name || '—'}</span>
+                    <div className="text-[11px] font-medium text-text-secondary mt-1">
+                        Soạn: <span className="font-bold text-text">{packedBy.packed_by_name || '—'}</span>
                         {' · '}{dateShortVN(new Date(packedBy.packed_at))} {timeStringVN(new Date(packedBy.packed_at))}
                     </div>
                 )}
@@ -302,7 +300,7 @@ const PILL_TONE = {
 function Pill({ tone, children, onClick }: { tone: 'success' | 'warning' | 'primary' | 'neutral'; children: ReactNode; onClick?: (() => void) | null }) {
     // Project palette has no separate "info" hue (warning ≡ primary literally),
     // so partial-status uses the neutral pill — clearly distinct from unpaid (amber).
-    const cls = `inline-flex items-center h-[22px] px-2 rounded-full text-[10px] font-bold leading-none whitespace-nowrap border ${PILL_TONE[tone]}`
+    const cls = `inline-flex items-center h-[22px] px-2 rounded-full text-[11px] font-bold leading-none whitespace-nowrap border ${PILL_TONE[tone]}`
     return onClick
         ? <button type="button" onClick={(e) => { e.stopPropagation(); onClick() }} className={`${cls} active:scale-95 transition-transform`}>{children}</button>
         : <span className={cls}>{children}</span>
