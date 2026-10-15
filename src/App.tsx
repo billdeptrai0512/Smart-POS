@@ -32,6 +32,7 @@ const RecipeIngredientPage = lazy(() => import('./pages/RecipeIngredientPage'))
 const DailyReportPage = lazy(() => import('./pages/DailyReportPage'))
 const IngredientManagementPage = lazy(() => import('./pages/IngredientManagementPage'))
 const IngredientDetailPage = lazy(() => import('./pages/IngredientDetailPage'))
+const InventorySummaryPage = lazy(() => import('./pages/InventorySummaryPage'))
 const ToppingsPage = lazy(() => import('./pages/ToppingsPage'))
 const ToppingDetailPage = lazy(() => import('./pages/ToppingDetailPage'))
 const DiscountProgramsPage = lazy(() => import('./pages/DiscountProgramsPage'))
@@ -131,6 +132,7 @@ export default function App() {
                           {/* Feature-level permission routes (anyone can view, managers can edit) */}
                           <Route path="/inventory/:tab?" element={<TabGuard base="/inventory" tabs={['management', 'stocking']}><IngredientManagementPage /></TabGuard>} />
                           <Route path="/inventory/stocking/:ingredientKey" element={<IngredientDetailPage />} />
+                          <Route path="/inventory/summary" element={<InventorySummaryPage />} />
                           <Route path="/category/:tab?" element={<TabGuard base="/category" tabs={['overall', 'recipes']}><RecipeMenuPage /></TabGuard>} />
                           <Route path="/category/recipes/:productId" element={<RecipeIngredientPage />} />
                           <Route path="/category/toppings" element={<ToppingsPage />} />

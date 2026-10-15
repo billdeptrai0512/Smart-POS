@@ -537,6 +537,14 @@ export function formatPackedQty(qty: unknown, packSize: unknown, packUnit: strin
     return parts.join(' + ')
 }
 
+// Gợi ý quy đổi nhỏ dưới số chính (số chính luôn là đơn vị nhỏ nhất): "= 5 bịch + 350 g".
+// null khi không có quy cách đóng gói hoặc chưa đủ 1 gói (khỏi lặp lại đúng số chính).
+export function packHint(qty: unknown, packSize: unknown, packUnit: string | null | undefined, baseUnit: string | null | undefined, pack2?: Pack2 | null) {
+    const ps = Number(packSize || 0)
+    if (!ps || !packUnit || Math.abs(Number(qty || 0)) < ps) return null
+    return `= ${formatPackedQty(qty, ps, packUnit, baseUnit, { compact: true, pack2 })}`
+}
+
 // Với mỗi nguyên liệu, chọn "sản phẩm đại diện" = món BÁN CHẠY NHẤT có dùng nguyên
 // liệu đó, để quy đổi hao hụt → số ly tương đương ("≈ 33 ly cà phê sữa") giúp user
 // hình dung magnitude. Bỏ nguyên liệu tỉ lệ 1:1 (ly/nắp) — "≈ 220 ly cà phê sữa" cho

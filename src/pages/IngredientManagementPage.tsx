@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, typ
 import { withCounterEstimate, recipesBelongTo } from '../services/counterEstimate'
 import { useCounterCalc } from '../hooks/useCounterCalc'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Plus, Settings2 } from 'lucide-react'
+import { Plus, Settings2, ClipboardList } from 'lucide-react'
 import { BottomSheet, SheetHeader, SHEET_PANEL } from '../components/common/ModalShell'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
@@ -435,6 +435,16 @@ export default function IngredientManagementPage() {
                             </button>
                         )}
                     </div>
+                    {canEdit && (
+                        <button
+                            onClick={() => navigate('/inventory/summary')}
+                            aria-label="Tổng hợp nhập kho"
+                            title="Tổng hợp nhập kho"
+                            className="shrink-0 w-11 rounded-[12px] bg-surface border border-border/60 text-text-secondary flex items-center justify-center active:scale-95 hover:border-primary/40 hover:text-primary transition-all"
+                        >
+                            <ClipboardList size={18} />
+                        </button>
+                    )}
                 </div>
                 {canEdit && keyMismatches.hasIssues && !isDismissed && (
                     <KeyMismatchBanner

@@ -2,13 +2,13 @@ import type { ReactNode } from 'react'
 import { ArrowRight, Trash2 } from 'lucide-react'
 import { TIME_PILL, ROUND_ICON_BTN } from '../common/ModalShell'
 import { formatVND } from '../../utils'
-import { formatPackedQty } from '../../utils/inventory'
+import { packHint } from '../../utils/inventory'
 import { dateShortVN, timeStringVN } from '../../utils/dateVN'
 import type { Pack2 } from '../../utils/inventory'
 import type { Row } from '../../types/domain'
 
 /** Tổng hợp khoảng ngày đang xem (IngredientDetailPage tính từ history). */
-export interface RestockSummary { totalQty: number; totalSpent: number; totalOwing: number; totalPaidInMonth: number }
+export interface RestockSummary { totalQty: number; totalSpent: number; totalOwing: number; totalPaidInMonth: number; withdrawQty: number; withdrawValue: number }
 
 interface PackProps {
     unit: string
@@ -62,6 +62,7 @@ export default function IngredientHistoryTab({
                             key={entry.id}
                             entry={entry}
                             unit={unit}
+                            pack={{ packSize, packUnit, pack2 }}
                             onOpenPayment={onOpenPayment}
                             onCancelRestock={onCancelRestock}
                             onEditRestock={onEditRestock}
@@ -75,18 +76,33 @@ export default function IngredientHistoryTab({
 }
 
 // ── Summary card ──────────────────────────────────────────────────────────────
-// Hàng 1: Tổng tiền | Khối lượng. Hàng 2 (chỉ khi có nợ): Đã trả | Còn nợ.
+// Hàng nhập: Tổng tiền | Khối lượng (+ Đã trả | Còn nợ khi có nợ). Hàng rút (chỉ khi có lượt rút): Rút ra quầy | Trị giá.
+// Chỉ có lượt rút (vd lọc theo địa chỉ) → ẩn hàng nhập toàn số 0.
 function MonthSummaryCard({ showStats, summary, unit, packSize, packUnit, pack2 }: PackProps & { showStats: boolean; summary: RestockSummary }) {
     if (!showStats) return null
+    const hasWithdraw = summary.withdrawQty > 0
+    const hasRestock = summary.totalSpent > 0 || summary.totalQty > 0 || !hasWithdraw
+    // Số chính = đơn vị nhỏ nhất (như tab Thông tin); quy đổi ra bịch/hộp chỉ là gợi ý nhỏ bên dưới.
+    const qtyProps = (n: number) => ({ value: `${Math.round(n * 10) / 10} ${unit}`, hint: packHint(n, packSize, packUnit, unit, pack2) })
     return (
         <div className="bg-surface rounded-[16px] border border-border/60 overflow-hidden">
             <div className="grid gap-3 grid-cols-2 p-4">
-                <Stat label="Tổng tiền" value={formatVND(summary.totalSpent)} align="start" />
-                <Stat label="Khối lượng" value={formatPackedQty(summary.totalQty, packSize, packUnit, unit, { compact: true, pack2 })} align="end" />
+                {hasRestock && (
+                    <>
+                        <Stat label="Tổng tiền" value={formatVND(summary.totalSpent)} align="start" />
+                        <Stat label="Khối lượng" {...qtyProps(summary.totalQty)} align="end" />
+                    </>
+                )}
                 {summary.totalOwing > 0 && (
                     <>
                         <Stat label="Đã trả" value={formatVND(summary.totalPaidInMonth)} tone="success" align="start" />
                         <Stat label="Còn nợ" value={formatVND(summary.totalOwing)} tone="warning" align="end" />
+                    </>
+                )}
+                {hasWithdraw && (
+                    <>
+                        <Stat label="Rút ra quầy" {...qtyProps(summary.withdrawQty)} align="start" />
+                        <Stat label="Trị giá" value={formatVND(Math.round(summary.withdrawValue))} align="end" />
                     </>
                 )}
             </div>
@@ -101,12 +117,13 @@ const STAT_TONE: Record<string, [string, string]> = {
     primary: ['text-text-secondary', 'text-primary'],
 }
 
-function Stat({ label, value, tone, align = 'center' }: { label: string; value: string; tone?: 'success' | 'warning' | 'primary'; align?: 'start' | 'end' | 'center' }) {
+function Stat({ label, value, hint, tone, align = 'center' }: { label: string; value: string; hint?: string | null; tone?: 'success' | 'warning' | 'primary'; align?: 'start' | 'end' | 'center' }) {
     const [labelCls, valueCls] = STAT_TONE[tone ?? ''] ?? ['text-text-secondary', 'text-text']
     return (
         <div className={`flex flex-col ${align === 'start' ? 'items-start' : align === 'end' ? 'items-end' : 'items-center'}`}>
             <span className={`text-[11px] font-black uppercase tracking-wide ${labelCls}`}>{label}</span>
             <span className={`text-[18px] font-black tabular-nums mt-1 ${valueCls}`}>{value}</span>
+            {hint && <span className="text-[11px] font-medium tabular-nums text-text-dim mt-0.5">{hint}</span>}
         </div>
     )
 }
@@ -126,6 +143,7 @@ function Stat({ label, value, tone, align = 'center' }: { label: string; value: 
 // Tồn X→Y · footer: address + staff + context pills (restock only) + Hủy.
 interface HistoryCardProps {
     unit: string
+    pack: Omit<PackProps, 'unit'>
     entry: Row
     onOpenPayment?: (entry: Row) => void
     onCancelRestock?: (entry: Row) => void
@@ -133,7 +151,7 @@ interface HistoryCardProps {
     addressName?: string
 }
 
-function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock, onEditRestock, addressName }: HistoryCardProps) {
+function HistoryCard({ entry, unit, pack, onOpenPayment, onCancelRestock, onEditRestock, addressName }: HistoryCardProps) {
     const d = new Date(entry.created_at)
     const dateStr = dateShortVN(d)
     const timeStr = timeStringVN(d)
@@ -174,6 +192,8 @@ function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock, onEditRestoc
         : isAdjust ? 'text-warning' : 'text-primary'
     // Màu số tồn SAU: tăng xanh / giảm đỏ (rút ra quầy là chuyển nội bộ → trung tính).
     const delta = hasSnapshot ? afterStock - beforeStock : qty
+    const beforeHint = packHint(beforeStock, pack.packSize, pack.packUnit, unit, pack.pack2)
+    const afterHint = packHint(hasSnapshot ? afterStock : qty, pack.packSize, pack.packUnit, unit, pack.pack2)
     const afterCls = cancelled ? 'text-text-dim line-through'
         : isWithdrawal ? 'text-text'
         : delta > 0 ? 'text-success' : delta < 0 ? 'text-danger' : 'text-text'
@@ -206,9 +226,9 @@ function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock, onEditRestoc
                 </div>
                 <div className={`${CLUSTER} items-end`}>
                     <span className={`${TYPE_PILL} uppercase tracking-wide ${typeTone}`}>{typeLabel}</span>
-                    {!isAdjust && delta !== 0 && (
+                    {delta !== 0 && (
                         <span className={`${TYPE_PILL} tabular-nums text-text`}>
-                            {Math.round(Math.abs(delta) * 10) / 10} {unit}
+                            {isAdjust ? (delta > 0 ? '+' : '−') : ''}{Math.round(Math.abs(delta) * 10) / 10} {unit}
                         </span>
                     )}
                 </div>
@@ -227,6 +247,12 @@ function HistoryCard({ entry, unit, onOpenPayment, onCancelRestock, onEditRestoc
                     </div>
                 ) : (
                     <span className={`text-[22px] font-black tabular-nums leading-tight ${afterCls}`}>{qty > 0 ? '+' : ''}{qty} {unit}</span>
+                )}
+                {/* Quy đổi bịch/hộp: gợi ý nhỏ dưới từng số tồn (số chính luôn là đơn vị nhỏ nhất). */}
+                {(beforeHint || afterHint) && (
+                    <div className="flex justify-between gap-2 text-[11px] font-medium tabular-nums text-text-dim">
+                        <span>{beforeHint}</span><span>{afterHint}</span>
+                    </div>
                 )}
                 {/* Rút ra quầy: ai SOẠN (xác nhận ở "Soạn cho ngày mai" hôm trước) — người NHẬN là staff ở đầu card. */}
                 {isWithdrawal && packedBy && (
