@@ -340,16 +340,18 @@ function GuestFunnelBody({ funnel, visits }: { funnel: GuestFunnel; visits?: num
     )
 }
 
-// Phễu chi nhánh theo giai đoạn (admin_branch_stages, migration 20261020): mỗi địa chỉ CÒN SỐNG nằm
+// Phễu chi nhánh theo giai đoạn (admin_branch_stages, migration 20261025): mỗi địa chỉ CÒN SỐNG nằm
 // đúng 1 nhóm nên các nhóm cộng lại = tổng địa chỉ; thanh = tỷ lệ trên tổng. RPC riêng như các thẻ
 // khác; lỗi/chưa apply → stages = null → ẩn thẻ.
 const BRANCH_STAGES = [
     { key: 'never', label: 'Chưa hoạt động', cls: 'bg-text-dim' },
-    { key: 'ordered', label: 'Có hoạt động, chưa nhập thực thu', cls: 'bg-warning' },
-    { key: 'cash_closed', label: 'Nhập thực thu nhưng chưa bắt đầu trial', cls: 'bg-danger' },
-    { key: 'trial', label: 'Đang dùng thử', cls: 'bg-primary' },
-    { key: 'paid', label: 'Đã đăng ký', cls: 'bg-success' },
-    { key: 'expired', label: 'Ngưng sử dụng', cls: 'bg-text-dim' },
+    { key: 'ordered', label: 'Đã có đơn, chưa nhập thực thu', cls: 'bg-warning' },
+    { key: 'trial_counted', label: 'Dùng thử, có kiểm kê', cls: 'bg-primary' },
+    { key: 'trial_uncounted', label: 'Dùng thử, chưa kiểm kê', cls: 'bg-danger' },
+    { key: 'expired_pre', label: 'Ngưng sử dụng trước khi trả phí', cls: 'bg-text-dim' },
+    { key: 'paid_counted', label: 'Trả phí, có kiểm kê', cls: 'bg-success' },
+    { key: 'paid_uncounted', label: 'Trả phí, chưa kiểm kê', cls: 'bg-danger' },
+    { key: 'expired_post', label: 'Ngưng sử dụng sau khi trả phí', cls: 'bg-text-dim' },
 ] as const
 
 function BranchStageCard({ stages }: { stages: Record<string, number> }) {
