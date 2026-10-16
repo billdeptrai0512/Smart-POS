@@ -137,6 +137,9 @@ function DashboardBody({ data, byRange, stages, visits }: { data: DashboardData;
     const attentionCount = attention_total_count ?? attention.length
     return (
         <>
+            <div className="mb-4">
+                <OnboardingFunnelCard byRange={byRange} visits={visits} />
+            </div>
             <ActiveTodayHeroCard stages={stages} />
             <KpiRow stages={stages} attentionCount={attentionCount} />
             {/* Tổng 16 chi nhánh chia theo giai đoạn — đứng ngay dưới con số tổng. */}
@@ -146,7 +149,6 @@ function DashboardBody({ data, byRange, stages, visits }: { data: DashboardData;
                 </div>
             )}
             <div className="flex flex-col gap-4">
-                <OnboardingFunnelCard byRange={byRange} visits={visits} />
                 <ActivityCard items={activity} />
             </div>
             {/* Công tắc cấu hình, không phải số liệu — xuống cuối, đứng đầu trang chỉ
@@ -238,7 +240,7 @@ function OnboardingFunnelCard({ byRange, visits }: { byRange: Record<string, Gue
     return (
         <div className={CARD}>
             <div className="flex items-center justify-between gap-2 mb-3 pb-3 border-b border-border/60">
-                <h3 className={CARD_TITLE}>Onboarding</h3>
+                <h3 className={CARD_TITLE}>Phễu khách mới</h3>
                 {byRange && (
                     <div className="flex gap-0.5 shrink-0 p-0.5 rounded-[10px] bg-surface-light">
                         {RANGE_TABS.map((t) => (
