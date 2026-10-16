@@ -168,7 +168,7 @@ function ActiveTodayHeroCard({ stages }: { stages: Record<string, number> | null
             <p className="text-[10.5px] font-black uppercase tracking-wide text-success">Hôm nay hoạt động</p>
             <p className="text-[34px] font-black tabular-nums leading-tight mt-0.5 text-text">
                 {stages ? stages.active_today : '—'}
-                {stages && <span className="text-[14px] font-bold text-text-secondary ml-1.5">chi nhánh</span>}
+                {stages && <span className="text-[14px] font-bold text-text-secondary ml-1.5">địa chỉ</span>}
                 {stages?.active_yesterday != null && <span className="text-[12px] font-bold text-text-dim ml-3">hôm qua {stages.active_yesterday}</span>}
             </p>
         </div>
@@ -194,10 +194,10 @@ function KpiRow({ stages, attentionCount }: { stages: Record<string, number> | n
 
     return (
         <div className="grid grid-cols-2 gap-3 mb-4">
-            <KpiCard label="Tổng cộng có" value={total != null ? `${total} chi nhánh` : '—'} />
+            <KpiCard label="Tổng cộng có" value={total != null ? `${total} địa chỉ` : '—'} />
             <KpiCard
                 label="Cần chú ý"
-                value={`${attentionCount} chi nhánh`}
+                value={`${attentionCount} địa chỉ`}
                 onClick={() => navigate('/admin/reconciliation')}
             />
         </div>
