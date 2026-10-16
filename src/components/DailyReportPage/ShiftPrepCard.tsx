@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useState, type ReactNode } from 'react'
 import type { PrepItem } from '../../utils/prepToday'
 import { Check, X, RotateCcw, Pencil, ChevronUp, ChevronDown } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
@@ -94,21 +94,21 @@ export default function ShiftPrepCard({
                         const shortfall = it.warehouse != null && it.warehouse < it.need
 
                         const name = (
-                            <span className={`block text-[14px] font-bold leading-tight ${muted ? 'text-text-dim line-through' : 'text-text'}`}>
+                            <span className={`block text-[15px] font-bold leading-tight ${muted ? 'text-text-dim line-through' : 'text-text'}`}>
                                 {ingredientLabel(it.ingredient)}
                             </span>
                         )
-                        const details = (
-                            <div className="text-[11px] text-text-dim">
-                                {/* Cam = hành động (CTA "Mua"), đỏ = vấn đề (kho dưới mức tối thiểu), xanh = đã mua đủ, xám = thông tin. */}
-                                {it.warehouse != null && (
-                                    <span className="block">
-                                        Tồn kho cuối kỳ: <span className={it.done ? 'text-success font-bold' : it.warehouse < it.minStock ? 'text-danger font-bold' : ''}>{fmt(it.warehouse)}</span>
-                                    </span>
-                                )}
-                                {it.minStock > 0 && <span className="block">Tồn kho cần ít nhất: {fmt(it.minStock)}</span>}
+                        // Nhãn nhỏ trên, số dưới (lưới 2×2 ở card Mua): mắt quét cột số nhanh hơn dòng "Nhãn: số".
+                        // Cam = hành động (CTA "Mua"), đỏ = vấn đề (kho dưới mức tối thiểu), xanh = đã mua đủ, trắng = thông tin.
+                        const field = (label: string, value: ReactNode, right = false, valueCls = 'text-text') => (
+                            <div className={`min-w-0 ${right ? 'text-right' : ''}`}>
+                                <span className="block text-[10px] font-bold uppercase tracking-wide text-text-dim">{label}</span>
+                                <span className={`block text-[13px] font-bold tabular-nums ${valueCls}`}>{value}</span>
                             </div>
                         )
+                        // Vạch trái 2 mức: hết hẳn (kho = 0) đỏ đậm, chỉ dưới tối thiểu đỏ nhạt — để món gấp nổi lên trong danh sách toàn đỏ.
+                        const edge = it.done ? 'border-transparent' : it.warehouse === 0 ? 'border-danger' : it.warehouse != null && it.warehouse < it.minStock ? 'border-danger/40' : 'border-transparent'
+                        const warehouseCls = it.done ? 'text-success' : it.warehouse != null && it.warehouse < it.minStock ? 'text-danger' : 'text-text'
                         // Các dòng dưới cùng nằm NGOÀI hàng có viên thuốc → chạy hết chiều ngang, không bị bẻ dòng bởi viên.
                         // Món đã mua đủ thì viên "Đã mua N" đã nói số đã mua — khỏi lặp.
                         const showBought = it.boughtToday > 0 && !it.done
@@ -259,10 +259,10 @@ export default function ShiftPrepCard({
                         const restock = () => onRestock?.(it.ingredient, it.needPacks > 0 ? it.needPacks : it.need)
                         const open = onOpen ? () => onOpen(it.ingredient) : restock
                         return (
-                            <div key={it.ingredient} className="py-2.5 border-b border-border/20 last:border-0">
+                            <div key={it.ingredient} className={`p-3 mb-2.5 last:mb-0 rounded-[14px] bg-surface-light border-l-2 ${edge}`}>
                                 {/* Lưới 2×2: hàng 1 = tên | nút (cùng một đường giữa); hàng 2 = 2 dòng trái | 2 dòng phải (cùng đỉnh).
                                     min-h-8! thấp hơn PILL (44px) để nút cân với tên. */}
-                                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5">
+                                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5">
                                     <button type="button" onClick={open} className="min-w-0 text-left active:scale-[0.99] transition">
                                         {name}
                                     </button>
@@ -281,15 +281,12 @@ export default function ShiftPrepCard({
                                             {ctaLabel}
                                         </button>
                                     )}
-                                    <button type="button" onClick={open} className="min-w-0 self-start text-left active:scale-[0.99] transition">
-                                        {details}
+                                    <button type="button" onClick={open} className="col-span-2 grid grid-cols-2 gap-x-3 gap-y-2.5 pt-2.5 border-t border-border/30 text-left active:scale-[0.99] transition">
+                                        {it.warehouse != null ? field('Tồn kho cuối kỳ', fmt(it.warehouse), false, warehouseCls) : <div />}
+                                        {field(haveLabel || '', <>{it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}</>, true)}
+                                        {it.minStock > 0 ? field('Tồn kho tối thiểu', fmt(it.minStock)) : <div />}
+                                        {it.forecast > 0 ? field('Ngày mai sử dụng', fmt(it.forecast), true) : <div />}
                                     </button>
-                                    <div className="self-start text-[11px] text-text-dim text-right">
-                                        <span className="block">
-                                            {haveLabel}: <span className="whitespace-nowrap">{it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}</span>
-                                        </span>
-                                        {it.forecast > 0 && <span className="block">Dự báo sử dụng: <span className="whitespace-nowrap">{fmt(it.forecast)} / ngày</span></span>}
-                                    </div>
                                 </div>
                                 {tail && <button type="button" onClick={open} className="block w-full text-left active:scale-[0.99] transition">{tail}</button>}
                             </div>
