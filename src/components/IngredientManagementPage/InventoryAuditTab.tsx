@@ -212,12 +212,18 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     const vvBox = useVisualViewportBox()
     const kbInset = vvBox ? Math.max(0, window.innerHeight - vvBox.height - vvBox.top) : 0
 
-    const isReady = !isLoadingHistory && isAsyncReady
+    // Hôm nay: chờ cả tồn kho/quầy (stocksLoaded) — không thì thẻ hiện sớm với map rỗng, Tổng hao hụt nháy 0đ rồi mới nhảy số thật.
+    const isReady = !isLoadingHistory && isAsyncReady && (!isTodayScope || inventory.stocksLoaded)
 
     return (
         <div className="flex flex-col gap-3">
             {!isReady ? (
-                <div className="bg-surface-light rounded-[24px] h-52 animate-pulse" />
+                // Hình dạng như nội dung thật (2 thẻ nhóm + thẻ tổng) để lúc hiện ra không nhảy chiều cao.
+                <div className="flex flex-col gap-3 animate-pulse">
+                    <div className="bg-surface-light rounded-[20px] h-[54px]" />
+                    <div className="bg-surface-light rounded-[20px] h-[54px]" />
+                    <div className="bg-surface-light rounded-[20px] h-[110px]" />
+                </div>
             ) : isTodayScope ? (
                 <div className="flex flex-col gap-3 animate-fade-in">
                     {isSaving && (

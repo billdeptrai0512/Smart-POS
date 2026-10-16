@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { fetchIngredientStocks } from '../services/orderService'
 import { estimateOpening, recipesBelongTo, type OpeningPeriods } from '../services/counterEstimate'
 import { useCounterCalc } from './useCounterCalc'
@@ -27,12 +27,22 @@ export function useWarehouseStockSync(addressId: string | null, { seedReady, isD
     // Công thức tải xong sau lần reload đầu → reload đổi identity để tính lại Đầu kỳ ước tính (xem recipesBelongTo).
     const recipesReady = recipesBelongTo(useProducts().recipes, addressId)
 
+    // Bắn RPC tồn kho SỚM (song song với lúc cha còn chờ phiếu chốt); reload kế tiếp dùng đúng lượt này 1 lần — khỏi nối tiếp.
+    const early = useRef<{ id: string | null; p: ReturnType<typeof fetchIngredientStocks> } | null>(null)
+    const prefetch = useCallback(() => {
+        const p = fetchIngredientStocks(addressId)
+        p.catch(() => {}) // lỗi để reload xử lý như cũ
+        early.current = { id: addressId, p }
+    }, [addressId])
+
     const reload = useCallback(() => {
+        const e = early.current
+        early.current = null
         const yesterdayPromise = seedReady
             ? Promise.resolve(seedYesterdayClosing)
             : isDayScope ? Promise.resolve(undefined) : fetchYesterdayShiftClosing(addressId)
         return Promise.all([
-            fetchIngredientStocks(addressId),
+            e && e.id === addressId ? e.p : fetchIngredientStocks(addressId),
             yesterdayPromise,
         ]).then(async ([rows, yesterdayClosing]) => {
             const warehouses: UsageMap = {}
@@ -55,5 +65,5 @@ export function useWarehouseStockSync(addressId: string | null, { seedReady, isD
         })
     }, [addressId, seedReady, seedYesterdayClosing, isDayScope, estimateOpeningOn, calcRef, recipesReady])
 
-    return { warehouseStocks, openingStock, openingPeriods, reload }
+    return { warehouseStocks, openingStock, openingPeriods, reload, prefetch }
 }

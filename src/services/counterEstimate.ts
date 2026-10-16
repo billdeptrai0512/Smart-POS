@@ -34,9 +34,13 @@ async function loadUsage(rows: Row[], addressId: string, { recipes, extraIngredi
     }
     if (!oldest && !stampedDays.size) return null
     const fromDay = oldest ? nextDayStr(oldest) : today
+    const todayOrdersP = includeToday ? fetchOrdersSince(addressId, today) : Promise.resolve([])
+    // Đơn của từng ngày đếm không phụ thuộc kết quả đọc usage đã lưu → bắn song song, khỏi nối đuôi sau nó.
+    const ordersByDayP = Promise.all([...stampedDays].map(async day =>
+        [day, day === today ? await todayOrdersP : await fetchOrdersSince(addressId, day, nextDayStr(day))] as const))
     const [stored, todayOrders] = await Promise.all([
         oldest ? fetchStoredUsage(addressId, fromDay, today) : {},
-        includeToday ? fetchOrdersSince(addressId, today) : [],
+        todayOrdersP,
     ])
     const missing = missingUsageDays(stored, fromDay, today)
     let computed: Record<string, UsageMap> = {}
@@ -49,10 +53,7 @@ async function loadUsage(rows: Row[], addressId: string, { recipes, extraIngredi
     const used = { ...stored, ...computed }
     if (includeToday) Object.assign(used, usageByDay(todayOrders, [today], recipes, extraIngredients))
     // Ngày đếm trong quá khứ: ngày đó đã đóng băng nguyên ngày nên phần sau giờ đếm phải tính lại từ đơn của riêng ngày đó.
-    const ordersByDay: Record<string, Row[]> = {}
-    await Promise.all([...stampedDays].map(async day => {
-        ordersByDay[day] = day === today ? todayOrders : await fetchOrdersSince(addressId, day, nextDayStr(day))
-    }))
+    const ordersByDay: Record<string, Row[]> = Object.fromEntries(await ordersByDayP)
     const afterCount = usageAfterCount(rows, ordersByDay, recipes, extraIngredients)
     return { used, today, fromDay, afterCount }
 }

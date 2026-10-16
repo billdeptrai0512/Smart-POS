@@ -153,12 +153,15 @@ export default function InventoryReportCard({
     // countedCount (số NVL đã nhập Cuối kỳ) đi kèm luôn — cùng vòng lặp, cùng deps.
     // useMemo vì card này KHÔNG memo: mọi re-render của trang (gõ tiền mặt, tick chi phí…)
     // vốn chạy lại cả vòng lặp lookupByLabel này dù không có gì đổi.
-    const { totalLossValue, countedCount } = useMemo(() => {
+    const { totalLossValue, countedCount, losses, uncounted } = useMemo(() => {
         let loss = 0
         let counted = 0
+        const uncounted: string[] = []
+        const losses: { key: string; name: string; qty: string; value: number }[] = []
         for (const ing of sortedList) {
             const v = inventoryInputs[ing.ingredient]
             if (v !== undefined && v !== '') counted++
+            else uncounted.push(ingredientLabel(ing.ingredient))
             const haoHut = computeHaoHut({
                 inventoryValue: v,
                 restockValue: restockInputs[ing.ingredient],
@@ -166,10 +169,14 @@ export default function InventoryReportCard({
                 openingFallback: openingStock[ing.ingredient],
                 used: lookupByLabel(ing.ingredient, usedMap),
             })
-            if (haoHut != null && haoHut < 0) loss += Math.abs(haoHut) * (Number(ing.unit_cost) || 0)
+            if (haoHut != null && haoHut < 0) {
+                const value = Math.abs(haoHut) * (Number(ing.unit_cost) || 0)
+                loss += value
+                losses.push({ key: ing.ingredient, name: ingredientLabel(ing.ingredient), qty: `${Math.abs(haoHut)} ${getIngredientUnit(ing.ingredient, ing.unit, ingredientUnits)}`, value })
+            }
         }
-        return { totalLossValue: loss, countedCount: counted }
-    }, [sortedList, inventoryInputs, restockInputs, openingInputs, openingStock, usedMap])
+        return { totalLossValue: loss, countedCount: counted, uncounted, losses: losses.sort((a, b) => b.value - a.value) }
+    }, [sortedList, inventoryInputs, restockInputs, openingInputs, openingStock, usedMap, ingredientUnits])
 
     if (isLoading) {
         return (
@@ -208,11 +215,26 @@ export default function InventoryReportCard({
 
     // Footer tổng — tiền hao hụt cộng dồn, chỉ hiện khi đã kiểm ít nhất 1 NVL.
     const totalRow = countedCount > 0 && (
-        <div className="flex items-center justify-between">
-            <span className="text-[14px] font-black text-text uppercase">Tổng hao hụt</span>
-            <span className={`text-[14px] font-black tabular-nums ${totalLossValue > 0 ? 'text-danger' : 'text-text-secondary'}`}>
-                {totalLossValue > 0 ? '-' : ''}{formatVND(Math.round(totalLossValue))}
-            </span>
+        <div>
+            <div className="flex items-center justify-between">
+                <span className="text-[14px] font-black text-text uppercase">Tổng hao hụt</span>
+                <span className={`text-[14px] font-black tabular-nums ${totalLossValue > 0 ? 'text-danger' : 'text-text-secondary'}`}>
+                    {totalLossValue > 0 ? '-' : ''}{formatVND(Math.round(totalLossValue))}
+                </span>
+            </div>
+            {losses.length > 0 ? (
+                <div className="mt-2 pt-2 border-t border-border/40 flex flex-col gap-1">
+                    {losses.map(l => (
+                        <div key={l.key} className="flex items-baseline justify-between gap-2 text-[12px]">
+                            <span className="text-text-secondary truncate">{l.name} <span className="text-text-dim tabular-nums">· hụt {l.qty}</span></span>
+                            <span className="font-bold tabular-nums text-danger shrink-0">{l.value > 0 ? `-${formatVND(Math.round(l.value))}` : '—'}</span>
+                        </div>
+                    ))}
+                </div>
+            ) : <p className="text-[11px] mt-0.5 text-success">Khớp hết</p>}
+            {uncounted.length > 0 && (
+                <p className="text-[11px] mt-2 pt-2 border-t border-border/40 text-warning">Chưa kiểm kê ({uncounted.length}): {uncounted.join(', ')}</p>
+            )}
         </div>
     )
 

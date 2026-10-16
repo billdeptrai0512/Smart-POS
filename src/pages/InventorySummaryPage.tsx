@@ -68,7 +68,7 @@ export default function InventorySummaryPage() {
     const open = (key: string) => {
         const q = new URLSearchParams(location.search)
         q.set('tab', 'history')
-        navigate(`/inventory/stocking/${key}?${q}`)
+        navigate(`/inventory/stocking/${key}?${q}`, { state: { ...location.state, backTo: location.pathname + location.search } })
     }
 
     return (
@@ -110,7 +110,7 @@ export default function InventorySummaryPage() {
                     [0, 1, 2, 3].map(i => <Skeleton key={i} className="h-[96px] rounded-[16px]" />)
                 ) : (<>
                     {groupIds.length > 1 && (
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="flex flex-wrap gap-1.5 pt-3 border-t border-border/40">
                             {[{ id: null, name: 'Tất cả' }, ...groupIds.map(id => ({ id, name: nameById[id] || 'Địa chỉ' }))].map(c => (
                                 <button
                                     key={c.id ?? 'all'}
@@ -123,28 +123,32 @@ export default function InventorySummaryPage() {
                     {list.length === 0 ? (
                         <p className="text-text-secondary text-[13px] text-center py-10 bg-surface-light rounded-[14px] border border-border/40">Chưa có nhập kho nào trong {rangeLabel}.</p>
                     ) : (<>
-                    <div className="bg-surface rounded-[16px] border border-border/60 grid grid-cols-2 gap-3 p-4">
-                        <div className="flex flex-col items-start">
-                            <span className={LABEL}>Tổng tiền</span>
-                            <span className="text-[18px] font-black tabular-nums mt-1 text-text">{formatVND(totals.spent)}</span>
-                        </div>
-                        <div className="flex flex-col items-end">
-                            <span className={`${LABEL} ${totals.owing > 0 ? 'text-warning' : ''}`}>Còn nợ</span>
-                            <span className={`text-[18px] font-black tabular-nums mt-1 ${totals.owing > 0 ? 'text-warning' : 'text-text'}`}>{formatVND(totals.owing)}</span>
+                    <div className="bg-surface rounded-[16px] border border-border/60 p-4">
+                        <div className="grid grid-cols-[1fr_auto_1fr] gap-x-4">
+                            <div className="flex flex-col items-start">
+                                <span className={LABEL}>Tổng tiền</span>
+                                <span className="text-[20px] font-black tabular-nums mt-1 text-text">{formatVND(totals.spent)}</span>
+                            </div>
+                            <div className="w-px bg-border/50" />
+                            <div className="flex flex-col items-end">
+                                <span className={`${LABEL} ${totals.owing > 0 ? 'text-warning' : ''}`}>Còn nợ</span>
+                                <span className={`text-[20px] font-black tabular-nums mt-1 ${totals.owing > 0 ? 'text-warning' : 'text-text-dim'}`}>{formatVND(totals.owing)}</span>
+                            </div>
                         </div>
                         {totals.withdrawn > 0 && (
-                            <div className="flex flex-col items-start col-span-2 pt-3 border-t border-border/40">
+                            <div className="flex items-baseline justify-between gap-3 mt-3 pt-3 border-t border-border/40">
                                 <span className={LABEL}>Trị giá rút ra quầy (giá vốn)</span>
-                                <span className="text-[18px] font-black tabular-nums mt-1 text-text">{formatVND(Math.round(totals.withdrawn))}</span>
+                                <span className="text-[15px] font-black tabular-nums text-text shrink-0">{formatVND(Math.round(totals.withdrawn))}</span>
                             </div>
                         )}
                     </div>
 
-                    {list.map(r => {
+                    <span className={`${LABEL} px-1 mt-1`}>{list.length} nguyên liệu</span>
+                                        {list.map(r => {
                         const cfg = cfgByKey.get(r.ingredient)
                         const unit = getIngredientUnit(r.ingredient, ingredientUnits[r.ingredient])
                         // Số chính = đơn vị nhỏ nhất (như Nhật ký / Thông tin); "= 20 bịch" chỉ là gợi ý nhỏ.
-                        const fmt = (n: number) => `${Math.round(n * 10) / 10} ${unit}`
+                        const fmt = (n: number) => `${(Math.round(n * 10) / 10).toLocaleString('vi-VN')} ${unit}`
                         const hint = (n: number) => packHint(n, cfg?.pack_size, cfg?.pack_unit, unit, pack2Of(cfg))
                         const withdrawnTotal = r.withdrawnQty
                         const perAddress = groupIds.length > 1 && !filterAddr ? groupIds.filter(id => r.withdrawn[id]) : []
@@ -152,19 +156,18 @@ export default function InventorySummaryPage() {
                             <button
                                 key={r.ingredient}
                                 onClick={() => open(r.ingredient)}
-                                className="w-full text-left bg-surface border border-border/60 rounded-[20px] p-4 flex flex-col gap-3 active:scale-[0.99] hover:border-primary/40 transition-all"
+                                className="shrink-0 w-full text-left bg-surface border border-border/60 rounded-[16px] p-4 flex flex-col gap-3 active:scale-[0.99] hover:border-primary/40 transition-all"
                             >
-                                <div className="flex items-baseline justify-between gap-2">
+                                <div className="flex items-baseline justify-between gap-2 pb-3 border-b border-border/40">
                                     <span className="text-[15px] font-black text-text truncate">{ingredientLabel(r.ingredient)}</span>
-                                    {r.spent > 0 && <span className="text-[16px] font-black tabular-nums shrink-0 text-text">{formatVND(r.spent)}</span>}
                                 </div>
-                                <div className={`grid gap-3 ${r.owing > 0 ? "grid-cols-3" : "grid-cols-2"}`}>
-                                    <div className="flex flex-col"><span className={LABEL}>Đã nhập</span><span className={`text-[14px] font-bold tabular-nums mt-0.5 ${r.qty ? 'text-text' : 'text-text-dim'}`}>{r.qty ? fmt(r.qty) : '—'}</span>{hint(r.qty) && <span className="text-[11px] font-medium tabular-nums text-text-dim">{hint(r.qty)}</span>}</div>
-                                    <div className="flex flex-col"><span className={LABEL}>Rút ra quầy</span><span className="text-[14px] font-bold tabular-nums text-text mt-0.5">{withdrawnTotal ? fmt(withdrawnTotal) : '—'}</span>{hint(withdrawnTotal) && <span className="text-[11px] font-medium tabular-nums text-text-dim">{hint(withdrawnTotal)}</span>}{r.value > 0 && <span className="text-[11px] font-medium tabular-nums text-text-dim">≈ {formatVND(Math.round(r.value))} giá vốn</span>}</div>
+                                <div className={`grid gap-3 divide-x divide-border/40 [&>div:not(:first-child)]:pl-3 ${r.owing > 0 ? "grid-cols-3" : "grid-cols-2"}`}>
+                                    <div className="flex flex-col"><span className={LABEL}>Đã nhập</span><span className={`text-[14px] font-bold tabular-nums mt-0.5 ${r.qty ? 'text-text' : 'text-text-dim'}`}>{r.qty ? fmt(r.qty) : '—'}</span>{hint(r.qty) && <span className="text-[11px] font-medium tabular-nums text-text-dim">{hint(r.qty)}</span>}{r.spent > 0 && <span className="text-[11px] font-medium tabular-nums text-text-dim">= {formatVND(r.spent)}</span>}</div>
+                                    <div className="flex flex-col"><span className={LABEL}>Rút ra quầy</span><span className="text-[14px] font-bold tabular-nums text-text mt-0.5">{withdrawnTotal ? fmt(withdrawnTotal) : '—'}</span>{hint(withdrawnTotal) && <span className="text-[11px] font-medium tabular-nums text-text-dim">{hint(withdrawnTotal)}</span>}{r.value > 0 && <span className="text-[11px] font-medium tabular-nums text-text-dim">≈ {formatVND(Math.round(r.value))}</span>}</div>
                                     {r.owing > 0 && <div className="flex flex-col items-end"><span className={`${LABEL} text-warning`}>Còn nợ</span><span className="text-[14px] font-bold tabular-nums mt-0.5 text-warning">{formatVND(r.owing)}</span></div>}
                                 </div>
                                 {perAddress.length > 0 && (
-                                    <div className="flex flex-wrap gap-1.5 pt-3 border-t border-border/40">
+                                    <div className="flex flex-wrap gap-1.5">
                                         {perAddress.map(id => (
                                             <span key={id} className={PILL}>{nameById[id] || 'Địa chỉ'} · {fmt(r.withdrawn[id])}</span>
                                         ))}

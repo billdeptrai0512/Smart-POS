@@ -193,7 +193,7 @@ export function useShiftInventoryState(
     // reflects here without manual refresh.
     // Exposed so callers can refresh after writing stock (e.g. Nhập kho từ /report)
     // — the warehouse balances then reflect the new purchase without a tab switch.
-    const { warehouseStocks, openingStock, openingPeriods, reload: reloadWarehouseStock } = useWarehouseStockSync(addressId, {
+    const { warehouseStocks, openingStock, openingPeriods, reload: reloadWarehouseStock, prefetch: prefetchStocks } = useWarehouseStockSync(addressId, {
         seedReady, isDayScope, seedYesterdayClosing,
         // Chỉ xem HÔM NAY; scope ngày thì đợi seed của cha, không seed (dải notice /pos) thì chạy luôn.
         estimateOpening: (!dateKey || dateKey === dateStringVN()) && (!isDayScope || seedReady),
@@ -220,11 +220,12 @@ export function useShiftInventoryState(
         // đổi identity và effect này bắn lại get_ingredient_stocks_v2 y hệt lần nữa (mỗi lần
         // mở trang 2 lượt quét toàn bộ shift_closings). Đợi không mất gì: trang vẫn đang
         // skeleton chờ đúng RPC báo cáo đó (isReady trong DailyReportPage).
-        if (isDayScope && !seedReady) return
+        // RPC tồn kho không cần phiếu chốt → bắn trước, reload khi seedReady dùng lại đúng lượt đó (vẫn 1 lượt/lần mở).
+        if (isDayScope && !seedReady) { prefetchStocks(); return }
         reloadStocks()
         // Chỉ khi tab quay lại sau khi đi vắng — mỗi lần 'visible' là 2 query lặp vô hạn.
         return onTabReturn(reloadStocks)
-    }, [addressId, reloadStocks, isDayScope, seedReady])
+    }, [addressId, reloadStocks, prefetchStocks, isDayScope, seedReady])
 
     // ── Remote merge: fold another device's saved inventory_report into local maps ──
     // Per-field rule: nếu field local đang dirty (≠ baseline → user đang gõ dở) thì GIỮ
