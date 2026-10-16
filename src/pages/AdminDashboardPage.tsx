@@ -300,7 +300,7 @@ function GuestFunnelBody({ funnel, visits }: { funnel: GuestFunnel; visits?: num
     const entered = stages[0].count
     // Thanh/% các dòng tính trên số ghé /login khi có; kẹp 100 vì khách cũ bấm hướng dẫn từ trước
     // khi có tracking có thể làm số bấm > số ghé.
-    const base = visits ? visits : entered
+    const base = visits || entered
     const barPct = (n: number) => (base > 0 ? Math.min(100, Math.round((n / base) * 100)) : 0)
     const totalSignup = signup.after_complete + signup.early
     const currentPct = entered > 0 ? Math.round((totalSignup / entered) * 100) : null
@@ -314,7 +314,7 @@ function GuestFunnelBody({ funnel, visits }: { funnel: GuestFunnel; visits?: num
             {delta && <p className={`text-[11px] font-bold mb-3 ${delta.cls}`}>Đăng ký {delta.text}</p>}
             <div className="flex flex-col gap-3">
                 {visits != null && (
-                    <FunnelStageRow dotClass="bg-primary" label="Vào trang chủ" count={visits} pct={visits > 0 ? 100 : 0} />
+                    <FunnelStageRow dotClass="bg-primary" label="Vào trang chủ" count={visits} pct={barPct(visits)} />
                 )}
                 {stages.map((f) => (
                     // step_median_seconds = thời gian trung vị TỪ BƯỚC TRƯỚC tới bước này —

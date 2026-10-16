@@ -1,14 +1,10 @@
--- admin_branch_stages v2: phễu chuyển đổi 8 nhóm LOẠI TRỪ NHAU (mỗi địa chỉ còn sống đúng 1 nhóm).
--- Khác v1 (20261020):
---   • Bỏ 'cash_closed' ("nhập thực thu nhưng chưa có trial"): trial giờ tự cấp ở lần lưu thực thu có tiền + có đơn
---     (852d430), nhập thực thu 0 / không đơn = đang test → rơi về 'ordered'/'never'. Địa chỉ đã chốt ca TRƯỚC trigger và
---     chưa có dòng gói (đang free vĩnh viễn) cũng rơi về 'ordered' — kiểm tra bằng query chẩn đoán trước khi apply.
---   • Tách trial / paid theo "đã kiểm kê": counted = có ít nhất 1 entry inventory_report với `remaining` khác null
---     (đã từng đếm tồn thật; entry tombstone/chỉ có Nhập thêm không tính). Kiểm kê là tính năng sống còn nhưng trigger
---     trial không đòi → cần thấy bao nhiêu chi nhánh dùng thử/trả phí mà KHÔNG kiểm kê.
---   • Tách 'expired' làm 2: expired_pre (hết hạn, chưa từng có gói trả phí) và expired_post (từng trả phí, giờ hết hạn).
--- Trả: never, ordered, trial_counted, trial_uncounted, expired_pre, paid_counted, paid_uncounted, expired_post,
--- + active_today / active_yesterday như cũ. Cùng signature → CREATE OR REPLACE, khai lại search_path + guard + REVOKE/GRANT.
+-- admin_branch_stages v2: phễu chi nhánh 8 nhóm loại trừ nhau (mỗi địa chỉ còn sống đúng 1 nhóm).
+--   • Bỏ 'cash_closed': trial tự cấp ở lần lưu thực thu có tiền + có đơn (852d430); nhập 0 / không đơn = đang test.
+--     Địa chỉ đã chốt ca TRƯỚC trigger và chưa có dòng gói rơi về 'ordered' — chạy query chẩn đoán trước khi apply.
+--   • trial / paid tách theo đã kiểm kê: counted = có entry inventory_report với `remaining` khác null.
+--   • expired tách: expired_pre (chưa từng trả phí) / expired_post (từng trả phí).
+-- Cùng signature → CREATE OR REPLACE, khai lại search_path + guard + REVOKE/GRANT.
+CREATE OR REPLACE, khai lại search_path + guard + REVOKE/GRANT.
 CREATE OR REPLACE FUNCTION admin_branch_stages()
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -50,10 +46,8 @@ BEGIN
         ),
         staged AS (
             SELECT CASE
-                       WHEN s.paid_now  AND c.address_id IS NOT NULL THEN 'paid_counted'
-                       WHEN s.paid_now                               THEN 'paid_uncounted'
-                       WHEN s.trial_now AND c.address_id IS NOT NULL THEN 'trial_counted'
-                       WHEN s.trial_now                              THEN 'trial_uncounted'
+                       WHEN s.paid_now  THEN 'paid'  || CASE WHEN c.address_id IS NOT NULL THEN '_counted' ELSE '_uncounted' END
+                       WHEN s.trial_now THEN 'trial' || CASE WHEN c.address_id IS NOT NULL THEN '_counted' ELSE '_uncounted' END
                        WHEN s.ever_paid                              THEN 'expired_post'
                        WHEN s.address_id IS NOT NULL                 THEN 'expired_pre'
                        WHEN o.address_id IS NOT NULL                 THEN 'ordered'
