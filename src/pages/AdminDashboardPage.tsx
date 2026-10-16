@@ -270,7 +270,7 @@ function OnboardingFunnelCard({ byRange, visits }: { byRange: Record<string, Gue
 // Nhãn mốc do RPC trả (xem 20261018_guest_onboarding_funnel_five_steps.sql) — đổi chữ ở client
 // thay vì viết lại cả hàm SQL chỉ để đổi nhãn hiển thị.
 const stageLabel = (raw: string) =>
-    raw.replace(/^Xong: /, '').replace('Cài công thức (hết guide)', 'Nhập định lượng')
+    raw.replace(/^Xong: /, '').replace('Cài công thức (hết guide)', 'Nhập định lượng').replace('Vào dùng thử', 'Bấm hướng dẫn sử dụng')
 
 function FunnelStageRow({ dotClass, label, count, pct, seconds }: { dotClass: string; label: string; count: number; pct: number; seconds?: number | null }) {
     return (
@@ -312,7 +312,7 @@ function GuestFunnelBody({ funnel, visits }: { funnel: GuestFunnel; visits?: num
             {delta && <p className={`text-[11px] font-bold mb-3 ${delta.cls}`}>Đăng ký {delta.text}</p>}
             <div className="flex flex-col gap-3">
                 {visits != null && (
-                    <FunnelStageRow dotClass="bg-primary" label="Ghé trang đăng nhập" count={visits} pct={visits > 0 ? 100 : 0} />
+                    <FunnelStageRow dotClass="bg-primary" label="Vào trang chủ" count={visits} pct={visits > 0 ? 100 : 0} />
                 )}
                 {stages.map((f) => (
                     // step_median_seconds = thời gian trung vị TỪ BƯỚC TRƯỚC tới bước này —
