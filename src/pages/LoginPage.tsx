@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate, Link } from 'react-router-dom'
 import ErrorBanner from '../components/common/ErrorBanner'
 import PasswordInput from '../components/common/PasswordInput'
 import FloatingLabelInput from '../components/common/FloatingLabelInput'
 import { errorMessage } from '../utils/errorMessage'
+import { trackLoginPageVisit } from '../services/onboardingFunnelService'
 
 // Supabase auth trả message tiếng Anh — dịch những lỗi login thường gặp
 const AUTH_ERROR_VI: Record<string, string> = {
@@ -21,6 +22,8 @@ export default function LoginPage() {
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
     const [guestLoading, setGuestLoading] = useState(false)
+
+    useEffect(() => { trackLoginPageVisit() }, [])
 
     async function handleGuest() {
         setGuestLoading(true)

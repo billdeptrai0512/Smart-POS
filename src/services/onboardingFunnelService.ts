@@ -40,6 +40,21 @@ export function trackGuestOnboardingStage(stage: number) {
     fireAndForget('track_guest_onboarding_stage', { p_visitor_id: visitorId, p_stage: stage }, 'funnel')
 }
 
+// Đầu phễu: 1 lượt ghé /login (login_page_visits, 20261024) — cùng visitor id với phễu để khớp
+// với bước bấm "Hướng dẫn sử dụng". Cùng ngày gọi lại vô hại (PK trùng → bỏ qua).
+export function trackLoginPageVisit() {
+    const visitorId = getOrCreateVisitorId()
+    if (!visitorId) return
+    fireAndForget('track_login_page_visit', { p_visitor_id: visitorId }, 'funnel')
+}
+
+// Số trình duyệt ghé /login theo today/week/all. Ném lỗi để caller ẩn dòng khi chưa apply RPC.
+export async function fetchLoginPageVisits() {
+    const { data, error } = await supabase.rpc('login_page_visit_stats')
+    if (error) throw error
+    return data as Record<string, number>
+}
+
 // Mốc cuối của phễu: khách dùng thử đã đăng ký tài khoản thật. Gọi sau khi signUp thành công
 // (AuthContext), TRƯỚC clearGuestData() cho chắc — hiện clearGuestData chỉ xoá KEYS của
 // localRepository nên visitor id vẫn sống, nhưng không đáng phụ thuộc vào chi tiết đó.

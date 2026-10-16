@@ -3,7 +3,7 @@ import { useNavigate, Navigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { fetchAdminDashboard, fetchAdminBranchStages } from '../services/adminDashboardService'
-import { fetchGuestOnboardingFunnel } from '../services/onboardingFunnelService'
+import { fetchGuestOnboardingFunnel, fetchLoginPageVisits } from '../services/onboardingFunnelService'
 import { timeStringVN } from '../utils/dateVN'
 import MonetizationToggle from '../components/AdminDashboardPage/MonetizationToggle'
 import { errorMessage } from '../utils/errorMessage'
@@ -87,11 +87,13 @@ export default function AdminDashboardPage() {
     // Hai RPC này lỗi/chưa apply → null → ẩn hẳn thẻ, không hỏng phần còn lại của dashboard.
     const [byRange, setByRange] = useState<Record<string, GuestFunnel> | null>(null)
     const [stages, setStages] = useState<Record<string, number> | null>(null)
+    const [visits, setVisits] = useState<Record<string, number> | null>(null)
 
     const reload = useCallback(() => {
         fetchAdminDashboard().then(setData).catch((e) => setError(errorMessage(e, '')))
         fetchGuestOnboardingFunnel().then(setByRange).catch(() => setByRange(null))
         fetchAdminBranchStages().then(setStages).catch(() => setStages(null))
+        fetchLoginPageVisits().then(setVisits).catch(() => setVisits(null))
     }, [])
 
     useEffect(() => {
@@ -120,7 +122,7 @@ export default function AdminDashboardPage() {
                             <Loader2 size={24} className="animate-spin text-text-dim" />
                         </div>
                     ) : (
-                        <DashboardBody data={data} byRange={byRange} stages={stages} />
+                        <DashboardBody data={data} byRange={byRange} stages={stages} visits={visits} />
                     )}
                 </div>
             </div>
@@ -128,7 +130,7 @@ export default function AdminDashboardPage() {
     )
 }
 
-function DashboardBody({ data, byRange, stages }: { data: DashboardData; byRange: Record<string, GuestFunnel> | null; stages: Record<string, number> | null }) {
+function DashboardBody({ data, byRange, stages, visits }: { data: DashboardData; byRange: Record<string, GuestFunnel> | null; stages: Record<string, number> | null; visits: Record<string, number> | null }) {
     const { attention, activity, attention_total_count } = data
     // total_count = đếm không giới hạn (đã dedupe theo chi nhánh) từ RPC; attention (mảng) chỉ là top-20
     // hiển thị nên KHÔNG dùng .length làm KPI — sẽ undercount khi > 20 chi nhánh cần chú ý.
@@ -144,7 +146,7 @@ function DashboardBody({ data, byRange, stages }: { data: DashboardData; byRange
                 </div>
             )}
             <div className="flex flex-col gap-4">
-                <OnboardingFunnelCard byRange={byRange} />
+                <OnboardingFunnelCard byRange={byRange} visits={visits} />
                 <ActivityCard items={activity} />
             </div>
             {/* Công tắc cấu hình, không phải số liệu — xuống cuối, đứng đầu trang chỉ
@@ -228,7 +230,7 @@ const RANGE_TABS = [
 // Fetch riêng (không qua fetchAdminDashboard) — 1 lần gọi trả cả 3 khoảng thời gian
 // (today/week/all), đổi tab KHÔNG cần round-trip mới. byRange = null khi RPC chưa apply
 // hoặc lỗi → ẩn hẳn phần guest funnel, không hỏng phần còn lại của dashboard.
-function OnboardingFunnelCard({ byRange }: { byRange: Record<string, GuestFunnel> | null }) {
+function OnboardingFunnelCard({ byRange, visits }: { byRange: Record<string, GuestFunnel> | null; visits: Record<string, number> | null }) {
     const [range, setRange] = useState('week')
 
     const funnel = byRange?.[range]
@@ -253,7 +255,7 @@ function OnboardingFunnelCard({ byRange }: { byRange: Record<string, GuestFunnel
             </div>
             <div className="mt-1">
                 {funnel?.stages?.length ? (
-                    <GuestFunnelBody funnel={funnel} />
+                    <GuestFunnelBody funnel={funnel} visits={visits?.[range]} />
                 ) : (
                     <p className="text-[11px] text-text-dim">Chưa có khách nào vào dùng thử trong khoảng này</p>
                 )}
@@ -291,9 +293,13 @@ function FunnelStageRow({ dotClass, label, count, pct, seconds }: { dotClass: st
     )
 }
 
-function GuestFunnelBody({ funnel }: { funnel: GuestFunnel }) {
+function GuestFunnelBody({ funnel, visits }: { funnel: GuestFunnel; visits?: number }) {
     const { stages, signup, prev } = funnel
     const entered = stages[0].count
+    // Thanh/% các dòng tính trên số ghé /login khi có; kẹp 100 vì khách cũ bấm hướng dẫn từ trước
+    // khi có tracking có thể làm số bấm > số ghé.
+    const base = visits ? visits : entered
+    const barPct = (n: number) => (base > 0 ? Math.min(100, Math.round((n / base) * 100)) : 0)
     const totalSignup = signup.after_complete + signup.early
     const currentPct = entered > 0 ? Math.round((totalSignup / entered) * 100) : null
     // prev = null cho khoảng "Tất cả" (không có "kỳ trước" tự nhiên) và cho
@@ -305,6 +311,9 @@ function GuestFunnelBody({ funnel }: { funnel: GuestFunnel }) {
         <>
             {delta && <p className={`text-[11px] font-bold mb-3 ${delta.cls}`}>Đăng ký {delta.text}</p>}
             <div className="flex flex-col gap-3">
+                {visits != null && (
+                    <FunnelStageRow dotClass="bg-primary" label="Ghé trang đăng nhập" count={visits} pct={visits > 0 ? 100 : 0} />
+                )}
                 {stages.map((f) => (
                     // step_median_seconds = thời gian trung vị TỪ BƯỚC TRƯỚC tới bước này —
                     // chỗ nào số này to là chỗ khách khựng lại lâu nhất, đáng sửa guide trước.
@@ -313,7 +322,7 @@ function GuestFunnelBody({ funnel }: { funnel: GuestFunnel }) {
                         dotClass={f.stage === 0 ? 'bg-primary' : 'bg-warning'}
                         label={stageLabel(f.label)}
                         count={f.count}
-                        pct={entered > 0 ? Math.round((f.count / entered) * 100) : 0}
+                        pct={barPct(f.count)}
                         seconds={f.step_median_seconds}
                     />
                 ))}
@@ -322,7 +331,7 @@ function GuestFunnelBody({ funnel }: { funnel: GuestFunnel }) {
                     dotClass="bg-success"
                     label="Đăng ký tài khoản"
                     count={totalSignup}
-                    pct={currentPct ?? 0}
+                    pct={barPct(totalSignup)}
                 />
             </div>
         </>
