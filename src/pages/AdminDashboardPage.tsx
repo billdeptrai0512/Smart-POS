@@ -349,7 +349,7 @@ const BRANCH_STAGES = [
     { key: 'cash_closed', label: 'Nhập thực thu nhưng chưa bắt đầu trial', cls: 'bg-danger' },
     { key: 'trial', label: 'Đang dùng thử', cls: 'bg-primary' },
     { key: 'paid', label: 'Đã đăng ký', cls: 'bg-success' },
-    { key: 'expired', label: 'Hết hạn, chưa gia hạn', cls: 'bg-text-dim' },
+    { key: 'expired', label: 'Ngưng sử dụng', cls: 'bg-text-dim' },
 ] as const
 
 function BranchStageCard({ stages }: { stages: Record<string, number> }) {
