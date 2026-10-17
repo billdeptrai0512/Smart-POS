@@ -70,7 +70,10 @@ export default function ShiftPrepCard({
     const isUrgent = (it: Item) => it.kind === 'depleted'
     const [handledOnOpen] = useState(() => new Set(
         rows.filter(it => checked[it.ingredient] || skipped[it.ingredient] || it.done).map(it => it.ingredient)))
-    const ordered = [...rows].sort((a, b) => Number(isUrgent(b)) - Number(isUrgent(a)) || Number(handledOnOpen.has(a.ingredient)) - Number(handledOnOpen.has(b.ingredient)))
+    // Card Mua: trong nhóm còn việc, hết hẳn (kho = 0) lên trước, rồi dưới tối thiểu, rồi còn lại — mắt đọc từ gấp nhất xuống.
+    const low = (it: Item) => it.warehouse != null && it.warehouse < it.minStock
+    const tier = (it: Item) => skipMode ? 0 : it.warehouse === 0 ? 0 : low(it) ? 1 : 2
+    const ordered = [...rows].sort((a, b) => Number(isUrgent(b)) - Number(isUrgent(a)) || Number(handledOnOpen.has(a.ingredient)) - Number(handledOnOpen.has(b.ingredient)) || tier(a) - tier(b))
     const [editing, setEditing] = useState<string | null>(null)
     const [draft, setDraft] = useState(0) // số đang sửa (đơn vị gốc) của dòng `editing`
     const split = skipMode && ordered.some(isUrgent) && ordered.some(it => !isUrgent(it))
@@ -100,15 +103,15 @@ export default function ShiftPrepCard({
                         )
                         // Nhãn nhỏ trên, số dưới (lưới 2×2 ở card Mua): mắt quét cột số nhanh hơn dòng "Nhãn: số".
                         // Cam = hành động (CTA "Mua"), đỏ = vấn đề (kho dưới mức tối thiểu), xanh = đã mua đủ, trắng = thông tin.
-                        const field = (label: string, value: ReactNode, right = false, valueCls = 'text-text') => (
+                        const field = (label: string, value: ReactNode, right = false, valueCls = 'text-text-secondary') => (
                             <div className={`min-w-0 ${right ? 'text-right' : ''}`}>
                                 <span className="block text-[10px] font-bold uppercase tracking-wide text-text-dim">{label}</span>
                                 <span className={`block text-[13px] font-bold tabular-nums ${valueCls}`}>{value}</span>
                             </div>
                         )
                         // Vạch trái 2 mức: hết hẳn (kho = 0) đỏ đậm, chỉ dưới tối thiểu đỏ nhạt — để món gấp nổi lên trong danh sách toàn đỏ.
-                        const edge = it.done ? 'border-transparent' : it.warehouse === 0 ? 'border-danger' : it.warehouse != null && it.warehouse < it.minStock ? 'border-danger/40' : 'border-transparent'
-                        const warehouseCls = it.done ? 'text-success' : it.warehouse != null && it.warehouse < it.minStock ? 'text-danger' : 'text-text'
+                        const edge = it.done ? 'border-transparent' : it.warehouse === 0 ? 'border-danger' : low(it) ? 'border-danger/40' : 'border-transparent'
+                        const warehouseCls = it.done ? 'text-success' : low(it) ? 'text-danger' : 'text-text'
                         // Các dòng dưới cùng nằm NGOÀI hàng có viên thuốc → chạy hết chiều ngang, không bị bẻ dòng bởi viên.
                         // Món đã mua đủ thì viên "Đã mua N" đã nói số đã mua — khỏi lặp.
                         const showBought = it.boughtToday > 0 && !it.done
@@ -259,7 +262,7 @@ export default function ShiftPrepCard({
                         const restock = () => onRestock?.(it.ingredient, it.needPacks > 0 ? it.needPacks : it.need)
                         const open = onOpen ? () => onOpen(it.ingredient) : restock
                         return (
-                            <div key={it.ingredient} className={`p-3 mb-2.5 last:mb-0 rounded-[14px] bg-surface-light border-l-2 ${edge}`}>
+                            <div key={it.ingredient} className={`p-3 mb-3.5 last:mb-0 rounded-[14px] bg-surface-light ring-1 ring-border/30 border-l-2 ${edge} ${it.done ? `opacity-60 ${ordered[i - 1]?.done ? '' : 'mt-5'}` : ''}`}>
                                 {/* Lưới 2×2: hàng 1 = tên | nút (cùng một đường giữa); hàng 2 = 2 dòng trái | 2 dòng phải (cùng đỉnh).
                                     min-h-8! thấp hơn PILL (44px) để nút cân với tên. */}
                                 <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5">
