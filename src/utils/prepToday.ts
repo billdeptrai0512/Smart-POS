@@ -244,7 +244,10 @@ export interface GroupPrepRow {
     totalPull: number
     buy: number
 }
-export function buildGroupPrepPlan({ branches, pool }: { branches: GroupPrepBranch[]; pool?: UsageMap | null }): GroupPrepRow[] {
+// minAsFloor (địa chỉ lẻ, không có kho tổng): min_stock là sàn của kho chứ không cộng chồng lên phần rút mai — cần mua =
+// max(min_stock, Σ rút) − pool, cùng công thức buildWarehousePrepList (card Bổ sung tồn kho trong Lưu trữ). Mặc định (kho tổng của nhóm):
+// min_stock + Σ rút − pool, vì rút ra quầy xong kho vẫn phải còn ≥ min_stock.
+export function buildGroupPrepPlan({ branches, pool, minAsFloor = false }: { branches: GroupPrepBranch[]; pool?: UsageMap | null; minAsFloor?: boolean }): GroupPrepRow[] {
     const byIng = new Map<string, Omit<GroupPrepRow, 'pool' | 'totalPull' | 'buy'>>()
     for (const b of branches) {
         for (const ing of b.ingredientsList || []) {
@@ -264,7 +267,7 @@ export function buildGroupPrepPlan({ branches, pool }: { branches: GroupPrepBran
     for (const row of byIng.values()) {
         const poolNow = poolOf(row.ingredient, pool)
         const totalPull = r1(row.branches.reduce((s, x) => s + x.qty, 0))
-        const buy = Math.max(0, r1(row.minStock + totalPull - poolNow))
+        const buy = Math.max(0, r1((minAsFloor ? Math.max(row.minStock, totalPull) : row.minStock + totalPull) - poolNow))
         if (totalPull > 0 || buy > 0) out.push({ ...row, pool: poolNow, totalPull, buy })
     }
     return out.sort((a, c) => c.buy - a.buy || c.totalPull - a.totalPull)

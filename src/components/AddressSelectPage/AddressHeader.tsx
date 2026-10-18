@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Building2, Users, Mail, Loader2, Check } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { setMyEmail } from '../../services/authService'
+import AddressNotice from './AddressNotice'
 import { Dialog, ModalHeader } from '../common/ModalShell'
 import type { Profile } from '../../types/domain'
 import { errorMessage } from '../../utils/errorMessage'
@@ -113,6 +114,12 @@ export default function AddressHeader({ isStaff, isGuest, activeTab, setActiveTa
                     </div>
                 )}
             </div>
+
+            {showTabs && (
+                <div className="mx-6 mt-3 rounded-[14px] overflow-hidden">
+                    <AddressNotice />
+                </div>
+            )}
 
             {emailOpen && <EmailModal email={email} onClose={() => setEmailOpen(false)} />}
         </header>
