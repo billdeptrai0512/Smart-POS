@@ -649,7 +649,7 @@ export function POSProvider() {
         applyCart(c => [...c, newItem])
     }, [productExtras, productDiscounts, applyCart])
 
-    // Giảm giá / ghi chú riêng một dòng trong giỏ (mở từ CartListModal / CartNoteModal).
+    // Giảm giá / ghi chú riêng một dòng trong giỏ (mở từ CartListModal).
     // Sống trên chính cart item nên tự dọn khi dòng đó bị xoá/gửi đơn — không cần reset riêng.
     const patchCartItem = useCallback((cartItemId: UUID, patch: Partial<CartItem>) => applyCart(c => patchLine(c, cartItemId, patch)), [applyCart])
     const setItemDiscount = useCallback((cartItemId: UUID, discount: Discount) => patchCartItem(cartItemId, { discount }), [patchCartItem])

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, type FormEvent, type SyntheticEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
-import { Plus, Check, Pencil, Trash2, ArrowUpDown, GripVertical } from 'lucide-react'
+import { Plus, Check, Pencil, Trash2, ArrowUpDown, GripVertical, ChevronLeft } from 'lucide-react'
 import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { useCart } from '../../contexts/CartContext'
@@ -76,9 +76,10 @@ function pendingCups(rounds: TableRound[]) {
 // inline = true: render as the permanent right-pane "screen" on tablet split-view
 // (POSPage) instead of a bottom-sheet Dialog — no backdrop, no close button, picking
 // a table just updates this pane (no onClose to call back to).
-interface Props { onClose?: () => void; inline?: boolean; takeawaySlot?: HTMLElement | null }
+// backLabel: mở từ một modal khác (modal giỏ) thì hiện nút "‹ <backLabel>" ở đầu để quay lại bước trước.
+interface Props { onClose?: () => void; inline?: boolean; takeawaySlot?: HTMLElement | null; backLabel?: string }
 
-export default function TableModal({ onClose, inline = false, takeawaySlot }: Props) {
+export default function TableModal({ onClose, inline = false, takeawaySlot, backLabel }: Props) {
     const { tableName, setTableName, openTables, refreshTables, showError } = useCart()
     const { addressId, selectedAddress, setTables } = useAddress()
     const { isManager, isAdmin } = useAuth()
@@ -512,6 +513,11 @@ export default function TableModal({ onClose, inline = false, takeawaySlot }: Pr
 
     return (
         <Dialog onClose={() => onClose?.()} panelClassName="w-full max-w-md mx-4 max-h-[92dvh] flex flex-col bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
+            {backLabel && (
+                <button type="button" onClick={() => onClose?.()} className="shrink-0 self-start flex items-center gap-1 pl-4 pr-3 pt-4 text-[13px] font-bold text-text-secondary hover:text-text transition-colors">
+                    <ChevronLeft size={16} strokeWidth={3} />{backLabel}
+                </button>
+            )}
             {inner}
         </Dialog>
     )

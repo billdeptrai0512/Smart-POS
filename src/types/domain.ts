@@ -81,7 +81,7 @@ export interface CartItem {
     toppingIds?: string[]
     /** Per-line discount, set via the cart list's per-item discount modal. */
     discount?: Discount
-    /** Per-line kitchen note, set via CartNoteModal. */
+    /** Per-line kitchen note, set via CartListModal. */
     note?: string | null
     /** Set on lines reloaded by "Sửa" (reopenRoundIntoCart) — kitchen ticket prints "HỦY #<old no>". */
     edit?: { orderNo: number | null }
