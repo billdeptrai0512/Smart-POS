@@ -6,7 +6,7 @@ import { fetchTodayStats, submitOrder, fetchOrderNo, fetchTodayOrders, deleteOrd
 import {
     isNetworkError, cartTotal, cartOrderCount, cartDiscountTotal, newCartLine, patchLine, removeLatestOfProduct, toggleExtraOnLast, toggleToppingOnLast,
     setStickyExtraOnLast, buildLastOrderFromDB, buildLastOrderFromCart, mergeFetchedOrders, computeSubmitTotals, submitLines, appendRoundToTables,
-    buildOptimisticRound, buildOptimisticOrder, cartItemsFromRound, seedRoundDiscounts, type LastOrder,
+    buildOptimisticRound, buildOptimisticOrder, cartItemsFromRound, seedRoundDiscounts, repriceCart, type LastOrder,
 } from '../services/cartOps'
 import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder, addPendingTableClose, removePendingTableClose } from '../hooks/useOfflineSync'
@@ -642,12 +642,20 @@ export function POSProvider() {
     // ref mirror) so the identity stays stable
     // across taps — otherwise ProductCard's React.memo never bails out, since
     // onAdd/onRemove would be new every single tap.
+    const tableNameRef = useRef(tableName)
+    tableNameRef.current = tableName
     const handleAddItem = useCallback((product: Row) => {
-        const newItem = newCartLine(product, productExtras[product.id], enabledStickyExtraIdsRef.current, productDiscounts[product.id], crypto.randomUUID())
+        const newItem = newCartLine(product, productExtras[product.id], enabledStickyExtraIdsRef.current, productDiscounts[product.id], crypto.randomUUID(), tableNameRef.current)
         // ponytail: chạm lại cùng món = thêm DÒNG mới, không cộng quantity — mỗi dòng
         // mang extras riêng, gộp lại thì không sửa topping từng ly được nữa.
         applyCart(c => [...c, newItem])
     }, [productExtras, productDiscounts, applyCart])
+
+    // Chương trình giảm giá có thể phụ thuộc bàn (mang đi / ngồi lại) mà bàn chọn SAU khi chạm món —
+    // đổi bàn (hoặc chương trình đổi) thì tính lại giá cả giỏ.
+    useEffect(() => {
+        applyCart(c => repriceCart(c, products, productDiscounts, tableName))
+    }, [tableName, products, productDiscounts, applyCart])
 
     // Giảm giá / ghi chú riêng một dòng trong giỏ (mở từ CartListModal).
     // Sống trên chính cart item nên tự dọn khi dòng đó bị xoá/gửi đơn — không cần reset riêng.

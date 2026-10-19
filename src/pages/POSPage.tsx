@@ -105,6 +105,7 @@ export default function POSPage() {
                     productExtras={productExtras}
                     productToppings={productToppings}
                     productDiscounts={productDiscounts}
+                    tableName={tableName}
                     onToggleExtra={handleToggleExtra}
                     onToggleTopping={handleToggleTopping}
                     enabledStickyExtraIds={enabledStickyExtraIds}

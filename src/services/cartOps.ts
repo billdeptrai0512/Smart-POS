@@ -27,10 +27,25 @@ export const cartDiscountTotal = (cart: CartItem[]) => cart.reduce((sum, item) =
 
 // Chạm lại cùng món = thêm DÒNG mới, không cộng quantity (mỗi dòng mang extras/topping riêng).
 // Giá lấy theo chương trình giảm giá đang hiệu lực nếu có.
-export function newCartLine(product: Row, productExtras: CartExtra[] | undefined, enabledStickyIds: string[], programs: DiscountProgram[] | undefined, cartItemId: UUID): CartItem {
+export function newCartLine(product: Row, productExtras: CartExtra[] | undefined, enabledStickyIds: string[], programs: DiscountProgram[] | undefined, cartItemId: UUID, tableName: string | null = null): CartItem {
     const stickyExtras = (productExtras || []).filter(e => e.is_sticky && enabledStickyIds.includes(e.id))
-    const basePrice = resolveDiscountedPrice(product.price, programs) ?? product.price
+    const basePrice = resolveDiscountedPrice(product.price, programs, tableName) ?? product.price
     return { cartItemId, productId: product.id, name: product.name, basePrice, quantity: 1, extras: [...stickyExtras], toppings: [] }
+}
+
+// Chọn/đổi bàn đổi luôn chương trình áp dụng (VD: mang đi giảm 20%) → tính lại giá từng dòng.
+// Không dòng nào đổi thì trả đúng mảng cũ để applyCart khỏi setState.
+export function repriceCart(cart: CartItem[], products: Row[], productDiscounts: Record<string, DiscountProgram[]>, tableName: string | null): CartItem[] {
+    let changed = false
+    const next = cart.map(item => {
+        const p = products.find(x => x.id === item.productId)
+        if (!p) return item
+        const basePrice = resolveDiscountedPrice(p.price, productDiscounts[p.id], tableName) ?? p.price
+        if (basePrice === item.basePrice) return item
+        changed = true
+        return { ...item, basePrice }
+    })
+    return changed ? next : cart
 }
 
 export const patchLine = (cart: CartItem[], cartItemId: UUID, patch: Partial<CartItem>) =>

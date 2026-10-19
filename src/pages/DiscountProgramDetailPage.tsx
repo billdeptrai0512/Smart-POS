@@ -14,7 +14,7 @@ import DiscountTypePicker from '../components/common/DiscountTypePicker'
 import MoneyInput from '../components/common/MoneyInput'
 import ToggleSwitch from '../components/common/ToggleSwitch'
 import ProductLinksSection from '../components/common/ProductLinksSection'
-import { clampPercentInput, parseDiscountValue, type DiscountProgram } from '../utils/discountPrograms'
+import { clampPercentInput, parseDiscountValue, TABLE_SCOPE_LABELS, type DiscountProgram } from '../utils/discountPrograms'
 import {
     updateDiscountProgram, deleteDiscountProgram,
     fetchDiscountProgramProductLinks, setDiscountProgramProducts,
@@ -135,6 +135,15 @@ export default function DiscountProgramDetailPage() {
                 </section>
 
                 <ValueSection key={program.id} program={program} canEdit={canEdit} saving={saving} onSave={saveValue} />
+
+                <section className="pt-4 border-t border-border/40">
+                    <span className="block text-[13px] font-black text-text uppercase tracking-wide mb-1">Áp dụng cho</span>
+                    <DiscountTypePicker labels={TABLE_SCOPE_LABELS} value={program.table_scope ?? 'all'} disabled={!canEdit || saving}
+                        onChange={tableScope => withSaving('Lưu loại bàn áp dụng', async () => {
+                            await updateDiscountProgram(programId, { table_scope: tableScope })
+                            await refreshProducts()
+                        })} />
+                </section>
 
                 <ScheduleSection key={program.id} program={program} canEdit={canEdit} saving={saving} onSave={saveSchedule} />
 

@@ -12,15 +12,15 @@ import ScheduleFields from '../components/common/ScheduleFields'
 import { FormDialog } from '../components/common/ModalShell'
 import { formatVND } from '../utils'
 import { insertDiscountProgram } from '../services/discountService'
-import { activePrograms, clampPercentInput, parseDiscountValue, type DiscountProgram } from '../utils/discountPrograms'
+import { activePrograms, clampPercentInput, parseDiscountValue, TABLE_SCOPE_LABELS, type DiscountProgram, type TableScope } from '../utils/discountPrograms'
+import { DISCOUNT_TYPE_LABELS } from '../constants/discountTypes'
 import { DISCOUNT_TAB } from '../constants/menuTabs'
 
-const initialForm = { name: '', type: 'fixed', value: '', days: [] as number[], startDate: '', endDate: '' }
+const initialForm = { name: '', type: 'fixed', value: '', days: [] as number[], startDate: '', endDate: '', tableScope: 'all' as TableScope }
 
-function programSummary(p: Pick<DiscountProgram, 'type' | 'value'>) {
-    if (p.type === 'fixed') return `Đồng giá ${formatVND(p.value)}`
-    if (p.type === 'percent') return `Giảm ${p.value}%`
-    return `Giảm ${formatVND(p.value)}`
+function programSummary(p: Pick<DiscountProgram, 'type' | 'value' | 'table_scope'>) {
+    const base = p.type === 'fixed' ? `Đồng giá ${formatVND(p.value)}` : p.type === 'percent' ? `Giảm ${p.value}%` : `Giảm ${formatVND(p.value)}`
+    return p.table_scope && p.table_scope !== 'all' ? `${base} · ${TABLE_SCOPE_LABELS[p.table_scope]}` : base
 }
 
 export default function DiscountProgramsPage() {
@@ -54,7 +54,7 @@ export default function DiscountProgramsPage() {
         try {
             await insertDiscountProgram({
                 name: form.name.trim(), type: form.type, value: rawValue, address_id: addressId,
-                days_of_week: form.days, start_date: form.startDate || null, end_date: form.endDate || null, enabled: false,
+                days_of_week: form.days, start_date: form.startDate || null, end_date: form.endDate || null, table_scope: form.tableScope, enabled: false,
             })
             await refreshProducts()
             resetForm()
@@ -109,36 +109,51 @@ export default function DiscountProgramsPage() {
 
                 {showCreate && (
                     <FormDialog title="Tạo chương trình mới" saving={saving} canSubmit={canSubmit} onClose={resetForm} onConfirm={handleCreate}>
-                        <input
-                            type="text"
-                            placeholder="Tên chương trình (VD: Đồng giá thứ Hai)"
-                            value={form.name}
-                            onChange={e => setField({ name: e.target.value })}
-                            className="bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
-                        />
-                        <DiscountTypePicker value={form.type} onChange={t => setField({ type: t, value: '' })} />
-                        {form.type === 'percent' ? (
+                        <div className="pb-3 border-b border-border/40">
+                            <span className="block text-[11px] font-black text-text-secondary uppercase tracking-wide mb-1">Lịch áp dụng</span>
+                            <ScheduleFields days={form.days} startDate={form.startDate} endDate={form.endDate} onChange={setField} />
+                        </div>
+
+                        <label className="flex flex-col">
+                            <span className="block text-[11px] font-black text-text-secondary uppercase tracking-wide mb-1">Tên chương trình</span>
                             <input
                                 type="text"
-                                inputMode="numeric"
-                                placeholder="% giảm (VD: 20)"
-                                value={form.value}
-                                onChange={e => setField({ value: clampPercentInput(e.target.value) })}
-                                className="bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-bold text-text text-right tabular-nums placeholder:text-text-secondary/50 placeholder:font-normal focus:outline-none focus:border-primary/40 transition-colors"
+                                placeholder="VD: Đồng giá thứ Hai"
+                                value={form.name}
+                                onChange={e => setField({ name: e.target.value })}
+                                className="bg-surface-light border border-border/60 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-text placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/40 transition-colors"
                             />
-                        ) : (
-                            <MoneyInput
-                                value={form.value}
-                                onChange={v => setField({ value: v })}
-                                onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
-                                placeholder={form.type === 'fixed' ? 'Giá bán mới' : 'Số tiền giảm'}
-                            />
-                        )}
+                        </label>
+                        <div>
+                            <span className="block text-[11px] font-black text-text-secondary uppercase tracking-wide mb-1">{DISCOUNT_TYPE_LABELS[form.type as keyof typeof DISCOUNT_TYPE_LABELS]}</span>
+                            {form.type === 'percent' ? (
+                                <div className="flex items-center bg-surface-light border border-border/60 rounded-[12px] focus-within:border-primary/40 transition-colors overflow-hidden">
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        placeholder="VD: 20"
+                                        value={form.value}
+                                        onChange={e => setField({ value: clampPercentInput(e.target.value) })}
+                                        className="w-full bg-transparent px-3 py-2.5 text-[14px] font-bold text-text tabular-nums placeholder:text-text-secondary/40 placeholder:font-normal focus:outline-none"
+                                    />
+                                    {form.value && <span className="text-[12px] font-bold text-text-secondary pr-2.5 shrink-0 pointer-events-none">%</span>}
+                                </div>
+                            ) : (
+                                <MoneyInput
+                                    value={form.value}
+                                    align="left"
+                                    onChange={v => setField({ value: v })}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
+                                />
+                            )}
+                            <div className="mt-1.5">
+                                <DiscountTypePicker value={form.type} onChange={t => setField({ type: t, value: '' })} />
+                            </div>
+                        </div>
 
                         <div className="pt-2 border-t border-border/40">
-                            <span className="block text-[11px] font-black text-text-secondary uppercase tracking-wide mb-1">Lịch áp dụng</span>
-                            <p className="text-[11px] text-text-secondary mb-2">Không chọn thứ nào = mọi ngày. Để trống ngày = không giới hạn.</p>
-                            <ScheduleFields days={form.days} startDate={form.startDate} endDate={form.endDate} onChange={setField} />
+                            <span className="block text-[11px] font-black text-text-secondary uppercase tracking-wide mb-1">Áp dụng cho</span>
+                            <DiscountTypePicker labels={TABLE_SCOPE_LABELS} value={form.tableScope} onChange={tableScope => setField({ tableScope: tableScope as TableScope })} />
                         </div>
                     </FormDialog>
                 )}
