@@ -1,13 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { flushSync } from 'react-dom'
-import { ChevronDown, Percent } from 'lucide-react'
+import { Percent } from 'lucide-react'
 import { formatVND, cartLineSubtotal, computeDiscount, NO_DISCOUNT } from '../../utils'
 import { useDiscountEditing } from '../../hooks/useDiscountEditing'
 import { Dialog } from '../common/ModalShell'
 import DiscountEditor from './DiscountEditor'
 import type { CartItem, Discount, UUID } from '../../types/domain'
 
-// Ghi chú + giảm giá từng món, bàn, và giảm giá CẢ ĐƠN (chip cạnh Tổng cộng, GHI ĐÈ giảm giá riêng từng món) cho giỏ đang dựng.
+// Ghi chú + giảm giá từng món và giảm giá CẢ ĐƠN (chip cạnh Tổng cộng, GHI ĐÈ giảm giá riêng từng món) cho giỏ đang dựng.
 // Mở từ số Tổng ở CheckoutBar. 1 món thì không có chip cả đơn (trùng chip của chính món đó).
 interface Props {
     cart: CartItem[]
@@ -15,9 +15,6 @@ interface Props {
     onItemDiscount: (cartItemId: UUID, discount: Discount) => void
     onItemNote: (cartItemId: UUID, note: string | null) => void
     onConfirm: () => void
-    tableName: string
-    // Có = hiện hàng chọn bàn; ở dine-split lưới bàn đã hiện sẵn bên cạnh nên CheckoutBar không truyền.
-    onPickTable?: () => void
 }
 
 // Mức giảm dạng ngắn cho chip: 22.000đ → "22k" (chip chỉ rộng cỡ một cái nút).
@@ -26,10 +23,22 @@ const shortDiscount = (d: Discount) =>
 
 const ALL = '__all__'
 
-export default function CartListModal({ cart, onClose, onItemDiscount, onItemNote, onConfirm, tableName, onPickTable }: Props) {
+export default function CartListModal({ cart, onClose, onItemDiscount, onItemNote, onConfirm }: Props) {
     const { editingId, preview, setPreview, toggleEditing } = useDiscountEditing()
     const [noteEditingId, setNoteEditingId] = useState<string | null>(null)
     const [noteDraft, setNoteDraft] = useState('')
+
+    // Esc đóng modal (bàn phím trên tablet/máy tính). Đang gõ ghi chú thì Esc chỉ rời ô (blur = lưu), Esc lần hai mới đóng —
+    // đóng thẳng thì ghi chú đang gõ dở bị mất vì unmount không bắn blur.
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape') return
+            if (document.activeElement instanceof HTMLInputElement) document.activeElement.blur()
+            else onClose()
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [onClose])
 
     const openNote = (item: CartItem) => { setNoteDraft(item.note || ''); setNoteEditingId(item.cartItemId) }
     const commitNote = (item: CartItem) => {
@@ -54,19 +63,6 @@ export default function CartListModal({ cart, onClose, onItemDiscount, onItemNot
     return (
         <Dialog onClose={onClose} panelClassName="w-full max-w-md mx-4 max-h-[85%] flex flex-col bg-surface border border-border/60 rounded-[24px] shadow-2xl overflow-hidden">
             <div className="flex-1 overflow-y-auto px-5 pt-1">
-                {/* Bàn là thuộc tính của cả đơn — không chọn = mang đi (một trạng thái thật, không phải "chưa chọn"). */}
-                {onPickTable && (
-                    <div className="py-2.5 border-b border-border/40">
-                        <button
-                            type="button"
-                            onClick={onPickTable}
-                            className="relative w-full flex items-center justify-center h-9 px-9 rounded-full border border-border/60 bg-surface-light text-[12px] font-black uppercase tracking-wider text-text"
-                        >
-                            {tableName || 'Mang đi'}
-                            <ChevronDown size={14} strokeWidth={3} className="absolute right-3.5 text-text-secondary" />
-                        </button>
-                    </div>
-                )}
                 {/* Danh sách phẳng (không khung): chữ món và giá thẳng lề với Tổng cộng / Tạo đơn / preset bên dưới. */}
                 <div className="divide-y divide-border/40">
                 {lines.map(({ item, discount, discountAmount, finalTotal }) => {
