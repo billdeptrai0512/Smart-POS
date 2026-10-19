@@ -37,10 +37,12 @@ export default function AddressNotice() {
     const [expanded, setExpanded] = useState<Set<string>>(() => new Set()) // dòng kho đang mở rộng
 
     // Chỉ xét chi nhánh đang hoạt động (có bán hôm nay) — chi nhánh ngưng không đáng báo hết hạn / tồn kho, lại đỡ tốn request.
-    const active = useMemo(
-        () => addresses.filter(a => (cupsMap[a.id] || 0) > 0 || (revenueMap[a.id] || 0) > 0),
-        [addresses, cupsMap, revenueMap],
-    )
+    // Ngày mới chưa ly nào được bán (stats đã tải nhưng toàn 0) thì không chi nhánh nào "có bán" → danh sách trống 0/0 đúng lúc
+    // cần bổ sung tồn kho nhất; lúc đó xét tất cả địa chỉ, sang khi có đơn đầu tiên mới lọc theo doanh số.
+    const active = useMemo(() => {
+        const sold = addresses.filter(a => (cupsMap[a.id] || 0) > 0 || (revenueMap[a.id] || 0) > 0)
+        return sold.length === 0 && Object.keys(cupsMap).length > 0 ? addresses : sold
+    }, [addresses, cupsMap, revenueMap])
 
     // Đơn vị kho: nhóm có kho tổng gộp 1 dòng (vào kho tổng), địa chỉ lẻ / nhóm chưa đặt kho tổng mỗi cái 1 dòng.
     const units = useMemo(() => {
