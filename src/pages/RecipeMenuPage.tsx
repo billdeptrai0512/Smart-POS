@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, Fragment, lazy, Suspense, type ReactNode } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
-import { Plus, BadgePercent, GripVertical } from 'lucide-react'
+import { Plus, BadgePercent, GripVertical, FileSpreadsheet } from 'lucide-react'
 import {
     type DragEndEvent,
     DndContext, DragOverlay, MouseSensor, TouchSensor,
@@ -417,6 +417,16 @@ export default function RecipeMenuPage() {
                                 </button>
                             )}
                         </div>
+                        {canEdit && (
+                            <button
+                                onClick={() => setShowImportModal(true)}
+                                aria-label="Nhập hàng loạt từ Excel"
+                                title="Nhập hàng loạt từ Excel"
+                                className="shrink-0 w-11 rounded-[12px] bg-surface border border-border/60 text-text-secondary flex items-center justify-center active:scale-95 hover:border-primary/40 hover:text-primary transition-all"
+                            >
+                                <FileSpreadsheet size={18} />
+                            </button>
+                        )}
                     </div>
                 )}
 
@@ -504,17 +514,7 @@ export default function RecipeMenuPage() {
                         onClose={() => setCreateOpen(false)}
                         closeDisabled={saving}
                     />
-                    {kind === 'main' && (
-                        <>
-                            <CreateProductForm saving={saving} onSubmit={handleCreateProduct} />
-                            <button
-                                onClick={() => { setCreateOpen(false); setShowImportModal(true) }}
-                                className="text-[13px] text-primary/80 hover:text-primary font-medium text-center"
-                            >
-                                hoặc Nhập hàng loạt từ Excel →
-                            </button>
-                        </>
-                    )}
+                    {kind === 'main' && <CreateProductForm saving={saving} onSubmit={handleCreateProduct} />}
                     {kind === 'batch' && (
                         <>
                             <p className="text-[13px] text-text-secondary -mt-2">Làm từ nguyên liệu theo mẻ (nước cốt, trân châu nấu…), có tồn riêng và dùng được trong công thức món.</p>
