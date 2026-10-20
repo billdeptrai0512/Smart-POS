@@ -11,10 +11,19 @@ import { Outlet } from 'react-router-dom'
 import { cacheKey as buildCacheKey } from '../constants/storageKeys'
 import { onTabReturn } from '../utils/tabVisibility'
 import { readJSON, writeJSON } from '../utils/storage'
+import { fetchProduction } from '../services/productionService'
+import type { ProductionRow } from '../utils/production'
+import { dateStringVN, addDaysVN } from '../utils/dateVN'
 
 export interface ProductContextValue {
+    /** Món bán (đã loại thành phẩm). */
     products: Product[]
+    /** Thành phẩm (products.is_batch): công thức mẻ nằm trong `recipes` theo product_id. */
+    batchProducts: Product[]
     recipes: RecipeRow[]
+    /** Các mẻ sản xuất còn hiệu lực trong ~62 ngày gần nhất (cộng vào tiêu hao, xem utils/production). */
+    productionRows: (ProductionRow & Row)[]
+    refreshProduction: () => Promise<void>
     ingredientCosts: Record<string, number>
     ingredientUnits: Record<string, string>
     ingredientConfigs: IngredientConfig[]
@@ -116,7 +125,9 @@ export function ProductProvider() {
 
     const readCache = useCallback(<T,>(name: string, fallback: T) => readJSON<T>(cacheKey(name), fallback), [cacheKey])
 
-    const [products, setProducts] = useState<Product[]>(() => readCache('products', []))
+    const [allProducts, setProducts] = useState<Product[]>(() => readCache('products', []))
+    const products = useMemo(() => allProducts.filter(p => !p.is_batch), [allProducts])
+    const batchProducts = useMemo(() => allProducts.filter(p => p.is_batch), [allProducts])
     const [recipes, setRecipes] = useState<RecipeRow[]>(() => readCache('recipes', []))
     const [ingredientCosts, setIngredientCosts] = useState<Record<string, number>>(() => readCache('costs', {}))
     const [ingredientUnits, setIngredientUnits] = useState<Record<string, string>>(() => readCache('units', {}))
@@ -128,6 +139,13 @@ export function ProductProvider() {
     const [productToppings, setProductToppings] = useState<Record<string, CartTopping[]>>(() => readCache('product_toppings', {}))
     const [discountPrograms, setDiscountPrograms] = useState<DiscountProgram[]>(() => readCache('discount_programs', []))
     const [productDiscounts, setProductDiscounts] = useState<Record<string, DiscountProgram[]>>(() => readCache('product_discounts', {}))
+    // ponytail: chỉ 62 ngày gần nhất — báo cáo dài hơn thì mẻ cũ không được cộng; tải theo khoảng khi cần.
+    const [productionRows, setProductionRows] = useState<(ProductionRow & Row)[]>([])
+    const refreshProduction = useCallback(async () => {
+        if (!addressId) { setProductionRows([]); return }
+        setProductionRows(await fetchProduction(addressId, dateStringVN(addDaysVN(new Date(), -62))))
+    }, [addressId])
+    useEffect(() => { refreshProduction() }, [refreshProduction])
     const [loading, setLoading] = useState(true)
     const [loadError, setLoadError] = useState<unknown>(null)
     const loadGenRef = useRef(0) // bumped each effect run so a stale retry can no-op instead of writing over a newer address's data
@@ -272,6 +290,9 @@ export function ProductProvider() {
 
     const value = useMemo(() => ({
         products,
+        batchProducts,
+        productionRows,
+        refreshProduction,
         recipes,
         ingredientCosts,
         ingredientUnits,
@@ -286,7 +307,7 @@ export function ProductProvider() {
         refreshProducts,
         loading,
         loadError
-    }), [products, recipes, ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, productExtras, extraIngredients, toppings, productToppings, discountPrograms, productDiscounts, refreshProducts, loading, loadError])
+    }), [products, batchProducts, productionRows, refreshProduction, recipes, ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, productExtras, extraIngredients, toppings, productToppings, discountPrograms, productDiscounts, refreshProducts, loading, loadError])
 
     return (
         <ProductContext.Provider value={value}>

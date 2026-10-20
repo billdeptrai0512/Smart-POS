@@ -3,12 +3,13 @@ import { fetchOrdersSince } from './reportService'
 import { fetchStoredUsage, saveUsageDays } from './dailyUsageService'
 import { estimateCounterRow, r1, usedSinceCount, type ExtraIngredients, type RecipeRow, type UsageMap } from '../utils/inventory'
 import { missingUsageDays, usageAfterCount, usageByDay } from '../utils/dailyUsage'
+import { overlayProduction, productionAfterCount, mergeUsage, type ProductionRow } from '../utils/production'
 import { dateStringVN, addDaysVN, nextDayStr } from '../utils/dateVN'
 
 // Xa hơn số ngày này thì giữ số đếm thô: tải cả chục nghìn đơn chỉ để ước tính một NVL bỏ quên là không đáng.
 const MAX_DAYS = 60
 
-interface CounterCalc { recipes: RecipeRow[]; extraIngredients: ExtraIngredients; canPersist: boolean }
+interface CounterCalc { recipes: RecipeRow[]; extraIngredients: ExtraIngredients; canPersist: boolean; production?: ProductionRow[] }
 
 // Công thức của địa chỉ = các dòng recipes có address_id đúng địa chỉ đó. Context còn rỗng hoặc đang là của địa chỉ trước
 // (vừa đổi địa chỉ) thì chưa dùng được — callers cũng dùng nó làm dep để tính lại khi công thức tải xong.
@@ -18,7 +19,7 @@ export const recipesBelongTo = (recipes: Row[], addressId: string | null) => rec
 // rồi ghi lại (đóng băng — lần sau khỏi tải đơn); HÔM NAY tính trực tiếp từ đơn (bỏ qua khi !includeToday).
 // Công thức chưa phải của địa chỉ này → KHÔNG ước tính (số tính từ công thức sai còn tệ hơn số thô). `canPersist` =
 // context đã tải xong, mới được ghi số đóng băng. → null nếu không có gì để ước tính. Có thể ném lỗi — caller bắt.
-async function loadUsage(rows: Row[], addressId: string, { recipes, extraIngredients, canPersist }: CounterCalc, includeToday: boolean) {
+async function loadUsage(rows: Row[], addressId: string, { recipes, extraIngredients, canPersist, production = [] }: CounterCalc, includeToday: boolean) {
     if (!recipesBelongTo(recipes, addressId)) return null
     const today = dateStringVN()
     const floor = dateStringVN(addDaysVN(new Date(), -MAX_DAYS))
@@ -28,7 +29,8 @@ async function loadUsage(rows: Row[], addressId: string, { recipes, extraIngredi
     for (const r of rows) {
         const on = r.counter_counted_on
         // Quầy + nhập thêm = 0 thì ước tính chắc chắn cũng 0 (kẹp ≥ 0) — không đáng tải đơn cả tháng vì NVL đó.
-        if (r.counter_stock + r.restock_since_count <= 0 || !on || on < floor) continue
+        // Ngoại lệ: thành phẩm đang có mẻ sản xuất (tiêu hao âm) thì tồn 0 vẫn tăng lên được.
+        if ((r.counter_stock + r.restock_since_count <= 0 && !production.some(p => p.output_ingredient === r.ingredient)) || !on || on < floor) continue
         if (on < today && (!oldest || on < oldest)) oldest = on
         if (r.counter_counted_at && (on < today || includeToday)) stampedDays.add(on)
     }
@@ -50,11 +52,13 @@ async function loadUsage(rows: Row[], addressId: string, { recipes, extraIngredi
         computed = usageByDay(window, missing, recipes, extraIngredients)
         if (canPersist) saveUsageDays(addressId, computed)
     }
-    const used = { ...stored, ...computed }
+    let used = { ...stored, ...computed }
     if (includeToday) Object.assign(used, usageByDay(todayOrders, [today], recipes, extraIngredients))
+    // Mẻ sản xuất phủ lên SAU khi đã lưu số đóng băng (computed ở trên không chứa mẻ) nên hủy mẻ hoàn lại được.
+    used = overlayProduction(used, production)
     // Ngày đếm trong quá khứ: ngày đó đã đóng băng nguyên ngày nên phần sau giờ đếm phải tính lại từ đơn của riêng ngày đó.
     const ordersByDay: Record<string, Row[]> = Object.fromEntries(await ordersByDayP)
-    const afterCount = usageAfterCount(rows, ordersByDay, recipes, extraIngredients)
+    const afterCount = mergeUsage(usageAfterCount(rows, ordersByDay, recipes, extraIngredients), productionAfterCount(rows, production))
     return { used, today, fromDay, afterCount }
 }
 

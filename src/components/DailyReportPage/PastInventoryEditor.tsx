@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { buildIngredientToProduct, calculateEstimatedConsumption, calculateConsumptionBreakdown, isLiveOrder, orderItemsOf } from '../../utils/inventory'
 import { getIngredientUnit, ingredientLabel } from '../../utils/ingredients'
 import { norm } from '../../utils/fieldSync'
+import { useProducts } from '../../contexts/ProductContext'
+import { productionOnDay, mergeUsage } from '../../utils/production'
+import { dateStringVN } from '../../utils/dateVN'
 import InventoryReportCard from './InventoryReportCard'
 import type { IngredientConfig, Row } from '../../types/domain'
 import type { RecipeRow, ExtraIngredients } from '../../utils/inventory'
@@ -53,9 +56,11 @@ export default function PastInventoryEditor({
 
     const orderItems = useMemo(() => dayOrders.filter(isLiveOrder).flatMap(orderItemsOf), [dayOrders])
 
+    const { productionRows } = useProducts()
+    const closingDay = shiftClosing ? dateStringVN(new Date(shiftClosing.closed_at || shiftClosing.created_at)) : null
     const usedMap = useMemo(
-        () => calculateEstimatedConsumption(orderItems, recipes, extraIngredients),
-        [orderItems, recipes, extraIngredients],
+        () => mergeUsage(calculateEstimatedConsumption(orderItems, recipes, extraIngredients), closingDay ? productionOnDay(productionRows, closingDay) : {}),
+        [orderItems, recipes, extraIngredients, productionRows, closingDay],
     )
     const consumptionBreakdown = useMemo(
         () => calculateConsumptionBreakdown(orderItems, recipes, extraIngredients, products, productExtras),

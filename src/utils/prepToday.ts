@@ -138,14 +138,17 @@ export type PrepConfirmed = Record<string, { qty: number; warehouse: number | nu
 // confirmed = { [ingredient]: { qty: số vừa lấy, warehouse: kho còn lại ngay lúc lấy } } trong lần mở modal này: món đó
 // ở lại danh sách (dù Lý thuyết đã > 0) để hiện "Đã lấy", chỉ rớt sau khi đóng modal (qty 0 = đã hoàn tác). Kho đóng băng lúc bấm vì kho trước ca
 // (đổi ngay khi phiếu lưu) và kho server (tải lại sau) cập nhật lệch nhịp → tính sống thì số nhảy 1 → 0 → 1 → 0.
-export function buildDepletedList({ ingredientsList, openingInputs, openingStock, restockInputs, inventoryInputs = {}, skipped, usedMap, effectiveWarehouseStocks, confirmed = {} }: {
+// producedMap = tiêu hao RÒNG của mẻ sản xuất hôm nay (nguyên liệu gốc +, thành phẩm −): cộng vào Lý thuyết, còn dự báo vẫn chỉ theo đơn bán.
+export function buildDepletedList({ ingredientsList, openingInputs, openingStock, restockInputs, inventoryInputs = {}, skipped, usedMap, producedMap = {}, effectiveWarehouseStocks, confirmed = {} }: {
     ingredientsList?: Row[] | null; openingInputs: Inputs; openingStock: UsageMap; restockInputs: Inputs; inventoryInputs?: Inputs
-    skipped: Record<string, unknown>; usedMap: UsageMap; effectiveWarehouseStocks: UsageMap; confirmed?: PrepConfirmed
+    skipped: Record<string, unknown>; usedMap: UsageMap; producedMap?: UsageMap; effectiveWarehouseStocks: UsageMap; confirmed?: PrepConfirmed
 }) {
     const out: PrepItem[] = []
     for (const ing of ingredientsList || []) {
-        const used = r1(lookupByLabel(ing.ingredient, usedMap))
-        if (used <= 0 || skipped[ing.ingredient]) continue
+        const sold = r1(lookupByLabel(ing.ingredient, usedMap))
+        const produced = r1(lookupByLabel(ing.ingredient, producedMap))
+        const used = r1(sold + produced)
+        if ((sold <= 0 && produced <= 0) || skipped[ing.ingredient]) continue
         const oRaw = openingInputs[ing.ingredient]
         const { lyThuyet } = computeBalance({
             restockValue: restockInputs[ing.ingredient],
@@ -293,9 +296,9 @@ export function buildTomorrowPrepList({ ingredientsList, counterStock, forecast,
 //   Chưa đếm Cuối kỳ → ước lượng quầy theo Lý thuyết (Đầu kỳ + Nhập thêm − Sử dụng).
 //   effectiveWarehouseStocks là kho TRƯỚC khi trừ restock của ca này → phải trừ restock để khỏi đếm 2 lần.
 //   Món đã mua đủ hôm nay vẫn nằm trong danh sách với `done: true` (nếu trước khi mua nó còn thiếu).
-export function buildWarehousePrepList({ ingredientsList, effectiveWarehouseStocks, restockInputs, inventoryInputs, openingInputs, openingStock, usedMap, nextDowUsedMap, todayBoughtMap }: {
+export function buildWarehousePrepList({ ingredientsList, effectiveWarehouseStocks, restockInputs, inventoryInputs, openingInputs, openingStock, usedMap, producedMap = {}, nextDowUsedMap, todayBoughtMap }: {
     ingredientsList?: Row[] | null; effectiveWarehouseStocks?: UsageMap | null; restockInputs: Inputs; inventoryInputs: Inputs; openingInputs: Inputs
-    openingStock: UsageMap; usedMap: UsageMap; nextDowUsedMap: UsageMap; todayBoughtMap: UsageMap
+    openingStock: UsageMap; usedMap: UsageMap; producedMap?: UsageMap; nextDowUsedMap: UsageMap; todayBoughtMap: UsageMap
 }) {
     const out: PrepItem[] = []
     for (const ing of ingredientsList || []) {
@@ -306,7 +309,7 @@ export function buildWarehousePrepList({ ingredientsList, effectiveWarehouseStoc
         if (counted !== undefined && counted !== '') {
             counter = r1(counted)
         } else {
-            const used = r1(lookupByLabel(ing.ingredient, usedMap))
+            const used = r1(lookupByLabel(ing.ingredient, usedMap) + lookupByLabel(ing.ingredient, producedMap))
             counter = Math.max(0, r1(openingGross(ing, openingInputs, openingStock) + restock - used))
         }
         // counter là số cân hộp (gồm bì) → lượng THẬT tại quầy = trừ bì, kẹp 0.

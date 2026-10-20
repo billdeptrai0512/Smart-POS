@@ -25,25 +25,28 @@ import {
     deleteExtraIngredient,
     upsertIngredientCost,
     deleteRecipeRow,
+    updateProductBatchYield,
 } from '../services/orderService'
-import { sortIngredients, getIngredientUnit, makeCategoryOf, registerNewIngredients } from '../utils/ingredients'
+import { sortIngredients, getIngredientUnit, makeCategoryOf, registerNewIngredients, normalizeIngredientKey } from '../utils/ingredients'
 import { useToast } from '../hooks/useToast'
 import { useSavingAction } from '../hooks/useSavingAction'
 import { useConfirm } from '../contexts/ConfirmContext'
 import Toast from '../components/POSPage/Toast'
 import RecipeHeader from '../components/RecipeIngredientPage/RecipeHeader'
+import EditableEntityHeader from '../components/common/EditableEntityHeader'
+import InlineEditor from '../components/RecipeIngredientPage/InlineEditor'
 import FastIngredientFill, { type CustomIngredient } from '../components/RecipeIngredientPage/FastIngredientFill'
 import ExtrasSection, { type ExtraHandlers } from '../components/RecipeIngredientPage/ExtrasSection'
 import CopyRecipeModal from '../components/RecipeIngredientPage/CopyRecipeModal'
 import type { CartExtra } from '../types/domain'
-import { groupRecipesByProduct } from '../utils/inventory'
+import { groupRecipesByProduct, type RecipeRow } from '../utils/inventory'
 
 export default function RecipeIngredientPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const { productId } = useParams() as { productId: string }
     const {
-        products, recipes: allRecipes,
+        products, batchProducts, recipes: allRecipes,
         ingredientCosts, ingredientUnits,
         productExtras: contextExtras, extraIngredients: contextExtraIngs,
         ingredientConfigs, refreshProducts,
@@ -64,7 +67,9 @@ export default function RecipeIngredientPage() {
     )
     useOnboardingProgressPersist('recipeProgress', recipeProgress, { isGuest, addressId })
 
-    const product = useMemo(() => products.find(p => p.id === productId), [products, productId])
+    const product = useMemo(() => products.find(p => p.id === productId) ?? batchProducts.find(p => p.id === productId), [products, batchProducts, productId])
+    // Thành phẩm: công thức này là CÔNG THỨC MẺ (sản lượng = batch_yield), không có giá bán/tùy chọn.
+    const isBatch = !!product?.is_batch
 
     // Onboarding phase 5 — chỉ hint/track trên đúng công thức "Cà phê đen".
     const isCafeDen = isGuest && norm(product?.name) === RECIPE_TARGET_PRODUCT
@@ -109,20 +114,40 @@ export default function RecipeIngredientPage() {
 
     const dbIngredients = useMemo(
         () => Object.keys(ingredientCosts)
+            .filter(k => !isBatch || !batchProducts.some(b => normalizeIngredientKey(b.name) === k)) // thành phẩm chỉ làm từ nguyên liệu gốc
             .sort((a, b) => sortIngredients(a, b, selectedAddress?.ingredient_sort_order)),
-        [ingredientCosts, selectedAddress?.ingredient_sort_order]
+        [ingredientCosts, isBatch, batchProducts, selectedAddress?.ingredient_sort_order]
     )
+
+    // Giá vốn 1 đơn vị thành phẩm = Σ(giá vốn NVL × lượng) / sản lượng mẻ — để món dùng thành phẩm tính đúng lãi.
+    // ponytail: unit_cost là số nguyên nên thành phẩm rất rẻ/đơn vị bị làm tròn; đổi sang numeric nếu cần chính xác hơn.
+    async function syncBatchCost(nextRecipes: RecipeRow[], batchYield = Number(product?.batch_yield) || 0) {
+        if (!isBatch || batchYield <= 0) return
+        const key = normalizeIngredientKey(product!.name)
+        const total = nextRecipes.filter(r => r.product_id === productId).reduce((sum, r) => sum + r.amount * (ingredientCosts[r.ingredient] || 0), 0)
+        await upsertIngredientCost(key, Math.round(total / batchYield), addressId, null)
+    }
+
+    async function saveBatchYield(batchYield: number) {
+        if (!(batchYield > 0)) return
+        await withSaving('Lưu sản lượng mẻ', async () => {
+            await updateProductBatchYield(productId, batchYield)
+            await syncBatchCost(recipes, batchYield)
+            refreshProducts?.()
+        })
+    }
     // ─── Base recipe handlers ─────────────────────────────────────────
     // Amount box only upserts (0 stays a 0-amount row, never deletes — removal is the
     // ✕ button). Optimistic state is authoritative; no refetch on a pure amount edit.
     async function setBaseAmount(ingredient: string, amount: number, unit: string) {
         await withSaving('Lưu công thức', async () => {
             await upsertRecipe(productId, ingredient, amount, addressId, unit)
-            setRecipes(prev => {
-                const exists = prev.some(r => r.product_id === productId && r.ingredient === ingredient)
-                if (exists) return prev.map(r => r.product_id === productId && r.ingredient === ingredient ? { ...r, amount } : r)
-                return [...prev, { product_id: productId, ingredient, amount, unit: unit || getIngredientUnit(ingredient) }]
-            })
+            const exists = recipes.some(r => r.product_id === productId && r.ingredient === ingredient)
+            const next = exists
+                ? recipes.map(r => r.product_id === productId && r.ingredient === ingredient ? { ...r, amount } : r)
+                : [...recipes, { product_id: productId, ingredient, amount, unit: unit || getIngredientUnit(ingredient) }]
+            setRecipes(next)
+            await syncBatchCost(next)
             // Guide onboarding đọc định lượng từ context nên guest phải đồng bộ ngay (user thật thì không cần refetch).
             if (isGuest) refreshProducts?.()
         })
@@ -131,7 +156,9 @@ export default function RecipeIngredientPage() {
     async function removeBaseIngredient(ingredient: string) {
         await withSaving('Xóa nguyên liệu khỏi công thức', async () => {
             await deleteRecipeRow(productId, ingredient, addressId)
-            setRecipes(prev => prev.filter(r => !(r.product_id === productId && r.ingredient === ingredient)))
+            const next = recipes.filter(r => !(r.product_id === productId && r.ingredient === ingredient))
+            setRecipes(next)
+            await syncBatchCost(next)
             refreshProducts?.()
         })
     }
@@ -353,7 +380,22 @@ export default function RecipeIngredientPage() {
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
 
-            <RecipeHeader
+            {isBatch ? (
+                // Tên thành phẩm = khóa nguyên liệu nên không đổi tên ở đây (đổi sẽ tách nó khỏi tồn kho/công thức món).
+                <EditableEntityHeader name={product.name} canEdit={false} onBack={() => navigate('/category/recipes', { state: location.state })} onSaveName={() => { }}>
+                    <div className="flex items-center justify-center gap-1.5 text-[12px] font-bold text-text-secondary">
+                        <span>1 mẻ ra:</span>
+                        <InlineEditor
+                            value={product.batch_yield}
+                            canEdit={canEdit}
+                            onSave={saveBatchYield}
+                            type="number"
+                            renderDisplay={(v: number) => <span className="text-success font-bold">{v} {ingredientUnits?.[normalizeIngredientKey(product.name)] || ''}</span>}
+                            inputWidthClassName="w-[72px]"
+                        />
+                    </div>
+                </EditableEntityHeader>
+            ) : <RecipeHeader
                 product={product}
                 canEdit={canEdit}
                 onBack={() => navigate('/category/recipes', { state: location.state })}
@@ -362,7 +404,7 @@ export default function RecipeIngredientPage() {
                 countAsCup={product.count_as_cup !== false}
                 onToggleCountAsCup={toggleCountAsCup}
                 toggleDisabled={saving}
-            />
+            />}
 
             <main className="flex-1 overflow-y-auto px-4 max-[329px]:px-2 py-4 space-y-3 bg-bg">
                 <FastIngredientFill
@@ -380,7 +422,7 @@ export default function RecipeIngredientPage() {
                 />
 
 
-                <ExtrasSection
+                {!isBatch && <ExtrasSection
                     extras={extras}
                     extraIngs={extraIngs}
                     ingredientUnits={ingredientUnits}
@@ -393,7 +435,7 @@ export default function RecipeIngredientPage() {
                     categoryOf={categoryOf}
                     baseAmounts={baseAmounts}
                     hint={isCafeDen && recipeProgress.filledAmount && !recipeProgress.addedExtra}
-                />
+                />}
 
                 {canEdit && (
                     <div className="mt-4 pt-4 border-t border-border/40 flex justify-between">

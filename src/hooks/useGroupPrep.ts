@@ -8,6 +8,8 @@ import { withCounterEstimate } from '../services/counterEstimate'
 import { forecastFromWeeks } from '../utils/inventory'
 import { buildGroupPrepPlan, HISTORY_OFFSETS_TOMORROW, RECENT_OFFSETS_TOMORROW, type GroupPrepBranch } from '../utils/prepToday'
 import type { Row } from '../types/domain'
+import { useProducts } from '../contexts/ProductContext'
+import { normalizeIngredientKey } from '../utils/ingredients'
 import type { UsageMap } from '../utils/inventory'
 
 interface State { branches: GroupPrepBranch[] | null; pool: UsageMap | null; loading: boolean; error: unknown }
@@ -55,7 +57,14 @@ export function useGroupPrep(addresses: { id: string; name: string }[]) {
     }, [key])
 
     useEffect(() => { load() }, [load])
-    const plan = useMemo(() => state.branches && buildGroupPrepPlan({ branches: state.branches, pool: state.pool }), [state.branches, state.pool])
+    // ponytail: thành phẩm loại theo tên của địa chỉ đang chọn (tên giống nhau giữa các chi nhánh trong nhóm).
+    const { batchProducts } = useProducts()
+    const plan = useMemo(() => {
+        if (!state.branches) return state.branches
+        const batchKeys = new Set(batchProducts.map(p => normalizeIngredientKey(p.name)))
+        const branches = state.branches.map(b => ({ ...b, ingredientsList: b.ingredientsList.filter((i: Row) => !batchKeys.has(i.ingredient)) }))
+        return buildGroupPrepPlan({ branches, pool: state.pool })
+    }, [state.branches, state.pool, batchProducts])
     // Cấu hình đơn vị CHUNG của kho cho mỗi nguyên liệu (đơn vị gốc + quy cách nhập): lấy của địa chỉ đầu danh sách, địa chỉ nào
     // thiếu thì mượn của địa chỉ kế — mọi số trên UI nhóm kho đọc qua đây để gọi tên đơn vị giống nhau.
     const cfgOf = useMemo(() => {

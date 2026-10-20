@@ -735,7 +735,8 @@ export function findMissingCupCandidates({ ingredientsList = [], haoHutByIngredi
 //
 // @returns { [dayStr]: { [ingredient]: diff } } — âm = hụt, chỉ gồm nguyên liệu có
 //   trong công thức nào đó (bao bì không công thức bị loại, giống RangeLossCard).
-export function buildDailyHaoHutMap({ shiftClosings = [], orders = [], recipes = [], extraIngredients = {} }: { shiftClosings?: Row[]; orders?: Row[]; recipes?: RecipeRow[]; extraIngredients?: ExtraIngredients }) {
+// extraUsageByDay = tiêu hao ròng của mẻ sản xuất theo ngày (overlayProduction({}, rows, true)), cộng vào tiêu hao từ đơn.
+export function buildDailyHaoHutMap({ shiftClosings = [], orders = [], recipes = [], extraIngredients = {}, extraUsageByDay = {} }: { shiftClosings?: Row[]; orders?: Row[]; recipes?: RecipeRow[]; extraIngredients?: ExtraIngredients; extraUsageByDay?: Record<string, UsageMap> }) {
     if (!shiftClosings.length) return {}
     const recipeSet = buildRecipeIngredientSet(recipes, extraIngredients)
 
@@ -748,6 +749,10 @@ export function buildDailyHaoHutMap({ shiftClosings = [], orders = [], recipes =
     const dailyConsumption: Record<string, UsageMap> = {}
     for (const [dayStr, items] of Object.entries(dailyOrderItems)) {
         dailyConsumption[dayStr] = calculateEstimatedConsumption(items, recipes, extraIngredients)
+    }
+    for (const [dayStr, extra] of Object.entries(extraUsageByDay)) {
+        const day = dailyConsumption[dayStr] ??= {}
+        for (const [k, v] of Object.entries(extra)) day[k] = r1((day[k] ?? 0) + v)
     }
 
     const lastClosingPerDay: Record<string, Row> = {}

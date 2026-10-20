@@ -10,11 +10,11 @@ import { BottomSheet, SheetHeader, SHEET_PANEL } from '../components/common/Moda
 import MenuDivider from '../components/common/MenuDivider'
 import Dropdown from '../components/common/Dropdown'
 import NoticeBar from '../components/common/NoticeBar'
-import { normalizeSearchText } from '../utils/ingredients'
+import { normalizeSearchText, normalizeIngredientKey } from '../utils/ingredients'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
-import { upsertProductPrice, insertProduct, updateProductSortOrder, updateProductName, removeProductFromAddress } from '../services/orderService'
+import { upsertProductPrice, insertProduct, updateProductSortOrder, updateProductName, removeProductFromAddress, upsertIngredientCost } from '../services/orderService'
 import { parseVNDInput } from '../utils'
 import { useToast } from '../hooks/useToast'
 import { useSavingAction } from '../hooks/useSavingAction'
@@ -22,6 +22,7 @@ import Toast from '../components/POSPage/Toast'
 import MenuPageHeader from '../components/common/MenuPageHeader'
 import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
+import CreateBatchForm from '../components/RecipeMenuPage/CreateBatchForm'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
 import { RECIPE_TABS, DISCOUNT_TAB } from '../constants/menuTabs'
@@ -83,7 +84,7 @@ export default function RecipeMenuPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const backTo = location.state?.from || '/history/sales'
-    const { products, recipes, ingredientCosts, ingredientUnits, discountPrograms, refreshProducts } = useProducts()
+    const { products, batchProducts, recipes, ingredientCosts, ingredientUnits, discountPrograms, refreshProducts } = useProducts()
     const { addressId } = useAddress()
     const { isManager, isAdmin, isGuest } = useAuth()
     const canEdit = isManager || isAdmin
@@ -126,6 +127,7 @@ export default function RecipeMenuPage() {
     const [search, setSearch] = useState('')
     const [showCreateModal, setShowCreateModal] = useState(false)
     const [showImportModal, setShowImportModal] = useState(false)
+    const [showBatchModal, setShowBatchModal] = useState(false)
     // {mode:'create'} | {mode:'edit', id} — modal tạo/sửa mục (divider phân nhóm menu)
     const [dividerModal, setDividerModal] = useState<{ mode: 'create' } | { mode: 'edit'; id: string } | null>(null)
     const [dividerName, setDividerName] = useState('')
@@ -171,6 +173,18 @@ export default function RecipeMenuPage() {
         refreshProducts?.()
         setShowCreateModal(false)
         showToast('Đã tạo món mới', 'success')
+    })
+
+    // Thành phẩm = 1 dòng products (is_batch) + 1 nguyên liệu cùng tên trong ingredient_costs: nhờ vậy nó tự hiện ở bộ chọn
+    // nguyên liệu của công thức món và ở Kiểm kê. Công thức mẻ là các dòng recipes của chính dòng products đó.
+    const handleCreateBatch = (name: string, unit: string, batchYield: number) => withSaving('Tạo thành phẩm', async () => {
+        const key = normalizeIngredientKey(name)
+        if (key in ingredientCosts) { showToast(`Đã có nguyên liệu "${name}"`, 'warning'); return }
+        await insertProduct(name, 0, addressId, false, batchYield)
+        await upsertIngredientCost(key, 0, addressId, unit, { category: 'main' })
+        refreshProducts?.()
+        setShowBatchModal(false)
+        showToast('Đã tạo thành phẩm', 'success')
     })
 
     function editDivider(divider: Row) {
@@ -284,6 +298,11 @@ export default function RecipeMenuPage() {
         return q ? realProducts.filter(p => normalizeSearchText(p.name).includes(q)) : realProducts
     }, [realProducts, search])
 
+    const searchedBatches = useMemo(() => {
+        const q = normalizeSearchText(search.trim())
+        return q ? batchProducts.filter(p => normalizeSearchText(p.name).includes(q)) : batchProducts
+    }, [batchProducts, search])
+
     return (
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
             <Toast toast={toast} />
@@ -347,6 +366,14 @@ export default function RecipeMenuPage() {
                                 </button>
                             )}
                         </div>
+                        {canEdit && !isGuest && (
+                            <button
+                                onClick={() => setShowBatchModal(true)}
+                                className="shrink-0 px-3 rounded-[12px] flex items-center justify-center bg-surface border border-border/60 text-text-secondary text-[12px] font-black uppercase tracking-widest hover:bg-surface-light active:scale-[0.98] transition-all"
+                            >
+                                Thành phẩm
+                            </button>
+                        )}
                         {canEdit && (
                             <button
                                 onClick={() => navigate('/category/toppings', { state: location.state })}
@@ -375,6 +402,21 @@ export default function RecipeMenuPage() {
                             <p className="col-span-2 text-text-secondary text-[13px] text-center py-6">
                                 {search.trim() ? 'Không tìm thấy công thức nào.' : 'Chưa có công thức nào.'}
                             </p>
+                        )}
+                        {searchedBatches.length > 0 && (
+                            <>
+                                <h2 className="col-span-2 mt-2 text-[12px] font-black uppercase tracking-widest text-text-secondary">Thành phẩm</h2>
+                                {searchedBatches.map(product => (
+                                    <ProductCard
+                                        key={product.id}
+                                        {...cardProps(product)}
+                                        onClick={() => {
+                                            savedScroll = mainRef.current?.scrollTop ?? 0
+                                            navigate(`/category/recipes/${product.id}`, { state: location.state })
+                                        }}
+                                    />
+                                ))}
+                            </>
                         )}
                     </div>
                 ) : (
@@ -438,6 +480,17 @@ export default function RecipeMenuPage() {
                         >
                             hoặc Nhập hàng loạt từ Excel →
                         </button>
+                </BottomSheet>
+            )}
+
+            {showBatchModal && (
+                <BottomSheet
+                    onClose={() => !saving && setShowBatchModal(false)}
+                    panelClassName={SHEET_PANEL}
+                >
+                    <SheetHeader title="Tạo thành phẩm" onClose={() => setShowBatchModal(false)} closeDisabled={saving} />
+                    <p className="text-[13px] text-text-secondary -mt-2">Thành phẩm là công thức tổng hợp nguyên liệu thành một thứ dùng tiếp (topping, nước cốt…). Sau khi tạo, thêm nguyên liệu cho 1 mẻ rồi chọn nó như nguyên liệu trong công thức món.</p>
+                    <CreateBatchForm saving={saving} onSubmit={handleCreateBatch} />
                 </BottomSheet>
             )}
 

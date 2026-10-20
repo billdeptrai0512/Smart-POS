@@ -22,6 +22,8 @@ import { ingredientLabel } from '../../utils/ingredients'
 import { findIngredientByLabel } from '../../utils/onboardingHint'
 import { isCashFlowProgressDone, isInventoryProgressDone, INVENTORY_ONBOARDING_ITEMS } from '../../utils/onboardingStorage'
 import { dateStringVN, isSameDayVN } from '../../utils/dateVN'
+import { productionOnDay, mergeUsage } from '../../utils/production'
+import TodayProduction from './TodayProduction'
 import InventoryReportCard from '../DailyReportPage/InventoryReportCard'
 import PastInventoryEditor from '../DailyReportPage/PastInventoryEditor'
 import RangeLossCard from '../DailyReportPage/RangeLossCard'
@@ -45,7 +47,7 @@ interface Props {
 export default function InventoryAuditTab({ dateScope, inventoryProgress, setInventoryProgress, onUnsavedChange, showToast, showError }: Props) {
     const { addressId, selectedAddress } = useAddress()
     const { isStaff, profile, isGuest } = useAuth()
-    const { products, recipes, extraIngredients, productExtras, ingredientUnits } = useProducts()
+    const { products, recipes, extraIngredients, productExtras, ingredientUnits, productionRows } = useProducts()
     const { todayOrders, isLoadingHistory, handleLoadHistory } = useHistory()
     const confirm = useConfirm()
 
@@ -88,9 +90,10 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
         () => (isTodayScope ? [...todayOrders.filter(isLiveOrder), ...offlineToday].flatMap(o => orderItemsOf(o)) : []),
         [isTodayScope, todayOrders, offlineToday]
     )
+    // Hôm nay: tiêu hao từ đơn + ròng của mẻ sản xuất (nguyên liệu gốc +, thành phẩm −).
     const usedMap = useMemo(
-        () => calculateEstimatedConsumption(todayOrderItems, recipes, extraIngredients),
-        [todayOrderItems, recipes, extraIngredients]
+        () => (isTodayScope ? mergeUsage(calculateEstimatedConsumption(todayOrderItems, recipes, extraIngredients), productionOnDay(productionRows, todayISO)) : calculateEstimatedConsumption(todayOrderItems, recipes, extraIngredients)),
+        [todayOrderItems, recipes, extraIngredients, isTodayScope, productionRows, todayISO]
     )
     const consumptionBreakdown = useMemo(
         () => calculateConsumptionBreakdown(todayOrderItems, recipes, extraIngredients, products, productExtras),
@@ -234,6 +237,8 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                             </span>
                         </div>
                     )}
+                    {/* setTimeout: calcRef (useCounterCalc) cập nhật mẻ mới ở effect sau render — tải lại tồn quầy phải đợi nó. */}
+                    {!isGuest && <TodayProduction onChanged={() => setTimeout(() => inventory.reloadStocks(), 50)} onError={showError} />}
                     <InventoryReportCard
                         ingredientsList={inventory.ingredientsList}
                         isLoading={inventory.isLoadingIngredients}

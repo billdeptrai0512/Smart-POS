@@ -8,6 +8,7 @@ import NoticeSheet from './NoticeSheet'
 import NoticeBar from './NoticeBar'
 import ShiftPrepCard from '../DailyReportPage/ShiftPrepCard'
 import Toast from '../POSPage/Toast'
+import BatchPrepList from './BatchPrepList'
 
 // Dải notice "Chuẩn bị hôm nay" trên /pos — nằm trong Header, dưới thẻ Địa chỉ + Nhật ký (POSPage truyền vào prop notice).
 // BẮT BUỘC hiện khi còn NVL cần lấy từ kho dự trữ ra quầy (soạn sáng nay chưa xong, hoặc Lý thuyết ở
@@ -23,19 +24,20 @@ export default function PrepPinBar() {
 }
 
 function PinBar() {
-    const { items, checked, skipped, pendingCount, ready, confirmPrep, toggleSkip, settle, toast } = usePrepNotice()
+    const { items, batchItems, checked, skipped, pendingCount, ready, confirmPrep, toggleSkip, settle, toast } = usePrepNotice()
     const [open, setOpen] = useState(false)
 
     if (!open && pendingCount === 0) return null
 
-    const doneCount = items.length - pendingCount
+    const total = items.length + batchItems.length
+    const doneCount = total - pendingCount
 
     return (
         <>
             <NoticeBar
                 icon={<CircleAlert size={15} className="text-primary shrink-0" />}
                 label="Chuẩn bị hôm nay"
-                count={`${doneCount}/${items.length}`}
+                count={`${doneCount}/${total}`}
                 onClick={ready ? () => setOpen(true) : undefined} // số từ ảnh chụp: chờ tính xong mới cho thao tác
             />
             <Toast toast={toast} />
@@ -44,7 +46,7 @@ function PinBar() {
                 <NoticeSheet
                     icon={<CircleAlert size={18} className="text-primary shrink-0" />}
                     title="Chuẩn bị hôm nay"
-                    count={`${doneCount}/${items.length}`}
+                    count={`${doneCount}/${total}`}
                     onClose={() => { setOpen(false); settle() }}
                 >
                     <ShiftPrepCard
@@ -57,6 +59,7 @@ function PinBar() {
                         onToggle={confirmPrep}
                         onSkip={toggleSkip}
                     />
+                    <BatchPrepList items={batchItems} />
                 </NoticeSheet>
             )}
         </>

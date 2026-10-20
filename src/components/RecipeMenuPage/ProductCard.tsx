@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { formatVND } from '../../utils'
 import type { Row } from '../../types/domain'
 import type { RecipeRow } from '../../utils/inventory'
-import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients'
+import { ingredientLabel, getIngredientUnit, normalizeIngredientKey } from '../../utils/ingredients'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -57,7 +57,9 @@ export default function ProductCard({ product, prodRecipes, cost, ingredientUnit
                 {!sortMode && (
                     <div className="flex flex-col gap-0.5 text-[12px] text-text-secondary mt-1 pt-2 border-t border-border/40">
                         {!isStaff && <span>Giá vốn: <span className="text-primary font-bold">{formatVND(cost)}</span></span>}
-                        <span>Giá bán: <span className="text-success font-bold">{formatVND(product.price)}</span></span>
+                        {product.is_batch
+                            ? <span>Mẻ: <span className="text-success font-bold">{product.batch_yield} {ingredientUnits?.[normalizeIngredientKey(product.name)] || ''}</span></span>
+                            : <span>Giá bán: <span className="text-success font-bold">{formatVND(product.price)}</span></span>}
                     </div>
                 )}
             </div>

@@ -19,6 +19,7 @@ import { readOnboardingState, DEFAULT_ONBOARDING_STATE, isCashFlowProgressDone, 
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
 import { isRecipeStepActive } from '../components/common/onboarding/steps'
 import { dateStringVN, isSameDayVN } from '../utils/dateVN'
+import { overlayProduction } from '../utils/production'
 import { useDateScope } from '../hooks/useDateScope'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
@@ -91,7 +92,7 @@ export default function DailyReportPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const backTo = location.state?.from || '/history/sales'
-    const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits, ingredientConfigs, refreshProducts } = useProducts()
+    const { products, recipes, ingredientCosts, extraIngredients, productExtras, ingredientUnits, ingredientConfigs, productionRows, refreshProducts } = useProducts()
     const { todayOrders, todayExpenses, isLoadingHistory, handleLoadHistory, refreshTodayExpenses } = useHistory()
     const { isStaff, profile, isGuest } = useAuth()
     const { hasAccess, loading: entitlementLoading, enabled: monetizationEnabled } = useEntitlement()
@@ -460,10 +461,11 @@ export default function DailyReportPage() {
             const dayStr = dateStringVN(new Date(o.created_at || o.createdAt))
             ;(itemsByDay[dayStr] ||= []).push(...orderItemsOf(o))
         }
-        const dailyConsumption: Record<string, ReturnType<typeof calculateEstimatedConsumption>> = {}
+        let dailyConsumption: Record<string, ReturnType<typeof calculateEstimatedConsumption>> = {}
         for (const [dayStr, items] of Object.entries(itemsByDay)) {
             dailyConsumption[dayStr] = calculateEstimatedConsumption(items, recipes, extraIngredients)
         }
+        dailyConsumption = overlayProduction(dailyConsumption, productionRows, true) // mẻ sản xuất: nguyên liệu gốc dùng thật, không phải hao hụt
 
         const prevClosings = isDayScope
             ? (yesterdayClosing ? [yesterdayClosing] : [])
@@ -485,7 +487,7 @@ export default function DailyReportPage() {
             .filter(l => l.value > 0)
             .sort((a, b) => b.value - a.value)
         return { lossValue: Math.round(loss), nonRecipeUsageLines }
-    }, [isDayScope, isTodayScope, isTodaysClosing, shiftClosing, yesterdayClosing, apiShiftClosings, prevShiftClosings, apiOrders, displayOrders, offlineToday, recipes, extraIngredients, ingredientConfigs, estimatedOpening])
+    }, [isDayScope, isTodayScope, isTodaysClosing, shiftClosing, yesterdayClosing, apiShiftClosings, prevShiftClosings, apiOrders, displayOrders, offlineToday, recipes, extraIngredients, ingredientConfigs, estimatedOpening, productionRows])
 
     const { lossValue, nonRecipeUsageLines } = lossInfo
     const nonRecipeUsageTotal = nonRecipeUsageLines.reduce((s, l) => s + l.value, 0)

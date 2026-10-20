@@ -9,8 +9,14 @@ import type { ExtraIngredients, ExtraIngRow } from '../utils/inventory'
 export async function fetchProducts(addressId: UUID | null): Promise<Product[]> {
     if (localRepo.isGuest()) return localRepo.fetchLocalProducts(addressId)
 
-    const q = supabase.from('products').select('id, name, price, is_active, owner_address_id, sort_order, count_as_cup, is_divider').eq('is_active', true)
-    const { data: prods, error } = await (addressId ? q.eq('owner_address_id', addressId) : q.is('owner_address_id', null))
+    const baseCols = 'id, name, price, is_active, owner_address_id, sort_order, count_as_cup, is_divider'
+    const run = (cols: string) => {
+        const q = supabase.from('products').select<string, Product>(cols).eq('is_active', true)
+        return addressId ? q.eq('owner_address_id', addressId) : q.is('owner_address_id', null)
+    }
+    let { data: prods, error } = await run(`${baseCols}, is_batch, batch_yield`)
+    // Cột thành phẩm (20261026) chưa migrate → đọc lại không có chúng, đừng làm trống menu.
+    if (error && /is_batch|batch_yield/.test(error.message || '')) ({ data: prods, error } = await run(baseCols))
 
     if (error) {
         console.error('fetchProducts error:', error)
@@ -54,6 +60,12 @@ export async function updateProductName(productId: UUID, name: string) {
     if (error) throw error
 }
 
+// Sản lượng 1 mẻ của thành phẩm (products.is_batch).
+export async function updateProductBatchYield(productId: UUID, batchYield: number) {
+    const { error } = await supabase.from('products').update({ batch_yield: batchYield }).eq('id', productId)
+    if (error) throw error
+}
+
 // Toggle whether a product counts toward daily cup total
 export async function updateProductCountAsCup(productId: UUID, countAsCup: boolean) {
     if (localRepo.isGuest()) return localRepo.updateLocalProductCountAsCup(productId, countAsCup)
@@ -69,7 +81,7 @@ export async function updateProductCountAsCup(productId: UUID, countAsCup: boole
 // is_divider khi true để insert món thường vẫn chạy trước khi migration apply.
 // Mục VÀ món mới đều lên đầu (sort_order thấp hơn hết): vừa tạo là thấy ngay,
 // khỏi cuộn xuống cuối danh sách rồi kéo lên.
-export async function insertProduct(name: string, price: number, addressId: UUID | null = null, isDivider = false) {
+export async function insertProduct(name: string, price: number, addressId: UUID | null = null, isDivider = false, batchYield: number | null = null) {
     if (localRepo.isGuest()) {
         const existing = localRepo.fetchLocalProducts(addressId)
         const sortOrder = Math.min(0, ...existing.map(p => p.sort_order ?? 0)) - 1
@@ -78,6 +90,7 @@ export async function insertProduct(name: string, price: number, addressId: UUID
 
     const payload: Row = { name, price }
     if (isDivider) payload.is_divider = true
+    if (batchYield != null) { payload.is_batch = true; payload.batch_yield = batchYield }
     if (addressId) payload.owner_address_id = addressId
 
     let query = supabase.from('products').select('sort_order')

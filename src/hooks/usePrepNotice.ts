@@ -13,7 +13,8 @@ import {
     buildPrepTodayList, buildDepletedList, type PrepConfirmed, mergePrepItems, isPrepDone, isPrepFilled,
     buildWarehousePrepList, buildTodayBoughtMap, HISTORY_OFFSETS_TODAY, HISTORY_OFFSETS_TOMORROW, RECENT_OFFSETS_TODAY, RECENT_OFFSETS_TOMORROW, type SentMap,
 } from '../utils/prepToday'
-import { ingredientLabel } from '../utils/ingredients'
+import { ingredientLabel, normalizeIngredientKey } from '../utils/ingredients'
+import { productionUsage } from '../utils/production'
 import { isSameDayVN, dateStringVN } from '../utils/dateVN'
 import type { Row } from '../types/domain'
 
@@ -50,7 +51,7 @@ function useSnapshot<T>(kind: string, live: T, ready: boolean): T {
 // Phần chung: nạp đơn hôm nay + dự báo cùng thứ 3 tuần trước + trạng thái kiểm kê, và báo `ready`.
 function useShiftPrepBase(offsets: number[], recent: number[]) {
     const selectedAddress = useSelectedAddress()
-    const { recipes, extraIngredients, ingredientConfigs } = useProducts()
+    const { recipes, extraIngredients, ingredientConfigs, productionRows } = useProducts()
     const { todayOrders, todayExpenses, handleLoadHistory } = useHistory()
     const { toast, showToast, showError } = useToast()
     const todayISO = dateStringVN()
@@ -95,6 +96,7 @@ function useShiftPrepBase(offsets: number[], recent: number[]) {
     const usedMap = useMemo(
         () => calculateEstimatedConsumption(liveOrders.flatMap(orderItemsOf), recipes, extraIngredients),
         [liveOrders, recipes, extraIngredients])
+    const todayProduction = useMemo(() => productionUsage(productionRows.filter(p => dateStringVN(new Date(p.created_at)) === dateStringVN())), [productionRows])
     const systemTotalRevenue = useMemo(() => liveOrders.reduce((sum, o) => sum + (o.total || 0), 0), [liveOrders])
     const forecastMap = useMemo(
         () => forecastFromWeeks(weeks || [], recipes, extraIngredients),
@@ -104,7 +106,7 @@ function useShiftPrepBase(offsets: number[], recent: number[]) {
     const ready = historyOk && weeks !== null && inventory.closingLoaded && inventory.stocksLoaded && !inventory.isLoadingIngredients
     const common = {
         ingredientsList: inventory.ingredientsList, openingInputs: inventory.openingInputs, openingStock: inventory.openingStock,
-        warehouseStocks: inventory.warehouseStocks, usedMap,
+        warehouseStocks: inventory.warehouseStocks, usedMap, producedMap: todayProduction,
     }
     return { inventory, ready, common, forecastMap, usedMap, systemTotalRevenue, todayExpenses, toast, showToast, showError, handleLoadHistory }
 }
@@ -133,21 +135,32 @@ export function usePrepNotice() {
     const [confirmed, setConfirmed] = useState<PrepConfirmed>({})
     const settle = useCallback(() => setConfirmed({}), [])
 
-    const items = useMemo(() => {
+    const allItems = useMemo(() => {
         if (!ready) return []
         return mergePrepItems(
             buildPrepTodayList({ ...common, restockInputs, inventoryInputs: inventory.inventoryInputs, lastWeekUsedMap: forecastMap, sent: sent! }),
             buildDepletedList({ ...common, restockInputs, inventoryInputs: inventory.inventoryInputs, skipped, effectiveWarehouseStocks: inventory.effectiveWarehouseStocks, confirmed }),
             restockInputs)
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ready, common.ingredientsList, common.openingInputs, common.openingStock, common.warehouseStocks, common.usedMap,
+    }, [ready, common.ingredientsList, common.openingInputs, common.openingStock, common.warehouseStocks, common.usedMap, common.producedMap,
         inventory.effectiveWarehouseStocks, inventory.inventoryInputs, forecastMap, restockInputs, skipped, confirmed, sent])
+
+    // Thành phẩm không "lấy từ kho" mà là LÀM: tách khỏi checklist Lấy, hiện ở danh sách riêng với lượng còn phải làm
+    // (cần − đã sản xuất hôm nay; mẻ sản xuất là tiêu hao âm của thành phẩm nên cộng vào "cần").
+    const { batchProducts } = useProducts()
+    const batchKeys = useMemo(() => new Set(batchProducts.map(b => normalizeIngredientKey(b.name))), [batchProducts])
+    const items = useMemo(() => allItems.filter(it => !batchKeys.has(it.ingredient)), [allItems, batchKeys])
+    const batchItems = useMemo(
+        () => allItems.filter(it => batchKeys.has(it.ingredient))
+            .map(it => ({ ...it, need: r1((it.need ?? 0) + (common.producedMap[it.ingredient] ?? 0)) }))
+            .filter(it => it.need > 0),
+        [allItems, batchKeys, common.producedMap])
 
     const checked = useMemo(
         () => Object.fromEntries(items.map(it => [it.ingredient, isPrepDone(it, restockInputs, skipped)])),
         [items, restockInputs, skipped])
-    const pendingCount = items.filter(it => !checked[it.ingredient]).length
-    const view = useSnapshot('pos', { items, checked, skipped, pendingCount }, ready)
+    const pendingCount = items.filter(it => !checked[it.ingredient]).length + batchItems.length
+    const view = useSnapshot('pos', { items, batchItems, checked, skipped, pendingCount }, ready)
 
     // Autosave debounce — cùng kiểu triggerAutoSave của /report: gom nhiều tick thành 1 lần đẩy,
     // ref luôn trỏ bản mới nhất để timer đọc đúng state hiện tại.
@@ -220,14 +233,16 @@ export function usePrepNotice() {
 export function useWarehousePrep() {
     const { inventory, ready, common, forecastMap, todayExpenses, toast, handleLoadHistory } = useShiftPrepBase(HISTORY_OFFSETS_TOMORROW, RECENT_OFFSETS_TOMORROW)
 
+    const { batchProducts } = useProducts()
     const items = useMemo(() => {
         if (!ready) return []
+        const batchKeys = new Set(batchProducts.map(b => normalizeIngredientKey(b.name)))
         return buildWarehousePrepList({
-            ...common, effectiveWarehouseStocks: inventory.effectiveWarehouseStocks, restockInputs: inventory.restockInputs,
+            ...common, ingredientsList: common.ingredientsList?.filter(i => !batchKeys.has(i.ingredient)), effectiveWarehouseStocks: inventory.effectiveWarehouseStocks, restockInputs: inventory.restockInputs,
             inventoryInputs: inventory.inventoryInputs, nextDowUsedMap: forecastMap, todayBoughtMap: buildTodayBoughtMap(todayExpenses),
         })
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ready, todayExpenses, common.ingredientsList, common.openingInputs, common.openingStock, common.warehouseStocks, common.usedMap,
+    }, [ready, todayExpenses, common.ingredientsList, common.openingInputs, common.openingStock, common.warehouseStocks, common.usedMap, common.producedMap, batchProducts,
         inventory.effectiveWarehouseStocks, inventory.restockInputs, inventory.inventoryInputs, forecastMap])
 
     // Sau khi mua/nhập kho: tươi lại tồn kho + danh sách NVL của hook để danh sách tính lại.

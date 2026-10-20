@@ -6,6 +6,8 @@ import {
 import { lookupByLabel } from '../utils/ingredients'
 import { dedupeShiftClosingsByDay } from '../utils/reportStats'
 import { startOfDayVN } from '../utils/dateVN'
+import { useProducts } from '../contexts/ProductContext'
+import { overlayProduction } from '../utils/production'
 import { fetchReportByRange } from '../services/orderService'
 import type { Inputs } from '../utils/prepToday'
 import type { ExtraIngredients, MissingCupCandidate, RecipeRow, UsageMap } from '../utils/inventory'
@@ -75,12 +77,13 @@ export function useMissingCupSuspicion({
         return map
     }, [enabled, ingredientsList, inventoryInputs, restockInputs, openingInputs, openingStock, usedMap])
 
+    const { productionRows } = useProducts()
     const historicalDailyHaoHut = useMemo(
         () => buildDailyHaoHutMap({
             shiftClosings: history.shiftClosings, orders: history.orders,
-            recipes, extraIngredients,
+            recipes, extraIngredients, extraUsageByDay: overlayProduction({}, productionRows, true),
         }),
-        [history, recipes, extraIngredients],
+        [history, recipes, extraIngredients, productionRows],
     )
 
     // Độ nhiễu tự nhiên/nguyên liệu suy ra từ lịch sử 14 ngày, thay cho dung sai %

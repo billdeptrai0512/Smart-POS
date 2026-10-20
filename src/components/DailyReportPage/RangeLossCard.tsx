@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { buildIngredientToProduct, calculateEstimatedConsumption, buildRecipeIngredientSet, orderItemsOf, r1, walkDailyIngredientDiff, isLiveOrder } from '../../utils/inventory';
 import { dateStringVN } from '../../utils/dateVN';
+import { overlayProduction } from '../../utils/production';
 import { ingredientLabel, getIngredientUnit } from '../../utils/ingredients';
 import { ChevronDown } from 'lucide-react';
 import { useProducts } from '../../contexts/ProductContext';
@@ -40,7 +41,7 @@ export default function RangeLossCard({
     extraIngredients,
     ingredientUnits = {},
 }: Props) {
-    const { ingredientConfigs = [], products = [] } = useProducts();
+    const { ingredientConfigs = [], products = [], productionRows } = useProducts();
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
     const toggleRow = (ingredient: string) => {
         setExpandedRows(prev => ({ ...prev, [ingredient]: !prev[ingredient] }));
@@ -70,10 +71,11 @@ export default function RangeLossCard({
         }
 
         // Pre-calculate estimated consumption per day
-        const dailyConsumption: Record<string, UsageMap> = {};
+        let dailyConsumption: Record<string, UsageMap> = {};
         for (const [dayStr, items] of Object.entries(dailyOrderItems)) {
             dailyConsumption[dayStr] = calculateEstimatedConsumption(items, recipes, extraIngredients);
         }
+        dailyConsumption = overlayProduction(dailyConsumption, productionRows, true);
 
         // --- Step 2: Keep only the LAST closing per calendar day, oldest → newest.
         // Mỗi ngày có thể có nhiều ca (sáng/tối). dailyConsumption là tổng cả ngày,
