@@ -138,3 +138,20 @@ export async function setToppingProductLinks(toppingId: UUID, productIds: UUID[]
         .insert(productIds.map(productId => ({ product_id: productId, topping_id: toppingId })))
     if (insError) throw insError
 }
+
+export interface ToppingSource { ingredient: string; amount: number }
+
+// Đọc / ghi nguồn tồn kho của 1 topping. Cột chưa migrate (20261028) → null.
+export async function fetchToppingSource(toppingId: UUID): Promise<ToppingSource | null> {
+    if (localRepo.isGuest()) return null
+    const { data } = await supabase.from('toppings').select('source_ingredient, source_amount').eq('id', toppingId).maybeSingle()
+    return data?.source_ingredient ? { ingredient: data.source_ingredient, amount: Number(data.source_amount) } : null
+}
+
+// source = null → bỏ nguồn, topping quay về tính theo topping_ingredients. CHECK toppings_source_pair buộc amount > 0.
+export async function updateToppingSource(toppingId: UUID, source: ToppingSource | null) {
+    if (localRepo.isGuest()) return
+    const { error } = await supabase.from('toppings')
+        .update({ source_ingredient: source?.ingredient ?? null, source_amount: source?.amount ?? null }).eq('id', toppingId)
+    if (error) throw error
+}

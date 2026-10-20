@@ -32,6 +32,7 @@ import { sortIngredients, getIngredientUnit, makeCategoryOf, registerNewIngredie
 import { useToast } from '../hooks/useToast'
 import { useSavingAction } from '../hooks/useSavingAction'
 import { useToppingDetail } from '../hooks/useToppingDetail'
+import ToppingSourceSection from '../components/RecipeIngredientPage/ToppingSourceSection'
 import ProductLinksSection from '../components/common/ProductLinksSection'
 import { ICON_BTN_DANGER } from '../components/common/ModalShell'
 import { capitalizeWords } from '../utils'
@@ -386,7 +387,14 @@ export default function RecipeIngredientPage() {
                     )}
                 />
                 <main className="flex-1 overflow-y-auto px-4 max-[329px]:px-2 py-4 space-y-3 bg-bg">
-                    <FastIngredientFill
+                    <ToppingSourceSection
+                        source={td.source}
+                        options={Object.keys(ingredientCosts).filter(k => k !== normalizeIngredientKey(topping.name)).sort((a, b) => sortIngredients(a, b, selectedAddress?.ingredient_sort_order))}
+                        unitOf={(k) => getIngredientUnit(k, ingredientUnits?.[k], ingredientUnits)}
+                        canEdit={canEdit}
+                        onSave={td.saveSource}
+                    />
+                    {!td.source && <FastIngredientFill
                         entries={td.ings}
                         dbIngredients={dbIngredients}
                         getUnit={(k) => getIngredientUnit(k, ingredientUnits?.[k], ingredientUnits)}
@@ -397,7 +405,7 @@ export default function RecipeIngredientPage() {
                         onSetAmount={td.setAmount}
                         onRemove={td.remove}
                         onAddCustom={td.addCustom}
-                    />
+                    />}
                     <ProductLinksSection links={td.links} products={products} canEdit={canEdit} saving={saving} onSave={td.saveLinks} />
                 </main>
                 {saving && (

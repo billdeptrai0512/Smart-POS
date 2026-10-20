@@ -7,7 +7,7 @@ và topping (bán kèm món). Đọc xong bạn trả lời được: *"Món nà
 
 > Trạng thái: **§2–§4 đã code** (nhánh `claude/wonderful-elion-4a0506`, migration `20261026` + `20261027`).
 > **§5–§8 là thiết kế đã thống nhất.** Đợt 1 (schema) và đợt 2 (tiêu hao ở client) **đã code** (migration `20261028_topping_source.sql`);
-> đợt 3–5 (giá vốn RPC, UI, chuyển dữ liệu) chưa.
+> Đợt 3 (giá vốn RPC, `20261029_topping_source_cogs.sql`) và đợt 4 (UI chọn nguồn ở trang chi tiết topping) **đã code**; đợt 5 (chuyển dữ liệu) chưa.
 
 ---
 
@@ -153,8 +153,8 @@ Mỗi đợt tự đứng được, deploy riêng. Migration **apply tay trong S
 1. ✅ **Schema**: thêm `toppings.source_ingredient`, `source_amount` (nullable, CHECK cặp). Không đổi hành vi.
 2. ✅ **Tiêu hao client** (test: `src/utils/toppingUsage.test.ts`): `calculateEstimatedConsumption` đọc topping có nguồn + select thêm `topping_ids`. Có test đơn vị.
    Topping chưa có nguồn → không đổi. (Đây là đợt kiểm chứng số liệu.)
-3. **Giá vốn RPC**: `bulk_create_orders` + khớp `POSContext`. Có fallback.
-4. **UI**: form Topping (chọn nguồn + định lượng), bỏ công thức topping cho topping đã có nguồn.
+3. ✅ **Giá vốn RPC**: `bulk_create_orders` + khớp `POSContext`. Có fallback.
+4. ✅ **UI**: form Topping (chọn nguồn + định lượng), bỏ công thức topping cho topping đã có nguồn.
 5. **Di chuyển dữ liệu** từng quán: gán nguồn cho từng topping (hỏi chủ quán định lượng 1 phần). Cuối cùng mới cân nhắc bỏ `topping_ingredients`.
 
 > Đợt 2 trước đợt 3 cố ý: trừ tồn sai chỉ lệch số đếm (sửa được bằng kiểm kê), còn giá vốn sai ghi vào `order_items.unit_cost`
