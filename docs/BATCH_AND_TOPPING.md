@@ -138,7 +138,7 @@ Hệ quả cần nhớ: topping hiện trong `calculateConsumptionBreakdown` nh�
 | Giá vốn | RPC `bulk_create_orders` (bản mới nhất: `20261026_discount_program_table_scope.sql`) | Vòng COGS topping đổi từ `topping_ingredients` sang `source_amount × unit_cost`, fallback cũ khi `source_ingredient IS NULL`. **Giữ `SET search_path = public`, ownership guard, REVOKE/GRANT** (xem CLAUDE.md). `npm run check:search-path`. |
 | Giá vốn client | `POSContext` (~L503, tính lạc quan) | Phải khớp RPC; server mới là nguồn thật. |
 | Đóng băng | `daily_ingredient_usage` | Ngày **đã đóng băng** giữ số cũ (không có tiêu hao topping). Chỉ ngày mới tính đúng. Không tự ghi lại lịch sử. |
-| Form/UI | `CreateToppingForm`, `ToppingsPage`, `ToppingDetailPage` | Thay phần "Công thức" bằng "Nguồn + định lượng"; vẫn giữ `ProductLinksSection`. |
+| Form/UI | `CreateToppingForm`, `RecipeMenuPage` (bộ lọc `?kind=main|batch|topping`), `RecipeIngredientPage` + `useToppingDetail` (1 trang chi tiết cho cả món, thành phẩm, topping; nhánh topping trả sớm ở đầu phần render) | Thay phần "Công thức" của nhánh topping bằng "Nguồn + định lượng"; vẫn giữ `ProductLinksSection`. Route cũ `/category/toppings` và `/category/toppings/:id` còn lại để tương thích. |
 | Sao chép/sao lưu | `backupService`, `exportService`, `importService`, `ExcelImportModal`, RPC `bulk_import_menu*`, `clone_full_config`, `localRepository` | Đều tham chiếu `toppings`/`topping_ingredients` — thêm 2 cột mới, kẻo clone chi nhánh mất nguồn. |
 | Xoá nguyên liệu | RPC `delete_ingredient` | Nguyên liệu/thành phẩm đang là nguồn của topping → chặn hoặc cảnh báo. |
 

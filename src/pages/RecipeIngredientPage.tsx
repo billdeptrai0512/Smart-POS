@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { Trash2 } from 'lucide-react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useProducts } from '../contexts/ProductContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -30,6 +31,10 @@ import {
 import { sortIngredients, getIngredientUnit, makeCategoryOf, registerNewIngredients, normalizeIngredientKey } from '../utils/ingredients'
 import { useToast } from '../hooks/useToast'
 import { useSavingAction } from '../hooks/useSavingAction'
+import { useToppingDetail } from '../hooks/useToppingDetail'
+import ProductLinksSection from '../components/common/ProductLinksSection'
+import { ICON_BTN_DANGER } from '../components/common/ModalShell'
+import { capitalizeWords } from '../utils'
 import { useConfirm } from '../contexts/ConfirmContext'
 import Toast from '../components/POSPage/Toast'
 import RecipeHeader from '../components/RecipeIngredientPage/RecipeHeader'
@@ -44,9 +49,11 @@ import { groupRecipesByProduct, type RecipeRow } from '../utils/inventory'
 export default function RecipeIngredientPage() {
     const navigate = useNavigate()
     const location = useLocation()
-    const { productId } = useParams() as { productId: string }
+    // Cùng trang cho món, thành phẩm và topping: id nằm ở :productId (/category/recipes/:id) hoặc :toppingId (đường cũ /category/toppings/:id).
+    const { productId: routeId, toppingId } = useParams()
+    const productId = (routeId ?? toppingId) as string
     const {
-        products, batchProducts, batchKeys, recipes: allRecipes,
+        products, batchProducts, batchKeys, toppings, recipes: allRecipes,
         ingredientCosts, ingredientUnits,
         productExtras: contextExtras, extraIngredients: contextExtraIngs,
         ingredientConfigs, refreshProducts,
@@ -70,6 +77,10 @@ export default function RecipeIngredientPage() {
     const product = useMemo(() => products.find(p => p.id === productId) ?? batchProducts.find(p => p.id === productId), [products, batchProducts, productId])
     // Thành phẩm: công thức này là CÔNG THỨC MẺ (sản lượng = batch_yield), không có giá bán/tùy chọn.
     const isBatch = !!product?.is_batch
+    const isTopping = !product && toppings.some(t => t.id === productId)
+    // Back / sau khi xoá: về đúng loại đang xem của danh sách.
+    const backUrl = '/category/recipes' + (isTopping ? '?kind=topping' : isBatch ? '?kind=batch' : '')
+    const td = useToppingDetail(isTopping ? productId : null, withSaving, backUrl, () => showToast('Đã lưu', 'success'))
 
     // Onboarding phase 5 — chỉ hint/track trên đúng công thức "Cà phê đen".
     const isCafeDen = isGuest && norm(product?.name) === RECIPE_TARGET_PRODUCT
@@ -246,7 +257,7 @@ export default function RecipeIngredientPage() {
         await withSaving('Xóa món khỏi menu', async () => {
             await removeProductFromAddress(productId, addrId)
             refreshProducts?.()
-            navigate('/category/recipes', { state: location.state })
+            navigate(backUrl, { state: location.state })
         })
     }
 
@@ -354,11 +365,55 @@ export default function RecipeIngredientPage() {
         })
     }
 
+    if (td.topping) {
+        const topping = td.topping
+        return (
+            <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
+                <Toast toast={toast} />
+                <EditableEntityHeader
+                    name={topping.name}
+                    nameTransform={capitalizeWords}
+                    canEdit={canEdit}
+                    onBack={() => navigate(backUrl, { state: location.state })}
+                    onSaveName={td.saveName}
+                    price={topping.price}
+                    priceLabel="Giá cộng thêm:"
+                    onSavePrice={td.savePrice}
+                    action={canEdit && (
+                        <button onClick={td.deleteSelf} className={ICON_BTN_DANGER} title="Xoá topping">
+                            <Trash2 size={20} strokeWidth={2.5} />
+                        </button>
+                    )}
+                />
+                <main className="flex-1 overflow-y-auto px-4 max-[329px]:px-2 py-4 space-y-3 bg-bg">
+                    <FastIngredientFill
+                        entries={td.ings}
+                        dbIngredients={dbIngredients}
+                        getUnit={(k) => getIngredientUnit(k, ingredientUnits?.[k], ingredientUnits)}
+                        categoryOf={categoryOf}
+                        ingredientCosts={ingredientCosts}
+                        canEdit={canEdit}
+                        showCost
+                        onSetAmount={td.setAmount}
+                        onRemove={td.remove}
+                        onAddCustom={td.addCustom}
+                    />
+                    <ProductLinksSection links={td.links} products={products} canEdit={canEdit} saving={saving} onSave={td.saveLinks} />
+                </main>
+                {saving && (
+                    <div className="fixed bottom-4 right-4 z-50 pointer-events-none">
+                        <span className="text-text-secondary text-[11px] animate-pulse">Đang lưu...</span>
+                    </div>
+                )}
+            </div>
+        )
+    }
+
     if (!product) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-bg px-6 gap-4">
                 <span className="text-text-secondary text-[14px]">Không tìm thấy món này.</span>
-                <button onClick={() => navigate('/category/recipes', { state: location.state })} className="text-primary font-bold text-[14px] underline">
+                <button onClick={() => navigate(backUrl, { state: location.state })} className="text-primary font-bold text-[14px] underline">
                     ← Quay lại
                 </button>
             </div>
@@ -382,7 +437,7 @@ export default function RecipeIngredientPage() {
 
             {isBatch ? (
                 // Tên thành phẩm = khóa nguyên liệu nên không đổi tên ở đây (đổi sẽ tách nó khỏi tồn kho/công thức món).
-                <EditableEntityHeader name={product.name} canEdit={false} onBack={() => navigate('/category/recipes', { state: location.state })} onSaveName={() => { }}>
+                <EditableEntityHeader name={product.name} canEdit={false} onBack={() => navigate(backUrl, { state: location.state })} onSaveName={() => { }}>
                     <div className="flex items-center justify-center gap-1.5 text-[12px] font-bold text-text-secondary">
                         <span>1 mẻ ra:</span>
                         <InlineEditor
@@ -398,7 +453,7 @@ export default function RecipeIngredientPage() {
             ) : <RecipeHeader
                 product={product}
                 canEdit={canEdit}
-                onBack={() => navigate('/category/recipes', { state: location.state })}
+                onBack={() => navigate(backUrl, { state: location.state })}
                 onSavePrice={saveProductPrice}
                 onSaveName={saveProductName}
                 countAsCup={product.count_as_cup !== false}

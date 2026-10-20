@@ -430,7 +430,7 @@ export default function RecipeMenuPage() {
                                 cost={(toppingIngs[t.id] || []).reduce((sum, r) => sum + r.amount * (ingredientCosts[r.ingredient] || 0), 0)}
                                 ingredientUnits={ingredientUnits}
                                 priceLabel="Giá cộng thêm"
-                                onClick={() => { rememberList(); navigate(`/category/toppings/${t.id}`, { state: location.state }) }}
+                                onClick={() => { rememberList(); navigate(`/category/recipes/${t.id}`, { state: location.state }) }}
                             />
                         )) : (kind === 'batch' ? searchedBatches : searchedProducts).map(product => (
                             <ProductCard
