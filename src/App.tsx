@@ -33,7 +33,6 @@ const DailyReportPage = lazy(() => import('./pages/DailyReportPage'))
 const IngredientManagementPage = lazy(() => import('./pages/IngredientManagementPage'))
 const IngredientDetailPage = lazy(() => import('./pages/IngredientDetailPage'))
 const InventorySummaryPage = lazy(() => import('./pages/InventorySummaryPage'))
-const ToppingsPage = lazy(() => import('./pages/ToppingsPage'))
 const ToppingDetailPage = lazy(() => import('./pages/ToppingDetailPage'))
 const DiscountProgramsPage = lazy(() => import('./pages/DiscountProgramsPage'))
 const DiscountProgramDetailPage = lazy(() => import('./pages/DiscountProgramDetailPage'))
@@ -135,7 +134,7 @@ export default function App() {
                           <Route path="/inventory/summary" element={<InventorySummaryPage />} />
                           <Route path="/category/:tab?" element={<TabGuard base="/category" tabs={['overall', 'recipes']}><RecipeMenuPage /></TabGuard>} />
                           <Route path="/category/recipes/:productId" element={<RecipeIngredientPage />} />
-                          <Route path="/category/toppings" element={<ToppingsPage />} />
+                          <Route path="/category/toppings" element={<Navigate to="/category/recipes?kind=topping" replace />} />
                           <Route path="/category/toppings/:toppingId" element={<ToppingDetailPage />} />
                           <Route path="/category/discounts" element={<DiscountProgramsPage />} />
                           <Route path="/category/discounts/:id" element={<DiscountProgramDetailPage />} />

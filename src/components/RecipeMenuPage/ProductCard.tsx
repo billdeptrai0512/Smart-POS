@@ -15,11 +15,13 @@ interface Props {
     dragHandle?: ReactNode
     sortMode?: boolean
     hint?: boolean
+    /** Nhãn giá bán (mặc định "Giá bán"; topping dùng "Giá cộng thêm"). */
+    priceLabel?: string
 }
 
 const SYMBOL_UNITS = new Set(['g', 'ml', 'l', 'kg', 'oz', 'mg'])
 
-export default function ProductCard({ product, prodRecipes, cost, ingredientUnits, onClick, dragHandle, sortMode = false, hint = false }: Props) {
+export default function ProductCard({ product, prodRecipes, cost, ingredientUnits, onClick, dragHandle, sortMode = false, hint = false, priceLabel = 'Giá bán' }: Props) {
     const { isStaff } = useAuth()
     const isOrphan = prodRecipes.length === 0
     const notCup = product.count_as_cup === false
@@ -59,7 +61,7 @@ export default function ProductCard({ product, prodRecipes, cost, ingredientUnit
                         {!isStaff && <span>Giá vốn: <span className="text-primary font-bold">{formatVND(cost)}</span></span>}
                         {product.is_batch
                             ? <span>Mẻ: <span className="text-success font-bold">{product.batch_yield} {ingredientUnits?.[normalizeIngredientKey(product.name)] || ''}</span></span>
-                            : <span>Giá bán: <span className="text-success font-bold">{formatVND(product.price)}</span></span>}
+                            : <span>{priceLabel}: <span className="text-success font-bold">{formatVND(product.price)}</span></span>}
                     </div>
                 )}
             </div>
