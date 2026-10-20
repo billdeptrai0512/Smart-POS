@@ -520,7 +520,7 @@ export default function RecipeIngredientPage() {
 
             {showCopyFrom && (
                 <CopyRecipeModal
-                    products={products.filter(p => p.id !== productId && !p.is_divider)}
+                    products={products.filter(p => p.id !== productId)}
                     recipesByProduct={recipesByProduct}
                     onPick={handleCopyFrom}
                     onClose={() => setShowCopyFrom(false)}
