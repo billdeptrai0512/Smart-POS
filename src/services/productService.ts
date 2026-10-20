@@ -3,6 +3,7 @@ import * as localRepo from './localRepository'
 import type { UUID, Row, CartExtra, Product } from '../types/domain'
 import type { ExtraIngredients, ExtraIngRow } from '../utils/inventory'
 import { normalizeIngredientKey } from '../utils/ingredients'
+import { fetchToppingSources } from './toppingService'
 
 // ---- Products CRUD ----
 
@@ -303,6 +304,13 @@ export async function fetchExtraIngredients(extraIds: UUID[] | null = null): Pro
         extrasMap[row.extra_id].push(row as ExtraIngRow)
     }
     return extrasMap
+}
+
+// Extras + nguồn tồn của topping trong CÙNG 1 map (key = id của extra hoặc topping, không trùng nhau) — mọi nơi tính tiêu hao
+// nhận map này. Xem fetchToppingSources.
+export async function fetchExtraIngredientsWithToppings(extraIds: UUID[] | null = null): Promise<ExtraIngredients> {
+    const [extras, toppingSources] = await Promise.all([fetchExtraIngredients(extraIds), fetchToppingSources()])
+    return { ...extras, ...toppingSources }
 }
 
 // Upsert extra ingredient

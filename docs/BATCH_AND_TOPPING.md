@@ -6,7 +6,8 @@ và topping (bán kèm món). Đọc xong bạn trả lời được: *"Món nà
 Đọc kèm [INVENTORY_LOGIC.md](INVENTORY_LOGIC.md) (tồn kho 2 kho, đếm tay, WAC). Tài liệu này chỉ nói phần thêm vào.
 
 > Trạng thái: **§2–§4 đã code** (nhánh `claude/wonderful-elion-4a0506`, migration `20261026` + `20261027`).
-> **§5–§8 là thiết kế đã thống nhất nhưng CHƯA code** (đợt "Topping trỏ nguồn").
+> **§5–§8 là thiết kế đã thống nhất.** Đợt 1 (schema) và đợt 2 (tiêu hao ở client) **đã code** (migration `20261028_topping_source.sql`);
+> đợt 3–5 (giá vốn RPC, UI, chuyển dữ liệu) chưa.
 
 ---
 
@@ -119,6 +120,13 @@ Mỗi quán chuyển dần từng topping; không có "ngày chuyển đổi" to
 
 ---
 
+### Cách đợt 2 cài (quan trọng khi đọc code)
+Nguồn của topping được đưa vào **cùng map với extras**: `fetchToppingSources()` trả `{ [toppingId]: [{ ingredient: source, amount: source_amount }] }`,
+`fetchExtraIngredientsWithToppings()` gộp nó vào map `extraIngredients` (key = id extra hoặc id topping, UUID nên không trùng).
+`orderItemsOf` đưa `topping_ids` (hoặc `toppings` của đơn offline) vào danh sách `extras` của dòng. Nhờ vậy **không đổi chữ ký**
+của `calculateEstimatedConsumption` / `usageByDay` / `counterEstimate`… — mọi nơi đang tính tiêu hao tự có tiêu hao topping.
+Hệ quả cần nhớ: topping hiện trong `calculateConsumptionBreakdown` như một biến thể extra; `buildRecipeIngredientSet` coi nguồn là nguyên liệu có trong công thức.
+
 ## 6. Các điểm chạm khi code (checklist)
 
 | Việc | Vị trí | Ghi chú |
@@ -142,8 +150,8 @@ Mỗi đợt tự đứng được, deploy riêng. Migration **apply tay trong S
 
 0. **Chốt thành phẩm** (đang làm): apply `20261026_batch_products.sql` + `20261027_production_batches.sql`, rồi deploy.
    *Thí điểm tại 31 Nguyễn Thị Tươi* — xem §8.
-1. **Schema**: thêm `toppings.source_ingredient`, `source_amount` (nullable). Không đổi hành vi.
-2. **Tiêu hao client**: `calculateEstimatedConsumption` đọc topping có nguồn + select thêm `topping_ids`. Có test đơn vị.
+1. ✅ **Schema**: thêm `toppings.source_ingredient`, `source_amount` (nullable, CHECK cặp). Không đổi hành vi.
+2. ✅ **Tiêu hao client** (test: `src/utils/toppingUsage.test.ts`): `calculateEstimatedConsumption` đọc topping có nguồn + select thêm `topping_ids`. Có test đơn vị.
    Topping chưa có nguồn → không đổi. (Đây là đợt kiểm chứng số liệu.)
 3. **Giá vốn RPC**: `bulk_create_orders` + khớp `POSContext`. Có fallback.
 4. **UI**: form Topping (chọn nguồn + định lượng), bỏ công thức topping cho topping đã có nguồn.

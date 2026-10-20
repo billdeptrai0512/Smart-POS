@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, us
 import type { CartExtra, CartTopping, IngredientConfig, IngredientGroup, Product, Row, UUID } from '../types/domain'
 import type { ExtraIngredients, RecipeRow } from '../utils/inventory'
 import type { DiscountProgram } from '../utils/discountPrograms'
-import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
+import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredientsWithToppings } from '../services/orderService'
 import { fetchToppings, fetchProductToppingLinks } from '../services/toppingService'
 import { fetchDiscountPrograms, fetchDiscountProgramProductLinks } from '../services/discountService'
 import { useAuth } from './AuthContext'
@@ -93,7 +93,7 @@ async function fetchProductDataWithRetry(addressId: UUID | null, attempts = 3, d
             ])
             const extraIds = Object.values(extras).flat().map(e => e.id)
             const [extraIngs, toppingLinks, discountLinks] = await Promise.all([
-                fetchExtraIngredients(extraIds),
+                fetchExtraIngredientsWithToppings(extraIds),
                 fetchProductToppingLinks(toppings.map(t => t.id)),
                 fetchDiscountProgramProductLinks(discountPrograms.map(p => p.id)),
             ])
@@ -257,7 +257,7 @@ export function ProductProvider() {
         ])
         const extraIds = Object.values(extras).flat().map(e => e.id)
         const [extraIngs, toppingLinks, discountLinks] = await Promise.all([
-            fetchExtraIngredients(extraIds),
+            fetchExtraIngredientsWithToppings(extraIds),
             fetchProductToppingLinks(toppingsList.map(t => t.id)),
             fetchDiscountProgramProductLinks(discountProgramsList.map(p => p.id)),
         ])

@@ -358,7 +358,7 @@ export async function fetchOrdersByRange(addressId: UUID | null, start: Date, en
         let query = supabase
             .from('orders')
             .select(`id, order_no, total, total_cost, discount_amount, payment_method, staff_name, table_name, created_at, deleted_at, deleted_by, print_count,
-                order_items(id, quantity, options, product_id, unit_cost, extra_ids, discount_amount, note, products(name))`)
+                order_items(id, quantity, options, product_id, unit_cost, extra_ids, topping_ids, discount_amount, note, products(name))`)
             .gte('created_at', start.toISOString())
             .lte('created_at', end.toISOString())
         if (addressId) query = query.eq('address_id', addressId)

@@ -3,6 +3,7 @@ import * as localRepo from './localRepository'
 import { upsertIngredientCost } from './ingredientCostService'
 import { normalizeIngredientKey } from '../utils/ingredients'
 import type { UUID, Row, CartTopping } from '../types/domain'
+import type { ExtraIngredients } from '../utils/inventory'
 
 // ---- Toppings CRUD ----
 // Thực thể toàn cục (không product_id) — mirrors product_extras nhưng gắn vào nhiều món
@@ -61,6 +62,16 @@ export async function deleteTopping(toppingId: UUID) {
     const { error } = await supabase.from('toppings').delete().eq('id', toppingId)
     if (error) throw error
     return true
+}
+
+// Nguồn tồn kho của topping (toppings.source_*) ở dạng ExtraIngredients { [toppingId]: [{ ingredient, amount }] }: topping
+// được tính như một "extra" nên toàn bộ phần tiêu hao/giá vốn có sẵn dùng lại được. Topping chưa gán nguồn không có mặt.
+// Cột chưa migrate (20261028) / lỗi → {} (không làm hỏng menu).
+export async function fetchToppingSources(): Promise<ExtraIngredients> {
+    if (localRepo.isGuest()) return {}
+    const { data, error } = await supabase.from('toppings').select('id, source_ingredient, source_amount').not('source_ingredient', 'is', null)
+    if (error) return {}
+    return Object.fromEntries((data ?? []).map(t => [t.id, [{ ingredient: t.source_ingredient, amount: Number(t.source_amount), extra_id: t.id }]]))
 }
 
 // ---- Topping Ingredients CRUD (công thức riêng của topping — mirrors recipes) ----

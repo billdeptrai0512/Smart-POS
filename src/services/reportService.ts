@@ -275,7 +275,8 @@ export async function fetchLastWeekSameDayOrderItems(addressId: UUID | null, day
                 order_items (
                     quantity,
                     product_id,
-                    extra_ids
+                    extra_ids,
+                    topping_ids
                 )
             `)
             .is('deleted_at', null)
@@ -325,7 +326,7 @@ export async function fetchOrdersSince(addressId: UUID, fromDay: string, toDay?:
         for (let from = 0; ; from += PAGE) {
             let q = supabase
                 .from('orders')
-                .select('id, created_at, order_items(quantity, product_id, extra_ids)')
+                .select('id, created_at, order_items(quantity, product_id, extra_ids, topping_ids)')
                 .eq('address_id', addressId)
                 .is('deleted_at', null)
                 .gte('created_at', start.toISOString())

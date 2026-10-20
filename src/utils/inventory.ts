@@ -82,7 +82,11 @@ export function orderItemsOf(order: Row) {
     return (order.order_items || order.orderItems || order.cart || []).map((i: Row) => ({
         productId: i.product_id || i.productId,
         qty: i.quantity || i.qty || 1,
-        extras: i.extra_ids ? i.extra_ids.map((id: string) => ({ id })) : (i.extras || []),
+        extras: [
+            ...(i.extra_ids ? i.extra_ids.map((id: string) => ({ id })) : (i.extras || [])),
+            // Topping tính như extra: tiêu hao lấy từ nguồn của nó (fetchToppingSources); topping chưa có nguồn → map không có key → 0.
+            ...(i.topping_ids ? i.topping_ids.map((id: string) => ({ id })) : (i.toppings || [])),
+        ],
     }))
 }
 
@@ -164,7 +168,7 @@ export function averageIngredientMaps(maps?: (UsageMap | null | undefined)[] | n
 // [{ product_id, quantity, extra_ids }] (fetchLastWeekSameDayOrderItems).
 export function forecastFromWeeks(weeks: Row[][], recipes: RecipeRow[], extraIngredients: ExtraIngredients) {
     return averageIngredientMaps(weeks.map(items => calculateEstimatedConsumption(
-        items.map(i => ({ productId: i.product_id, qty: i.quantity, extras: (i.extra_ids || []).map((id: string) => ({ id })) })),
+        items.map(i => ({ productId: i.product_id, qty: i.quantity, extras: [...(i.extra_ids || []), ...(i.topping_ids || [])].map((id: string) => ({ id })) })),
         recipes, extraIngredients)));
 }
 

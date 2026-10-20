@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { fetchIngredientStocks } from '../services/ingredientStockService'
 import { fetchIngredientCostsAndUnits } from '../services/ingredientCostService'
 import { fetchAllRecipes } from '../services/recipeService'
-import { fetchExtraIngredients, fetchBatchKeys } from '../services/productService'
+import { fetchExtraIngredientsWithToppings, fetchBatchKeys } from '../services/productService'
 import { fetchForecastDays } from '../services/reportService'
 import { historicalCache } from '../services/cache'
 import { withCounterEstimate } from '../services/counterEstimate'
@@ -32,7 +32,7 @@ export function useGroupPrep(addresses: { id: string; name: string }[], minAsFlo
         setState(s => ({ ...s, loading: true, error: null }))
         try {
             // Không phụ thuộc chi nhánh nên dùng chung 1 lần đọc (cache 5 phút + gộp các hook cùng lúc) — trước đây mỗi kho tự đọc lại bảng này.
-            const extraP = historicalCache.through(['extraIngredients'], () => fetchExtraIngredients())
+            const extraP = historicalCache.through(['extraIngredients'], () => fetchExtraIngredientsWithToppings())
             const recipesById: Static['recipes'] = {}
             const results = await Promise.all(addresses.map(async ({ id, name }) => {
                 const recipesP = fetchAllRecipes(id).then(r => (recipesById[id] = r))
