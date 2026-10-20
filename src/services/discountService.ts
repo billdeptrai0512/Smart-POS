@@ -12,7 +12,7 @@ export async function fetchDiscountPrograms(addressId: UUID | null): Promise<Dis
     if (!addressId) return []
     const { data, error } = await supabase
         .from('discount_programs')
-        .select('id, address_id, name, type, value, days_of_week, start_date, end_date, enabled')
+        .select('id, address_id, name, type, value, days_of_week, start_date, end_date, enabled, table_scope')
         .eq('address_id', addressId)
         .order('created_at', { ascending: true })
     if (error) {

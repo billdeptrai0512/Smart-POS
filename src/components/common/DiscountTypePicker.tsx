@@ -1,13 +1,14 @@
 import { DISCOUNT_TYPE_LABELS } from '../../constants/discountTypes'
 
-// 3 nút chọn kiểu chương trình giảm giá — dùng chung ở form tạo (DiscountProgramsPage) và
-// form sửa (DiscountProgramDetailPage).
-interface Props { value: string; onChange: (type: string) => void; disabled?: boolean }
+// Hàng nút chọn 1 trong N — mặc định là 3 kiểu chương trình giảm giá (form tạo ở
+// DiscountProgramsPage + form sửa ở DiscountProgramDetailPage); truyền `labels` để dùng cho
+// lựa chọn khác (VD: loại bàn áp dụng).
+interface Props { value: string; onChange: (value: string) => void; disabled?: boolean; labels?: Record<string, string> }
 
-export default function DiscountTypePicker({ value, onChange, disabled }: Props) {
+export default function DiscountTypePicker({ value, onChange, disabled, labels = DISCOUNT_TYPE_LABELS }: Props) {
     return (
         <div className="flex gap-2">
-            {Object.entries(DISCOUNT_TYPE_LABELS).map(([t, label]) => (
+            {Object.entries(labels).map(([t, label]) => (
                 <button
                     key={t}
                     type="button"

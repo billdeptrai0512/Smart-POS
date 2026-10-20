@@ -364,7 +364,7 @@ export default function TableModal({ onClose, inline = false, takeawaySlot }: Pr
                                                 >
                                                     <span className="shrink-0 w-full flex items-baseline justify-between gap-2">
                                                         <span className={`text-[13px] font-black uppercase tracking-wide line-clamp-1 ${busy || active ? 'text-text' : 'text-text-secondary'}`}>{name}</span>
-                                                        {busy && <span className="shrink-0 text-[14px] font-black tabular-nums text-primary">{formatVND(t.total)}</span>}
+                                                        {busy && <span className="shrink-0 text-[14px] font-black tabular-nums text-primary">{formatVND(t.rounds.reduce((s, r) => s + (r.paidAt ? 0 : r.total), 0) || t.total)}</span>}
                                                     </span>
                                                     {busy ? (
                                                         roundPreview(t.rounds)

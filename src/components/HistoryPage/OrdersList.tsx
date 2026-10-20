@@ -153,7 +153,7 @@ const OrderCard = memo(function OrderCard({ order, isDeleting, setDeletingId, on
         // — sửa/bỏ ở ô này là ghi đè luôn phần đó (món về giá gốc trong khi khách đã trả giá chương
         // trình), nên nói thẳng cho người bấm biết.
         const listPrice = products.find(p => p.id === item.productId)?.price || 0
-        const programAmount = Math.max(0, listPrice - (resolveDiscountedPrice(listPrice, productDiscounts[item.productId]) ?? listPrice)) * item.quantity
+        const programAmount = Math.max(0, listPrice - (resolveDiscountedPrice(listPrice, productDiscounts[item.productId], order.tableName || null) ?? listPrice)) * item.quantity
         const discountNote = committedAmount > 0 && programAmount > 0
             ? `Đang gồm ${formatVND(programAmount)} giảm giá chương trình — sửa ở đây là ghi đè phần đó.`
             : null

@@ -188,7 +188,7 @@ export function FormDialog({ title, saving, canSubmit, onClose, onConfirm, confi
     return (
         <Dialog onClose={() => !saving && onClose()} panelClassName={MODAL_PANEL}>
             <ModalHeader title={title} onClose={onClose} hideClose={saving} />
-            <div className="overflow-y-auto p-5 flex flex-col gap-3">{children}</div>
+            <div className="overflow-y-auto p-5 flex flex-col gap-3 [&>*]:shrink-0">{children}</div>
             <div className="p-5 pt-3 border-t border-border/40">
                 <ModalActions confirmLabel={confirmLabel} onCancel={onClose} onConfirm={onConfirm} loading={saving} confirmDisabled={!canSubmit} />
             </div>

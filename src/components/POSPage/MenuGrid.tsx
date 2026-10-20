@@ -203,6 +203,7 @@ interface MenuGridProps {
     productExtras?: Record<string, CartExtra[]>
     productToppings?: Record<string, CartTopping[]>
     productDiscounts?: Record<string, DiscountProgram[]>
+    tableName: string
     onToggleExtra: (extra: CartExtra) => void
     onToggleTopping: (topping: CartTopping) => void
     enabledStickyExtraIds?: string[]
@@ -211,7 +212,7 @@ interface MenuGridProps {
     hintExtraName?: string | null
 }
 
-export default function MenuGrid({ products, cart, activeItem, onAddItem, onRemoveItem, productExtras, productToppings, productDiscounts, onToggleExtra, onToggleTopping, enabledStickyExtraIds = [], onToggleStickyExtra, hintProductId, hintExtraName = null }: MenuGridProps) {
+export default function MenuGrid({ products, cart, activeItem, onAddItem, onRemoveItem, productExtras, productToppings, productDiscounts, tableName, onToggleExtra, onToggleTopping, enabledStickyExtraIds = [], onToggleStickyExtra, hintProductId, hintExtraName = null }: MenuGridProps) {
     const navigate = useNavigate()
     const { isManager, isAdmin } = useAuth()
     const { loading, loadError } = useProducts()
@@ -291,7 +292,7 @@ export default function MenuGrid({ products, cart, activeItem, onAddItem, onRemo
                 onAdd={onAddItem}
                 onRemove={onRemoveItem}
                 hint={product.id === hintProductId}
-                discountedPrice={resolveDiscountedPrice(product.price, productDiscounts?.[product.id])}
+                discountedPrice={resolveDiscountedPrice(product.price, productDiscounts?.[product.id], tableName)}
             />
         ))
         if (idx === extrasAfterIdx) {

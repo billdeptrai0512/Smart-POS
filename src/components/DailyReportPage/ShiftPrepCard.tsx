@@ -26,6 +26,8 @@ interface Props {
     emptyTitle?: string
     emptyHint?: string
     packVerb: string
+    // Card Mua: gộp 4 ô (lưới 2×2) thành 1 hàng 3 nhãn — Tồn kho | Tối thiểu | Ngày mai sử dụng (số = `have`).
+    threeFields?: boolean
 }
 
 // PrepItem có nhiều số tuỳ chọn (mỗi nguồn danh sách điền một phần) — chuẩn hoá về 0 một lần ở đầu
@@ -58,6 +60,7 @@ export default function ShiftPrepCard({
     // Động từ CTA: "Lấy" (soạn ra quầy) / "Mua" (đi chợ). Dòng lớn = "<packVerb> N bịch"
     // nếu có pack_size, không thì "<packVerb> X <đơn vị>".
     packVerb,
+    threeFields = false,
 }: Props) {
     // Có onToggle = dạng checklist "Lấy/Soạn" (Chuẩn bị hôm nay, Soạn cho ngày mai); có thêm onSkip thì mới có nút ✕ bỏ qua.
     const skipMode = typeof onToggle === 'function'
@@ -70,7 +73,10 @@ export default function ShiftPrepCard({
     const isUrgent = (it: Item) => it.kind === 'depleted'
     const [handledOnOpen] = useState(() => new Set(
         rows.filter(it => checked[it.ingredient] || skipped[it.ingredient] || it.done).map(it => it.ingredient)))
-    const ordered = [...rows].sort((a, b) => Number(isUrgent(b)) - Number(isUrgent(a)) || Number(handledOnOpen.has(a.ingredient)) - Number(handledOnOpen.has(b.ingredient)))
+    // Card Mua: trong nhóm còn việc, hết hẳn (kho = 0) lên trước, rồi dưới tối thiểu, rồi còn lại — mắt đọc từ gấp nhất xuống.
+    const low = (it: Item) => it.warehouse != null && it.warehouse < it.minStock
+    const tier = (it: Item) => skipMode ? 0 : it.warehouse === 0 ? 0 : low(it) ? 1 : 2
+    const ordered = [...rows].sort((a, b) => Number(isUrgent(b)) - Number(isUrgent(a)) || Number(handledOnOpen.has(a.ingredient)) - Number(handledOnOpen.has(b.ingredient)) || tier(a) - tier(b))
     const [editing, setEditing] = useState<string | null>(null)
     const [draft, setDraft] = useState(0) // số đang sửa (đơn vị gốc) của dòng `editing`
     const split = skipMode && ordered.some(isUrgent) && ordered.some(it => !isUrgent(it))
@@ -100,15 +106,15 @@ export default function ShiftPrepCard({
                         )
                         // Nhãn nhỏ trên, số dưới (lưới 2×2 ở card Mua): mắt quét cột số nhanh hơn dòng "Nhãn: số".
                         // Cam = hành động (CTA "Mua"), đỏ = vấn đề (kho dưới mức tối thiểu), xanh = đã mua đủ, trắng = thông tin.
-                        const field = (label: string, value: ReactNode, right = false, valueCls = 'text-text') => (
+                        const field = (label: string, value: ReactNode, right = false, valueCls = 'text-text-secondary') => (
                             <div className={`min-w-0 ${right ? 'text-right' : ''}`}>
                                 <span className="block text-[10px] font-bold uppercase tracking-wide text-text-dim">{label}</span>
                                 <span className={`block text-[13px] font-bold tabular-nums ${valueCls}`}>{value}</span>
                             </div>
                         )
                         // Vạch trái 2 mức: hết hẳn (kho = 0) đỏ đậm, chỉ dưới tối thiểu đỏ nhạt — để món gấp nổi lên trong danh sách toàn đỏ.
-                        const edge = it.done ? 'border-transparent' : it.warehouse === 0 ? 'border-danger' : it.warehouse != null && it.warehouse < it.minStock ? 'border-danger/40' : 'border-transparent'
-                        const warehouseCls = it.done ? 'text-success' : it.warehouse != null && it.warehouse < it.minStock ? 'text-danger' : 'text-text'
+                        const edge = it.done ? 'border-transparent' : it.warehouse === 0 ? 'border-danger' : low(it) ? 'border-danger/40' : 'border-transparent'
+                        const warehouseCls = it.done ? 'text-success' : low(it) ? 'text-danger' : 'text-text'
                         // Các dòng dưới cùng nằm NGOÀI hàng có viên thuốc → chạy hết chiều ngang, không bị bẻ dòng bởi viên.
                         // Món đã mua đủ thì viên "Đã mua N" đã nói số đã mua — khỏi lặp.
                         const showBought = it.boughtToday > 0 && !it.done
@@ -258,35 +264,63 @@ export default function ShiftPrepCard({
                         // bấm tên mở chi tiết nguyên liệu (onOpen; không set → cũng mở phiếu Nhập kho).
                         const restock = () => onRestock?.(it.ingredient, it.needPacks > 0 ? it.needPacks : it.need)
                         const open = onOpen ? () => onOpen(it.ingredient) : restock
+                        // Nút CTA: "Đã mua N" khi đủ, không thì "Mua N …" mở phiếu Nhập kho. threeFields → full-width dưới hàng nhãn.
+                        const ctaCls = threeFields ? 'w-full' : 'justify-self-end'
+                        const cta = isSkipped ? null : it.done ? (
+                            <span className={`${PILL} min-h-8! ${ctaCls} ${threeFields ? 'col-span-2' : ''} bg-success/15 text-success`}>
+                                <Check size={13} strokeWidth={3} />
+                                Đã mua {fmt(it.boughtToday)}
+                            </span>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={restock}
+                                title="Nhập kho"
+                                className={`${PILL} min-h-8! ${ctaCls} ${threeFields ? 'col-span-2' : ''} bg-primary/10 text-primary active:scale-95`}
+                            >
+                                {ctaLabel}
+                            </button>
+                        )
                         return (
-                            <div key={it.ingredient} className={`p-3 mb-2.5 last:mb-0 rounded-[14px] bg-surface-light border-l-2 ${edge}`}>
+                            <div key={it.ingredient} className={`p-3 mb-3.5 last:mb-0 rounded-[14px] bg-surface-light ring-1 ring-border/30 border-l-2 ${edge} ${it.done ? `opacity-60 ${ordered[i - 1]?.done ? '' : 'mt-5'}` : isSkipped ? 'opacity-60' : ''}`}>
                                 {/* Lưới 2×2: hàng 1 = tên | nút (cùng một đường giữa); hàng 2 = 2 dòng trái | 2 dòng phải (cùng đỉnh).
-                                    min-h-8! thấp hơn PILL (44px) để nút cân với tên. */}
+                                    min-h-8! thấp hơn PILL (44px) để nút cân với tên.
+                                    threeFields: tên full-width → hàng 3 nhãn → nút Mua full-width ở dưới cùng. */}
                                 <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5">
-                                    <button type="button" onClick={open} className="min-w-0 text-left active:scale-[0.99] transition">
-                                        {name}
-                                    </button>
-                                    {it.done ? (
-                                        <span className={`${PILL} min-h-8! justify-self-end bg-success/15 text-success`}>
-                                            <Check size={13} strokeWidth={3} />
-                                            Đã mua {fmt(it.boughtToday)}
-                                        </span>
+                                    {threeFields ? (
+                                        <div className="col-span-2 flex items-center gap-1">
+                                            <button type="button" onClick={open} className="flex-1 min-w-0 text-left active:scale-[0.99] transition">{name}</button>
+                                            {/* Bỏ qua: đã xem, không mua — nguyên liệu mờ + gạch ngang, vẫn có ↩ để hoàn tác. */}
+                                            {onSkip && !it.done && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onSkip(it.ingredient)}
+                                                    title={isSkipped ? 'Hoàn tác bỏ qua' : 'Bỏ qua — không cần mua'}
+                                                    className={`shrink-0 w-8 h-8 flex items-center justify-center rounded-lg active:scale-95 transition ${isSkipped ? 'text-primary hover:bg-primary/10' : 'text-text-dim hover:text-text hover:bg-border/40'}`}
+                                                >
+                                                    {isSkipped ? <RotateCcw size={14} /> : <X size={15} />}
+                                                </button>
+                                            )}
+                                        </div>
                                     ) : (
-                                        <button
-                                            type="button"
-                                            onClick={restock}
-                                            title="Nhập kho"
-                                            className={`${PILL} min-h-8! justify-self-end bg-primary/10 text-primary active:scale-95`}
-                                        >
-                                            {ctaLabel}
+                                        <button type="button" onClick={open} className="min-w-0 text-left active:scale-[0.99] transition">{name}</button>
+                                    )}
+                                    {!threeFields && cta}
+                                    {threeFields ? (
+                                        <button type="button" onClick={open} className="col-span-2 grid grid-cols-3 gap-x-3 pt-2.5 border-t border-border/30 text-left active:scale-[0.99] transition">
+                                            {it.warehouse != null ? field('Tồn kho', fmt(it.warehouse), false, warehouseCls) : <div />}
+                                            {it.minStock > 0 ? field('Tối thiểu', fmt(it.minStock)) : <div />}
+                                            {field('Ngày mai sử dụng', <>{it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}</>, true)}
+                                        </button>
+                                    ) : (
+                                        <button type="button" onClick={open} className="col-span-2 grid grid-cols-2 gap-x-3 gap-y-2.5 pt-2.5 border-t border-border/30 text-left active:scale-[0.99] transition">
+                                            {it.warehouse != null ? field('Tồn kho cuối kỳ', fmt(it.warehouse), false, warehouseCls) : <div />}
+                                            {field(haveLabel || '', <>{it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}</>, true)}
+                                            {it.minStock > 0 ? field('Tồn kho tối thiểu', fmt(it.minStock)) : <div />}
+                                            {it.forecast > 0 ? field('Ngày mai sử dụng', fmt(it.forecast), true) : <div />}
                                         </button>
                                     )}
-                                    <button type="button" onClick={open} className="col-span-2 grid grid-cols-2 gap-x-3 gap-y-2.5 pt-2.5 border-t border-border/30 text-left active:scale-[0.99] transition">
-                                        {it.warehouse != null ? field('Tồn kho cuối kỳ', fmt(it.warehouse), false, warehouseCls) : <div />}
-                                        {field(haveLabel || '', <>{it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}</>, true)}
-                                        {it.minStock > 0 ? field('Tồn kho tối thiểu', fmt(it.minStock)) : <div />}
-                                        {it.forecast > 0 ? field('Ngày mai sử dụng', fmt(it.forecast), true) : <div />}
-                                    </button>
+                                    {threeFields && cta}
                                 </div>
                                 {tail && <button type="button" onClick={open} className="block w-full text-left active:scale-[0.99] transition">{tail}</button>}
                             </div>

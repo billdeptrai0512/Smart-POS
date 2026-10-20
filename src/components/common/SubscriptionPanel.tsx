@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react'
-import { Loader2, CheckCircle2, Copy, Check } from 'lucide-react'
+import { Loader2, CheckCircle2, Copy, Check, ChevronDown } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAddressStats } from '../../contexts/AddressStatsContext'
@@ -12,6 +12,7 @@ import { dateFullVN } from '../../utils/dateVN'
 import { copyText } from '../../utils/clipboard'
 import { errorMessage } from '../../utils/errorMessage'
 import type { UUID } from '../../types/domain'
+import { BottomSheet } from './ModalShell'
 
 // Gradient vàng thương hiệu (đồng bộ badge "developed by").
 const GOLD = 'linear-gradient(135deg, #f8c577, #f59e0b, #d4882f, #b8732a)'
@@ -48,6 +49,8 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
     const [adminError, setAdminError] = useState<string | null>(null)
     const [confirmed, setConfirmed] = useState(false)
     const [branchQuery, setBranchQuery] = useState('')
+    const [pickerOpen, setPickerOpen] = useState(false)
+    const [adminOpen, setAdminOpen] = useState(false)
     const [copied, setCopied] = useState<string | null>(null) // 'stk' | 'noidung' | null
     const [reference, setReference] = useState<string | null>(null) // mã CK (SP<reference>) từ payment_intent
     const [refError, setRefError] = useState(false)
@@ -96,9 +99,12 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
 
     // Nhiều chi nhánh → bật search + cuộn nội bộ.
     const manyBranches = addresses.length > 6
-    const filteredAddresses = branchQuery.trim()
+    const matched = branchQuery.trim()
         ? addresses.filter(a => normalizeText(a.name).includes(normalizeText(branchQuery)))
         : addresses
+    // Chưa mở lên trước: đó là việc cần làm ở trang này. Sort ổn định nên thứ tự cũ giữ trong mỗi nhóm.
+    const filteredAddresses = [...matched].sort((a, b) => Number(!!validToByAddr[a.id]) - Number(!!validToByAddr[b.id]))
+    const firstSelected = addresses.find(a => a.id === selectedAddressIds[0])
 
     // ── Tính tiền: giá cố định × số chi nhánh ────────────────────────────────────
     const addrCount = selectedAddressIds.length
@@ -230,63 +236,68 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
 
     return (
         <div className="flex flex-col gap-5 animate-fade-in">
-            {/* ── Chi nhánh (áp dụng ở đâu) ───────────────────────────────────────── */}
+            {/* ── Chi nhánh (áp dụng ở đâu): 1 hàng tóm tắt, bấm mở sheet chọn ─────── */}
             <section className="flex flex-col gap-2.5">
-                <SectionHeader
-                    title="Địa chỉ"
-                    hint={addresses.length > 0 ? `${addrCount}/${addresses.length}` : undefined}
-                    action={addresses.length > 1 && (
-                        <button onClick={toggleAllAddresses} className="text-[11px] font-black text-primary uppercase tracking-wide whitespace-nowrap">
-                            {allAddressesSelected ? 'Bỏ tất cả' : 'Tất cả'}
-                        </button>
-                    )}
-                />
-
-                {/* Search — chỉ khi nhiều chi nhánh */}
-                {manyBranches && (
-                    <input
-                        type="text"
-                        value={branchQuery}
-                        onChange={e => setBranchQuery(e.target.value)}
-                        placeholder="Tìm chi nhánh…"
-                        className="w-full px-3 py-2 rounded-[10px] bg-surface-light border border-border/60 text-text text-[13px] placeholder:text-text-dim focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
-                    />
-                )}
-
-                <div className={`flex flex-col gap-1.5 ${manyBranches ? 'max-h-[240px] overflow-y-auto pr-0.5' : ''}`}>
-                    {filteredAddresses.map(addr => {
-                        const active = selectedAddressIds.includes(addr.id)
-                        const hasAccess = !!validToByAddr[addr.id]
-                        const statusChip = !accessLoaded
-                            ? null
-                            : hasAccess
-                                ? <span className="shrink-0 text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-success-soft/60 text-success">Đã mở</span>
-                                : <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-surface text-text-dim">Chưa mở</span>
-                        return (
-                            <button
-                                key={addr.id}
-                                onClick={() => toggleAddress(addr.id)}
-                                className={`w-full text-left rounded-[12px] border px-3 py-2 transition-all duration-150
-                                    ${active
-                                        ? 'border-primary bg-primary/[0.07] shadow-[0_0_14px_rgba(244,119,75,0.12)]'
-                                        : 'border-border/60 bg-surface-light hover:border-border-light'}`}
-                            >
-                                <span className="flex items-center justify-between gap-2">
-                                    <span className={`min-w-0 text-[13px] font-bold truncate transition-colors ${active ? 'text-text' : 'text-text-secondary'}`}>
-                                        {addr.name}
-                                    </span>
-                                    {statusChip}
-                                </span>
-                            </button>
-                        )
-                    })}
-                    {filteredAddresses.length === 0 && (
-                        <p className="text-[12px] text-text-secondary py-2">
-                            {addresses.length === 0 ? 'Chưa có chi nhánh nào.' : 'Không tìm thấy chi nhánh.'}
-                        </p>
-                    )}
-                </div>
+                <SectionHeader title="Địa chỉ" />
+                <button
+                    onClick={() => setPickerOpen(true)}
+                    disabled={addresses.length === 0}
+                    className="w-full flex items-center gap-2 rounded-[12px] border border-border/60 bg-surface-light px-3 py-2.5 text-left active:scale-[0.99] transition"
+                >
+                    <span className="flex-1 min-w-0 text-[13px] font-bold text-text truncate">
+                        {firstSelected ? firstSelected.name : addresses.length === 0 ? 'Chưa có chi nhánh nào.' : 'Chọn địa chỉ'}
+                    </span>
+                    {addrCount > 1 && <span className="shrink-0 text-[11px] font-black text-primary">+{addrCount - 1}</span>}
+                    <ChevronDown size={16} className="shrink-0 text-text-dim" />
+                </button>
             </section>
+
+            {pickerOpen && (
+                <BottomSheet onClose={() => setPickerOpen(false)} panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-6 flex flex-col gap-3 animate-slide-up max-h-[85dvh]">
+                    <SectionHeader
+                        title="Chọn địa chỉ"
+                        hint={`${addrCount}/${addresses.length}`}
+                        action={addresses.length > 1 && (
+                            <button onClick={toggleAllAddresses} className="text-[11px] font-black text-primary uppercase tracking-wide whitespace-nowrap">
+                                {allAddressesSelected ? 'Bỏ tất cả' : 'Tất cả'}
+                            </button>
+                        )}
+                    />
+                    {manyBranches && (
+                        <input
+                            type="text"
+                            value={branchQuery}
+                            onChange={e => setBranchQuery(e.target.value)}
+                            placeholder="Tìm chi nhánh…"
+                            className="w-full px-3 py-2 rounded-[10px] bg-surface-light border border-border/60 text-text text-[13px] placeholder:text-text-dim focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
+                        />
+                    )}
+                    <div className="min-h-0 flex flex-col gap-1.5 overflow-y-auto">
+                        {filteredAddresses.map(addr => {
+                            const active = selectedAddressIds.includes(addr.id)
+                            return (
+                                <button
+                                    key={addr.id}
+                                    onClick={() => toggleAddress(addr.id)}
+                                    className={`w-full flex items-center gap-2 text-left rounded-[12px] border px-3 py-2 transition-colors ${active ? 'border-primary bg-primary/[0.07]' : 'border-border/60 bg-surface-light'}`}
+                                >
+                                    <span className={`min-w-0 flex-1 text-[13px] font-bold truncate ${active ? 'text-text' : 'text-text-secondary'}`}>{addr.name}</span>
+                                    {/* Chỉ gắn nhãn ngoại lệ "Chưa mở"; đã mở là trạng thái mặc định, khỏi lặp ở từng dòng. */}
+                                    {accessLoaded && !validToByAddr[addr.id] && <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-surface text-text-dim">Chưa mở</span>}
+                                    {active && <Check size={15} strokeWidth={3} className="shrink-0 text-primary" />}
+                                </button>
+                            )
+                        })}
+                        {filteredAddresses.length === 0 && <p className="text-[12px] text-text-secondary py-2">Không tìm thấy chi nhánh.</p>}
+                    </div>
+                    <button
+                        onClick={() => setPickerOpen(false)}
+                        className="w-full py-3 rounded-[12px] bg-primary text-bg text-[14px] font-black uppercase active:scale-[0.98] transition"
+                    >
+                        Xong{addrCount > 0 && ` (${addrCount})`}
+                    </button>
+                </BottomSheet>
+            )}
 
             {/* Mỗi chi nhánh 1 card — gia hạn nối tiếp nên hạn từng chi nhánh có thể khác nhau */}
             <section className="flex flex-col gap-2.5">
@@ -294,9 +305,9 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                 {addrCount > 0 ? (
                     selectedAddressIds.map(id => (
                         <div key={id} className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2">
-                            <CopyRow label="Địa chỉ" value={addresses.find(a => a.id === id)?.name || '—'} />
-                            <CopyRow label="Thời hạn" value={PLAN.periodLabel} />
-                            <CopyRow label="Sử dụng đến" value={accessLoaded ? dateFullVN(newExpiryFor(id)) : '…'} />
+                            {/* Chọn 1 địa chỉ thì tên đã nằm ở hàng chọn phía trên → bỏ dòng lặp. */}
+                            {addrCount > 1 && <CopyRow label="Địa chỉ" value={addresses.find(a => a.id === id)?.name || '—'} />}
+                            <CopyRow label="Thời hạn" value={`${PLAN.periodLabel} · đến ${accessLoaded ? dateFullVN(newExpiryFor(id)) : '…'}`} />
                         </div>
                     ))
                 ) : (
@@ -372,24 +383,34 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
 
             {/* ── Footer dính đáy: nút Mock + Reset (Admin). User thường xác nhận qua webhook. ── */}
             {isAdmin && (
-                <div className="sticky bottom-0 -mx-4 px-4 pt-3 bg-bg/85 backdrop-blur-md border-t border-border/50 pb-[max(env(safe-area-inset-bottom),12px)] flex flex-col gap-2">
+                <div className="sticky bottom-0 -mx-4 px-4 pt-2 bg-bg/85 backdrop-blur-md border-t border-border/50 pb-[max(env(safe-area-inset-bottom),8px)] flex flex-col gap-2">
                     <button
-                        onClick={handleMockPayment}
-                        disabled={isMocking || isResetting || !canSubmit}
-                        className="w-full py-2.5 rounded-[12px] bg-danger/10 text-danger text-[12px] font-bold hover:bg-danger/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                        onClick={() => setAdminOpen(o => !o)}
+                        className="self-center flex items-center gap-1 text-[11px] font-bold text-text-dim active:scale-95 transition"
                     >
-                        {isMocking ? <Loader2 size={14} className="animate-spin" /> : `Mock trial ${TRIAL_DAYS} ngày (Admin)`}
+                        Admin <ChevronDown size={13} className={`transition-transform ${adminOpen ? '' : 'rotate-180'}`} />
                     </button>
-                    <button
-                        onClick={handleReset}
-                        disabled={isMocking || isResetting || !selectedAddressIds.length}
-                        className={`w-full py-2 rounded-[12px] text-[11px] font-bold active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50
-                            ${confirmReset ? 'bg-danger/15 text-danger hover:bg-danger/25' : 'bg-surface-light text-text-secondary hover:bg-border/40'}`}
-                    >
-                        {isResetting
-                            ? <Loader2 size={14} className="animate-spin" />
-                            : confirmReset ? 'Bấm lần nữa để xoá gói đã chọn' : 'Reset gói (Admin · dev)'}
-                    </button>
+                    {adminOpen && (
+                        <>
+                            <button
+                                onClick={handleMockPayment}
+                                disabled={isMocking || isResetting || !canSubmit}
+                                className="w-full py-2.5 rounded-[12px] bg-danger/10 text-danger text-[12px] font-bold hover:bg-danger/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                {isMocking ? <Loader2 size={14} className="animate-spin" /> : `Mock trial ${TRIAL_DAYS} ngày (Admin)`}
+                            </button>
+                            <button
+                                onClick={handleReset}
+                                disabled={isMocking || isResetting || !selectedAddressIds.length}
+                                className={`w-full py-2 rounded-[12px] text-[11px] font-bold active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50
+                                    ${confirmReset ? 'bg-danger/15 text-danger hover:bg-danger/25' : 'bg-surface-light text-text-secondary hover:bg-border/40'}`}
+                            >
+                                {isResetting
+                                    ? <Loader2 size={14} className="animate-spin" />
+                                    : confirmReset ? 'Bấm lần nữa để xoá gói đã chọn' : 'Reset gói (Admin · dev)'}
+                            </button>
+                        </>
+                    )}
                     {adminError && <p className="text-[10.5px] text-danger text-center">{adminError}</p>}
                 </div>
             )}

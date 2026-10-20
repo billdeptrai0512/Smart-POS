@@ -1,20 +1,15 @@
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
+import { ChevronUp } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
-import { Percent, Pencil } from 'lucide-react'
 import { formatVND } from '../../utils'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import TableModal from './TableModal'
 import CartListModal from './CartListModal'
-import CartNoteModal from './CartNoteModal'
 import type { CartItem, Discount, UUID } from '../../types/domain'
 
-// Ô bàn dùng dáng nút này; nút % và Ghi chú là bản icon cùng viền/bo, cỡ cố định bằng nhau.
-const CHIP_BTN = 'min-w-[92px] shrink-0 bg-surface-light border border-border/60 rounded-[12px] px-1.5 text-center focus:outline-none focus:border-primary/40 hover:border-primary/40 transition-colors'
-const ICON_BTN = 'shrink-0 w-[52px] h-[34px] border rounded-[12px] flex items-center justify-center gap-1 focus:outline-none hover:border-primary/40 transition-colors'
-const CHIP_LABEL = 'block text-[12px] font-bold uppercase tracking-wider text-text'
-
 // Thanh chốt bàn: giỏ chỉ thành đơn khi bấm Tạo đơn ở đây.
+// Giảm giá / Ghi chú từng món mở từ việc chạm vào số Tổng (CartListModal).
 interface Props {
     discountAmount: number
     finalTotal: number
@@ -35,86 +30,50 @@ export default function CheckoutBar({
     // "BÀN 3" trong Nhật ký nhảy tới /pos kèm state này — mở thẳng lưới bàn (TableModal
     // tự đọc lại state này để seed "detail" cho đúng bàn đó, xem TableModal.tsx).
     const { state } = useLocation()
-    const [showDiscount, setShowDiscount] = useState(false)
-    const [showNotes, setShowNotes] = useState(false)
+    const [showCart, setShowCart] = useState(false)
     const [showTables, setShowTables] = useState(!!state?.openTableDetail)
-    const noteCount = cart.filter(i => i.note).length
 
     return (
         <footer className="shrink-0 bg-surface border-t border-border/80 px-6 dine-split:px-4 pt-3 pb-[max(env(safe-area-inset-bottom),16px)] shadow-[0_-4px_24px_rgba(0,0,0,0.02)]">
-            <div className="flex items-center justify-between gap-3 mb-3">
-                {/* Một con số duy nhất: số khách phải trả. Có giảm giá hay không thì đọc ở
-                    nút % bên phải (sáng lên khi đang giảm), không cần thêm số thứ hai. */}
-                <div className="min-w-0 flex items-baseline gap-2">
-                    <span className="text-[14px] font-black uppercase tracking-wider text-text-secondary">Tổng:</span>
-                    <span className="text-[17px] font-black text-text tabular-nums">{formatVND(finalTotal)}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                {/* Giỏ rỗng thì không có gì để giảm — mờ đi như nút Ghi chú, giữ chỗ để thanh không nhảy. */}
-                {/* flushSync: modal + autoFocus ô nhập commit NGAY trong cú tap. React 19 mặc định
-                    dời sang microtask, máy thật coi là focus ngoài thao tác → không bật bàn phím. */}
+            <div className="flex items-center gap-4">
                 <button
                     type="button"
-                    onClick={() => flushSync(() => setShowDiscount(true))}
+                    onClick={() => flushSync(() => setShowCart(true))}
                     disabled={disabled}
-                    aria-label="Giảm giá"
-                    className={`${ICON_BTN} ${discountAmount > 0 ? 'bg-warning/10 border-warning/50 text-warning' : 'bg-surface-light border-border/60 text-text'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                    aria-label="Giảm giá và ghi chú"
+                    className="min-w-0 flex-1 flex flex-col gap-0.5 text-left disabled:cursor-not-allowed"
                 >
-                    <Percent size={15} strokeWidth={2.5} />
-                </button>
-                {/* Ghi chú từng món (CartNoteModal) — in lên phiếu bếp. Đếm số món đã có ghi
-                    chú để nhìn thanh là biết, không phải mở modal. */}
-                <button
-                    type="button"
-                    onClick={() => setShowNotes(true)}
-                    disabled={disabled}
-                    aria-label="Ghi chú"
-                    className={`${ICON_BTN} bg-surface-light border-border/60 disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                    <Pencil size={16} strokeWidth={2.5} className="text-text" />
-                    {noteCount > 0 && <span className={CHIP_LABEL}>{noteCount}</span>}
-                </button>
-                </div>
-            </div>
-
-            <div className="flex gap-3">
-                {/* Ô bàn mở lưới bàn thay vì gõ tay: bàn là một tab còn mở nhiều đợt,
-                    gõ lại tên mỗi đợt thì sai chính tả một lần là tách thành hai bàn.
-                    Chỉ tên bàn — tổng đang chạy của bàn nằm trên thẻ trong lưới, để đây
-                    thì hai con số tiền cạnh nhau (tổng bàn vs tổng đợt) rất dễ đọc nhầm.
-                    Ở dine-split, lưới bàn (.pos-table-pane, xem POSPage.tsx) đã hiện sẵn
-                    ngay cạnh — hỏi thẳng DOM có đang hiện nó không thay vì tự đoán lại
-                    breakpoint bằng một chuỗi media-query chép tay riêng, dễ lệch với
-                    @custom-variant dine-split (index.css) mỗi lần một bên đổi mà quên bên kia. */}
-                <button
-                    type="button"
-                    onClick={() => {
-                        const tablePane = document.querySelector('.pos-table-pane')
-                        if (!tablePane || getComputedStyle(tablePane).display === 'none') setShowTables(true)
-                    }}
-                    className={CHIP_BTN}
-                >
-                    {/* Không chọn bàn = mang đi, đó là một trạng thái thật chứ không phải
-                        "chưa chọn" — hiện đúng tên nó để không ai đi tìm nút mang đi. */}
-                    <span className={CHIP_LABEL}>
-                        {tableName || 'Mang đi'}
+                    {/* Cùng khuôn với chân modal giỏ: nhãn "TỔNG CỘNG" trên, số tiền dưới. */}
+                    <span className="text-[11px] font-black uppercase tracking-wide text-text-secondary">Tổng cộng</span>
+                    <span className="flex items-center gap-1.5">
+                        <span className="text-[20px] font-black text-text tabular-nums leading-none">{formatVND(finalTotal)}</span>
+                        {!disabled && <ChevronUp size={14} strokeWidth={3} className="text-text-secondary" />}
                     </span>
                 </button>
                 <button
                     onClick={() => onConfirm(discountAmount, tableName)}
                     disabled={disabled}
-                    className={`flex-1 py-2.5 rounded-[12px] bg-primary text-bg text-[14px] font-black uppercase tracking-wider hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${onboardingHintClass(showOnboardingHint, 'solid')}`}
+                    className={`w-[45%] min-w-[132px] max-w-[192px] shrink-0 h-11 rounded-[12px] bg-primary text-bg text-[14px] font-black uppercase tracking-wider hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${onboardingHintClass(showOnboardingHint, 'solid')}`}
                 >
                     Tạo đơn
                 </button>
             </div>
 
-            {/* 1 dòng thì tự mở thẳng ô sửa của dòng đó (xem CartListModal). */}
-            {showDiscount && (
-                <CartListModal cart={cart} onClose={() => setShowDiscount(false)} onItemDiscount={onItemDiscount} />
-            )}
+            {/* Pill bàn full-width dưới hàng Tổng cộng / Tạo đơn, giống pill bàn trong modal giỏ. LUÔN có ("Mang đi" khi chưa chọn bàn) nên
+                thanh không nhảy chiều cao và mang đi cũng hiện rõ. Trong luồng (không absolute) để không che hàng tuỳ chọn món phía trên.
+                Ẩn ở dine-split: lưới bàn đã hiện sẵn bên cạnh. Chạm = mở lưới bàn để đổi. */}
+            <button
+                type="button"
+                onClick={() => setShowTables(true)}
+                className="dine-split:hidden relative mt-2.5 w-full h-9 px-9 flex items-center justify-center rounded-[12px] border border-border/60 bg-surface-light text-[12px] font-black uppercase tracking-wider text-text"
+            >
+                <span className="truncate">{tableName || 'Mang đi'}</span>
+                <ChevronUp size={14} strokeWidth={3} className="absolute right-3.5 text-text-secondary" />
+            </button>
 
-            {showNotes && <CartNoteModal cart={cart} onClose={() => setShowNotes(false)} onItemNote={onItemNote} />}
+            {showCart && (
+                <CartListModal cart={cart} onClose={() => setShowCart(false)} onItemDiscount={onItemDiscount} onItemNote={onItemNote} onConfirm={() => { onConfirm(discountAmount, tableName); setShowCart(false) }} />
+            )}
 
             {showTables && <TableModal onClose={() => setShowTables(false)} />}
         </footer>

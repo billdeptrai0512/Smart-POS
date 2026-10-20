@@ -1,7 +1,11 @@
 import { dateStringVN } from './dateVN'
 import { parseVNDInput } from './money'
 
-export interface DiscountProgram { id: string; name: string; enabled: boolean; start_date?: string | null; end_date?: string | null; days_of_week: number[]; type: string; value: number }
+// 'all' = mọi đơn; 'takeaway' = đơn mang đi (không có bàn); 'dine_in' = ngồi lại (có bàn).
+export type TableScope = 'all' | 'takeaway' | 'dine_in'
+export const TABLE_SCOPE_LABELS: Record<TableScope, string> = { all: 'Tất cả', takeaway: 'Mang đi', dine_in: 'Ngồi lại' }
+
+export interface DiscountProgram { id: string; name: string; enabled: boolean; start_date?: string | null; end_date?: string | null; days_of_week: number[]; type: string; value: number; table_scope?: TableScope }
 
 // Client-side mirror của phần resolve giá trong bulk_create_orders (xem
 // supabase/migrations/20260909_bulk_create_orders_scheduled_discount.sql) — chỉ dùng để hiện
@@ -16,11 +20,14 @@ function todayDowVN() {
 // days_of_week rỗng = không lọc theo thứ; start/end_date null = không giới hạn phía đó —
 // mirror đúng điều kiện SQL. So sánh chuỗi 'YYYY-MM-DD' theo thứ tự từ điển vẫn đúng thứ tự
 // thời gian.
-export function activePrograms(programsForProduct?: DiscountProgram[] | null) {
+// tableName: undefined = không lọc theo loại bàn (màn quản lý); null/'' = đơn mang đi; có tên = ngồi lại.
+export function activePrograms(programsForProduct?: DiscountProgram[] | null, tableName?: string | null) {
     const dow = todayDowVN()
     const today = dateStringVN()
     return (programsForProduct || []).filter(p => {
         if (!p.enabled) return false
+        const scope = p.table_scope ?? 'all'
+        if (tableName !== undefined && scope !== 'all' && (scope === 'dine_in') !== !!tableName) return false
         if (p.start_date && today < p.start_date) return false
         if (p.end_date && today > p.end_date) return false
         if (p.days_of_week.length > 0 && !p.days_of_week.includes(dow)) return false
@@ -33,8 +40,8 @@ export function activePrograms(programsForProduct?: DiscountProgram[] | null) {
 // GIẢM trước rồi trừ, trong khi ở đây (và SQL) làm tròn GIÁ CÒN LẠI trực tiếp; 2 cách làm
 // tròn có thể lệch nhau 1đ khi số tiền giảm rơi đúng mốc .5 (client hiện 1 giá, server tính
 // tiền 1 giá khác).
-export function resolveDiscountedPrice(basePrice: number, programsForProduct?: DiscountProgram[] | null) {
-    const active = activePrograms(programsForProduct)
+export function resolveDiscountedPrice(basePrice: number, programsForProduct?: DiscountProgram[] | null, tableName?: string | null) {
+    const active = activePrograms(programsForProduct, tableName)
     if (active.length === 0) return null
     return Math.min(...active.map(p => {
         if (p.type === 'fixed') return p.value
