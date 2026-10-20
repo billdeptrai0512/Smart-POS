@@ -2,8 +2,16 @@ import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
 import type { UUID, Row, CartExtra, Product } from '../types/domain'
 import type { ExtraIngredients, ExtraIngRow } from '../utils/inventory'
+import { normalizeIngredientKey } from '../utils/ingredients'
 
 // ---- Products CRUD ----
+
+// Key nguyên liệu của thành phẩm một địa chỉ — cho chỗ nằm ngoài ProductProvider (Soạn kho nhóm ở /addresses). Lỗi/chưa migrate → rỗng.
+export async function fetchBatchKeys(addressId: UUID): Promise<Set<string>> {
+    if (localRepo.isGuest()) return new Set()
+    const { data } = await supabase.from('products').select('name').eq('owner_address_id', addressId).eq('is_active', true).eq('is_batch', true)
+    return new Set((data ?? []).map(p => normalizeIngredientKey(p.name)))
+}
 
 // Fetch all products for the menu (purely branch isolated)
 export async function fetchProducts(addressId: UUID | null): Promise<Product[]> {

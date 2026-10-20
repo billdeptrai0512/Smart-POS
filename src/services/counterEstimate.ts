@@ -23,6 +23,7 @@ async function loadUsage(rows: Row[], addressId: string, { recipes, extraIngredi
     if (!recipesBelongTo(recipes, addressId)) return null
     const today = dateStringVN()
     const floor = dateStringVN(addDaysVN(new Date(), -MAX_DAYS))
+    const produced = new Set(production.map(p => p.output_ingredient))
     let oldest: string | null = null
     // Ngày đếm của các dòng có giờ đếm: đơn của ngày đó sau giờ đếm cũng phải trừ (usageAfterCount).
     const stampedDays = new Set<string>()
@@ -30,7 +31,7 @@ async function loadUsage(rows: Row[], addressId: string, { recipes, extraIngredi
         const on = r.counter_counted_on
         // Quầy + nhập thêm = 0 thì ước tính chắc chắn cũng 0 (kẹp ≥ 0) — không đáng tải đơn cả tháng vì NVL đó.
         // Ngoại lệ: thành phẩm đang có mẻ sản xuất (tiêu hao âm) thì tồn 0 vẫn tăng lên được.
-        if ((r.counter_stock + r.restock_since_count <= 0 && !production.some(p => p.output_ingredient === r.ingredient)) || !on || on < floor) continue
+        if ((r.counter_stock + r.restock_since_count <= 0 && !produced.has(r.ingredient)) || !on || on < floor) continue
         if (on < today && (!oldest || on < oldest)) oldest = on
         if (r.counter_counted_at && (on < today || includeToday)) stampedDays.add(on)
     }

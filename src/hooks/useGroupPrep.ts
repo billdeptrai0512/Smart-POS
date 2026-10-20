@@ -2,15 +2,13 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { fetchIngredientStocks } from '../services/ingredientStockService'
 import { fetchIngredientCostsAndUnits } from '../services/ingredientCostService'
 import { fetchAllRecipes } from '../services/recipeService'
-import { fetchExtraIngredients } from '../services/productService'
+import { fetchExtraIngredients, fetchBatchKeys } from '../services/productService'
 import { fetchForecastDays } from '../services/reportService'
 import { historicalCache } from '../services/cache'
 import { withCounterEstimate } from '../services/counterEstimate'
 import { forecastFromWeeks } from '../utils/inventory'
 import { buildGroupPrepPlan, HISTORY_OFFSETS_TOMORROW, RECENT_OFFSETS_TOMORROW, type GroupPrepBranch } from '../utils/prepToday'
 import type { Row } from '../types/domain'
-import { useProducts } from '../contexts/ProductContext'
-import { normalizeIngredientKey } from '../utils/ingredients'
 import type { ExtraIngredients, RecipeRow } from '../utils/inventory'
 import type { UsageMap } from '../utils/inventory'
 
@@ -43,12 +41,14 @@ export function useGroupPrep(addresses: { id: string; name: string }[], minAsFlo
                 const estimatedP = Promise.all([stocksP, recipesP, extraP])
                     .then(([stocks, recipes, extraIngredients]) => withCounterEstimate(stocks, id, { recipes, extraIngredients, canPersist: false }))
                 const weeksP = fetchForecastDays(id, HISTORY_OFFSETS_TOMORROW, RECENT_OFFSETS_TOMORROW)
-                const [{ rows }, recipes, stocks, estimated, weeks, extraIngredients] =
-                    await Promise.all([fetchIngredientCostsAndUnits(id), recipesP, stocksP, estimatedP, weeksP, extraP])
+                const [{ rows }, recipes, stocks, estimated, weeks, extraIngredients, batchKeys] =
+                    await Promise.all([fetchIngredientCostsAndUnits(id), recipesP, stocksP, estimatedP, weeksP, extraP, fetchBatchKeys(id)])
                 return {
                     warehouse: stockMap(stocks, 'warehouse_stock'),
                     branch: {
-                        id, name, ingredientsList: rows,
+                        id, name,
+                        // Thành phẩm tự làm, không mua/lấy từ kho → loại khỏi danh sách soạn.
+                        ingredientsList: rows.filter((i: Row) => !batchKeys.has(i.ingredient)),
                         forecast: forecastFromWeeks(weeks, recipes, extraIngredients),
                         sampleDays: weeks.filter((w: Row[]) => w.length).length,
                         counterStock: stockMap(estimated, 'counter_stock'),
@@ -89,14 +89,9 @@ export function useGroupPrep(addresses: { id: string; name: string }[], minAsFlo
     }, [load, key])
 
     useEffect(() => { load() }, [load])
-    // ponytail: thành phẩm loại theo tên của địa chỉ đang chọn (tên giống nhau giữa các chi nhánh trong nhóm).
-    const { batchProducts } = useProducts()
-    const plan = useMemo(() => {
-        if (!state.branches) return state.branches
-        const batchKeys = new Set(batchProducts.map(p => normalizeIngredientKey(p.name)))
-        const branches = state.branches.map(b => ({ ...b, ingredientsList: b.ingredientsList.filter((i: Row) => !batchKeys.has(i.ingredient)) }))
-        return buildGroupPrepPlan({ branches, pool: state.pool, minAsFloor })
-    }, [state.branches, state.pool, minAsFloor, batchProducts])
+    const plan = useMemo(
+        () => state.branches && buildGroupPrepPlan({ branches: state.branches, pool: state.pool, minAsFloor }),
+        [state.branches, state.pool, minAsFloor])
     // Cấu hình đơn vị CHUNG của kho cho mỗi nguyên liệu (đơn vị gốc + quy cách nhập): lấy của địa chỉ đầu danh sách, địa chỉ nào
     // thiếu thì mượn của địa chỉ kế — mọi số trên UI nhóm kho đọc qua đây để gọi tên đơn vị giống nhau.
     const cfgOf = useMemo(() => {

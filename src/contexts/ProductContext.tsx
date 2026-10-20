@@ -14,12 +14,15 @@ import { readJSON, writeJSON } from '../utils/storage'
 import { fetchProduction } from '../services/productionService'
 import type { ProductionRow } from '../utils/production'
 import { dateStringVN, addDaysVN } from '../utils/dateVN'
+import { normalizeIngredientKey } from '../utils/ingredients'
 
 export interface ProductContextValue {
     /** Món bán (đã loại thành phẩm). */
     products: Product[]
     /** Thành phẩm (products.is_batch): công thức mẻ nằm trong `recipes` theo product_id. */
     batchProducts: Product[]
+    /** Key nguyên liệu của các thành phẩm (để loại khỏi danh sách mua/lấy từ kho). */
+    batchKeys: Set<string>
     recipes: RecipeRow[]
     /** Các mẻ sản xuất còn hiệu lực trong ~62 ngày gần nhất (cộng vào tiêu hao, xem utils/production). */
     productionRows: (ProductionRow & Row)[]
@@ -128,6 +131,7 @@ export function ProductProvider() {
     const [allProducts, setProducts] = useState<Product[]>(() => readCache('products', []))
     const products = useMemo(() => allProducts.filter(p => !p.is_batch), [allProducts])
     const batchProducts = useMemo(() => allProducts.filter(p => p.is_batch), [allProducts])
+    const batchKeys = useMemo(() => new Set(batchProducts.map(p => normalizeIngredientKey(p.name))), [batchProducts])
     const [recipes, setRecipes] = useState<RecipeRow[]>(() => readCache('recipes', []))
     const [ingredientCosts, setIngredientCosts] = useState<Record<string, number>>(() => readCache('costs', {}))
     const [ingredientUnits, setIngredientUnits] = useState<Record<string, string>>(() => readCache('units', {}))
@@ -291,6 +295,7 @@ export function ProductProvider() {
     const value = useMemo(() => ({
         products,
         batchProducts,
+        batchKeys,
         productionRows,
         refreshProduction,
         recipes,
@@ -307,7 +312,7 @@ export function ProductProvider() {
         refreshProducts,
         loading,
         loadError
-    }), [products, batchProducts, productionRows, refreshProduction, recipes, ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, productExtras, extraIngredients, toppings, productToppings, discountPrograms, productDiscounts, refreshProducts, loading, loadError])
+    }), [products, batchProducts, batchKeys, productionRows, refreshProduction, recipes, ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, productExtras, extraIngredients, toppings, productToppings, discountPrograms, productDiscounts, refreshProducts, loading, loadError])
 
     return (
         <ProductContext.Provider value={value}>

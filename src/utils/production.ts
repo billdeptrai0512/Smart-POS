@@ -11,7 +11,7 @@ const addNet = (map: UsageMap, p: ProductionRow) => {
     for (const [ing, qty] of Object.entries(p.inputs || {})) map[ing] = (map[ing] ?? 0) + Number(qty)
     map[p.output_ingredient] = (map[p.output_ingredient] ?? 0) - Number(p.output_qty)
 }
-const round = (map: UsageMap) => { for (const k of Object.keys(map)) { map[k] = r1(map[k]); if (map[k] === 0) delete map[k] } return map }
+const round = (map: UsageMap): UsageMap => Object.fromEntries(Object.entries(map).map(([k, v]) => [k, r1(v)] as const).filter(([, v]) => v !== 0))
 
 /** Tiêu hao ròng của các mẻ còn hiệu lực (bỏ mẻ đã hủy). */
 export function productionUsage(rows: ProductionRow[] = []): UsageMap {

@@ -46,7 +46,7 @@ export default function RecipeIngredientPage() {
     const location = useLocation()
     const { productId } = useParams() as { productId: string }
     const {
-        products, batchProducts, recipes: allRecipes,
+        products, batchProducts, batchKeys, recipes: allRecipes,
         ingredientCosts, ingredientUnits,
         productExtras: contextExtras, extraIngredients: contextExtraIngs,
         ingredientConfigs, refreshProducts,
@@ -114,9 +114,9 @@ export default function RecipeIngredientPage() {
 
     const dbIngredients = useMemo(
         () => Object.keys(ingredientCosts)
-            .filter(k => !isBatch || !batchProducts.some(b => normalizeIngredientKey(b.name) === k)) // thành phẩm chỉ làm từ nguyên liệu gốc
+            .filter(k => !isBatch || !batchKeys.has(k)) // thành phẩm chỉ làm từ nguyên liệu gốc
             .sort((a, b) => sortIngredients(a, b, selectedAddress?.ingredient_sort_order)),
-        [ingredientCosts, isBatch, batchProducts, selectedAddress?.ingredient_sort_order]
+        [ingredientCosts, isBatch, batchKeys, selectedAddress?.ingredient_sort_order]
     )
 
     // Giá vốn 1 đơn vị thành phẩm = Σ(giá vốn NVL × lượng) / sản lượng mẻ — để món dùng thành phẩm tính đúng lãi.

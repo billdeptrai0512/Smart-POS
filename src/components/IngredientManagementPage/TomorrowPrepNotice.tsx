@@ -15,7 +15,6 @@ import ShiftPrepCard from '../DailyReportPage/ShiftPrepCard'
 import Toast from '../POSPage/Toast'
 import type { UUID, Row } from '../../types/domain'
 import { useProducts } from '../../contexts/ProductContext'
-import { normalizeIngredientKey } from '../../utils/ingredients'
 
 // Dải "Soạn cho ngày mai" ở Kiểm kê → bottom sheet của ĐỊA CHỈ ĐANG MỞ, cùng giao diện "Chuẩn bị hôm nay" của POS nhưng theo dự báo
 // NGÀY MAI. Tick = XÁC NHẬN đã soạn (ghi tên người tick) — không trừ kho. Sáng hôm sau "Chuẩn bị hôm nay" của địa chỉ đó đọc đúng
@@ -44,7 +43,7 @@ function Sheet({ groupId, addressId, name, onClose }: { groupId: UUID; addressId
     const forDate = useMemo(() => dateStringVN(addDaysVN(new Date(), 1)), [])
     const addresses = useMemo(() => [{ id: addressId, name }], [addressId, name])
     const { branches, pool, error, reload } = useGroupPrep(addresses)
-    const { batchProducts } = useProducts()
+    const { batchKeys } = useProducts()
     // Dòng đã xác nhận: { [ingredient]: { qty lúc xác nhận, by } }. null = đang tải.
     const [confirmed, setConfirmed] = useState<Confirmed | null>(null)
     useEffect(() => {
@@ -58,14 +57,13 @@ function Sheet({ groupId, addressId, name, onClose }: { groupId: UUID; addressId
     const items = useMemo(() => {
         const b = branches?.[0]
         if (!b || !confirmed) return []
-        const batchKeys = new Set(batchProducts.map(p => normalizeIngredientKey(p.name)))
         return buildTomorrowPrepList({ ingredientsList: b.ingredientsList.filter((i: Row) => !batchKeys.has(i.ingredient)), counterStock: b.counterStock, forecast: b.forecast, pool })
             .filter(it => !isTrivialQty(it.fillQty ?? 0, it.unit))
             .map(it => {
                 const c = confirmed[it.ingredient]
                 return c ? { ...it, taken: c.qty, by: c.by } : it
             })
-    }, [branches, pool, confirmed, batchProducts])
+    }, [branches, pool, confirmed, batchKeys])
     const checked = useMemo(() => Object.fromEntries(items.filter(it => it.taken != null).map(it => [it.ingredient, true])), [items])
     const done = Object.keys(checked).length
 

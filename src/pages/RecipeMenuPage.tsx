@@ -23,6 +23,8 @@ import MenuPageHeader from '../components/common/MenuPageHeader'
 import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
 import CreateBatchForm from '../components/RecipeMenuPage/CreateBatchForm'
+import CreateToppingForm from '../components/RecipeMenuPage/CreateToppingForm'
+import { insertTopping } from '../services/toppingService'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
 import { RECIPE_TABS, DISCOUNT_TAB } from '../constants/menuTabs'
@@ -80,6 +82,12 @@ function DragRow({ id, enabled, lit, children }: { id: string; enabled: boolean;
     )
 }
 
+const CREATE_KINDS = [
+    { key: 'product', title: 'Món bán', desc: 'Món có giá bán trên POS, công thức trừ nguyên liệu khi bán.' },
+    { key: 'batch', title: 'Thành phẩm', desc: 'Tự làm từ nguyên liệu theo mẻ (nước cốt, trân châu nấu…), có tồn riêng để dùng trong công thức món.' },
+    { key: 'topping', title: 'Topping', desc: 'Thêm vào món khi bán, tính thêm tiền; tồn đếm ở Kiểm kê.' },
+] as const
+
 export default function RecipeMenuPage() {
     const navigate = useNavigate()
     const location = useLocation()
@@ -125,9 +133,9 @@ export default function RecipeMenuPage() {
     // Lọc danh mục ở tab Menu: 'all' | 'none' (món chưa thuộc mục nào) | id của mục (divider). Id lạ (mục đã xoá) rơi về 'all'.
     const [categoryFilter, setCategoryFilter] = useState('all')
     const [search, setSearch] = useState('')
-    const [showCreateModal, setShowCreateModal] = useState(false)
+    // Nút + duy nhất: 'choose' = chọn loại, các bước còn lại là form của từng loại.
+    const [createStep, setCreateStep] = useState<null | 'choose' | 'product' | 'batch' | 'topping'>(null)
     const [showImportModal, setShowImportModal] = useState(false)
-    const [showBatchModal, setShowBatchModal] = useState(false)
     // {mode:'create'} | {mode:'edit', id} — modal tạo/sửa mục (divider phân nhóm menu)
     const [dividerModal, setDividerModal] = useState<{ mode: 'create' } | { mode: 'edit'; id: string } | null>(null)
     const [dividerName, setDividerName] = useState('')
@@ -171,7 +179,7 @@ export default function RecipeMenuPage() {
             await upsertProductPrice(newProd.id, parsedPrice)
         }
         refreshProducts?.()
-        setShowCreateModal(false)
+        setCreateStep(null)
         showToast('Đã tạo món mới', 'success')
     })
 
@@ -183,8 +191,16 @@ export default function RecipeMenuPage() {
         await insertProduct(name, 0, addressId, false, batchYield)
         await upsertIngredientCost(key, 0, addressId, unit, { category: 'main' })
         refreshProducts?.()
-        setShowBatchModal(false)
+        setCreateStep(null)
         showToast('Đã tạo thành phẩm', 'success')
+    })
+
+    // insertTopping tự đăng ký luôn nguyên liệu cùng tên để topping hiện ở Kiểm kê.
+    const handleCreateTopping = (name: string, price: number, unit: string) => withSaving('Tạo topping', async () => {
+        await insertTopping(name, price, addressId, unit)
+        refreshProducts?.()
+        setCreateStep(null)
+        showToast('Đã tạo topping', 'success')
     })
 
     function editDivider(divider: Row) {
@@ -293,15 +309,12 @@ export default function RecipeMenuPage() {
         [sections, effectiveFilter]
     )
     // Tab Công thức: tìm theo tên món (không phân biệt hoa/thường & dấu).
-    const searchedProducts = useMemo(() => {
+    const searchByName = (list: Row[]) => {
         const q = normalizeSearchText(search.trim())
-        return q ? realProducts.filter(p => normalizeSearchText(p.name).includes(q)) : realProducts
-    }, [realProducts, search])
-
-    const searchedBatches = useMemo(() => {
-        const q = normalizeSearchText(search.trim())
-        return q ? batchProducts.filter(p => normalizeSearchText(p.name).includes(q)) : batchProducts
-    }, [batchProducts, search])
+        return q ? list.filter(p => normalizeSearchText(p.name).includes(q)) : list
+    }
+    const searchedProducts = useMemo(() => searchByName(realProducts), [realProducts, search]) // eslint-disable-line react-hooks/exhaustive-deps
+    const searchedBatches = useMemo(() => searchByName(batchProducts), [batchProducts, search]) // eslint-disable-line react-hooks/exhaustive-deps
 
     return (
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">
@@ -358,22 +371,14 @@ export default function RecipeMenuPage() {
                             />
                             {canEdit && (
                                 <button
-                                    onClick={() => setShowCreateModal(true)}
-                                    aria-label="Tạo công thức"
+                                    onClick={() => setCreateStep('choose')}
+                                    aria-label="Tạo mới"
                                     className="absolute right-1 top-1 bottom-1 w-9 rounded-[8px] flex items-center justify-center active:scale-95 transition-all bg-primary text-bg hover:bg-primary/90"
                                 >
                                     <Plus size={18} />
                                 </button>
                             )}
                         </div>
-                        {canEdit && !isGuest && (
-                            <button
-                                onClick={() => setShowBatchModal(true)}
-                                className="shrink-0 px-3 rounded-[12px] flex items-center justify-center bg-surface border border-border/60 text-text-secondary text-[12px] font-black uppercase tracking-widest hover:bg-surface-light active:scale-[0.98] transition-all"
-                            >
-                                Thành phẩm
-                            </button>
-                        )}
                         {canEdit && (
                             <button
                                 onClick={() => navigate('/category/toppings', { state: location.state })}
@@ -467,30 +472,39 @@ export default function RecipeMenuPage() {
                 )}
             </main>
 
-            {showCreateModal && (
-                <BottomSheet
-                    onClose={() => !saving && setShowCreateModal(false)}
-                    panelClassName={SHEET_PANEL}
-                >
-                        <SheetHeader title="Tạo công thức mới" onClose={() => setShowCreateModal(false)} closeDisabled={saving} />
-                        <CreateProductForm saving={saving} onSubmit={handleCreateProduct} />
-                        <button
-                            onClick={() => { setShowCreateModal(false); setShowImportModal(true) }}
-                            className="text-[13px] text-primary/80 hover:text-primary font-medium text-center"
-                        >
-                            hoặc Nhập hàng loạt từ Excel →
-                        </button>
-                </BottomSheet>
-            )}
-
-            {showBatchModal && (
-                <BottomSheet
-                    onClose={() => !saving && setShowBatchModal(false)}
-                    panelClassName={SHEET_PANEL}
-                >
-                    <SheetHeader title="Tạo thành phẩm" onClose={() => setShowBatchModal(false)} closeDisabled={saving} />
-                    <p className="text-[13px] text-text-secondary -mt-2">Thành phẩm là công thức tổng hợp nguyên liệu thành một thứ dùng tiếp (topping, nước cốt…). Sau khi tạo, thêm nguyên liệu cho 1 mẻ rồi chọn nó như nguyên liệu trong công thức món.</p>
-                    <CreateBatchForm saving={saving} onSubmit={handleCreateBatch} />
+            {createStep && (
+                <BottomSheet onClose={() => !saving && setCreateStep(null)} panelClassName={SHEET_PANEL}>
+                    <SheetHeader
+                        title={{ choose: 'Tạo mới', product: 'Tạo món bán', batch: 'Tạo thành phẩm', topping: 'Tạo topping' }[createStep]}
+                        onClose={() => setCreateStep(null)}
+                        closeDisabled={saving}
+                    />
+                    {createStep === 'choose' && (
+                        <div className="flex flex-col gap-2">
+                            {CREATE_KINDS.filter(k => k.key !== 'batch' || !isGuest).map(k => (
+                                <button
+                                    key={k.key}
+                                    onClick={() => setCreateStep(k.key)}
+                                    className="text-left rounded-[12px] bg-surface-light border border-border/60 px-3 py-3 hover:border-primary/40 active:scale-[0.99] transition"
+                                >
+                                    <span className="block text-[14px] font-black text-text">{k.title}</span>
+                                    <span className="block text-[12px] text-text-secondary mt-0.5">{k.desc}</span>
+                                </button>
+                            ))}
+                            <button
+                                onClick={() => { setCreateStep(null); setShowImportModal(true) }}
+                                className="text-[13px] text-primary/80 hover:text-primary font-medium text-center mt-1"
+                            >
+                                hoặc Nhập hàng loạt từ Excel →
+                            </button>
+                        </div>
+                    )}
+                    {createStep !== 'choose' && (
+                        <button onClick={() => !saving && setCreateStep('choose')} className="self-start -mt-2 text-[13px] font-medium text-primary/80 hover:text-primary">‹ Chọn loại khác</button>
+                    )}
+                    {createStep === 'product' && <CreateProductForm saving={saving} onSubmit={handleCreateProduct} />}
+                    {createStep === 'batch' && <CreateBatchForm saving={saving} onSubmit={handleCreateBatch} />}
+                    {createStep === 'topping' && <CreateToppingForm saving={saving} onSubmit={handleCreateTopping} />}
                 </BottomSheet>
             )}
 

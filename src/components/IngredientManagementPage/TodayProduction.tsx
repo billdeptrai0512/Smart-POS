@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { FlaskConical } from 'lucide-react'
 import { useProducts } from '../../contexts/ProductContext'
 import { useConfirm } from '../../contexts/ConfirmContext'
@@ -7,7 +6,7 @@ import { dateStringVN, timeStringVN } from '../../utils/dateVN'
 import { ingredientLabel } from '../../utils/ingredients'
 import { r1 } from '../../utils/inventory'
 import type { Row } from '../../types/domain'
-import ProduceBatchSheet from '../common/ProduceBatchSheet'
+import ProduceButton from '../common/ProduceButton'
 
 interface Props {
     /** Gọi sau khi ghi/hủy một mẻ — để tải lại tồn quầy (mẻ đổi tiêu hao). */
@@ -19,7 +18,6 @@ interface Props {
 export default function TodayProduction({ onChanged, onError }: Props) {
     const { batchProducts, productionRows, ingredientUnits, refreshProduction } = useProducts()
     const confirm = useConfirm()
-    const [producing, setProducing] = useState<Row | null>(null)
     if (!batchProducts.length) return null
 
     const today = dateStringVN()
@@ -44,14 +42,14 @@ export default function TodayProduction({ onChanged, onError }: Props) {
             </div>
             <div className="flex flex-wrap gap-2">
                 {batchProducts.map(b => (
-                    <button
+                    <ProduceButton
                         key={b.id}
-                        type="button"
-                        onClick={() => setProducing(b)}
+                        product={b}
+                        onDone={onChanged}
                         className="px-3 py-2 rounded-[12px] border border-primary/40 bg-primary/10 text-primary text-[13px] font-black active:scale-95 transition"
                     >
                         + {b.name}
-                    </button>
+                    </ProduceButton>
                 ))}
             </div>
             {todayRows.map(p => {
@@ -66,7 +64,6 @@ export default function TodayProduction({ onChanged, onError }: Props) {
                     </div>
                 )
             })}
-            {producing && <ProduceBatchSheet product={producing} onClose={() => setProducing(null)} onDone={onChanged} />}
         </div>
     )
 }
