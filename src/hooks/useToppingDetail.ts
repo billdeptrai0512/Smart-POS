@@ -4,14 +4,15 @@ import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { useProductLinks } from './useProductLinks'
-import { getIngredientUnit, registerNewIngredients } from '../utils/ingredients'
+import { getIngredientUnit, registerNewIngredients, normalizeIngredientKey, ingredientLabel } from '../utils/ingredients'
 import type { CustomIngredient } from '../components/RecipeIngredientPage/FastIngredientFill'
 import {
     updateToppingName, updateToppingPrice, deleteTopping,
     fetchToppingIngredients, upsertToppingIngredient, deleteToppingIngredient,
     fetchProductToppingLinks, setToppingProductLinks,
-    upsertIngredientCost,
+    upsertIngredientCost, deleteIngredientCost, fetchIngredientStocks,
 } from '../services/orderService'
+import { isIngredientReferenced } from '../utils/toppingStock'
 import { updateToppingSource, type ToppingSource } from '../services/toppingService'
 
 export interface ToppingIng { topping_id: string; ingredient: string; amount: number; unit?: string | null }
@@ -22,7 +23,7 @@ export interface ToppingIng { topping_id: string; ingredient: string; amount: nu
 export function useToppingDetail(toppingId: string | null, withSaving: (label: string, fn: () => Promise<void>) => Promise<unknown>, backUrl: string, showSaved: () => void) {
     const navigate = useNavigate()
     const confirm = useConfirm()
-    const { toppings, ingredientCosts, refreshProducts } = useProducts()
+    const { toppings, ingredientCosts, recipes, extraIngredients, batchKeys, refreshProducts } = useProducts()
     const { addressId } = useAddress()
     const [ings, setIngs] = useState<ToppingIng[]>([])
     // local: nguồn vừa chọn, hiện ngay trong lúc đợi refreshProducts đem dữ liệu thật về (undefined = dùng của context).
@@ -76,10 +77,20 @@ export function useToppingDetail(toppingId: string | null, withSaving: (label: s
             await refreshProducts()
             showSaved()
         }),
+        // Xoá topping + dọn dòng tồn kho cùng tên (nếu không ai khác dùng khoá đó) để khỏi còn "mồ côi" trong Kiểm kê.
+        // Đang còn tồn thì nói rõ trong hộp xác nhận vì số tồn đó mất theo.
         deleteSelf: async () => {
-            if (!topping || !await confirm({ title: `Xoá topping "${topping.name}"?`, danger: true, confirmLabel: 'Xoá' })) return
+            if (!topping) return
+            const key = normalizeIngredientKey(topping.name)
+            const others = toppings.filter(t => t.id !== toppingId).map(t => t.id)
+            const [otherIngs, stocks] = await Promise.all([fetchToppingIngredients(others), fetchIngredientStocks(addressId)])
+            const dropStockRow = key in ingredientCosts && !isIngredientReferenced(key, { recipes, extraIngredients, batchKeys, toppingIngredients: otherIngs as Record<string, ToppingIng[]>, excludeId: toppingId! })
+            const stock = dropStockRow ? stocks?.find((r: { ingredient: string; current_stock?: number }) => r.ingredient === key)?.current_stock ?? 0 : 0
+            const detail = stock > 0 ? `Topping còn tồn ${Math.round(stock * 10) / 10} ${getIngredientUnit(key)} (${ingredientLabel(key)}); xoá sẽ mất luôn số tồn này.` : undefined
+            if (!await confirm({ title: `Xoá topping "${topping.name}"?`, detail, danger: true, confirmLabel: 'Xoá' })) return
             await run('Xoá topping', async () => {
                 await deleteTopping(toppingId!)
+                if (dropStockRow) await deleteIngredientCost(key, addressId)
                 await refreshProducts()
                 navigate(backUrl)
             })
