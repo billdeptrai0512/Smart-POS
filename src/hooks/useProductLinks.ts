@@ -16,6 +16,12 @@ export function useProductLinks() {
             if (!next.delete(id)) next.add(id)
             return next
         }),
+        // Chọn / bỏ chọn cả một nhóm món.
+        setMany: (ids: string[], on: boolean) => setSelected(prev => {
+            const next = new Set(prev)
+            for (const id of ids) on ? next.add(id) : next.delete(id)
+            return next
+        }),
         reset,
         markSaved: () => setSaved(new Set(selected)),
     }
