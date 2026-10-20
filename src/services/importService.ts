@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx'
 import { normalizeIngredientKey } from '../utils/ingredients'
 import { insertProduct, upsertProductPrice, insertProductExtra, updateProductExtraPrice, updateProductExtraSticky, upsertExtraIngredient } from './productService'
 import { upsertIngredientCost } from './ingredientCostService'
-import { insertTopping, updateToppingPrice, upsertToppingIngredient, setToppingProductLinks } from './toppingService'
+import { insertTopping, updateToppingPrice, updateToppingSource, upsertToppingIngredient, setToppingProductLinks } from './toppingService'
 import { upsertRecipes } from './recipeService'
 import { insertDiscountProgram, updateDiscountProgram, deleteDiscountProgram, setDiscountProgramProducts } from './discountService'
 import { supabase } from '../lib/supabaseClient'
@@ -14,7 +14,7 @@ import type { UUID } from '../types/domain'
 // 2 hàm tách bạch: resolveImportPlan (thuần, không gọi mạng — dùng cho màn xem trước) và
 // commitImportPlan (gọi service layer có sẵn theo đúng thứ tự phụ thuộc FK).
 
-interface ParsedWorkbook {
+export interface ParsedWorkbook {
     products: Record<string, unknown>[]
     ingredients: Record<string, unknown>[]
     recipes: Record<string, unknown>[]
@@ -166,6 +166,8 @@ interface ImportPlan {
     toppingUpdates: Array<{ name: string; price: number }>
     recipes: Array<{ productName: string; ingredient: string; amount: number; unit: string | null }>
     toppingIngredients: Array<{ toppingName: string; ingredient: string; amount: number; unit: string | null }>
+    // Cột 'Nguồn tồn kho' + 'Lượng mỗi phần' của sheet Topping (cả hai có mới ghi; để trống = giữ nguyên nguồn hiện tại).
+    toppingSources: Array<{ toppingName: string; ingredient: string; amount: number }>
     toppingLinks: Array<{ toppingName: string; productNames: string[] }>
     extras: Array<{ productName: string; name: string; price: number; sticky: boolean }>
     extraUpdates: Array<{ productName: string; name: string; price: number; sticky: boolean }>
@@ -372,6 +374,20 @@ export function resolveImportPlan(parsed: ParsedWorkbook, existing: ExistingData
         toppingIngredients.push({ toppingName, ingredient: ensureIngredientKey(ingredientName, unit), amount, unit: unit || null })
     })
 
+    // ---- Nguồn tồn kho của topping ---- (nguyên liệu / thành phẩm PHẢI có sẵn: gõ sai tên thì bỏ qua + cảnh báo, không tự tạo)
+    const toppingSources: ImportPlan['toppingSources'] = []
+    parsed.toppings.forEach((row, i) => {
+        const toppingName = normName(row['Tên topping'])
+        const ingredientName = normName(row['Nguồn tồn kho'])
+        const amount = toNumber(row['Lượng mỗi phần'])
+        if (!toppingName || (!ingredientName && amount == null)) return
+        const line = `Topping dòng ${i + 2}`
+        if (!ingredientName || amount == null || amount <= 0) { warnings.push(`Bỏ qua nguồn tồn kho của ${line} ("${toppingName}"): cần đủ cả Nguồn tồn kho và Lượng mỗi phần (> 0)`); return }
+        const key = normalizeIngredientKey(ingredientName)
+        if (!allIngredientKeys.has(key)) { warnings.push(`Bỏ qua nguồn tồn kho của ${line} ("${toppingName}"): không tìm thấy nguyên liệu / thành phẩm "${ingredientName}"`); return }
+        toppingSources.push({ toppingName, ingredient: key, amount })
+    })
+
     // ---- Công thức tùy chọn ----
     const extraIngredientsPlan: ImportPlan['extraIngredients'] = []
     parsed.extraIngredients.forEach((row, i) => {
@@ -469,7 +485,7 @@ export function resolveImportPlan(parsed: ParsedWorkbook, existing: ExistingData
             products, productUpdates,
             ingredients, ingredientUpdates,
             toppings, toppingUpdates,
-            recipes, toppingIngredients,
+            recipes, toppingIngredients, toppingSources,
             toppingLinks: [...linksByTopping.values()],
             extras, extraUpdates,
             extraIngredients: extraIngredientsPlan,
@@ -659,6 +675,8 @@ export function buildBulkPayload(plan: ImportPlan, existing: ExistingData) {
         extraUpdates: plan.extraUpdates.map(ex => ({ id: extraId.get(extraKey(ex.productName, ex.name)), price: ex.price, sticky: ex.sticky })),
         recipes: plan.recipes.map(r => ({ productId: productId.get(normKey(r.productName)), ingredient: r.ingredient, amount: r.amount, unit: r.unit })),
         toppingIngredients: plan.toppingIngredients.map(t => ({ toppingId: toppingId.get(normKey(t.toppingName)), ingredient: t.ingredient, amount: t.amount, unit: t.unit })),
+        // Không do RPC xử lý — commitImportPlan ghi qua updateToppingSource sau khi RPC xong (cần id topping đã resolve ở đây).
+        toppingSources: plan.toppingSources.map(t => ({ toppingId: toppingId.get(normKey(t.toppingName))!, ingredient: t.ingredient, amount: t.amount })),
         extraIngredients: plan.extraIngredients.map(e => ({ extraId: extraId.get(extraKey(e.productName, e.extraName)), ingredient: e.ingredient, amount: e.amount, unit: e.unit })),
         toppingLinks: plan.toppingLinks.map(l => ({ toppingId: toppingId.get(normKey(l.toppingName)), productIds: l.productNames.map(n => productId.get(normKey(n))) })),
         // Không do RPC xử lý — commitImportPlan ghi qua commitDiscounts sau khi RPC xong (cần id món đã resolve ở đây).
@@ -675,4 +693,5 @@ export async function commitImportPlan(plan: ImportPlan, addressId: UUID | null,
     if (error) throw error
     await commitIngredientAttrs(plan, addressId)
     await commitDiscounts(plan, addressId, existing, payload.discountLinks)
+    await runWithConcurrency(payload.toppingSources, CONCURRENCY, t => updateToppingSource(t.toppingId, { ingredient: t.ingredient, amount: t.amount }))
 }

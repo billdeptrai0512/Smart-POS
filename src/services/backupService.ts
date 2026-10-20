@@ -112,6 +112,8 @@ async function applySnapshot(targetAddressId: UUID, snapshot: Snapshot, options?
                     is_active: true,
                     owner_address_id: targetAddressId,
                     is_divider: p.is_divider ?? false,
+                    is_batch: p.is_batch ?? false,
+                    batch_yield: p.batch_yield ?? null,
                 }
             })
             await insertAll('products', rows, 'Lỗi khi sao lưu menu: ')

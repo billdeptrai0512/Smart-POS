@@ -72,6 +72,8 @@ export async function downloadCurrentDataExcel(input: ExportInput) {
         'Tên topping': t.name,
         'Giá bán': t.price,
         'Đơn vị tồn kho': input.ingredientUnits[normalizeIngredientKey(t.name)] || 'đv',
+        'Nguồn tồn kho': t.source_ingredient ? ingredientLabel(t.source_ingredient) : '',
+        'Lượng mỗi phần': t.source_ingredient ? Number(t.source_amount) : '',
     })))
 
     const toppingIngredientsMap = await fetchToppingIngredients(input.toppings.map(t => t.id))

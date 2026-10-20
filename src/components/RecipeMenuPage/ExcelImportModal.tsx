@@ -100,6 +100,7 @@ export default function ExcelImportModal({ onClose }: { onClose: () => void }) {
         [result.plan.toppings.length, 'topping mới'],
         [result.plan.toppingUpdates.length, 'topping cập nhật giá'],
         [result.plan.toppingIngredients.length, 'dòng công thức topping'],
+        [result.plan.toppingSources.length, 'topping có nguồn tồn kho'],
         [result.plan.extras.length, 'tùy chọn thêm mới'],
         [result.plan.extraUpdates.length, 'tùy chọn thêm cập nhật'],
         [result.plan.extraIngredients.length, 'dòng công thức tùy chọn'],
