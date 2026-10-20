@@ -7,6 +7,7 @@ và topping (bán kèm món). Đọc xong bạn trả lời được: *"Món nà
 
 > Trạng thái: **§2–§4 đã code** (nhánh `claude/wonderful-elion-4a0506`, migration `20261026` + `20261027`).
 > **§5–§8 là thiết kế đã thống nhất.** Đợt 1 (schema) và đợt 2 (tiêu hao ở client) **đã code** (migration `20261028_topping_source.sql`);
+> Migration `20261030_topping_source_follow_ingredient.sql`: đổi tên / xoá nguyên liệu kéo theo `toppings.source_ingredient`.
 > Đợt 3 (giá vốn RPC, `20261029_topping_source_cogs.sql`) và đợt 4 (UI chọn nguồn ở trang chi tiết topping) **đã code**; đợt 5 (chuyển dữ liệu) chưa.
 
 ---

@@ -1,6 +1,7 @@
 import { BottomSheet, SheetHeader } from '../common/ModalShell'
 import type { Row, UUID } from '../../types/domain'
 import type { RecipeRow } from '../../utils/inventory'
+import { groupByDivider } from '../../utils/groupByDivider'
 
 interface Props {
     products: Row[]
@@ -13,12 +14,7 @@ interface Props {
 // product (existing ingredients with the same key get overwritten).
 export default function CopyRecipeModal({ products, recipesByProduct, onPick, onClose }: Props) {
     // products giữ nguyên dòng phân nhóm (is_divider) của menu → chia món thành từng nhóm; nhóm không có món nào để chép thì ẩn.
-    const groups: { name: string | null; items: Row[] }[] = [{ name: null, items: [] }]
-    for (const p of products) {
-        if (p.is_divider) groups.push({ name: p.name, items: [] })
-        else if ((recipesByProduct.get(p.id)?.length || 0) > 0) groups[groups.length - 1].items.push(p)
-    }
-    const shown = groups.filter(g => g.items.length > 0)
+    const shown = groupByDivider(products as (Row & { name: string })[], p => (recipesByProduct.get(p.id)?.length || 0) > 0)
 
     return (
         <BottomSheet
@@ -33,8 +29,8 @@ export default function CopyRecipeModal({ products, recipesByProduct, onPick, on
                     {shown.length === 0 && (
                         <p className="text-text-secondary text-[13px] text-center py-6">Chưa có món nào có công thức để chép.</p>
                     )}
-                    {shown.map((g, i) => (
-                        <div key={i} className="flex flex-col gap-1.5">
+                    {shown.map(g => (
+                        <div key={g.name ?? ''} className="flex flex-col gap-1.5">
                             {g.name && (
                                 <div className="flex items-center gap-3 min-w-0 pt-2">
                                     <span className="flex-1 h-px bg-border" />

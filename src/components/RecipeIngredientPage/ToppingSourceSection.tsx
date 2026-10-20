@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react'
 import Dropdown from '../common/Dropdown'
 import { ingredientLabel } from '../../utils/ingredients'
 import type { ToppingSource } from '../../services/toppingService'
@@ -13,13 +12,11 @@ interface Props {
 
 // Nguồn tồn kho của topping: bán 1 phần trừ `amount` của 1 nguyên liệu / thành phẩm. Chưa chọn → topping dùng công thức bên dưới.
 export default function ToppingSourceSection({ source, options, unitOf, canEdit, onSave }: Props) {
-    const [amount, setAmount] = useState(source ? String(source.amount) : '')
-    useEffect(() => { setAmount(source ? String(source.amount) : '') }, [source])
-
-    const commitAmount = () => {
-        const n = Number(amount.replace(',', '.'))
+    // Ô số không kiểm soát: key theo giá trị đã lưu nên đổi nguồn / lưu xong thì ô tự nạp lại; số sai (≤ 0, chữ) thì trả về giá trị cũ.
+    const commitAmount = (input: HTMLInputElement) => {
+        const n = Number(input.value.replace(',', '.'))
         if (source && n > 0 && n !== source.amount) onSave({ ingredient: source.ingredient, amount: n })
-        else setAmount(source ? String(source.amount) : '')
+        else if (source) input.value = String(source.amount)
     }
 
     return (
@@ -39,17 +36,18 @@ export default function ToppingSourceSection({ source, options, unitOf, canEdit,
                         { value: '', label: 'Không dùng nguồn (theo công thức)' },
                         ...options.map(k => ({ value: k, label: ingredientLabel(k) })),
                     ]}
-                    onChange={k => onSave(k ? { ingredient: k, amount: source?.amount ?? 1 } : null)}
+                    onChange={k => { if (k !== (source?.ingredient ?? '')) onSave(k ? { ingredient: k, amount: source?.amount ?? 1 } : null) }}
                 />
                 {source && (
                     <div className="flex items-center gap-1 shrink-0">
                         <input
                             type="text"
                             inputMode="decimal"
-                            value={amount}
+                            key={`${source.ingredient}:${source.amount}`}
+                            defaultValue={source.amount}
                             disabled={!canEdit}
-                            onChange={e => setAmount(e.target.value)}
-                            onBlur={commitAmount}
+                            onBlur={e => commitAmount(e.currentTarget)}
+                            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
                             aria-label="Định lượng mỗi phần"
                             className="w-20 h-11 px-2 text-right rounded-[12px] bg-bg border border-border/60 text-text text-[14px] focus:outline-none focus:border-primary/60"
                         />

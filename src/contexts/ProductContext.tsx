@@ -2,8 +2,8 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, us
 import type { CartExtra, CartTopping, IngredientConfig, IngredientGroup, Product, Row, UUID } from '../types/domain'
 import type { ExtraIngredients, RecipeRow } from '../utils/inventory'
 import type { DiscountProgram } from '../utils/discountPrograms'
-import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredientsWithToppings } from '../services/orderService'
-import { fetchToppings, fetchProductToppingLinks } from '../services/toppingService'
+import { fetchProducts, fetchAllRecipes, fetchIngredientCostsAndUnits, fetchProductExtras, fetchExtraIngredients } from '../services/orderService'
+import { fetchToppings, fetchProductToppingLinks, toppingSourcesOf } from '../services/toppingService'
 import { fetchDiscountPrograms, fetchDiscountProgramProductLinks } from '../services/discountService'
 import { useAuth } from './AuthContext'
 import { useAddress } from './AddressContext'
@@ -93,12 +93,12 @@ async function fetchProductDataWithRetry(addressId: UUID | null, attempts = 3, d
             ])
             const extraIds = Object.values(extras).flat().map(e => e.id)
             const [extraIngs, toppingLinks, discountLinks] = await Promise.all([
-                fetchExtraIngredientsWithToppings(extraIds),
+                fetchExtraIngredients(extraIds),
                 fetchProductToppingLinks(toppings.map(t => t.id)),
                 fetchDiscountProgramProductLinks(discountPrograms.map(p => p.id)),
             ])
             return {
-                prods, recs, costsResult, extras, extraIngs, toppings,
+                prods, recs, costsResult, extras, extraIngs: { ...extraIngs, ...toppingSourcesOf(toppings) }, toppings,
                 productToppings: buildProductToppingsMap(toppings, toppingLinks),
                 discountPrograms, productDiscounts: buildProductDiscountsMap(discountPrograms, discountLinks),
             }
@@ -257,13 +257,13 @@ export function ProductProvider() {
         ])
         const extraIds = Object.values(extras).flat().map(e => e.id)
         const [extraIngs, toppingLinks, discountLinks] = await Promise.all([
-            fetchExtraIngredientsWithToppings(extraIds),
+            fetchExtraIngredients(extraIds),
             fetchProductToppingLinks(toppingsList.map(t => t.id)),
             fetchDiscountProgramProductLinks(discountProgramsList.map(p => p.id)),
         ])
         if (loadGenRef.current !== gen) return
         applyData(
-            prods, recs, costsResult, extras, extraIngs, addressId, toppingsList, buildProductToppingsMap(toppingsList, toppingLinks),
+            prods, recs, costsResult, extras, { ...extraIngs, ...toppingSourcesOf(toppingsList) }, addressId, toppingsList, buildProductToppingsMap(toppingsList, toppingLinks),
             discountProgramsList, buildProductDiscountsMap(discountProgramsList, discountLinks),
         )
     }, [addressId, applyData])

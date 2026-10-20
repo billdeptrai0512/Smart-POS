@@ -64,7 +64,11 @@ export interface CartExtra {
 
 /** A topping selected on a cart line — a `toppings` row (global entity, own id space,
  *  attached to many products via `product_toppings`; separate from CartExtra). */
-export type CartTopping = Omit<CartExtra, 'is_sticky'>
+export type CartTopping = Omit<CartExtra, 'is_sticky'> & {
+    /** Nguồn tồn kho (nguyên liệu / thành phẩm) + lượng trừ mỗi phần bán; NULL = tính theo topping_ingredients. */
+    source_ingredient?: string | null
+    source_amount?: number | string | null
+}
 
 /** A single line in the POS cart (see POSContext.handleAddItem). */
 export interface CartItem {

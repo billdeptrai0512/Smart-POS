@@ -12,7 +12,7 @@ import type { ExtraIngredients } from '../utils/inventory'
 
 export async function fetchToppings(addressId: UUID | null): Promise<CartTopping[]> {
     if (localRepo.isGuest()) return localRepo.fetchLocalToppings(addressId) as CartTopping[]
-    let query = supabase.from('toppings').select('id, name, price, address_id, sort_order').order('sort_order', { ascending: true, nullsFirst: false })
+    let query = supabase.from('toppings').select('id, name, price, address_id, sort_order, source_ingredient, source_amount').order('sort_order', { ascending: true, nullsFirst: false })
 
     if (addressId) query = query.eq('address_id', addressId)
     else query = query.is('address_id', null)
@@ -66,12 +66,17 @@ export async function deleteTopping(toppingId: UUID) {
 
 // Nguồn tồn kho của topping (toppings.source_*) ở dạng ExtraIngredients { [toppingId]: [{ ingredient, amount }] }: topping
 // được tính như một "extra" nên toàn bộ phần tiêu hao/giá vốn có sẵn dùng lại được. Topping chưa gán nguồn không có mặt.
-// Cột chưa migrate (20261028) / lỗi → {} (không làm hỏng menu).
+// Lỗi → {} (không làm hỏng menu).
+export function toppingSourcesOf(toppings: { id: UUID; source_ingredient?: string | null; source_amount?: number | string | null }[]): ExtraIngredients {
+    return Object.fromEntries(toppings.filter(t => t.source_ingredient)
+        .map(t => [t.id, [{ ingredient: t.source_ingredient!, amount: Number(t.source_amount), extra_id: t.id }]]))
+}
+
+// Cho chỗ không có ProductContext (Soạn kho nhóm) — trong context nguồn đã nằm sẵn trong danh sách toppings.
 export async function fetchToppingSources(): Promise<ExtraIngredients> {
     if (localRepo.isGuest()) return {}
     const { data, error } = await supabase.from('toppings').select('id, source_ingredient, source_amount').not('source_ingredient', 'is', null)
-    if (error) return {}
-    return Object.fromEntries((data ?? []).map(t => [t.id, [{ ingredient: t.source_ingredient, amount: Number(t.source_amount), extra_id: t.id }]]))
+    return error ? {} : toppingSourcesOf(data ?? [])
 }
 
 // ---- Topping Ingredients CRUD (công thức riêng của topping — mirrors recipes) ----
@@ -141,13 +146,7 @@ export async function setToppingProductLinks(toppingId: UUID, productIds: UUID[]
 
 export interface ToppingSource { ingredient: string; amount: number }
 
-// Đọc / ghi nguồn tồn kho của 1 topping. Cột chưa migrate (20261028) → null.
-export async function fetchToppingSource(toppingId: UUID): Promise<ToppingSource | null> {
-    if (localRepo.isGuest()) return null
-    const { data } = await supabase.from('toppings').select('source_ingredient, source_amount').eq('id', toppingId).maybeSingle()
-    return data?.source_ingredient ? { ingredient: data.source_ingredient, amount: Number(data.source_amount) } : null
-}
-
+// Ghi nguồn tồn kho của 1 topping (đọc: toppings.source_* đi cùng fetchToppings).
 // source = null → bỏ nguồn, topping quay về tính theo topping_ingredients. CHECK toppings_source_pair buộc amount > 0.
 export async function updateToppingSource(toppingId: UUID, source: ToppingSource | null) {
     if (localRepo.isGuest()) return

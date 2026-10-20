@@ -12,7 +12,7 @@ import {
     fetchProductToppingLinks, setToppingProductLinks,
     upsertIngredientCost,
 } from '../services/orderService'
-import { fetchToppingSource, updateToppingSource, type ToppingSource } from '../services/toppingService'
+import { updateToppingSource, type ToppingSource } from '../services/toppingService'
 
 export interface ToppingIng { topping_id: string; ingredient: string; amount: number; unit?: string | null }
 
@@ -25,16 +25,17 @@ export function useToppingDetail(toppingId: string | null, withSaving: (label: s
     const { toppings, ingredientCosts, refreshProducts } = useProducts()
     const { addressId } = useAddress()
     const [ings, setIngs] = useState<ToppingIng[]>([])
-    const [source, setSource] = useState<ToppingSource | null>(null)
+    // local: nguồn vừa chọn, hiện ngay trong lúc đợi refreshProducts đem dữ liệu thật về (undefined = dùng của context).
+    const [local, setLocal] = useState<ToppingSource | null | undefined>(undefined)
     const links = useProductLinks()
     const topping = toppingId ? toppings.find(t => t.id === toppingId) : undefined
+    const source = local !== undefined ? local : topping?.source_ingredient ? { ingredient: topping.source_ingredient, amount: Number(topping.source_amount) } : null
 
     useEffect(() => {
         if (!toppingId) return
         let cancelled = false
-        Promise.all([fetchToppingIngredients([toppingId]), fetchProductToppingLinks([toppingId]), fetchToppingSource(toppingId)]).then(([ingsMap, linkRows, src]) => {
+        Promise.all([fetchToppingIngredients([toppingId]), fetchProductToppingLinks([toppingId])]).then(([ingsMap, linkRows]) => {
             if (cancelled) return
-            setSource(src)
             setIngs((ingsMap[toppingId] || []) as ToppingIng[])
             links.reset(new Set(linkRows.map(l => l.product_id)))
         })
@@ -47,8 +48,8 @@ export function useToppingDetail(toppingId: string | null, withSaving: (label: s
         topping, ings, links, source,
         saveSource: (next: ToppingSource | null) => run('Lưu nguồn tồn kho topping', async () => {
             await updateToppingSource(toppingId!, next)
-            setSource(next)
-            await refreshProducts()
+            setLocal(next)
+            try { await refreshProducts() } finally { setLocal(undefined) }
         }),
         saveName: (name: string) => name.trim() ? run('Lưu tên topping', async () => { await updateToppingName(toppingId!, name.trim()); await refreshProducts() }) : Promise.resolve(),
         savePrice: (price: number) => run('Lưu giá topping', async () => { await updateToppingPrice(toppingId!, price); await refreshProducts() }),

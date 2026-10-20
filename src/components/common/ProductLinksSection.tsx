@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { useProductLinks } from '../../hooks/useProductLinks'
+import { groupByDivider } from '../../utils/groupByDivider'
 
 interface Props {
     links: ReturnType<typeof useProductLinks>
@@ -12,14 +13,10 @@ interface Props {
 
 // Tick-list "Áp dụng cho món" + nút lưu khi có thay đổi. Món chia thành thẻ thu gọn theo các dòng phân nhóm (is_divider) của menu.
 export default function ProductLinksSection({ links, products, canEdit, saving, onSave }: Props) {
-    const groups: { name: string | null; items: Props['products'] }[] = [{ name: null, items: [] }]
-    // touched[i]: người dùng đã mở/đóng/chọn nhóm i → giữ nguyên trạng thái đó; chưa chạm thì nhóm có món được chọn tự mở.
-    const [touched, setTouched] = useState<Record<number, boolean>>({})
-    for (const p of products) {
-        if (p.is_divider) groups.push({ name: p.name, items: [] })
-        else groups[groups.length - 1].items.push(p)
-    }
-    const shown = groups.filter(g => g.items.length > 0)
+    // touched[tên nhóm]: người dùng đã mở/đóng/chọn nhóm đó → giữ nguyên trạng thái; chưa chạm thì nhóm có món được chọn tự mở.
+    // Khoá theo tên (không theo vị trí) để thêm/bớt nhóm không làm lệch trạng thái của nhóm khác.
+    const [touched, setTouched] = useState<Record<string, boolean>>({})
+    const shown = groupByDivider(products)
     return (
         <section className="pt-4 border-t border-border/40">
             <div className="flex items-center justify-between mb-3">
@@ -32,17 +29,18 @@ export default function ProductLinksSection({ links, products, canEdit, saving, 
             </div>
             <div className="space-y-2">
                 {shown.map((g, i) => {
+                    const key = g.name ?? ''
                     const ids = g.items.map(p => p.id)
                     const n = ids.filter(id => links.selected.has(id)).length
-                    const isOpen = !g.name || (touched[i] ?? n > 0)
+                    const isOpen = !g.name || (touched[key] ?? n > 0)
                     const allOn = n === ids.length
                     return (
-                        <div key={i} className={g.name ? 'rounded-[12px] border border-border/60 bg-surface overflow-hidden' : ''}>
+                        <div key={key} className={g.name ? 'rounded-[12px] border border-border/60 bg-surface overflow-hidden' : ''}>
                             {g.name && (
                                 <div className="flex items-center gap-2 pr-2">
                                     <button
                                         type="button"
-                                        onClick={() => setTouched(t => ({ ...t, [i]: !isOpen }))}
+                                        onClick={() => setTouched(t => ({ ...t, [key]: !isOpen }))}
                                         aria-expanded={isOpen}
                                         className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2.5 text-left"
                                     >
@@ -53,7 +51,7 @@ export default function ProductLinksSection({ links, products, canEdit, saving, 
                                     {canEdit && (
                                         <button
                                             type="button"
-                                            onClick={() => { links.setMany(ids, !allOn); setTouched(t => ({ ...t, [i]: true })) }}
+                                            onClick={() => { links.setMany(ids, !allOn); setTouched(t => ({ ...t, [key]: true })) }}
                                             className="shrink-0 text-[11px] font-bold text-primary px-2 py-1 rounded-md hover:bg-primary/10 active:bg-primary/20"
                                         >
                                             {allOn ? 'Bỏ cả nhóm' : 'Chọn cả nhóm'}
@@ -69,7 +67,7 @@ export default function ProductLinksSection({ links, products, canEdit, saving, 
                                             <button
                                                 key={p.id}
                                                 disabled={!canEdit}
-                                                onClick={() => { links.toggle(p.id); if (g.name) setTouched(t => ({ ...t, [i]: true })) }}
+                                                onClick={() => { links.toggle(p.id); setTouched(t => ({ ...t, [key]: true })) }}
                                                 className={`text-[12px] border px-2.5 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-60 ${isSelected
                                                     ? 'bg-primary text-bg border-primary shadow-sm'
                                                     : 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 active:bg-primary/30'

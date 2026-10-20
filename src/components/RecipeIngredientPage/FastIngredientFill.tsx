@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { ChevronDown } from 'lucide-react'
 import { formatVND } from '../../utils'
 import { ingredientLabel } from '../../utils/ingredients'
 import { onboardingHintClass } from '../../utils/onboardingHint'
@@ -45,7 +44,6 @@ export default function FastIngredientFill({
 }: Props) {
     const [revealed, setRevealed] = useState<Set<string>>(() => new Set()) // chip-tapped, not yet saved
     const [creatingCat, setCreatingCat] = useState<string | null>(null) // 'main' | 'packaging' while typing a new name
-    const [closedCats, setClosedCats] = useState<Set<string>>(() => new Set()) // nhóm trong bảng thêm đang thu gọn
     const [addOpenLocal, setAddOpenLocal] = useState(false) // chip palette hidden until tapped — keeps the screen tidy
     const addOpen = addOpenProp ?? addOpenLocal
     const setAddOpen = onAddOpenChange ?? setAddOpenLocal
@@ -104,51 +102,37 @@ export default function FastIngredientFill({
                 </button>
             )}
 
-            {canEdit && addOpen && CATS.map(cat => {
-                const items = itemsOf(cat.key)
-                const isOpen = !closedCats.has(cat.key)
-                return (
-                    <div key={cat.key} className="rounded-[12px] border border-border/60 bg-surface overflow-hidden">
-                        <button
-                            type="button"
-                            onClick={() => setClosedCats(prev => { const n = new Set(prev); if (!n.delete(cat.key)) n.add(cat.key); return n })}
-                            aria-expanded={isOpen}
-                            className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
-                        >
-                            <ChevronDown size={14} className={`shrink-0 text-text-secondary transition-transform ${isOpen ? '' : '-rotate-90'}`} />
-                            <span className="text-[12px] font-black uppercase tracking-widest text-text-secondary">{cat.label}</span>
-                            <span className="text-[11px] font-bold text-text-dim">{items.length}</span>
-                        </button>
-                        {isOpen && (
-                            <div className="px-3 pb-3 space-y-2">
-                                <div className="flex flex-wrap gap-1.5">
-                                    {items.map(k => (
-                                        <button key={k} onClick={() => reveal(k)}
-                                            className="text-[12px] border border-primary/20 bg-primary/10 text-primary px-2.5 py-1.5 rounded-lg font-medium hover:bg-primary/20 active:bg-primary/30 transition-colors">
-                                            + {ingredientLabel(k)}
-                                        </button>
-                                    ))}
-                                    <button onClick={() => setCreatingCat(cat.key)}
-                                        className="text-[12px] border border-dashed border-border/70 text-text-secondary px-2.5 py-1.5 rounded-lg font-medium hover:text-primary hover:border-primary/50 transition-colors">
-                                        + Tạo mới
-                                    </button>
-                                </div>
-                                {creatingCat === cat.key && (
-                                    <IngredientPicker
-                                        existingIngredients={dbIngredients}
-                                        label={`Tạo nguyên liệu mới · ${cat.label}`}
-                                        onConfirm={(ingredient) => {
-                                            onAddCustom({ ...ingredient, category: cat.key })
-                                            setCreatingCat(null)
-                                        }}
-                                        onCancel={() => setCreatingCat(null)}
-                                    />
-                                )}
-                            </div>
-                        )}
+            {canEdit && addOpen && CATS.map(cat => (
+                <div key={cat.key} className="rounded-[12px] border border-border/60 bg-surface p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                        <span className="text-[12px] font-black uppercase tracking-widest text-text-secondary">{cat.label}</span>
+                        <span className="text-[11px] font-bold text-text-dim">{itemsOf(cat.key).length}</span>
                     </div>
-                )
-            })}
+                    <div className="flex flex-wrap gap-1.5">
+                        {itemsOf(cat.key).map(k => (
+                            <button key={k} onClick={() => reveal(k)}
+                                className="text-[12px] border border-primary/20 bg-primary/10 text-primary px-2.5 py-1.5 rounded-lg font-medium hover:bg-primary/20 active:bg-primary/30 transition-colors">
+                                + {ingredientLabel(k)}
+                            </button>
+                        ))}
+                        <button onClick={() => setCreatingCat(cat.key)}
+                            className="text-[12px] border border-dashed border-border/70 text-text-secondary px-2.5 py-1.5 rounded-lg font-medium hover:text-primary hover:border-primary/50 transition-colors">
+                            + Tạo mới
+                        </button>
+                    </div>
+                    {creatingCat === cat.key && (
+                        <IngredientPicker
+                            existingIngredients={dbIngredients}
+                            label={`Tạo nguyên liệu mới · ${cat.label}`}
+                            onConfirm={(ingredient) => {
+                                onAddCustom({ ...ingredient, category: cat.key })
+                                setCreatingCat(null)
+                            }}
+                            onCancel={() => setCreatingCat(null)}
+                        />
+                    )}
+                </div>
+            ))}
 
             {canEdit && addOpen && !onAddOpenChange && (
                 <div className="flex justify-end">
