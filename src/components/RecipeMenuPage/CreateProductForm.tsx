@@ -1,18 +1,22 @@
 import { useState } from 'react'
 import MoneyInput from '../common/MoneyInput'
+import Dropdown from '../common/Dropdown'
 import { parseVNDInput, capitalizeWords } from '../../utils'
 
 interface Props {
     saving?: boolean
-    onSubmit: (name: string, price: string) => void
+    /** Món đã có công thức để chép định lượng sang món mới (không truyền / rỗng → ẩn ô chép). */
+    copyable?: { id: string; name: string }[]
+    onSubmit: (name: string, price: string, copyFromId: string) => void
 }
 
 // Tự giữ name/price: modal gỡ mount sau khi tạo xong nên state tự reset; lỗi thì form còn nguyên giá trị.
-export default function CreateProductForm({ saving, onSubmit }: Props) {
+export default function CreateProductForm({ saving, copyable = [], onSubmit }: Props) {
     const [name, setName] = useState('')
     const [price, setPrice] = useState('')
+    const [copyFrom, setCopyFrom] = useState('')
     const canSubmit = name.trim() && parseVNDInput(price) >= 0 && !saving
-    const submit = () => { if (canSubmit) onSubmit(name.trim(), price) }
+    const submit = () => { if (canSubmit) onSubmit(name.trim(), price, copyFrom) }
 
     return (
         <div className="flex flex-col gap-3">
@@ -33,6 +37,21 @@ export default function CreateProductForm({ saving, onSubmit }: Props) {
                     className="shrink-0 w-[140px]"
                 />
             </div>
+
+            {copyable.length > 0 && (
+                <Dropdown
+                    ariaLabel="Chép định lượng nguyên liệu từ món"
+                    value={copyFrom}
+                    triggerLabel={copyable.find(p => p.id === copyFrom)?.name ?? 'Chép nguyên liệu từ món có sẵn (tuỳ chọn)'}
+                    align="left"
+                    up
+                    className="w-full"
+                    panelClassName="max-h-44 overflow-y-auto min-w-[14rem]"
+                    triggerClassName="w-full h-11 px-3 rounded-[12px] bg-surface-light border border-border/60 text-text text-[14px]"
+                    items={[{ value: '', label: 'Không chép (để trống)' }, ...copyable.map(p => ({ value: p.id, label: p.name }))]}
+                    onChange={setCopyFrom}
+                />
+            )}
 
             <button
                 onClick={submit}

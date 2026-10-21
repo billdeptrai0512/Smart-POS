@@ -10,7 +10,7 @@ import { BottomSheet, SheetHeader, SHEET_PANEL } from '../components/common/Moda
 import MenuDivider from '../components/common/MenuDivider'
 import Dropdown from '../components/common/Dropdown'
 import NoticeBar from '../components/common/NoticeBar'
-import { normalizeSearchText, normalizeIngredientKey } from '../utils/ingredients'
+import { normalizeSearchText, normalizeIngredientKey, sortIngredients, getIngredientUnit } from '../utils/ingredients'
 import { useProducts } from '../contexts/ProductContext'
 import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -24,7 +24,8 @@ import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
 import CreateBatchForm from '../components/RecipeMenuPage/CreateBatchForm'
 import CreateToppingForm from '../components/RecipeMenuPage/CreateToppingForm'
-import { insertTopping, fetchToppingIngredients } from '../services/toppingService'
+import { insertTopping, updateToppingSource, fetchToppingIngredients, type ToppingSource } from '../services/toppingService'
+import { upsertRecipes } from '../services/recipeService'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
 import { RECIPE_TABS, DISCOUNT_TAB } from '../constants/menuTabs'
@@ -94,7 +95,7 @@ export default function RecipeMenuPage() {
     const location = useLocation()
     const backTo = location.state?.from || '/history/sales'
     const { products, batchProducts, toppings, recipes, ingredientCosts, ingredientUnits, ingredientGroups, discountPrograms, refreshProducts } = useProducts()
-    const { addressId } = useAddress()
+    const { addressId, selectedAddress } = useAddress()
     const { isManager, isAdmin, isGuest } = useAuth()
     const canEdit = isManager || isAdmin
 
@@ -195,12 +196,17 @@ export default function RecipeMenuPage() {
         return map
     }, [recipesByProduct, ingredientCosts])
 
-    const handleCreateProduct = (name: string, price: string) => withSaving('Tạo món mới', async () => {
+    // Món đã có công thức → chọn để chép định lượng sang món mới ở form tạo (chỉ nguyên liệu gốc; tùy chọn/extra chép ở trang chi tiết).
+    const copyable = useMemo(() => products.filter(p => !p.is_divider && recipesByProduct.get(p.id)?.length).map(p => ({ id: p.id, name: p.name })), [products, recipesByProduct])
+
+    const handleCreateProduct = (name: string, price: string, copyFromId: string) => withSaving('Tạo món mới', async () => {
         const parsedPrice = parseVNDInput(price)
         const newProd = await insertProduct(name, parsedPrice, addressId)
         if (newProd && addressId) {
             await upsertProductPrice(newProd.id, parsedPrice)
         }
+        const srcRows = copyFromId ? recipesByProduct.get(copyFromId) : undefined
+        if (newProd && srcRows?.length) await upsertRecipes(srcRows.map(r => ({ productId: newProd.id, ingredient: r.ingredient, amount: r.amount, addressId, unit: r.unit })))
         refreshProducts?.()
         setCreateOpen(false)
         showToast('Đã tạo món mới', 'success')
@@ -222,12 +228,18 @@ export default function RecipeMenuPage() {
     })
 
     // insertTopping tự đăng ký luôn nguyên liệu cùng tên để topping hiện ở Kiểm kê.
-    const handleCreateTopping = (name: string, price: number, unit: string) => withSaving('Tạo topping', async () => {
-        await insertTopping(name, price, addressId, unit)
+    const handleCreateTopping = (name: string, price: number, unit: string, source: ToppingSource | null) => withSaving('Tạo topping', async () => {
+        const topping = await insertTopping(name, price, addressId, unit)
+        if (source) await updateToppingSource(topping.id, source)
         refreshProducts?.()
         setCreateOpen(false)
         showToast('Đã tạo topping', 'success')
     })
+
+    const sourceOptions = useMemo(
+        () => Object.keys(ingredientCosts).sort((a, b) => sortIngredients(a, b, selectedAddress?.ingredient_sort_order)),
+        [ingredientCosts, selectedAddress?.ingredient_sort_order],
+    )
 
     function editDivider(divider: Row) {
         setDividerName(divider.name)
@@ -514,7 +526,7 @@ export default function RecipeMenuPage() {
                         onClose={() => setCreateOpen(false)}
                         closeDisabled={saving}
                     />
-                    {kind === 'main' && <CreateProductForm saving={saving} onSubmit={handleCreateProduct} />}
+                    {kind === 'main' && <CreateProductForm saving={saving} copyable={copyable} onSubmit={handleCreateProduct} />}
                     {kind === 'batch' && (
                         <>
                             <p className="text-[13px] text-text-secondary -mt-2">Làm từ nguyên liệu theo mẻ (nước cốt, trân châu nấu…), có tồn riêng và dùng được trong công thức món.</p>
@@ -524,7 +536,12 @@ export default function RecipeMenuPage() {
                     {kind === 'topping' && (
                         <>
                             <p className="text-[13px] text-text-secondary -mt-2">Thêm vào món khi bán, tính thêm tiền; tồn đếm ở Kiểm kê.</p>
-                            <CreateToppingForm saving={saving} onSubmit={handleCreateTopping} />
+                            <CreateToppingForm
+                                saving={saving}
+                                sourceOptions={isGuest ? [] : sourceOptions}
+                                unitOf={k => getIngredientUnit(k, ingredientUnits?.[k], ingredientUnits)}
+                                onSubmit={handleCreateTopping}
+                            />
                         </>
                     )}
                 </BottomSheet>
