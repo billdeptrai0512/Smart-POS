@@ -42,11 +42,11 @@ export default function CreateProductForm({ saving, copyable = [], onSubmit }: P
                 <Dropdown
                     ariaLabel="Chép định lượng nguyên liệu từ món"
                     value={copyFrom}
-                    triggerLabel={copyable.find(p => p.id === copyFrom)?.name ?? 'Chép nguyên liệu từ món có sẵn (tuỳ chọn)'}
+                    triggerLabel={copyable.find(p => p.id === copyFrom)?.name ?? 'Chép nguyên liệu từ món có sẵn (tùy chọn)'}
                     align="left"
                     up
                     className="w-full"
-                    panelClassName="max-h-44 overflow-y-auto min-w-[14rem]"
+                    panelClassName="min-w-[14rem]"
                     triggerClassName="w-full h-11 px-3 rounded-[12px] bg-surface-light border border-border/60 text-text text-[14px]"
                     items={[{ value: '', label: 'Không chép (để trống)' }, ...copyable.map(p => ({ value: p.id, label: p.name }))]}
                     onChange={setCopyFrom}

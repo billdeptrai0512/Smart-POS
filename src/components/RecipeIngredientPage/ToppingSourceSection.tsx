@@ -7,11 +7,13 @@ interface Props {
     options: string[]
     unitOf: (key: string) => string
     canEdit: boolean
+    /** Danh sách mở lên trên — dùng trong bottom sheet để khỏi bị cắt ở đáy màn hình. */
+    up?: boolean
     onSave: (source: ToppingSource | null) => void
 }
 
 // Nguồn tồn kho của topping: bán 1 phần trừ `amount` của 1 nguyên liệu / thành phẩm. Chưa chọn → topping dùng công thức bên dưới.
-export default function ToppingSourceSection({ source, options, unitOf, canEdit, onSave }: Props) {
+export default function ToppingSourceSection({ source, options, unitOf, canEdit, up, onSave }: Props) {
     // Ô số không kiểm soát: key theo giá trị đã lưu nên đổi nguồn / lưu xong thì ô tự nạp lại; số sai (≤ 0, chữ) thì trả về giá trị cũ.
     const commitAmount = (input: HTMLInputElement) => {
         const n = Number(input.value.replace(',', '.'))
@@ -29,6 +31,7 @@ export default function ToppingSourceSection({ source, options, unitOf, canEdit,
                     triggerLabel={source ? ingredientLabel(source.ingredient) : 'Chưa chọn nguồn'}
                     disabled={!canEdit}
                     align="left"
+                    up={up}
                     className="flex-1 min-w-0"
                     panelClassName="max-h-64 overflow-y-auto min-w-[14rem]"
                     triggerClassName="w-full h-11 px-3 rounded-[12px] bg-bg border border-border/60 text-text text-[14px]"

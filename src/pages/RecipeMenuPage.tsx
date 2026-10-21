@@ -209,7 +209,7 @@ export default function RecipeMenuPage() {
         if (newProd && srcRows?.length) await upsertRecipes(srcRows.map(r => ({ productId: newProd.id, ingredient: r.ingredient, amount: r.amount, addressId, unit: r.unit })))
         refreshProducts?.()
         setCreateOpen(false)
-        showToast('Đã tạo món mới', 'success')
+        showToast(srcRows?.length ? `Đã tạo món mới, chép ${srcRows.length} nguyên liệu` : 'Đã tạo món mới', 'success')
     })
 
     // Thành phẩm = 1 dòng products (is_batch) + 1 nguyên liệu cùng tên trong ingredient_costs: nhờ vậy nó tự hiện ở bộ chọn
@@ -235,11 +235,6 @@ export default function RecipeMenuPage() {
         setCreateOpen(false)
         showToast('Đã tạo topping', 'success')
     })
-
-    const sourceOptions = useMemo(
-        () => Object.keys(ingredientCosts).sort((a, b) => sortIngredients(a, b, selectedAddress?.ingredient_sort_order)),
-        [ingredientCosts, selectedAddress?.ingredient_sort_order],
-    )
 
     function editDivider(divider: Row) {
         setDividerName(divider.name)
@@ -535,10 +530,10 @@ export default function RecipeMenuPage() {
                     )}
                     {kind === 'topping' && (
                         <>
-                            <p className="text-[13px] text-text-secondary -mt-2">Thêm vào món khi bán, tính thêm tiền; tồn đếm ở Kiểm kê.</p>
+                            <p className="text-[13px] text-text-secondary -mt-2">Thêm vào món khi bán, tính thêm tiền; tồn lấy từ nguồn bạn chọn hoặc đếm tay ở Kiểm kê.</p>
                             <CreateToppingForm
                                 saving={saving}
-                                sourceOptions={isGuest ? [] : sourceOptions}
+                                sourceOptions={isGuest ? [] : Object.keys(ingredientCosts).sort((a, b) => sortIngredients(a, b, selectedAddress?.ingredient_sort_order))}
                                 unitOf={k => getIngredientUnit(k, ingredientUnits?.[k], ingredientUnits)}
                                 onSubmit={handleCreateTopping}
                             />
