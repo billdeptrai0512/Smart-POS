@@ -12,7 +12,7 @@ export interface HistoryContextValue {
     /** false = tải hỏng (khác "không có đơn"); undefined = bỏ qua vì vừa tải xong / đang tải. */
     handleLoadHistory: () => Promise<boolean | undefined>
     handleDeleteOrder: (orderId: UUID) => Promise<boolean>
-    handleUpdateOrderDiscount: (orderId: UUID, total: number, discountAmount: number, itemDiscounts?: { id: UUID; discount_amount: number }[]) => Promise<void>
+    handleUpdateOrderDiscount: (orderId: UUID, total: number, discountAmount: number, itemDiscounts?: { id: UUID; discount_amount: number }[]) => Promise<boolean>
     handleAddExpense: (
         name: string, amount: number, isRefill?: boolean, paymentMethod?: string, metadata?: Row, isFixed?: boolean,
         categoryId?: UUID | null, createdAt?: string | null,

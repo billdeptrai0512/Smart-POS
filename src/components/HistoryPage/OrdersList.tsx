@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useState, type ReactNode } from 'react'
 import type { Discount, Row, UUID } from '../../types/domain'
 import type { HistoryOrder, HistoryOrderItem } from '../../hooks/useFormatHistoryOrders'
 import { useNavigate } from 'react-router-dom'
@@ -18,7 +18,6 @@ import DiscountEditor from '../POSPage/DiscountEditor'
 import PrintBill from '../common/PrintBill'
 import Toast from '../POSPage/Toast'
 import { ROUND_ICON_BTN } from '../common/ModalShell'
-import CupsRevenueSummary from '../common/CupsRevenueSummary'
 
 
 // Pill nhỏ dùng cho giờ/mã đơn/tên bàn/tên nhân viên trên thẻ đơn — cùng khuôn
@@ -26,6 +25,8 @@ import CupsRevenueSummary from '../common/CupsRevenueSummary'
 // chỗ dùng. PILL_LG = pill hàng footer, to hơn 1 chút so với pill header (đã yêu cầu).
 const PILL = 'shrink-0 bg-surface-light border border-border/60 rounded-full px-2 py-0.5 text-[11px] font-bold text-text-secondary'
 const PILL_LG = 'shrink-0 bg-surface-light border border-border/60 rounded-full px-2.5 py-1 text-[11px] font-bold text-text-secondary'
+
+const PAGE_SIZE = 40
 
 interface CardActions {
     onDeleteOrder: (id: UUID) => Promise<unknown>
@@ -36,8 +37,8 @@ interface CardActions {
 
 interface Props extends CardActions {
     orders: HistoryOrder[]
-    totalCups: number
-    totalRevenue: number
+    /** Thẻ tổng kết (SalesCard) — luôn là item đầu danh sách. */
+    summary: ReactNode
     isLoading?: boolean
     isTodayScope?: boolean
     pendingOrders: Row[]
@@ -48,18 +49,19 @@ interface Props extends CardActions {
 }
 
 export default function OrdersList({
-    orders, totalCups, totalRevenue, isLoading, isTodayScope,
+    orders, summary, isLoading, isTodayScope,
     pendingOrders, isSyncing, onRetrySync, onDeleteOffline,
     onDeleteOrder, onUpdateDiscount, deletingId, setDeletingId,
     justArrivedIds,
 }: Props) {
+    // Tháng đông khách có hàng nghìn đơn — chỉ dựng PAGE_SIZE thẻ đầu, còn lại bấm "Xem thêm".
+    // Tổng cộng/biểu đồ ở `summary` vẫn tính trên toàn bộ đơn.
+    const [shown, setShown] = useState(PAGE_SIZE)
     return (
         <main className="flex-1 overflow-y-auto px-4 py-5 pb-4 space-y-3 bg-bg">
             {/* Card đầu danh sách — nằm trong luồng cuộn bình thường như mọi card khác,
                 chỉ cần luôn là item ĐẦU TIÊN nên đơn mới không bao giờ chèn lên trên nó. */}
-            <div className="bg-surface rounded-[24px] p-5 shadow-sm border border-border/60">
-                <CupsRevenueSummary cups={totalCups} revenue={totalRevenue} />
-            </div>
+            {summary}
 
             {pendingOrders.length > 0 && (
                 <div className="bg-warning/10 border border-warning/40 rounded-[14px] px-4 py-3 flex items-center justify-between gap-3">
@@ -89,18 +91,29 @@ export default function OrdersList({
                     <span className="text-text-secondary font-medium">{isTodayScope ? 'Chưa có đơn hàng nào hôm nay.' : 'Không có đơn hàng trong khoảng này.'}</span>
                 </div>
             ) : (
-                orders.map(order => (
-                    <OrderCard
-                        key={order.id}
-                        order={order}
-                        isDeleting={deletingId === order.id}
-                        setDeletingId={setDeletingId}
-                        onDeleteOrder={onDeleteOrder}
-                        onUpdateDiscount={onUpdateDiscount}
-                        onDeleteOffline={onDeleteOffline}
-                        isNew={justArrivedIds?.has(order.id) || false}
-                    />
-                ))
+                <>
+                    {orders.slice(0, shown).map(order => (
+                        <OrderCard
+                            key={order.id}
+                            order={order}
+                            isDeleting={deletingId === order.id}
+                            setDeletingId={setDeletingId}
+                            onDeleteOrder={onDeleteOrder}
+                            onUpdateDiscount={onUpdateDiscount}
+                            onDeleteOffline={onDeleteOffline}
+                            isNew={justArrivedIds?.has(order.id) || false}
+                        />
+                    ))}
+                    {orders.length > shown && (
+                        <button
+                            type="button"
+                            onClick={() => setShown(n => n + PAGE_SIZE)}
+                            className="w-full py-3 rounded-[14px] bg-surface border border-border/60 text-[12px] font-bold text-text-secondary hover:text-text"
+                        >
+                            Xem thêm ({orders.length - shown} đơn)
+                        </button>
+                    )}
+                </>
             )}
         </main>
     )

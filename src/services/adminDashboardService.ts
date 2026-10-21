@@ -16,10 +16,15 @@ export async function fetchAdminDashboard() {
 }
 
 
+// group = tên nhóm kho chung của địa chỉ (null = kho riêng).
+export interface StageAddress { name: string; group: string | null }
+// Các key số = số địa chỉ mỗi nhóm; lists[nhóm] = địa chỉ trong nhóm (migration 20261026).
+export type BranchStages = Record<string, any> & { lists?: Record<string, StageAddress[]> } // eslint-disable-line @typescript-eslint/no-explicit-any
+
 // Số chi nhánh theo giai đoạn (admin_branch_stages, migration 20261020). RPC RIÊNG vì cùng lý do như
 // trên. Ném lỗi để caller tự ẩn thẻ khi chưa apply.
 export async function fetchAdminBranchStages() {
     const { data, error } = await supabase.rpc('admin_branch_stages')
     if (error) throw error
-    return data as Record<string, number>
+    return data as BranchStages
 }

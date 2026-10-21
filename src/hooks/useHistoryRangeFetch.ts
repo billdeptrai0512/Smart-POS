@@ -33,7 +33,16 @@ function useCachedRange(fetchFn: (addressId: string, start: Date, end: Date) => 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [addressId, startISO, endISO, isTodayScope, isReadOnly])
 
-    return { data, setData, isLoading, cacheRef }
+    // Vá 1 dòng theo id ở cả state lẫn cache, để thẻ đổi ngay và quay lại cùng khoảng ngày không thấy bản cũ.
+    const patch = (id: string, updates: Row) => {
+        const apply = (rows: Row[]) => rows.map(r => r.id === id ? { ...r, ...updates } : r)
+        setData(apply)
+        const key = `${addressId}|${startISO}|${endISO}`
+        const cached = cacheRef.current.get(key)
+        if (cached) cacheRef.current.set(key, apply(cached))
+    }
+
+    return { data, isLoading, patch }
 }
 
 export function useHistoryRangeFetch({ addressId, rangeStart, rangeEnd, isTodayScope, isReadOnly }: Pick<RangeCtx, 'addressId' | 'rangeStart' | 'rangeEnd' | 'isTodayScope' | 'isReadOnly'>) {
@@ -41,18 +50,8 @@ export function useHistoryRangeFetch({ addressId, rangeStart, rangeEnd, isTodayS
     const endISO = rangeEnd.toISOString()
     const rangeCtx = { addressId, rangeStart, rangeEnd, startISO, endISO, isTodayScope, isReadOnly }
 
-    const { data: rangeExpenses, setData: setRangeExpenses, isLoading: isLoadingRange, cacheRef: expCache } = useCachedRange(fetchExpensesByRange, rangeCtx)
-    const { data: rangeOrders, isLoading: isLoadingRangeOrders } = useCachedRange(fetchOrdersByRange, rangeCtx)
+    const { data: rangeExpenses, isLoading: isLoadingRange, patch: patchExpense } = useCachedRange(fetchExpensesByRange, rangeCtx)
+    const { data: rangeOrders, isLoading: isLoadingRangeOrders, patch: patchOrder } = useCachedRange(fetchOrdersByRange, rangeCtx)
 
-    // Optimistic patch helper for mutations (e.g. re-tag expense). Patches both
-    // the visible state and the cached entry so a re-render or cache hit shows
-    // the new value without a server refetch.
-    const patchExpense = (id: string, updates: Row) => {
-        setRangeExpenses(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e))
-        const key = `${addressId}|${startISO}|${endISO}`
-        const cached = expCache.current.get(key)
-        if (cached) expCache.current.set(key, cached.map(e => e.id === id ? { ...e, ...updates } : e))
-    }
-
-    return { rangeExpenses, rangeOrders, isLoadingRange, isLoadingRangeOrders, patchExpense }
+    return { rangeExpenses, rangeOrders, isLoadingRange, isLoadingRangeOrders, patchExpense, patchOrder }
 }

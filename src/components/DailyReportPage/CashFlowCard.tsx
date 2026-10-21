@@ -31,6 +31,7 @@ interface Props {
     actualCash?: number
     actualTransfer?: number
     dailyExpense?: number
+    revenue?: number
     refillFreeForm?: number
     expenses?: Row[]
     payments?: Row[]
@@ -67,6 +68,7 @@ export default function CashFlowCard({
     actualCash = 0,
     actualTransfer = 0,
     dailyExpense = 0,
+    revenue,
     refillFreeForm = 0,
     expenses = [],
     payments = [],   // NEW: expense_payments của ngày này (cash-out thực, theo paid_at)
@@ -385,14 +387,33 @@ export default function CashFlowCard({
                             <PanelRow label="Chuyển khoản" value={formatVND(actualTransfer)} />
                         </>
                     )}
-                    <PanelRow label="Chi phí trong ca" value={formatVND(inShiftOpsCash)} valueClassName="text-warning" />
-                    {/* NVL/đi chợ trả tiền mặt TRƯỚC chốt cũng là tiền rút từ két trong ca →
-                        cộng vào Thực thu. Hiện riêng để tổng nhìn ra được phần cộng lại. */}
-                    {inShiftRefillCash > 0 && (
-                        <PanelRow label="Mua NVL trong ca" value={formatVND(inShiftRefillCash)} valueClassName="text-warning" />
-                    )}
+                    <div className="flex flex-col gap-1.5 rounded-[12px] bg-surface-light/60 border border-border/40 px-2.5 py-2">
+                        <span className="text-[10.5px] font-black uppercase tracking-wide text-text-dim">Phát sinh trong ca</span>
+                        <PanelRow label="Chi phí" value={formatVND(inShiftOpsCash)} valueClassName="text-warning" />
+                        {/* NVL/đi chợ trả tiền mặt TRƯỚC chốt cũng là tiền rút từ két trong ca →
+                            cộng vào Thực thu. Hiện riêng để tổng nhìn ra được phần cộng lại. */}
+                        <PanelRow label="Bổ sung nguyên liệu" value={formatVND(inShiftRefillCash)} valueClassName="text-warning" />
+                    </div>
                 </div>
             </ReportPanel>
+
+            {/* PANEL: CHÊNH LỆCH — Thực thu (két đếm + chi trong ca) so với Doanh thu theo đơn.
+                Dương = két dư so với đơn, âm = két hụt. Chưa nhập tiền → "—" như Thực nhận. */}
+            {revenue != null && (() => {
+                const diff = actualTotal - revenue
+                const tone = cashNotEntered || diff === 0 ? 'text-text-dim' : diff > 0 ? 'text-success' : 'text-danger'
+                return (
+                    <ReportPanel
+                        title="So sánh"
+                        total={{ label: 'Chênh lệch', value: cashNotEntered ? '—' : `${diff > 0 ? '+' : ''}${formatVND(diff)}`, className: tone }}
+                    >
+                        <div className="flex flex-col gap-2.5 pl-2">
+                            <PanelRow label="Thực thu" value={money(actualTotal)} />
+                            <PanelRow label="Doanh thu" value={formatVND(revenue)} />
+                        </div>
+                    </ReportPanel>
+                )
+            })()}
 
             {/* PANEL 2: THỰC CHI — 4 section theo group_section nhãn (Vận hành / Quản lý
                 & khác / Tồn kho / Ngoài kinh doanh), section phụ chỉ hiện khi có chi.

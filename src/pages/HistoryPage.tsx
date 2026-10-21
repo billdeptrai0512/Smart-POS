@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { calculateItemCost, parseVNDInput, formatVNDInput } from '../utils'
+import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart } from '../utils/reportStats'
 import { getPendingOrders, removePendingOrder } from '../hooks/useOfflineSync'
 import { dateStringVN } from '../utils/dateVN'
 import { calcRangeWithLabel } from '../utils/rangeCalc'
@@ -22,6 +23,7 @@ import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import { orderStep, isRecipeStepActive } from '../components/common/onboarding/steps'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
 import OrdersList from '../components/HistoryPage/OrdersList'
+import SalesCard from '../components/DailyReportPage/SalesCard'
 import ExpensePanel from '../components/HistoryPage/ExpensePanel'
 import AddExpenseModal from '../components/HistoryPage/AddExpenseModal'
 import { shiftFinalizedKey, cashClosedKey } from '../constants/storageKeys'
@@ -36,14 +38,14 @@ export default function HistoryPage() {
     const location = useLocation()
     const { addressId } = useAddress()
     const confirm = useConfirm()
-    const { products, recipes, ingredientCosts, extraIngredients, refreshProducts } = useProducts()
+    const { products, recipes, ingredientCosts, extraIngredients, productExtras, refreshProducts } = useProducts()
     const {
         todayOrders, todayExpenses, isLoadingHistory, justArrivedIds,
         handleDeleteOrder, handleUpdateOrderDiscount, handleAddExpense, handleUpdateExpense, handleDeleteExpense, handleLoadHistory,
     } = useHistory()
     const { retrySync } = useStats()
     const { toast, showToast } = useCart()
-    const { isGuest } = useAuth()
+    const { isGuest, profile } = useAuth()
 
     useEffect(() => {
         if (!isLoadingHistory) handleLoadHistory()
@@ -176,7 +178,7 @@ export default function HistoryPage() {
     const isTodayScope = scope === 'day' && offset === 0
 
     // ─── Range data fetchers ──────────────────────────────────────────
-    const { rangeExpenses, rangeOrders, isLoadingRange, isLoadingRangeOrders, patchExpense: patchRangeExpense } = useHistoryRangeFetch({
+    const { rangeExpenses, rangeOrders, isLoadingRange, isLoadingRangeOrders, patchExpense: patchRangeExpense, patchOrder: patchRangeOrder } = useHistoryRangeFetch({
         addressId,
         rangeStart, rangeEnd,
         isTodayScope, isReadOnly,
@@ -193,6 +195,25 @@ export default function HistoryPage() {
         (expenseId: string, toId: string) => updateExpense(expenseId, { category_id: toId }),
         [updateExpense]
     )
+
+    // Xem tuần/tháng thì danh sách đơn nằm trong rangeOrders, không phải todayOrders mà context vá —
+    // vá thêm ở đây để thẻ đổi ngay thay vì đứng yên tới khi đổi khoảng ngày.
+    const deleteOrder = useCallback(async (id: string) => {
+        const ok = await handleDeleteOrder(id)
+        if (ok && !isTodayScope) patchRangeOrder(id, { deleted_at: new Date().toISOString(), deleted_by: profile?.name })
+        return ok
+    }, [handleDeleteOrder, isTodayScope, patchRangeOrder, profile?.name])
+
+    const updateOrderDiscount = useCallback(async (orderId: string, total: number, discountAmount: number, itemDiscounts: { id: string; discount_amount: number }[] = []) => {
+        const ok = await handleUpdateOrderDiscount(orderId, total, discountAmount, itemDiscounts)
+        if (!ok || isTodayScope) return
+        const byId = new Map(itemDiscounts.map(d => [d.id, d.discount_amount]))
+        const items = rangeOrders.find(o => o.id === orderId)?.order_items || []
+        patchRangeOrder(orderId, {
+            total, discount_amount: discountAmount,
+            order_items: items.map((i: Row) => byId.has(i.id) ? { ...i, discount_amount: byId.get(i.id) } : i),
+        })
+    }, [handleUpdateOrderDiscount, isTodayScope, patchRangeOrder, rangeOrders])
 
     // ─── Offline order sync ───────────────────────────────────────────
     const refreshPending = useCallback(() => setPendingOrders(getPendingOrders()), [])
@@ -243,6 +264,19 @@ export default function HistoryPage() {
     }, 0), [allOrders, productCountMap])
 
     const totalRevenue = useMemo(() => allOrders.reduce((sum, o) => o.deletedAt ? sum : sum + o.total, 0), [allOrders])
+
+    // Bảng "Trong đó" + biểu đồ giờ của SalesCard. Không dùng giá vốn nên không cần công thức/giá NVL.
+    const { productStats, soldProducts, lineChartData } = useMemo(() => {
+        const extraMaps = buildExtraMaps(productExtras)
+        const agg = aggregateOrderStats({
+            orders: [...baseOrders, ...(isTodayScope ? pendingOrders : [])],
+            productMap: productById,
+            extraPriceMap: extraMaps.priceMap,
+            extraNameMap: extraMaps.nameMap,
+            recipes: [], extraIngredients: {}, ingredientCosts: {},
+        })
+        return { productStats: agg.productStats, soldProducts: agg.soldProducts, lineChartData: buildHourlyLineChart(agg) }
+    }, [baseOrders, pendingOrders, isTodayScope, productById, productExtras])
 
     // ─── Expense data ─────────────────────────────────────────────────
     const baseExpenses = useMemo(() => {
@@ -364,8 +398,17 @@ export default function HistoryPage() {
             {activeTab === 'sales' && (
                 <OrdersList
                     orders={allOrders}
-                    totalCups={totalCups}
-                    totalRevenue={totalRevenue}
+                    summary={
+                        <SalesCard
+                            totalCups={totalCups}
+                            products={products}
+                            soldProducts={soldProducts}
+                            totalRevenue={totalRevenue}
+                            productStats={productStats}
+                            lineChartData={lineChartData}
+                            showChart={scope !== 'week' && scope !== 'month'}
+                        />
+                    }
                     isLoading={isTodayScope ? isLoadingHistory : isLoadingRangeOrders}
                     isTodayScope={isTodayScope}
                     justArrivedIds={isTodayScope ? justArrivedIds : null}
@@ -373,8 +416,8 @@ export default function HistoryPage() {
                     isSyncing={isSyncing}
                     onRetrySync={handleRetrySync}
                     onDeleteOffline={handleDeleteOffline}
-                    onDeleteOrder={handleDeleteOrder}
-                    onUpdateDiscount={handleUpdateOrderDiscount}
+                    onDeleteOrder={deleteOrder}
+                    onUpdateDiscount={updateOrderDiscount}
                     deletingId={deletingId}
                     setDeletingId={setDeletingId}
                 />

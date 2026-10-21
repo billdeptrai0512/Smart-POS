@@ -1,6 +1,7 @@
 import { memo, useState, useRef } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { formatVND } from '../../utils'
+import { STORAGE_KEYS } from '../../constants/storageKeys'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import CupsRevenueSummary from '../common/CupsRevenueSummary'
 import type { Row } from '../../types/domain'
@@ -31,6 +32,12 @@ function SalesCard({
     lineChartData,
     showChart = true,
 }: Props) {
+    const [open, setOpen] = useState(() => localStorage.getItem(STORAGE_KEYS.SALES_CARD_COLLAPSED) !== '1')
+    const toggleOpen = () => {
+        const next = !open
+        setOpen(next)
+        localStorage.setItem(STORAGE_KEYS.SALES_CARD_COLLAPSED, next ? '0' : '1')
+    }
     const [expandedId, setExpandedId] = useState<string | null>(null)
     const [showAllProducts, setShowAllProducts] = useState(false)
     // Tap a column to pin its tooltip; tap it again (or anywhere else) to close.
@@ -51,9 +58,18 @@ function SalesCard({
 
     return (
         <div className="bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col gap-4">
-            <CupsRevenueSummary cups={totalCups} revenue={totalRevenue} />
+            <button
+                type="button"
+                onClick={toggleOpen}
+                aria-expanded={open}
+                aria-label={open ? 'Thu gọn' : 'Mở rộng'}
+                className="flex items-center gap-2 w-full text-left"
+            >
+                <div className="flex-1 min-w-0"><CupsRevenueSummary cups={totalCups} revenue={totalRevenue} /></div>
+                <ChevronDown size={16} className={`shrink-0 text-text-secondary transition-transform ${open ? 'rotate-180' : ''}`} />
+            </button>
 
-            {rankedProducts.length > 0 && (<>
+            {open && rankedProducts.length > 0 && (<>
                 <div className="h-[1px] bg-border/30 -mx-1" />
                 <div>
                     <div className="flex items-center justify-between mb-2">
@@ -111,7 +127,7 @@ function SalesCard({
             </>)}
 
             {/* Revenue chart — hidden on range scopes (bar chart shown separately) */}
-            {showChart && (<>
+            {open && showChart && (<>
             <div>
                 {lineChartData.length > 0 ? (
                     <div

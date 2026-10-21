@@ -24,6 +24,9 @@ export const STORAGE_KEYS = {
     PENDING_ORDERS: 'coffee_pending_orders',
     PENDING_TABLE_CLOSES: 'coffee_pending_table_closes', // lệnh tính tiền bàn lúc mất mạng
 
+    // UI: thẻ tổng kết Nhật ký đang thu nhỏ ('1') hay mở — nhớ theo máy
+    SALES_CARD_COLLAPSED: 'sales_card_collapsed',
+
     // PWA
     PWA_PROMPT_DISMISSED: 'pwa_prompt_dismissed',
     PWA_INSTALLED_TRACKED: 'pwa_installed_tracked', // đã báo installed_at 1 lần, khỏi gọi lại mỗi lần mở app

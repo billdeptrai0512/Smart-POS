@@ -821,8 +821,10 @@ export function POSProvider() {
                 invalidateDailyContext(addressId)
             }
             showToast('Đã cập nhật giảm giá', 'success')
+            return true
         } catch (err) {
             showError(err, 'Cập nhật giảm giá')
+            return false
         }
     }
 

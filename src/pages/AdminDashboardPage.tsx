@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { fetchAdminDashboard, fetchAdminBranchStages } from '../services/adminDashboardService'
+import { fetchAdminDashboard, fetchAdminBranchStages, type BranchStages } from '../services/adminDashboardService'
 import { fetchGuestOnboardingFunnel, fetchLoginPageVisits } from '../services/onboardingFunnelService'
 import { timeStringVN } from '../utils/dateVN'
 import MonetizationToggle from '../components/AdminDashboardPage/MonetizationToggle'
@@ -86,7 +86,7 @@ export default function AdminDashboardPage() {
     // Phễu guest (byRange: 1 lần gọi trả cả today/week/all) và giai đoạn chi nhánh fetch song song với overview.
     // Hai RPC này lỗi/chưa apply → null → ẩn hẳn thẻ, không hỏng phần còn lại của dashboard.
     const [byRange, setByRange] = useState<Record<string, GuestFunnel> | null>(null)
-    const [stages, setStages] = useState<Record<string, number> | null>(null)
+    const [stages, setStages] = useState<BranchStages | null>(null)
     const [visits, setVisits] = useState<Record<string, number> | null>(null)
 
     const reload = useCallback(() => {
@@ -130,7 +130,7 @@ export default function AdminDashboardPage() {
     )
 }
 
-function DashboardBody({ data, byRange, stages, visits }: { data: DashboardData; byRange: Record<string, GuestFunnel> | null; stages: Record<string, number> | null; visits: Record<string, number> | null }) {
+function DashboardBody({ data, byRange, stages, visits }: { data: DashboardData; byRange: Record<string, GuestFunnel> | null; stages: BranchStages | null; visits: Record<string, number> | null }) {
     const { attention, activity, attention_total_count } = data
     // total_count = đếm không giới hạn (đã dedupe theo chi nhánh) từ RPC; attention (mảng) chỉ là top-20
     // hiển thị nên KHÔNG dùng .length làm KPI — sẽ undercount khi > 20 chi nhánh cần chú ý.
@@ -354,8 +354,9 @@ const BRANCH_STAGES = [
     { key: 'expired_post', label: 'Ngưng sử dụng sau khi trả phí', cls: 'bg-text-dim' },
 ] as const
 
-function BranchStageCard({ stages }: { stages: Record<string, number> }) {
+function BranchStageCard({ stages }: { stages: BranchStages }) {
     const total = BRANCH_STAGES.reduce((n, s) => n + (stages[s.key] ?? 0), 0)
+    const [open, setOpen] = useState<Record<string, boolean>>({})
 
     return (
         <div className={CARD}>
@@ -363,7 +364,23 @@ function BranchStageCard({ stages }: { stages: Record<string, number> }) {
             <div className="flex flex-col gap-3">
                 {BRANCH_STAGES.map((s) => {
                     const count = stages[s.key] ?? 0
-                    return <FunnelStageRow key={s.key} dotClass={s.cls} label={s.label} count={count} pct={total > 0 ? Math.round((count / total) * 100) : 0} />
+                    const names = stages.lists?.[s.key] ?? []
+                    const row = <FunnelStageRow dotClass={s.cls} label={s.label} count={count} pct={total > 0 ? Math.round((count / total) * 100) : 0} />
+                    return (
+                        <div key={s.key}>
+                            <button disabled={names.length === 0} onClick={() => setOpen((o) => ({ ...o, [s.key]: !o[s.key] }))} className="w-full text-left hover:opacity-80 transition-opacity">{row}</button>
+                            {open[s.key] && names.length > 0 && (
+                                <ul className="mt-2 pl-3 border-l-2 border-border/60 flex flex-col gap-1">
+                                    {names.map((n, i) => (
+                                        <li key={i} className="text-[12px] text-text-secondary flex items-baseline justify-between gap-2">
+                                            <span className="min-w-0 truncate">{n.name}</span>
+                                            {n.group && <span className="shrink-0 text-[10px] font-bold text-primary">Kho chung: {n.group}</span>}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    )
                 })}
             </div>
         </div>

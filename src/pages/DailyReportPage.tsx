@@ -3,7 +3,7 @@ import { useHistory } from '../contexts/HistoryContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { formatVNDInput, parseVNDInput } from '../utils'
-import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart, splitExpenses } from '../utils/reportStats'
+import { aggregateOrderStats, buildExtraMaps, splitExpenses } from '../utils/reportStats'
 import { getPendingOrders } from '../hooks/useOfflineSync'
 import { fetchDailyReportContext, fetchIngredientStocks, invalidateDailyContext, editIngredientRestock, fetchIngredientRestockHistory, insertShiftClosing, updateShiftClosing } from '../services/orderService'
 import { buildCashPayload } from '../services/reportService'
@@ -24,7 +24,6 @@ import { useDateScope } from '../hooks/useDateScope'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
 import HistoryHeader from '../components/HistoryPage/HistoryHeader'
-import SalesCard from '../components/DailyReportPage/SalesCard'
 import CashFlowCard from '../components/DailyReportPage/CashFlowCard'
 import ExpenseEditorModal from '../components/DailyReportPage/ExpenseEditorModal'
 import FinanceCards from '../components/DailyReportPage/FinanceCards'
@@ -348,7 +347,7 @@ export default function DailyReportPage() {
     const extraMaps = useMemo(() => buildExtraMaps(productExtras), [productExtras])
 
     // All heavy stats: only reruns when orders/recipes/products change, NOT on UI state changes
-    const { totalRevenue, totalDiscount, totalCOGS, productStats, soldProducts, lineChartData, offlineToday } = useMemo(() => {
+    const { totalRevenue, totalDiscount, totalCOGS, productStats, offlineToday } = useMemo(() => {
         const pending = isTodayScope ? getPendingOrders() : []
         const offlineToday = pending.filter(o => isSameDayVN(new Date(o.createdAt), new Date()))
 
@@ -365,8 +364,6 @@ export default function DailyReportPage() {
             totalDiscount: agg.totalDiscount,
             totalCOGS: agg.totalCOGS,
             productStats: agg.productStats,
-            soldProducts: agg.soldProducts,
-            lineChartData: buildHourlyLineChart(agg),
             offlineToday,
         }
     }, [displayOrders, productMap, extraMaps, recipes, extraIngredients, ingredientCosts, isTodayScope])
@@ -709,6 +706,7 @@ export default function DailyReportPage() {
                                 actualCash={actualCash}
                                 actualTransfer={actualTransfer}
                                 dailyExpense={dailyExpense}
+                                revenue={totalRevenue}
                                 refillFreeForm={refillFreeForm}
                                 expenses={displayExpenses}
                                 payments={displayPayments}
@@ -730,25 +728,14 @@ export default function DailyReportPage() {
                                 onPreviewClose={() => setPrintPreview(false)}
                                 onPrintError={e => showError(e, 'In báo cáo')}
                             >
-                                <div className="flex flex-col gap-4">
-                                    <SalesCard
-                                        totalCups={totalCups}
+                                {isRangeScope && (
+                                    <DayPerformanceChart
+                                        orders={displayOrders}
+                                        range={scope}
+                                        start={rangeStart}
                                         products={products}
-                                        soldProducts={soldProducts}
-                                        totalRevenue={totalRevenue}
-                                        productStats={productStats}
-                                        lineChartData={lineChartData}
-                                        showChart={!isRangeScope}
                                     />
-                                    {isRangeScope && (
-                                        <DayPerformanceChart
-                                            orders={displayOrders}
-                                            range={scope}
-                                            start={rangeStart}
-                                            products={products}
-                                        />
-                                    )}
-                                </div>
+                                )}
                             </CashFlowCard>
                         )}
 

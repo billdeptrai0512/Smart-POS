@@ -355,16 +355,24 @@ export async function fetchOrdersByRange(addressId: UUID | null, start: Date, en
                 })
                 .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         }
-        let query = supabase
-            .from('orders')
-            .select(`id, order_no, total, total_cost, discount_amount, payment_method, staff_name, table_name, created_at, deleted_at, deleted_by, print_count,
-                order_items(id, quantity, options, product_id, unit_cost, extra_ids, topping_ids, discount_amount, note, products(name))`)
-            .gte('created_at', start.toISOString())
-            .lte('created_at', end.toISOString())
-        if (addressId) query = query.eq('address_id', addressId)
-        const { data, error } = await query.order('created_at', { ascending: false })
-        if (error) { console.error('fetchOrdersByRange error:', error); return [] }
-        return data || []
+        // Phân trang vì PostgREST cắt ở 1000 dòng: tháng đông khách bị cắt âm thầm = thiếu đơn,
+        // sai tổng/biểu đồ (xem fetchOrdersSince). `id` làm khoá phụ để trang không trùng/sót khi cùng created_at.
+        const PAGE = 1000
+        const out: any[] = []
+        for (let from = 0; ; from += PAGE) {
+            let query = supabase
+                .from('orders')
+                .select(`id, order_no, total, total_cost, discount_amount, payment_method, staff_name, table_name, created_at, deleted_at, deleted_by, print_count,
+                    order_items(id, quantity, options, product_id, unit_cost, extra_ids, topping_ids, discount_amount, note, products(name))`)
+                .gte('created_at', start.toISOString())
+                .lte('created_at', end.toISOString())
+            if (addressId) query = query.eq('address_id', addressId)
+            const { data, error } = await query
+                .order('created_at', { ascending: false }).order('id').range(from, from + PAGE - 1)
+            if (error) { console.error('fetchOrdersByRange error:', error); return [] }
+            out.push(...(data || []))
+            if ((data?.length ?? 0) < PAGE) return out
+        }
     })
 }
 
