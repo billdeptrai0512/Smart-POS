@@ -73,9 +73,8 @@ export const mergeUsage = (a: UsageMap, b: UsageMap): UsageMap => {
 export function productionLogEntries(rows: (ProductionRow & Row)[], ingredient: string, addressId: string | null): Row[] {
     const out: Row[] = []
     for (const p of rows) {
-        if (p.cancelled_at) continue
         const base = { created_at: p.created_at, is_production: true, staff_name: p.staff_name ?? null, address_id: addressId }
-        const meta = { batches: Number(p.batches) || 0, product: p.output_ingredient, outputQty: Number(p.output_qty) || 0, inputs: p.inputs || {} }
+        const meta = { batchId: p.id, cancelled: !!p.cancelled_at, batches: Number(p.batches) || 0, product: p.output_ingredient, outputQty: Number(p.output_qty) || 0, inputs: p.inputs || {} }
         if (p.output_ingredient === ingredient) out.push({ ...base, id: `pb-${p.id}-out`, metadata: { ...meta, role: 'output', qty: meta.outputQty } })
         const used = Number(p.inputs?.[ingredient])
         if (used > 0) out.push({ ...base, id: `pb-${p.id}-in`, metadata: { ...meta, role: 'input', qty: used } })

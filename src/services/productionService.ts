@@ -4,12 +4,14 @@ import type { UUID, Row } from '../types/domain'
 import type { ProductionRow } from '../utils/production'
 
 // Các mẻ sản xuất còn hiệu lực từ 00:00 VN của `fromDay` ('YYYY-MM-DD') tới nay. Lỗi / bảng chưa migrate (20261027) → []:
-// trang tồn kho không được hỏng vì tính năng này.
-export async function fetchProduction(addressId: UUID, fromDay: string): Promise<(ProductionRow & Row)[]> {
+// trang tồn kho không được hỏng vì tính năng này. withCancelled: Nhật ký còn hiện cả mẻ đã hủy (mờ) để có dấu vết.
+export async function fetchProduction(addressId: UUID, fromDay: string, withCancelled = false): Promise<(ProductionRow & Row)[]> {
     if (localRepo.isGuest()) return []
-    const { data, error } = await supabase.from('production_batches')
+    let q = supabase.from('production_batches')
         .select('id, product_id, created_at, output_ingredient, batches, output_qty, inputs, staff_name, cancelled_at')
-        .eq('address_id', addressId).is('cancelled_at', null)
+        .eq('address_id', addressId)
+    if (!withCancelled) q = q.is('cancelled_at', null)
+    const { data, error } = await q
         .gte('created_at', new Date(`${fromDay}T00:00:00+07:00`).toISOString())
         .order('created_at', { ascending: false })
     if (error) { console.error('fetchProduction', error); return [] }

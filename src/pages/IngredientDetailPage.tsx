@@ -37,7 +37,7 @@ import { calcRangeWithLabel } from '../utils/rangeCalc'
 import { useDateScope } from '../hooks/useDateScope'
 import { DateRangePicker } from '../components/HistoryPage/HistoryHeader'
 import { fetchPackedConfirmations } from '../services/warehouseTransferService'
-import { fetchProduction } from '../services/productionService'
+import { fetchProduction, cancelProductionBatch } from '../services/productionService'
 import { productionLogEntries } from '../utils/production'
 import type { Row, UUID } from '../types/domain'
 
@@ -48,7 +48,7 @@ export default function IngredientDetailPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const { ingredientKey } = useParams() as { ingredientKey: string }
-    const { ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, refreshProducts, recipes } = useProducts()
+    const { ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, refreshProducts, refreshProduction, recipes } = useProducts()
     const calcRef = useCounterCalc()
     const { addressId, selectedAddress, siblingsByAddress } = useAddress()
     const warehouseSiblings = addressId ? siblingsByAddress[addressId] : null
@@ -151,7 +151,7 @@ export default function IngredientDetailPage() {
             // Người xác nhận SOẠN (ngày trước) của từng lượt rút — chỉ nhóm kho chung có; lỗi/chưa có phiếu thì bỏ qua.
             groupAddressIds.length > 1 ? fetchPackedConfirmations(groupAddressIds, ingredientKey, fromDate, toDate).catch(() => []) : Promise.resolve([]),
             // Mẻ sản xuất của địa chỉ này (thành phẩm làm ra / nguyên liệu gốc đã dùng) — lỗi thì chỉ thiếu dòng này, không hỏng nhật ký.
-            addressId ? fetchProduction(addressId, dateStringVN(new Date(fromDate))).catch(() => []) : Promise.resolve([]),
+            addressId ? fetchProduction(addressId, dateStringVN(new Date(fromDate)), true).catch(() => []) : Promise.resolve([]),
         ])
         const toMs = new Date(toDate).getTime()
         const productionEntries = productionLogEntries(production, ingredientKey, addressId).filter(e => new Date(e.created_at).getTime() <= toMs)
@@ -349,6 +349,15 @@ export default function IngredientDetailPage() {
             await Promise.all([reloadHistory(), refreshTodayExpenses?.()])
             setPaymentInvoice(null)
             showToast('Đã ghi nhận thanh toán', 'success')
+        })
+    }
+
+    async function handleCancelProduction(entry: Row) {
+        if (!await confirm({ title: 'Hủy mẻ này?', detail: 'Nguyên liệu và thành phẩm sẽ được hoàn lại như chưa làm.', danger: true, confirmLabel: 'Hủy mẻ' })) return
+        await withSaving('Hủy mẻ sản xuất', async () => {
+            await cancelProductionBatch(entry.metadata.batchId)
+            await Promise.all([reloadHistory(), reloadStock(), refreshProduction?.()])
+            showToast('Đã hủy mẻ sản xuất', 'success')
         })
     }
 
@@ -573,6 +582,7 @@ export default function IngredientDetailPage() {
                         onCancelRestock={canEdit ? handleCancelRestock : undefined}
                         onEditRestock={canEdit ? setEditingEntry : undefined}
                         addressNameById={groupAddressIds.length > 1 ? addressNameById : null}
+                        onCancelProduction={canEdit ? handleCancelProduction : undefined}
                         ingredientUnits={ingredientUnits}
                         onOpenIngredient={key => navigate(`/inventory/stocking/${encodeURIComponent(key)}?tab=history&scope=month`, { state: location.state })}
                     />

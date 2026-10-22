@@ -31,6 +31,7 @@ interface Props extends PackProps {
     /** Đơn vị từng nguyên liệu + lối mở nhật ký của nguyên liệu khác — cho thẻ Sản xuất (công thức / thành phẩm liên quan). */
     ingredientUnits?: Record<string, string>
     onOpenIngredient?: (key: string) => void
+    onCancelProduction?: (entry: Row) => void
 }
 
 // Monthly restock log for one ingredient. Card layout mirrors /history's
@@ -47,7 +48,7 @@ export default function IngredientHistoryTab({
     rangeLabel,
     onOpenPayment, onCancelRestock, onEditRestock,
     addressNameById, // {id: name} — chỉ truyền khi địa chỉ thuộc 1 warehouse group (kho tổng chung)
-    ingredientUnits, onOpenIngredient,
+    ingredientUnits, onOpenIngredient, onCancelProduction,
 }: Props) {
     return (
         <>
@@ -70,6 +71,7 @@ export default function IngredientHistoryTab({
                             unit={unit}
                             unitOf={k => ingredientUnits?.[k] || ''}
                             onOpenIngredient={onOpenIngredient}
+                            onCancel={onCancelProduction}
                             addressName={addressNameById?.[entry.address_id]}
                         />
                     ) : (
@@ -358,16 +360,19 @@ function Pill({ tone, children, onClick }: { tone: 'success' | 'warning' | 'prim
 // ── Production card ─────────────────────────────────────────────────────────
 // Mẻ sản xuất nhìn từ MỘT nguyên liệu: thành phẩm thì "Sản xuất +qty" + công thức đã dùng; nguyên liệu gốc thì
 // "Dùng sản xuất −qty" + thành phẩm đã làm. Mỗi nguyên liệu liên quan là một chip bấm vào được → nhật ký của nó.
-// Chỉ để xem: không tiền, không tồn kho tổng, hủy mẻ ở thẻ "Sản xuất thành phẩm" (Kiểm kê).
-function ProductionCard({ entry, unit, unitOf, onOpenIngredient, addressName }: { entry: Row; unit: string; unitOf: (key: string) => string; onOpenIngredient?: (key: string) => void; addressName?: string }) {
+// Không tiền, không tồn kho tổng. Hủy mẻ (quản lý) ở đây hoặc ở thẻ "Sản xuất thành phẩm" (Kiểm kê); mẻ đã hủy vẫn hiện mờ để có dấu vết.
+function ProductionCard({ entry, unit, unitOf, onOpenIngredient, onCancel, addressName }: { entry: Row; unit: string; unitOf: (key: string) => string; onOpenIngredient?: (key: string) => void; onCancel?: (entry: Row) => void; addressName?: string }) {
     const d = new Date(entry.created_at)
-    const { role, qty, batches, product, outputQty, inputs } = entry.metadata as { role: 'output' | 'input'; qty: number; batches: number; product: string; outputQty: number; inputs: Record<string, number> }
+    const { role, qty, batches, product, outputQty, inputs, cancelled } = entry.metadata as { cancelled: boolean; role: 'output' | 'input'; qty: number; batches: number; product: string; outputQty: number; inputs: Record<string, number> }
     const made = role === 'output'
     const round = (n: number) => Math.round(n * 10) / 10
     const chip = (key: string, text: string) => <IngredientLogChip key={key} text={text} onOpen={onOpenIngredient && (() => onOpenIngredient(key))} />
     return (
-        <div className="bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-3">
-            <div className="flex items-start justify-between gap-2">
+        <div className={`bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-3 relative overflow-hidden ${cancelled ? 'opacity-50 grayscale select-none' : ''}`}>
+            {cancelled && (
+                <div className="absolute top-0 left-0 bg-danger/20 text-danger text-[10px] font-black px-3 py-1 rounded-br-[14px] uppercase tracking-wider z-10">ĐÃ HỦY</div>
+            )}
+            <div className={`flex items-start justify-between gap-2 ${cancelled ? 'mt-4' : ''}`}>
                 <div className="flex items-center gap-1.5">
                     <span className={`${TIME_PILL} tabular-nums`}>{dateShortVN(d)}</span>
                     <span className={`${TIME_PILL} tabular-nums`}>{timeStringVN(d)}</span>
@@ -377,7 +382,7 @@ function ProductionCard({ entry, unit, unitOf, onOpenIngredient, addressName }: 
                         {made ? 'Sản xuất' : 'Dùng sản xuất'}
                     </span>
                     <span className={`${TYPE_PILL} tabular-nums text-text`}>
-                        {made ? '+' : '−'}{round(qty)} {unit}
+                        <span className={cancelled ? 'line-through' : ''}>{made ? '+' : '−'}{round(qty)} {unit}</span>
                     </span>
                 </div>
             </div>
@@ -393,9 +398,16 @@ function ProductionCard({ entry, unit, unitOf, onOpenIngredient, addressName }: 
                 </div>
             </div>
             <div className="h-[1px] bg-border/40" />
-            <div className="flex flex-wrap items-center gap-1.5">
-                {addressName && <span className={META_PILL}>{addressName}</span>}
-                <span className={META_PILL}>{entry.staff_name || '—'}</span>
+            <div className="flex justify-between items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                    {addressName && <span className={META_PILL}>{addressName}</span>}
+                    <span className={META_PILL}>{entry.staff_name || '—'}</span>
+                </div>
+                {onCancel && !cancelled && (
+                    <button type="button" onClick={() => onCancel(entry)} aria-label="Hủy mẻ" className={`${ROUND_ICON_BTN} text-text-dim hover:text-danger active:scale-95`}>
+                        <Trash2 size={13} />
+                    </button>
+                )}
             </div>
         </div>
     )

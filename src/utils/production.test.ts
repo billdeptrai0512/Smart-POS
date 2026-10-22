@@ -24,10 +24,11 @@ describe('production usage', () => {
 
 describe('productionLogEntries', () => {
     const rows = [{ ...at('2026-10-18T03:00:00Z'), id: 'm1', batches: 2 }, { ...at('2026-10-18T04:00:00Z', { cancelled_at: 'x' }), id: 'm2', batches: 1 }] as never
-    it('thành phẩm: 1 dòng "output" kèm công thức; nguyên liệu gốc: 1 dòng "input"; mẻ hủy bỏ qua; ngoài mẻ không có gì', () => {
+    it('thành phẩm: dòng "output" kèm công thức; nguyên liệu gốc: dòng "input"; mẻ hủy vẫn có dòng nhưng đánh dấu cancelled; ngoài mẻ không có gì', () => {
         const out = productionLogEntries(rows, 'tp', 'addr')
-        expect(out).toHaveLength(1)
-        expect(out[0].metadata).toMatchObject({ role: 'output', qty: 600, batches: 2, inputs: { a: 250, b: 100 } })
+        expect(out).toHaveLength(2)
+        expect(out[0].metadata).toMatchObject({ role: 'output', qty: 600, batches: 2, inputs: { a: 250, b: 100 }, cancelled: false })
+        expect(out[1].metadata.cancelled).toBe(true)
         expect(productionLogEntries(rows, 'a', 'addr')[0].metadata).toMatchObject({ role: 'input', qty: 250, product: 'tp' })
         expect(productionLogEntries(rows, 'zzz', 'addr')).toEqual([])
     })
