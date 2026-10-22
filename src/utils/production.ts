@@ -58,6 +58,17 @@ export function productionAfterCount(stockRows: Row[], rows: ProductionRow[] = [
 /** Phần thành phẩm làm ra trong tiêu hao ròng (số âm) → { ingredient: lượng dương } — hiện như "Nhập thêm" của thành phẩm. */
 export const madeOf = (net: UsageMap): UsageMap => Object.fromEntries(Object.entries(net).filter(([, v]) => v < 0).map(([k, v]) => [k, -v]))
 
+/** Thành phẩm làm ra trong kỳ kiểm kê nhiều ngày: các mẻ SAU ngày đếm (`since`) tới hết hôm qua, theo từng thành phẩm. */
+export function madeInPeriods(rows: ProductionRow[] = [], periods: Record<string, { since: string }>, today: string): UsageMap {
+    const out: UsageMap = {}
+    for (const p of rows) {
+        const since = periods[p.output_ingredient]?.since
+        const day = dateStringVN(new Date(p.created_at))
+        if (!p.cancelled_at && since && day > since && day < today) out[p.output_ingredient] = (out[p.output_ingredient] ?? 0) + Number(p.output_qty)
+    }
+    return round(out)
+}
+
 /** Gộp `a` + `b` theo từng nguyên liệu (dùng cộng afterCount của đơn với của mẻ). */
 export const mergeUsage = (a: UsageMap, b: UsageMap): UsageMap => {
     const out = { ...a }

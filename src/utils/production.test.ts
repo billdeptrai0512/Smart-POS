@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { productionUsage, overlayProduction, productionAfterCount, productionLogEntries, type ProductionRow } from './production'
+import { productionUsage, overlayProduction, productionAfterCount, productionLogEntries, madeInPeriods, type ProductionRow } from './production'
 import { dateStringVN } from './dateVN'
 
 const at = (iso: string, extra: Partial<ProductionRow> = {}): ProductionRow =>
@@ -31,5 +31,13 @@ describe('productionLogEntries', () => {
         expect(out[1].metadata.cancelled).toBe(true)
         expect(productionLogEntries(rows, 'a', 'addr')[0].metadata).toMatchObject({ role: 'input', qty: 250, product: 'tp' })
         expect(productionLogEntries(rows, 'zzz', 'addr')).toEqual([])
+    })
+})
+
+describe('madeInPeriods', () => {
+    it('chỉ tính mẻ SAU ngày đếm và trước hôm nay, bỏ mẻ hủy và thành phẩm không có kỳ', () => {
+        const day = (d: string) => `${d}T05:00:00Z`
+        const rows = [at(day('2026-10-18')), at(day('2026-10-19')), at(day('2026-10-20'), { cancelled_at: 'x' }), at(day('2026-10-22')), at(day('2026-10-19'), { output_ingredient: 'khac' })]
+        expect(madeInPeriods(rows, { tp: { since: '2026-10-18' } }, '2026-10-22')).toEqual({ tp: 600 })
     })
 })

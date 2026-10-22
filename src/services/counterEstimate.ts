@@ -76,6 +76,7 @@ function withProducedRows(rows: Row[], production: ProductionRow[] = []): Row[] 
     const added = Object.entries(first).map(([ingredient, day]) => ({
         ingredient, current_stock: 0, restocked_qty: 0, warehouse_stock: 0, counter_stock: 0, warehouse_stock_set: false, counter_stock_set: false,
         counter_counted_on: dateStringVN(addDaysVN(new Date(`${day}T12:00:00+07:00`), -1)), counter_counted_at: null, restock_since_count: 0,
+        from_production: true,   // ngày "đếm" là giả (mốc để ước tính) — UI không được gọi nó là lần kiểm kê
     }))
     return added.length ? [...rows, ...added] : rows
 }

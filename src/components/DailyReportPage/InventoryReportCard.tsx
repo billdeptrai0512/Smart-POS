@@ -33,6 +33,7 @@ interface Props {
     warehouseStocks?: UsageMap
     ingredientUnits?: Record<string, string>
     usedMap?: UsageMap
+    periodMadeMap?: UsageMap   // như madeMap nhưng cho các ngày trong kỳ kiểm kê nhiều ngày (sau ngày đếm → hết hôm qua)
     madeMap?: UsageMap       // ingredient → lượng thành phẩm làm ra hôm nay (mẻ sản xuất); đã nằm trong usedMap dưới dạng âm
     consumptionBreakdown?: ConsumptionBreakdown
     ingredientToProduct?: IngredientToProduct
@@ -77,6 +78,7 @@ export default function InventoryReportCard({
     ingredientUnits = {},
     usedMap = {},            // ingredient → todayEstimatedConsumption qty
     madeMap = {},
+    periodMadeMap = {},
     consumptionBreakdown = {}, // ingredient → { [variantKey]: { name, qty, totalAmount } } for expand-on-tap
     ingredientToProduct = {}, // ingredient → { amountPerCup, productName } for "Tương đương N ly" label
     isSubmitting,
@@ -203,6 +205,7 @@ export default function InventoryReportCard({
             warehouseAvailable={warehouseStocks[ing.ingredient]}
             used={lookupByLabel(ing.ingredient, usedMap)}
             made={lookupByLabel(ing.ingredient, madeMap)}
+            periodMade={lookupByLabel(ing.ingredient, periodMadeMap)}
             breakdown={lookupByLabel(ing.ingredient, consumptionBreakdown) || null}
             period={openingPeriods[ing.ingredient]}
             productRef={ingredientToProduct[ing.ingredient]}
@@ -295,6 +298,7 @@ interface RowProps {
     warehouseAvailable?: number
     used: number
     made: number
+    periodMade: number
     breakdown: ConsumptionBreakdown[string] | null
     period?: OpeningPeriods[string]
     productRef?: IngredientToProduct[string]
@@ -309,7 +313,7 @@ interface RowProps {
 
 const IngredientRow = memo(function IngredientRow({
     ing, ingredientUnits, openingValue, openingFallback, isLocked, restockValue, inventoryValue,
-    warehouseAvailable, used, made, breakdown, period, productRef,
+    warehouseAvailable, used, made, periodMade, breakdown, period, productRef,
     isSubmitting, lockWarehouseInputs, readOnly,
     onOpeningChange, onRestockChange, onInventoryChange,
     hint,
@@ -359,8 +363,9 @@ const IngredientRow = memo(function IngredientRow({
         ? computeBalance({ inventoryValue, restockValue: restockTotal, openingValue: p.counted, used: r1(used) + p.used })
         : computeBalance({ inventoryValue, restockValue, openingValue, openingFallback, used })
     // Thành phẩm / topping: mẻ làm ra chính là "Nhập thêm" của nó (không qua kho tổng), Sử dụng chỉ còn phần bán — Lý thuyết không đổi (usedNum là ròng). Chỉ là cách hiện, không ghi vào ô Nhập thêm đã lưu.
-    const madeNum = p ? 0 : r1(made)
-    const usedShown = r1(usedNum + madeNum)
+    const madeNum = r1(made)
+    const madeAll = p ? r1(madeNum + periodMade) : madeNum   // kỳ nhiều ngày: cộng dồn cả các mẻ của kỳ
+    const usedShown = r1(usedNum + madeAll)
     const haoHutTone = haoHut == null
         ? 'neutral'
         : haoHut === 0 ? 'good' : haoHut < 0 ? 'bad' : 'warn'
@@ -443,7 +448,7 @@ const IngredientRow = memo(function IngredientRow({
                     <div className="grid grid-cols-3 gap-2 mb-2">
                         <TextCell label="Kiểm lần cuối" text={countedLabelVN(p.since)} />
                         <div className="col-span-2">
-                            <TextCell label="Đã nhập thêm" text={`${p.restock} ${unit}`} />
+                            <TextCell label="Đã nhập thêm" text={`${r1(p.restock + periodMade)} ${unit}`} />
                         </div>
                     </div>
                 )}
@@ -535,7 +540,7 @@ const IngredientRow = memo(function IngredientRow({
                 {showLyThuyetInfo && (
                     /* Nhãn trên, số dưới — 1 hàng không wrap kể cả màn 320px */
                     <div className="mt-2 px-2 py-2 bg-surface-light rounded-[10px] border border-border/40 flex items-center justify-between gap-1 text-[10px] leading-tight whitespace-nowrap">
-                        {[['Đầu kỳ', openingNum], ['Nhập thêm', r1(restockTotal + madeNum)], ['Sử dụng', usedShown], ['Lý thuyết', lyThuyet]].map(([label, val], i) => (
+                        {[['Đầu kỳ', openingNum], ['Nhập thêm', r1(restockTotal + madeAll)], ['Sử dụng', usedShown], ['Lý thuyết', lyThuyet]].map(([label, val], i) => (
                             <Fragment key={label}>
                                 {i > 0 && <span className="text-text-secondary">{['+', '−', '='][i - 1]}</span>}
                                 <span className="flex flex-col items-center gap-0.5">

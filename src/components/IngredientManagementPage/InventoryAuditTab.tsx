@@ -22,7 +22,7 @@ import { ingredientLabel } from '../../utils/ingredients'
 import { findIngredientByLabel } from '../../utils/onboardingHint'
 import { isCashFlowProgressDone, isInventoryProgressDone, INVENTORY_ONBOARDING_ITEMS } from '../../utils/onboardingStorage'
 import { dateStringVN, isSameDayVN } from '../../utils/dateVN'
-import { productionOnDay, mergeUsage, madeOf } from '../../utils/production'
+import { productionOnDay, mergeUsage, madeOf, madeInPeriods } from '../../utils/production'
 import TodayProduction from './TodayProduction'
 import InventoryReportCard from '../DailyReportPage/InventoryReportCard'
 import PastInventoryEditor from '../DailyReportPage/PastInventoryEditor'
@@ -100,6 +100,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
         () => isTodayScope ? madeOf(productionOnDay(productionRows, todayISO)) : {},
         [isTodayScope, productionRows, todayISO]
     )
+    const periodMadeMap = useMemo(() => madeInPeriods(productionRows, inventory.openingPeriods, todayISO), [productionRows, inventory.openingPeriods, todayISO])
     const consumptionBreakdown = useMemo(
         () => calculateConsumptionBreakdown(todayOrderItems, recipes, extraIngredients, products, productExtras),
         [todayOrderItems, recipes, extraIngredients, products, productExtras]
@@ -257,6 +258,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                         ingredientUnits={inventoryRowUnits}
                         usedMap={usedMap}
                         madeMap={madeMap}
+                        periodMadeMap={periodMadeMap}
                         consumptionBreakdown={consumptionBreakdown}
                         ingredientToProduct={ingredientToProduct}
                         isSubmitting={isSaving}

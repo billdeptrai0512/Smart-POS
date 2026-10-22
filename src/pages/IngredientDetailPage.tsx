@@ -48,7 +48,7 @@ export default function IngredientDetailPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const { ingredientKey } = useParams() as { ingredientKey: string }
-    const { ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, refreshProducts, refreshProduction, recipes } = useProducts()
+    const { ingredientCosts, ingredientUnits, ingredientConfigs, ingredientGroups, refreshProducts, refreshProduction, recipes, productionRows } = useProducts()
     const calcRef = useCounterCalc()
     const { addressId, selectedAddress, siblingsByAddress } = useAddress()
     const warehouseSiblings = addressId ? siblingsByAddress[addressId] : null
@@ -118,6 +118,7 @@ export default function IngredientDetailPage() {
     // Mặc định true (chưa migrate / phiếu cũ → vẫn kiểm kê).
     const countInAudit = config.count_in_audit ?? true
     const currentStock = stockData?.current_stock ?? null
+    const counted = stockData?.from_production ? null : stockData   // dòng tồn dựng từ mẻ sản xuất không có lần kiểm kê thật
 
     // Stocks only depend on address+key — refetching on month-arrow taps would
     // burn one extra round-trip per nav.
@@ -132,7 +133,7 @@ export default function IngredientDetailPage() {
     useEffect(() => {
         if (!hasAddress || !ingredientKey) return
         fetchStockRow(addressId).then(setStockData)
-    }, [hasAddress, addressId, ingredientKey, fetchStockRow, recipesReady])
+    }, [hasAddress, addressId, ingredientKey, fetchStockRow, recipesReady, productionRows])   // mẻ sản xuất tải/đổi (làm, hủy) → tồn quầy ước tính tính lại
 
     // Đầu ngày/Lấy ra/Nhập mới cho panel Kiểm kê — cùng nguồn dữ liệu với card ở /inventory.
     useEffect(() => {
@@ -560,8 +561,8 @@ export default function IngredientDetailPage() {
                             minCounterStock={minCounterStock}
                             onSaveMinCounter={saveMinCounter}
                             counterStock={stockData?.counter_stock ?? null}
-                            counterCountedOn={stockData?.counter_counted_on ?? null}
-                            counterCountedAt={stockData?.counter_counted_at ?? null}
+                            counterCountedOn={counted?.counter_counted_on ?? null}
+                            counterCountedAt={counted?.counter_counted_at ?? null}
                             currentStock={currentStock}
                             canEdit={canEdit}
                             onSaveCounter={saveCounter}
