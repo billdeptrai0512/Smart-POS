@@ -7,6 +7,7 @@ import { fetchTodayExpenses } from '../../services/expenseService'
 import { buildTodayBoughtMap } from '../../utils/prepToday'
 import type { UsageMap } from '../../utils/inventory'
 import { readJSON, writeJSON } from '../../utils/storage'
+import { fetchRestockSkips, setRestockSkip } from '../../services/restockSkipService'
 import NoticeBar from '../common/NoticeBar'
 import NoticeSheet from '../common/NoticeSheet'
 import { HubBuyBody, buildHubBuyItems, type Prep } from '../IngredientManagementPage/HubBuyNotice'
@@ -35,7 +36,6 @@ export default function AddressNotice() {
     })
     const [loaded, setLoaded] = useState<Record<string, Loaded>>({}) // số liệu chi tiết từng kho — dòng mở rộng đọc lại, khỏi tải lần 2
     const [expanded, setExpanded] = useState<Set<string>>(() => new Set()) // dòng kho đang mở rộng
-
     // Chỉ xét chi nhánh đang hoạt động (có bán hôm nay) — chi nhánh ngưng không đáng báo hết hạn / tồn kho, lại đỡ tốn request.
     // Ngày mới chưa ly nào được bán (stats đã tải nhưng toàn 0) thì không chi nhánh nào "có bán" → danh sách trống 0/0 đúng lúc
     // cần bổ sung tồn kho nhất; lúc đó xét tất cả địa chỉ, sang khi có đơn đầu tiên mới lọc theo doanh số.
@@ -59,12 +59,25 @@ export default function AddressNotice() {
         return out
     }, [addresses, active, warehouseGroups])
 
-    function toggleSkip(unitKey: string, ingredient: string) {
+    // "Bỏ qua" lưu trên server (mọi thiết bị cùng thấy); localStorage chỉ để có số ngay lúc mở trang. Khoá = id địa chỉ đích của kho.
+    const targetIds = useMemo(() => units.map(u => u.target.id), [units])
+    useEffect(() => {
+        if (targetIds.length) fetchRestockSkips(targetIds).then(server => { if (server) saveSkips(() => server) })
+    }, [targetIds])
+
+    function saveSkips(update: (sk: Skips) => Skips) {
         setSkips(sk => {
-            const next = { ...sk, [unitKey]: { ...sk[unitKey], [ingredient]: !sk[unitKey]?.[ingredient] } }
+            const next = update(sk)
             writeJSON(SKIP_KEY, { date: todayKey(), byUnit: next })
             return next
         })
+    }
+
+    function toggleSkip(targetId: string, ingredient: string) {
+        const skipped = !skips[targetId]?.[ingredient]
+        saveSkips(sk => ({ ...sk, [targetId]: { ...sk[targetId], [ingredient]: skipped } }))
+        // Ghi server lỗi (mất mạng / chưa migrate) thì máy này vẫn giữ trạng thái bỏ qua, chỉ không đồng bộ sang máy khác.
+        setRestockSkip(targetId, ingredient, skipped).catch(err => console.error('setRestockSkip', err))
     }
 
     function onStock(key: string, stat: StockStat | null, data: Loaded) {
@@ -99,12 +112,12 @@ export default function AddressNotice() {
                                     <div key={u.key}>
                                         <Row
                                             name={u.name}
-                                            note={st ? `${st.total - st.need}/${st.total} nguyên liệu cần bổ sung` : 'Đang tính…'}
+                                            note={st ? `${st.total - st.need}/${st.total} nguyên liệu cần bổ sung${data ? '' : ' · đang cập nhật…'}` : 'Đang tính…'}
                                             tone={!st ? undefined : st.need === 0 ? 'text-success' : st.need < st.total ? 'text-warning' : 'text-danger'}
                                             chevron={isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                                             onClick={data ? () => setExpanded(e => { const n = new Set(e); if (!n.delete(u.key)) n.add(u.key); return n }) : undefined}
                                         />
-                                        {isOpen && <HubBuyBody addressId={u.target.id} prep={data.prep} bought={data.bought} minAsFloor={!u.hub} skipped={skips[u.key]} onSkip={ing => toggleSkip(u.key, ing)} onAfterRestock={data.refreshBought} />}
+                                        {isOpen && <HubBuyBody addressId={u.target.id} prep={data.prep} bought={data.bought} minAsFloor={!u.hub} skipped={skips[u.target.id]} onSkip={ing => toggleSkip(u.target.id, ing)} onAfterRestock={data.refreshBought} />}
                                     </div>
                                 )
                             })}
@@ -113,7 +126,7 @@ export default function AddressNotice() {
                 </NoticeSheet>
             )}
             {/* Bộ tải nền: mount dần, mỗi lần tối đa STOCK_CONCURRENCY kho đang chạy */}
-            {!statsLoading && units.slice(0, STOCK_CONCURRENCY + Object.keys(loaded).length).map(u => <StockLoader key={u.key} unit={u} skipped={skips[u.key]} onResult={onStock} />)}
+            {!statsLoading && units.slice(0, STOCK_CONCURRENCY + Object.keys(loaded).length).map(u => <StockLoader key={u.key} unit={u} skipped={skips[u.target.id]} onResult={onStock} />)}
         </>
     )
 }

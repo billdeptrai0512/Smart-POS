@@ -26,7 +26,7 @@ interface Props {
     emptyTitle?: string
     emptyHint?: string
     packVerb: string
-    // Card Mua: gộp 4 ô (lưới 2×2) thành 1 hàng 3 nhãn — Tồn kho | Tối thiểu | Ngày mai sử dụng (số = `have`).
+    // Card Mua: gộp 4 ô (lưới 2×2) thành 1 hàng 3 nhãn — Tồn kho | Tối thiểu | Cần rút ra quầy (số = `have`).
     threeFields?: boolean
 }
 
@@ -310,7 +310,7 @@ export default function ShiftPrepCard({
                                         <button type="button" onClick={open} className="col-span-2 grid grid-cols-3 gap-x-3 pt-2.5 border-t border-border/30 text-left active:scale-[0.99] transition">
                                             {it.warehouse != null ? field('Tồn kho', fmt(it.warehouse), false, warehouseCls) : <div />}
                                             {it.minStock > 0 ? field('Tối thiểu', fmt(it.minStock)) : <div />}
-                                            {field('Ngày mai sử dụng', <>{it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}</>, true)}
+                                            {field('Cần rút ra quầy', <>{it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}</>, true)}
                                         </button>
                                     ) : (
                                         <button type="button" onClick={open} className="col-span-2 grid grid-cols-2 gap-x-3 gap-y-2.5 pt-2.5 border-t border-border/30 text-left active:scale-[0.99] transition">
