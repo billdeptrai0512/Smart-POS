@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { formatVND } from '../../utils'
-import { ingredientLabel } from '../../utils/ingredients'
+import { ingredientLabel, normalizeSearchText } from '../../utils/ingredients'
 import { onboardingHintClass } from '../../utils/onboardingHint'
 import { SignedBox, SIGNED_INPUT_CLASS } from './SignedMoneyInput'
 import IngredientPicker from './IngredientPicker'
@@ -12,6 +12,9 @@ interface Props {
     dbIngredients: string[]
     getUnit: (ingredient: string) => string
     categoryOf?: (ingredient: string) => string | null | undefined
+    /** Nhóm nguyên liệu (đã sắp thứ tự) + nhóm của từng nguyên liệu: bảng chọn chia theo nhóm thay vì 1 dải dài. */
+    groups?: { id: string; name: string }[] | null
+    groupIdOf?: (ingredient: string) => string | null | undefined
     ingredientCosts?: Record<string, number>
     canEdit?: boolean
     showCost?: boolean
@@ -37,13 +40,14 @@ const CATS = [
 // category — tap to add, then type the quantity. No name-typing in the daily flow.
 // Each category has its own "create new" so a brand-new ingredient lands in the right one.
 export default function FastIngredientFill({
-    entries, dbIngredients, getUnit, categoryOf = () => 'main',
+    entries, dbIngredients, getUnit, categoryOf = () => 'main', groups, groupIdOf,
     ingredientCosts, canEdit, showCost = false, allowNegative = false,
     baseAmounts, onSetAmount, onRemove, onAddCustom, hint = false,
     addOpen: addOpenProp, onAddOpenChange,
 }: Props) {
     const [revealed, setRevealed] = useState<Set<string>>(() => new Set()) // chip-tapped, not yet saved
     const [creatingCat, setCreatingCat] = useState<string | null>(null) // 'main' | 'packaging' while typing a new name
+    const [query, setQuery] = useState('')
     const [addOpenLocal, setAddOpenLocal] = useState(false) // chip palette hidden until tapped — keeps the screen tidy
     const addOpen = addOpenProp ?? addOpenLocal
     const setAddOpen = onAddOpenChange ?? setAddOpenLocal
@@ -68,8 +72,14 @@ export default function FastIngredientFill({
     const drop = (k: string) => setRevealed(prev => { const n = new Set(prev); n.delete(k); return n })
 
     const available = dbIngredients.filter(k => !rowKeys.includes(k))
+    const q = normalizeSearchText(query)
     const itemsOf = (catKey: string) => available.filter(k =>
-        catKey === 'packaging' ? categoryOf(k) === 'packaging' : categoryOf(k) !== 'packaging')
+        (catKey === 'packaging' ? categoryOf(k) === 'packaging' : categoryOf(k) !== 'packaging') && (!q || normalizeSearchText(ingredientLabel(k)).includes(q)))
+    const bucketsOf = (items: string[]) => {
+        if (!groups?.length || !groupIdOf) return [{ id: 'all', name: '', items }]
+        const byGroup = groups.map(g => ({ id: g.id, name: g.name, items: items.filter(k => groupIdOf(k) === g.id) }))
+        return [...byGroup, { id: 'none', name: 'Chưa phân nhóm', items: items.filter(k => !groups.some(g => g.id === groupIdOf(k))) }].filter(b => b.items.length)
+    }
 
     return (
         <div className="space-y-2">
@@ -102,19 +112,42 @@ export default function FastIngredientFill({
                 </button>
             )}
 
-            {canEdit && addOpen && CATS.map(cat => (
+            {canEdit && addOpen && available.length > 8 && (
+                <input
+                    type="search"
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    placeholder="Tìm nguyên liệu…"
+                    className="w-full h-10 px-3 rounded-[12px] bg-bg border border-border/60 text-text text-[14px] focus:outline-none focus:border-primary/60"
+                />
+            )}
+
+            {canEdit && addOpen && CATS.map((cat, i) => (
                 <div key={cat.key} className="rounded-[12px] border border-border/60 bg-surface p-3 space-y-2">
                     <div className="flex items-center gap-2">
                         <span className="text-[12px] font-black uppercase tracking-widest text-text-secondary">{cat.label}</span>
                         <span className="text-[11px] font-bold text-text-dim">{itemsOf(cat.key).length}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                        {itemsOf(cat.key).map(k => (
-                            <button key={k} onClick={() => reveal(k)}
-                                className="text-[12px] border border-primary/20 bg-primary/10 text-primary px-2.5 py-1.5 rounded-lg font-medium hover:bg-primary/20 active:bg-primary/30 transition-colors">
-                                + {ingredientLabel(k)}
+                        {i === 0 && !onAddOpenChange && (
+                            <button onClick={() => setAddOpen(false)}
+                                className="ml-auto text-[12px] text-text-secondary px-1 py-0.5 font-medium hover:text-text transition-colors">
+                                Thu gọn
                             </button>
-                        ))}
+                        )}
+                    </div>
+                    {bucketsOf(itemsOf(cat.key)).map(b => (
+                        <div key={b.id} className="space-y-1.5">
+                            {b.name && <div className="text-[11px] font-bold uppercase tracking-wider text-text-dim">{b.name}</div>}
+                            <div className="flex flex-wrap gap-1.5">
+                                {b.items.map(k => (
+                                    <button key={k} onClick={() => reveal(k)}
+                                        className="text-[12px] border border-primary/20 bg-primary/10 text-primary px-2.5 py-1.5 rounded-lg font-medium hover:bg-primary/20 active:bg-primary/30 transition-colors">
+                                        + {ingredientLabel(k)}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                    <div className="flex flex-wrap gap-1.5">
                         <button onClick={() => setCreatingCat(cat.key)}
                             className="text-[12px] border border-dashed border-border/70 text-text-secondary px-2.5 py-1.5 rounded-lg font-medium hover:text-primary hover:border-primary/50 transition-colors">
                             + Tạo mới
@@ -133,15 +166,6 @@ export default function FastIngredientFill({
                     )}
                 </div>
             ))}
-
-            {canEdit && addOpen && !onAddOpenChange && (
-                <div className="flex justify-end">
-                    <button onClick={() => setAddOpen(false)}
-                        className="text-[12px] text-text-secondary px-1 py-0.5 font-medium hover:text-text transition-colors">
-                        Thu gọn
-                    </button>
-                </div>
-            )}
         </div>
     )
 }

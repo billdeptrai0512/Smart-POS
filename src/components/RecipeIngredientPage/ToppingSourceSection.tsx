@@ -12,7 +12,7 @@ interface Props {
     onSave: (source: ToppingSource | null) => void
 }
 
-// Nguồn tồn kho của topping: bán 1 phần trừ `amount` của 1 nguyên liệu / thành phẩm. Chưa chọn → topping dùng công thức bên dưới.
+// Nguồn tồn kho của topping: bán 1 phần trừ `amount` của 1 nguyên liệu / thành phẩm. Topping cũ chưa chọn nguồn vẫn dùng công thức riêng bên dưới.
 export default function ToppingSourceSection({ source, options, unitOf, canEdit, up, onSave }: Props) {
     // Ô số không kiểm soát: key theo giá trị đã lưu nên đổi nguồn / lưu xong thì ô tự nạp lại; số sai (≤ 0, chữ) thì trả về giá trị cũ.
     const commitAmount = (input: HTMLInputElement) => {
@@ -23,7 +23,7 @@ export default function ToppingSourceSection({ source, options, unitOf, canEdit,
 
     return (
         <section className="rounded-[14px] bg-surface border border-border/60 p-3 space-y-2">
-            <div className="text-[11px] font-black uppercase tracking-widest text-text-secondary">Nguồn tồn kho</div>
+            <div className="text-[11px] font-black uppercase tracking-widest text-text-secondary">Mỗi phần bán trừ gì trong kho?</div>
             <div className="flex items-stretch gap-2">
                 <Dropdown
                     ariaLabel="Chọn nguồn tồn kho"
@@ -36,7 +36,7 @@ export default function ToppingSourceSection({ source, options, unitOf, canEdit,
                     panelClassName="max-h-64 overflow-y-auto min-w-[14rem]"
                     triggerClassName="w-full h-11 px-3 rounded-[12px] bg-bg border border-border/60 text-text text-[14px]"
                     items={[
-                        { value: '', label: 'Không dùng nguồn (theo công thức)' },
+                        { value: '', label: 'Không dùng nguồn' },
                         ...options.map(k => ({ value: k, label: ingredientLabel(k) })),
                     ]}
                     onChange={k => { if (k !== (source?.ingredient ?? '')) onSave(k ? { ingredient: k, amount: source?.amount ?? 1 } : null) }}
@@ -59,7 +59,7 @@ export default function ToppingSourceSection({ source, options, unitOf, canEdit,
                 )}
             </div>
             <p className="text-[12px] text-text-dim">
-                {source ? 'Mỗi phần bán trừ đúng lượng này từ nguồn; công thức bên dưới chỉ dùng khi bỏ nguồn.' : 'Chọn nguyên liệu hoặc thành phẩm mà topping này lấy từ kho.'}
+                {source ? 'Mỗi phần bán trừ đúng lượng này từ nguồn.' : 'Chọn nguyên liệu mà topping này lấy từ kho. Topping tự nấu thì thêm từ 2 nguyên liệu ở trang topping sau khi tạo.'}
             </p>
         </section>
     )

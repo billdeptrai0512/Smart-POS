@@ -13,10 +13,11 @@ interface Props {
 
 // Tick-list "Áp dụng cho món" + nút lưu khi có thay đổi. Món chia thành thẻ thu gọn theo các dòng phân nhóm (is_divider) của menu.
 export default function ProductLinksSection({ links, products, canEdit, saving, onSave }: Props) {
-    // touched[tên nhóm]: người dùng đã mở/đóng/chọn nhóm đó → giữ nguyên trạng thái; chưa chạm thì nhóm có món được chọn tự mở.
+    // touched[tên nhóm]: người dùng đã mở/đóng/chọn nhóm đó; chưa chạm thì nhóm thu gọn (số n/tổng ở tiêu đề vẫn cho biết đã chọn gì).
     // Khoá theo tên (không theo vị trí) để thêm/bớt nhóm không làm lệch trạng thái của nhóm khác.
     const [touched, setTouched] = useState<Record<string, boolean>>({})
-    const shown = groupByDivider(products)
+    const grouped = groupByDivider(products)
+    const shown = [...grouped.filter(g => g.name), ...grouped.filter(g => !g.name)] // món không thuộc nhóm nào xuống cuối
     return (
         <section className="pt-4 border-t border-border/40">
             <div className="flex items-center justify-between mb-3">
@@ -32,35 +33,33 @@ export default function ProductLinksSection({ links, products, canEdit, saving, 
                     const key = g.name ?? ''
                     const ids = g.items.map(p => p.id)
                     const n = ids.filter(id => links.selected.has(id)).length
-                    const isOpen = !g.name || (touched[key] ?? n > 0)
+                    const isOpen = !!touched[key]
                     const allOn = n === ids.length
                     return (
-                        <div key={key} className={g.name ? 'rounded-[12px] border border-border/60 bg-surface overflow-hidden' : ''}>
-                            {g.name && (
-                                <div className="flex items-center gap-2 pr-2">
+                        <div key={key} className="rounded-[12px] border border-border/60 bg-surface overflow-hidden">
+                            <div className="flex items-center gap-2 pr-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setTouched(t => ({ ...t, [key]: !isOpen }))}
+                                    aria-expanded={isOpen}
+                                    className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2.5 text-left"
+                                >
+                                    <ChevronDown size={14} className={`shrink-0 text-text-secondary transition-transform ${isOpen ? '' : '-rotate-90'}`} />
+                                    <span className="truncate text-[12px] font-black uppercase tracking-widest text-text-secondary">{g.name ?? 'Chưa phân loại'}</span>
+                                    <span className={`shrink-0 text-[11px] font-bold ${n > 0 ? 'text-primary' : 'text-text-dim'}`}>{n}/{ids.length}</span>
+                                </button>
+                                {canEdit && (
                                     <button
                                         type="button"
-                                        onClick={() => setTouched(t => ({ ...t, [key]: !isOpen }))}
-                                        aria-expanded={isOpen}
-                                        className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2.5 text-left"
+                                        onClick={() => { links.setMany(ids, !allOn); setTouched(t => ({ ...t, [key]: true })) }}
+                                        className="shrink-0 text-[11px] font-bold text-primary px-2 py-1 rounded-md hover:bg-primary/10 active:bg-primary/20"
                                     >
-                                        <ChevronDown size={14} className={`shrink-0 text-text-secondary transition-transform ${isOpen ? '' : '-rotate-90'}`} />
-                                        <span className="truncate text-[12px] font-black uppercase tracking-widest text-text-secondary">{g.name}</span>
-                                        <span className={`shrink-0 text-[11px] font-bold ${n > 0 ? 'text-primary' : 'text-text-dim'}`}>{n}/{ids.length}</span>
+                                        {allOn ? 'Bỏ cả nhóm' : 'Chọn cả nhóm'}
                                     </button>
-                                    {canEdit && (
-                                        <button
-                                            type="button"
-                                            onClick={() => { links.setMany(ids, !allOn); setTouched(t => ({ ...t, [key]: true })) }}
-                                            className="shrink-0 text-[11px] font-bold text-primary px-2 py-1 rounded-md hover:bg-primary/10 active:bg-primary/20"
-                                        >
-                                            {allOn ? 'Bỏ cả nhóm' : 'Chọn cả nhóm'}
-                                        </button>
-                                    )}
-                                </div>
-                            )}
+                                )}
+                            </div>
                             {isOpen && (
-                                <div className={`flex flex-wrap gap-1.5 ${g.name ? 'px-3 pb-3' : ''}`}>
+                                <div className="flex flex-wrap gap-1.5 px-3 pb-3">
                                     {g.items.map(p => {
                                         const isSelected = links.selected.has(p.id)
                                         return (

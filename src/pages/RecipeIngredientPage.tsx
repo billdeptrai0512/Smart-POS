@@ -32,7 +32,8 @@ import { sortIngredients, getIngredientUnit, makeCategoryOf, registerNewIngredie
 import { useToast } from '../hooks/useToast'
 import { useSavingAction } from '../hooks/useSavingAction'
 import { useToppingDetail } from '../hooks/useToppingDetail'
-import ToppingSourceSection from '../components/RecipeIngredientPage/ToppingSourceSection'
+import MenuTabsBar from '../components/common/MenuTabsBar'
+import ToppingBatchSection from '../components/RecipeIngredientPage/ToppingBatchSection'
 import ProductLinksSection from '../components/common/ProductLinksSection'
 import { ICON_BTN_DANGER } from '../components/common/ModalShell'
 import { capitalizeWords } from '../utils'
@@ -57,7 +58,7 @@ export default function RecipeIngredientPage() {
         products, batchProducts, batchKeys, toppings, recipes: allRecipes,
         ingredientCosts, ingredientUnits,
         productExtras: contextExtras, extraIngredients: contextExtraIngs,
-        ingredientConfigs, refreshProducts,
+        ingredientConfigs, ingredientGroups, refreshProducts,
     } = useProducts()
     const { addressId, selectedAddress } = useAddress()
     const { isManager, isAdmin, isGuest } = useAuth()
@@ -70,6 +71,7 @@ export default function RecipeIngredientPage() {
     const [extraIngs, setExtraIngs] = useState(contextExtraIngs || {})
     const { saving, withSaving } = useSavingAction(showError)
     const [showCopyFrom, setShowCopyFrom] = useState(false)
+    const [toppingTab, setToppingTab] = useState('detail')
     const [recipeProgress, setRecipeProgress] = useState(() =>
         (addressId ? readOnboardingState(addressId) : DEFAULT_ONBOARDING_STATE).recipeProgress
     )
@@ -91,6 +93,7 @@ export default function RecipeIngredientPage() {
 
     // Category lookup for the add-ingredient combobox (groups chips into Chính / Bao bì).
     const categoryOf = useMemo(() => makeCategoryOf(ingredientConfigs), [ingredientConfigs])
+    const groupIdOf = useMemo(() => { const m = new Map(ingredientConfigs.map(c => [c.ingredient, c.group_id])); return (k: string) => m.get(k) }, [ingredientConfigs])
 
     // Fetch fresh data on mount to avoid showing stale localStorage cache.
     // ponytail: mount-only — refreshProducts already refetches on address change via
@@ -376,7 +379,7 @@ export default function RecipeIngredientPage() {
                     nameTransform={capitalizeWords}
                     canEdit={canEdit}
                     onBack={() => navigate(backUrl, { state: location.state })}
-                    onSaveName={td.saveName}
+                    onSaveName={td.batch ? () => showToast('Tên topping gắn với công thức nấu, không đổi được', 'warning') : td.saveName}
                     price={topping.price}
                     priceLabel="Giá cộng thêm:"
                     onSavePrice={td.savePrice}
@@ -385,28 +388,39 @@ export default function RecipeIngredientPage() {
                             <Trash2 size={20} strokeWidth={2.5} />
                         </button>
                     )}
-                />
+                >
+                    <MenuTabsBar tabs={[{ key: 'detail', label: 'Chi tiết' }, { key: 'links', label: 'Món áp dụng' }]} activeTab={toppingTab} onSelect={setToppingTab} />
+                </EditableEntityHeader>
                 <main className="flex-1 overflow-y-auto px-4 max-[329px]:px-2 py-4 space-y-3 bg-bg">
-                    {!isGuest && <ToppingSourceSection
-                        source={td.source}
-                        options={Object.keys(ingredientCosts).filter(k => k !== normalizeIngredientKey(topping.name)).sort((a, b) => sortIngredients(a, b, selectedAddress?.ingredient_sort_order))}
-                        unitOf={(k) => getIngredientUnit(k, ingredientUnits?.[k], ingredientUnits)}
-                        canEdit={canEdit}
-                        onSave={td.saveSource}
-                    />}
-                    {!td.source && <FastIngredientFill
-                        entries={td.ings}
-                        dbIngredients={dbIngredients}
-                        getUnit={(k) => getIngredientUnit(k, ingredientUnits?.[k], ingredientUnits)}
-                        categoryOf={categoryOf}
-                        ingredientCosts={ingredientCosts}
-                        canEdit={canEdit}
-                        showCost
-                        onSetAmount={td.setAmount}
-                        onRemove={td.remove}
-                        onAddCustom={td.addCustom}
-                    />}
-                    <ProductLinksSection links={td.links} products={products} canEdit={canEdit} saving={saving} onSave={td.saveLinks} />
+                    {toppingTab === 'detail' && <>
+                        <FastIngredientFill
+                            entries={td.rows}
+                            dbIngredients={dbIngredients.filter(k => k !== td.ownKey)}
+                            getUnit={(k) => getIngredientUnit(k, ingredientUnits?.[k], ingredientUnits)}
+                            categoryOf={categoryOf}
+                            groups={ingredientGroups}
+                            groupIdOf={groupIdOf}
+                            ingredientCosts={ingredientCosts}
+                            canEdit={canEdit}
+                            showCost
+                            onSetAmount={td.setAmount}
+                            onRemove={td.remove}
+                            onAddCustom={td.addCustom}
+                        />
+                        {!isGuest && td.rows.length >= 2 && <ToppingBatchSection
+                            yieldValue={td.cook.yield}
+                            serving={td.cook.serving}
+                            unit={getIngredientUnit(td.ownKey, ingredientUnits?.[td.ownKey], ingredientUnits)}
+                            canEdit={canEdit}
+                            onYield={td.cook.setYield}
+                            onServing={td.cook.setServing}
+                            onCommit={td.cook.commit}
+                        />}
+                        <p className="text-[12px] text-text-dim">
+                            {td.rows.length === 0 ? 'Thêm nguyên liệu mà topping này lấy từ kho.' : td.rows.length === 1 ? 'Mỗi phần bán trừ đúng lượng này từ kho.' : 'Từ 2 nguyên liệu: topping tự nấu theo mẻ, có tồn kho riêng và hiện ở màn Sản xuất.'}
+                        </p>
+                    </>}
+                    {toppingTab === 'links' && <ProductLinksSection links={td.links} products={products} canEdit={canEdit} saving={saving} onSave={td.saveLinks} />}
                 </main>
                 {saving && (
                     <div className="fixed bottom-4 right-4 z-50 pointer-events-none">
@@ -475,6 +489,8 @@ export default function RecipeIngredientPage() {
                     dbIngredients={dbIngredients}
                     getUnit={(k) => getIngredientUnit(k, ingredientUnits?.[k], ingredientUnits)}
                     categoryOf={categoryOf}
+                    groups={ingredientGroups}
+                    groupIdOf={groupIdOf}
                     ingredientCosts={ingredientCosts}
                     canEdit={canEdit}
                     showCost
