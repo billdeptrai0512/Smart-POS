@@ -255,7 +255,8 @@ export function buildGroupPrepPlan({ branches, pool, minAsFloor = false }: { bra
     for (const b of branches) {
         for (const ing of b.ingredientsList || []) {
             const item = tomorrowItem(ing, b.counterStock, b.forecast)
-            const qty = item?.fillQty ?? 0
+            // Địa chỉ lẻ (minAsFloor): kho và quầy cùng chỗ, không cần rút nguyên bịch → so kho với lượng cần thật. Kho tổng nhóm: mỗi chi nhánh lấy nguyên bịch.
+            const qty = (minAsFloor ? item?.need : item?.fillQty) ?? 0
             const packs = item?.needPacks ?? 0
             let row = byIng.get(ing.ingredient)
             if (!row) {
