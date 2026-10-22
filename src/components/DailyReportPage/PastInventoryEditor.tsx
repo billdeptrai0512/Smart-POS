@@ -3,7 +3,7 @@ import { buildIngredientToProduct, calculateEstimatedConsumption, calculateConsu
 import { getIngredientUnit, ingredientLabel } from '../../utils/ingredients'
 import { norm } from '../../utils/fieldSync'
 import { useProducts } from '../../contexts/ProductContext'
-import { productionOnDay, mergeUsage } from '../../utils/production'
+import { productionOnDay, mergeUsage, madeOf } from '../../utils/production'
 import { dateStringVN } from '../../utils/dateVN'
 import InventoryReportCard from './InventoryReportCard'
 import type { IngredientConfig, Row } from '../../types/domain'
@@ -58,10 +58,12 @@ export default function PastInventoryEditor({
 
     const { productionRows } = useProducts()
     const closingDay = shiftClosing ? dateStringVN(new Date(shiftClosing.closed_at || shiftClosing.created_at)) : null
+    const dayProduction = useMemo(() => closingDay ? productionOnDay(productionRows, closingDay) : {}, [productionRows, closingDay])
     const usedMap = useMemo(
-        () => mergeUsage(calculateEstimatedConsumption(orderItems, recipes, extraIngredients), closingDay ? productionOnDay(productionRows, closingDay) : {}),
-        [orderItems, recipes, extraIngredients, productionRows, closingDay],
+        () => mergeUsage(calculateEstimatedConsumption(orderItems, recipes, extraIngredients), dayProduction),
+        [orderItems, recipes, extraIngredients, dayProduction],
     )
+    const madeMap = useMemo(() => madeOf(dayProduction), [dayProduction])
     const consumptionBreakdown = useMemo(
         () => calculateConsumptionBreakdown(orderItems, recipes, extraIngredients, products, productExtras),
         [orderItems, recipes, extraIngredients, products, productExtras],
@@ -165,6 +167,7 @@ export default function PastInventoryEditor({
                 warehouseStocks={EMPTY}
                 ingredientUnits={ingredientUnits}
                 usedMap={usedMap}
+                madeMap={madeMap}
                 consumptionBreakdown={consumptionBreakdown}
                 ingredientToProduct={ingredientToProduct}
                 isSubmitting={isSaving}

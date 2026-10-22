@@ -1,21 +1,22 @@
 import { useState, type ReactNode } from 'react'
-import { X, Layers, type LucideIcon, PackagePlus, Scale, Store, Ban, CircleDollarSign, CircleCheck } from 'lucide-react'
+import { X, Layers, type LucideIcon, PackagePlus, Scale, Store, Ban, FlaskConical, CircleDollarSign, CircleCheck } from 'lucide-react'
 import { BottomSheet, SHEET_PANEL } from '../common/ModalShell'
 import Dropdown from '../common/Dropdown'
 import type { Row } from '../../types/domain'
 
-export type HistoryKind = 'restock' | 'adjustment' | 'withdrawal' | 'cancelled'
+export type HistoryKind = 'restock' | 'adjustment' | 'withdrawal' | 'production' | 'cancelled'
 
 const HISTORY_KINDS: [HistoryKind, string, LucideIcon][] = [
     ['restock', 'Nhập kho', PackagePlus],
     ['adjustment', 'Hiệu chỉnh tồn', Scale],
     ['withdrawal', 'Rút ra quầy', Store],
+    ['production', 'Sản xuất', FlaskConical],
     ['cancelled', 'Đã hủy', Ban],
 ]
 
 // Đã hủy ưu tiên trước loại gốc (phiếu hủy bị zero trong DB nhưng vẫn mang cờ adjustment/restock).
 export const kindOf = (e: Row): HistoryKind =>
-    e.metadata?.cancelled ? 'cancelled' : e.is_withdrawal ? 'withdrawal' : e.metadata?.adjustment ? 'adjustment' : 'restock'
+    e.metadata?.cancelled ? 'cancelled' : e.is_withdrawal ? 'withdrawal' : e.is_production ? 'production' : e.metadata?.adjustment ? 'adjustment' : 'restock'
 
 type DebtStatus = 'owing' | 'paid'
 

@@ -55,6 +55,9 @@ export function productionAfterCount(stockRows: Row[], rows: ProductionRow[] = [
     return out
 }
 
+/** Phần thành phẩm làm ra trong tiêu hao ròng (số âm) → { ingredient: lượng dương } — hiện như "Nhập thêm" của thành phẩm. */
+export const madeOf = (net: UsageMap): UsageMap => Object.fromEntries(Object.entries(net).filter(([, v]) => v < 0).map(([k, v]) => [k, -v]))
+
 /** Gộp `a` + `b` theo từng nguyên liệu (dùng cộng afterCount của đơn với của mẻ). */
 export const mergeUsage = (a: UsageMap, b: UsageMap): UsageMap => {
     const out = { ...a }
@@ -62,3 +65,20 @@ export const mergeUsage = (a: UsageMap, b: UsageMap): UsageMap => {
     return out
 }
 
+
+/**
+ * Dòng Nhật ký của MỘT nguyên liệu từ các mẻ sản xuất: là thành phẩm thì "sản xuất +qty" (kèm công thức đã dùng),
+ * là nguyên liệu gốc thì "dùng cho sản xuất −qty". Chỉ để xem — không tiền, không đụng tồn kho tổng.
+ */
+export function productionLogEntries(rows: (ProductionRow & Row)[], ingredient: string, addressId: string | null): Row[] {
+    const out: Row[] = []
+    for (const p of rows) {
+        if (p.cancelled_at) continue
+        const base = { created_at: p.created_at, is_production: true, staff_name: p.staff_name ?? null, address_id: addressId }
+        const meta = { batches: Number(p.batches) || 0, product: p.output_ingredient, outputQty: Number(p.output_qty) || 0, inputs: p.inputs || {} }
+        if (p.output_ingredient === ingredient) out.push({ ...base, id: `pb-${p.id}-out`, metadata: { ...meta, role: 'output', qty: meta.outputQty } })
+        const used = Number(p.inputs?.[ingredient])
+        if (used > 0) out.push({ ...base, id: `pb-${p.id}-in`, metadata: { ...meta, role: 'input', qty: used } })
+    }
+    return out
+}

@@ -37,6 +37,8 @@ import { calcRangeWithLabel } from '../utils/rangeCalc'
 import { useDateScope } from '../hooks/useDateScope'
 import { DateRangePicker } from '../components/HistoryPage/HistoryHeader'
 import { fetchPackedConfirmations } from '../services/warehouseTransferService'
+import { fetchProduction } from '../services/productionService'
+import { productionLogEntries } from '../utils/production'
 import type { Row, UUID } from '../types/domain'
 
 // Page-level orchestrator: fetches data, owns the canonical state (stock, history,
@@ -123,7 +125,8 @@ export default function IngredientDetailPage() {
     const recipesReady = recipesBelongTo(recipes, addressId)   // công thức tải xong sau lần đọc đầu → đọc lại để có ước tính
     const fetchStockRow = useCallback(async (addressId: UUID | null) => {
         const row = (await fetchIngredientStocks(addressId)).find((s: Row) => s.ingredient === ingredientKey)
-        return row ? (await withCounterEstimate([row], addressId, calcRef.current))?.[0] : row
+        // Thành phẩm chưa có dòng tồn: withCounterEstimate dựng dòng từ mẻ sản xuất.
+        return (await withCounterEstimate(row ? [row] : [], addressId, calcRef.current))?.find((s: Row) => s.ingredient === ingredientKey) ?? null
     }, [ingredientKey, calcRef])
 
     useEffect(() => {
@@ -142,12 +145,16 @@ export default function IngredientDetailPage() {
     // phiếu nhập/hiệu chỉnh (expenses) + lượt "Rút ra quầy" (restock trong phiếu
     // chốt ca). Lượt rút là chuyển kho nội bộ — không tiền, không payments.
     const loadHistory = useCallback(async () => {
-        const [hist, withdrawals, packed] = await Promise.all([
+        const [hist, withdrawals, packed, production] = await Promise.all([
             fetchIngredientRestockHistory(groupAddressIds, ingredientKey, fromDate, toDate),
             fetchIngredientWithdrawals(groupAddressIds, ingredientKey, fromDate, toDate),
             // Người xác nhận SOẠN (ngày trước) của từng lượt rút — chỉ nhóm kho chung có; lỗi/chưa có phiếu thì bỏ qua.
             groupAddressIds.length > 1 ? fetchPackedConfirmations(groupAddressIds, ingredientKey, fromDate, toDate).catch(() => []) : Promise.resolve([]),
+            // Mẻ sản xuất của địa chỉ này (thành phẩm làm ra / nguyên liệu gốc đã dùng) — lỗi thì chỉ thiếu dòng này, không hỏng nhật ký.
+            addressId ? fetchProduction(addressId, dateStringVN(new Date(fromDate))).catch(() => []) : Promise.resolve([]),
         ])
+        const toMs = new Date(toDate).getTime()
+        const productionEntries = productionLogEntries(production, ingredientKey, addressId).filter(e => new Date(e.created_at).getTime() <= toMs)
         const packedBy = new Map(packed.map(p => [`${p.address_id}|${p.for_date}`, p]))
         const withdrawalEntries = withdrawals.map(w => ({
             id: `wd-${w.id}`,
@@ -164,9 +171,9 @@ export default function IngredientDetailPage() {
                 packed_by: packedBy.get(`${w.address_id}|${dateStringVN(new Date(w.created_at))}`),
             },
         }))
-        return ([...hist, ...withdrawalEntries] as Row[])
+        return ([...hist, ...withdrawalEntries, ...productionEntries] as Row[])
             .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    }, [groupAddressIds, ingredientKey, fromDate, toDate])
+    }, [groupAddressIds, addressId, ingredientKey, fromDate, toDate])
 
     const reloadStock = useCallback(async () => {
         if (!hasAddress) return
@@ -196,7 +203,7 @@ export default function IngredientDetailPage() {
     ), [history, filter])
 
     const summary = useMemo(() => {
-        let totalQty = 0, totalSpent = 0, totalOwing = 0, totalPaidInMonth = 0, withdrawQty = 0
+        let totalQty = 0, totalSpent = 0, totalOwing = 0, totalPaidInMonth = 0, withdrawQty = 0, madeQty = 0, usedQty = 0
         // `fromDate` / `toDate` xác định cửa sổ đang xem — payments có paid_at
         // trong cửa sổ này được tính vào "Đã trả". Một payment có thể trả
         // cho invoice kỳ khác, nên paid không = invoice.amount khớp 1-1.
@@ -206,6 +213,7 @@ export default function IngredientDetailPage() {
             // Lượt rút ra quầy không phải mua hàng — không tính tiền.
             const kind = kindOf(e)
             if (kind === 'withdrawal') { withdrawQty += e.metadata?.qty || 0; return }
+            if (kind === 'production') { if (e.metadata?.role === 'output') madeQty += e.metadata?.qty || 0; else usedQty += e.metadata?.qty || 0; return }
             if (kind === 'restock') totalQty += e.metadata?.qty || 0
             totalSpent += e.amount || 0
             const paid = (e.payments || []).reduce((s: number, p: Row) => s + (p.amount || 0), 0)
@@ -216,7 +224,7 @@ export default function IngredientDetailPage() {
             }
         })
         // Rút ra quầy không có tiền thật → trị giá = lượng × giá vốn hiện tại của nguyên liệu (ước tính).
-        return { totalQty, totalSpent, totalOwing, totalPaidInMonth, withdrawQty, withdrawValue: withdrawQty * cost }
+        return { totalQty, totalSpent, totalOwing, totalPaidInMonth, withdrawQty, withdrawValue: withdrawQty * cost, madeQty, usedQty }
     },[shownHistory, fromDate, toDate, cost])
 
     // ── Save callbacks for child rows ───────────────────────────────────────
@@ -565,6 +573,8 @@ export default function IngredientDetailPage() {
                         onCancelRestock={canEdit ? handleCancelRestock : undefined}
                         onEditRestock={canEdit ? setEditingEntry : undefined}
                         addressNameById={groupAddressIds.length > 1 ? addressNameById : null}
+                        ingredientUnits={ingredientUnits}
+                        onOpenIngredient={key => navigate(`/inventory/stocking/${encodeURIComponent(key)}?tab=history&scope=month`, { state: location.state })}
                     />
                 )}
             </main>

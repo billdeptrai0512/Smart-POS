@@ -4,16 +4,20 @@ import { fetchIngredientCostsAndUnits } from '../services/ingredientCostService'
 import { fetchAllRecipes } from '../services/recipeService'
 import { fetchExtraIngredientsWithToppings, fetchBatchKeys } from '../services/productService'
 import { fetchForecastDays } from '../services/reportService'
+import { fetchProduction } from '../services/productionService'
 import { historicalCache } from '../services/cache'
 import { withCounterEstimate } from '../services/counterEstimate'
 import { forecastFromWeeks } from '../utils/inventory'
 import { buildGroupPrepPlan, HISTORY_OFFSETS_TOMORROW, RECENT_OFFSETS_TOMORROW, type GroupPrepBranch } from '../utils/prepToday'
+import { dateStringVN, addDaysVN } from '../utils/dateVN'
 import type { Row } from '../types/domain'
 import type { ExtraIngredients, RecipeRow } from '../utils/inventory'
 import type { UsageMap } from '../utils/inventory'
 
 // Phần KHÔNG đổi sau khi nhập kho (công thức, cấu hình NVL, dự báo mai) — giữ lại để làm tươi chỉ tồn kho + tồn quầy.
 interface Static { extra: ExtraIngredients; recipes: Record<string, RecipeRow[]> }
+// Mẻ sản xuất tính vào tồn quầy ước tính (nguyên liệu gốc −, thành phẩm +); cùng khoảng 62 ngày với ProductContext.
+const fetchRecentProduction = (id: string) => fetchProduction(id, dateStringVN(addDaysVN(new Date(), -62)))
 const stockMap = (rows: Row[] | null | undefined, field: string) => Object.fromEntries((rows ?? []).map(s => [s.ingredient, s[field]]))
 
 interface State { branches: GroupPrepBranch[] | null; pool: UsageMap | null; loading: boolean; error: unknown }
@@ -38,8 +42,8 @@ export function useGroupPrep(addresses: { id: string; name: string }[], minAsFlo
                 const recipesP = fetchAllRecipes(id).then(r => (recipesById[id] = r))
                 const stocksP = fetchIngredientStocks(id)
                 // Ước tính tồn quầy cần công thức + extras + tồn — nối chuỗi thay vì chờ cả lô, để dự báo/cấu hình tải chồng lên.
-                const estimatedP = Promise.all([stocksP, recipesP, extraP])
-                    .then(([stocks, recipes, extraIngredients]) => withCounterEstimate(stocks, id, { recipes, extraIngredients, canPersist: false }))
+                const estimatedP = Promise.all([stocksP, recipesP, extraP, fetchRecentProduction(id)])
+                    .then(([stocks, recipes, extraIngredients, production]) => withCounterEstimate(stocks, id, { recipes, extraIngredients, production, canPersist: false }))
                 const weeksP = fetchForecastDays(id, HISTORY_OFFSETS_TOMORROW, RECENT_OFFSETS_TOMORROW)
                 const [{ rows }, recipes, stocks, estimated, weeks, extraIngredients, batchKeys] =
                     await Promise.all([fetchIngredientCostsAndUnits(id), recipesP, stocksP, estimatedP, weeksP, extraP, fetchBatchKeys(id)])
@@ -72,8 +76,8 @@ export function useGroupPrep(addresses: { id: string; name: string }[], minAsFlo
         if (!st) return load()
         try {
             const results = await Promise.all(addresses.map(async ({ id }) => {
-                const stocks = await fetchIngredientStocks(id)
-                const estimated = await withCounterEstimate(stocks, id, { recipes: st.recipes[id], extraIngredients: st.extra, canPersist: false })
+                const [stocks, production] = await Promise.all([fetchIngredientStocks(id), fetchRecentProduction(id)])
+                const estimated = await withCounterEstimate(stocks, id, { recipes: st.recipes[id], extraIngredients: st.extra, production, canPersist: false })
                 return { id, warehouse: stockMap(stocks, 'warehouse_stock'), counterStock: stockMap(estimated, 'counter_stock') }
             }))
             setState(s => ({

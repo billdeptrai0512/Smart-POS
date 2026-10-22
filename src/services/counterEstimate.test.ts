@@ -170,3 +170,12 @@ describe('estimateOpeningStocks — Đầu kỳ hôm nay từ lần đếm gần
         expect(await estimateOpeningStocks([prior()], null, calc)).toEqual({})
     })
 })
+
+describe('thành phẩm chưa có dòng tồn', () => {
+    it('mẻ sản xuất tạo dòng tồn quầy: 100 g làm ra, tồn quầy = 100', async () => {
+        ordersMock.mockResolvedValue([])
+        const production = [{ created_at: at(0), output_ingredient: 'kem_pho_mai', output_qty: 100, inputs: { sua: 200 } }]
+        const out = await withCounterEstimate([], 'addr', { ...calc, production })
+        expect(out?.find(r => r.ingredient === 'kem_pho_mai')).toMatchObject({ counter_stock: 100, current_stock: 100, counter_estimated: true })
+    })
+})

@@ -63,14 +63,32 @@ async function loadUsage(rows: Row[], addressId: string, { recipes, extraIngredi
     return { used, today, fromDay, afterCount }
 }
 
+// Thành phẩm chưa từng được đếm / nhập kho thì RPC không có dòng tồn nào → mẻ sản xuất không có chỗ cộng vào.
+// Dựng dòng tồn quầy 0 "đếm" từ trước mẻ đầu tiên để ước tính (mẻ − bán) hiện ra như mọi NVL khác.
+function withProducedRows(rows: Row[], production: ProductionRow[] = []): Row[] {
+    const have = new Set(rows.map(r => r.ingredient))
+    const first: Record<string, string> = {}
+    for (const p of production) {
+        if (p.cancelled_at || have.has(p.output_ingredient)) continue
+        const day = dateStringVN(new Date(p.created_at))
+        if (!first[p.output_ingredient] || day < first[p.output_ingredient]) first[p.output_ingredient] = day
+    }
+    const added = Object.entries(first).map(([ingredient, day]) => ({
+        ingredient, current_stock: 0, restocked_qty: 0, warehouse_stock: 0, counter_stock: 0, warehouse_stock_set: false, counter_stock_set: false,
+        counter_counted_on: dateStringVN(addDaysVN(new Date(`${day}T12:00:00+07:00`), -1)), counter_counted_at: null, restock_since_count: 0,
+    }))
+    return added.length ? [...rows, ...added] : rows
+}
+
 // rows = kết quả fetchIngredientStocks của MỘT địa chỉ. NVL chưa đếm hôm nay thì tồn quầy được nối theo lý thuyết
 // (estimateCounterRow). Công thức là của địa chỉ đang chọn — chỉ gọi cho địa chỉ đó.
 // Lỗi → trả số thô, không làm hỏng trang.
 export async function withCounterEstimate(rows: Row[] | null | undefined, addressId: string | null, calc: CounterCalc) {
-    if (!addressId || !rows?.length) return rows
+    const all = withProducedRows(rows ?? [], calc.production)
+    if (!addressId || !all.length) return rows
     try {
-        const usage = await loadUsage(rows, addressId, calc, true)
-        return usage ? rows.map(r => estimateCounterRow(r, usage.used, usage)) : rows
+        const usage = await loadUsage(all, addressId, calc, true)
+        return usage ? all.map(r => estimateCounterRow(r, usage.used, usage)) : all
     } catch (err) {
         console.error('withCounterEstimate', err)
         return rows

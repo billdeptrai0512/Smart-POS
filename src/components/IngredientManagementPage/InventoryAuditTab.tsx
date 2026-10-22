@@ -22,7 +22,7 @@ import { ingredientLabel } from '../../utils/ingredients'
 import { findIngredientByLabel } from '../../utils/onboardingHint'
 import { isCashFlowProgressDone, isInventoryProgressDone, INVENTORY_ONBOARDING_ITEMS } from '../../utils/onboardingStorage'
 import { dateStringVN, isSameDayVN } from '../../utils/dateVN'
-import { productionOnDay, mergeUsage } from '../../utils/production'
+import { productionOnDay, mergeUsage, madeOf } from '../../utils/production'
 import TodayProduction from './TodayProduction'
 import InventoryReportCard from '../DailyReportPage/InventoryReportCard'
 import PastInventoryEditor from '../DailyReportPage/PastInventoryEditor'
@@ -94,6 +94,11 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     const usedMap = useMemo(
         () => (isTodayScope ? mergeUsage(calculateEstimatedConsumption(todayOrderItems, recipes, extraIngredients), productionOnDay(productionRows, todayISO)) : calculateEstimatedConsumption(todayOrderItems, recipes, extraIngredients)),
         [todayOrderItems, recipes, extraIngredients, isTodayScope, productionRows, todayISO]
+    )
+    // Phần thành phẩm làm ra hôm nay (dương) — cộng vào "Nhập thêm" khi hiển thị để Sử dụng chỉ còn phần bán.
+    const madeMap = useMemo(
+        () => isTodayScope ? madeOf(productionOnDay(productionRows, todayISO)) : {},
+        [isTodayScope, productionRows, todayISO]
     )
     const consumptionBreakdown = useMemo(
         () => calculateConsumptionBreakdown(todayOrderItems, recipes, extraIngredients, products, productExtras),
@@ -251,6 +256,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                         warehouseStocks={inventory.effectiveWarehouseStocks}
                         ingredientUnits={inventoryRowUnits}
                         usedMap={usedMap}
+                        madeMap={madeMap}
                         consumptionBreakdown={consumptionBreakdown}
                         ingredientToProduct={ingredientToProduct}
                         isSubmitting={isSaving}

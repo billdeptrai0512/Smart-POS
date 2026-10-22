@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { productionUsage, overlayProduction, productionAfterCount, type ProductionRow } from './production'
+import { productionUsage, overlayProduction, productionAfterCount, productionLogEntries, type ProductionRow } from './production'
 import { dateStringVN } from './dateVN'
 
 const at = (iso: string, extra: Partial<ProductionRow> = {}): ProductionRow =>
@@ -19,5 +19,16 @@ describe('production usage', () => {
         const day = dateStringVN(new Date('2026-10-18T03:00:00Z'))
         const rows = [{ ingredient: 'tp', counter_counted_on: day, counter_counted_at: '2026-10-18T03:30:00Z' }]
         expect(productionAfterCount(rows, [at('2026-10-18T03:00:00Z'), at('2026-10-18T04:00:00Z')])).toEqual({ tp: -600 })
+    })
+})
+
+describe('productionLogEntries', () => {
+    const rows = [{ ...at('2026-10-18T03:00:00Z'), id: 'm1', batches: 2 }, { ...at('2026-10-18T04:00:00Z', { cancelled_at: 'x' }), id: 'm2', batches: 1 }] as never
+    it('thành phẩm: 1 dòng "output" kèm công thức; nguyên liệu gốc: 1 dòng "input"; mẻ hủy bỏ qua; ngoài mẻ không có gì', () => {
+        const out = productionLogEntries(rows, 'tp', 'addr')
+        expect(out).toHaveLength(1)
+        expect(out[0].metadata).toMatchObject({ role: 'output', qty: 600, batches: 2, inputs: { a: 250, b: 100 } })
+        expect(productionLogEntries(rows, 'a', 'addr')[0].metadata).toMatchObject({ role: 'input', qty: 250, product: 'tp' })
+        expect(productionLogEntries(rows, 'zzz', 'addr')).toEqual([])
     })
 })

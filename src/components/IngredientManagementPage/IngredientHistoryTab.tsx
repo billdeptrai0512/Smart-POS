@@ -1,14 +1,16 @@
 import type { ReactNode } from 'react'
 import { ArrowRight, Trash2 } from 'lucide-react'
+import IngredientLogChip from '../common/IngredientLogChip'
 import { TIME_PILL, ROUND_ICON_BTN } from '../common/ModalShell'
 import { formatVND } from '../../utils'
 import { packHint } from '../../utils/inventory'
+import { ingredientLabel } from '../../utils/ingredients'
 import { dateShortVN, timeStringVN } from '../../utils/dateVN'
 import type { Pack2 } from '../../utils/inventory'
 import type { Row } from '../../types/domain'
 
 /** Tổng hợp khoảng ngày đang xem (IngredientDetailPage tính từ history). */
-export interface RestockSummary { totalQty: number; totalSpent: number; totalOwing: number; totalPaidInMonth: number; withdrawQty: number; withdrawValue: number }
+export interface RestockSummary { totalQty: number; totalSpent: number; totalOwing: number; totalPaidInMonth: number; withdrawQty: number; withdrawValue: number; madeQty?: number; usedQty?: number }
 
 interface PackProps {
     unit: string
@@ -26,6 +28,9 @@ interface Props extends PackProps {
     onCancelRestock?: (entry: Row) => void
     onEditRestock?: (entry: Row) => void
     addressNameById?: Record<string, string> | null
+    /** Đơn vị từng nguyên liệu + lối mở nhật ký của nguyên liệu khác — cho thẻ Sản xuất (công thức / thành phẩm liên quan). */
+    ingredientUnits?: Record<string, string>
+    onOpenIngredient?: (key: string) => void
 }
 
 // Monthly restock log for one ingredient. Card layout mirrors /history's
@@ -42,6 +47,7 @@ export default function IngredientHistoryTab({
     rangeLabel,
     onOpenPayment, onCancelRestock, onEditRestock,
     addressNameById, // {id: name} — chỉ truyền khi địa chỉ thuộc 1 warehouse group (kho tổng chung)
+    ingredientUnits, onOpenIngredient,
 }: Props) {
     return (
         <>
@@ -57,7 +63,16 @@ export default function IngredientHistoryTab({
                 </div>
             ) : (
                 <div className="flex flex-col gap-3">
-                    {history.map(entry => (
+                    {history.map(entry => entry.is_production ? (
+                        <ProductionCard
+                            key={entry.id}
+                            entry={entry}
+                            unit={unit}
+                            unitOf={k => ingredientUnits?.[k] || ''}
+                            onOpenIngredient={onOpenIngredient}
+                            addressName={addressNameById?.[entry.address_id]}
+                        />
+                    ) : (
                         <HistoryCard
                             key={entry.id}
                             entry={entry}
@@ -81,7 +96,8 @@ export default function IngredientHistoryTab({
 function MonthSummaryCard({ showStats, summary, unit, packSize, packUnit, pack2 }: PackProps & { showStats: boolean; summary: RestockSummary }) {
     if (!showStats) return null
     const hasWithdraw = summary.withdrawQty > 0
-    const hasRestock = summary.totalSpent > 0 || summary.totalQty > 0 || !hasWithdraw
+    const hasProd = (summary.madeQty ?? 0) > 0 || (summary.usedQty ?? 0) > 0
+    const hasRestock = summary.totalSpent > 0 || summary.totalQty > 0 || (!hasWithdraw && !hasProd)
     // Số chính = đơn vị nhỏ nhất (như tab Thông tin); quy đổi ra bịch/hộp chỉ là gợi ý nhỏ bên dưới.
     const qtyProps = (n: number) => ({ value: `${Math.round(n * 10) / 10} ${unit}`, hint: packHint(n, packSize, packUnit, unit, pack2) })
     return (
@@ -97,6 +113,12 @@ function MonthSummaryCard({ showStats, summary, unit, packSize, packUnit, pack2 
                     <>
                         <Stat label="Đã trả" value={formatVND(summary.totalPaidInMonth)} tone="success" align="start" />
                         <Stat label="Còn nợ" value={formatVND(summary.totalOwing)} tone="warning" align="end" />
+                    </>
+                )}
+                {hasProd && (
+                    <>
+                        {(summary.madeQty ?? 0) > 0 && <Stat label="Sản xuất" tone="primary" {...qtyProps(summary.madeQty!)} align="start" />}
+                        {(summary.usedQty ?? 0) > 0 && <Stat label="Dùng sản xuất" {...qtyProps(summary.usedQty!)} align={(summary.madeQty ?? 0) > 0 ? 'end' : 'start'} />}
                     </>
                 )}
                 {hasWithdraw && (
@@ -127,6 +149,10 @@ function Stat({ label, value, hint, tone, align = 'center' }: { label: string; v
         </div>
     )
 }
+
+// Pill đầu card (26px) lớn hơn pill phụ ở chân card (22px) để đầu card đọc trước. Dùng chung cho thẻ nhập/rút và thẻ sản xuất.
+const TYPE_PILL = 'h-[26px] inline-flex items-center rounded-full bg-surface-light border border-border/60 px-2.5 text-[12px] font-bold leading-none whitespace-nowrap shrink-0'
+const META_PILL = 'h-[22px] px-2 text-[11px] font-bold text-text-secondary/50 inline-flex items-center rounded-full bg-surface-light border border-border/60 leading-none whitespace-nowrap'
 
 // ── History card ────────────────────────────────────────────────────────────
 //
@@ -198,11 +224,8 @@ function HistoryCard({ entry, unit, pack, onOpenPayment, onCancelRestock, onEdit
         : isWithdrawal ? 'text-text'
         : delta > 0 ? 'text-success' : delta < 0 ? 'text-danger' : 'text-text'
     const openPayment = onOpenPayment && (() => onOpenPayment(entry))
-    // Pill phụ ở chân card nhỏ hơn pill ở đầu (22px vs 26px) để đầu card đọc trước.
-    const TYPE_PILL = 'h-[26px] inline-flex items-center rounded-full bg-surface-light border border-border/60 px-2.5 text-[12px] font-bold leading-none whitespace-nowrap shrink-0'
     // Cụm header: 1 hàng khi card rộng, xếp dọc khi hẹp (container query).
     const CLUSTER = 'flex flex-col @[20rem]:flex-row @[20rem]:items-center gap-1.5'
-    const META_PILL ='h-[22px] px-2 text-[11px] font-bold text-text-secondary/50 inline-flex items-center rounded-full bg-surface-light border border-border/60 leading-none whitespace-nowrap'
 
     const innerCls = `bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-3 relative overflow-hidden transition-all ${
         cancelled ? 'opacity-50 grayscale select-none' : ''
@@ -330,4 +353,50 @@ function Pill({ tone, children, onClick }: { tone: 'success' | 'warning' | 'prim
     return onClick
         ? <button type="button" onClick={(e) => { e.stopPropagation(); onClick() }} className={`${cls} active:scale-95 transition-transform`}>{children}</button>
         : <span className={cls}>{children}</span>
+}
+
+// ── Production card ─────────────────────────────────────────────────────────
+// Mẻ sản xuất nhìn từ MỘT nguyên liệu: thành phẩm thì "Sản xuất +qty" + công thức đã dùng; nguyên liệu gốc thì
+// "Dùng sản xuất −qty" + thành phẩm đã làm. Mỗi nguyên liệu liên quan là một chip bấm vào được → nhật ký của nó.
+// Chỉ để xem: không tiền, không tồn kho tổng, hủy mẻ ở thẻ "Sản xuất thành phẩm" (Kiểm kê).
+function ProductionCard({ entry, unit, unitOf, onOpenIngredient, addressName }: { entry: Row; unit: string; unitOf: (key: string) => string; onOpenIngredient?: (key: string) => void; addressName?: string }) {
+    const d = new Date(entry.created_at)
+    const { role, qty, batches, product, outputQty, inputs } = entry.metadata as { role: 'output' | 'input'; qty: number; batches: number; product: string; outputQty: number; inputs: Record<string, number> }
+    const made = role === 'output'
+    const round = (n: number) => Math.round(n * 10) / 10
+    const chip = (key: string, text: string) => <IngredientLogChip key={key} text={text} onOpen={onOpenIngredient && (() => onOpenIngredient(key))} />
+    return (
+        <div className="bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                    <span className={`${TIME_PILL} tabular-nums`}>{dateShortVN(d)}</span>
+                    <span className={`${TIME_PILL} tabular-nums`}>{timeStringVN(d)}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <span className={`${TYPE_PILL} uppercase tracking-wide ${made ? 'text-primary' : 'text-text-secondary'}`}>
+                        {made ? 'Sản xuất' : 'Dùng sản xuất'}
+                    </span>
+                    <span className={`${TYPE_PILL} tabular-nums text-text`}>
+                        {made ? '+' : '−'}{round(qty)} {unit}
+                    </span>
+                </div>
+            </div>
+            <div className="h-[1px] bg-border/40" />
+            <div className="flex flex-col gap-2">
+                <span className="text-[11px] font-black uppercase tracking-wide text-text-secondary">
+                    {made ? `${round(batches)} mẻ · từ nguyên liệu` : `Dùng cho ${round(batches)} mẻ`}
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                    {made
+                        ? Object.entries(inputs || {}).map(([k, v]) => chip(k, `${ingredientLabel(k)} ${round(Number(v))} ${unitOf(k)}`.trim()))
+                        : chip(product, `${ingredientLabel(product)} +${round(outputQty)} ${unitOf(product)}`.trim())}
+                </div>
+            </div>
+            <div className="h-[1px] bg-border/40" />
+            <div className="flex flex-wrap items-center gap-1.5">
+                {addressName && <span className={META_PILL}>{addressName}</span>}
+                <span className={META_PILL}>{entry.staff_name || '—'}</span>
+            </div>
+        </div>
+    )
 }
