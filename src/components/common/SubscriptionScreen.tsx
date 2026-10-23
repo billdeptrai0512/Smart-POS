@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { UUID } from '../../types/domain'
-import { ArrowLeft, LifeBuoy } from 'lucide-react'
+import { ArrowLeft, MessageCircleQuestionMark } from 'lucide-react'
 import SubscriptionPanel from './SubscriptionPanel'
 import SupportModal from './SupportModal'
 import { ICON_BTN } from './ModalShell'
@@ -39,7 +39,7 @@ export default function SubscriptionScreen({ backTo = '/addresses', preselectAdd
                 </div>
 
                 <button onClick={() => setShowSupport(true)} className={ICON_BTN} aria-label="Hỗ trợ / liên lạc">
-                    <LifeBuoy size={20} strokeWidth={2.5} />
+                    <MessageCircleQuestionMark size={20} strokeWidth={2.5} />
                 </button>
             </header>
 
