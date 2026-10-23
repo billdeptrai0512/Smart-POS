@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react'
-import { Loader2, CheckCircle2, Copy, Check, ChevronDown } from 'lucide-react'
+import { Loader2, CheckCircle2, Check, ChevronDown, ClipboardCheck } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAddressStats } from '../../contexts/AddressStatsContext'
@@ -85,7 +85,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
     // độ trễ vài giây không đáng kể so với chuyển khoản ngân hàng (5-30s).
     // manual_review = đã nhận tiền nhưng sai số tiền → báo user chờ admin (KHÔNG lặng lẽ
     // đổi mã QR mới). Hết hạn/huỷ → tạo intent mới để QR luôn dùng mã còn hiệu lực.
-    usePaymentPoll({
+    const { connected } = usePaymentPoll({
         reference,
         enabled: !confirmed && !reviewHold,
         onPaid: handleConfirmed,
@@ -244,7 +244,6 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
             <section className="flex flex-col gap-2.5">
                 <SectionHeader
                     title="Địa chỉ"
-                    hint={`Gói ${PLAN.periodLabel}`}
                     action={addresses.length > 0 && (
                         <button onClick={() => setPickerOpen(true)} className="text-[11px] font-black text-primary uppercase tracking-wide whitespace-nowrap">
                             {addrCount > 0 ? 'Đổi' : 'Chọn'}
@@ -317,11 +316,30 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
 
             {/* ── Thanh toán — 1 card gắn kết: QR + tổng cộng + status ───────────── */}
             <section className="flex flex-col gap-2.5">
-                <SectionHeader title="Thanh toán" />
+                <SectionHeader
+                    title="Thanh toán"
+                    action={!!reference && !reviewHold && (
+                        // Phản ánh đúng trạng thái poll xác nhận (usePaymentPoll): xanh nhấp nháy = đang theo dõi, CK xong tự xác nhận;
+                        // vàng đứng yên + chữ = lần poll gần nhất lỗi, chưa cập nhật được (chỉ ngoại lệ mới có chữ).
+                        connected
+                            ? (
+                                <span role="status" aria-label="Đang chờ chuyển khoản" title="Đang chờ chuyển khoản" className="relative flex w-2.5 h-2.5 mr-1.5">
+                                    <span className="absolute inset-0 rounded-full bg-success opacity-75 animate-ping" />
+                                    <span className="relative w-2.5 h-2.5 rounded-full bg-success ring-4 ring-success/20" />
+                                </span>
+                            )
+                            : (
+                                <span role="status" title="Chưa cập nhật được thanh toán, đang thử lại" className="flex items-center gap-1.5 text-[10px] font-bold text-warning">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-warning ring-4 ring-warning/20" />
+                                    Mất kết nối
+                                </span>
+                            )
+                    )}
+                />
                 <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3.5">
                     {/* QR — đứng giữa, một mình */}
                     <div className="flex justify-center py-1">
-                        <div className="relative w-[140px] aspect-square shrink-0 rounded-[16px] border flex items-center justify-center overflow-hidden bg-surface-light border-border/60 text-text-dim">
+                        <div className="relative w-[min(62%,220px)] aspect-square shrink-0 rounded-[16px] border flex items-center justify-center overflow-hidden bg-surface-light border-border/60 text-text-dim">
                             <Corner className="top-2 left-2 border-t-2 border-l-2 rounded-tl-[6px]" />
                             <Corner className="top-2 right-2 border-t-2 border-r-2 rounded-tr-[6px]" />
                             <Corner className="bottom-2 left-2 border-b-2 border-l-2 rounded-bl-[6px]" />
@@ -339,16 +357,15 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                         </div>
                     </div>
 
-                    {/* Thông tin thanh toán — tổng cộng + STK + tên + nội dung CK */}
+                    {/* Tổng tiền — ngay dưới QR, không nhãn */}
+                    {addrCount > 0 && (
+                        <p className="mt-2 text-center text-[22px] font-black bg-clip-text text-transparent" style={{ backgroundImage: GOLD }}>{formatVND(total)}</p>
+                    )}
+
+                    {/* Thông tin thanh toán — ngân hàng + STK + nội dung CK */}
                     {addrCount > 0 ? (
                         <div className="mt-3.5 pt-3.5 border-t border-border/40 flex flex-col gap-2.5">
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="text-[11px] font-bold text-text-secondary shrink-0">Tổng cộng</span>
-                                <span className="text-[15px] font-black bg-clip-text text-transparent" style={{ backgroundImage: GOLD }}>{formatVND(total)}</span>
-                            </div>
-                            <div className="border-t border-border/30" />
                             <CopyRow label="Ngân hàng" value={BANK_INFO.bank} />
-                            <CopyRow label="Tên tài khoản" value={BANK_INFO.accountName} />
                             <CopyRow label="Số tài khoản" value={BANK_INFO.accountNumber} onCopy={() => copy(BANK_INFO.accountNumber, 'stk')} copied={copied === 'stk'} />
                             <CopyRow label="Nội dung" value={transferContent} onCopy={() => copy(transferContent, 'noidung')} copied={copied === 'noidung'} />
                         </div>
@@ -356,24 +373,13 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                         <p className="mt-3.5 pt-3.5 border-t border-border/40 text-[12px] text-text-secondary font-medium">Chọn chi nhánh để tính tiền</p>
                     )}
 
-                    {/* status — cùng card, ngăn bằng hairline */}
-                    <div className="mt-3 pt-3 border-t border-border/40 flex flex-col gap-1.5">
-                        {reviewHold ? (
-                            <div className="flex gap-2 text-[10.5px] leading-[1.6] font-bold text-warning">
-                                <span className="w-1.5 h-1.5 rounded-full bg-warning shrink-0 mt-[5px]" />
-                                <span>Đã nhận chuyển khoản nhưng số tiền chưa khớp — admin sẽ kiểm tra và mở khoá thủ công.</span>
-                            </div>
-                        ) : (
-                            transferContent && (
-                                <ul className="text-[10.5px] leading-[1.6] flex flex-col gap-0.5">
-                                    <li className="flex gap-2 text-warning"><span className="w-1.5 h-1.5 rounded-full bg-warning shrink-0 mt-[5px]" /><span>Chuyển đúng số tiền <b>{formatVND(total)}</b></span></li>
-                                    <li className="flex gap-2 text-warning"><span className="w-1.5 h-1.5 rounded-full bg-warning shrink-0 mt-[5px]" /><span>Ghi đúng nội dung <b>{transferContent}</b></span></li>
-                                    <li className="flex gap-2 text-text-secondary"><span className="w-1.5 h-1.5 rounded-full bg-text-dim shrink-0 mt-[5px]" /><span>Quét QR là đã điền sẵn cả hai</span></li>
-                                    <li className="flex gap-2 text-text-secondary"><span className="w-1.5 h-1.5 rounded-full bg-success shrink-0 mt-[5px] animate-pulse" /><span>Hệ thống tự động xác nhận thanh toán</span></li>
-                                </ul>
-                            )
-                        )}
-                    </div>
+                    {/* status — chỉ khi CK sai số tiền; cùng card, ngăn bằng hairline */}
+                    {reviewHold && (
+                        <div className="mt-3 pt-3 border-t border-border/40 flex gap-2 text-[10.5px] leading-[1.6] font-bold text-warning">
+                            <span className="w-1.5 h-1.5 rounded-full bg-warning shrink-0 mt-[5px]" />
+                            <span>Đã nhận chuyển khoản nhưng số tiền chưa khớp — admin sẽ kiểm tra và mở khoá thủ công.</span>
+                        </div>
+                    )}
                 </div>
             </section>
 
@@ -433,22 +439,22 @@ function Corner({ className }: { className: string }) {
     return <span className={`absolute w-4 h-4 border-primary/40 ${className}`} />
 }
 
+// onCopy: giá trị là nút chạm-để-sao-chép — gạch chân chấm gợi ý bấm được, vùng chạm nới ra bằng py/-my, sao chép xong đổi xanh + dấu ✓.
 function CopyRow({ label, value, onCopy, copied }: { label: string; value: string; onCopy?: () => void; copied?: boolean }) {
     return (
         <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] text-text-secondary shrink-0">{label}</span>
-            <span className="flex items-center gap-1.5 min-w-0">
-                <span className="text-[12px] font-bold text-text truncate">{value}</span>
-                {onCopy && (
-                    <button
-                        onClick={onCopy}
-                        title="Sao chép"
-                        className="shrink-0 w-6 h-6 flex items-center justify-center rounded-[8px] bg-surface-light border border-border/60 text-text-secondary hover:text-text active:scale-95 transition-all"
-                    >
-                        {copied ? <Check size={12} className="text-success" /> : <Copy size={12} />}
-                    </button>
-                )}
-            </span>
+            {onCopy ? (
+                <button
+                    onClick={onCopy}
+                    className={`min-w-0 py-1.5 -my-1.5 flex items-center gap-1.5 text-[12px] font-bold text-right break-all underline decoration-dotted underline-offset-4 active:opacity-60 transition-colors ${copied ? 'text-success decoration-success' : 'text-text decoration-text-dim'}`}
+                >
+                    {copied && <ClipboardCheck size={13} strokeWidth={2.5} className="shrink-0" />}
+                    {value}
+                </button>
+            ) : (
+                <span className="text-[12px] font-bold text-text text-right min-w-0">{value}</span>
+            )}
         </div>
     )
 }
