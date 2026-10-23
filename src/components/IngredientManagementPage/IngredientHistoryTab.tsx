@@ -93,8 +93,8 @@ export default function IngredientHistoryTab({
 }
 
 // ── Summary card ──────────────────────────────────────────────────────────────
-// Hàng nhập: Tổng tiền | Khối lượng (+ Đã trả | Còn nợ khi có nợ). Hàng rút (chỉ khi có lượt rút): Rút ra quầy | Trị giá.
-// Chỉ có lượt rút (vd lọc theo địa chỉ) → ẩn hàng nhập toàn số 0.
+// Tổng khối lượng | Rút ra quầy, rồi Tổng tiền (= trị giá lượng rút, theo giá vốn) | Còn nợ (luôn hiện, kể cả 0đ).
+// Chỉ có lượt rút (vd lọc theo địa chỉ) → ẩn Tổng khối lượng toàn số 0.
 function MonthSummaryCard({ showStats, summary, unit, packSize, packUnit, pack2 }: PackProps & { showStats: boolean; summary: RestockSummary }) {
     if (!showStats) return null
     const hasWithdraw = summary.withdrawQty > 0
@@ -105,28 +105,28 @@ function MonthSummaryCard({ showStats, summary, unit, packSize, packUnit, pack2 
     return (
         <div className="bg-surface rounded-[16px] border border-border/60 overflow-hidden">
             <div className="grid gap-3 grid-cols-2 p-4">
-                {hasRestock && (
+                {/* Lưới 2×2 cố định cột: Tổng khối lượng | Rút ra quầy / Tổng tiền (trị giá lượng rút) | Còn nợ. Ô vắng giữ chỗ để cột không nhảy. */}
+                {/* Thành phẩm / topping chỉ có mẻ sản xuất (không qua kho tổng → không mua, không rút, không nợ): chỉ hiện hàng sản xuất. */}
+                {(hasRestock || hasWithdraw) && (
                     <>
-                        <Stat label="Tổng tiền" value={formatVND(summary.totalSpent)} align="start" />
-                        <Stat label="Khối lượng" {...qtyProps(summary.totalQty)} align="end" />
-                    </>
-                )}
-                {summary.totalOwing > 0 && (
-                    <>
-                        <Stat label="Đã trả" value={formatVND(summary.totalPaidInMonth)} tone="success" align="start" />
-                        <Stat label="Còn nợ" value={formatVND(summary.totalOwing)} tone="warning" align="end" />
+                        {hasRestock && <Stat label="Tổng khối lượng" {...qtyProps(summary.totalQty)} align="start" />}
+                        {hasRestock && !hasWithdraw && <div />}
+                        {hasWithdraw && (
+                            <>
+                                {!hasRestock && <div />}
+                                <Stat label="Rút ra quầy" {...qtyProps(summary.withdrawQty)} align="end" />
+                            </>
+                        )}
+                        <div className="col-span-2 border-t border-border/60" />
+                        {hasWithdraw ? <Stat label="Tổng tiền" value={formatVND(Math.round(summary.withdrawValue))} align="start" /> : <div />}
+                        <Stat label="Còn nợ" value={formatVND(summary.totalOwing)} tone={summary.totalOwing > 0 ? 'warning' : undefined} align="end" />
+                        {hasProd && <div className="col-span-2 border-t border-border/60" />}
                     </>
                 )}
                 {hasProd && (
                     <>
                         {(summary.madeQty ?? 0) > 0 && <Stat label="Sản xuất" tone="primary" {...qtyProps(summary.madeQty!)} align="start" />}
                         {(summary.usedQty ?? 0) > 0 && <Stat label="Dùng sản xuất" {...qtyProps(summary.usedQty!)} align={(summary.madeQty ?? 0) > 0 ? 'end' : 'start'} />}
-                    </>
-                )}
-                {hasWithdraw && (
-                    <>
-                        <Stat label="Rút ra quầy" {...qtyProps(summary.withdrawQty)} align="start" />
-                        <Stat label="Trị giá" value={formatVND(Math.round(summary.withdrawValue))} align="end" />
                     </>
                 )}
             </div>
