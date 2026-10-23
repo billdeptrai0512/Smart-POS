@@ -1,7 +1,7 @@
 import type { MouseEvent, ReactNode } from 'react'
 import type { Row, UUID } from '../../types/domain'
 import { useMonetizationEnabled } from '../../hooks/useEntitlement'
-import { computeSubscriptionStatus } from '../../utils/subscriptionStatus'
+import { computeSubscriptionStatus, expiryTone } from '../../utils/subscriptionStatus'
 
 /**
  * Trạng thái gói cước của 1 address card — 1 dòng chấm màu + chữ. Ẩn hẳn khi monetization OFF.
@@ -50,7 +50,7 @@ export default function SubscriptionBadge({ addressId, rows, pending, hasActivit
         )
     }
 
-    const { status, daysLeft = 0 } = computeSubscriptionStatus(rows)
+    const { status, daysLeft = 0, trialEnded } = computeSubscriptionStatus(rows)
 
     if (status === 'none' && pending) {
         return (
@@ -73,14 +73,15 @@ export default function SubscriptionBadge({ addressId, rows, pending, hasActivit
                 dotClass="bg-primary"
                 textClass="text-primary"
             >
-                Chưa đăng ký
+                {trialEnded ? 'Hết dùng thử' : 'Chưa đăng ký'}
             </StatusLine>
         )
     }
 
-    const dotClass = daysLeft <= 3 ? 'bg-danger' : daysLeft <= 14 ? 'bg-warning' : 'bg-success'
+    const tone = expiryTone(daysLeft)
+    const dotClass = { danger: 'bg-danger', warning: 'bg-warning', success: 'bg-success' }[tone]
     // Chữ trầm (subtitle) cho trạng thái bình thường; chỉ đỏ lên khi gấp (≤3 ngày).
-    const textClass = daysLeft <= 3 ? 'text-danger' : 'text-text-secondary'
+    const textClass = tone === 'danger' ? 'text-danger' : 'text-text-secondary'
 
     return (
         <StatusLine

@@ -7,7 +7,7 @@ import { createPaymentIntent, grantSubscription, resetSubscription } from '../..
 import { usePaymentPoll } from '../../hooks/usePaymentPoll'
 import { formatVND } from '../../utils'
 import { PLAN, ALL_TIER, BANK_INFO, TRIAL_DAYS } from '../../constants/monetization'
-import { computeSubscriptionStatus } from '../../utils/subscriptionStatus'
+import { computeSubscriptionStatus, expiryTone } from '../../utils/subscriptionStatus'
 import { dateFullVN } from '../../utils/dateVN'
 import { copyText } from '../../utils/clipboard'
 import { errorMessage } from '../../utils/errorMessage'
@@ -16,6 +16,11 @@ import { BottomSheet } from './ModalShell'
 
 // Gradient vàng thương hiệu (đồng bộ badge "developed by").
 const GOLD = 'linear-gradient(135deg, #f8c577, #f59e0b, #d4882f, #b8732a)'
+
+// Thứ tự danh sách địa chỉ: hết dùng thử / chưa đăng ký (cần xử lý) → đang dùng thử → đã đăng ký → đang dùng miễn phí.
+const statusRank = ({ status, pending }: ReturnType<typeof computeSubscriptionStatus>) =>
+    status === 'trial' ? 1 : status === 'paid' ? 2 : pending ? 3 : 0
+const PILL_TONE = { danger: 'bg-danger/10 text-danger', warning: 'bg-warning/10 text-warning', success: 'bg-success/10 text-success' }
 
 /**
  * SubscriptionPanel — thân trang đăng ký gói (checkout).
@@ -57,12 +62,12 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
     const [refRetry, setRefRetry] = useState(0) // tăng → chạy lại effect tạo intent
     const [reviewHold, setReviewHold] = useState(false) // CK sai số tiền → chờ admin duyệt tay
 
-    // valid_to (hạn) hiện tại của TỪNG chi nhánh → vừa hiện chip Đã mở/Chưa mở,
+    // Trạng thái gói + valid_to (hạn) hiện tại của TỪNG chi nhánh → vừa hiện trạng thái từng dòng,
     // vừa tính "hiệu lực đến" sau khi trả (gia hạn nối tiếp). null = chưa có sub active.
     // Derived từ subscriptionRowsMap (AddressStatsContext) — 1 query dùng chung cho
     // cả badge danh sách lẫn panel này, thay vì mỗi nơi tự RPC riêng cho từng chi nhánh.
-    const validToByAddr = useMemo(() => Object.fromEntries(
-        addresses.map(a => [a.id, computeSubscriptionStatus(subscriptionRowsMap[a.id]).validTo])
+    const subByAddr = useMemo(() => Object.fromEntries(
+        addresses.map(a => [a.id, computeSubscriptionStatus(subscriptionRowsMap[a.id])])
     ), [addresses, subscriptionRowsMap])
     const accessLoaded = !subscriptionLoading
 
@@ -102,8 +107,8 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
     const matched = branchQuery.trim()
         ? addresses.filter(a => normalizeText(a.name).includes(normalizeText(branchQuery)))
         : addresses
-    // Chưa mở lên trước: đó là việc cần làm ở trang này. Sort ổn định nên thứ tự cũ giữ trong mỗi nhóm.
-    const filteredAddresses = [...matched].sort((a, b) => Number(!!validToByAddr[a.id]) - Number(!!validToByAddr[b.id]))
+    // Sort ổn định nên thứ tự cũ giữ trong mỗi nhóm.
+    const filteredAddresses = [...matched].sort((a, b) => statusRank(subByAddr[a.id]) - statusRank(subByAddr[b.id]))
     const firstSelected = addresses.find(a => a.id === selectedAddressIds[0])
 
     // ── Tính tiền: giá cố định × số chi nhánh ────────────────────────────────────
@@ -116,7 +121,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
     const newExpiryFor = (addrId: UUID) => {
         const today = new Date(); today.setHours(0, 0, 0, 0)
         let from = today
-        const vt = validToByAddr[addrId]
+        const vt = subByAddr[addrId].validTo
         if (vt) {
             const next = new Date(vt + 'T00:00:00'); next.setDate(next.getDate() + 1)
             if (next > today) from = next
@@ -198,7 +203,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
     }
 
     // ── Panel xác nhận thanh toán thành công ─────────────────────────────────────
-    // newExpiryFor tính từ validToByAddr TRƯỚC khi trả (gia hạn nối tiếp §4) = đúng
+    // newExpiryFor tính từ subByAddr TRƯỚC khi trả (gia hạn nối tiếp §4) = đúng
     // hạn mới sau khi webhook insert sub. User tự bấm "Xong", không auto-redirect.
     if (confirmed) {
         return (
@@ -275,6 +280,11 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                     <div className="min-h-0 flex flex-col gap-1.5 overflow-y-auto">
                         {filteredAddresses.map(addr => {
                             const active = selectedAddressIds.includes(addr.id)
+                            const { status, daysLeft = 0, pending, trialEnded } = subByAddr[addr.id]
+                            const [pillText, pillCls] = status !== 'none'
+                                ? [`${status === 'trial' ? 'Dùng thử · ' : ''}còn ${daysLeft} ngày`, PILL_TONE[expiryTone(daysLeft)]]
+                                : pending ? ['Đang dùng miễn phí', 'bg-surface text-text-dim']
+                                : [trialEnded ? 'Hết dùng thử' : 'Chưa đăng ký', 'bg-primary/10 text-primary']
                             return (
                                 <button
                                     key={addr.id}
@@ -282,8 +292,8 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                                     className={`w-full flex items-center gap-2 text-left rounded-[12px] border px-3 py-2 transition-colors ${active ? 'border-primary bg-primary/[0.07]' : 'border-border/60 bg-surface-light'}`}
                                 >
                                     <span className={`min-w-0 flex-1 text-[13px] font-bold truncate ${active ? 'text-text' : 'text-text-secondary'}`}>{addr.name}</span>
-                                    {/* Chỉ gắn nhãn ngoại lệ "Chưa mở"; đã mở là trạng thái mặc định, khỏi lặp ở từng dòng. */}
-                                    {accessLoaded && !validToByAddr[addr.id] && <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-surface text-text-dim">Chưa mở</span>}
+                                    {/* Pill: còn X ngày (đã đăng ký) / Dùng thử · còn X ngày — màu theo độ gấp như chấm của SubscriptionBadge (>14 xanh, ≤14 vàng, ≤3 đỏ); Đang dùng miễn phí (xám) / Hết dùng thử / Chưa đăng ký (cam). */}
+                                    {accessLoaded && <span className={`shrink-0 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${pillCls}`}>{pillText}</span>}
                                     {active && <Check size={15} strokeWidth={3} className="shrink-0 text-primary" />}
                                 </button>
                             )

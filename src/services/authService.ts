@@ -271,7 +271,7 @@ export async function fetchAddresses(managerId: UUID) {
 
 // Trạng thái gói ('trial'|'paid'|'none') + rows thô cho từng address — 1 query
 // duy nhất dùng chung cho sort BranchGrid, SubscriptionBadge (badge từng card) và
-// SubscriptionPanel (chip Đã mở/Chưa mở) — trước đây 3 nơi tự fetch riêng (N+1).
+// SubscriptionPanel (pill trạng thái từng dòng trong sheet chọn địa chỉ) — trước đây 3 nơi tự fetch riêng (N+1).
 export async function fetchSubscriptionStatuses(addressIds: UUID[]): Promise<{ statusMap: Record<string, string>; rowsMap: Record<string, Row[]> } | null> {
     if (isGuest() || !addressIds.length) return { statusMap: {}, rowsMap: {} }
     const { data, error } = await supabase
