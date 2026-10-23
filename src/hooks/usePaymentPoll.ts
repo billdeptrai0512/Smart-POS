@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 
 const POLL_MS = 4000
@@ -19,10 +19,13 @@ const POLL_MS = 4000
  * @param {boolean}  [opts.enabled=true]
  * @param {()=>void} opts.onPaid
  * @param {(status:string)=>void} [opts.onExpired] - expired/cancelled/manual_review
+ * @returns {{connected: boolean}} false khi lần poll gần nhất lỗi/không đọc được intent — UI dùng để báo "chưa cập nhật được".
  */
 export function usePaymentPoll({ reference, enabled = true, onPaid, onExpired }: {
     reference?: string | null; enabled?: boolean; onPaid: () => void; onExpired?: (status: string) => void
 }) {
+    // reference của lần poll lỗi gần nhất (null = lần gần nhất ổn) — gắn theo reference để đổi intent thì tự coi là ổn lại.
+    const [failedRef, setFailedRef] = useState<string | null>(null)
     // Giữ callback mới nhất mà không re-subscribe interval.
     const onPaidRef = useRef(onPaid)
     const onExpiredRef = useRef(onExpired)
@@ -42,7 +45,9 @@ export function usePaymentPoll({ reference, enabled = true, onPaid, onExpired }:
                 .select('status')
                 .eq('reference', reference)
                 .maybeSingle()
-            if (stopped || error || !data) return
+            if (stopped) return
+            if (error || !data) { setFailedRef(reference); return }
+            setFailedRef(null)
             if (data.status === 'paid') {
                 stopped = true
                 clearInterval(id)
@@ -57,4 +62,6 @@ export function usePaymentPoll({ reference, enabled = true, onPaid, onExpired }:
         const id = setInterval(tick, POLL_MS)
         return () => { stopped = true; clearInterval(id) }
     }, [reference, enabled])
+
+    return { connected: failedRef !== reference }
 }
