@@ -77,7 +77,7 @@ export function buildHubBuyItems({ plan, cfgOf, pool }: Prep, bought?: UsageMap,
 }
 
 // Phần danh sách "Mua" + phiếu Nhập kho, không kèm khung sheet — nhúng được vào chỗ khác (vd. dòng mở rộng ở /addresses).
-export function HubBuyBody({ addressId, prep, bought, minAsFloor, skipped, onSkip, onAfterRestock }: { addressId: string; prep: Prep; bought?: UsageMap; minAsFloor?: boolean; skipped?: Record<string, boolean>; onSkip?: (ingredient: string) => void; onAfterRestock?: () => unknown }) {
+export function HubBuyBody({ addressId, prep, bought, minAsFloor, skipped, onSkip, onOpenIngredient, onAfterRestock }: { addressId: string; prep: Prep; bought?: UsageMap; minAsFloor?: boolean; skipped?: Record<string, boolean>; onSkip?: (ingredient: string) => void; onOpenIngredient?: (ingredient: string) => void; onAfterRestock?: () => unknown }) {
     const { profile } = useAuth()
     const { plan, pool, cfgOf, error, reload } = prep
     const [restock, setRestock] = useState<{ ingredient: string; qty: number | null } | null>(null)
@@ -93,6 +93,7 @@ export function HubBuyBody({ addressId, prep, bought, minAsFloor, skipped, onSki
                     threeFields
                     skipped={skipped}
                     onSkip={onSkip}
+                    onOpen={onOpenIngredient}
                     haveLabel="Cả nhóm rút ngày mai"
                     emptyTitle="Kho tổng đủ cho mai!"
                     emptyHint="Không cần đi chợ đắp thêm cho ngày mai."

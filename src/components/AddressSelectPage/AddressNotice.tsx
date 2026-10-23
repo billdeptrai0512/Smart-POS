@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ClipboardList, ChevronDown, ChevronUp } from 'lucide-react'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAddressStats } from '../../contexts/AddressStatsContext'
@@ -26,16 +27,21 @@ type StockStat = { need: number; total: number }
 // Số liệu tải xong của 1 kho: plan + đã mua hôm nay (+ hàm tươi lại phần đã mua sau khi Nhập kho).
 type Loaded = { prep: Prep; bought: UsageMap; refreshBought: () => unknown }
 export default function AddressNotice() {
-    const { addresses, warehouseGroups } = useAddress()
+    const { addresses, warehouseGroups, setSelectedAddress } = useAddress()
+    const navigate = useNavigate()
+    // Bấm tên nguyên liệu → sang trang chi tiết (trang này unmount); nút Back của trang đó về /addresses?reopen=<kho> → mở lại sheet + dòng kho đó.
+    const { search } = useLocation()
+    const [reopenKey] = useState(() => new URLSearchParams(search).get('reopen'))
+    const focusRef = useRef<HTMLDivElement>(null)
     const { cupsMap, revenueMap, statsLoading } = useAddressStats()
-    const [open, setOpen] = useState(false)
+    const [open, setOpen] = useState(reopenKey !== null)
     const [stats, setStats] = useState<Record<string, StockStat>>(() => readJSON(STOCK_CACHE_KEY, {}))
     const [skips, setSkips] = useState<Skips>(() => {
         const saved = readJSON<{ date?: string; byUnit?: Skips }>(SKIP_KEY, {})
         return saved.date === todayKey() ? saved.byUnit ?? {} : {}
     })
     const [loaded, setLoaded] = useState<Record<string, Loaded>>({}) // số liệu chi tiết từng kho — dòng mở rộng đọc lại, khỏi tải lần 2
-    const [expanded, setExpanded] = useState<Set<string>>(() => new Set()) // dòng kho đang mở rộng
+    const [expanded, setExpanded] = useState<Set<string>>(() => new Set(reopenKey ? [reopenKey] : [])) // dòng kho đang mở rộng
     // Chỉ xét chi nhánh đang hoạt động (có bán hôm nay) — chi nhánh ngưng không đáng báo hết hạn / tồn kho, lại đỡ tốn request.
     // Ngày mới chưa ly nào được bán (stats đã tải nhưng toàn 0) thì không chi nhánh nào "có bán" → danh sách trống 0/0 đúng lúc
     // cần bổ sung tồn kho nhất; lúc đó xét tất cả địa chỉ, sang khi có đơn đầu tiên mới lọc theo doanh số.
@@ -80,6 +86,13 @@ export default function AddressNotice() {
         setRestockSkip(targetId, ingredient, skipped).catch(err => console.error('setRestockSkip', err))
     }
 
+    // Chọn địa chỉ đích của kho rồi vào thẳng trang chi tiết nguyên liệu; Back về /addresses.
+    function openIngredient(unitKey: string, target: Address, ingredient: string) {
+        setSelectedAddress(target)
+        // ?scope=month sẵn trên URL: không thì useDateScope tự ghi (replace) và làm rơi location.state → mất backTo.
+        navigate(`/inventory/stocking/${encodeURIComponent(ingredient)}?scope=month`, { state: { backTo: `/addresses?reopen=${unitKey}` } })
+    }
+
     function onStock(key: string, stat: StockStat | null, data: Loaded) {
         setLoaded(l => ({ ...l, [key]: data }))
         if (!stat) return
@@ -96,6 +109,10 @@ export default function AddressNotice() {
         .sort((x, y) => (stats[y.key]?.need ?? 0) - (stats[x.key]?.need ?? 0))
     const total = stockRows.filter(u => stats[u.key]).length
     const doneCount = stockRows.filter(u => stats[u.key]?.need === 0).length
+    // Về từ trang chi tiết: kho vừa bấm tải trước (khỏi chờ các kho khác) rồi cuộn tới dòng của nó.
+    const loadOrder = [...units].sort((a, b) => Number(b.key === reopenKey) - Number(a.key === reopenKey))
+    const reopenReady = !!(reopenKey && loaded[reopenKey])
+    useEffect(() => { if (reopenReady) focusRef.current?.scrollIntoView({ block: 'start' }) }, [reopenReady])
 
     return (
         <>
@@ -109,7 +126,7 @@ export default function AddressNotice() {
                                 const data = loaded[u.key]
                                 const isOpen = expanded.has(u.key) && !!data
                                 return (
-                                    <div key={u.key}>
+                                    <div key={u.key} ref={u.key === reopenKey ? focusRef : undefined}>
                                         <Row
                                             name={u.name}
                                             note={st ? `${st.total - st.need}/${st.total} nguyên liệu cần bổ sung${data ? '' : ' · đang cập nhật…'}` : 'Đang tính…'}
@@ -117,7 +134,7 @@ export default function AddressNotice() {
                                             chevron={isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                                             onClick={data ? () => setExpanded(e => { const n = new Set(e); if (!n.delete(u.key)) n.add(u.key); return n }) : undefined}
                                         />
-                                        {isOpen && <HubBuyBody addressId={u.target.id} prep={data.prep} bought={data.bought} minAsFloor={!u.hub} skipped={skips[u.target.id]} onSkip={ing => toggleSkip(u.target.id, ing)} onAfterRestock={data.refreshBought} />}
+                                        {isOpen && <HubBuyBody addressId={u.target.id} prep={data.prep} bought={data.bought} minAsFloor={!u.hub} skipped={skips[u.target.id]} onSkip={ing => toggleSkip(u.target.id, ing)} onOpenIngredient={ing => openIngredient(u.key, u.target, ing)} onAfterRestock={data.refreshBought} />}
                                     </div>
                                 )
                             })}
@@ -126,7 +143,7 @@ export default function AddressNotice() {
                 </NoticeSheet>
             )}
             {/* Bộ tải nền: mount dần, mỗi lần tối đa STOCK_CONCURRENCY kho đang chạy */}
-            {!statsLoading && units.slice(0, STOCK_CONCURRENCY + Object.keys(loaded).length).map(u => <StockLoader key={u.key} unit={u} skipped={skips[u.target.id]} onResult={onStock} />)}
+            {!statsLoading && loadOrder.slice(0, STOCK_CONCURRENCY + Object.keys(loaded).length).map(u => <StockLoader key={u.key} unit={u} skipped={skips[u.target.id]} onResult={onStock} />)}
         </>
     )
 }
