@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { UUID } from '../../types/domain'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, LifeBuoy } from 'lucide-react'
 import SubscriptionPanel from './SubscriptionPanel'
+import SupportModal from './SupportModal'
 import { ICON_BTN } from './ModalShell'
 
 /**
@@ -19,10 +21,11 @@ interface Props { backTo?: string; preselectAddressId?: UUID; onDone?: () => voi
 
 export default function SubscriptionScreen({ backTo = '/addresses', preselectAddressId, onDone }: Props) {
     const navigate = useNavigate()
+    const [showSupport, setShowSupport] = useState(false)
 
     return (
         <div className="flex flex-col h-[100dvh] max-w-lg mx-auto bg-bg">
-            {/* Header: [back] [chip tiêu đề canh giữa] */}
+            {/* Header: [back] [chip tiêu đề canh giữa] [hỗ trợ / liên lạc] */}
             <header className="shrink-0 pt-6 pb-4 bg-surface border-b border-border/60 shadow-sm relative z-20 flex items-center px-4 gap-3">
                 <button
                     onClick={() => navigate(backTo)}
@@ -34,6 +37,10 @@ export default function SubscriptionScreen({ backTo = '/addresses', preselectAdd
                 <div className="flex-1 min-w-0 bg-primary/5 border border-primary/10 shadow-sm rounded-[14px] px-3 py-2.5 flex items-center justify-center">
                     <span className="text-[12px] font-black text-primary uppercase tracking-wide">Đăng ký sử dụng</span>
                 </div>
+
+                <button onClick={() => setShowSupport(true)} className={ICON_BTN} aria-label="Hỗ trợ / liên lạc">
+                    <LifeBuoy size={20} strokeWidth={2.5} />
+                </button>
             </header>
 
             <div className="flex-1 overflow-y-auto px-4 pt-4">
@@ -42,6 +49,8 @@ export default function SubscriptionScreen({ backTo = '/addresses', preselectAdd
                     onDone={onDone || (() => navigate(backTo))}
                 />
             </div>
+
+            <SupportModal open={showSupport} onClose={() => setShowSupport(false)} />
         </div>
     )
 }
