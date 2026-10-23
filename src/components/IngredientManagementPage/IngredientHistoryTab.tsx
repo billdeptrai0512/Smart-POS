@@ -10,7 +10,7 @@ import type { Pack2 } from '../../utils/inventory'
 import type { Row } from '../../types/domain'
 
 /** Tổng hợp khoảng ngày đang xem (IngredientDetailPage tính từ history). */
-export interface RestockSummary { totalQty: number; totalSpent: number; totalOwing: number; totalPaidInMonth: number; withdrawQty: number; withdrawValue: number; madeQty?: number; usedQty?: number }
+export interface RestockSummary { totalQty: number; totalSpent: number; totalOwing: number; withdrawQty: number; withdrawValue: number; madeQty?: number; usedQty?: number }
 
 interface PackProps {
     unit: string
@@ -105,18 +105,11 @@ function MonthSummaryCard({ showStats, summary, unit, packSize, packUnit, pack2 
     return (
         <div className="bg-surface rounded-[16px] border border-border/60 overflow-hidden">
             <div className="grid gap-3 grid-cols-2 p-4">
-                {/* Lưới 2×2 cố định cột: Tổng khối lượng | Rút ra quầy / Tổng tiền (trị giá lượng rút) | Còn nợ. Ô vắng giữ chỗ để cột không nhảy. */}
-                {/* Thành phẩm / topping chỉ có mẻ sản xuất (không qua kho tổng → không mua, không rút, không nợ): chỉ hiện hàng sản xuất. */}
+                {/* Ô vắng giữ chỗ để cột không nhảy. Thành phẩm / topping chỉ có mẻ sản xuất (không qua kho tổng → không mua, không rút, không nợ): chỉ hiện hàng sản xuất. */}
                 {(hasRestock || hasWithdraw) && (
                     <>
-                        {hasRestock && <Stat label="Tổng khối lượng" {...qtyProps(summary.totalQty)} align="start" />}
-                        {hasRestock && !hasWithdraw && <div />}
-                        {hasWithdraw && (
-                            <>
-                                {!hasRestock && <div />}
-                                <Stat label="Rút ra quầy" {...qtyProps(summary.withdrawQty)} align="end" />
-                            </>
-                        )}
+                        {hasRestock ? <Stat label="Tổng khối lượng" {...qtyProps(summary.totalQty)} align="start" /> : <div />}
+                        {hasWithdraw ? <Stat label="Rút ra quầy" {...qtyProps(summary.withdrawQty)} align="end" /> : <div />}
                         <div className="col-span-2 border-t border-border/60" />
                         {hasWithdraw ? <Stat label="Tổng tiền" value={formatVND(Math.round(summary.withdrawValue))} align="start" /> : <div />}
                         <Stat label="Còn nợ" value={formatVND(summary.totalOwing)} tone={summary.totalOwing > 0 ? 'warning' : undefined} align="end" />

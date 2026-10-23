@@ -204,12 +204,7 @@ export default function IngredientDetailPage() {
     ), [history, filter])
 
     const summary = useMemo(() => {
-        let totalQty = 0, totalSpent = 0, totalOwing = 0, totalPaidInMonth = 0, withdrawQty = 0, madeQty = 0, usedQty = 0
-        // `fromDate` / `toDate` xác định cửa sổ đang xem — payments có paid_at
-        // trong cửa sổ này được tính vào "Đã trả". Một payment có thể trả
-        // cho invoice kỳ khác, nên paid không = invoice.amount khớp 1-1.
-        const monthStartMs = new Date(fromDate).getTime()
-        const monthEndMs = new Date(toDate).getTime()
+        let totalQty = 0, totalSpent = 0, totalOwing = 0, withdrawQty = 0, madeQty = 0, usedQty = 0
         shownHistory.forEach(e => {
             // Lượt rút ra quầy không phải mua hàng — không tính tiền.
             const kind = kindOf(e)
@@ -219,14 +214,10 @@ export default function IngredientDetailPage() {
             totalSpent += e.amount || 0
             const paid = (e.payments || []).reduce((s: number, p: Row) => s + (p.amount || 0), 0)
             totalOwing += Math.max(0, (e.amount || 0) - paid)
-            for (const p of e.payments || []) {
-                const t = new Date(p.paid_at).getTime()
-                if (t >= monthStartMs && t <= monthEndMs) totalPaidInMonth += p.amount || 0
-            }
         })
         // Rút ra quầy không có tiền thật → trị giá = lượng × giá vốn hiện tại của nguyên liệu (ước tính).
-        return { totalQty, totalSpent, totalOwing, totalPaidInMonth, withdrawQty, withdrawValue: withdrawQty * cost, madeQty, usedQty }
-    },[shownHistory, fromDate, toDate, cost])
+        return { totalQty, totalSpent, totalOwing, withdrawQty, withdrawValue: withdrawQty * cost, madeQty, usedQty }
+    },[shownHistory, cost])
 
     // ── Save callbacks for child rows ───────────────────────────────────────
     // category đi theo section của nhóm (trigger DB ép) — client chỉ gán group_id.
