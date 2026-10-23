@@ -109,7 +109,6 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
         : addresses
     // Sort ổn định nên thứ tự cũ giữ trong mỗi nhóm.
     const filteredAddresses = [...matched].sort((a, b) => statusRank(subByAddr[a.id]) - statusRank(subByAddr[b.id]))
-    const firstSelected = addresses.find(a => a.id === selectedAddressIds[0])
 
     // ── Tính tiền: giá cố định × số chi nhánh ────────────────────────────────────
     const addrCount = selectedAddressIds.length
@@ -241,20 +240,27 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
 
     return (
         <div className="flex flex-col gap-5 animate-fade-in">
-            {/* ── Chi nhánh (áp dụng ở đâu): 1 hàng tóm tắt, bấm mở sheet chọn ─────── */}
+            {/* ── Địa chỉ + hạn: mỗi địa chỉ đã chọn 1 dòng "tên | đến ngày" (gia hạn nối tiếp nên hạn mỗi chi nhánh có thể khác nhau). "Đổi" mở sheet chọn. ── */}
             <section className="flex flex-col gap-2.5">
-                <SectionHeader title="Địa chỉ" />
-                <button
-                    onClick={() => setPickerOpen(true)}
-                    disabled={addresses.length === 0}
-                    className="w-full flex items-center gap-2 rounded-[12px] border border-border/60 bg-surface-light px-3 py-2.5 text-left active:scale-[0.99] transition"
-                >
-                    <span className="flex-1 min-w-0 text-[13px] font-bold text-text truncate">
-                        {firstSelected ? firstSelected.name : addresses.length === 0 ? 'Chưa có chi nhánh nào.' : 'Chọn địa chỉ'}
-                    </span>
-                    {addrCount > 1 && <span className="shrink-0 text-[11px] font-black text-primary">+{addrCount - 1}</span>}
-                    <ChevronDown size={16} className="shrink-0 text-text-dim" />
-                </button>
+                <SectionHeader
+                    title="Địa chỉ"
+                    hint={`Gói ${PLAN.periodLabel}`}
+                    action={addresses.length > 0 && (
+                        <button onClick={() => setPickerOpen(true)} className="text-[11px] font-black text-primary uppercase tracking-wide whitespace-nowrap">
+                            {addrCount > 0 ? 'Đổi' : 'Chọn'}
+                        </button>
+                    )}
+                />
+                <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2 max-h-[168px] overflow-y-auto">
+                    {addrCount > 0 ? selectedAddressIds.map(id => (
+                        <div key={id} className="flex items-center justify-between gap-3">
+                            <span className="min-w-0 truncate text-[13px] font-bold text-text">{addresses.find(a => a.id === id)?.name || '—'}</span>
+                            <span className="shrink-0 text-[12px] text-text-secondary tabular-nums">đến {accessLoaded ? dateFullVN(newExpiryFor(id)) : '…'}</span>
+                        </div>
+                    )) : (
+                        <p className="text-[12px] text-text-secondary font-medium">{addresses.length === 0 ? 'Chưa có chi nhánh nào.' : 'Chọn chi nhánh để đăng ký'}</p>
+                    )}
+                </div>
             </section>
 
             {pickerOpen && (
@@ -308,24 +314,6 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                     </button>
                 </BottomSheet>
             )}
-
-            {/* Mỗi chi nhánh 1 card — gia hạn nối tiếp nên hạn từng chi nhánh có thể khác nhau */}
-            <section className="flex flex-col gap-2.5">
-                <SectionHeader title="Thông tin" hint={addrCount > 0 ? `${addrCount} địa chỉ` : undefined} />
-                {addrCount > 0 ? (
-                    selectedAddressIds.map(id => (
-                        <div key={id} className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2">
-                            {/* Chọn 1 địa chỉ thì tên đã nằm ở hàng chọn phía trên → bỏ dòng lặp. */}
-                            {addrCount > 1 && <CopyRow label="Địa chỉ" value={addresses.find(a => a.id === id)?.name || '—'} />}
-                            <CopyRow label="Thời hạn" value={`${PLAN.periodLabel} · đến ${accessLoaded ? dateFullVN(newExpiryFor(id)) : '…'}`} />
-                        </div>
-                    ))
-                ) : (
-                    <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3">
-                        <p className="text-[12px] text-text-secondary font-medium">Chọn chi nhánh để xem thông tin</p>
-                    </div>
-                )}
-            </section>
 
             {/* ── Thanh toán — 1 card gắn kết: QR + tổng cộng + status ───────────── */}
             <section className="flex flex-col gap-2.5">
