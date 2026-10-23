@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react'
-import { Loader2, CheckCircle2, Check, ChevronDown, ClipboardCheck } from 'lucide-react'
+import { Loader2, CheckCircle2, Check, ChevronDown, ClipboardCheck, Download } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAddressStats } from '../../contexts/AddressStatsContext'
@@ -156,6 +156,18 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
             setCopied(key)
             setTimeout(() => setCopied(null), 1500)
         }
+    }
+
+    // Lưu ảnh QR để chọn từ thư viện trong app ngân hàng; Web Share (bảng chia sẻ hệ điều hành) nếu có, không thì mở ảnh tab mới để nhấn giữ lưu.
+    const saveQr = async () => {
+        try {
+            const blob = await (await fetch(qrUrl)).blob()
+            const file = new File([blob], `QR-${transferContent}.png`, { type: 'image/png' })
+            if (navigator.canShare?.({ files: [file] })) return await navigator.share({ files: [file] })
+        } catch (err) {
+            if ((err as Error).name === 'AbortError') return
+        }
+        window.open(qrUrl, '_blank')
     }
 
     const handleMockPayment = async () => {
@@ -359,7 +371,18 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
 
                     {/* Tổng tiền — ngay dưới QR, không nhãn */}
                     {addrCount > 0 && (
-                        <p className="mt-2 text-center text-[22px] font-black bg-clip-text text-transparent" style={{ backgroundImage: GOLD }}>{formatVND(total)}</p>
+                        <div className="mt-2 flex items-center justify-center gap-3">
+                            <span className="text-[22px] font-black bg-clip-text text-transparent" style={{ backgroundImage: GOLD }}>{formatVND(total)}</span>
+                            {reference && (
+                                <button
+                                    onClick={saveQr}
+                                    aria-label="Lưu ảnh QR"
+                                    className="shrink-0 w-8 h-8 flex items-center justify-center rounded-[10px] bg-surface-light border border-border/60 text-text-secondary hover:text-text active:scale-95 transition-all"
+                                >
+                                    <Download size={15} strokeWidth={2.5} />
+                                </button>
+                            )}
+                        </div>
                     )}
 
                     {/* Thông tin thanh toán — ngân hàng + STK + nội dung CK */}
