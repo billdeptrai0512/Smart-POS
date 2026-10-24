@@ -354,10 +354,10 @@ const BRANCH_STAGES = [
     { key: 'ordered', label: 'Đã có đơn, chưa nhập thực thu', cls: 'bg-warning' },
     { key: 'trial_counted', label: 'Dùng thử, có kiểm kê', cls: 'bg-primary' },
     { key: 'trial_uncounted', label: 'Dùng thử, chưa kiểm kê', cls: 'bg-danger' },
-    { key: 'expired_pre', label: 'Ngưng sử dụng trước khi trả phí', cls: 'bg-text-dim' },
+    { key: 'expired_pre', label: 'Hết hạn dùng thử, chưa trả phí', cls: 'bg-text-dim' },
     { key: 'paid_counted', label: 'Trả phí, có kiểm kê', cls: 'bg-success' },
     { key: 'paid_uncounted', label: 'Trả phí, chưa kiểm kê', cls: 'bg-danger' },
-    { key: 'expired_post', label: 'Ngưng sử dụng sau khi trả phí', cls: 'bg-text-dim' },
+    { key: 'expired_post', label: 'Trả phí, không gia hạn', cls: 'bg-text-dim' },
 ] as const
 
 function BranchStageCard({ stages }: { stages: BranchStages }) {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { useAddress } from '../contexts/AddressContext'
+import { useEntitlement } from '../hooks/useEntitlement'
 import { useProducts } from '../contexts/ProductContext'
 import { useAuth } from '../contexts/AuthContext'
 import { fetchRestockSummary, groupByIngredient, type RestockSummaryRow } from '../services/restockSummaryService'
@@ -27,6 +28,9 @@ export default function InventorySummaryPage() {
     const { ingredientUnits, ingredientConfigs, ingredientCosts } = useProducts()
     const { isManager, isAdmin } = useAuth()
     const canView = isManager || isAdmin
+    // Báo cáo chi/nợ nhập kho → cùng gate gói với Báo cáo (xem DailyReportPage).
+    const { hasAccess, loading: entitlementLoading, enabled: monetizationEnabled } = useEntitlement()
+    const locked = monetizationEnabled && !entitlementLoading && !hasAccess
 
     // Kho tổng chung = 1 kho: gộp cả nhóm; tên địa chỉ để tách "rút ra quầy" theo chi nhánh.
     const siblings = addressId ? siblingsByAddress[addressId] : null
@@ -49,14 +53,14 @@ export default function InventorySummaryPage() {
     const [rows, setRows] = useState<RestockSummaryRow[] | null>(null)
     const [failed, setFailed] = useState(false)
     useEffect(() => {
-        if (!groupIds.length) return
+        if (!groupIds.length || locked) return
         let stale = false
         setRows(null); setFailed(false)
         fetchRestockSummary(groupIds, fromDate, toDate)
             .then(r => { if (!stale) setRows(r) })
             .catch(err => { console.error('fetchRestockSummary', err); if (!stale) setFailed(true) })
         return () => { stale = true }
-    }, [groupIds, fromDate, toDate])
+    }, [groupIds, fromDate, toDate, locked])
 
     // Kho tổng chung: chọn 1 địa chỉ → chỉ số của địa chỉ đó (rút bao nhiêu, trị giá bao nhiêu) cho mọi nguyên liệu.
     const [filterAddr, setFilterAddr] = useState<UUID | null>(null)
@@ -70,6 +74,8 @@ export default function InventorySummaryPage() {
         q.set('tab', 'history')
         navigate(`/inventory/stocking/${key}?${q}`, { state: { ...location.state, backTo: location.pathname + location.search } })
     }
+
+    if (locked) return <Navigate to="/subscription" replace state={{ preselectAddressId: addressId, from: '/inventory/stocking' }} />
 
     return (
         <div className="flex flex-col h-full max-w-lg mx-auto bg-bg relative">

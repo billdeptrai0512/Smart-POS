@@ -65,6 +65,7 @@ Lý do: mục tiêu là owner phải THỰC SỰ vận hành đủ (nhập thự
 | View **Lợi nhuận** — FinanceCards / P&L / COGS |  |  ✓  |
 | View **Tồn kho** — InventoryReportCard / Refill / Gợi ý đi chợ |  |  ✓  |
 | View **Tồn kho** — Audit tab + RangeLossCard (hao hụt) |  |  ✓  |
+| **Tổng hợp nhập kho** (`/inventory/summary`) — tiền chi / công nợ theo kỳ |  |  ✓  |
 
 Khi quyết định feature mới:
 - Bất kỳ view báo cáo nào (tiền mặt/thu chi/lãi-lỗ/COGS/tồn/hao hụt/đi chợ) → thuộc gói **`all`** (gate).
