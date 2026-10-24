@@ -135,28 +135,30 @@ function DashboardBody({ data, byRange, stages, visits }: { data: DashboardData;
     // total_count = đếm không giới hạn (đã dedupe theo chi nhánh) từ RPC; attention (mảng) chỉ là top-20
     // hiển thị nên KHÔNG dùng .length làm KPI — sẽ undercount khi > 20 chi nhánh cần chú ý.
     const attentionCount = attention_total_count ?? attention.length
+    // Mobile: 1 cột theo thứ tự DOM. Desktop (lg): 2 cột đặt vị trí tường minh — hàng 1 KPI | hero;
+    // hàng 2-3 phễu khách (cao 2 hàng) | giai đoạn chi nhánh + công tắc; hàng 4 hoạt động full ngang.
     return (
-        <>
-            <div className="mb-4">
+        <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+            <div className="lg:col-start-1 lg:row-start-2 lg:row-span-2">
                 <OnboardingFunnelCard byRange={byRange} visits={visits} />
             </div>
-            <ActiveTodayHeroCard stages={stages} />
-            <KpiRow stages={stages} attentionCount={attentionCount} />
+            <div className="lg:col-start-2 lg:row-start-1 lg:self-stretch"><ActiveTodayHeroCard stages={stages} /></div>
+            <div className="lg:col-start-1 lg:row-start-1 lg:self-stretch"><KpiRow stages={stages} attentionCount={attentionCount} /></div>
             {/* Tổng 16 chi nhánh chia theo giai đoạn — đứng ngay dưới con số tổng. */}
             {stages && (
-                <div className="mb-4">
+                <div className="lg:col-start-2 lg:row-start-2">
                     <BranchStageCard stages={stages} />
                 </div>
             )}
-            <div className="flex flex-col gap-4">
+            <div className="lg:col-span-2 lg:row-start-4">
                 <ActivityCard items={activity} />
             </div>
-            {/* Công tắc cấu hình, không phải số liệu — xuống cuối, đứng đầu trang chỉ
-                chiếm chỗ của câu mở đầu. */}
-            <div className="mt-4">
+            {/* Công tắc cấu hình, không phải số liệu — xuống cuối ở mobile; desktop đứng dưới thẻ giai đoạn
+                cho cột phải cao ngang phễu khách. */}
+            <div className="lg:col-start-2 lg:row-start-3">
                 <MonetizationToggle />
             </div>
-        </>
+        </div>
     )
 }
 
@@ -164,7 +166,7 @@ function DashboardBody({ data, byRange, stages, visits }: { data: DashboardData;
 // phản hồi trong ngày; chuyển đổi trả phí/kích hoạt chỉ là bối cảnh ở các thẻ bên dưới.
 function ActiveTodayHeroCard({ stages }: { stages: Record<string, number> | null }) {
     return (
-        <div className="relative bg-success-soft border border-success/30 rounded-[20px] px-5 py-4 mb-3 overflow-hidden">
+        <div className="relative bg-success-soft border border-success/30 rounded-[20px] px-5 py-4 h-full overflow-hidden">
             <p className="text-[10.5px] font-black uppercase tracking-wide text-success">Hôm nay hoạt động</p>
             <p className="text-[34px] font-black tabular-nums leading-tight mt-0.5 text-text">
                 {stages ? stages.active_today : '—'}
@@ -180,7 +182,7 @@ function KpiCard({ label, value, onClick }: { label: string; value: string; onCl
     return (
         <Tag
             onClick={onClick}
-            className={`relative bg-surface border border-border/60 rounded-[16px] px-4 py-3.5 overflow-hidden text-left ${onClick ? 'hover:bg-border/10 active:scale-[0.99] transition-all' : ''}`}
+            className={`relative flex flex-col justify-center bg-surface border border-border/60 rounded-[16px] px-4 py-3.5 overflow-hidden text-left ${onClick ? 'hover:bg-border/10 active:scale-[0.99] transition-all' : ''}`}
         >
             <p className="text-[10px] font-black uppercase tracking-wide text-text-dim mb-1">{label}</p>
             <p className="text-[19px] xl:text-[22px] font-black text-text tabular-nums leading-tight truncate">{value}</p>
@@ -193,7 +195,7 @@ function KpiRow({ stages, attentionCount }: { stages: Record<string, number> | n
     const total = stages ? BRANCH_STAGES.reduce((n, s) => n + (stages[s.key] ?? 0), 0) : null
 
     return (
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-2 gap-3 h-full">
             <KpiCard label="Tổng cộng có" value={total != null ? `${total} địa chỉ` : '—'} />
             <KpiCard
                 label="Cần chú ý"
@@ -257,7 +259,7 @@ function OnboardingFunnelCard({ byRange, visits }: { byRange: Record<string, Gue
             </div>
             <div className="mt-1">
                 {funnel?.stages?.length ? (
-                    <GuestFunnelBody funnel={funnel} visits={visits?.[range]} />
+                    <GuestFunnelBody funnel={funnel} visits={visits?.[range]} loggedIn={visits?.[`${range}_members`]} />
                 ) : (
                     <p className="text-[11px] text-text-dim">Chưa có khách nào vào dùng thử trong khoảng này</p>
                 )}
@@ -274,7 +276,8 @@ function OnboardingFunnelCard({ byRange, visits }: { byRange: Record<string, Gue
 const stageLabel = (raw: string) =>
     raw.replace(/^Xong: /, '').replace('Cài công thức (hết guide)', 'Nhập định lượng').replace('Vào dùng thử', 'Bấm hướng dẫn sử dụng')
 
-function FunnelStageRow({ dotClass, label, count, pct, seconds }: { dotClass: string; label: string; count: number; pct: number; seconds?: number | null }) {
+// activePct (tuỳ chọn) = phần của thanh được tô đậm; phần còn lại của thanh nhạt đi.
+function FunnelStageRow({ dotClass, label, count, pct, seconds, activePct }: { dotClass: string; label: string; count: number; pct: number; seconds?: number | null; activePct?: number }) {
     return (
         <div className="flex flex-col gap-1.5">
             <div className="flex items-baseline justify-between gap-2">
@@ -288,14 +291,16 @@ function FunnelStageRow({ dotClass, label, count, pct, seconds }: { dotClass: st
                 </span>
             </div>
             {/* Chỗ rớt tự đọc được từ độ ngắn đi của thanh so với thanh ngay trên — không ghi thêm số. */}
-            <div className="h-2 rounded-full bg-surface-light overflow-hidden">
-                <div className={`h-full rounded-full ${dotClass} transition-all`} style={{ width: `${pct}%` }} />
+            <div className="relative h-2 rounded-full bg-surface-light overflow-hidden">
+                <div className={`h-full rounded-full ${dotClass} transition-all ${activePct != null ? 'opacity-30' : ''}`} style={{ width: `${pct}%` }} />
+                {activePct != null && <div className={`absolute inset-y-0 left-0 rounded-full ${dotClass} transition-all`} style={{ width: `${activePct}%` }} />}
             </div>
         </div>
     )
 }
 
-function GuestFunnelBody({ funnel, visits }: { funnel: GuestFunnel; visits?: number }) {
+// loggedIn = trình duyệt ghé /login rồi đăng nhập (nhân viên/quản lý) — đã loại khỏi visits (20261034/36).
+function GuestFunnelBody({ funnel, visits, loggedIn }: { funnel: GuestFunnel; visits?: number; loggedIn?: number }) {
     const { stages, signup, prev } = funnel
     const entered = stages[0].count
     // Thanh/% các dòng tính trên số ghé /login khi có; kẹp 100 vì khách cũ bấm hướng dẫn từ trước
@@ -316,6 +321,7 @@ function GuestFunnelBody({ funnel, visits }: { funnel: GuestFunnel; visits?: num
                 {visits != null && (
                     <FunnelStageRow dotClass="bg-primary" label="Vào trang chủ" count={visits} pct={barPct(visits)} />
                 )}
+                {!!loggedIn && <p className="text-[11px] text-text-dim font-medium -mt-1.5">Chưa tính {loggedIn} lượt đã đăng nhập (nhân viên/quản lý)</p>}
                 {stages.map((f) => (
                     // step_median_seconds = thời gian trung vị TỪ BƯỚC TRƯỚC tới bước này —
                     // chỗ nào số này to là chỗ khách khựng lại lâu nhất, đáng sửa guide trước.
@@ -360,12 +366,27 @@ function BranchStageCard({ stages }: { stages: BranchStages }) {
 
     return (
         <div className={CARD}>
-            <h3 className={`${CARD_TITLE} mb-3 pb-3 border-b border-border/60`}>Trong đó</h3>
+            <div className="flex items-baseline justify-between gap-2 mb-3 pb-3 border-b border-border/60">
+                <h3 className={CARD_TITLE}>Trong đó</h3>
+                {Object.values(stages.lists ?? {}).some((l) => l[0]?.active !== undefined) && (
+                    <span className="text-[10.5px] text-text-dim font-medium">Phần đậm: hôm nay có đơn/kết ca</span>
+                )}
+            </div>
             <div className="flex flex-col gap-3">
                 {BRANCH_STAGES.map((s) => {
                     const count = stages[s.key] ?? 0
                     const names = stages.lists?.[s.key] ?? []
-                    const row = <FunnelStageRow dotClass={s.cls} label={s.label} count={count} pct={total > 0 ? Math.round((count / total) * 100) : 0} />
+                    const hasActive = names.length > 0 && names[0].active !== undefined
+                    const activeCount = names.filter((n) => n.active).length
+                    const row = (
+                        <FunnelStageRow
+                            dotClass={s.cls}
+                            label={s.label}
+                            count={count}
+                            pct={total > 0 ? Math.round((count / total) * 100) : 0}
+                            activePct={hasActive && total > 0 ? Math.round((activeCount / total) * 100) : undefined}
+                        />
+                    )
                     return (
                         <div key={s.key}>
                             <button disabled={names.length === 0} onClick={() => setOpen((o) => ({ ...o, [s.key]: !o[s.key] }))} className="w-full text-left hover:opacity-80 transition-opacity">{row}</button>
@@ -373,7 +394,10 @@ function BranchStageCard({ stages }: { stages: BranchStages }) {
                                 <ul className="mt-2 pl-3 border-l-2 border-border/60 flex flex-col gap-1">
                                     {names.map((n, i) => (
                                         <li key={i} className="text-[12px] text-text-secondary flex items-baseline justify-between gap-2">
-                                            <span className="min-w-0 truncate">{n.name}</span>
+                                            <span className="min-w-0 truncate flex items-center gap-1.5">
+                                                {n.active && <i className="w-[6px] h-[6px] rounded-full bg-success shrink-0" title="Hôm nay có đơn/kết ca" />}
+                                                {n.name}
+                                            </span>
                                             {n.group && <span className="shrink-0 text-[10px] font-bold text-primary">Kho chung: {n.group}</span>}
                                         </li>
                                     ))}

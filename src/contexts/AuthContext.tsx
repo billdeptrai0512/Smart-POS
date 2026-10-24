@@ -4,7 +4,7 @@ import type { Profile, Row } from '../types/domain'
 import { supabase } from '../lib/supabaseClient'
 import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, fetchProfileByAuthId, removeSession, fetchDefaultIngredientSort } from '../services/authService'
 import { isGuest as getLocalIsGuest, setIsGuest as setLocalIsGuest, initializeGuestFromGlobal, clearGuestData, setGuestIngredientSortOrder } from '../services/localRepository'
-import { trackGuestOnboardingStage, markGuestFunnelSignup } from '../services/onboardingFunnelService'
+import { trackGuestOnboardingStage, markGuestFunnelSignup, markLoginPageMember } from '../services/onboardingFunnelService'
 import { STORAGE_KEYS } from '../constants/storageKeys'
 import { readJSON, writeJSON } from '../utils/storage'
 
@@ -264,6 +264,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const signIn = useCallback(async (username: string, password: string) => {
         const data = await authSignIn(username, password)
+        markLoginPageMember() // trước clearGuestData() — không phụ thuộc visitor id còn hay không
         // Auth state change listener will handle setting user/profile.
         // Transition from guest sandbox → real account: clear local guest data so stale
         // guest_* keys don't linger (signUp / signUpWithInvite already do this). Only after

@@ -17,7 +17,8 @@ export async function fetchAdminDashboard() {
 
 
 // group = tên nhóm kho chung của địa chỉ (null = kho riêng).
-export interface StageAddress { name: string; group: string | null }
+// active = hôm nay có đơn/kết ca (migration 20261035; undefined khi RPC chưa apply).
+export interface StageAddress { name: string; group: string | null; active?: boolean }
 // Các key số = số địa chỉ mỗi nhóm; lists[nhóm] = địa chỉ trong nhóm (migration 20261026).
 export type BranchStages = Record<string, any> & { lists?: Record<string, StageAddress[]> } // eslint-disable-line @typescript-eslint/no-explicit-any
 

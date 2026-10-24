@@ -48,6 +48,14 @@ export function trackLoginPageVisit() {
     fireAndForget('track_login_page_visit', { p_visitor_id: visitorId }, 'funnel')
 }
 
+// Đăng nhập thành công = nhân viên/quản lý đã có địa chỉ, không phải khách mới → loại trình duyệt
+// này khỏi số "Vào trang chủ" (20261034). Chỉ ĐỌC id: máy chưa từng ghé /login thì không cần đánh dấu.
+export function markLoginPageMember() {
+    const visitorId = readVisitorId()
+    if (!visitorId) return
+    fireAndForget('mark_login_page_member', { p_visitor_id: visitorId }, 'funnel')
+}
+
 // Số trình duyệt ghé /login theo today/week/all. Ném lỗi để caller ẩn dòng khi chưa apply RPC.
 export async function fetchLoginPageVisits() {
     const { data, error } = await supabase.rpc('login_page_visit_stats')
