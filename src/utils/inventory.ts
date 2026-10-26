@@ -12,6 +12,12 @@ export type UsageMap = Record<string, number>
 interface OrderItem { productId?: string; product_id?: string; quantity?: number; qty?: number; extras?: { id: string }[] }
 export interface Pack2 { size: number; unit: string }
 
+// Làm tròn 1 chữ số thập phân — dùng chung cho mọi phép tồn/hao hụt để tránh 3 nơi
+// tự định nghĩa lại rồi lệch epsilon nhau.
+export const r1 = (n: unknown) => Math.round((Number(n) || 0) * 10) / 10
+
+const idObjs = (ids?: string[]) => (ids || []).map(id => ({ id }))
+
 /** Món nghi "pha bán nhưng không bấm bill" (findMissingCupCandidates). */
 export interface MissingCupCandidate {
     productId: string; productName: string; estimatedCups: number; confidence: number
@@ -66,15 +72,6 @@ export function groupRecipesByProduct(recipes?: RecipeRow[] | null) {
     return byProduct;
 }
 
-/**
- * Tính tổng lượng nguyên liệu tiêu hao dự kiến dựa trên danh sách món đã bán.
- * 
- * @param {Array} orderItems - Mảng các order item (có thể lấy từ todayOrders + offlineToday)
- *                             Cấu trúc yêu cầu: { product_id hoặc productId, quantity hoặc qty, extras: [] }
- * @param {Array} recipes - Toàn bộ bản ghi recipes
- * @param {Object} extraIngredients - Map extra_id -> array of {ingredient, amount}
- * @returns {Object} object mapping ingredient -> tổng số lượng tiêu hao
- */
 // Chuẩn hoá item của MỘT đơn về { productId, qty, extras } — nguồn duy nhất cho mọi
 // chỗ nạp đơn vào calculateEstimatedConsumption/buildIngredientToProduct. Nhận cả 3
 // shape đang tồn tại: order_items (server), orderItems / cart (đơn offline chờ sync).
@@ -83,9 +80,9 @@ export function orderItemsOf(order: Row) {
         productId: i.product_id || i.productId,
         qty: i.quantity || i.qty || 1,
         extras: [
-            ...(i.extra_ids ? i.extra_ids.map((id: string) => ({ id })) : (i.extras || [])),
+            ...(i.extra_ids ? idObjs(i.extra_ids) : (i.extras || [])),
             // Topping tính như extra: tiêu hao lấy từ nguồn của nó (fetchToppingSources); topping chưa có nguồn → map không có key → 0.
-            ...(i.topping_ids ? i.topping_ids.map((id: string) => ({ id })) : (i.toppings || [])),
+            ...(i.topping_ids ? idObjs(i.topping_ids) : (i.toppings || [])),
         ],
     }))
 }
@@ -97,6 +94,15 @@ export const isLiveOrder = (o: Row) => !o.deleted_at && !o.deletedAt
 export const sumLiveRevenue = (...lists: Row[][]) =>
     lists.flat().reduce((sum, o) => (isLiveOrder(o) ? sum + (o.total || 0) : sum), 0)
 
+/**
+ * Tính tổng lượng nguyên liệu tiêu hao dự kiến dựa trên danh sách món đã bán.
+ *
+ * @param {Array} orderItems - Mảng các order item (có thể lấy từ todayOrders + offlineToday)
+ *                             Cấu trúc yêu cầu: { product_id hoặc productId, quantity hoặc qty, extras: [] }
+ * @param {Array} recipes - Toàn bộ bản ghi recipes
+ * @param {Object} extraIngredients - Map extra_id -> array of {ingredient, amount}
+ * @returns {Object} object mapping ingredient -> tổng số lượng tiêu hao
+ */
 export function calculateEstimatedConsumption(orderItems: OrderItem[], recipes: RecipeRow[], extraIngredients: ExtraIngredients) {
     const estimated: UsageMap = {};
     const recipesByProduct = groupRecipesByProduct(recipes);
@@ -127,7 +133,7 @@ export function calculateEstimatedConsumption(orderItems: OrderItem[], recipes: 
     // Xóa những nguyên liệu có lượng tiêu hao = 0 (tránh bị hiển thị trống hoặc âm do bù trừ do thiết lập sai sót nhẹ nếu có)
     Object.keys(estimated).forEach(key => {
         // Làm tròn lấy 1 chữ số thập phân để tránh lỗi epsilon Math floating point của JS (ví dụ 0.1 + 0.2 = 0.30000000004)
-        estimated[key] = Math.round(estimated[key] * 10) / 10;
+        estimated[key] = r1(estimated[key]);
         if (estimated[key] === 0) {
             delete estimated[key];
         }
@@ -158,7 +164,7 @@ export function averageIngredientMaps(maps?: (UsageMap | null | undefined)[] | n
 
     const averaged: UsageMap = {};
     Object.entries(sums).forEach(([ingredient, sum]) => {
-        const avg = Math.round((sum / weeks.length) * 10) / 10;
+        const avg = r1(sum / weeks.length);
         if (avg !== 0) averaged[ingredient] = avg;
     });
     return averaged;
@@ -168,7 +174,7 @@ export function averageIngredientMaps(maps?: (UsageMap | null | undefined)[] | n
 // [{ product_id, quantity, extra_ids }] (fetchLastWeekSameDayOrderItems).
 export function forecastFromWeeks(weeks: Row[][], recipes: RecipeRow[], extraIngredients: ExtraIngredients) {
     return averageIngredientMaps(weeks.map(items => calculateEstimatedConsumption(
-        items.map(i => ({ productId: i.product_id, qty: i.quantity, extras: [...(i.extra_ids || []), ...(i.topping_ids || [])].map((id: string) => ({ id })) })),
+        items.map(i => ({ productId: i.product_id, qty: i.quantity, extras: [...idObjs(i.extra_ids), ...idObjs(i.topping_ids)] })),
         recipes, extraIngredients)));
 }
 
@@ -224,7 +230,7 @@ export function calculateConsumptionBreakdown(orderItems: OrderItem[], recipes: 
                 counted.add(ingredient);
             }
             breakdown[ingredient][variantKey].totalAmount =
-                Math.round((breakdown[ingredient][variantKey].totalAmount + amount * qty) * 10) / 10;
+                r1(breakdown[ingredient][variantKey].totalAmount + amount * qty);
         };
 
         (recipesByProduct.get(id!) || []).forEach(r => touch(r.ingredient, r.amount));
@@ -263,7 +269,7 @@ export function splitCogsByCategory(orders: Row[] | null | undefined, recipes: R
             for (const r of recipesByProduct.get(productId) || []) {
                 bucket[bucketFor(r.ingredient)] += (ingredientCosts[r.ingredient] || 0) * (r.amount || 0) * qty
             }
-            const extras = item.extras || (item.extra_ids ? item.extra_ids.map((id: string) => ({ id })) : [])
+            const extras = item.extras || (item.extra_ids ? idObjs(item.extra_ids) : [])
             for (const e of extras) {
                 const eid = e?.id
                 if (!eid) continue
@@ -276,33 +282,7 @@ export function splitCogsByCategory(orders: Row[] | null | undefined, recipes: R
     return bucket
 }
 
-/**
- * Per-day audit of `actual - (opening + restock - used)` summed across shift
- * closings; returns Σ|diff × unit_cost| where diff < 0 (hao hụt money lost).
- *
- * Mirrors the formula used inline in InventoryReportCard + RangeLossCard so a
- * single source of truth feeds the FinanceCards "Hao hụt / hủy" line.
- *
- * Opening rules (matches the cards):
- *   - First closing: prevShiftClosings[0]?.inventory_report.remaining map,
- *     OR if `openingOverrideMap` supplied use it as the base (Daily passes
- *     a precomputed map that already folds in yesterday + opening overrides).
- *   - Subsequent closings: previous closing's `remaining` per ingredient.
- *   - Always: `item.opening` on the closing wins when present.
- *
- * dailyConsumption: { 'YYYY-MM-DD': { ingredient: usedAmount, ... } }.
- *   Caller computes via calculateEstimatedConsumption on orders bucketed
- *   by VN local date (matches the existing cards' dayStr key).
- *
- * `recipeIngredients` (optional Set): ingredients consumed by some recipe/extra.
- *   An item NOT in this set has 0 theoretical usage, so its whole depletion is
- *   real consumption (ống hút, bịch chữ T — bao bì chỉ đếm tồn, không vào công
- *   thức), not waste. Those are split into `consumption` keyed by ingredient so
- *   the P&L can name them instead of lumping into "Hao hụt". Omit → all to loss.
- *
- * Returns { loss, consumption: { ingredient: value } }; {loss:0,consumption:{}}
- * when there are no closings.
- */
+// Nguyên liệu nằm trong công thức hoặc extra nào đó.
 export function buildRecipeIngredientSet(recipes: RecipeRow[] = [], extraIngredients: ExtraIngredients = {}) {
     const set = new Set<string>()
     for (const r of recipes) if (r?.ingredient) set.add(r.ingredient)
@@ -458,6 +438,33 @@ export function walkDailyIngredientDiff({ shiftClosings = [], dailyConsumption =
         .map(r => ({ dayStr: r.dayStr, ingredient: r.ingredient, diff: r1(r.remaining! - r.theoretical), idx: r.closingIdx }))
 }
 
+/**
+ * Per-day audit of `actual - (opening + restock - used)` summed across shift
+ * closings; returns Σ|diff × unit_cost| where diff < 0 (hao hụt money lost).
+ *
+ * Mirrors the formula used inline in InventoryReportCard + RangeLossCard so a
+ * single source of truth feeds the FinanceCards "Hao hụt / hủy" line.
+ *
+ * Opening rules (matches the cards):
+ *   - First closing: prevShiftClosings[0]?.inventory_report.remaining map,
+ *     OR if `openingOverrideMap` supplied use it as the base (Daily passes
+ *     a precomputed map that already folds in yesterday + opening overrides).
+ *   - Subsequent closings: previous closing's `remaining` per ingredient.
+ *   - Always: `item.opening` on the closing wins when present.
+ *
+ * dailyConsumption: { 'YYYY-MM-DD': { ingredient: usedAmount, ... } }.
+ *   Caller computes via calculateEstimatedConsumption on orders bucketed
+ *   by VN local date (matches the existing cards' dayStr key).
+ *
+ * `recipeIngredients` (optional Set): ingredients consumed by some recipe/extra.
+ *   An item NOT in this set has 0 theoretical usage, so its whole depletion is
+ *   real consumption (ống hút, bịch chữ T — bao bì chỉ đếm tồn, không vào công
+ *   thức), not waste. Those are split into `consumption` keyed by ingredient so
+ *   the P&L can name them instead of lumping into "Hao hụt". Omit → all to loss.
+ *
+ * Returns { loss, consumption: { ingredient: value } }; {loss:0,consumption:{}}
+ * when there are no closings.
+ */
 export function calculateLossValue({
     shiftClosings,
     prevShiftClosings = [],
@@ -533,7 +540,7 @@ export function formatPackedQty(qty: unknown, packSize: unknown, packUnit: strin
     const bigs = bigSize ? Math.floor(abs / bigSize) : 0
     const afterBig = abs - bigs * bigSize
     const packs = Math.floor(afterBig / ps)
-    const rem = Math.round((afterBig - packs * ps) * 10) / 10
+    const rem = r1(afterBig - packs * ps)
     const parts: string[] = []
     if (bigs > 0) parts.push(`${neg}${bigs} ${opts.pack2!.unit}`)
     if (packs > 0) parts.push(`${neg}${packs} ${packUnit}`)
@@ -578,13 +585,10 @@ export function buildIngredientToProduct({ orderItems = [], recipes = [], produc
     return map
 }
 
-// Làm tròn 1 chữ số thập phân — dùng chung cho mọi phép tồn/hao hụt để tránh 3 nơi
-// tự định nghĩa lại rồi lệch epsilon nhau.
-export const r1 = (n: unknown) => Math.round((Number(n) || 0) * 10) / 10
-
+const MEASURED_UNITS = new Set(['g', 'ml', 'kg', 'l'])
 // Phần bì trừ khỏi tồn quầy: chỉ khi đo được (g/ml/kg/l) và có số đếm quầy.
 const tareCutOf = (counter: number | null | undefined, tareWeight: number | null | undefined, unit: string) =>
-    ['g', 'ml', 'kg', 'l'].includes(unit) && (tareWeight ?? 0) > 0 && counter != null ? Math.min(counter, tareWeight!) : 0
+    MEASURED_UNITS.has(unit) && (tareWeight ?? 0) > 0 && counter != null ? Math.min(counter, tareWeight!) : 0
 
 // Tổng tồn thật = kho + quầy − bì. Tồn quầy lưu là số cân gồm bì nên bì chỉ trừ khi đo được (g/ml/kg/l).
 // Dùng chung cho hiển thị tổng và nhãn Hết/Sắp hết để hai nơi không lệch nhau. null = chưa có số tồn.
