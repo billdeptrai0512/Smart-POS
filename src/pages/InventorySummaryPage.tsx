@@ -55,6 +55,7 @@ export default function InventorySummaryPage() {
     useEffect(() => {
         if (!groupIds.length || locked) return
         let stale = false
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- xoá kết quả cũ khi đổi khoảng ngày/nhóm trước khi tải lại
         setRows(null); setFailed(false)
         fetchRestockSummary(groupIds, fromDate, toDate)
             .then(r => { if (!stale) setRows(r) })

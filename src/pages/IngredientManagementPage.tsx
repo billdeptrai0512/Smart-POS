@@ -63,7 +63,7 @@ export default function IngredientManagementPage() {
         ingredientGroups, refreshProducts,
     } = useProducts()
     const { addressId, selectedAddress } = useAddress()
-    const { isManager, isAdmin, profile, isGuest } = useAuth()
+    const { isManager, isAdmin, isGuest } = useAuth()
     const { toast, showToast, showError } = useToast()
     const confirm = useConfirm()
     const canEdit = isManager || isAdmin

@@ -7,10 +7,9 @@ import { useHistory } from '../../contexts/HistoryContext'
 import { useGroupPrep } from '../../hooks/useGroupPrep'
 import { useCashClosedToday } from '../../hooks/useCashClosedToday'
 import { processIngredientRestock } from '../../services/orderService'
-import { ceilToBigUnit } from '../../utils/warehouseTransfer'
-import { byIngredientLabel, lookupByLabel } from '../../utils/ingredients'
+import { buildHubBuyItems } from '../../utils/hubBuy'
+import { lookupByLabel } from '../../utils/ingredients'
 import { pack2Of, type UsageMap } from '../../utils/inventory'
-import { toPrepItem, poolOf, type PrepItem } from '../../utils/prepToday'
 import NoticeBar from '../common/NoticeBar'
 import NoticeSheet, { SheetBody } from '../common/NoticeSheet'
 import ShiftPrepCard from '../DailyReportPage/ShiftPrepCard'
@@ -49,40 +48,13 @@ function Sheet({ addressId, addresses: all, onClose, onRestocked }: { addressId:
 
 export type Prep = ReturnType<typeof useGroupPrep>
 
-// bought (tuỳ chọn, tổng đã "Nhập kho" hôm nay theo NVL — buildTodayBoughtMap): có thì kèm "Đã mua hôm nay" và giữ lại dòng
-// "đã mua đủ" (done) thay vì để món biến mất — mẫu số tiến độ đứng yên suốt ngày, như card Bổ sung tồn kho của địa chỉ lẻ.
-export function buildHubBuyItems({ plan, cfgOf, pool }: Prep, bought?: UsageMap, minAsFloor = false): PrepItem[] {
-    const items = (plan ?? [])
-        .map((r): PrepItem | null => {
-            const cfg = cfgOf[r.ingredient]
-            const item = toPrepItem(cfg, 0, ceilToBigUnit(r.buy, r.unit, cfg))
-            return item && { ...item, warehouse: r.pool, minStock: r.minStock, have: r.totalPull, boughtToday: lookupByLabel(r.ingredient, bought ?? {}) }
-        })
-        .filter((it): it is PrepItem => !!it)
-    for (const [ingredient, qty] of Object.entries(bought ?? {})) {
-        const cfg = cfgOf[ingredient]
-        if (!cfg || !(qty > 0) || items.some(it => it.ingredient === ingredient)) continue
-        const poolNow = poolOf(ingredient, pool)
-        const pull = plan?.find(r => r.ingredient === ingredient)?.totalPull ?? 0
-        const minStock = Number(cfg.min_stock) || 0
-        // Trước khi mua kho còn thiếu (kho đã gồm số mua) thì đây là dòng "xong"; món tình cờ nhập mà vốn không thiếu thì bỏ.
-        if ((minAsFloor ? Math.max(minStock, pull) : minStock + pull) - Math.max(0, poolNow - qty) > 0) {
-            items.push({
-                ingredient, done: true, boughtToday: qty, warehouse: poolNow, minStock, have: pull,
-                unit: cfg.unit, packUnit: cfg.pack_unit, packSize: Number(cfg.pack_size) || 0, pack2: pack2Of(cfg),
-            })
-        }
-    }
-    return items.sort((a, b) => byIngredientLabel(a.ingredient, b.ingredient))
-}
-
 // Phần danh sách "Mua" + phiếu Nhập kho, không kèm khung sheet — nhúng được vào chỗ khác (vd. dòng mở rộng ở /addresses).
 export function HubBuyBody({ addressId, prep, bought, minAsFloor, skipped, onSkip, onOpenIngredient, onAfterRestock }: { addressId: string; prep: Prep; bought?: UsageMap; minAsFloor?: boolean; skipped?: Record<string, boolean>; onSkip?: (ingredient: string) => void; onOpenIngredient?: (ingredient: string) => void; onAfterRestock?: () => unknown }) {
     const { profile } = useAuth()
     const { plan, pool, cfgOf, error, reload } = prep
     const [restock, setRestock] = useState<{ ingredient: string; qty: number | null } | null>(null)
     const cashClosedToday = useCashClosedToday(addressId, !!restock)
-    const items = useMemo(() => buildHubBuyItems(prep, bought, minAsFloor), [prep.plan, prep.cfgOf, prep.pool, bought, minAsFloor]) // eslint-disable-line react-hooks/exhaustive-deps
+    const items = useMemo(() => buildHubBuyItems({ plan, cfgOf, pool }, bought, minAsFloor), [plan, cfgOf, pool, bought, minAsFloor])
     const cfg = restock ? cfgOf[restock.ingredient] : undefined
 
     return (

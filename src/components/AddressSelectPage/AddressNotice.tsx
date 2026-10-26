@@ -11,7 +11,8 @@ import { readJSON, writeJSON } from '../../utils/storage'
 import { fetchRestockSkips, setRestockSkip } from '../../services/restockSkipService'
 import NoticeBar from '../common/NoticeBar'
 import NoticeSheet from '../common/NoticeSheet'
-import { HubBuyBody, buildHubBuyItems, type Prep } from '../IngredientManagementPage/HubBuyNotice'
+import { HubBuyBody, type Prep } from '../IngredientManagementPage/HubBuyNotice'
+import { buildHubBuyItems } from '../../utils/hubBuy'
 import type { Address } from '../../types/domain'
 
 // "Việc cần làm" của quản lý trên /addresses: tồn kho cần bổ sung của từng kho. Tồn kho nặng (~5 request × kho) nên tính NỀN:
@@ -67,10 +68,6 @@ export default function AddressNotice() {
 
     // "Bỏ qua" lưu trên server (mọi thiết bị cùng thấy); localStorage chỉ để có số ngay lúc mở trang. Khoá = id địa chỉ đích của kho.
     const targetIds = useMemo(() => units.map(u => u.target.id), [units])
-    useEffect(() => {
-        if (targetIds.length) fetchRestockSkips(targetIds).then(server => { if (server) saveSkips(() => server) })
-    }, [targetIds])
-
     function saveSkips(update: (sk: Skips) => Skips) {
         setSkips(sk => {
             const next = update(sk)
@@ -78,6 +75,9 @@ export default function AddressNotice() {
             return next
         })
     }
+    useEffect(() => {
+        if (targetIds.length) fetchRestockSkips(targetIds).then(server => { if (server) saveSkips(() => server) })
+    }, [targetIds])
 
     function toggleSkip(targetId: string, ingredient: string) {
         const skipped = !skips[targetId]?.[ingredient]

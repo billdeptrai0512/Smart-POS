@@ -3,8 +3,7 @@ import { X, Layers, type LucideIcon, PackagePlus, Scale, Store, Ban, FlaskConica
 import { BottomSheet, SHEET_PANEL } from '../common/ModalShell'
 import Dropdown from '../common/Dropdown'
 import type { Row } from '../../types/domain'
-
-export type HistoryKind = 'restock' | 'adjustment' | 'withdrawal' | 'production' | 'cancelled'
+import type { HistoryKind, DebtStatus } from '../../utils/ingredientHistory'
 
 const HISTORY_KINDS: [HistoryKind, string, LucideIcon][] = [
     ['restock', 'Nhập kho', PackagePlus],
@@ -13,19 +12,6 @@ const HISTORY_KINDS: [HistoryKind, string, LucideIcon][] = [
     ['production', 'Sản xuất', FlaskConical],
     ['cancelled', 'Đã hủy', Ban],
 ]
-
-// Đã hủy ưu tiên trước loại gốc (phiếu hủy bị zero trong DB nhưng vẫn mang cờ adjustment/restock).
-export const kindOf = (e: Row): HistoryKind =>
-    e.metadata?.cancelled ? 'cancelled' : e.is_withdrawal ? 'withdrawal' : e.is_production ? 'production' : e.metadata?.adjustment ? 'adjustment' : 'restock'
-
-type DebtStatus = 'owing' | 'paid'
-
-// Chỉ phiếu nhập còn hiệu lực mới có công nợ; các loại thẻ khác → null (bị loại khi lọc theo công nợ).
-export const debtOf = (e: Row): DebtStatus | null => {
-    if (kindOf(e) !== 'restock') return null
-    const paid = (e.payments || []).reduce((s: number, p: Row) => s + (p.amount || 0), 0)
-    return (e.amount || 0) - paid > 0 ? 'owing' : 'paid'
-}
 
 export interface HistoryFilter { kind: HistoryKind | null; address: string | null; staff: string | null; debt: DebtStatus | null }
 

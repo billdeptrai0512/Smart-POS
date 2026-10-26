@@ -29,7 +29,7 @@ export default function ProductLinksSection({ links, products, canEdit, saving, 
                 )}
             </div>
             <div className="space-y-2">
-                {shown.map((g, i) => {
+                {shown.map(g => {
                     const key = g.name ?? ''
                     const ids = g.items.map(p => p.id)
                     const n = ids.filter(id => links.selected.has(id)).length
