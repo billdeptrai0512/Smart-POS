@@ -75,7 +75,9 @@ function calculateSyncedCashFlow(isDay: boolean, singleClosing: Row | null | und
     const ordersByDay = new Map<string, Row[]>()
     for (const o of orders) {
         const day = dateStringVN(new Date(o.created_at || o.createdAt))
-        ordersByDay.set(day, [...(ordersByDay.get(day) || []), o])
+        const bucket = ordersByDay.get(day)
+        if (bucket) bucket.push(o)
+        else ordersByDay.set(day, [o])
     }
 
     let cash = 0, transfer = 0
@@ -426,7 +428,7 @@ export default function DailyReportPage() {
     const [estimatedOpening, setEstimatedOpening] = useState<Record<string, number>>({})
     const recipesReady = recipesBelongTo(recipes, addressId)
     useEffect(() => {
-        if (!isDayScope || !isTodayScope || !isAsyncReady || !addressId) { setEstimatedOpening({}); return }
+        if (!isDayScope || !isTodayScope || !isAsyncReady || !addressId) { setEstimatedOpening(prev => Object.keys(prev).length ? {} : prev); return }
         let cancelled = false
         fetchIngredientStocks(addressId)
             .then(rows => estimateOpening(rows, addressId, counterCalc.current))

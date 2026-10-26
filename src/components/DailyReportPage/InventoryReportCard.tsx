@@ -50,9 +50,7 @@ interface Props {
     hintIngredient?: string | null
 }
 
-type BalanceArgs = Parameters<typeof computeHaoHut>[0] & { warehouseAvailable?: unknown }
-
-function computeRowStatus(args: BalanceArgs) {
+function computeRowStatus(args: Parameters<typeof computeHaoHut>[0]) {
     const haoHut = computeHaoHut(args)
     if (haoHut == null) return 'pending'
     if (haoHut === 0) return 'match'
@@ -115,11 +113,10 @@ export default function InventoryReportCard({
     const baseStatus = useCallback((ing: IngredientConfig) => computeRowStatus({
         inventoryValue: sortInventory[ing.ingredient],
         restockValue: sortRestock[ing.ingredient],
-        warehouseAvailable: warehouseStocks[ing.ingredient],
         openingValue: sortOpening[ing.ingredient],
         openingFallback: openingStock[ing.ingredient],
         used: lookupByLabel(ing.ingredient, usedMap),
-    }), [sortOpening, sortRestock, sortInventory, warehouseStocks, openingStock, usedMap])
+    }), [sortOpening, sortRestock, sortInventory, openingStock, usedMap])
     // Demo (guest) và Mẫu mặc định (addressId null) không có bảng ingredient_groups → chia theo 2 danh mục
     // (Nguyên liệu chính / Bao bì) và theo thứ tự ingredient_sort_order. Địa chỉ thật giữ nguyên: nhóm DB + A→Z.
     const { ingredientGroups: dbGroups } = useProducts()
@@ -502,7 +499,7 @@ const IngredientRow = memo(function IngredientRow({
                                 <div key={i} className="flex items-center justify-between">
                                     <span className="text-[11px] text-text-secondary truncate flex-1">{entry.name}</span>
                                     <span className="text-[11px] font-bold text-text-dim tabular-nums shrink-0 ml-2">
-                                        {entry.qty} ly × {Math.round(entry.totalAmount / entry.qty * 10) / 10} {unit} = <span className="text-text font-black">{entry.totalAmount} {unit}</span>
+                                        {entry.qty} ly × {r1(entry.totalAmount / entry.qty)} {unit} = <span className="text-text font-black">{entry.totalAmount} {unit}</span>
                                     </span>
                                 </div>
                             ))
