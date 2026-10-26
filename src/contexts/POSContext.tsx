@@ -11,7 +11,7 @@ import {
 import { upsertSession } from '../services/authService'
 import { useOfflineSync, addPendingOrder, addPendingTableClose, removePendingTableClose } from '../hooks/useOfflineSync'
 import { useOrdersPoll } from '../hooks/useOrdersPoll'
-import { dateStringVN } from '../utils/dateVN'
+import { dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { calculateItemCost } from '../utils'
 import { cartBelongsToAddress, shouldRestoreCartOnFailure } from '../utils/posCartGuards'
 import { readJSON, writeJSON } from '../utils/storage'
@@ -259,12 +259,18 @@ export function POSProvider() {
         }
     }, [addressId, refreshTables, showError])
 
+    // Lấy lại tổng ngày / 3 đơn gần nhất từ server. Trả về promise để chỗ nào cần thì await.
+    const refreshStats = useCallback((id: UUID | null) =>
+        fetchTodayStats(id).then(({ revenue: rev, cups }) => { setRevenue(rev); setCupsSold(cups) }), [])
+    const refreshRecentOrders = useCallback((id: UUID | null) =>
+        fetchRecentOrders(id, 3).then(recent => setRecentOrders(recent.map(buildLastOrderFromDB))), [])
+
     // ---- Offline sync ----
     const handleSyncComplete = useCallback(() => {
         if (!addressId) return
-        fetchTodayStats(addressId).then(({ revenue, cups }) => { setRevenue(revenue); setCupsSold(cups) })
+        refreshStats(addressId)
         showToast('Đã đồng bộ đơn hàng offline!', 'success')
-    }, [addressId, showToast])
+    }, [addressId, showToast, refreshStats])
 
     const { getPendingCount, retrySync } = useOfflineSync(handleSyncComplete)
 
@@ -315,7 +321,7 @@ export function POSProvider() {
             const todayStr = dateStringVN()
             if (storedDate && storedDate !== todayStr) {
                 if (navigator.onLine && addressId) {
-                    fetchTodayStats(addressId).then(({ revenue, cups }) => { setRevenue(revenue); setCupsSold(cups) })
+                    refreshStats(addressId)
                     setTotalCost(0)
                     showToast('Đã qua ngày mới, dữ liệu đã được làm mới!', 'info')
                 } else {
@@ -339,7 +345,7 @@ export function POSProvider() {
             window.removeEventListener('focus', checkNewDay)
             window.removeEventListener('visibilitychange', handleVisibility)
         }
-    }, [addressId, showToast])
+    }, [addressId, showToast, refreshStats])
 
     // ---- Đồng bộ đơn giữa các máy ----
     // Poll thay cho kênh realtime cũ — lý do đầy đủ ở hooks/useOrdersPoll.ts. Ở đây chỉ
@@ -380,12 +386,12 @@ export function POSProvider() {
                 }))
                 // Sửa/xoá đơn là thao tác tay, hiếm — chịu một lượt fetch để thẻ Nhật ký kéo
                 // đơn thứ 4 lên đúng chỗ đơn vừa bị xoá (giống hệt handleDeleteOrder tại chỗ).
-                if (moneyChanged) fetchRecentOrders(addressId, 3).then(recent => setRecentOrders(recent.map(buildLastOrderFromDB)))
+                if (moneyChanged) refreshRecentOrders(addressId)
             }
             // Tổng ngày lấy lại từ server chứ không tự cộng ở client: chiết khấu và đơn bị
             // xoá làm phép cộng tay lệch dần, mà đây là con số tiền. Chỉ khi tiền thật sự
             // đổi — máy kia lật cờ "Ra món" thì lưới bàn vẽ lại là đủ.
-            if (moneyChanged) fetchTodayStats(addressId).then(({ revenue: rev, cups }) => { setRevenue(rev); setCupsSold(cups) })
+            if (moneyChanged) refreshStats(addressId)
             // Chỉ khi thay đổi thật sự động tới bàn. Sửa chiết khấu một đơn MANG ĐI mà kéo
             // fetchOpenTables (join order_items + products từng bàn) là trả giá cho không.
             // Lưới bàn chỉ có ở /pos — ở /history chỉ đánh dấu cũ, quay lại /pos thì effect
@@ -402,7 +408,7 @@ export function POSProvider() {
         // chỉ phải thêm tổng ngày.
         onResume: () => {
             handleLoadHistory()
-            fetchTodayStats(addressId).then(({ revenue: rev, cups }) => { setRevenue(rev); setCupsSold(cups) })
+            refreshStats(addressId)
         },
     })
 
@@ -746,10 +752,10 @@ export function POSProvider() {
                 // Không await: kết quả chỉ chảy vào doanh thu/ly trên header, không ai
                 // đợi nó. Await ở đây là bắt người xoá nhìn màn hình đứng thêm một RTT
                 // (rõ nhất ở nút Sửa đợt — giỏ chỉ hiện món sau khi RPC này về).
-                fetchTodayStats(addressId).then(({ revenue: rev, cups }) => { setRevenue(rev); setCupsSold(cups) })
+                refreshStats(addressId)
                 // Keep the POS journal header in sync — without this a delete here
                 // leaves the removed order showing on /pos until the next reload.
-                fetchRecentOrders(addressId, 3).then(recent => setRecentOrders(recent.map(buildLastOrderFromDB)))
+                refreshRecentOrders(addressId)
                 invalidateDailyContext(addressId)
                 // Tổng bàn cũng lệch sau khi xoá — gom về đây thay vì bắt từng nơi gọi nhớ tự
                 // refresh (xoá đơn bàn từ Nhật ký trước đây bỏ sót đúng chỗ này). Dựng lại
@@ -814,10 +820,8 @@ export function POSProvider() {
                 order_items: (o.order_items || []).map((i: Row) => byId.has(i.id) ? { ...i, discount_amount: byId.get(i.id) } : i),
             }))
             if (addressId) {
-                const { revenue: rev, cups } = await fetchTodayStats(addressId)
-                setRevenue(rev)
-                setCupsSold(cups)
-                fetchRecentOrders(addressId, 3).then(recent => setRecentOrders(recent.map(buildLastOrderFromDB)))
+                await refreshStats(addressId)
+                refreshRecentOrders(addressId)
                 invalidateDailyContext(addressId)
             }
             showToast('Đã cập nhật giảm giá', 'success')
@@ -835,7 +839,7 @@ export function POSProvider() {
             // Only fold into today's local list when it actually belongs to today —
             // a backdated expense (createdAt in the past) shows up on its own day's
             // range view, not today's. invalidateDailyContext below refreshes both.
-            const isToday = !createdAt || dateStringVN(new Date(createdAt)) === dateStringVN(new Date())
+            const isToday = !createdAt || isSameDayVN(createdAt, new Date())
             if (isToday) {
                 setTodayExpenses(prev => [expense, ...prev])
                 if (!isFixed) setTotalCost(prev => prev + amount)
