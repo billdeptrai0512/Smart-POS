@@ -2,7 +2,7 @@ import { Fragment, useState, type ReactNode } from 'react'
 import type { PrepItem } from '../../utils/prepToday'
 import { Check, X, RotateCcw, Pencil, ChevronUp, ChevronDown } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
-import { formatPackCount, formatPackedQty, r1 } from '../../utils/inventory'
+import { formatPackCount, formatPackedQty } from '../../utils/inventory'
 
 // Viên thuốc CTA dùng chung cho cả 2 card (Lấy / Mua) — màu theo trạng thái do từng nơi ghép thêm.
 const PILL = 'shrink-0 min-h-[44px] min-w-[124px] px-3 flex items-center justify-center gap-1 rounded-xl text-[12px] font-black transition'
@@ -146,7 +146,7 @@ export default function ShiftPrepCard({
                             // Đang sửa số: dòng thành div (ô nhập không được nằm trong button) và ô nhập thay cho chip ✎ + viên CTA.
                             const ed = editing === it.ingredient && !isDone
                             const meta = qtyMeta(it, draft)
-                            const shown = r1(draft / meta.step)
+                            const shown = Math.round(draft / meta.step * 10) / 10
                             const Row = (ed ? 'div' : 'button') as 'button'
                             return (
                                 <Fragment key={it.ingredient}>
@@ -211,7 +211,7 @@ export default function ShiftPrepCard({
                                                     type="number" inputMode="decimal" min={0} step="any" autoFocus
                                                     value={shown}
                                                     style={{ width: `${String(shown).length}ch` }}
-                                                    onChange={(e) => setDraft(Math.max(0, r1(Number(e.target.value) * meta.step)))}
+                                                    onChange={(e) => setDraft(Math.max(0, Math.round(Number(e.target.value) * meta.step * 10) / 10))}
                                                     className="min-w-0 bg-transparent text-left text-[16px] font-black outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                                                 />
                                                 <span className="text-[12px] text-text-secondary">{meta.unitLabel}</span>
@@ -229,7 +229,7 @@ export default function ShiftPrepCard({
                                                     <button
                                                         key={dir} type="button" title={dir > 0 ? 'Tăng' : 'Giảm'}
                                                         onMouseDown={(e) => e.preventDefault()}
-                                                        onClick={() => setDraft(Math.max(0, r1(draft + dir * meta.step)))}
+                                                        onClick={() => setDraft(Math.max(0, Math.round((draft + dir * meta.step) * 10) / 10))}
                                                         className="w-8 h-[21px] flex items-center justify-center rounded-md bg-surface border border-border/40 text-text-secondary active:scale-95"
                                                     >
                                                         {dir > 0 ? <ChevronUp size={14} /> : <ChevronDown size={14} />}

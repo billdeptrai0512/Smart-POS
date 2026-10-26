@@ -133,7 +133,7 @@ export function calculateEstimatedConsumption(orderItems: OrderItem[], recipes: 
     // Xóa những nguyên liệu có lượng tiêu hao = 0 (tránh bị hiển thị trống hoặc âm do bù trừ do thiết lập sai sót nhẹ nếu có)
     Object.keys(estimated).forEach(key => {
         // Làm tròn lấy 1 chữ số thập phân để tránh lỗi epsilon Math floating point của JS (ví dụ 0.1 + 0.2 = 0.30000000004)
-        estimated[key] = r1(estimated[key]);
+        estimated[key] = Math.round(estimated[key] * 10) / 10;
         if (estimated[key] === 0) {
             delete estimated[key];
         }
@@ -230,7 +230,7 @@ export function calculateConsumptionBreakdown(orderItems: OrderItem[], recipes: 
                 counted.add(ingredient);
             }
             breakdown[ingredient][variantKey].totalAmount =
-                r1(breakdown[ingredient][variantKey].totalAmount + amount * qty);
+                Math.round((breakdown[ingredient][variantKey].totalAmount + amount * qty) * 10) / 10;
         };
 
         (recipesByProduct.get(id!) || []).forEach(r => touch(r.ingredient, r.amount));
