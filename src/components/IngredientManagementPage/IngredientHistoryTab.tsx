@@ -3,7 +3,7 @@ import { ArrowRight, Trash2 } from 'lucide-react'
 import IngredientLogChip from '../common/IngredientLogChip'
 import { TIME_PILL, ROUND_ICON_BTN } from '../common/ModalShell'
 import { formatVND } from '../../utils'
-import { packHint } from '../../utils/inventory'
+import { packHint, r1 } from '../../utils/inventory'
 import { ingredientLabel } from '../../utils/ingredients'
 import { dateShortVN, timeStringVN } from '../../utils/dateVN'
 import type { Pack2 } from '../../utils/inventory'
@@ -101,7 +101,7 @@ function MonthSummaryCard({ showStats, summary, unit, packSize, packUnit, pack2 
     const hasProd = (summary.madeQty ?? 0) > 0 || (summary.usedQty ?? 0) > 0
     const hasRestock = summary.totalSpent > 0 || summary.totalQty > 0 || (!hasWithdraw && !hasProd)
     // Số chính = đơn vị nhỏ nhất (như tab Thông tin); quy đổi ra bịch/hộp chỉ là gợi ý nhỏ bên dưới.
-    const qtyProps = (n: number) => ({ value: `${Math.round(n * 10) / 10} ${unit}`, hint: packHint(n, packSize, packUnit, unit, pack2) })
+    const qtyProps = (n: number) => ({ value: `${r1(n)} ${unit}`, hint: packHint(n, packSize, packUnit, unit, pack2) })
     return (
         <div className="bg-surface rounded-[16px] border border-border/60 overflow-hidden">
             <div className="grid gap-3 grid-cols-2 p-4">
@@ -246,7 +246,7 @@ function HistoryCard({ entry, unit, pack, onOpenPayment, onCancelRestock, onEdit
                     <span className={`${TYPE_PILL} uppercase tracking-wide ${typeTone}`}>{typeLabel}</span>
                     {delta !== 0 && (
                         <span className={`${TYPE_PILL} tabular-nums text-text`}>
-                            {isAdjust ? (delta > 0 ? '+' : '−') : ''}{Math.round(Math.abs(delta) * 10) / 10} {unit}
+                            {isAdjust ? (delta > 0 ? '+' : '−') : ''}{r1(Math.abs(delta))} {unit}
                         </span>
                     )}
                 </div>
@@ -259,9 +259,9 @@ function HistoryCard({ entry, unit, pack, onOpenPayment, onCancelRestock, onEdit
                 <span className="text-[11px] font-black uppercase tracking-wide text-text-secondary">Tồn kho</span>
                 {hasSnapshot ? (
                     <div className="flex justify-between items-baseline gap-2 text-[22px] font-black tabular-nums leading-tight">
-                        <span className="font-bold text-text-secondary">{Math.round(beforeStock * 10) / 10}<span className="text-[12px] font-bold ml-1">{unit}</span></span>
+                        <span className="font-bold text-text-secondary">{r1(beforeStock)}<span className="text-[12px] font-bold ml-1">{unit}</span></span>
                         <ArrowRight size={18} className="text-text-dim self-center shrink-0" />
-                        <span className={afterCls}>{Math.round(afterStock * 10) / 10}<span className="text-[12px] font-bold ml-1 text-text-secondary">{unit}</span></span>
+                        <span className={afterCls}>{r1(afterStock)}<span className="text-[12px] font-bold ml-1 text-text-secondary">{unit}</span></span>
                     </div>
                 ) : (
                     <span className={`text-[22px] font-black tabular-nums leading-tight ${afterCls}`}>{qty > 0 ? '+' : ''}{qty} {unit}</span>
@@ -358,7 +358,7 @@ function ProductionCard({ entry, unit, unitOf, onOpenIngredient, onCancel, addre
     const d = new Date(entry.created_at)
     const { role, qty, batches, product, outputQty, inputs, cancelled } = entry.metadata as { cancelled: boolean; role: 'output' | 'input'; qty: number; batches: number; product: string; outputQty: number; inputs: Record<string, number> }
     const made = role === 'output'
-    const round = (n: number) => Math.round(n * 10) / 10
+    const round = r1
     const chip = (key: string, text: string) => <IngredientLogChip key={key} text={text} onOpen={onOpenIngredient && (() => onOpenIngredient(key))} />
     return (
         <div className={`bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-3 relative overflow-hidden ${cancelled ? 'opacity-50 grayscale select-none' : ''}`}>

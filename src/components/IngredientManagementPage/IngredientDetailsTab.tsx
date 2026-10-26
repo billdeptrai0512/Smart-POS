@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Check, Trash2 } from 'lucide-react'
-import { formatPackedQty, netStockOf } from '../../utils/inventory'
+import { formatPackedQty, netStockOf, r1 } from '../../utils/inventory'
 import { INGREDIENT_CATEGORIES } from '../../utils/ingredients'
 import { countedLabelVN } from '../../utils/dateVN'
 import Dropdown from '../common/Dropdown'
@@ -206,7 +206,7 @@ export function IngredientCounterPanel({
     const showTare = tareApplies && (tareWeight != null || canEdit)
     // Tồn quầy đang lưu = số cân (gồm bì) → lượng thật = trừ bì (chỉ để hiển thị).
     const counterReal = hasTare && counterStock != null
-        ? Math.max(0, Math.round((counterStock - tare) * 10) / 10)
+        ? Math.max(0, r1(counterStock - tare))
         : null
     return (
         <>
@@ -323,7 +323,7 @@ function TextRow({ label, value, inputWidth, canEdit, onSave, normalize = (s: st
 // Chỉ đọc, cùng cách diễn đạt với QtyRow: số gốc đậm ở trên, breakdown quy
 // đổi (nếu có) mờ bên dưới — thay vì gộp sẵn thành 1 chuỗi compact như trước.
 function DailyQtyRow({ label, value, unit, hasPack, packSize, packUnit, pack2, sign = '', accentClass = 'text-text' }: QtyPackProps & { label: string; value: number; sign?: string; accentClass?: string }) {
-    const rounded = Math.round(value * 10) / 10
+    const rounded = r1(value)
     const showPack = hasPack && value >= (packSize ?? 0)
     return (
         <Row label={label}>
@@ -363,7 +363,7 @@ function QtyRow({ label, value, unit, hasPack, packSize, packUnit, pack2, canEdi
     const tappable = editable && canEdit
     const negative = value != null && value < 0
     const start = () => {
-        setInput(String(value != null ? Math.round(value * 10) / 10 : 0))
+        setInput(String(value != null ? r1(value) : 0))
         setEditing(true)
     }
     const commit = () => {
@@ -398,7 +398,7 @@ function QtyRow({ label, value, unit, hasPack, packSize, packUnit, pack2, canEdi
                         onClick={tappable ? start : undefined}
                         className={`inline-flex items-baseline gap-1 text-[13px] font-bold tabular-nums rounded-md px-2 -mx-2 py-1 -my-1 ${negative ? 'text-danger' : tappable ? 'text-primary' : valueClass} ${tappable ? 'cursor-pointer hover:brightness-110' : 'cursor-default'}`}
                     >
-                        {value != null ? Math.round(value * 10) / 10 : '—'}
+                        {value != null ? r1(value) : '—'}
                         <span className="text-text-dim font-medium">{unit}</span>
                     </button>
                     {hasPack && value != null && value >= (packSize ?? 0) && (
@@ -559,7 +559,7 @@ function TareRow({ tareWeight, unit, canEdit, onSave }: { tareWeight?: number | 
     const [input, setInput] = useState('')
     const [tareUnit, setTareUnit] = useState('g')
     const gPerBase = ['kg', 'l'].includes(unit) ? 1000 : 1   // 1 đơn vị NVL = bao nhiêu gram
-    const tareGrams = tareWeight != null ? Math.round(tareWeight * gPerBase * 10) / 10 : null
+    const tareGrams = tareWeight != null ? r1(tareWeight * gPerBase) : null
     const start = () => {
         setTareUnit('g')
         setInput(tareGrams != null ? String(tareGrams) : '')
