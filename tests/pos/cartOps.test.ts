@@ -217,10 +217,11 @@ describe('pendingOrderItems (payload hàng đợi offline của doSubmit)', () =
         pendingOrderItems(items, costPerItem)
         expect(items[0]).not.toHaveProperty('unitCost')
     })
-    it('nhánh offline hẳn giữ id rỗng; nhánh mất mạng giữa chừng (dropEmptyIds) lọc bỏ — hai nhánh cũ khác nhau đúng chỗ này', () => {
-        const odd = [line({ extras: [{ ...shot, id: '' }, ice] })]
-        expect(pendingOrderItems(odd, {})[0].extraIds).toEqual(['', 'e-ice'])
-        expect(pendingOrderItems(odd, {}, true)[0].extraIds).toEqual(['e-ice'])
+    it('lọc id rỗng của extras / topping để khỏi đẩy id rác lên server', () => {
+        const odd = [line({ extras: [{ ...shot, id: '' }, ice], toppings: [{ ...pearl, id: '' }] })]
+        const [out] = pendingOrderItems(odd, {})
+        expect(out.extraIds).toEqual(['e-ice'])
+        expect(out.toppingIds).toEqual([])
     })
     it('khớp computeSubmitTotals: Σ unitCost × quantity = cartCost của đơn', () => {
         const t = computeSubmitTotals(items, 0, [], it => (it.productId === 'p1' ? 3000 : 5000))

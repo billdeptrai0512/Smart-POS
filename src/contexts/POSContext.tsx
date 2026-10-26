@@ -589,7 +589,7 @@ export function POSProvider() {
                         // committed it before the response was lost, the retry is a no-op
                         // (ON CONFLICT) instead of creating a duplicate order.
                         addPendingOrder(
-                            pendingOrderItems(cartItems, costPerItem, true),
+                            pendingOrderItems(cartItems, costPerItem),
                             netTotal, null, addressId, cartCost, profile?.name, discountApplied, orderId, tableNameArg
                         )
                         setTodayOrders(prev => prev.filter(o => o !== optimisticOrder)) // offline pending list shows it instead

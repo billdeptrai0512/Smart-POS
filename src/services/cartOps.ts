@@ -149,12 +149,12 @@ export function computeSubmitTotals(cartItems: CartItem[], discountAmountArg: nu
 const idsOf = (xs?: { id: string }[]) => (xs || []).map(x => x.id).filter(Boolean)
 
 // Dòng đơn đưa vào hàng đợi offline (addPendingOrder): giỏ + giá vốn 1 đơn vị + id extras/topping.
-// dropEmptyIds: nhánh "mất mạng giữa chừng" lọc id rỗng, nhánh offline hẳn thì giữ nguyên — giữ y hệt hai nhánh cũ.
-export const pendingOrderItems = (cartItems: CartItem[], costPerItem: CostPerItem, dropEmptyIds = false) => cartItems.map(item => ({
+// Id rỗng bị lọc để khỏi đẩy id rác lên server khi đồng bộ.
+export const pendingOrderItems = (cartItems: CartItem[], costPerItem: CostPerItem) => cartItems.map(item => ({
     ...item,
     unitCost: costPerItem[item.cartItemId] || 0,
-    extraIds: dropEmptyIds ? idsOf(item.extras) : item.extras.map(e => e.id),
-    toppingIds: dropEmptyIds ? idsOf(item.toppings) : item.toppings.map(t => t.id),
+    extraIds: idsOf(item.extras),
+    toppingIds: idsOf(item.toppings),
 }))
 const addonNames = (it: CartItem) => [...(it.extras || []), ...(it.toppings || [])].map(e => e.name)
 
