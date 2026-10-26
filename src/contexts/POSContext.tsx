@@ -5,7 +5,7 @@ import { printKitchenTicket } from '../components/common/KitchenTicket'
 import { fetchTodayStats, submitOrder, fetchOrderNo, fetchTodayOrders, deleteOrder, updateOrderDiscount, fetchTodayExpenses, insertExpense, updateExpense, deleteExpense, fetchRecentOrders, invalidateDailyContext, fetchOpenTables, closeTable, reopenTable, markOrder, extractRounds, dropTableByName, restoreTable, moveRoundsIntoTable, moveTableRounds as moveTableRoundsService, type OpenTable, type TableRound } from '../services/orderService'
 import {
     isNetworkError, cartTotal, cartOrderCount, cartDiscountTotal, newCartLine, patchLine, removeLatestOfProduct, toggleExtraOnLast, toggleToppingOnLast,
-    setStickyExtraOnLast, buildLastOrderFromDB, buildLastOrderFromCart, mergeFetchedOrders, computeSubmitTotals, submitLines, appendRoundToTables,
+    setStickyExtraOnLast, buildLastOrderFromDB, buildLastOrderFromCart, mergeFetchedOrders, computeSubmitTotals, pendingOrderItems, submitLines, appendRoundToTables,
     buildOptimisticRound, buildOptimisticOrder, cartItemsFromRound, seedRoundDiscounts, repriceCart, type LastOrder,
 } from '../services/cartOps'
 import { upsertSession } from '../services/authService'
@@ -589,7 +589,7 @@ export function POSProvider() {
                         // committed it before the response was lost, the retry is a no-op
                         // (ON CONFLICT) instead of creating a duplicate order.
                         addPendingOrder(
-                            cartItems.map(item => ({ ...item, unitCost: costPerItem[item.cartItemId] || 0, extraIds: item.extras.map(e => e.id).filter(Boolean), toppingIds: item.toppings.map(t => t.id).filter(Boolean) })),
+                            pendingOrderItems(cartItems, costPerItem, true),
                             netTotal, null, addressId, cartCost, profile?.name, discountApplied, orderId, tableNameArg
                         )
                         setTodayOrders(prev => prev.filter(o => o !== optimisticOrder)) // offline pending list shows it instead
@@ -614,7 +614,7 @@ export function POSProvider() {
                 })
         } else {
             addPendingOrder(
-                cartItems.map(item => ({ ...item, unitCost: costPerItem[item.cartItemId] || 0, extraIds: item.extras.map(e => e.id), toppingIds: item.toppings.map(t => t.id) })),
+                pendingOrderItems(cartItems, costPerItem),
                 netTotal, null, addressId, cartCost, profile?.name, discountApplied, null, tableNameArg
             )
             showToast(`Lưu offline (${getPendingCount()} đơn chờ)`, 'warning')

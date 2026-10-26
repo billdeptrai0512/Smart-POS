@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest'
 import {
     isNetworkError, cartTotal, cartOrderCount, cartDiscountTotal, newCartLine, patchLine, removeLatestOfProduct,
     toggleExtraOnLast, toggleToppingOnLast, setStickyExtraOnLast, buildLastOrderFromDB, buildLastOrderFromCart,
-    mergeFetchedOrders, computeSubmitTotals, submitLines, appendRoundToTables, buildOptimisticRound,
+    mergeFetchedOrders, computeSubmitTotals, pendingOrderItems, submitLines, appendRoundToTables, buildOptimisticRound,
     buildOptimisticOrder, cartItemsFromRound, seedRoundDiscounts,
 } from '../../src/services/cartOps'
 import type { ReopenResult } from '../../src/services/cartOps'
@@ -191,6 +191,41 @@ describe('computeSubmitTotals', () => {
         const t = computeSubmitTotals([line({ productId: 'gone', basePrice: 7000 })], 0, products, () => 0)
         expect(t.programDiscount).toBe(0)
         expect(t.countableQty).toBe(1)
+    })
+})
+
+describe('pendingOrderItems (payload hàng đợi offline của doSubmit)', () => {
+    const items = [
+        line({ quantity: 2, extras: [ice, shot], toppings: [pearl] }),
+        line({ cartItemId: 'c2', productId: 'p2', basePrice: 20000 }),
+    ]
+    const costPerItem = { c1: 3000 } // c2 không có giá vốn
+
+    it('gắn giá vốn 1 đơn vị theo cartItemId, thiếu → 0, giữ nguyên các trường của dòng', () => {
+        const out = pendingOrderItems(items, costPerItem)
+        expect(out.map(i => i.unitCost)).toEqual([3000, 0])
+        expect(out[0]).toMatchObject({ cartItemId: 'c1', productId: 'p1', quantity: 2, basePrice: 10000 })
+        expect(out[0].extras).toEqual([ice, shot])
+    })
+    it('extraIds / toppingIds lấy theo thứ tự trong dòng', () => {
+        const out = pendingOrderItems(items, costPerItem)
+        expect(out[0].extraIds).toEqual(['e-ice', 'e-shot'])
+        expect(out[0].toppingIds).toEqual(['t-pearl'])
+        expect(out[1].extraIds).toEqual([])
+    })
+    it('không đụng giỏ gốc (thêm trường trên bản sao)', () => {
+        pendingOrderItems(items, costPerItem)
+        expect(items[0]).not.toHaveProperty('unitCost')
+    })
+    it('nhánh offline hẳn giữ id rỗng; nhánh mất mạng giữa chừng (dropEmptyIds) lọc bỏ — hai nhánh cũ khác nhau đúng chỗ này', () => {
+        const odd = [line({ extras: [{ ...shot, id: '' }, ice] })]
+        expect(pendingOrderItems(odd, {})[0].extraIds).toEqual(['', 'e-ice'])
+        expect(pendingOrderItems(odd, {}, true)[0].extraIds).toEqual(['e-ice'])
+    })
+    it('khớp computeSubmitTotals: Σ unitCost × quantity = cartCost của đơn', () => {
+        const t = computeSubmitTotals(items, 0, [], it => (it.productId === 'p1' ? 3000 : 5000))
+        const out = pendingOrderItems(items, t.costPerItem)
+        expect(out.reduce((s, i) => s + i.unitCost * i.quantity, 0)).toBe(t.cartCost)
     })
 })
 
