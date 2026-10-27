@@ -5,6 +5,7 @@
  */
 import { dateStringVN, startOfDayVN } from '../utils/dateVN'
 import { ONBOARDING_STORAGE_PREFIX } from '../utils/onboardingStorage'
+import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps'
 import type { Row, Product } from '../types/domain'
 import { readJSON, writeJSON } from '../utils/storage'
 
@@ -83,7 +84,15 @@ export const initializeGuestFromGlobal = (data: Row) => {
         set(KEYS.PRODUCTS, data.products.map((p: Row) => ({ ...p, owner_address_id: addressId, is_active: true })));
     }
     if (data.recipes) {
-        set(KEYS.RECIPES, data.recipes.map((r: Row) => ({ ...r, address_id: addressId })));
+        // Công thức bước onboarding "Công thức" để trống cả 4 dòng; điền sẵn ly/nắp/đường để khách chỉ
+        // phải nhập cà phê (xem onboarding/steps.ts) — 4 ô nhập cùng một thao tác.
+        const target = (data.products || []).find((p: Row) => (p.name || '').trim().toLowerCase() === RECIPE_TARGET_PRODUCT);
+        const prefill: Record<string, number> = { cup: 1, lid: 1, 'đường': 5 };
+        set(KEYS.RECIPES, data.recipes.map((r: Row) => ({
+            ...r,
+            address_id: addressId,
+            ...(target && r.product_id === target.id && !r.amount && prefill[r.ingredient] ? { amount: prefill[r.ingredient] } : {}),
+        })));
     }
     if (data.extras) {
         set(KEYS.PRODUCT_EXTRAS, data.extras.map((e: Row) => ({ ...e, address_id: addressId })));
@@ -134,8 +143,10 @@ export const initializeGuestFromGlobal = (data: Row) => {
         created_at: new Date().toISOString()
     });
     seededExpenses.push(
-        demoExpense('Nhân viên ăn sáng', 50000, 'Chi phí khác', false),
-        demoExpense('Thuê mặt bằng', 100000, 'Thuê mặt bằng', true),
+        // Số nhỏ cho vừa quy mô 2 đơn demo (73k): chi phí trong ca (10k) quyết định số tiền ở bước
+        // "Kết ca" của guide — xem steps.ts.
+        demoExpense('Nhân viên ăn sáng', 10000, 'Chi phí khác', false),
+        demoExpense('Thuê mặt bằng', 20000, 'Thuê mặt bằng', true),
     );
     set(KEYS.EXPENSES, seededExpenses);
 

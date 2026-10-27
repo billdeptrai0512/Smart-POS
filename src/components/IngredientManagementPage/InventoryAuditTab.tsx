@@ -19,8 +19,8 @@ import { useVisualViewportBox } from '../../hooks/useVisualViewportBox'
 import { getPendingOrders } from '../../hooks/useOfflineSync'
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown, buildIngredientToProduct, orderItemsOf, isLiveOrder, sumLiveRevenue } from '../../utils/inventory'
 import { ingredientLabel } from '../../utils/ingredients'
-import { findIngredientByLabel } from '../../utils/onboardingHint'
-import { isCashFlowProgressDone, isInventoryProgressDone, INVENTORY_ONBOARDING_ITEMS } from '../../utils/onboardingStorage'
+import { findIngredientByLabel, onboardingHintClass } from '../../utils/onboardingHint'
+import { isCashFlowProgressDone, isInventoryProgressDone } from '../../utils/onboardingStorage'
 import { dateStringVN, isSameDayVN } from '../../utils/dateVN'
 import { productionOnDay, mergeUsage, madeOf, madeInPeriods } from '../../utils/production'
 import TodayProduction from './TodayProduction'
@@ -137,13 +137,15 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     useEffect(() => {
         if (hintInventory && !inventoryProgress.visited) setInventoryProgress(prev => ({ ...prev, visited: true }))
     }, [hintInventory, inventoryProgress.visited, setInventoryProgress])
-    // Mỗi NVL của bước onboarding: hint dừng ở NVL đầu tiên chưa tick.
-    const onboardingTargets = useMemo(() => (isGuest
-        ? INVENTORY_ONBOARDING_ITEMS.map(i => ({ key: i.key, ingredient: findIngredientByLabel(inventory.ingredientsList, i.label)?.ingredient }))
-        : []), [isGuest, inventory.ingredientsList])
-    const hintInventoryIngredient = hintInventory
-        ? onboardingTargets.find(t => !inventoryProgress[t.key])?.ingredient ?? null
-        : null
+    // NVL của bước onboarding: chỉ cà phê (đếm ly/nắp là cùng một thao tác).
+    const coffee = isGuest ? findIngredientByLabel(inventory.ingredientsList, 'cà phê')?.ingredient : undefined
+    const coffeeTyped = !!coffee && (inventory.inventoryInputs[coffee] ?? '') !== ''
+    // Gõ xong mà chưa bấm Lưu → dải guide đổi sang nhắc bấm Lưu, nút Lưu nhấp nháy.
+    const inventoryTyped = hintInventory && coffeeTyped
+    useEffect(() => {
+        if (inventoryTyped !== !!inventoryProgress.typed) setInventoryProgress(prev => ({ ...prev, typed: inventoryTyped }))
+    }, [inventoryTyped, inventoryProgress.typed, setInventoryProgress])
+    const hintInventoryIngredient = hintInventory ? coffee ?? null : null
 
     const [isSaving, setIsSaving] = useState(false)
     const [openAudit, setOpenAudit] = useState(true)
@@ -160,13 +162,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
             const row = await inventory.pushInventory(profile?.id, systemTotalRevenue)
             if (!row) return // không có gì đổi (hoặc đang có push khác chạy) → isDirty giữ để thử lại
             showToast('Đã lưu báo cáo tồn kho', 'success')
-            if (isGuest) {
-                const filled = onboardingTargets.filter(t => {
-                    const v = t.ingredient ? inventory.inventoryInputs[t.ingredient] : undefined
-                    return v !== undefined && v !== '' && !inventoryProgress[t.key]
-                })
-                if (filled.length) setInventoryProgress(prev => ({ ...prev, ...Object.fromEntries(filled.map(t => [t.key, true])) }))
-            }
+            if (coffeeTyped) setInventoryProgress(prev => ({ ...prev, coffee: true }))
             const [fresh] = await Promise.all([
                 fetchDailyReportContext(addressId),
                 inventory.reloadStocks(),
@@ -318,7 +314,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                         <button
                             onClick={handleSaveInventory}
                             disabled={isSaving}
-                            className="bg-primary text-black rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider hover:bg-primary/90 active:scale-95 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                            className={`bg-primary text-black rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider hover:bg-primary/90 active:scale-95 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed ${onboardingHintClass(inventoryTyped, 'solid')}`}
                         >
                             {isSaving ? 'Đang lưu...' : 'Lưu'}
                         </button>

@@ -27,6 +27,10 @@ export default function SignUpPage() {
     const navigate = useNavigate()
     const location = useLocation()
     const [name, setName] = useState('')
+    const [branch, setBranch] = useState('')
+    // Có link ?clone=MÃ → chi nhánh đầu tiên do modal "Tạo địa chỉ" ở /addresses lo (chép cấu hình
+    // từ mã), nên ở đây không hỏi tên quán.
+    const hasCloneCode = !!sessionStorage.getItem('pending_clone_code')
     const [email, setEmail] = useState('')
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
@@ -37,6 +41,7 @@ export default function SignUpPage() {
     async function handleSubmit(e: FormEvent) {
         e.preventDefault()
         if (!name.trim()) { setError('Vui lòng nhập tên'); return }
+        if (!hasCloneCode && !branch.trim()) { setError('Vui lòng nhập tên quán'); return }
         // ponytail: format email để type="email" + regex trong signUp lo, không lặp lại ở đây.
         if (!email.trim()) { setError('Vui lòng nhập email'); return }
         if (!username.trim()) { setError('Vui lòng nhập tài khoản'); return }
@@ -45,8 +50,9 @@ export default function SignUpPage() {
         setError('')
         setLoading(true)
         try {
-            await signUp(username.trim(), password, name.trim(), email.trim())
-            navigate('/addresses', { replace: true })
+            const { address } = await signUp(username.trim(), password, name.trim(), email.trim(), hasCloneCode ? '' : branch)
+            // Có chi nhánh (đã chọn sẵn) → vào thẳng Menu để set up; không thì tự tạo ở /addresses.
+            navigate(address ? '/category/overall' : '/addresses', { replace: true })
         } catch (err) {
             setError(errorMessage(err, 'Đăng ký thất bại'))
         } finally {
@@ -74,6 +80,17 @@ export default function SignUpPage() {
                         onChange={e => setName(capitalizeWords(e.target.value))}
                         required
                     />
+
+                    {!hasCloneCode && (
+                        <FloatingLabelInput
+                            id="signup-branch"
+                            label="Tên quán / chi nhánh"
+                            autoCapitalize="words"
+                            value={branch}
+                            onChange={e => setBranch(e.target.value)}
+                            required
+                        />
+                    )}
 
                     <div>
                         <FloatingLabelInput

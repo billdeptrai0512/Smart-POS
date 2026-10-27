@@ -4,14 +4,14 @@ import { readOnboardingState, DEFAULT_ONBOARDING_STATE } from '../utils/onboardi
 import { useOnboardingProgressPersist } from './useOnboardingProgressPersist'
 import type { CartItem, Row } from '../types/domain'
 
-// Đơn 1 = cà phê sữa; đơn 2 = bạc xỉu (ít ngọt) + cacao cà phê (lớn) + matcha cà phê (lớn, hơi
-// ngọt). p = tên món, x = extra bắt buộc, theo thứ tự cần bấm.
+// Đơn 1 = cà phê sữa (16k); đơn 2 = cacao cà phê (lớn, 27k) + matcha cà phê (lớn, ngọt — không
+// phụ thu, 30k). Doanh thu 73k — số tiền ở bước "Kết ca" (steps.ts) tính theo đây: 73k − 10k chi phí
+// trong ca (seed ở localRepository.ts) = 63k. p = tên món, x = extra bắt buộc, theo thứ tự cần bấm.
 const ORDERS: { p: string; x: string[] }[][] = [
     [{ p: 'cà phê sữa', x: [] }],
     [
-        { p: 'bạc xỉu', x: ['ít ngọt'] },
         { p: 'cacao cà phê', x: ['lớn'] },
-        { p: 'matcha cà phê', x: ['lớn', 'hơi ngọt'] },
+        { p: 'matcha cà phê', x: ['lớn', 'ngọt'] },
     ],
 ]
 const hasExtra = (item: CartItem, name: string) => (item.extras || []).some(e => norm(e.name) === name)
@@ -54,14 +54,13 @@ export function useOrderOnboardingProgress({ isGuest, addressId, products, cart,
     const orderReady = isGuest && !allSent && !!orders[sent] && !pending
 
     // enterKey đổi mỗi lần gửi đơn thật — lúc đó giỏ đã bị dọn, nên đếm theo `ready` của lần
-    // render TRƯỚC (state, không phải ref). Gửi đơn thiếu món thì không tăng `sent`.
+    // render TRƯỚC (orderProgress.ready, state không phải ref). Gửi đơn thiếu món thì không tăng `sent`.
     const [seenKey, setSeenKey] = useState(enterKey)
-    const [ready, setReady] = useState(false)
     if (enterKey !== seenKey) {
         setSeenKey(enterKey)
-        if (isGuest && enterKey && ready) setOrderProgress(prev => ({ ...prev, sent: sent + 1 }))
+        if (isGuest && enterKey && orderProgress.ready) setOrderProgress(prev => ({ ...prev, sent: sent + 1 }))
     }
-    if (ready !== orderReady) setReady(orderReady)
+    if (!!orderProgress.ready !== orderReady) setOrderProgress(prev => ({ ...prev, ready: orderReady }))
 
     useOnboardingProgressPersist('orderProgress', orderProgress, { isGuest, addressId })
 

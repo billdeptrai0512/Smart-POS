@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, useCallback, us
 import type { Session, User } from '@supabase/supabase-js'
 import type { Profile, Row } from '../types/domain'
 import { supabase } from '../lib/supabaseClient'
-import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, fetchProfileByAuthId, removeSession, fetchDefaultIngredientSort } from '../services/authService'
+import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp, createAddress, fetchProfileByAuthId, removeSession, fetchDefaultIngredientSort } from '../services/authService'
 import { isGuest as getLocalIsGuest, setIsGuest as setLocalIsGuest, initializeGuestFromGlobal, clearGuestData, setGuestIngredientSortOrder } from '../services/localRepository'
 import { trackGuestOnboardingStage, markGuestFunnelSignup, markLoginPageMember } from '../services/onboardingFunnelService'
 import { STORAGE_KEYS } from '../constants/storageKeys'
@@ -18,7 +18,8 @@ export interface AuthContextValue {
     setIsGuest: (val: boolean) => void
     initGuestMode: () => Promise<void>
     signIn: (username: string, password: string) => ReturnType<typeof authSignIn>
-    signUp: (username: string, password: string, name: string, email?: string | null) => ReturnType<typeof authSignUp>
+    /** addressName (tuỳ chọn): tạo luôn chi nhánh đầu tiên và chọn sẵn; `address` null nếu không có/không tạo được. */
+    signUp: (username: string, password: string, name: string, email?: string | null, addressName?: string) => Promise<Awaited<ReturnType<typeof authSignUp>> & { address: Row | null }>
     signOut: () => Promise<void>
     refreshProfile: () => Promise<void>
     isManager: boolean
@@ -288,8 +289,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(null)
     }, [profile])
 
-    const signUp = useCallback(async (username: string, password: string, name: string, email: string | null = null) => {
+    const signUp = useCallback(async (username: string, password: string, name: string, email: string | null = null, addressName = '') => {
         const data = await authSignUp(username, password, name, email)
+        // Chi nhánh đầu tiên tạo TRƯỚC setProfile: setProfile kích AddressContext tải danh sách địa chỉ,
+        // tạo sau thì danh sách đó rỗng và phải tự chọn lại. Tài khoản đã tạo xong — lỗi ở đây không
+        // được làm hỏng đăng ký, rơi về /addresses để họ tự tạo.
+        let address: Row | null = null
+        const cleanName = addressName.trim().replace(/\s+/g, ' ').toUpperCase()
+        if (cleanName) {
+            try {
+                const created = await createAddress(data.profile.id, cleanName)
+                localStorage.setItem(STORAGE_KEYS.SELECTED_ADDRESS, created.id)
+                writeJSON(STORAGE_KEYS.SELECTED_ADDRESS_OBJ, created)
+                localStorage.setItem(STORAGE_KEYS.ACTIVE_USER_ID, data.profile.id)
+                address = created
+            } catch { /* address giữ null */ }
+        }
         setUser(data.user)
         setProfile(data.profile)
         writeJSON(STORAGE_KEYS.AUTH_USER, data.user)
@@ -300,7 +315,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Transition from guest to real user — clear sandbox
         clearGuestData()
         setIsGuest(false)
-        return data
+        return { ...data, address }
     }, [setIsGuest])
 
 

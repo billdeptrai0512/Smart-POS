@@ -318,7 +318,10 @@ const IngredientRow = memo(function IngredientRow({
     // Whole-row collapse: default closed so staff can scroll the list of NVL fast and
     // open just the ones they're counting. Status badge in the header tells them
     // which rows still need "+ Cuối kỳ" input vs. already counted.
-    const [open, setOpen] = useState(false)
+    const [open, setOpen] = useState(hint)
+    // Onboarding: dòng đang được gợi ý tự mở sẵn — khỏi 1 lần bấm đi tìm ô Cuối kỳ.
+    const [seenHint, setSeenHint] = useState(hint)
+    if (hint !== seenHint) { setSeenHint(hint); if (hint) setOpen(true) }
     // Sub-expand: per-recipe consumption breakdown inside the expanded row.
     const [expanded, setExpanded] = useState(false)
     // Inline help bubble for the Lý thuyết formula — tap the (i) to toggle.

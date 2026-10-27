@@ -19,10 +19,12 @@ export const ONBOARDING_STORAGE_PREFIX = 'onboarding_v4_'
 // thức, chỉ tính sau khi xong Tồn kho); filledAmount (điền đủ MỌI dòng định lượng) + addedExtra ghi
 // từ RecipeIngredientPage.tsx cho công thức "Cà phê đen" — xem onboarding/steps.ts.
 export const DEFAULT_ONBOARDING_STATE = {
-    orderProgress: { sent: 0, picked: 0, viewedHistory: false },
+    // ready: giỏ đang đủ món của đơn hiện tại (không latch — giỏ đổi thì tắt) → guide nhắc bấm Tạo đơn.
+    orderProgress: { sent: 0, picked: 0, viewedHistory: false, ready: false },
     journalProgress: { viewedIncome: false, viewedExpense: false, viewedReport: false, viewedProfit: false },
     cashFlowProgress: { scrolled: false, cash: false, transfer: false },
-    inventoryProgress: { visited: false, coffee: false, cup: false, lid: false },
+    // typed: đã gõ tồn cà phê nhưng chưa bấm Lưu (không latch) → guide nhắc bấm Lưu.
+    inventoryProgress: { visited: false, coffee: false, typed: false },
     recipeProgress: { viewedMenu: false, viewedRecipes: false, filledAmount: false, addedExtra: false },
 }
 
@@ -53,15 +55,9 @@ export function reachedCashCard(cashFlowProgress: { scrolled: boolean; cash: boo
 }
 
 // Phase 4 "Kiểm kê tồn kho" — shared by DailyReportPage.tsx (same
-// reason as isCashFlowProgressDone above).
-export const INVENTORY_ONBOARDING_ITEMS = [
-    { key: 'coffee', label: 'cà phê' },
-    { key: 'cup', label: 'ly' },
-    { key: 'lid', label: 'nắp' },
-] as const
-
-export function isInventoryProgressDone(inventoryProgress: Pick<OnboardingState['inventoryProgress'], typeof INVENTORY_ONBOARDING_ITEMS[number]['key']>) {
-    return INVENTORY_ONBOARDING_ITEMS.every(i => inventoryProgress[i.key])
+// reason as isCashFlowProgressDone above). Chỉ đếm cà phê: ly/nắp là cùng một thao tác.
+export function isInventoryProgressDone(inventoryProgress: Pick<OnboardingState['inventoryProgress'], 'coffee'>) {
+    return inventoryProgress.coffee
 }
 
 export function readOnboardingState(addressId: string, fallback = DEFAULT_ONBOARDING_STATE): typeof DEFAULT_ONBOARDING_STATE {
