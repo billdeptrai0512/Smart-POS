@@ -1,90 +1,36 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ClipboardList, ChevronDown, ChevronUp } from 'lucide-react'
+import { ClipboardList, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import { useAddress } from '../../contexts/AddressContext'
-import { useAddressStats } from '../../contexts/AddressStatsContext'
+import { useRestockOverview, type Loaded, type StockStat, type StockUnit } from '../../hooks/useRestockOverview'
 import { useGroupPrep } from '../../hooks/useGroupPrep'
 import { fetchTodayExpenses } from '../../services/expenseService'
 import { buildTodayBoughtMap } from '../../utils/prepToday'
 import type { UsageMap } from '../../utils/inventory'
-import { readJSON, writeJSON } from '../../utils/storage'
-import { fetchRestockSkips, setRestockSkip } from '../../services/restockSkipService'
 import NoticeBar from '../common/NoticeBar'
 import NoticeSheet from '../common/NoticeSheet'
-import { HubBuyBody, type Prep } from '../IngredientManagementPage/HubBuyNotice'
+import { HubBuyBody } from '../IngredientManagementPage/HubBuyNotice'
 import { buildHubBuyItems } from '../../utils/hubBuy'
 import type { Address } from '../../types/domain'
 
 // "Việc cần làm" của quản lý trên /addresses: tồn kho cần bổ sung của từng kho. Tồn kho nặng (~5 request × kho) nên tính NỀN:
 // sau khi stats tải xong (khỏi tranh băng thông), mỗi lần chạy tối đa STOCK_CONCURRENCY kho; kết quả
 // lưu localStorage → lần vào sau có số cũ ngay, rồi cập nhật ngầm. Mở sheet chỉ đọc số đã có.
+// Dữ liệu (danh sách kho, tiến độ, bỏ qua, thứ tự) nằm ở useRestockOverview; file này lo giao diện + điều hướng.
 const STOCK_CONCURRENCY = 3
-const STOCK_CACHE_KEY = 'notice_restock_stats_v3'
-const SKIP_KEY = 'notice_restock_skipped' // { date, byUnit: { [unitKey]: { [ingredient]: true } } } — "bỏ qua" chỉ có hiệu lực trong ngày
-const todayKey = () => new Date().toLocaleDateString('en-CA')
-type Skips = Record<string, Record<string, boolean>>
-// need = nguyên liệu còn phải mua (không tính đã mua đủ / bỏ qua); total = tất cả dòng của kho (đứng yên suốt ngày) → tiến độ (total − need)/total.
-type StockStat = { need: number; total: number }
-// Số liệu tải xong của 1 kho: plan + đã mua hôm nay (+ hàm tươi lại phần đã mua sau khi Nhập kho).
-type Loaded = { prep: Prep; bought: UsageMap; refreshBought: () => unknown }
+
 export default function AddressNotice() {
-    const { addresses, warehouseGroups, setSelectedAddress } = useAddress()
+    const { setSelectedAddress } = useAddress()
     const navigate = useNavigate()
     // Bấm tên nguyên liệu → sang trang chi tiết (trang này unmount); nút Back của trang đó về /addresses?reopen=<kho> → mở lại sheet + dòng kho đó.
     const { search } = useLocation()
     const [reopenKey] = useState(() => new URLSearchParams(search).get('reopen'))
     const focusRef = useRef<HTMLDivElement>(null)
-    const { cupsMap, revenueMap, statsLoading } = useAddressStats()
+    const scrollRef = useRef<HTMLDivElement>(null)
+    const [scrollTo, setScrollTo] = useState<string | null>(null)
     const [open, setOpen] = useState(reopenKey !== null)
-    const [stats, setStats] = useState<Record<string, StockStat>>(() => readJSON(STOCK_CACHE_KEY, {}))
-    const [skips, setSkips] = useState<Skips>(() => {
-        const saved = readJSON<{ date?: string; byUnit?: Skips }>(SKIP_KEY, {})
-        return saved.date === todayKey() ? saved.byUnit ?? {} : {}
-    })
-    const [loaded, setLoaded] = useState<Record<string, Loaded>>({}) // số liệu chi tiết từng kho — dòng mở rộng đọc lại, khỏi tải lần 2
-    const [expanded, setExpanded] = useState<Set<string>>(() => new Set(reopenKey ? [reopenKey] : [])) // dòng kho đang mở rộng
-    // Chỉ xét chi nhánh đang hoạt động (có bán hôm nay) — chi nhánh ngưng không đáng báo hết hạn / tồn kho, lại đỡ tốn request.
-    // Ngày mới chưa ly nào được bán (stats đã tải nhưng toàn 0) thì không chi nhánh nào "có bán" → danh sách trống 0/0 đúng lúc
-    // cần bổ sung tồn kho nhất; lúc đó xét tất cả địa chỉ, sang khi có đơn đầu tiên mới lọc theo doanh số.
-    const active = useMemo(() => {
-        const sold = addresses.filter(a => (cupsMap[a.id] || 0) > 0 || (revenueMap[a.id] || 0) > 0)
-        return sold.length === 0 && Object.keys(cupsMap).length > 0 ? addresses : sold
-    }, [addresses, cupsMap, revenueMap])
-
-    // Đơn vị kho: nhóm có kho tổng gộp 1 dòng (vào kho tổng), địa chỉ lẻ / nhóm chưa đặt kho tổng mỗi cái 1 dòng.
-    const units = useMemo(() => {
-        const out: { key: string; name: string; target: Address; members: Address[]; hub: boolean }[] = []
-        const grouped = new Set<string>()
-        for (const g of warehouseGroups) {
-            const hub = addresses.find(a => a.id === g.hub_address_id && a.warehouse_group_id === g.id)
-            if (!hub) continue
-            const members = active.filter(a => a.warehouse_group_id === g.id)
-            addresses.forEach(a => { if (a.warehouse_group_id === g.id) grouped.add(a.id) })
-            if (members.length) out.push({ key: g.id, name: g.name, target: hub, members, hub: true })
-        }
-        for (const a of active) if (!grouped.has(a.id)) out.push({ key: a.id, name: a.name, target: a, members: [a], hub: false })
-        return out
-    }, [addresses, active, warehouseGroups])
-
-    // "Bỏ qua" lưu trên server (mọi thiết bị cùng thấy); localStorage chỉ để có số ngay lúc mở trang. Khoá = id địa chỉ đích của kho.
-    const targetIds = useMemo(() => units.map(u => u.target.id), [units])
-    function saveSkips(update: (sk: Skips) => Skips) {
-        setSkips(sk => {
-            const next = update(sk)
-            writeJSON(SKIP_KEY, { date: todayKey(), byUnit: next })
-            return next
-        })
-    }
-    useEffect(() => {
-        if (targetIds.length) fetchRestockSkips(targetIds).then(server => { if (server) saveSkips(() => server) })
-    }, [targetIds])
-
-    function toggleSkip(targetId: string, ingredient: string) {
-        const skipped = !skips[targetId]?.[ingredient]
-        saveSkips(sk => ({ ...sk, [targetId]: { ...sk[targetId], [ingredient]: skipped } }))
-        // Ghi server lỗi (mất mạng / chưa migrate) thì máy này vẫn giữ trạng thái bỏ qua, chỉ không đồng bộ sang máy khác.
-        setRestockSkip(targetId, ingredient, skipped).catch(err => console.error('setRestockSkip', err))
-    }
+    const [expanded, setExpanded] = useState<string | null>(reopenKey) // kho đang mở rộng — accordion: mở kho này thì kho kia tự đóng
+    const { statsLoading, stats, skips, loaded, stockRows, total, doneCount, loadOrder, toggleSkip, onStock } = useRestockOverview(reopenKey, open)
 
     // Chọn địa chỉ đích của kho rồi vào thẳng trang chi tiết nguyên liệu; Back về /addresses.
     function openIngredient(unitKey: string, target: Address, ingredient: string) {
@@ -93,26 +39,13 @@ export default function AddressNotice() {
         navigate(`/inventory/stocking/${encodeURIComponent(ingredient)}?scope=month`, { state: { backTo: `/addresses?reopen=${unitKey}` } })
     }
 
-    function onStock(key: string, stat: StockStat | null, data: Loaded) {
-        setLoaded(l => ({ ...l, [key]: data }))
-        if (!stat) return
-        setStats(st => {
-            const next = { ...st, [key]: stat }
-            writeJSON(STOCK_CACHE_KEY, next)
-            return next
-        })
-    }
-
-    // Kho còn dòng (kể cả đã mua đủ hết) giữ trong danh sách cả ngày; chưa tính xong thì hiện "Đang tính…".
-    const stockRows = units
-        .filter(u => !stats[u.key] || stats[u.key].total > 0)
-        .sort((x, y) => (stats[y.key]?.need ?? 0) - (stats[x.key]?.need ?? 0))
-    const total = stockRows.filter(u => stats[u.key]).length
-    const doneCount = stockRows.filter(u => stats[u.key]?.need === 0).length
-    // Về từ trang chi tiết: kho vừa bấm tải trước (khỏi chờ các kho khác) rồi cuộn tới dòng của nó.
-    const loadOrder = [...units].sort((a, b) => Number(b.key === reopenKey) - Number(a.key === reopenKey))
     const reopenReady = !!(reopenKey && loaded[reopenKey])
     useEffect(() => { if (reopenReady) focusRef.current?.scrollIntoView({ block: 'start' }) }, [reopenReady])
+    // Mở dòng → cuộn dòng đó lên đầu sheet, khỏi phải kéo xuống tới phần nguyên liệu. Chạy trong effect (sau khi phần mở rộng
+    // đã vẽ) vì cuộn sớm hơn bị chặn ở mức cuộn tối đa lúc đó.
+    useEffect(() => {
+        if (scrollTo) scrollRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }, [scrollTo])
 
     return (
         <>
@@ -124,17 +57,26 @@ export default function AddressNotice() {
                             {stockRows.map(u => {
                                 const st = stats[u.key]
                                 const data = loaded[u.key]
-                                const isOpen = expanded.has(u.key) && !!data
+                                const isOpen = expanded === u.key && !!data
                                 return (
-                                    <div key={u.key} ref={u.key === reopenKey ? focusRef : undefined}>
+                                    <div key={u.key} ref={u.key === scrollTo ? scrollRef : u.key === reopenKey ? focusRef : undefined} className="border-b border-border/30 last:border-0">
                                         <Row
                                             name={u.name}
-                                            note={st ? `${st.total - st.need}/${st.total} nguyên liệu cần bổ sung${data ? '' : ' · đang cập nhật…'}` : 'Đang tính…'}
-                                            tone={!st ? undefined : st.need === 0 ? 'text-success' : st.need < st.total ? 'text-warning' : 'text-danger'}
-                                            chevron={isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                                            onClick={data ? () => setExpanded(e => { const n = new Set(e); if (!n.delete(u.key)) n.add(u.key); return n }) : undefined}
+                                            note={noteOf(st, !!data)}
+                                            tone={!st ? (data ? 'text-danger' : undefined) : st.need === 0 ? 'text-success' : st.need < st.total ? 'text-warning' : 'text-danger'}
+                                            expanded={isOpen}
+                                            busy={!data}
+                                            onClick={data ? () => {
+                                                setExpanded(isOpen ? null : u.key)
+                                                setScrollTo(isOpen ? null : u.key)
+                                            } : undefined}
                                         />
-                                        {isOpen && <HubBuyBody addressId={u.target.id} prep={data.prep} bought={data.bought} minAsFloor={!u.hub} skipped={skips[u.target.id]} onSkip={ing => toggleSkip(u.target.id, ing)} onOpenIngredient={ing => openIngredient(u.key, u.target, ing)} onAfterRestock={data.refreshBought} />}
+                                        {/* Thụt vào + vạch dọc cam: danh sách món thuộc về kho ngay phía trên, không lẫn với dòng kho kế tiếp. */}
+                                        {isOpen && (
+                                            <div className="ml-1.5 mb-2 pl-3.5 border-l-2 border-primary/50">
+                                                <HubBuyBody addressId={u.target.id} prep={data.prep} bought={data.bought} minAsFloor={!u.hub} skipped={skips[u.target.id]} onSkip={ing => toggleSkip(u.target.id, ing)} onOpenIngredient={ing => openIngredient(u.key, u.target, ing)} onAfterRestock={data.refreshBought} />
+                                            </div>
+                                        )}
                                     </div>
                                 )
                             })}
@@ -148,10 +90,19 @@ export default function AddressNotice() {
     )
 }
 
+// Dòng phụ nói số CÒN PHẢI LÀM (không phải số đã xong) để "0/14" không bị đọc thành "0 nguyên liệu cần bổ sung".
+function noteOf(st: StockStat | undefined, hasData: boolean) {
+    if (!st) return hasData ? 'Không tải được · bấm để thử lại' : 'Đang tính…' // có data mà không có stat = StockLoader báo lỗi
+    const sync = hasData ? '' : ' · đang cập nhật…'
+    return st.need === 0 ? `Đã đủ ${st.total} nguyên liệu${sync}` : `Còn ${st.need}/${st.total} nguyên liệu cần bổ sung${sync}`
+}
+
 // tone: màu dòng phụ theo tiến độ — đỏ chưa làm gì, cam đang làm dở, xanh xong hết.
-function Row({ name, note, tone = 'text-text-secondary', chevron, onClick }: { name: string; note: string; tone?: string; chevron: ReactNode; onClick?: () => void }) {
+// busy: chưa có số liệu chi tiết → chưa bấm mở được: hiện vòng xoay thay mũi tên, tắt nút.
+function Row({ name, note, tone = 'text-text-secondary', expanded, busy, onClick }: { name: string; note: string; tone?: string; expanded: boolean; busy: boolean; onClick?: () => void }) {
+    const chevron: ReactNode = busy ? <Loader2 size={16} className="animate-spin" /> : expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />
     return (
-        <button type="button" onClick={onClick} className="w-full flex items-center gap-3 py-3 border-b border-border/30 last:border-0 text-left">
+        <button type="button" onClick={onClick} disabled={busy} aria-expanded={busy ? undefined : expanded} className="w-full flex items-center gap-3 py-3 text-left disabled:cursor-default">
             <span className="flex-1 min-w-0 flex flex-col gap-0.5">
                 <span className="truncate text-[14px] font-black text-text">{name}</span>
                 <span className={`text-[13px] font-bold ${tone}`}>{note}</span>
@@ -162,7 +113,7 @@ function Row({ name, note, tone = 'text-text-secondary', chevron, onClick }: { n
 }
 
 // Không vẽ gì — chỉ tải số liệu 1 kho (hook theo cụm địa chỉ) + phần đã mua hôm nay của kho đích, rồi báo tiến độ lên cha.
-function StockLoader({ unit, skipped, onResult }: { unit: { key: string; members: Address[]; target: Address; hub: boolean }; skipped?: Record<string, boolean>; onResult: (key: string, stat: StockStat | null, data: Loaded) => void }) {
+function StockLoader({ unit, skipped, onResult }: { unit: StockUnit; skipped?: Record<string, boolean>; onResult: (key: string, stat: StockStat | null, data: Loaded) => void }) {
     const members = useMemo(() => unit.members.map(a => ({ id: a.id, name: a.name })), [unit.members])
     const prep = useGroupPrep(members, !unit.hub) // địa chỉ lẻ: min là sàn kho (như Lưu trữ); kho tổng nhóm: cộng chồng
     const { plan, error } = prep

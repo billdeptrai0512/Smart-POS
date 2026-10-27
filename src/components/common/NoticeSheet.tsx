@@ -45,7 +45,7 @@ export default function NoticeSheet({ icon, title, count, onClose, children }: P
             <div className="flex items-center gap-2 px-5 pt-5 pb-3 border-b border-border/40 shrink-0">
                 {icon}
                 <span className="flex-1 min-w-0 truncate text-[16px] font-black text-text">{title}</span>
-                <span className="shrink-0 text-[13px] font-bold text-text-secondary tabular-nums">{count}</span>
+                {count !== '' && <span className="shrink-0 text-[13px] font-bold text-text-secondary tabular-nums">{count}</span>}
                 <button
                     onClick={onClose}
                     aria-label="Đóng"
