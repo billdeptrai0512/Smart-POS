@@ -159,9 +159,9 @@ export default function SignUpPage() {
                             <button
                                 type="button"
                                 onClick={() => (location.key !== 'default' ? navigate(-1) : navigate('/pos'))}
-                                className="text-primary font-bold hover:underline"
+                                className="hover:text-text hover:underline"
                             >
-                                ← Tiếp tục dùng thử
+                                Tiếp tục dùng thử
                             </button>
                         ) : (
                             <><Link to="/login" className="text-primary font-bold hover:underline">Quay lại</Link> trang đăng nhập</>
