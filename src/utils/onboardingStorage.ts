@@ -16,13 +16,14 @@ export const ONBOARDING_STORAGE_PREFIX = 'onboarding_v4_'
 // guide tái xuất hiện khi dữ liệu hôm sau reset (actual_cash/inventory_report chỉ có nghĩa
 // "hôm nay").
 // recipeProgress (phase 5): viewedMenu/viewedRecipes ghi từ RecipeMenuPage.tsx (vào tab Menu/Công
-// thức, chỉ tính sau khi xong Tồn kho); filledAmount (điền đủ MỌI dòng định lượng) + addedExtra ghi
+// thức, chỉ tính sau khi xong Tồn kho); filledAmount (mọi dòng định lượng > 0 — ly/nắp/đường đã điền
+// sẵn lúc vào dùng thử, xem localRepository.ts, nên khách chỉ còn nhập cà phê) + addedExtra ghi
 // từ RecipeIngredientPage.tsx cho công thức "Cà phê đen" — xem onboarding/steps.ts.
 export const DEFAULT_ONBOARDING_STATE = {
     // ready: giỏ đang đủ món của đơn hiện tại (không latch — giỏ đổi thì tắt) → guide nhắc bấm Tạo đơn.
     orderProgress: { sent: 0, picked: 0, viewedHistory: false, ready: false },
     journalProgress: { viewedIncome: false, viewedExpense: false, viewedReport: false, viewedProfit: false },
-    cashFlowProgress: { scrolled: false, cash: false, transfer: false },
+    cashFlowProgress: { cash: false, transfer: false },
     // typed: đã gõ tồn cà phê nhưng chưa bấm Lưu (không latch) → guide nhắc bấm Lưu.
     inventoryProgress: { visited: false, coffee: false, typed: false },
     recipeProgress: { viewedMenu: false, viewedRecipes: false, filledAmount: false, addedExtra: false },
@@ -46,12 +47,6 @@ export function isRecipeProgressDone(recipeProgress: Pick<OnboardingState['recip
 // needs the same "is this phase done" check to gate phase 4's hint sequence).
 export function isCashFlowProgressDone(cashFlowProgress: { cash: boolean; transfer: boolean }) {
     return cashFlowProgress.cash && cashFlowProgress.transfer
-}
-
-// Việc "Kéo xuống" của phase 3 — thẻ Thực thu đã hiện trọn (scrolled), hoặc đã gõ tiền thì
-// chắc chắn đã kéo tới (phiên cũ chưa có cờ scrolled không bị lùi về việc này).
-export function reachedCashCard(cashFlowProgress: { scrolled: boolean; cash: boolean; transfer: boolean }) {
-    return cashFlowProgress.scrolled || cashFlowProgress.cash || cashFlowProgress.transfer
 }
 
 // Phase 4 "Kiểm kê tồn kho" — shared by DailyReportPage.tsx (same

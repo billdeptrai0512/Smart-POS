@@ -73,7 +73,7 @@ export default function OnboardingGuide() {
                 to="/signup"
                 className={`${bar} justify-center bg-primary text-bg uppercase font-black tracking-wider hover:bg-primary/90 active:bg-primary/80 transition-colors`}
             >
-                Đăng ký tài khoản
+                Hoàn thành! Đăng ký tài khoản
             </Link>
         )
     }

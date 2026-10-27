@@ -1,4 +1,4 @@
-import { isRecipeProgressDone, isInventoryProgressDone, reachedCashCard, type OnboardingState } from '../../../utils/onboardingStorage'
+import { isRecipeProgressDone, isInventoryProgressDone, type OnboardingState } from '../../../utils/onboardingStorage'
 
 // recipeRows: các dòng định lượng hiện có của công thức RECIPE_TARGET_PRODUCT (đã xếp theo thứ tự hiển thị).
 export interface StepCtx extends OnboardingState {
@@ -66,9 +66,8 @@ export const STEPS: Step[] = [
     {
         title: 'Kết ca',
         items: (ctx) => [
-            { label: 'Kéo xuống', done: reachedCashCard(ctx.cashFlowProgress) },
-            { label: 'Bạn thu 40.000đ tiền mặt', done: ctx.cashFlowProgress.cash },
-            { label: 'Bạn thu 23.000đ tiền chuyển khoản', done: ctx.cashFlowProgress.transfer },
+            { label: 'Nhập 40.000đ tiền mặt', done: ctx.cashFlowProgress.cash },
+            { label: 'Nhập 23.000đ tiền chuyển khoản', done: ctx.cashFlowProgress.transfer },
             { label: 'Xem báo cáo lợi nhuận', done: ctx.journalProgress.viewedProfit, offerSignup: true },
         ],
     },
@@ -91,7 +90,7 @@ export const STEPS: Step[] = [
             { label: 'Xem danh mục công thức', done: recipeProgress.viewedRecipes },
             // Mọi dòng định lượng gộp thành 1 việc; cờ filledAmount chỉ lên không xuống nên xong là xong.
             { label: 'Nhập định lượng', done: recipeProgress.filledAmount || (recipeRows.length > 0 && recipeRows.every(r => r.amount > 0)) },
-            { label: 'Tạo tùy chọn thêm', done: recipeProgress.addedExtra },
+            { label: 'Thêm tùy chọn "Lớn" +5.000đ', done: recipeProgress.addedExtra },
         ],
     },
 ]

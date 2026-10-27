@@ -41,11 +41,19 @@ export function trackGuestOnboardingStage(stage: number) {
 }
 
 // Đầu phễu: 1 lượt ghé /login (login_page_visits, 20261024) — cùng visitor id với phễu để khớp
-// với bước bấm "Hướng dẫn sử dụng". Cùng ngày gọi lại vô hại (PK trùng → bỏ qua).
+// với bước bấm "Dùng thử miễn phí". Cùng ngày gọi lại vô hại (PK trùng → bỏ qua).
 export function trackLoginPageVisit() {
     const visitorId = getOrCreateVisitorId()
     if (!visitorId) return
     fireAndForget('track_login_page_visit', { p_visitor_id: visitorId }, 'funnel')
+}
+
+// Mốc "mở trang đăng ký" (signup_page_visits, 20261037): cho biết khách rơi ở form hay rơi trước đó.
+// Chỉ ĐỌC id như markGuestFunnelSignup — người đăng ký thẳng không có id thì không đếm.
+export function trackSignupPageVisit() {
+    const visitorId = readVisitorId()
+    if (!visitorId) return
+    fireAndForget('track_signup_page_visit', { p_visitor_id: visitorId }, 'funnel')
 }
 
 // Đăng nhập thành công = nhân viên/quản lý đã có địa chỉ, không phải khách mới → loại trình duyệt

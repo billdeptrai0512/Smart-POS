@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { CircleAlert } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import ErrorBanner from '../components/common/ErrorBanner'
@@ -8,6 +9,7 @@ import PasswordChecklist from '../components/common/PasswordChecklist'
 import { capitalizeWords } from '../utils'
 import { errorMessage } from '../utils/errorMessage'
 import { isStrongPassword } from '../utils/password'
+import { trackSignupPageVisit } from '../services/onboardingFunnelService'
 
 // ponytail: bảng typo cứng thay vì thư viện (mailcheck) — email chỉ dùng để reset
 // mật khẩu, gõ nhầm domain là mất luôn đường đó. Thêm dòng khi gặp ca mới.
@@ -37,6 +39,7 @@ export default function SignUpPage() {
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
     const emailFix = suggestEmailFix(email)
+    useEffect(trackSignupPageVisit, [])
 
     async function handleSubmit(e: FormEvent) {
         e.preventDefault()
@@ -51,8 +54,8 @@ export default function SignUpPage() {
         setLoading(true)
         try {
             const { address } = await signUp(username.trim(), password, name.trim(), email.trim(), hasCloneCode ? '' : branch)
-            // Có chi nhánh (đã chọn sẵn) → vào thẳng Menu để set up; không thì tự tạo ở /addresses.
-            navigate(address ? '/category/overall' : '/addresses', { replace: true })
+            // Có chi nhánh (đã chọn sẵn) → vào thẳng tab Công thức để set up (tab Menu dễ rối); không thì tự tạo ở /addresses.
+            navigate(address ? '/category/recipes' : '/addresses', { replace: true })
         } catch (err) {
             setError(errorMessage(err, 'Đăng ký thất bại'))
         } finally {
@@ -79,6 +82,7 @@ export default function SignUpPage() {
                         value={name}
                         onChange={e => setName(capitalizeWords(e.target.value))}
                         required
+                        autoComplete="name"
                     />
 
                     {!hasCloneCode && (
@@ -89,29 +93,9 @@ export default function SignUpPage() {
                             value={branch}
                             onChange={e => setBranch(e.target.value)}
                             required
+                            autoComplete="organization"
                         />
                     )}
-
-                    <div>
-                        <FloatingLabelInput
-                            id="signup-email"
-                            label="Email"
-                            type="email"
-                            value={email}
-                            onChange={e => setEmail(e.target.value)}
-                            required
-                            autoComplete="email"
-                        />
-                        {emailFix && (
-                            <button
-                                type="button"
-                                onClick={() => setEmail(emailFix)}
-                                className="mt-1.5 text-[11px] text-warning hover:underline"
-                            >
-                                Có phải <span className="font-bold">{emailFix}</span>? Bấm để sửa
-                            </button>
-                        )}
-                    </div>
 
                     <FloatingLabelInput
                         id="signup-username"
@@ -133,6 +117,33 @@ export default function SignUpPage() {
                         <PasswordChecklist password={password} />
                     </div>
 
+                    {/* Email cuối form: ô duy nhất đổi bàn phím, và chỉ phục vụ khôi phục mật khẩu. */}
+                    <div>
+                        <FloatingLabelInput
+                            id="signup-email"
+                            label="Email"
+                            type="email"
+                            value={email}
+                            onChange={e => setEmail(e.target.value)}
+                            required
+                            autoComplete="email"
+                        />
+                        {emailFix ? (
+                            <button
+                                type="button"
+                                onClick={() => setEmail(emailFix)}
+                                className="mt-1.5 text-[11px] text-warning hover:underline"
+                            >
+                                Có phải <span className="font-bold">{emailFix}</span>? Bấm để sửa
+                            </button>
+                        ) : (
+                            <p className="mt-1.5 flex items-center gap-1 text-[11px] text-text-secondary">
+                                <CircleAlert size={12} className="shrink-0" />
+                                Dùng để khôi phục mật khẩu
+                            </p>
+                        )}
+                    </div>
+
                     <button
                         type="submit"
                         disabled={loading}
@@ -141,20 +152,20 @@ export default function SignUpPage() {
                         {loading ? 'Đang tạo...' : 'Tạo tài khoản'}
                     </button>
 
-                    {/* Phiên dùng thử chỉ bị xoá SAU khi đăng ký/đăng nhập thành công — chưa thì quay lại demo vẫn còn nguyên. */}
-                    {isGuest && (
-                        <button
-                            type="button"
-                            onClick={() => (location.key !== 'default' ? navigate(-1) : navigate('/pos'))}
-                            className="w-full py-3 rounded-[14px] border border-border/60 text-text font-bold text-sm hover:bg-surface-light active:bg-border/40 transition-colors"
-                        >
-                            Tiếp tục dùng thử
-                        </button>
-                    )}
-
+                    {/* Phiên dùng thử chỉ bị xoá SAU khi đăng ký/đăng nhập thành công — chưa thì quay lại demo vẫn còn nguyên.
+                        Link chữ (không phải nút to) để không ngang hàng với "Tạo tài khoản". */}
                     <p className="text-center text-text-secondary text-xs mt-2">
-                        {' '}
-                        <Link to="/login" className="text-primary font-bold hover:underline">Quay lại</Link> trang đăng nhập
+                        {isGuest ? (
+                            <button
+                                type="button"
+                                onClick={() => (location.key !== 'default' ? navigate(-1) : navigate('/pos'))}
+                                className="text-primary font-bold hover:underline"
+                            >
+                                ← Tiếp tục dùng thử
+                            </button>
+                        ) : (
+                            <><Link to="/login" className="text-primary font-bold hover:underline">Quay lại</Link> trang đăng nhập</>
+                        )}
                     </p>
                 </form>
             </div>

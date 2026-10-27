@@ -259,7 +259,7 @@ function OnboardingFunnelCard({ byRange, visits }: { byRange: Record<string, Gue
             </div>
             <div className="mt-1">
                 {funnel?.stages?.length ? (
-                    <GuestFunnelBody funnel={funnel} visits={visits?.[range]} loggedIn={visits?.[`${range}_members`]} />
+                    <GuestFunnelBody funnel={funnel} visits={visits?.[range]} loggedIn={visits?.[`${range}_members`]} signupOpened={visits?.[`${range}_signup`]} />
                 ) : (
                     <p className="text-[11px] text-text-dim">Chưa có khách nào vào dùng thử trong khoảng này</p>
                 )}
@@ -274,7 +274,7 @@ function OnboardingFunnelCard({ byRange, visits }: { byRange: Record<string, Gue
 // Nhãn mốc do RPC trả (xem 20261018_guest_onboarding_funnel_five_steps.sql) — đổi chữ ở client
 // thay vì viết lại cả hàm SQL chỉ để đổi nhãn hiển thị.
 const stageLabel = (raw: string) =>
-    raw.replace(/^Xong: /, '').replace('Cài công thức (hết guide)', 'Nhập định lượng').replace('Vào dùng thử', 'Bấm hướng dẫn sử dụng')
+    raw.replace(/^Xong: /, '').replace('Cài công thức (hết guide)', 'Nhập định lượng').replace('Vào dùng thử', 'Bấm dùng thử miễn phí')
 
 // activePct (tuỳ chọn) = phần của thanh được tô đậm; phần còn lại của thanh nhạt đi.
 function FunnelStageRow({ dotClass, label, count, pct, seconds, activePct }: { dotClass: string; label: string; count: number; pct: number; seconds?: number | null; activePct?: number }) {
@@ -300,7 +300,8 @@ function FunnelStageRow({ dotClass, label, count, pct, seconds, activePct }: { d
 }
 
 // loggedIn = trình duyệt ghé /login rồi đăng nhập (nhân viên/quản lý) — đã loại khỏi visits (20261034/36).
-function GuestFunnelBody({ funnel, visits, loggedIn }: { funnel: GuestFunnel; visits?: number; loggedIn?: number }) {
+// signupOpened = khách đã dùng thử và mở trang đăng ký (20261037) — chưa apply thì undefined, ẩn dòng.
+function GuestFunnelBody({ funnel, visits, loggedIn, signupOpened }: { funnel: GuestFunnel; visits?: number; loggedIn?: number; signupOpened?: number }) {
     const { stages, signup, prev } = funnel
     const entered = stages[0].count
     // Thanh/% các dòng tính trên số ghé /login khi có; kẹp 100 vì khách cũ bấm hướng dẫn từ trước
@@ -334,6 +335,9 @@ function GuestFunnelBody({ funnel, visits, loggedIn }: { funnel: GuestFunnel; vi
                         seconds={f.step_median_seconds}
                     />
                 ))}
+                {signupOpened != null && (
+                    <FunnelStageRow dotClass="bg-primary" label="Mở trang đăng ký" count={signupOpened} pct={barPct(signupOpened)} />
+                )}
                 {/* Bước cuối của phễu: đăng ký tài khoản (gồm cả đăng ký sớm, bỏ guide giữa chừng). */}
                 <FunnelStageRow
                     dotClass="bg-success"

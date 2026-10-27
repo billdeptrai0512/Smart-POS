@@ -43,8 +43,6 @@ interface Props {
     onInputBlur?: () => void
     onCashChange?: (value: string) => void
     onTransferChange?: (value: string) => void
-    hintCard?: boolean
-    onCardFullyVisible?: () => void
     hintCash?: boolean
     hintTransfer?: boolean
     onEditExpense?: (expense: Row) => void
@@ -83,10 +81,7 @@ export default function CashFlowCard({
     onInputBlur,
     onCashChange,
     onTransferChange,
-    // Onboarding bước 3: hintCard sáng cả panel Thực thu, onCardFullyVisible báo khi panel hiện
-    // trọn trong màn hình (việc "Kéo xuống"); sau đó hintCash/hintTransfer sáng từng ô.
-    hintCard = false,
-    onCardFullyVisible,
+    // Onboarding bước 3: hintCash/hintTransfer sáng từng ô; còn ô cần sáng thì panel tự cuộn vào màn hình.
     hintCash = false,
     hintTransfer = false,
     // Bấm 1 dòng chi phí → mở modal sửa (DailyReportPage điều hướng sang tab Chi phí).
@@ -102,17 +97,13 @@ export default function CashFlowCard({
     onPreviewClose,
     onPrintError,
 }: Props) {
-    // "Hiện trọn" = 100% panel nằm trong màn hình (IntersectionObserver tự tính cả phần bị
-    // <main> cuộn che). ponytail: panel cao hơn vùng cuộn thì không bao giờ trọn — hiện ~210px,
-    // hạ threshold nếu panel phình ra.
+    // Guide còn ô Thực thu cần nhập → cuộn panel vào giữa màn hình, khách khỏi phải tự kéo xuống.
+    // Chỉ chạy khi cờ bật lên (chuyển từ ô tiền mặt sang chuyển khoản vẫn là true nên không cuộn lại).
     const panelRef = useRef<HTMLDivElement>(null)
+    const scrollToPanel = hintCash || hintTransfer
     useEffect(() => {
-        const el = panelRef.current
-        if (!onCardFullyVisible || !el) return
-        const io = new IntersectionObserver(([e]) => { if (e.intersectionRatio >= 1) onCardFullyVisible() }, { threshold: 1 })
-        io.observe(el)
-        return () => io.disconnect()
-    }, [onCardFullyVisible])
+        if (scrollToPanel) panelRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }, [scrollToPanel])
     // Category (Nguyên liệu chính / Bao bì) của từng nguyên liệu — để phân loại
     // mục "Mua nguyên liệu / bao bì" bên dưới. Mặc định collapse từng nhóm.
     const { ingredientConfigs } = useProducts()
@@ -359,7 +350,6 @@ export default function CashFlowCard({
             {/* PANEL 1: THỰC THU */}
             <ReportPanel
                 panelRef={panelRef}
-                className={onboardingHintClass(hintCard)}
                 title="Thực thu"
                 total={{ label: 'Tổng thực thu', value: formatVND(actualTotal), className: 'text-success' }}
             >

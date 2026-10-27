@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useHistory } from '../contexts/HistoryContext'
 import { useProducts } from '../contexts/ProductContext'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
@@ -15,7 +15,7 @@ import { useCounterCalc } from '../hooks/useCounterCalc'
 import { calcRangeWithLabel } from '../utils/rangeCalc'
 import { restockInitialFrom } from '../utils/restockInitial'
 import { ingredientLabel, getIngredientUnit } from '../utils/ingredients'
-import { readOnboardingState, DEFAULT_ONBOARDING_STATE, isCashFlowProgressDone, isInventoryProgressDone, reachedCashCard } from '../utils/onboardingStorage'
+import { readOnboardingState, DEFAULT_ONBOARDING_STATE, isCashFlowProgressDone, isInventoryProgressDone } from '../utils/onboardingStorage'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
 import { isRecipeStepActive } from '../components/common/onboarding/steps'
 import { dateStringVN, isSameDayVN } from '../utils/dateVN'
@@ -244,13 +244,9 @@ export default function DailyReportPage() {
 
     // Hint spotlight cho phase 3 — xem CashFlowCard. Phase 4 (Kiểm kê) nằm ở /inventory.
     const showOnboardingHints = isGuest && !!addressId
-    // Bước 3: chưa kéo tới thì sáng cả thẻ Thực thu; thẻ hiện trọn rồi (CashFlowCard tự đo, gọi
-    // markCashCardSeen) thì chỉ sáng ô còn thiếu.
-    const cashCardReached = reachedCashCard(cashFlowProgress)
-    const hintCashCard = showOnboardingHints && !cashCardReached
-    const hintCash = showOnboardingHints && cashCardReached && !cashFlowProgress.cash
-    const hintTransfer = showOnboardingHints && cashCardReached && !cashFlowProgress.transfer
-    const markCashCardSeen = useCallback(() => setCashFlowProgress(prev => ({ ...prev, scrolled: true })), [])
+    // Bước 3: sáng ô còn thiếu; CashFlowCard tự cuộn thẻ Thực thu vào màn hình (không có việc "Kéo xuống").
+    const hintCash = showOnboardingHints && !cashFlowProgress.cash
+    const hintTransfer = showOnboardingHints && !cashFlowProgress.transfer
     const cashFlowDone = isCashFlowProgressDone(cashFlowProgress)
     const inventoryDone = isInventoryProgressDone(inventoryProgress)
     // Xong dòng tiền + đã xem Lợi nhuận → mũi tên "tiến" dẫn sang Tồn kho (tab Kiểm kê) để đếm tồn.
@@ -719,8 +715,6 @@ export default function DailyReportPage() {
                                 onCashChange={(v) => setCashInput(formatVNDInput(v))}
                                 onTransferChange={(v) => setTransferInput(formatVNDInput(v))}
                                 onInputBlur={handleSaveCashflow}
-                                hintCard={hintCashCard}
-                                onCardFullyVisible={hintCashCard ? markCashCardSeen : undefined}
                                 hintCash={hintCash}
                                 hintTransfer={hintTransfer}
                                 onEditExpense={setEditingExpense}
