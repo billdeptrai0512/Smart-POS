@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Lightbulb } from 'lucide-react'
+import { Check, Lightbulb } from 'lucide-react'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useAddress } from '../../../contexts/AddressContext'
 import { useProducts } from '../../../contexts/ProductContext'
@@ -8,6 +8,7 @@ import { trackGuestOnboardingStage } from '../../../services/onboardingFunnelSer
 import { sortIngredients } from '../../../utils/ingredients'
 import { norm } from '../../../utils/onboardingHint'
 import { readOnboardingState, DEFAULT_ONBOARDING_STATE, ONBOARDING_EVENT } from '../../../utils/onboardingStorage'
+import Typewriter from '../Typewriter'
 import { STEPS, RECIPE_TARGET_PRODUCT } from './steps'
 
 // Hướng dẫn "Bắt đầu bán hàng" — 1 dải IN-FLOW trên đỉnh layout (App.tsx OnboardingLayout đặt
@@ -69,11 +70,13 @@ export default function OnboardingGuide() {
 
     if (idx === -1) {
         return (
+            // Cùng kiểu dải nhạt như các việc trước (không phải nền cam đặc — chói); cả dải bấm được.
             <Link
                 to="/signup"
-                className={`${bar} justify-center bg-primary text-bg uppercase font-black tracking-wider hover:bg-primary/90 active:bg-primary/80 transition-colors`}
+                className={`${bar} bg-primary/15 text-primary hover:bg-primary/25 active:bg-primary/30 transition-colors`}
             >
-                Hoàn thành! Đăng ký tài khoản
+                <span className="shrink-0 grid place-items-center size-6 rounded-full bg-primary/20"><Check size={14} /></span>
+                <span className="flex-1 uppercase tracking-wider text-[12px] font-black"><Typewriter text="Hoàn thành! Đăng ký tài khoản" /></span>
             </Link>
         )
     }
@@ -82,10 +85,15 @@ export default function OnboardingGuide() {
     const flat = STEPS.flatMap(s => s.items(ctx))
     const offerFrom = flat.findIndex(i => i.offerSignup)
     const showSignup = offerFrom >= 0 && flat.findIndex(i => !i.done) >= offerFrom
+    const label = items.find(i => !i.done)?.label ?? ''
     return (
         <div className={`${bar} bg-primary/15 text-text`}>
             <span className="shrink-0 grid place-items-center size-6 rounded-full bg-primary/20 text-primary"><Lightbulb size={14} /></span>
-            <span className="flex-1 line-clamp-2 uppercase tracking-wider text-[12px] font-black">{items.find(i => !i.done)?.label}</span>
+            {/* Chữ gõ dần (Typewriter); bản ẩn cùng nội dung giữ chỗ để dải không đổi chiều cao lúc đang gõ. */}
+            <span className="flex-1 relative uppercase tracking-wider text-[12px] font-black">
+                <span className="invisible line-clamp-2">{label}</span>
+                <span className="absolute inset-0 line-clamp-2"><Typewriter text={label} /></span>
+            </span>
             {/* Tới việc có cờ offerSignup (steps.ts) thì cho đăng ký sớm — guide vẫn chạy tiếp. */}
             {showSignup && (
                 <Link to="/signup" className="shrink-0 text-[12px] font-black uppercase tracking-wider text-primary border border-primary/60 rounded-full px-3 py-0.5 active:bg-primary/15 transition-colors">

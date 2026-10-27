@@ -13,10 +13,16 @@ describe('guide nhắc nút bấm khi đã đủ việc', () => {
         expect(firstUndone(orderStep.items({ orderProgress: { ...op, sent: 1, picked: 2, ready: true } }))).toMatch(/Tạo đơn/)
     })
 
-    it('Tồn kho: gõ đủ chưa Lưu → nhắc bấm Lưu', () => {
+    it('Tồn kho: Sử dụng → Lý thuyết → Cuối kỳ → Lưu', () => {
         const ctx = { ...DEFAULT_ONBOARDING_STATE, recipeRows: [] }
-        const inv = STEPS[3]
-        expect(firstUndone(inv.items({ ...ctx, inventoryProgress: { ...ctx.inventoryProgress, visited: true } }))).toBe('Nhập tồn cuối kỳ')
-        expect(firstUndone(inv.items({ ...ctx, inventoryProgress: { ...ctx.inventoryProgress, visited: true, typed: true } }))).toMatch(/Lưu/)
+        const inv = STEPS[2]
+        const inventory = (patch: Partial<typeof ctx.inventoryProgress>) => inv.items({ ...ctx, inventoryProgress: { ...ctx.inventoryProgress, ...patch } })
+        expect(firstUndone(inventory({}))).toMatch(/chi tiết/)
+        expect(firstUndone(inventory({ usedOpened: true }))).toMatch(/công thức/)
+        expect(firstUndone(inventory({ usedOpened: true, theory: 951 }))).toMatch(/951g/)
+        expect(firstUndone(inventory({ usedOpened: true, theoryOpened: true }))).toMatch(/cuối kỳ/)
+        // nhập luôn mà bỏ qua 2 ô đầu thì không kẹt
+        expect(inventory({ coffee: true }).every(i => i.done)).toBe(true)
+        expect(firstUndone(inv.items({ ...ctx, inventoryProgress: { ...ctx.inventoryProgress, usedOpened: true, theoryOpened: true, typed: true } }))).toMatch(/Lưu/)
     })
 })

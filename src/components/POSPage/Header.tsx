@@ -1,18 +1,7 @@
-import { useState, useEffect, type ReactNode, type Ref } from 'react'
+import type { ReactNode, Ref } from 'react'
 import { onboardingHintClass } from '../../utils/onboardingHint'
+import Typewriter from '../common/Typewriter'
 import type { LastOrder } from '../../services/cartOps'
-
-// Types the committed order's text out left→right — only runs once "Tạo đơn" is pressed
-// (tapping a product no longer writes to the journal, so it can't be mistaken for "sent").
-function Typewriter({ text }: { text: string }) {
-    const [n, setN] = useState(0)
-    useEffect(() => {
-        if (n >= text.length) return
-        const id = setTimeout(() => setN(n + 1), 25)
-        return () => clearTimeout(id)
-    }, [n, text.length])
-    return <>{text.slice(0, n)}{n < text.length && <span className="opacity-50">▌</span>}</>
-}
 
 interface Props {
     dayName: string

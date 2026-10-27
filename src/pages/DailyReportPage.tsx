@@ -170,7 +170,7 @@ export default function DailyReportPage() {
         isGuest && addressId ? readOnboardingState(addressId) : DEFAULT_ONBOARDING_STATE
     )
     const [cashFlowProgress, setCashFlowProgress] = useState(initialOnboardingState.cashFlowProgress)
-    // inventoryProgress do tab Kiểm kê của /inventory ghi — ở đây chỉ đọc để biết lúc nào hint mũi tên "tiến".
+    // inventoryProgress do tab Kiểm kê của /inventory ghi — ở đây chỉ đọc để biết lúc nào bắt đầu hint nhập thực thu.
     const { inventoryProgress } = initialOnboardingState
     useOnboardingProgressPersist('cashFlowProgress', cashFlowProgress, { isGuest, addressId })
     // Việc "Xem báo cáo lợi nhuận" của phase 3 (sau khi nhập thực thu): tick khi user tự bấm sang tab Lợi nhuận.
@@ -242,22 +242,20 @@ export default function DailyReportPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cashEditable, cashClosing, todayISO, shiftClosing?.id, shiftClosing?.closed_at])
 
-    // Hint spotlight cho phase 3 — xem CashFlowCard. Phase 4 (Kiểm kê) nằm ở /inventory.
+    // Hint spotlight cho phase 4 (Kết ca) — xem CashFlowCard; chỉ sau khi đã đếm tồn ở /inventory (phase 3).
     const showOnboardingHints = isGuest && !!addressId
-    // Bước 3: sáng ô còn thiếu; CashFlowCard tự cuộn thẻ Thực thu vào màn hình (không có việc "Kéo xuống").
-    const hintCash = showOnboardingHints && !cashFlowProgress.cash
-    const hintTransfer = showOnboardingHints && !cashFlowProgress.transfer
-    const cashFlowDone = isCashFlowProgressDone(cashFlowProgress)
     const inventoryDone = isInventoryProgressDone(inventoryProgress)
-    // Xong dòng tiền + đã xem Lợi nhuận → mũi tên "tiến" dẫn sang Tồn kho (tab Kiểm kê) để đếm tồn.
-    // Chờ viewedProfit để không sáng cùng lúc với tab Lợi nhuận.
-    const hintGoToInventory = showOnboardingHints && cashFlowDone && viewedProfit && !inventoryDone
+    // Sáng ô còn thiếu; CashFlowCard tự cuộn thẻ Thực thu vào màn hình.
+    const hintCash = showOnboardingHints && inventoryDone && !cashFlowProgress.cash
+    const hintTransfer = showOnboardingHints && inventoryDone && !cashFlowProgress.transfer
+    const cashFlowDone = isCashFlowProgressDone(cashFlowProgress)
 
     // Phase 5 "Điều chỉnh công thức" không còn nút riêng trong guide — hint thẳng vào mũi tên
     // "tiến" ở header, đi xuyên page tới /category qua menuSequence.ts (xem onboarding/steps.ts).
+    // Chờ viewedProfit để không sáng cùng lúc với tab Lợi nhuận.
     // recipeProgress do RecipeIngredientPage.tsx ghi — đọc lại từ initialOnboardingState (đã
     // đọc localStorage 1 lần ở trên cho cashFlowProgress/inventoryProgress rồi, khỏi đọc thêm).
-    const hintGoToRecipes = showOnboardingHints && isRecipeStepActive(inventoryDone, initialOnboardingState.recipeProgress)
+    const hintGoToRecipes = showOnboardingHints && isRecipeStepActive(cashFlowDone && viewedProfit, initialOnboardingState.recipeProgress)
 
     // Week/month scopes show the per-day/per-week bar chart instead of the hourly line.
     // "Range" = khoảng NHIỀU NGÀY. Biểu đồ đường cộng dồn theo GIỜ chỉ có nghĩa cho 1
@@ -649,7 +647,7 @@ export default function DailyReportPage() {
                 scope={scope}
                 onBack={() => guardLeave(() => goToMenuStep('report', -1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard }))}
                 onForward={() => goToMenuStep('report', +1, { navigate, backTo, scopeState: dateNavState, wizard: location.state?.wizard })}
-                hintForward={hintGoToInventory || hintGoToRecipes}
+                hintForward={hintGoToRecipes}
                 canGoForward={canGoForwardPeriod}
                 onOffsetPrev={() => guardLeave(goOffsetPrev)}
                 onOffsetNext={() => guardLeave(goOffsetNext)}

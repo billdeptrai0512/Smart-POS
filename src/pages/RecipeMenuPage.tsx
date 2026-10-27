@@ -30,7 +30,7 @@ import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
 import { RECIPE_TABS, DISCOUNT_TAB } from '../constants/menuTabs'
 import { norm } from '../utils/onboardingHint'
-import { isRecipeProgressDone, isInventoryProgressDone, readOnboardingState, DEFAULT_ONBOARDING_STATE } from '../utils/onboardingStorage'
+import { isRecipeProgressDone, isCashFlowProgressDone, readOnboardingState, DEFAULT_ONBOARDING_STATE } from '../utils/onboardingStorage'
 import { useOnboardingProgress } from '../hooks/useOnboardingProgress'
 import { useOnboardingProgressPersist } from '../hooks/useOnboardingProgressPersist'
 import { RECIPE_TARGET_PRODUCT } from '../components/common/onboarding/steps'
@@ -102,8 +102,11 @@ export default function RecipeMenuPage() {
     // Onboarding phase 5 (Công thức) — hint thẻ "Cà phê đen" cho tới khi đã điền định lượng
     // + tạo tùy chọn thêm.
     // recipeProgress do trang này ghi viewedMenu/viewedRecipes (cùng pattern RecipeIngredientPage):
-    // chỉ tính khi đã xong Tồn kho — nếu không guide nhảy qua bước đang đứng. viewedRecipes cần viewedMenu trước.
-    const inventoryDone = isInventoryProgressDone(useOnboardingProgress('inventoryProgress', { isGuest, addressId }))
+    // chỉ tính khi đã xong Kết ca (nhập thực thu + xem lợi nhuận) — nếu không guide nhảy qua bước đang đứng.
+    // viewedRecipes cần viewedMenu trước.
+    const cashFlowProgress = useOnboardingProgress('cashFlowProgress', { isGuest, addressId })
+    const { viewedProfit } = useOnboardingProgress('journalProgress', { isGuest, addressId })
+    const shiftCloseDone = isCashFlowProgressDone(cashFlowProgress) && viewedProfit
     const [recipeProgress, setRecipeProgress] = useState(() =>
         (isGuest && addressId ? readOnboardingState(addressId) : DEFAULT_ONBOARDING_STATE).recipeProgress
     )
@@ -129,7 +132,7 @@ export default function RecipeMenuPage() {
     // /category/recipes = Công thức (chi tiết từng món, tìm kiếm, thêm công thức, topping).
     const [view, setView] = useTabRoute('/category')
     if (isGuest && addressId) {
-        if (inventoryDone && view === 'overall' && !recipeProgress.viewedMenu) setRecipeProgress(prev => ({ ...prev, viewedMenu: true }))
+        if (shiftCloseDone && view === 'overall' && !recipeProgress.viewedMenu) setRecipeProgress(prev => ({ ...prev, viewedMenu: true }))
         if (recipeProgress.viewedMenu && view === 'recipes' && !recipeProgress.viewedRecipes) setRecipeProgress(prev => ({ ...prev, viewedRecipes: true }))
     }
     // Lọc danh mục ở tab Menu: 'all' | 'none' (món chưa thuộc mục nào) | id của mục (divider). Id lạ (mục đã xoá) rơi về 'all'.

@@ -20,11 +20,11 @@ import { getPendingOrders } from '../../hooks/useOfflineSync'
 import { calculateEstimatedConsumption, calculateConsumptionBreakdown, buildIngredientToProduct, orderItemsOf, isLiveOrder, sumLiveRevenue } from '../../utils/inventory'
 import { ingredientLabel } from '../../utils/ingredients'
 import { findIngredientByLabel, onboardingHintClass } from '../../utils/onboardingHint'
-import { isCashFlowProgressDone, isInventoryProgressDone } from '../../utils/onboardingStorage'
+import { isInventoryProgressDone } from '../../utils/onboardingStorage'
 import { dateStringVN, isSameDayVN } from '../../utils/dateVN'
 import { productionOnDay, mergeUsage, madeOf, madeInPeriods } from '../../utils/production'
 import TodayProduction from './TodayProduction'
-import InventoryReportCard from '../DailyReportPage/InventoryReportCard'
+import InventoryReportCard, { type HintStep } from '../DailyReportPage/InventoryReportCard'
 import PastInventoryEditor from '../DailyReportPage/PastInventoryEditor'
 import RangeLossCard from '../DailyReportPage/RangeLossCard'
 import MissingCupSuspicionCard from '../DailyReportPage/MissingCupSuspicionCard'
@@ -130,13 +130,20 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     )
 
     // ── Onboarding phase 4 (Kiểm kê tồn kho): hint Cà phê → Cacao, tick khi bấm Lưu ──
-    const cashFlowProgress = useOnboardingProgress('cashFlowProgress', { isGuest, addressId })
-    const hintInventory = isGuest && !!addressId
-        && isCashFlowProgressDone(cashFlowProgress) && !isInventoryProgressDone(inventoryProgress)
-    // Việc "Kiểm kê nguyên liệu cuối ngày": tick khi user đã điều hướng tới tab này (mũi tên từ /report).
-    useEffect(() => {
-        if (hintInventory && !inventoryProgress.visited) setInventoryProgress(prev => ({ ...prev, visited: true }))
-    }, [hintInventory, inventoryProgress.visited, setInventoryProgress])
+    // Bắt đầu sau Nhật ký (viewedReport = đã bấm mũi tên "tiến" từ /history).
+    const { viewedReport } = useOnboardingProgress('journalProgress', { isGuest, addressId })
+    const hintInventory = isGuest && !!addressId && viewedReport && !isInventoryProgressDone(inventoryProgress)
+    // 3 câu hỏi lần lượt (mỗi lúc sáng 1 chỗ trên dòng cà phê): đã dùng bao nhiêu (Sử dụng) → máy tính
+    // còn bao nhiêu (Lý thuyết) → mình đếm được bao nhiêu (Cuối kỳ).
+    const hintStep: HintStep = !inventoryProgress.usedOpened ? 'used' : !inventoryProgress.theoryOpened ? 'theory' : 'count'
+    const onHintSeen = useCallback(
+        (step: 'used' | 'theory') => setInventoryProgress(prev => ({ ...prev, [step === 'used' ? 'usedOpened' : 'theoryOpened']: true })),
+        [setInventoryProgress]
+    )
+    const onHintValue = useCallback(
+        (theory: number) => setInventoryProgress(prev => (prev.theory === theory ? prev : { ...prev, theory })),
+        [setInventoryProgress]
+    )
     // NVL của bước onboarding: chỉ cà phê (đếm ly/nắp là cùng một thao tác).
     const coffee = isGuest ? findIngredientByLabel(inventory.ingredientsList, 'cà phê')?.ingredient : undefined
     const coffeeTyped = !!coffee && (inventory.inventoryInputs[coffee] ?? '') !== ''
@@ -266,6 +273,9 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                         open={openAudit}
                         onToggleOpen={() => setOpenAudit(o => !o)}
                         hintIngredient={hintInventoryIngredient}
+                        hintStep={hintStep}
+                        onHintSeen={onHintSeen}
+                        onHintValue={onHintValue}
                     />
 
                     {!isStaff && <MissingCupSuspicionCard candidates={missingCupCandidates} />}

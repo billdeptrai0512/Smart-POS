@@ -24,8 +24,10 @@ export const DEFAULT_ONBOARDING_STATE = {
     orderProgress: { sent: 0, picked: 0, viewedHistory: false, ready: false },
     journalProgress: { viewedIncome: false, viewedExpense: false, viewedReport: false, viewedProfit: false },
     cashFlowProgress: { cash: false, transfer: false },
+    // usedOpened/theoryOpened: đã bấm xem ô Sử dụng / Lý thuyết của cà phê (2 câu hỏi trước khi nhập Cuối kỳ).
+    // theory: số Lý thuyết hiện tại của cà phê (g) — guide đọc ra "bạn sẽ còn Xg"; 0 = chưa có.
     // typed: đã gõ tồn cà phê nhưng chưa bấm Lưu (không latch) → guide nhắc bấm Lưu.
-    inventoryProgress: { visited: false, coffee: false, typed: false },
+    inventoryProgress: { usedOpened: false, theoryOpened: false, theory: 0, coffee: false, typed: false },
     recipeProgress: { viewedMenu: false, viewedRecipes: false, filledAmount: false, addedExtra: false },
 }
 

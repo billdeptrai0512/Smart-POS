@@ -1,6 +1,6 @@
 // The ordered list of dashboard destinations the header ‹ › arrows walk through.
-// "Next/prev page, not next tab": Nhật ký (/history), Báo cáo (/report),
-// Tồn kho (/inventory), Công thức (/category).
+// "Next/prev page, not next tab": Nhật ký (/history), Tồn kho (/inventory),
+// Báo cáo (/report), Công thức (/category).
 // The arrows step through THIS list in order;
 // stepping off either end exits to /pos (it's a bounded line, not a loop).
 //
@@ -9,8 +9,8 @@
 //   dated    — trang có khoảng ngày: nhận scopeState khi bước sang
 export const MENU_SEQUENCE: { key: string; route: string; dated?: boolean }[] = [
     { key: 'sales', route: '/history/sales', dated: true },   // Nhật ký
-    { key: 'report', route: '/report/cashflow', dated: true },        // Báo cáo
     { key: 'main', route: '/inventory/management' },             // Tồn kho
+    { key: 'report', route: '/report/cashflow', dated: true },        // Báo cáo
     { key: 'recipes', route: '/category/overall' },               // Danh mục
 ]
 

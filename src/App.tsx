@@ -124,7 +124,7 @@ export default function App() {
                       <Route element={<POSProvider />}>
                         <Route element={<OnboardingLayout />}>
                           <Route path="/pos" element={<POSPage />} />
-                          {/* Nhật ký · Báo cáo · Tồn kho · Danh mục: 4 điểm dừng của mũi tên ‹ › (utils/menuSequence.ts), mỗi trang 2 tab trên URL */}
+                          {/* Nhật ký · Tồn kho · Báo cáo · Danh mục: 4 điểm dừng của mũi tên ‹ › (utils/menuSequence.ts), mỗi trang 2 tab trên URL */}
                           <Route path="/history/:tab?" element={<TabGuard base="/history" tabs={['sales', 'expense']}><HistoryPage /></TabGuard>} />
                           <Route path="/report/:tab?" element={<TabGuard base="/report" tabs={['cashflow', 'revenue']}><DailyReportPage /></TabGuard>} />
                           {/* Feature-level permission routes (anyone can view, managers can edit) */}
