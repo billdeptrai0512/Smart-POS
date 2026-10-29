@@ -76,7 +76,15 @@ export default function OnboardingGuide() {
                 className={`${bar} bg-primary/15 text-primary hover:bg-primary/25 active:bg-primary/30 transition-colors`}
             >
                 <span className="shrink-0 grid place-items-center size-6 rounded-full bg-primary/20"><Check size={14} /></span>
-                <span className="flex-1 uppercase tracking-wider text-[12px] font-black"><Typewriter text="Hoàn thành! Đăng ký tài khoản" /></span>
+                {/* Căn giữa: bản ẩn giữ đủ bề rộng chữ, bản gõ dần chồng lên canh trái — chữ mọc từ trái sang
+                    phải thay vì lan ra hai bên. Ô trống size-6 bên phải cân với icon để chữ nằm giữa dải. */}
+                <span className="flex-1 text-center uppercase tracking-wider text-[12px] font-black">
+                    <span className="relative inline-block">
+                        <span className="invisible">Hoàn thành! Đăng ký tài khoản</span>
+                        <span className="absolute inset-0 text-left"><Typewriter text="Hoàn thành! Đăng ký tài khoản" /></span>
+                    </span>
+                </span>
+                <span className="shrink-0 size-6" />
             </Link>
         )
     }
