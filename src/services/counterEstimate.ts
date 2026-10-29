@@ -98,7 +98,9 @@ export async function withCounterEstimate(rows: Row[] | null | undefined, addres
 
 // Kỳ kiểm kê của 1 NVL: ngày đếm trước (YYYY-MM-DD) + số đã đếm, tổng dùng và tổng nhập thêm từ sau đó tới hôm qua.
 export type OpeningPeriods = Record<string, { since: string; counted: number; used: number; restock: number }>
-const emptyOpening = (): { stocks: UsageMap; periods: OpeningPeriods } => ({ stocks: {}, periods: {} })
+// Đếm hôm qua nhưng Đầu kỳ hôm nay thấp hơn số đếm vì có đơn bán SAU giờ đếm: số đã đếm và lượng đã trừ.
+export type OpeningNotes = Record<string, { counted: number; used: number }>
+const emptyOpening = (): { stocks: UsageMap; periods: OpeningPeriods; notes: OpeningNotes } => ({ stocks: {}, periods: {}, notes: {} })
 
 // Đầu kỳ HÔM NAY = tồn quầy ước tính cuối hôm qua, tính từ lần đếm gần nhất TRƯỚC hôm nay (prior_* của RPC): cùng công
 // thức estimateCounterRow, tiêu hao chỉ tới hết hôm qua. Không phụ thuộc NVL có được đếm hôm nay hay chưa, nên số này
@@ -123,6 +125,8 @@ export async function estimateOpening(rows: Row[] | null | undefined, addressId:
             out.stocks[r.ingredient] = e.counter_stock
             if (nextDayStr(r.counter_counted_on) < usage.today)
                 out.periods[r.ingredient] = { since: r.counter_counted_on, counted: r.counter_stock, used: r1(usedSinceCount(r, usage.used, usage.afterCount)), restock: r.restock_since_count }
+            else if (e.counter_stock < r.counter_stock)
+                out.notes[r.ingredient] = { counted: r.counter_stock, used: r1(r.counter_stock - e.counter_stock) }
         }
         return out
     } catch (err) {

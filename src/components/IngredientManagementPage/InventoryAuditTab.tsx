@@ -253,6 +253,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                         isLoading={inventory.isLoadingIngredients}
                         openingStock={inventory.openingStock}
                         openingPeriods={inventory.openingPeriods}
+                        openingNotes={inventory.openingNotes}
                         openingInputs={inventory.openingInputs}
                         openingLocked={inventory.openingLocked}
                         restockInputs={inventory.restockInputs}
