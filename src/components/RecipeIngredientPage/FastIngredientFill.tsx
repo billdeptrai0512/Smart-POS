@@ -222,7 +222,8 @@ function FillRow({ ingredient, amount, unit, unitCost, canEdit, showCost, allowN
         if (n) { onCommit(ingredient, next ? -n : n, unit); flashSaved() } // ghi ngay: bấm nút không gây blur
     }
 
-    const val = amount || 0
+    // Giá trị đang gõ, không phải `amount` đã lưu (lưu chỉ xảy ra khi blur) — để tổng/chi phí đổi theo từng phím.
+    const val = signed(parseDraft(), negative)
 
     return (
         <div className="flex items-center gap-2 max-[329px]:gap-1.5 px-3 max-[329px]:px-2 py-2 rounded-[12px] bg-surface-light">
