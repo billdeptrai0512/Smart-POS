@@ -83,15 +83,12 @@ export default function LoginPage() {
                                 required
                                 autoComplete="current-password"
                             />
-                            {/* pl-4 = px-4 của input → link thẳng hàng với chữ trong ô, không tuột ra mép thẻ */}
-                            <div className="mt-3 pl-2 pr-2 flex items-center justify-between">
-                                <Link to="/forgot-password" className="text-text-secondary text-xs hover:text-primary hover:underline">
+                            {/* Chỉ hiện khi nhập sai; pl-2 → thẳng hàng với chữ trong ô */}
+                            {error === AUTH_ERROR_VI['Invalid login credentials'] && (
+                                <Link to="/forgot-password" className="block mt-3 pl-2 text-text-secondary text-xs hover:text-primary hover:underline">
                                     Quên mật khẩu?
                                 </Link>
-                                <Link to="/signup" className="text-text-secondary text-xs hover:text-primary hover:underline">
-                                    Đăng ký
-                                </Link>
-                            </div>
+                            )}
                         </div>
 
                         <button
@@ -118,7 +115,7 @@ export default function LoginPage() {
                             disabled={guestLoading}
                             className="w-full py-3.5 rounded-[14px] bg-primary/5 uppercase border border-primary/40 text-primary font-black text-sm hover:bg-primary/10 hover:border-primary/60 focus-visible:outline-2 focus-visible:outline-primary/50 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {guestLoading ? 'Đang tải...' : 'Dùng thử miễn phí'}
+                            {guestLoading ? 'Đang tải...' : 'Bán thử một đơn'}
                         </button>
                     </div>
                 </div>
