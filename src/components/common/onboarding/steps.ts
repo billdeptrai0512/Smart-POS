@@ -71,7 +71,7 @@ export const STEPS: Step[] = [
             // 3 câu hỏi: đã dùng bao nhiêu → máy tính còn bao nhiêu → mình đếm được bao nhiêu (nhập). `|| coffee`:
             // khách nhập luôn mà không bấm xem 2 ô đầu thì vẫn không kẹt ở đây. `theory` = số Lý thuyết hiện tại
             // của cà phê, do dòng kiểm kê ghi lại (đổi theo số đơn khách bấm thử).
-            { label: 'Xem chi tiết đã sử dụng', done: ctx.inventoryProgress.usedOpened || ctx.inventoryProgress.coffee },
+            { label: 'Xem định lượng công thức đã sử dụng', done: ctx.inventoryProgress.usedOpened || ctx.inventoryProgress.coffee },
             {
                 label: `Theo công thức, bạn sẽ còn ${ctx.inventoryProgress.theory ? `${ctx.inventoryProgress.theory}g ` : ''}cà phê`,
                 done: ctx.inventoryProgress.theoryOpened || ctx.inventoryProgress.coffee,

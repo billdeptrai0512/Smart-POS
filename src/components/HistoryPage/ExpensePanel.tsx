@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import CupsRevenueSummary from '../common/CupsRevenueSummary'
 import { formatVND } from '../../utils'
 import { groupMeta } from '../../constants/expenseGroups'
 import { dateShortVN } from '../../utils/dateVN'
@@ -20,6 +21,9 @@ interface Props {
 }
 
 export default function ExpensePanel({ isReadOnly, isLoading, expenses, expenseCategories = [], onEditExpense }: Props) {
+    // O(1) category lookup keyed by id.
+    const catById = useMemo(() => new Map(expenseCategories.map(c => [c.id, c])), [expenseCategories])
+
     return (
         <main className="flex-1 overflow-y-auto px-4 py-4 pb-4 space-y-3 bg-bg">
             {isLoading ? (
@@ -31,61 +35,36 @@ export default function ExpensePanel({ isReadOnly, isLoading, expenses, expenseC
                 <div className="text-center text-text-secondary text-[13px] py-10 bg-surface-light rounded-xl border border-border/40">
                     Chưa có chi phí nào.
                 </div>
-            ) : (
-                <ExpenseList
-                    expenses={expenses}
-                    expenseCategories={expenseCategories}
-                    onEdit={isReadOnly ? null : onEditExpense}
-                />
-            )}
+            ) : (<>
+                {/* Thẻ tổng kết — cùng bố cục tab Bán hàng */}
+                <div className="bg-surface rounded-[24px] p-5 shadow-sm border border-border/60">
+                    <CupsRevenueSummary
+                        cups={expenses.length}
+                        revenue={expenses.reduce((sum, e) => sum + (e.amount || 0), 0)}
+                        leftLabel="Phát sinh" unit="chi phí" rightLabel="Tổng cộng" rightTone="text-danger"
+                    />
+                </div>
+                {expenses.map(expense => (
+                    <ExpenseCard
+                        key={expense.id}
+                        expense={expense}
+                        category={catById.get(expense.category_id)}
+                        onEdit={isReadOnly ? null : onEditExpense}
+                    />
+                ))}
+            </>)}
         </main>
-    )
-}
-
-// Subcomponent that owns the running-total computation so it
-// doesn't rerun when unrelated state changes in ExpensePanel.
-function ExpenseList({ expenses, expenseCategories, onEdit }: { expenses: Row[]; expenseCategories: ExpenseCategory[]; onEdit?: ((expense: Row) => void) | null }) {
-    // Running total (cumulative) — walks oldest → newest. expenses list is sorted
-    // newest-first so we iterate in reverse.
-    const runningMap = useMemo(() => {
-        const map = new Map<string, number>()
-        let cum = 0
-        for (let i = expenses.length - 1; i >= 0; i--) {
-            cum += expenses[i].amount || 0
-            map.set(expenses[i].id, cum)
-        }
-        return map
-    }, [expenses])
-
-    // O(1) category lookup keyed by id.
-    const catById = useMemo(
-        () => new Map(expenseCategories.map(c => [c.id, c])),
-        [expenseCategories]
-    )
-
-    return (
-        <>
-            {expenses.map(expense => (
-                <ExpenseCard
-                    key={expense.id}
-                    expense={expense}
-                    category={catById.get(expense.category_id)}
-                    runningTotal={runningMap.get(expense.id)}
-                    onEdit={onEdit}
-                />
-            ))}
-        </>
     )
 }
 
 // Thẻ chi phí — HIỂN THỊ THUẦN, bấm cả thẻ để mở modal sửa (mọi thao tác đổi
 // nhãn / tiền mặt / xoá / ngày dồn vào modal cho gọn). Bố cục:
-//   row 1 — tên (hero) · số tiền
-//   row 2 — badge: nhãn (chấm màu nhóm) · thời điểm · phương thức (gọn, nhạt)
-//   row 3 — nhân viên + ngày (trái) · luỹ kế (phải, nhạt)
-interface CardProps { expense: Row; category?: ExpenseCategory; runningTotal?: number; onEdit?: ((expense: Row) => void) | null }
+//   header — badge: nhãn (chấm màu nhóm) · thời điểm (trái) · số tiền (phải)
+//   body — tên
+//   footer — nhân viên + ngày (trái) · phương thức (phải)
+interface CardProps { expense: Row; category?: ExpenseCategory; onEdit?: ((expense: Row) => void) | null }
 
-function ExpenseCard({ expense, category, runningTotal, onEdit }: CardProps) {
+function ExpenseCard({ expense, category, onEdit }: CardProps) {
     const time = dateShortVN(new Date(expense.created_at))
     // "Sau ca" marker: free-form refill flag (NVL refills đã lọc ở trên).
     const isAfterShift = !!expense.metadata?.free_form
@@ -104,31 +83,28 @@ function ExpenseCard({ expense, category, runningTotal, onEdit }: CardProps) {
             role={clickable ? 'button' : undefined}
             tabIndex={clickable ? 0 : undefined}
             onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEdit(expense) } } : undefined}
-            className={`bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2.5 relative overflow-hidden transition-all ${
+            className={`bg-surface border border-border/60 rounded-[20px] p-4 shadow-sm flex flex-col gap-2 relative overflow-hidden transition-all ${
                 clickable ? 'cursor-pointer hover:border-primary/40 active:scale-[0.99]' : ''
             }`}
         >
-            {/* Row 1 — tên (hero) + số tiền */}
-            <div className="flex justify-between items-baseline gap-3">
-                <span className="text-[15px] leading-snug font-bold text-text whitespace-pre-wrap min-w-0">{expense.name}</span>
-                <span className="text-[15px] font-black tabular-nums text-danger shrink-0">-{formatVND(expense.amount)}</span>
+            {/* Header — badge (trái) · số tiền (phải), divider như thẻ lịch sử bán hàng */}
+            <div className="flex items-center justify-between gap-2 border-b border-border/40 pb-2">
+                <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                    <Badge dot={groupMeta(tag.group).dotCls} muted={tag.muted} strike={tag.strike}>{tag.name}</Badge>
+                    <Badge>{isAfterShift ? 'Sau ca' : 'Trong ca'}</Badge>
+                </div>
+                <span className="text-[14px] font-bold tabular-nums text-danger shrink-0">-{formatVND(expense.amount)}</span>
             </div>
 
-            {/* Row 2 — badge gọn cùng style: nhãn (chấm màu) · thời điểm · phương thức */}
-            <div className="flex flex-wrap items-center gap-1.5">
-                <Badge dot={groupMeta(tag.group).dotCls} muted={tag.muted} strike={tag.strike}>{tag.name}</Badge>
-                <Badge>{isAfterShift ? 'Sau ca' : 'Trong ca'}</Badge>
-                <Badge>{isTransfer ? 'Chuyển khoản' : 'Tiền mặt'}</Badge>
-            </div>
+            {/* Body — tên chi phí, cùng lề trái với badge và footer */}
+            <span className="text-[14px] leading-snug font-medium text-text whitespace-pre-wrap">{expense.name}</span>
 
-            {/* Row 3 — nhân viên + ngày (trái) · luỹ kế (phải) */}
+            {/* Footer — nhân viên + ngày (trái) · phương thức (phải) */}
             <div className="flex justify-between items-end gap-2 border-t border-border/40 pt-2">
                 <span className="text-[12px] font-bold text-text-secondary/70 truncate">
                     {expense.staff_name || '—'}<span className="text-text-dim font-medium"> · {time}</span>
                 </span>
-                {runningTotal != null && (
-                    <span className="text-[12px] font-bold text-text-dim tabular-nums shrink-0">Σ -{formatVND(runningTotal)}</span>
-                )}
+                <Badge>{isTransfer ? 'Chuyển khoản' : 'Tiền mặt'}</Badge>
             </div>
         </div>
     )
