@@ -35,7 +35,8 @@ export default function FloatingLabelInput({
                 htmlFor={id}
                 className="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary text-xs font-bold uppercase tracking-wider transition-all duration-150 pointer-events-none
                     peer-focus:top-0 peer-focus:text-[10px] peer-focus:px-1 peer-focus:bg-surface peer-focus:text-primary
-                    peer-[:not(:placeholder-shown)]:top-0 peer-[:not(:placeholder-shown)]:text-[10px] peer-[:not(:placeholder-shown)]:px-1 peer-[:not(:placeholder-shown)]:bg-surface"
+                    peer-[:not(:placeholder-shown)]:top-0 peer-[:not(:placeholder-shown)]:text-[10px] peer-[:not(:placeholder-shown)]:px-1 peer-[:not(:placeholder-shown)]:bg-surface
+                    peer-autofill:top-0 peer-autofill:text-[10px] peer-autofill:px-1 peer-autofill:bg-surface"
             >
                 {label}
             </label>
