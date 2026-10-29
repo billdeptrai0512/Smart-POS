@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import { fetchIngredientStocks } from '../services/orderService'
-import { estimateOpening, recipesBelongTo, type OpeningPeriods } from '../services/counterEstimate'
+import { estimateOpening, recipesBelongTo, type OpeningPeriods, type OpeningNotes } from '../services/counterEstimate'
 import { useCounterCalc } from './useCounterCalc'
 import { useProducts } from '../contexts/ProductContext'
 import { fetchYesterdayShiftClosing } from '../services/reportService'
@@ -23,6 +23,7 @@ export function useWarehouseStockSync(addressId: string | null, { seedReady, isD
     const [warehouseStocks, setWarehouseStocks] = useState<UsageMap>({})
     const [openingStock, setOpeningStock] = useState<UsageMap>({})
     const [openingPeriods, setOpeningPeriods] = useState<OpeningPeriods>({})
+    const [openingNotes, setOpeningNotes] = useState<OpeningNotes>({})
     const calcRef = useCounterCalc()
     // Công thức tải xong sau lần reload đầu → reload đổi identity để tính lại Đầu kỳ ước tính (xem recipesBelongTo).
     const recipesReady = recipesBelongTo(useProducts().recipes, addressId)
@@ -57,13 +58,14 @@ export function useWarehouseStockSync(addressId: string | null, { seedReady, isD
             })
             // Ước tính thắng số trong phiếu: "phiếu hôm qua" là phiếu GẦN NHẤT trước hôm nay (có thể cách vài ngày); ước tính
             // tính từ lần đếm thật cuối + nhập thêm − tiêu hao các ngày đã qua, và đếm hôm qua thì hai số trùng nhau.
-            const { stocks, periods } = estimateOpeningOn && recipesReady ? await estimateOpening(rows, addressId, calcRef.current) : { stocks: {}, periods: {} }
+            const { stocks, periods, notes } = estimateOpeningOn && recipesReady ? await estimateOpening(rows, addressId, calcRef.current) : { stocks: {}, periods: {}, notes: {} }
             Object.assign(counters, stocks)
             setOpeningPeriods(periods)
+            setOpeningNotes(notes)
             setOpeningStock(counters)
             return { counters }
         })
     }, [addressId, seedReady, seedYesterdayClosing, isDayScope, estimateOpeningOn, calcRef, recipesReady])
 
-    return { warehouseStocks, openingStock, openingPeriods, reload, prefetch }
+    return { warehouseStocks, openingStock, openingPeriods, openingNotes, reload, prefetch }
 }

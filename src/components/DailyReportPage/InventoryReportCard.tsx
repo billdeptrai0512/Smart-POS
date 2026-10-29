@@ -10,7 +10,7 @@ import { countedLabelVN } from '../../utils/dateVN'
 import { useProducts } from '../../contexts/ProductContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
-import type { OpeningPeriods } from '../../services/counterEstimate'
+import type { OpeningPeriods, OpeningNotes } from '../../services/counterEstimate'
 import CollapsibleCard from './CollapsibleCard'
 
 // Status priority for sorting collapsed list. Lower = render earlier.
@@ -26,6 +26,7 @@ interface Props {
     isLoading?: boolean
     openingStock: UsageMap
     openingPeriods?: OpeningPeriods
+    openingNotes?: OpeningNotes
     openingInputs: Inputs
     openingLocked: Record<string, boolean>
     restockInputs: Inputs
@@ -77,7 +78,7 @@ function computeRowStatus(args: Parameters<typeof computeHaoHut>[0]) {
 //   Hao hụt   = Thực tế − Lý thuyết           (âm = thiếu, dương = dư, 0 = khớp)
 export default function InventoryReportCard({
     ingredientsList, isLoading,
-    openingStock, openingPeriods = {}, openingInputs, openingLocked,
+    openingStock, openingPeriods = {}, openingNotes = {}, openingInputs, openingLocked,
     restockInputs, inventoryInputs,
     warehouseStocks = {},
     ingredientUnits = {},
@@ -213,6 +214,7 @@ export default function InventoryReportCard({
             periodMade={lookupByLabel(ing.ingredient, periodMadeMap)}
             breakdown={lookupByLabel(ing.ingredient, consumptionBreakdown) || null}
             period={openingPeriods[ing.ingredient]}
+            openingNote={openingNotes[ing.ingredient]}
             productRef={ingredientToProduct[ing.ingredient]}
             isSubmitting={isSubmitting}
             lockWarehouseInputs={lockWarehouseInputs}
@@ -309,6 +311,7 @@ interface RowProps {
     periodMade: number
     breakdown: ConsumptionBreakdown[string] | null
     period?: OpeningPeriods[string]
+    openingNote?: OpeningNotes[string]
     productRef?: IngredientToProduct[string]
     isSubmitting?: boolean
     lockWarehouseInputs: boolean
@@ -324,7 +327,7 @@ interface RowProps {
 
 const IngredientRow = memo(function IngredientRow({
     ing, ingredientUnits, openingValue, openingFallback, isLocked, restockValue, inventoryValue,
-    warehouseAvailable, used, made, periodMade, breakdown, period, productRef,
+    warehouseAvailable, used, made, periodMade, breakdown, period, openingNote, productRef,
     isSubmitting, lockWarehouseInputs, readOnly,
     onOpeningChange, onRestockChange, onInventoryChange,
     hint, hintStep, onHintSeen, onHintValue,
@@ -487,6 +490,21 @@ const IngredientRow = memo(function IngredientRow({
                         />
                     </div>
                 </div>
+
+                {!p && !isLocked && openingNote && Number(openingDisplay) === r1(openingNote.counted - openingNote.used) && (
+                    /* Đầu kỳ ≠ số đếm hôm qua vì có đơn bán sau giờ đếm — cùng kiểu hàng công thức Lý thuyết bên dưới */
+                    <div className="mt-2 px-1.5 py-3 bg-surface-light rounded-[10px] border border-border/40 flex items-center justify-between gap-0.5 text-[11px] leading-tight whitespace-nowrap">
+                        {[['Hôm qua', openingNote.counted], ['Sử dụng thêm', openingNote.used], ['Hôm nay', openingDisplay]].map(([label, val], i) => (
+                            <Fragment key={label}>
+                                {i > 0 && <span className="text-[13px] font-bold text-text">{['−', '='][i - 1]}</span>}
+                                <span className="flex flex-col items-center gap-1">
+                                    <span className="font-bold text-text-secondary">{label}</span>
+                                    <span className="text-[12px] font-black text-text tabular-nums">{val} {unit}</span>
+                                </span>
+                            </Fragment>
+                        ))}
+                    </div>
+                )}
 
                 {/* Row 2 — counter level */}
                 <div className="grid grid-cols-3 gap-2 mt-2">
