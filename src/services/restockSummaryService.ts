@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
+import { fetchAllPages } from './fetchAllPages'
 import type { Row, UUID } from '../types/domain'
 
 // Tổng hợp nhập kho của MỌI nguyên liệu trong 1 khoảng ngày (nhóm kho tổng chung = 1 kho), 1 dòng / (nguyên liệu, địa chỉ):
@@ -56,18 +57,6 @@ export function groupByIngredient(rows: RestockSummaryRow[], addressId: UUID | n
         if (r.withdrawnQty) g.withdrawn[r.address_id] = r.withdrawnQty
     }
     return Object.values(by).sort((a, b) => b.spent - a.spent || b.qty - a.qty || b.withdrawnQty - a.withdrawnQty)
-}
-
-// PostgREST cắt 1000 dòng/lần → quét theo trang (cùng cách scanIngredientDebts). Chỉ dùng cho đường dự phòng.
-async function fetchAllPages(build: (from: number, to: number) => PromiseLike<{ data: Row[] | null; error: unknown }>) {
-    const PAGE = 1000
-    const out: Row[] = []
-    for (let from = 0; ; from += PAGE) {
-        const { data, error } = await build(from, from + PAGE - 1)
-        if (error) throw error
-        out.push(...(data || []))
-        if ((data?.length ?? 0) < PAGE) return out
-    }
 }
 
 async function fetchSummaryInJs(addressIds: UUID[], fromDate: string, toDate: string) {

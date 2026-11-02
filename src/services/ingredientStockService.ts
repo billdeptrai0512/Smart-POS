@@ -223,32 +223,15 @@ export async function fetchIngredientWithdrawals(addressIds: UUID[] | UUID | nul
         )
     }
     if (!ids.length) return []
-    const sb = supabase
-    const closingsQuery = async (sel: string) => await sb
-        .from('shift_closings')
-        .select<string, Row>(sel)
-        .in('address_id', ids)
-    const [refillsRes, closingsRes] = await Promise.all([
-        sb
-            .from('expenses')
-            .select('created_at, metadata')
-            .in('address_id', ids)
-            .eq('is_refill', true),
-        closingsQuery('id, address_id, created_at, inventory_report, closer:users!closed_by(name)'),
-    ])
-    if (refillsRes.error) {
-        console.error('fetchIngredientWithdrawals refills error:', refillsRes.error)
+    // Replay chạy trong Postgres (migration 20261039) — không kéo shift_closings về client. Địa chỉ đầu mảng là
+    // địa chỉ đang xem; nhóm kho server tự suy ra. Replay JS ở trên chỉ còn phục vụ guest (dữ liệu local).
+    const { data, error } = await supabase.rpc('get_ingredient_withdrawals', {
+        p_address_id: ids[0], p_ingredient: ingredient,
+        p_from: new Date(fromDate).toISOString(), p_to: new Date(toDate).toISOString(),
+    })
+    if (error) {
+        console.error('fetchIngredientWithdrawals rpc error:', error)
         return []
     }
-    let closings = closingsRes.data
-    if (closingsRes.error) {
-        // Join users thất bại (RLS/FK đổi tên) → fallback không có tên người chốt.
-        const retry = await closingsQuery('id, address_id, created_at, inventory_report')
-        if (retry.error) {
-            console.error('fetchIngredientWithdrawals closings error:', retry.error)
-            return []
-        }
-        closings = retry.data
-    }
-    return replay((refillsRes.data || []) as Row[], closings || [])
+    return data as Row[]
 }

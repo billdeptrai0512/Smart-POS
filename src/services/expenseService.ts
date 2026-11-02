@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
 import { startOfDayVN } from '../utils/dateVN'
+import { fetchAllPages } from './fetchAllPages'
 import { reportCache, invalidateReportCache } from './cache'
 import type { UUID, Row, ExpenseCategory, SupabaseError } from '../types/domain'
 
@@ -116,15 +117,17 @@ export async function fetchExpensesByRange(addressId: UUID | null, start: Date, 
                 })
                 .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         }
-        let query = supabase
-            .from('expenses')
-            .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, metadata, category_id, created_at, address_id')
-            .gte('created_at', start.toISOString())
-            .lte('created_at', end.toISOString())
-        if (addressId) query = query.eq('address_id', addressId)
-        const { data, error } = await query.order('created_at', { ascending: false })
-        if (error) { console.error('fetchExpensesByRange error:', error); return [] }
-        return data || []
+        try {
+            return await fetchAllPages((from, to) => {
+                let query = supabase
+                    .from('expenses')
+                    .select('id, name, amount, staff_name, is_fixed, is_refill, payment_method, metadata, category_id, created_at, address_id')
+                    .gte('created_at', start.toISOString())
+                    .lte('created_at', end.toISOString())
+                if (addressId) query = query.eq('address_id', addressId)
+                return query.order('created_at', { ascending: false }).order('id').range(from, to)
+            })
+        } catch (error) { console.error('fetchExpensesByRange error:', error); return [] }
     })
 }
 
@@ -169,6 +172,7 @@ export async function fetchIngredientRestockHistory(addressIds: (UUID | null)[] 
             .select<string, Row>(sel)
             .in('address_id', ids)
             .eq('is_refill', true)
+            .eq('metadata->>ingredient', ingredient)
             .gte('created_at', fromDate)
             .lte('created_at', toDate)
             .order('created_at', { ascending: false })
@@ -181,9 +185,7 @@ export async function fetchIngredientRestockHistory(addressIds: (UUID | null)[] 
         console.error('fetchIngredientRestockHistory error code:', error.code, 'msg:', error.message, 'details:', error.details)
         return []
     }
-    // Filter by ingredient in metadata (client-side, since Supabase JSONB filter syntax varies)
     return (data || [])
-        .filter(e => e.metadata?.ingredient === ingredient)
         .map(e => ({ ...e, payments: e.expense_payments || [] }))
 }
 
