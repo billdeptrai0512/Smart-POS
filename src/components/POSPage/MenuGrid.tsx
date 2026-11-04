@@ -217,6 +217,13 @@ export default function MenuGrid({ products, cart, activeItem, onAddItem, onRemo
     const { isManager, isAdmin } = useAuth()
     const { loading, loadError } = useProducts()
     const canSetup = isManager || isAdmin
+    // ponytail: chỉ nhớ trong phiên; lưu localStorage nếu cần nhớ giữa các lần mở.
+    const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set())
+    const toggleCollapsed = (id: string) => setCollapsedIds(prev => {
+        const next = new Set(prev)
+        if (!next.delete(id)) next.add(id)
+        return next
+    })
 
     // PERF: index cart qty by productId once per cart change.
     // Was: cart.filter().reduce() called per product per render — O(N×M).
@@ -281,10 +288,17 @@ export default function MenuGrid({ products, cart, activeItem, onAddItem, onRemo
     }
 
     const gridItems: ReactNode[] = []
+    let hidden = false // đang ở trong nhóm bị thu gọn
     products.forEach((product, idx) => {
-        gridItems.push(product.is_divider ? (
-            <MenuDivider key={product.id} name={product.name} />
-        ) : (
+        if (product.is_divider) {
+            hidden = collapsedIds.has(product.id)
+            gridItems.push(
+                <MenuDivider key={product.id} name={product.name} collapsed={hidden} onToggle={() => toggleCollapsed(product.id)} />
+            )
+            return
+        }
+        if (hidden) return
+        gridItems.push((
             <ProductCard
                 key={product.id}
                 product={product}

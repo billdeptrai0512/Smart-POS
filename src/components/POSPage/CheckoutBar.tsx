@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import { ChevronUp } from 'lucide-react'
-import { useLocation } from 'react-router-dom'
 import { formatVND } from '../../utils'
 import { onboardingHintClass } from '../../utils/onboardingHint'
-import TableModal from './TableModal'
 import CartListModal from './CartListModal'
 import type { CartItem, Discount, UUID } from '../../types/domain'
 
@@ -27,11 +25,7 @@ export default function CheckoutBar({
     cart, onItemDiscount, onItemNote,
     tableName, onConfirm, disabled, showOnboardingHint = false,
 }: Props) {
-    // "BÀN 3" trong Nhật ký nhảy tới /pos kèm state này — mở thẳng lưới bàn (TableModal
-    // tự đọc lại state này để seed "detail" cho đúng bàn đó, xem TableModal.tsx).
-    const { state } = useLocation()
     const [showCart, setShowCart] = useState(false)
-    const [showTables, setShowTables] = useState(!!state?.openTableDetail)
 
     return (
         <footer className="shrink-0 bg-surface border-t border-border/80 px-6 dine-split:px-4 pt-3 pb-[max(env(safe-area-inset-bottom),16px)] shadow-[0_-4px_24px_rgba(0,0,0,0.02)]">
@@ -59,23 +53,9 @@ export default function CheckoutBar({
                 </button>
             </div>
 
-            {/* Pill bàn full-width dưới hàng Tổng cộng / Tạo đơn, giống pill bàn trong modal giỏ. LUÔN có ("Mang đi" khi chưa chọn bàn) nên
-                thanh không nhảy chiều cao và mang đi cũng hiện rõ. Trong luồng (không absolute) để không che hàng tuỳ chọn món phía trên.
-                Ẩn ở dine-split: lưới bàn đã hiện sẵn bên cạnh. Chạm = mở lưới bàn để đổi. */}
-            <button
-                type="button"
-                onClick={() => setShowTables(true)}
-                className="dine-split:hidden relative mt-2.5 w-full h-9 px-9 flex items-center justify-center rounded-[12px] border border-border/60 bg-surface-light text-[12px] font-black uppercase tracking-wider text-text"
-            >
-                <span className="truncate">{tableName || 'Mang đi'}</span>
-                <ChevronUp size={14} strokeWidth={3} className="absolute right-3.5 text-text-secondary" />
-            </button>
-
             {showCart && (
                 <CartListModal cart={cart} onClose={() => setShowCart(false)} onItemDiscount={onItemDiscount} onItemNote={onItemNote} onConfirm={() => { onConfirm(discountAmount, tableName); setShowCart(false) }} />
             )}
-
-            {showTables && <TableModal onClose={() => setShowTables(false)} />}
         </footer>
     )
 }

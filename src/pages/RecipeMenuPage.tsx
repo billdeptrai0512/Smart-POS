@@ -164,6 +164,13 @@ export default function RecipeMenuPage() {
     // {mode:'create'} | {mode:'edit', id} — modal tạo/sửa mục (divider phân nhóm menu)
     const [dividerModal, setDividerModal] = useState<{ mode: 'create' } | { mode: 'edit'; id: string } | null>(null)
     const [dividerName, setDividerName] = useState('')
+    // ponytail: trạng thái thu gọn chỉ trong phiên, không lưu; lưu localStorage nếu cần nhớ.
+    const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set())
+    const toggleCollapsed = (id: string) => setCollapsedIds(prev => {
+        const next = new Set(prev)
+        if (!next.delete(id)) next.add(id)
+        return next
+    })
 
     const mainRef = useRef<HTMLElement>(null)
 
@@ -479,9 +486,6 @@ export default function RecipeMenuPage() {
                         onDragEnd={handleDragEnd}
                     >
                         <div className="flex flex-col gap-3">
-                            {canSort && (
-                                <p className="text-[12px] text-text-secondary text-center -mb-1">Bấm giữ một món hoặc danh mục rồi kéo để sắp xếp</p>
-                            )}
                             {visibleSections.map((section, si) => (
                                 <Fragment key={section.divider?.id ?? `_first_${si}`}>
                                     {section.divider && (
@@ -489,10 +493,12 @@ export default function RecipeMenuPage() {
                                             <MenuDivider
                                                 name={section.divider.name}
                                                 onClick={canEdit ? () => editDivider(section.divider!) : undefined}
+                                                collapsed={collapsedIds.has(section.divider.id)}
+                                                onToggle={() => toggleCollapsed(section.divider!.id)}
                                             />
                                         </DragRow>
                                     )}
-                                    {section.items.length > 0 && (
+                                    {section.items.length > 0 && !(section.divider && collapsedIds.has(section.divider.id)) && (
                                         <div className="grid grid-cols-2 gap-3">
                                             {section.items.map(product => (
                                                 <DragRow key={product.id} id={product.id} enabled={canSort} lit={litIds.has(product.id)}>
@@ -506,9 +512,9 @@ export default function RecipeMenuPage() {
                         </div>
                         <DragOverlay>
                             {activeProduct && (activeProduct.is_divider ? (
-                                <div className="opacity-90 w-[calc(100vw-2rem)] max-w-[28rem]"><MenuDivider name={activeProduct.name} /></div>
+                                <div className="w-[calc(100vw-2rem)] max-w-[28rem] rounded-[1.5rem] bg-surface px-4 py-1 ring-2 ring-primary shadow-2xl shadow-black/40"><MenuDivider name={activeProduct.name} /></div>
                             ) : (
-                                <div className="opacity-90 rotate-2 shadow-2xl shadow-black/40 rounded-[1.5rem]">
+                                <div className="rotate-2 shadow-2xl shadow-black/40 rounded-[1.5rem] ring-2 ring-primary">
                                     <ProductCard {...cardProps(activeProduct)} sortMode />
                                 </div>
                             ))}

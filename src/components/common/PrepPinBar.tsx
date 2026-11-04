@@ -11,8 +11,9 @@ import Toast from '../POSPage/Toast'
 import BatchPrepList from './BatchPrepList'
 
 // Dải notice "Chuẩn bị hôm nay" trên /pos — nằm trong Header, dưới thẻ Địa chỉ + Nhật ký (POSPage truyền vào prop notice).
-// BẮT BUỘC hiện khi còn NVL cần lấy từ kho dự trữ ra quầy (soạn sáng nay chưa xong, hoặc Lý thuyết ở
-// quầy đã về 0 giữa ca). Bấm → modal checklist, nhân viên xác nhận đã lấy ngay tại chỗ.
+// Luôn hiện (kể cả khi hết việc), số bên phải = số NVL đang chờ lấy từ kho dự trữ ra quầy (soạn sáng nay
+// chưa xong, hoặc Lý thuyết ở quầy đã về 0 giữa ca); 0 thì không hiện số. Bấm → modal checklist, nhân viên
+// xác nhận đã lấy ngay tại chỗ.
 // Guide ưu tiên: guest không thấy dải này (chỉ 1 dải ở đỉnh). Offline cũng ẩn — hook cần đọc kho.
 export default function PrepPinBar() {
     const { isGuest } = useAuth()
@@ -27,8 +28,6 @@ function PinBar() {
     const { items, batchItems, checked, skipped, pendingCount, ready, confirmPrep, toggleSkip, settle, toast } = usePrepNotice()
     const [open, setOpen] = useState(false)
 
-    if (!open && pendingCount === 0) return null
-
     const total = items.length + batchItems.length
     const doneCount = total - pendingCount
 
@@ -36,8 +35,8 @@ function PinBar() {
         <>
             <NoticeBar
                 icon={<CircleAlert size={15} className="text-primary shrink-0" />}
-                label="Chuẩn bị hôm nay"
-                count={`${doneCount}/${total}`}
+                label="Cần chuẩn bị"
+                count={pendingCount} // số việc đang chờ lấy ra quầy; 0 → NoticeBar ẩn số, pill vẫn hiện
                 onClick={ready ? () => setOpen(true) : undefined} // số từ ảnh chụp: chờ tính xong mới cho thao tác
             />
             <Toast toast={toast} />
@@ -45,7 +44,7 @@ function PinBar() {
             {open && (
                 <NoticeSheet
                     icon={<CircleAlert size={18} className="text-primary shrink-0" />}
-                    title="Chuẩn bị hôm nay"
+                    title="Cần chuẩn bị"
                     count={`${doneCount}/${total}`}
                     onClose={() => { setOpen(false); settle() }}
                 >

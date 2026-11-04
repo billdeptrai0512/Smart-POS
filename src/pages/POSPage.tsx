@@ -6,6 +6,7 @@ import { useAddress } from '../contexts/AddressContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useOrderOnboardingProgress } from '../hooks/useOrderOnboardingProgress'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { ChevronDown } from 'lucide-react'
 import { DAY_NAMES } from '../constants/products'
 import { dateFullVN } from '../utils/dateVN'
 
@@ -37,6 +38,10 @@ export default function POSPage() {
     // Dòng vừa chạm (cuối giỏ) — thanh extras sửa dòng này. Tính một lần ở đây vì cả
     // MenuGrid lẫn useOrderOnboardingProgress cần.
     const activeItem = cart[cart.length - 1]
+
+    // "BÀN 3" trong Nhật ký nhảy tới /pos kèm state.openTableDetail — mở thẳng lưới bàn (TableModal
+    // tự đọc lại state này để seed "detail" cho đúng bàn đó). Đọc ở lần render đầu, trước effect dọn state bên dưới.
+    const [showTables, setShowTables] = useState(!!location.state?.openTableDetail)
 
     // "BÀN X" trong Nhật ký nhảy vào đây kèm state.openTableDetail (đọc lại ở CheckoutBar/
     // TableModal) để mở thẳng chi tiết bàn đó. location.state sống mãi qua các lần
@@ -90,7 +95,19 @@ export default function POSPage() {
                     takeawaySlotRef={setTakeawaySlot}
                     notice={<>
                         {isGuest && <div className="mb-2 last:mb-0 rounded-[14px] overflow-hidden"><OnboardingGuide /></div>}
-                        <PrepPinBar />
+                        {/* Pill bàn cùng hàng với "Chuẩn bị hôm nay" ("Mang đi" khi chưa chọn bàn); pill vừa khít tên bàn (tối đa 50%, dài thì truncate), bar kia lấy phần còn lại; bar kia ẩn thì pill giãn full-width.
+                            Ẩn ở dine-split: lưới bàn đã hiện sẵn bên cạnh. Chạm = mở lưới bàn để đổi. */}
+                        <div className="flex gap-2 [&>button]:rounded-[14px] [&>button]:w-auto [&>button]:min-w-0 [&>button:first-child]:flex-1">
+                            <PrepPinBar />
+                            <button
+                                type="button"
+                                onClick={() => setShowTables(true)}
+                                className="dine-split:hidden [&:not(:first-child)]:max-w-[50%] h-10 px-3 flex items-center justify-center gap-1.5 border border-border/60 bg-surface-light text-[12px] font-black uppercase tracking-wider text-text"
+                            >
+                                <span className="truncate">{tableName || 'Mang đi'}</span>
+                                <ChevronDown size={14} strokeWidth={3} className="shrink-0 text-text-secondary" />
+                            </button>
+                        </div>
                     </>}
                 />
             </div>
@@ -120,6 +137,8 @@ export default function POSPage() {
             <div className="pos-table-pane hidden dine-split:flex flex-col min-h-0 [grid-area:table] bg-bg">
                 <TableModal inline takeawaySlot={takeawaySlot} />
             </div>
+
+            {showTables && <TableModal onClose={() => setShowTables(false)} />}
 
             <div className="[grid-area:checkout] w-full max-w-lg mx-auto dine-split:max-w-none">
                 <CheckoutBar
