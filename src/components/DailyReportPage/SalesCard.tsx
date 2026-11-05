@@ -7,7 +7,7 @@ import CupsRevenueSummary from '../common/CupsRevenueSummary'
 import type { Row } from '../../types/domain'
 
 /** 1 cột giờ của biểu đồ doanh thu (do DailyReportPage dựng). */
-export interface HourBucket { hour: string; hourRevenue: number; revenue?: number; items?: { qty: number; name: string }[]; cups?: number }
+export interface HourBucket { hour: string; hourRevenue: number; items?: { qty: number; name: string }[]; cups?: number }
 // Số ly in trên đầu cột: bucket tự khai (đã loại món không tính ly) hoặc tổng số lượng các món của cột.
 const bucketCups = (d: HourBucket) => d.cups ?? (d.items || []).reduce((s, i) => s + i.qty, 0)
 interface ProductStat { qty: number; revenue: number; variants?: Record<string, number> }

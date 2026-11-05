@@ -227,18 +227,16 @@ export function aggregateOrderStats({
     return { totalRevenue, totalDiscount, totalCOGS, productStats, soldProducts, hourlyRevenue, hourlyOrders, activeHours }
 }
 
-// Builds the hourly cumulative line-chart series from aggregator output. Daily-only.
+// Builds the hourly bar-chart series from aggregator output. Daily-only.
 export function buildHourlyLineChart({ activeHours, hourlyRevenue, hourlyOrders }: { activeHours: Set<number>; hourlyRevenue: Record<number, number>; hourlyOrders: Record<number, Record<string, number>> }) {
     if (activeHours.size === 0) return []
     const minH = Math.min(...activeHours), maxH = Math.max(...activeHours)
-    let cumulative = 0
-    const out: { hour: string; revenue: number; hourRevenue: number; items: { name: string; qty: number }[] }[] = []
+    const out: { hour: string; hourRevenue: number; items: { name: string; qty: number }[] }[] = []
     for (let h = minH; h <= maxH; h++) {
-        cumulative += (hourlyRevenue[h] || 0)
         const items = Object.entries(hourlyOrders[h] || {})
             .map(([name, qty]) => ({ name, qty }))
             .sort((a, b) => b.qty - a.qty)
-        out.push({ hour: `${h}h`, revenue: cumulative, hourRevenue: hourlyRevenue[h] || 0, items })
+        out.push({ hour: `${h}h`, hourRevenue: hourlyRevenue[h] || 0, items })
     }
     return out
 }

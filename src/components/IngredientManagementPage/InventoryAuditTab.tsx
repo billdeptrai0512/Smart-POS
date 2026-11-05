@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useCallback, useRef, type Dispatch, type SetStateAction } from 'react'
-import { Loader2 } from 'lucide-react'
 import { useHistory } from '../../contexts/HistoryContext'
 import { useProducts } from '../../contexts/ProductContext'
 import { useAddress } from '../../contexts/AddressContext'
@@ -259,14 +258,6 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                 </div>
             ) : isTodayScope ? (
                 <div className="flex flex-col gap-3 animate-fade-in">
-                    {isSaving && !holdLayoutRef.current && (
-                        <div className="flex justify-end -mb-1">
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide border bg-primary/10 text-primary border-primary/30">
-                                <Loader2 size={11} className="animate-spin" />
-                                Đang lưu
-                            </span>
-                        </div>
-                    )}
                     {/* setTimeout: calcRef (useCounterCalc) cập nhật mẻ mới ở effect sau render — tải lại tồn quầy phải đợi nó. */}
                     {!isGuest && <TodayProduction onChanged={() => setTimeout(() => inventory.reloadStocks(), 50)} onError={showError} />}
                     <InventoryReportCard
