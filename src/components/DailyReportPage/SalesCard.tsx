@@ -7,7 +7,9 @@ import CupsRevenueSummary from '../common/CupsRevenueSummary'
 import type { Row } from '../../types/domain'
 
 /** 1 cột giờ của biểu đồ doanh thu (do DailyReportPage dựng). */
-export interface HourBucket { hour: string; hourRevenue: number; revenue?: number; items?: { qty: number; name: string }[] }
+export interface HourBucket { hour: string; hourRevenue: number; revenue?: number; items?: { qty: number; name: string }[]; cups?: number }
+// Số ly in trên đầu cột: bucket tự khai (đã loại món không tính ly) hoặc tổng số lượng các món của cột.
+const bucketCups = (d: HourBucket) => d.cups ?? (d.items || []).reduce((s, i) => s + i.qty, 0)
 interface ProductStat { qty: number; revenue: number; variants?: Record<string, number> }
 
 interface Props {
@@ -140,32 +142,28 @@ function SalesCard({
                                 <div key={p} className="absolute inset-x-0 border-t border-dashed border-[#44403c]" style={{ top: `${p}%` }} />
                             ))}
                             {active && (
-                                // Always above the bar's top edge — a below-placement can land on top of
-                                // neighboring hour columns and block taps on them. left p% + translateX(-p%)
-                                // keeps it inside both edges at any width without measuring.
+                                // Luôn nằm trên đỉnh cột (đặt dưới/đè sẽ che các cột khác). Danh sách món cao tối đa 120px rồi cuộn
+                                // trong tooltip → tổng ~180px, vừa chỗ phía trên biểu đồ kể cả cột cao nhất.
+                                // left p% + translateX(-p%) giữ tooltip trong 2 mép ở mọi bề rộng mà không cần đo.
                                 <div
-                                    className="absolute z-50 pointer-events-none w-max min-w-[140px] max-w-[220px]"
+                                    className="absolute z-50 w-max min-w-[140px] max-w-[220px]"
+                                    onClick={e => e.stopPropagation()} // cuộn/bấm trong tooltip không đóng nó
                                     style={{ left: `${tipPos}%`, bottom: `calc(${barPct(active)}% + 14px)`, transform: `translateX(-${tipPos}%)` }}
                                 >
                                     <div className="bg-[#1c1917] border border-[#44403c] rounded-[14px] px-3 py-2.5 shadow-xl">
-                                        <div className="flex items-center justify-between gap-3 mb-2">
+                                        <div className="flex items-center justify-between gap-3 pb-2 mb-2 border-b border-[#44403c]">
                                             <span className="text-[11px] font-black text-warning uppercase tracking-wider">{active.hour}</span>
                                             <span className="text-[11px] font-black text-warning">+{formatVND(active.hourRevenue || 0)}</span>
                                         </div>
                                         {!active.items?.length ? (
                                             <span className="text-[12px] text-[#a8a29e]">Không có đơn</span>
                                         ) : (
-                                            <div className="flex flex-col gap-1 mb-2">
+                                            <div className="flex flex-col gap-1 max-h-[120px] overflow-y-auto overscroll-contain pr-1">
                                                 {active.items.map((item, i) => (
                                                     <span key={i} className="text-[12px] text-[#fafaf9] font-medium leading-snug">
                                                         {item.qty} {item.name}
                                                     </span>
                                                 ))}
-                                            </div>
-                                        )}
-                                        {activeIdx != null && activeIdx > 0 && (
-                                            <div className="flex flex-col items-start border-t border-[#44403c] pt-1.5 mt-1">
-                                                <span className="text-[11px] text-warning">Tổng: {formatVND(active.revenue || 0)}</span>
                                             </div>
                                         )}
                                     </div>
@@ -183,8 +181,8 @@ function SalesCard({
                                             className={`relative w-[90%] rounded-[4px] ${activeIdx === i || isPeak ? 'bg-[#f59e0b]' : 'bg-[#57534e]'}`}
                                             style={{ height: `max(${barPct(d)}%, 1px)` }}
                                         >
-                                            {isPeak && (
-                                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 text-[9px] font-black text-[#f59e0b] whitespace-nowrap">Cao điểm</span>
+                                            {bucketCups(d) > 0 && (
+                                                <span className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-1 text-[10px] font-black whitespace-nowrap ${isPeak ? 'text-[#f59e0b]' : 'text-[#a8a29e]'}`}>{bucketCups(d)} ly</span>
                                             )}
                                         </div>
                                     </div>

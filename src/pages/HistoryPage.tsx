@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { calculateItemCost, parseVNDInput, formatVNDInput } from '../utils'
 import { aggregateOrderStats, buildExtraMaps, buildHourlyLineChart } from '../utils/reportStats'
 import { getPendingOrders, removePendingOrder } from '../hooks/useOfflineSync'
-import { dateStringVN } from '../utils/dateVN'
+import { dateStringVN, isSameDayVN } from '../utils/dateVN'
 import { calcRangeWithLabel } from '../utils/rangeCalc'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
@@ -176,6 +176,8 @@ export default function HistoryPage() {
     }, [scope, offset, customRange])
 
     const isTodayScope = scope === 'day' && offset === 0
+    // Nhiều ngày → biểu đồ cột theo thứ (DayPerformanceChart); 1 ngày → biểu đồ theo giờ trong SalesCard.
+    const isRangeScope = scope === 'week' || scope === 'month' || (scope === 'custom' && !isSameDayVN(rangeStart, rangeEnd))
 
     // ─── Range data fetchers ──────────────────────────────────────────
     const { rangeExpenses, rangeOrders, isLoadingRange, isLoadingRangeOrders, patchExpense: patchRangeExpense, patchOrder: patchRangeOrder } = useHistoryRangeFetch({
@@ -241,6 +243,27 @@ export default function HistoryPage() {
     }, [recipes, extraIngredients, ingredientCosts])
 
     const baseOrders = isTodayScope ? (todayOrders || []) : rangeOrders
+    const productCountMap = useMemo(() => new Map((products || []).map(p => [p.id, p.count_as_cup !== false])), [products])
+    // Nhiều ngày: cùng biểu đồ cột của SalesCard nhưng mỗi cột là 1 THỨ (T2..CN) gộp cả kỳ, thay cho cột giờ.
+    const weekdayChartData = useMemo(() => {
+        const days = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
+        const slots = days.map(() => ({ revenue: 0, cups: 0, items: {} as Record<string, number> }))
+        for (const o of baseOrders) {
+            if (o.deleted_at) continue
+            const s = slots[(new Date(o.created_at).getDay() + 6) % 7]
+            s.revenue += o.total || 0
+            for (const it of o.order_items || []) {
+                const qty = it.quantity || 1
+                if (productCountMap.get(it.product_id) !== false) s.cups += qty
+                const name = it.products?.name
+                if (name) s.items[name] = (s.items[name] || 0) + qty
+            }
+        }
+        return slots.map((s, i) => {
+            const items = Object.entries(s.items).map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty)
+            return { hour: days[i], hourRevenue: s.revenue, items, cups: s.cups }
+        })
+    }, [baseOrders, productCountMap])
 
     // PERF: index products by id once (was: products?.find() inside every order's item map).
     const productById = useMemo(() => {
@@ -252,8 +275,6 @@ export default function HistoryPage() {
     const { allOrders } = useFormatHistoryOrders({
         baseOrders, pendingOrders, productById, getItemCost, isTodayScope,
     })
-
-    const productCountMap = useMemo(() => new Map((products || []).map(p => [p.id, p.count_as_cup !== false])), [products])
 
     const totalCups = useMemo(() => allOrders.reduce((sum, o) => {
         if (!o.items || o.deletedAt) return sum
@@ -405,8 +426,7 @@ export default function HistoryPage() {
                             soldProducts={soldProducts}
                             totalRevenue={totalRevenue}
                             productStats={productStats}
-                            lineChartData={lineChartData}
-                            showChart={scope !== 'week' && scope !== 'month'}
+                            lineChartData={isRangeScope ? weekdayChartData : lineChartData}
                         />
                     }
                     isLoading={isTodayScope ? isLoadingHistory : isLoadingRangeOrders}
