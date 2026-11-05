@@ -48,6 +48,7 @@ interface Props {
     onOpeningChange: FieldChange
     onRestockChange: FieldChange
     onInventoryChange: FieldChange
+    onFieldBlur?: () => void // rời ô Cuối kỳ → cha tự lưu (phải ổn định: IngredientRow là memo)
     hintIngredient?: string | null
     // Onboarding bước Tồn kho chia 3 câu hỏi, mỗi lần sáng 1 chỗ: Sử dụng → Lý thuyết → Cuối kỳ.
     // onHintSeen báo guide khi khách bấm xem 2 chỗ đầu (xem onboarding/steps.ts).
@@ -100,7 +101,7 @@ export default function InventoryReportCard({
     // every row remounts (→ collapses) right after a successful save.
     baselineInputs, baselineVersion = 0,
     open = true, onToggleOpen,
-    onOpeningChange, onRestockChange, onInventoryChange,
+    onOpeningChange, onRestockChange, onInventoryChange, onFieldBlur,
     // Nguyên liệu đang được onboarding phase 4 gợi ý bấm vào — xem DailyReportPage.tsx
     // (hintCoffeeIngredient) + onboarding/steps.ts.
     hintIngredient = null,
@@ -222,6 +223,7 @@ export default function InventoryReportCard({
             onOpeningChange={onOpeningChange}
             onRestockChange={onRestockChange}
             onInventoryChange={onInventoryChange}
+            onFieldBlur={onFieldBlur}
             hint={ing.ingredient === hintIngredient}
             hintStep={ing.ingredient === hintIngredient ? hintStep : null}
             onHintSeen={onHintSeen}
@@ -319,6 +321,7 @@ interface RowProps {
     onOpeningChange: FieldChange
     onRestockChange: FieldChange
     onInventoryChange: FieldChange
+    onFieldBlur?: () => void
     hint: boolean
     hintStep: HintStep | null
     onHintSeen?: (step: 'used' | 'theory') => void
@@ -329,7 +332,7 @@ const IngredientRow = memo(function IngredientRow({
     ing, ingredientUnits, openingValue, openingFallback, isLocked, restockValue, inventoryValue,
     warehouseAvailable, used, made, periodMade, breakdown, period, openingNote, productRef,
     isSubmitting, lockWarehouseInputs, readOnly,
-    onOpeningChange, onRestockChange, onInventoryChange,
+    onOpeningChange, onRestockChange, onInventoryChange, onFieldBlur,
     hint, hintStep, onHintSeen, onHintValue,
 }: RowProps) {
     // Whole-row collapse: default closed so staff can scroll the list of NVL fast and
@@ -473,8 +476,9 @@ const IngredientRow = memo(function IngredientRow({
                             label="Đầu kỳ"
                             value={openingDisplay}
                             unit={unit}
-                            disabled={isLocked || isSubmitting || lockWarehouseInputs || readOnly}
+                            disabled={isLocked || lockWarehouseInputs || readOnly}
                             onChange={(v) => onOpeningChange(ing.ingredient, v)}
+                            onBlur={onFieldBlur}
                             locked={isLocked || lockWarehouseInputs || readOnly}
                         />
                     )}
@@ -483,8 +487,9 @@ const IngredientRow = memo(function IngredientRow({
                             label={p ? 'Nhập hôm nay' : 'Nhập thêm'}
                             value={madeNum > 0 ? String(r1(restockNum + madeNum)) : restockValue || ''}
                             unit={unit}
-                            disabled={isSubmitting || lockWarehouseInputs || readOnly || madeNum > 0}
+                            disabled={lockWarehouseInputs || readOnly || madeNum > 0}
                             onChange={(v) => onRestockChange(ing.ingredient, v)}
+                            onBlur={onFieldBlur}
                             overflow={restockOverflow}
                             locked={lockWarehouseInputs || readOnly || madeNum > 0}
                         />
@@ -559,9 +564,10 @@ const IngredientRow = memo(function IngredientRow({
                         label="Cuối kỳ"
                         value={inventoryValue ?? ''}
                         unit={unit}
-                        disabled={isSubmitting || readOnly}
+                        disabled={readOnly} // không khoá theo isSubmitting: tự lưu khi rời ô sẽ tắt luôn ô vừa được focus kế tiếp
                         locked={readOnly}
                         onChange={(v) => onInventoryChange(ing.ingredient, v)}
+                        onBlur={onFieldBlur}
                         hint={hintCount}
                     />
                 </div>
@@ -614,13 +620,14 @@ interface ColumnInputProps {
     disabled?: boolean
     locked?: boolean
     onChange?: (value: string) => void
+    onBlur?: () => void
     overflow?: boolean
     tone?: string
     onBoxClick?: () => void
     hint?: boolean | 'soft'
 }
 
-function ColumnInput({ label, value, unit, disabled, locked, onChange, overflow, tone = 'neutral', onBoxClick, hint = false }: ColumnInputProps) {
+function ColumnInput({ label, value, unit, disabled, locked, onChange, onBlur, overflow, tone = 'neutral', onBoxClick, hint = false }: ColumnInputProps) {
     // tone overrides the default disabled coloring for read-only diff cells.
     const t: Partial<ToneCls> = TONE[tone] || {}
 
@@ -653,6 +660,8 @@ function ColumnInput({ label, value, unit, disabled, locked, onChange, overflow,
                     placeholder="-"
                     value={value}
                     onChange={e => onChange?.(e.target.value)}
+                    onBlur={onBlur}
+                    onKeyDown={onBlur ? e => { if (e.key === 'Enter') e.currentTarget.blur() } : undefined} // Enter/"Đi" không mất focus → tự blur để kích hoạt lưu
                     disabled={disabled}
                     style={{ width: `${Math.max(String(value ?? '').length, 1)}ch` }}
                     className={`min-w-0 bg-transparent text-[13px] font-bold text-center placeholder:text-text-secondary/40 focus:outline-none no-spin ${tone === 'neutral' ? 'disabled:opacity-50' : ''} ${inputCls}`}

@@ -43,6 +43,7 @@ export default function CreateIngredientForm({ groups, saving, onSubmit }: Props
                     value={groupId}
                     triggerLabel={groups.find(g => g.id === groupId)?.name || 'Phân loại'}
                     onChange={setGroupId}
+                    up // sheet sát đáy màn hình: mở xuống sẽ bị cắt mất dòng cuối
                     items={[{ value: '', label: 'Chưa phân nhóm' }, ...groups.map(g => ({ value: g.id, label: g.name }))]}
                     triggerClassName="h-11 px-3 rounded-[12px] bg-surface-light border border-border/60 text-[14px]"
                 />

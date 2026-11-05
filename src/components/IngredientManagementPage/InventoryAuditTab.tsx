@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, type Dispatch, type SetStateAction } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, type Dispatch, type SetStateAction } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useHistory } from '../../contexts/HistoryContext'
 import { useProducts } from '../../contexts/ProductContext'
@@ -21,7 +21,7 @@ import { calculateEstimatedConsumption, calculateConsumptionBreakdown, buildIngr
 import { ingredientLabel } from '../../utils/ingredients'
 import { findIngredientByLabel, onboardingHintClass } from '../../utils/onboardingHint'
 import { isInventoryProgressDone } from '../../utils/onboardingStorage'
-import { dateStringVN, isSameDayVN } from '../../utils/dateVN'
+import { dateStringVN, isSameDayVN, timeStringVN } from '../../utils/dateVN'
 import { productionOnDay, mergeUsage, madeOf, madeInPeriods } from '../../utils/production'
 import TodayProduction from './TodayProduction'
 import InventoryReportCard, { type HintStep } from '../DailyReportPage/InventoryReportCard'
@@ -80,6 +80,15 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
         shiftClosing, isTodaysClosing, ingredientsList: inventory.ingredientsList,
         isTodayScope, addressId, todayISO,
     })
+
+    // Lần lưu kiểm kê cuối = counted_at (server đóng khi số đếm đổi) lớn nhất trong phiếu hôm nay.
+    // ponytail: lưu chỉ sửa Nhập thêm/Đầu kỳ không đóng dấu mới → không dời mốc; null → hiện nhãn cũ.
+    const lastSavedAt = useMemo(() => {
+        const times = ((shiftClosing?.inventory_report as { counted_at?: string }[] | undefined) ?? [])
+            .map(e => e.counted_at ? new Date(e.counted_at).getTime() : NaN)
+            .filter(t => !Number.isNaN(t))
+        return times.length ? new Date(Math.max(...times)) : null
+    }, [shiftClosing])
 
     // ── Hao hụt hôm nay: lượng tiêu hao ước tính từ đơn hôm nay (online + chờ đồng bộ) ──
     const offlineToday = useMemo(
@@ -157,8 +166,8 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
     const [isSaving, setIsSaving] = useState(false)
     const [openAudit, setOpenAudit] = useState(true)
 
-    // Lưu Kiểm kê hôm nay: chỉ đẩy field đã đổi (merge race-free server-side), không autosave từng
-    // phím — autosave sẽ ghi Cuối kỳ lên DB và Đầu kỳ bị carry-forward thành đúng số đó.
+    // Lưu Kiểm kê hôm nay: chỉ đẩy field đã đổi (merge race-free server-side). Tự lưu khi rời ô Cuối kỳ
+    // (onFieldBlur bên dưới), không lưu từng phím.
     const handleSaveInventory = async () => {
         if (!selectedAddress) return
         if (inventory.restockDirty
@@ -168,7 +177,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
         try {
             const row = await inventory.pushInventory(profile?.id, systemTotalRevenue)
             if (!row) return // không có gì đổi (hoặc đang có push khác chạy) → isDirty giữ để thử lại
-            showToast('Đã lưu báo cáo tồn kho', 'success')
+            showToast('Đã lưu kiểm kê tồn cuối ca', 'success')
             if (coffeeTyped) setInventoryProgress(prev => ({ ...prev, coffee: true }))
             const [fresh] = await Promise.all([
                 fetchDailyReportContext(addressId),
@@ -183,6 +192,18 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
         }
     }
 
+    // Rời ô Cuối kỳ → tự lưu như Tiền mặt/Chuyển khoản (không autosave từng phím). Nhập thêm chưa lưu
+    // thì handleSaveInventory tự hỏi xác nhận trước. Ref giữ handler ổn định cho IngredientRow (memo).
+    // Tự lưu KHÔNG làm mới bố cục (dựng lại dòng + xếp lại thứ tự theo baseline) — không thì danh sách
+    // nhảy ngay dưới ngón tay khi sang ô kế tiếp. Bố cục chỉ làm mới khi bấm nút Lưu (hold = false).
+    const holdLayoutRef = useRef(false)
+    const layoutRef = useRef({ version: inventory.baselineVersion, snapshot: inventory.baselineSnapshot })
+    if (!holdLayoutRef.current) layoutRef.current = { version: inventory.baselineVersion, snapshot: inventory.baselineSnapshot }
+    const blurSaveRef = useRef(() => {})
+    // Guest giữ nút Lưu: bước onboarding dạy bấm Lưu.
+    blurSaveRef.current = () => { if (!isGuest && inventory.isDirty && !isSaving) { holdLayoutRef.current = true; handleSaveInventory() } }
+    const onFieldBlur = useCallback(() => blurSaveRef.current(), [])
+
     // Sửa Cuối kỳ của 1 NGÀY QUÁ KHỨ — UPDATE thẳng inventory_report của phiếu ngày đó (không qua
     // merge RPC vì merge khoá cứng phiếu hôm nay). Tồn được tính lúc đọc nên hao hụt/lợi nhuận
     // tự tính lại; không đụng kho tổng (chỉ sửa remaining, không sửa restock).
@@ -194,7 +215,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
             const saved = await updateShiftClosing(shiftClosing.id, { address_id: addressId, inventory_report: newReport })
             invalidateDailyContext(addressId)
             setShiftClosing(saved || { ...shiftClosing, inventory_report: newReport })
-            showToast('Đã cập nhật tồn cuối ca', 'success')
+            showToast('Đã cập nhật tồn cuối kỳ', 'success')
             return true
         } catch (err) {
             showError(err, 'Cập nhật tồn cuối ca')
@@ -238,7 +259,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                 </div>
             ) : isTodayScope ? (
                 <div className="flex flex-col gap-3 animate-fade-in">
-                    {isSaving && (
+                    {isSaving && !holdLayoutRef.current && (
                         <div className="flex justify-end -mb-1">
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide border bg-primary/10 text-primary border-primary/30">
                                 <Loader2 size={11} className="animate-spin" />
@@ -266,11 +287,12 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                         consumptionBreakdown={consumptionBreakdown}
                         ingredientToProduct={ingredientToProduct}
                         isSubmitting={isSaving}
-                        baselineInputs={inventory.baselineSnapshot}
-                        baselineVersion={inventory.baselineVersion}
+                        baselineInputs={layoutRef.current.snapshot}
+                        baselineVersion={layoutRef.current.version}
                         onOpeningChange={inventory.onOpeningChange}
                         onRestockChange={inventory.onRestockChange}
                         onInventoryChange={inventory.onInventoryChange}
+                        onFieldBlur={onFieldBlur}
                         open={openAudit}
                         onToggleOpen={() => setOpenAudit(o => !o)}
                         hintIngredient={hintInventoryIngredient}
@@ -283,7 +305,7 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
 
                     {shiftDone && (
                         <div className="flex items-center justify-center gap-2 bg-success/10 border border-success/30 px-3 py-2 rounded-[10px] text-success">
-                            <span className="text-[12px] font-bold uppercase tracking-wide">✓ Đã hoàn tất ca hôm nay</span>
+                            <span className="text-[12px] font-bold uppercase tracking-wide">{lastSavedAt ? `Lần cuối kiểm kê: ${timeStringVN(lastSavedAt)}` : 'Đã hoàn tất ca hôm nay'}</span>
                         </div>
                     )}
                 </div>
@@ -316,14 +338,14 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
                 />
             )}
 
-            {isTodayScope && inventory.isDirty && (
+            {isTodayScope && isGuest && inventory.isDirty && (
                 <div
                     className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-40"
                     style={kbInset ? { transform: `translateY(-${kbInset}px)` } : undefined}
                 >
                     <div className={`flex justify-end px-4 pointer-events-auto ${kbInset ? 'mb-3' : 'mb-[72px]'}`}>
                         <button
-                            onClick={handleSaveInventory}
+                            onClick={() => { holdLayoutRef.current = false; handleSaveInventory() }}
                             disabled={isSaving}
                             className={`bg-primary text-black rounded-[12px] px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider hover:bg-primary/90 active:scale-95 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed ${onboardingHintClass(inventoryTyped, 'solid')}`}
                         >

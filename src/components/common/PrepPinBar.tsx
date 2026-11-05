@@ -37,6 +37,7 @@ function PinBar() {
                 icon={<CircleAlert size={15} className="text-primary shrink-0" />}
                 label="Cần chuẩn bị"
                 count={pendingCount} // số việc đang chờ lấy ra quầy; 0 → NoticeBar ẩn số, pill vẫn hiện
+                chevron={false}
                 onClick={ready ? () => setOpen(true) : undefined} // số từ ảnh chụp: chờ tính xong mới cho thao tác
             />
             <Toast toast={toast} />

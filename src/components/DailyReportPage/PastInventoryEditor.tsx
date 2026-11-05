@@ -118,9 +118,11 @@ export default function PastInventoryEditor({
     // Báo cha trạng thái dirty để guardLeave cảnh báo trước khi đổi ngày/rời trang.
     useEffect(() => { onDirtyChange?.(hasEdits, dirtyLines) }, [hasEdits, dirtyLines, onDirtyChange])
 
+    // Đóng băng theo `version` (chỉ đổi khi đổi phiếu/ngày): tự lưu khi rời ô không được xếp lại / dựng lại dòng.
     const baselineInputs = useMemo(
         () => ({ opening: openingInputs, openingLocked, restock: restockInputs, inventory: seedRemaining }),
-        [openingInputs, openingLocked, restockInputs, seedRemaining],
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [version],
     )
 
     const handleSave = async () => {
@@ -141,9 +143,12 @@ export default function PastInventoryEditor({
                 report.push({ ingredient: ing, unit: getIngredientUnit(ing, undefined, ingredientUnits), remaining })
             }
         }
-        const ok = await onSave?.(report)
-        if (ok) setVersion(v => v + 1)   // remount rows → collapse; baseline tự khớp số mới đã lưu
+        await onSave?.(report) // true → shiftClosing mới về làm seedRemaining → hết dirty; bố cục giữ nguyên
     }
+    // Rời ô Cuối kỳ → tự lưu như hôm nay. Ref giữ handler ổn định cho IngredientRow (memo).
+    const blurSaveRef = useRef(() => {})
+    blurSaveRef.current = () => { if (hasEdits && !isSaving) handleSave() }
+    const handleBlur = useCallback(() => blurSaveRef.current(), [])
 
     const handleInventoryChange = useCallback(
         (ing: string, v: string) => setRemainingInputs(prev => ({ ...prev, [ing]: v })),
@@ -180,19 +185,8 @@ export default function PastInventoryEditor({
                 onOpeningChange={NOOP}
                 onRestockChange={NOOP}
                 onInventoryChange={handleInventoryChange}
+                onFieldBlur={handleBlur}
             />
-
-            {!readOnly && hasEdits && (
-                <div className="flex justify-end">
-                    <button
-                        onClick={handleSave}
-                        disabled={isSaving}
-                        className="bg-primary text-black rounded-[12px] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wider active:scale-95 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                        {isSaving ? 'Đang lưu...' : 'Lưu tồn cuối ca'}
-                    </button>
-                </div>
-            )}
         </div>
     )
 }

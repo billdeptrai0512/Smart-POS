@@ -178,7 +178,8 @@ export function buildDepletedList({ ingredientsList, openingInputs, openingStock
         out.push({
             ingredient: ing.ingredient,
             kind: 'depleted' as const,
-            have: balance, // số thật (có thể âm) — thấy được mức lệch so với số đếm
+            have: net, // số thật đã trừ bì (có thể âm) — thấy được mức lệch so với số đếm
+            tare, // >0 → card hiện "bì X + <thật>", khớp với tiêu chí hết/sắp hết (tính trên net)
             haveLabel: 'Tồn quầy lý thuyết',
             need,
             needPacks: packs,
