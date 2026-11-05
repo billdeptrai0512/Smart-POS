@@ -354,7 +354,6 @@ export default function CashFlowCard({
             <ReportPanel
                 panelRef={panelRef}
                 title="Thực thu"
-                headerDivider
                 subtitle={enteredAt ? <>{openedLabelVN(enteredAt)}<Clock size={11} /></> : undefined}
                 total={{ label: 'Tổng thực thu', value: formatVND(actualTotal), className: 'text-success' }}
             >
@@ -400,7 +399,6 @@ export default function CashFlowCard({
                 return (
                     <ReportPanel
                         title="So sánh"
-                        headerDivider
                         total={{ label: 'Chênh lệch', value: cashNotEntered ? '—' : `${diff > 0 ? '+' : ''}${formatVND(diff)}`, className: tone }}
                     >
                         <div className="flex flex-col gap-2.5 pl-2">
@@ -416,7 +414,6 @@ export default function CashFlowCard({
                 Mỗi section là các dòng nhãn collapse; Tổng thực chi nằm cuối CÙNG PANEL. */}
             <ReportPanel
                 title="Thực chi"
-                headerDivider
                 total={{ label: 'Tổng thực chi', value: `-${formatVND(totalExpenses)}`, className: 'text-danger' }}
             >
 
@@ -484,7 +481,6 @@ export default function CashFlowCard({
             {/* PANEL 4: THỰC NHẬN */}
             <ReportPanel
                 title="Thực nhận"
-                headerDivider
                 total={{ label: 'Tổng thực nhận', value: money(takeHome), className: cashNotEntered ? 'text-text-dim' : takeHome < 0 ? 'text-danger' : 'text-success' }}
             >
                 <div className="flex flex-col gap-2.5 pl-2">
