@@ -710,6 +710,7 @@ export default function DailyReportPage() {
                                 editable={cashEditable}
                                 cashInput={cashInput}
                                 transferInput={transferInput}
+                                enteredAt={cashClosing ? shiftClosing?.cash_closed_at : null}
                                 onCashChange={(v) => setCashInput(formatVNDInput(v))}
                                 onTransferChange={(v) => setTransferInput(formatVNDInput(v))}
                                 onInputBlur={handleSaveCashflow}

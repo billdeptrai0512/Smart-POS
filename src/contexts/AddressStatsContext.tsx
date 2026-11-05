@@ -5,6 +5,7 @@ import { useAuth } from './AuthContext'
 import { useAddress } from './AddressContext'
 import { useMonetizationEnabled } from '../hooks/useEntitlement'
 import { fetchBranchesTodayStats, fetchStaffByManager, fetchSubscriptionStatuses } from '../services/authService'
+import { fetchBranchesTodayActualTotals, type BranchActualTotals } from '../services/branchCashService'
 import { onTabReturn } from '../utils/tabVisibility'
 
 export interface StaffMember { id: string; name: string; role: string; username: string }
@@ -14,6 +15,8 @@ export interface AddressStatsContextValue {
     revenueMap: Record<string, number>
     prevCupsMap: Record<string, number>
     prevRevenueMap: Record<string, number>
+    /** addressId → Tổng thực thu hôm nay; chỉ có key khi chi nhánh đã nhập tiền */
+    actualTotals: BranchActualTotals
     sessionsMap: Record<string, { name: string; role: string }[]>
     /** addressId → 'trial' | 'paid' | 'none' | 'pending' */
     subscriptionStatusMap: Record<string, string>
@@ -50,6 +53,7 @@ export function AddressStatsProvider() {
     const [revenueMap, setRevenueMap] = useState<AddressStatsContextValue['revenueMap']>({})
     const [prevCupsMap, setPrevCupsMap] = useState<AddressStatsContextValue['prevCupsMap']>({})
     const [prevRevenueMap, setPrevRevenueMap] = useState<AddressStatsContextValue['prevRevenueMap']>({})
+    const [actualTotals, setActualTotals] = useState<BranchActualTotals>({ today: {}, prev: {} })
     const [sessionsMap, setSessionsMap] = useState<AddressStatsContextValue['sessionsMap']>({})
     const [subscriptionStatusMap, setSubscriptionStatusMap] = useState<AddressStatsContextValue['subscriptionStatusMap']>({})
     const [subscriptionRowsMap, setSubscriptionRowsMap] = useState<AddressStatsContextValue['subscriptionRowsMap']>({})
@@ -92,6 +96,8 @@ export function AddressStatsProvider() {
             setPrevCupsMap(prevCups)
             setPrevRevenueMap(prevRevenue)
             setSessionsMap(sessions)
+            // Không chặn card: số thực thu đến sau, lỗi thì giữ số cũ.
+            fetchBranchesTodayActualTotals(addrIds).then(m => { if (!cancelRef.current) setActualTotals(m) }).catch(e => console.error('actualTotals:', e))
         } catch (err) {
             // Giữ nguyên số đang hiện thay vì đổ 0 lên mọi card: rớt mạng một nhịp không
             // có nghĩa là quán không bán được ly nào. BranchGrid vốn đã stale-while-revalidate.
@@ -200,6 +206,7 @@ export function AddressStatsProvider() {
         revenueMap,
         prevCupsMap,
         prevRevenueMap,
+        actualTotals,
         sessionsMap,
         subscriptionStatusMap,
         subscriptionRowsMap,
@@ -210,7 +217,7 @@ export function AddressStatsProvider() {
         refreshStats: loadStats,
         refreshStaff: loadStaff,
         refreshSubscriptionStatuses: loadSubscriptionStatuses,
-    }), [cupsMap, revenueMap, prevCupsMap, prevRevenueMap, sessionsMap, subscriptionStatusMap, subscriptionRowsMap, subscriptionLoading, staffList, statsLoading, staffLoading, loadStats, loadStaff, loadSubscriptionStatuses])
+    }), [cupsMap, revenueMap, prevCupsMap, prevRevenueMap, actualTotals, sessionsMap, subscriptionStatusMap, subscriptionRowsMap, subscriptionLoading, staffList, statsLoading, staffLoading, loadStats, loadStaff, loadSubscriptionStatuses])
 
     return (
         <AddressStatsContext.Provider value={value}>

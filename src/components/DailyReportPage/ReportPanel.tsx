@@ -2,6 +2,10 @@ import type { ReactNode, Ref } from 'react'
 
 interface PanelProps {
     title: string
+    /** Chú thích nhỏ bên phải tiêu đề (vd giờ nhập). */
+    subtitle?: ReactNode
+    /** Vạch kẻ ngay dưới tiêu đề. */
+    headerDivider?: boolean
     /** Dòng tổng cuối panel, sau một vạch kẻ. */
     total?: { label: string; value: ReactNode; className: string }
     className?: string
@@ -10,10 +14,13 @@ interface PanelProps {
 }
 
 // Khung panel của báo cáo (Thực thu / Thực chi / Thực nhận / các thẻ Doanh thu, Giá vốn…): tiêu đề, nội dung, vạch, dòng tổng.
-export function ReportPanel({ title, total, className = '', panelRef, children }: PanelProps) {
+export function ReportPanel({ title, subtitle, headerDivider, total, className = '', panelRef, children }: PanelProps) {
     return (
         <div ref={panelRef} className={`w-full bg-surface rounded-[24px] p-5 shadow-sm border border-border/60 flex flex-col justify-center relative overflow-hidden group ${className}`}>
-            <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider mb-3 pl-1">{title}</h3>
+            <div className={`flex items-baseline justify-between gap-2 pl-1 ${headerDivider ? 'pb-3 mb-4 border-b border-border/60' : 'mb-3'}`}>
+                <h3 className="text-[14px] font-black text-text/90 uppercase tracking-wider">{title}</h3>
+                {subtitle && <span className="inline-flex items-center gap-1 text-[11px] font-medium text-text-secondary">{subtitle}</span>}
+            </div>
             {children}
             {total && (
                 <>

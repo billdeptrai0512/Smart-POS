@@ -62,6 +62,7 @@ interface Props {
     revenueMap: Record<string, number>
     prevCupsMap?: Record<string, number>
     prevRevenueMap?: Record<string, number>
+    actualTotals?: { today: Record<string, number>; prev: Record<string, number> }
     sessionsMap: Record<string, { name: string; role: string }[]>
     subscriptionRowsMap?: Record<string, Row[]>
     subscriptionStatusMap?: Record<string, string>
@@ -87,7 +88,7 @@ interface Props {
 }
 
 export default function BranchGrid({
-    addresses, fetchError, cupsMap, revenueMap, prevCupsMap = {}, prevRevenueMap = {}, sessionsMap, subscriptionRowsMap = {}, subscriptionStatusMap = {}, subscriptionLoading, statsLoading,
+    addresses, fetchError, cupsMap, revenueMap, prevCupsMap = {}, prevRevenueMap = {}, actualTotals = { today: {}, prev: {} }, sessionsMap, subscriptionRowsMap = {}, subscriptionStatusMap = {}, subscriptionLoading, statsLoading,
     isStaff, isAdmin, error, setError,
     onSelect, onNavigate,
     onRename, onRemove, onDefaultTemplate, onSupportClick, onSetPrinters,
@@ -186,10 +187,17 @@ export default function BranchGrid({
                                                     <Delta pct={deltaPct(cups, prevCupsMap[addr.id] || 0)} />
                                                 </div>
                                                 <div className="flex items-baseline gap-1.5">
-                                                    <span className="text-text-secondary">Tổng doanh thu:</span>
+                                                    <span className="text-text-secondary">Doanh thu:</span>
                                                     <span className="text-text">{formatVND(revenue)}</span>
                                                     <Delta pct={deltaPct(revenue, prevRevenueMap[addr.id] || 0)} />
                                                 </div>
+                                                {actualTotals.today[addr.id] != null && (
+                                                    <div className="flex items-baseline gap-1.5">
+                                                        <span className="text-text-secondary">Tổng thực thu:</span>
+                                                        <span className="text-text">{formatVND(actualTotals.today[addr.id])}</span>
+                                                        <Delta pct={deltaPct(actualTotals.today[addr.id], actualTotals.prev[addr.id])} />
+                                                    </div>
+                                                )}
                                             </>
                                         )}
                                     </div>

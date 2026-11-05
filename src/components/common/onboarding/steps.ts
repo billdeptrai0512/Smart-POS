@@ -55,7 +55,7 @@ export const STEPS: Step[] = [
     // 2. Nhật ký — 3 tab của /history (HistoryTabsBar.tsx). viewedIncome tick ngay khi vào
     // /history (Doanh thu là tab mặc định) nên nhãn là "Vào nhật ký" — lúc này user còn đứng ở
     // POS. Chi phí tick khi user tự bấm tab; viewedReport tick khi bấm mũi tên "tiến" sang trang kế
-    // (Tồn kho — thứ tự trong menuSequence.ts) — ghi từ HistoryPage.tsx.
+    // (Báo cáo — thứ tự trong menuSequence.ts) — ghi từ HistoryPage.tsx.
     {
         title: 'Nhật ký',
         items: (ctx) => [

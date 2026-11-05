@@ -28,7 +28,7 @@ export default function AddressSelectPage() {
         addresses, setSelectedAddress, createNewAddress, renameAddress, setPrinters, removeAddress, loading, fetchError,
         warehouseGroups, createWarehouseGroup, renameWarehouseGroup, removeWarehouseGroup, setAddressGroup, setGroupHub,
     } = useAddress()
-    const { cupsMap, revenueMap, prevCupsMap, prevRevenueMap, sessionsMap, subscriptionStatusMap, subscriptionRowsMap, subscriptionLoading, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
+    const { cupsMap, revenueMap, prevCupsMap, prevRevenueMap, actualTotals, sessionsMap, subscriptionStatusMap, subscriptionRowsMap, subscriptionLoading, staffList, staffLoading, statsLoading, refreshStaff } = useAddressStats()
     const { signOut, profile, isStaff, isManager, isAdmin, isGuest } = useAuth()
     const navigate = useNavigate()
 
@@ -239,6 +239,7 @@ export default function AddressSelectPage() {
                         revenueMap={revenueMap}
                         prevCupsMap={prevCupsMap}
                         prevRevenueMap={prevRevenueMap}
+                        actualTotals={actualTotals}
                         sessionsMap={sessionsMap}
                         subscriptionRowsMap={subscriptionRowsMap}
                         subscriptionStatusMap={subscriptionStatusMap}
