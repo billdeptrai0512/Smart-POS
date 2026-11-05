@@ -38,7 +38,6 @@ import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { cashClosedKey } from '../constants/storageKeys'
 import { useShiftFinalized } from '../hooks/useShiftFinalized'
-import DayPerformanceChart from '../components/DailyReportPage/DayPerformanceChart'
 import RestockModal, { type RestockPayload } from '../components/IngredientManagementPage/RestockModal'
 import type { ExpenseCategory, Row, UUID } from '../types/domain'
 
@@ -711,6 +710,7 @@ export default function DailyReportPage() {
                                 cashInput={cashInput}
                                 transferInput={transferInput}
                                 enteredAt={cashClosing ? shiftClosing?.cash_closed_at : null}
+                                day={isTodayScope ? todayISO : dateStringVN(rangeStart)}
                                 onCashChange={(v) => setCashInput(formatVNDInput(v))}
                                 onTransferChange={(v) => setTransferInput(formatVNDInput(v))}
                                 onInputBlur={handleSaveCashflow}
@@ -722,16 +722,7 @@ export default function DailyReportPage() {
                                 printPreview={printPreview}
                                 onPreviewClose={() => setPrintPreview(false)}
                                 onPrintError={e => showError(e, 'In báo cáo')}
-                            >
-                                {isRangeScope && (
-                                    <DayPerformanceChart
-                                        orders={displayOrders}
-                                        range={scope}
-                                        start={rangeStart}
-                                        products={products}
-                                    />
-                                )}
-                            </CashFlowCard>
+                            />
                         )}
 
                         <div className="flex items-center justify-center gap-2 p-3">

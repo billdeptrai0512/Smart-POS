@@ -2,7 +2,7 @@ import { useMemo, useState, useRef, useEffect, type ReactNode, type Ref } from '
 import { createPortal } from 'react-dom'
 import { ChevronDown, ChevronRight, Clock } from 'lucide-react'
 import { formatVND, parseVNDInput, capFirst } from '../../utils'
-import { dayMonthVN, openedLabelVN, timeStringVN } from '../../utils/dateVN'
+import { dateStringVN, dayMonthVN, timeStringVN } from '../../utils/dateVN'
 import { OFFSCREEN_FRAME_CSS, captureOffscreen, printBillJob } from '../../lib/escposBitmap'
 import { Dialog } from '../common/ModalShell'
 import { ReportPanel, PanelRow } from './ReportPanel'
@@ -42,6 +42,8 @@ interface Props {
     transferInput?: string
     /** Lúc nhân viên lưu Thực thu lần đầu (shift_closings.cash_closed_at). */
     enteredAt?: string | null
+    /** Ngày của báo cáo đang xem: nhập cùng ngày thì chỉ hiện giờ, lệch ngày mới kèm ngày. */
+    day?: string
     onInputBlur?: () => void
     onCashChange?: (value: string) => void
     onTransferChange?: (value: string) => void
@@ -80,7 +82,7 @@ export default function CashFlowCard({
     editable = false,
     cashInput = '',
     transferInput = '',
-    enteredAt,
+    enteredAt, day,
     onInputBlur,
     onCashChange,
     onTransferChange,
@@ -354,7 +356,7 @@ export default function CashFlowCard({
             <ReportPanel
                 panelRef={panelRef}
                 title="Thực thu"
-                subtitle={enteredAt ? <>{openedLabelVN(enteredAt)}<Clock size={11} /></> : undefined}
+                subtitle={enteredAt ? <>{dateStringVN(new Date(enteredAt)) === day ? timeStringVN(new Date(enteredAt)) : `${timeStringVN(new Date(enteredAt))} ${dayMonthVN(enteredAt)}`}<Clock size={11} /></> : undefined}
                 total={{ label: 'Tổng thực thu', value: formatVND(actualTotal), className: 'text-success' }}
             >
                 <div className="flex flex-col gap-2.5 pl-2">

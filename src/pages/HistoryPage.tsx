@@ -459,7 +459,7 @@ export default function HistoryPage() {
                 <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none z-50">
                     <div className="flex justify-end px-4 pb-[max(env(safe-area-inset-bottom),16px)] pointer-events-auto">
                         <button
-                            onClick={() => setShowAddModal(true)}
+                            onClick={() => { if (scope === 'day') setExpenseDate(dayInputValue); setShowAddModal(true) }}
                             aria-label="Thêm chi phí"
                             className="bg-primary rounded-[12px] px-4 py-2.5 flex items-center justify-center text-[13px] font-bold uppercase tracking-wider text-bg hover:bg-primary/90 active:scale-95 transition-all shadow-sm"
                         >
