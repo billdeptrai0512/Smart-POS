@@ -579,6 +579,8 @@ export default function DailyReportPage() {
             // Phiếu quá khứ đã có snapshot doanh thu — đừng ghi đè bằng 0.
             ...(isTodayScope && { system_total_revenue: systemTotalRevenue }),
             ...cashPayload,
+            // Giờ lưu cuối (pill Thực thu), tính lúc bấm lưu — cashPayload memo từ lúc gõ nên không dùng được.
+            cash_saved_at: new Date().toISOString(),
         }
         try {
             // isTodaysClosing, KHÔNG phải chỉ có id: get_daily_report_context thỉnh
@@ -709,7 +711,7 @@ export default function DailyReportPage() {
                                 editable={cashEditable}
                                 cashInput={cashInput}
                                 transferInput={transferInput}
-                                enteredAt={cashClosing ? shiftClosing?.cash_closed_at : null}
+                                enteredAt={cashClosing ? (shiftClosing?.cash_saved_at || shiftClosing?.cash_closed_at) : null}
                                 day={isTodayScope ? todayISO : dateStringVN(rangeStart)}
                                 onCashChange={(v) => setCashInput(formatVNDInput(v))}
                                 onTransferChange={(v) => setTransferInput(formatVNDInput(v))}

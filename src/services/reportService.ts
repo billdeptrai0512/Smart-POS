@@ -12,11 +12,14 @@ import type { UUID, Row, SupabaseError } from '../types/domain'
 function isMissingCashClosedAt(error: SupabaseError) {
     if (!error) return false
     if (error.code === 'PGRST204' || error.code === '42703') return true
-    return /cash_closed_at/i.test(error.message || '')
+    return /cash_closed_at|cash_saved_at/i.test(error.message || '')
 }
-function omitCashClosedAt(data: Row) {
+// Cột nào thiếu thì chỉ bỏ cột đó: thiếu cash_saved_at (deploy trước migration 20261040) vẫn
+// phải giữ cash_closed_at — đó là mốc chia chi phí trước/sau chốt ca.
+function omitCashClosedAt(data: Row, error: SupabaseError) {
     const rest = { ...data }
-    delete rest.cash_closed_at
+    if (/cash_saved_at/i.test(error?.message || '')) delete rest.cash_saved_at
+    else delete rest.cash_closed_at
     return rest
 }
 
@@ -98,7 +101,7 @@ export async function insertShiftClosing(data: Row) {
         .select()
         .single()
     if (isMissingCashClosedAt(error) && 'cash_closed_at' in data) {
-        ;({ data: row, error } = await supabase.from('shift_closings').insert(omitCashClosedAt(data)).select().single())
+        ;({ data: row, error } = await supabase.from('shift_closings').insert(omitCashClosedAt(data, error)).select().single())
     }
     // Race/insert trùng cùng ngày → unique index chặn. Tự lành: cập nhật phiếu cùng ngày
     // (đúng phiếu report Ngày dùng) thay vì ném lỗi làm hỏng luồng lưu báo cáo/thực thu.
@@ -123,7 +126,7 @@ export async function updateShiftClosing(id: UUID, data: Row) {
         .select()
         .single()
     if (isMissingCashClosedAt(error) && 'cash_closed_at' in data) {
-        ;({ data: row, error } = await supabase.from('shift_closings').update(omitCashClosedAt(data)).eq('id', id).select().single())
+        ;({ data: row, error } = await supabase.from('shift_closings').update(omitCashClosedAt(data, error)).eq('id', id).select().single())
     }
     if (error) throw error
     return row

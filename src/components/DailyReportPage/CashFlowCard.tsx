@@ -6,7 +6,8 @@ import { dateStringVN, dayMonthVN, timeStringVN } from '../../utils/dateVN'
 import { OFFSCREEN_FRAME_CSS, captureOffscreen, printBillJob } from '../../lib/escposBitmap'
 import { Dialog } from '../common/ModalShell'
 import { ReportPanel, PanelRow } from './ReportPanel'
-import { ingredientLabel, normalizeIngredientCategory, INGREDIENT_CATEGORIES } from '../../utils/ingredients'
+import { ingredientLabel } from '../../utils/ingredients'
+import { capitalizeWords } from '../../utils/text'
 import { groupMeta } from '../../constants/expenseGroups'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { computeCashFlowTotals } from '../../utils/reportStats'
@@ -15,6 +16,7 @@ import { onboardingHintClass } from '../../utils/onboardingHint'
 import type { ExpenseCategory, Row } from '../../types/domain'
 import type { PrintBillHandle } from '../common/PrintBill'
 
+const OTHER = 'Khác' // dòng Tồn kho không thuộc nhóm nguyên liệu nào
 type Phase = 'in_shift' | 'post_close' | 'mixed'
 type Method = 'cash' | 'transfer' | 'mixed'
 type ExpensePhase = 'inShift' | 'postClose'
@@ -109,9 +111,8 @@ export default function CashFlowCard({
     useEffect(() => {
         if (scrollToPanel) panelRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
     }, [scrollToPanel])
-    // Category (Nguyên liệu chính / Bao bì) của từng nguyên liệu — để phân loại
-    // mục "Mua nguyên liệu / bao bì" bên dưới. Mặc định collapse từng nhóm.
-    const { ingredientConfigs } = useProducts()
+    // Nhóm nguyên liệu — để chia các dòng trong mục Tồn kho bên dưới. Mặc định collapse từng nhóm.
+    const { ingredientConfigs, ingredientGroups } = useProducts()
     const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({})
     const toggleCat = (key: string) => setExpandedCats(prev => ({ ...prev, [key]: !prev[key] }))
     // When editing, totals/Thực nhận track the typed values so the user sees the impact
@@ -216,10 +217,6 @@ export default function CashFlowCard({
 
         // ── Section TỒN KHO — mua NVL refill (gom theo nhóm nguyên liệu) GỘP với chi phí
         // gắn nhãn nhóm "Chi phí tồn kho" (vật tư không kiểm kê) cùng tên nhãn, + Trả nợ cũ.
-        // Gộp theo label để "Mua nguyên liệu" refill và chi phí nhãn "Mua nguyên liệu" về 1 dòng.
-        const catByKey = new Map(
-            (ingredientConfigs || []).map(c => [c.ingredient, normalizeIngredientCategory(c.category)])
-        )
         const invBlocks = new Map<string, Block>()
         const ensureBlock = (label: string, sortKey: number) => {
             let b = invBlocks.get(label)
@@ -230,10 +227,19 @@ export default function CashFlowCard({
         // Mọi payment NVL (đi chợ trả ngay LẪN trả nợ cũ) gom chung 1 lượt theo tên
         // nguyên liệu — báo cáo dòng tiền chỉ quan tâm tiền ra trong kỳ, không phân
         // biệt trả cho hoá đơn ngày nào.
-        for (const cat of INGREDIENT_CATEGORIES) {
-            const pays = nvlPayments.filter(p => (catByKey.get(p.invoice_metadata?.ingredient) || 'main') === cat.key)
-            if (pays.length === 0) continue
-            const b = ensureBlock(cat.key === 'packaging' ? 'Mua bao bì' : 'Mua nguyên liệu', cat.key === 'packaging' ? 20 : 10)
+        // Mỗi nhóm nguyên liệu (ingredient_groups) 1 dòng theo sort_order, tên viết hoa chữ cái đầu
+        // mỗi từ; NVL không thuộc nhóm nào (hoặc địa chỉ chưa chia nhóm) rơi về "Khác".
+        const groupById = new Map((ingredientGroups || []).map(g => [g.id, g]))
+        const groupIdByKey = new Map((ingredientConfigs || []).map(c => [c.ingredient, c.group_id]))
+        const paysByGroup = new Map<string | null, Row[]>()
+        for (const p of nvlPayments) {
+            const gid = groupIdByKey.get(p.invoice_metadata?.ingredient)
+            const key = groupById.has(gid) ? gid : null // nhóm đã xoá / NVL không nhóm → Khác
+            paysByGroup.set(key, [...(paysByGroup.get(key) || []), p])
+        }
+        for (const [gid, pays] of paysByGroup) {
+            const g = gid ? groupById.get(gid) : null
+            const b = ensureBlock(g ? capitalizeWords(g.name.toLowerCase()) : OTHER, g ? (g.sort_order ?? 0) : 999)
             for (const r of groupByIngredient(pays)) {
                 b.total += r.amount; b.count += r.count
                 // Chỉ mở sửa được khi cả nhóm chỉ gộp từ 1 hoá đơn CÓ ingredient (1 expense_id
@@ -249,11 +255,10 @@ export default function CashFlowCard({
             }
         }
         for (const { e, phase } of tagged.inventory) {
-            const cat = catById.get(e.category_id)
-            const label = cat?.name || 'Mua nguyên liệu'
-            const b = ensureBlock(label, cat?.sort_order ?? 100)
+            // Chi phí tồn kho gắn nhãn không thuộc nhóm nguyên liệu nào → gộp vào "Khác".
+            const b = ensureBlock(OTHER, 999)
             b.total += e.amount || 0; b.count += 1
-            b.children.push(toItemRow(e, phase, label))
+            b.children.push(toItemRow(e, phase, OTHER))
         }
         const inventoryBlocks = [...invBlocks.values()].sort((a, b) => a.sortKey - b.sortKey || a.label.localeCompare(b.label, 'vi'))
         const inventoryTotal = inventoryBlocks.reduce((s, b) => s + b.total, 0)
@@ -262,7 +267,7 @@ export default function CashFlowCard({
             totalExpenses, shiftExpenses, afterShiftOps,
             operating, overhead, nonOp, inventoryBlocks, inventoryTotal,
         }
-    }, [payments, expenses, expenseCategories, ingredientConfigs, dailyExpense, refillFreeForm])
+    }, [payments, expenses, expenseCategories, ingredientConfigs, ingredientGroups, dailyExpense, refillFreeForm])
 
     // 1. Thực thu / Thực nhận — phân loại tiền mặt theo cờ `cash_phase` lưu trên từng
     //    phiếu NVL (đặt lúc nhập kho): in_shift → cộng Thực thu (dựng lại doanh thu tiền
