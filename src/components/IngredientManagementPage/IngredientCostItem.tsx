@@ -25,7 +25,7 @@ interface Props {
  *   │ Cà phê                   │  ← name (tap card to open detail)
  *   │ Kiểm kê lần cuối: 10:05 06/09 │  ← giờ + ngày kiểm kê quầy (manager only)
  *   │ Tồn đầu / Lấy ra / …     │  ← daily context
- *   │ Tồn quầy hiện có 8g      │  ← counter stock (manager only)
+ *   │ Tồn quầy đang có 8g      │  ← counter stock (manager only)
  *   │ ──────────────────────── │
  *   │ Tổng cộng        9180 g  │  ← hero stock number (phải)
  *   │             = 9 bịch…    │  ← pack breakdown dưới số tổng (if pack configured)
@@ -109,7 +109,7 @@ export default function IngredientCostItem({
                      Nhóm + Quy đổi đã chuyển sang trang chi tiết của ingredient. */}
                 {canEdit && (
                     <div className="pt-2 border-t border-border/40 flex flex-col gap-1.5">
-                        <Row label="Tồn quầy hiện có" value={`${fmtRound(stockData?.counter_stock)} ${displayUnit}`} />
+                        <Row label="Tồn quầy đang có" value={`${fmtRound(stockData?.counter_stock)} ${displayUnit}`} />
                     </div>
                 )}
             </div>
@@ -118,20 +118,25 @@ export default function IngredientCostItem({
             <div className="mt-auto pt-2 border-t border-border/40 flex justify-between items-center gap-2 min-w-0">
                 <span className="text-[11px] font-bold uppercase tracking-wide text-text-dim leading-none">Tổng cộng</span>
                 <div className="flex flex-col items-end gap-1 min-w-0">
-                    <div className="flex items-baseline gap-1.5">
-                        <span className={`text-[16px] font-black tabular-nums leading-none ${textClass}`}>
-                            {shownStock ?? '—'}
-                        </span>
-                        <span className="text-[12.5px] font-bold text-text-secondary leading-none">
-                            {displayUnit}
-                        </span>
-                    </div>
-
-                    {/* Pack breakdown dưới số tổng (nếu có quy cách & tồn ≥ 1 bịch) */}
-                    {shownStock !== null && packSize && packUnit && shownStock >= packSize && (
-                        <span className="text-[11.5px] font-semibold text-text-dim tabular-nums leading-none">
-                            = {formatPackedQty(shownStock, packSize, packUnit, displayUnit, { compact: true, pack2 })}
-                        </span>
+                    {/* Có quy cách & tồn ≥ 1 bịch: "2 cây + 18 cái" là số chính, tổng đơn vị nhỏ nhất chỉ bổ trợ bên dưới */}
+                    {shownStock !== null && packSize && packUnit && shownStock >= packSize ? (
+                        <>
+                            <span className={`text-[16px] font-black tabular-nums leading-none ${textClass}`}>
+                                {formatPackedQty(shownStock, packSize, packUnit, displayUnit, { compact: true, pack2 })}
+                            </span>
+                            <span className="text-[11.5px] font-semibold text-text-dim tabular-nums leading-none">
+                                = {shownStock} {displayUnit}
+                            </span>
+                        </>
+                    ) : (
+                        <div className="flex items-baseline gap-1.5">
+                            <span className={`text-[16px] font-black tabular-nums leading-none ${textClass}`}>
+                                {shownStock ?? '—'}
+                            </span>
+                            <span className="text-[12.5px] font-bold text-text-secondary leading-none">
+                                {displayUnit}
+                            </span>
+                        </div>
                     )}
                 </div>
             </div>
