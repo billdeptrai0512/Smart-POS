@@ -2,7 +2,7 @@ import { Fragment, useState, type ReactNode } from 'react'
 import type { PrepItem } from '../../utils/prepToday'
 import { Check, X, RotateCcw, Pencil, ChevronUp, ChevronDown } from 'lucide-react'
 import { ingredientLabel } from '../../utils/ingredients'
-import { formatPackCount, formatPackedQty } from '../../utils/inventory'
+import { formatPackCount, formatPackedQty, unitTiersOf } from '../../utils/inventory'
 
 // Viên thuốc CTA dùng chung cho cả 2 card (Lấy / Mua) — màu theo trạng thái do từng nơi ghép thêm.
 const PILL = 'shrink-0 min-h-[44px] min-w-[124px] px-3 flex items-center justify-center gap-1 rounded-xl text-[12px] font-black transition'
@@ -79,6 +79,7 @@ export default function ShiftPrepCard({
     const ordered = [...rows].sort((a, b) => Number(isUrgent(b)) - Number(isUrgent(a)) || Number(handledOnOpen.has(a.ingredient)) - Number(handledOnOpen.has(b.ingredient)) || tier(a) - tier(b))
     const [editing, setEditing] = useState<string | null>(null)
     const [draft, setDraft] = useState(0) // số đang sửa (đơn vị gốc) của dòng `editing`
+    const [unitKey, setUnitKey] = useState<string | null>(null) // đơn vị đang chọn trong ô sửa (null = mặc định: bịch nếu có quy cách, không thì đơn vị gốc)
     const split = skipMode && ordered.some(isUrgent) && ordered.some(it => !isUrgent(it))
     // Card Mua: món đã mua đủ gom thành 1 dòng "Đã mua đủ (N)" ở đáy, mặc định đóng — vẫn nằm trong items nên mẫu số tiến độ
     // đứng yên suốt ngày, chỉ không chiếm ~155px mỗi món. Bấm dòng đó để xem lại từng món.
@@ -140,8 +141,8 @@ export default function ShiftPrepCard({
                             )
                             // Đang sửa số: dòng thành div (ô nhập không được nằm trong button) và ô nhập thay cho chip ✎ + viên CTA.
                             const ed = editing === it.ingredient && !isDone
-                            const meta = qtyMeta(it, draft)
-                            const shown = Math.round(draft / meta.step * 10) / 10
+                            const meta = ed ? qtyMeta(it, draft, unitKey) : null   // chỉ dòng đang sửa mới cần
+                            const shown = meta ? Math.round(draft / meta.step * 10) / 10 : 0
                             const Row = (ed ? 'div' : 'button') as 'button'
                             return (
                                 <Fragment key={it.ingredient}>
@@ -183,7 +184,7 @@ export default function ShiftPrepCard({
                                                 <span className="block text-warning font-bold">Gợi ý: {fmt(it.fillQty)}</span>
                                             )}
                                             {it.reason && <span className="block text-warning font-bold">{it.reason}</span>}
-                                            {ed && meta.over && <span className="block text-danger font-bold">Vượt kho — chỉ lấy tối đa {fmt(meta.out)}</span>}
+                                            {meta?.over && <span className="block text-danger font-bold">Vượt kho — chỉ lấy tối đa {fmt(meta.out)}</span>}
                                             <span className="block">
                                                 {it.haveLabel || haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}
                                             </span>
@@ -194,7 +195,7 @@ export default function ShiftPrepCard({
                                             {muted && it.counted != null && <span className="block">Tồn quầy cuối ca: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.counted)}</span>}
                                         </div>
                                     </div>
-                                    {ed ? (
+                                    {ed && meta ? (
                                         // [ 1 hộp ✓ ] ▲▼ — ✓ trong ô, ▲▼ ngoài ô. Chạm ra ngoài / Esc = đóng, chưa ✓ thì chưa ghi gì.
                                         <div
                                             className="self-center shrink-0 flex items-center gap-1.5"
@@ -209,7 +210,15 @@ export default function ShiftPrepCard({
                                                     onChange={(e) => setDraft(Math.max(0, Math.round(Number(e.target.value) * meta.step * 10) / 10))}
                                                     className="min-w-0 bg-transparent text-left text-[16px] font-black outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                                                 />
-                                                <span className="text-[12px] text-text-secondary">{meta.unitLabel}</span>
+                                                {/* Nhiều đơn vị (thùng / bịch / gốc): chạm nhãn để đổi — giữ nguyên lượng, chỉ đổi cách đọc. */}
+                                                <button
+                                                    type="button" title="Đổi đơn vị" disabled={meta.tiers.length < 2}
+                                                    onMouseDown={(e) => e.preventDefault()}
+                                                    onClick={() => setUnitKey(meta.next)}
+                                                    className="shrink-0 text-[12px] font-bold text-primary underline decoration-dotted underline-offset-2 active:scale-95 disabled:text-text-secondary disabled:no-underline disabled:font-normal"
+                                                >
+                                                    {meta.unitLabel}
+                                                </button>
                                                 <button
                                                     type="button" title={`${packVerb} ${fmt(meta.out)}`} disabled={meta.out <= 0}
                                                     onMouseDown={(e) => e.preventDefault()} // giữ focus ở ô nhập để onBlur không đóng trước khi click
@@ -235,7 +244,7 @@ export default function ShiftPrepCard({
                                     ) : <>
                                     {!isDone && !isSkipped && (
                                         <span
-                                            onClick={(e) => { e.stopPropagation(); setEditing(it.ingredient); setDraft(it.sent ?? it.fillQty ?? it.need) }}
+                                            onClick={(e) => { e.stopPropagation(); setEditing(it.ingredient); setUnitKey(null); setDraft(it.sent ?? it.fillQty ?? it.need) }} // setUnitKey(null): dòng kế tiếp không dính đơn vị của dòng trước
                                             title="Sửa số lượng"
                                             className="self-center shrink-0 w-11 h-11 flex items-center justify-center rounded-xl border active:scale-95 transition text-text-dim border-border/40 hover:text-text"
                                         >
@@ -310,9 +319,12 @@ export default function ShiftPrepCard({
                                     {/* Mỗi số một dòng "Nhãn: số" như card Soạn; bấm vào mở chi tiết nguyên liệu. */}
                                     <button type="button" onClick={open} className="block w-full text-left text-[11px] text-text-dim mt-0.5 active:scale-[0.99] transition">
                                         {it.warehouse != null && (
-                                            <span className="block">{threeFields ? 'Tồn kho' : 'Tồn kho cuối kỳ'}: <span className={`font-bold ${warehouseCls}`}>{fmt(it.warehouse)}</span></span>
+                                            <span className="block">{threeFields ? 'Tồn kho' : 'Tồn kho cuối kỳ'}: {it.done && it.boughtToday > 0
+                                                // Đã mua đủ: kho hiện tại đã gồm số vừa mua → tách "trước khi mua + đã mua"; âm = kho đã bị lấy ra quầy bớt sau khi mua.
+                                                ? <><span className="font-bold">{it.warehouse === it.boughtToday ? 0 : fmt(it.warehouse - it.boughtToday)}</span> + <span className="font-bold text-success">{fmt(it.boughtToday)}</span></>
+                                                : <span className={`font-bold ${warehouseCls}`}>{fmt(it.warehouse)}</span>}</span>
                                         )}
-                                        {it.minStock > 0 && <span className="block">{threeFields ? 'Tối thiểu' : 'Tồn kho tối thiểu'}: {fmt(it.minStock)}</span>}
+                                        {it.minStock > 0 && <span className="block">{threeFields ? 'Cần tối thiểu' : 'Tồn kho tối thiểu'}: {fmt(it.minStock)}</span>}
                                         {/* Số rút = 0 thì dòng này chỉ gây khó hiểu cạnh nút Mua (mua vì kho dưới tối thiểu, không phải vì quầy sẽ lấy). */}
                                         {(it.have > 0 || it.tare > 0) && <span className="block">{threeFields ? 'Cần rút ra quầy' : haveLabel}: {it.tare > 0 && <>{it.tare} + </>}{fmt(it.have)}</span>}
                                         {!threeFields && it.forecast > 0 && <span className="block">Ngày mai sử dụng: {fmt(it.forecast)}</span>}
@@ -330,10 +342,12 @@ export default function ShiftPrepCard({
     )
 }
 
-// Đơn vị bước (1 bịch, hoặc 1 đơn vị gốc nếu không có quy cách) + số thực sự ghi (kẹp theo kho) của ô sửa số.
-// ponytail: chỉ 1 ô số (bịch có thể lẻ), chưa tách ô "bịch + lẻ g" của pack2 — thêm khi nhân viên cần.
-function qtyMeta(it: Item, draft: number) {
-    const packed = !!it.packSize && it.packSize > 0
+// Đơn vị đang chọn của ô sửa (thùng / bịch / gốc, mặc định bịch) + số thực sự ghi (kẹp theo kho); next = đơn vị kế khi chạm nhãn.
+// ponytail: chỉ 1 ô số (đơn vị lớn có thể lẻ), chưa tách ô "bịch + lẻ g" — thêm khi nhân viên cần.
+function qtyMeta(it: Item, draft: number, unitKey: string | null) {
+    const tiers = unitTiersOf(it.packSize, it.packUnit, it.pack2, it.unit || '')
+    const i = Math.max(0, tiers.findIndex(t => t.key === (unitKey ?? 'pack')))
+    const tier = tiers[i]
     const over = it.warehouse != null && draft > it.warehouse
-    return { step: packed ? it.packSize! : 1, unitLabel: packed ? (it.packUnit || 'bịch') : (it.unit || ''), over, out: over ? it.warehouse! : draft }
+    return { tiers, step: tier.mult, unitLabel: tier.label || '', next: tiers[(i + 1) % tiers.length].key, over, out: over ? it.warehouse! : draft }
 }
