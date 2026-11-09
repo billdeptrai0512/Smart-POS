@@ -45,6 +45,18 @@ import type { Row, UUID } from '../types/domain'
 // Page-level orchestrator: fetches data, owns the canonical state (stock, history,
 // config), and exposes per-field save callbacks. All edit-mode UI state lives
 // inside child components — see IngredientDetailsTab for the inverted control.
+// Các trường "lần đếm" của dòng tồn thay bằng lần xác nhận kiểm kê gần nhất: đã xác nhận hôm nay → số + giờ xác nhận; hôm nay mới
+// đếm dở chưa xác nhận → lần đếm gần nhất trước hôm nay (prior_*, không có thì 0 và không ước tính); còn lại giữ nguyên.
+async function confirmedCountBase(row: Row, addressId: UUID | null) {
+    const confirmed = (await fetchIngredientDailyContext(addressId))[row.ingredient]
+    if (confirmed?.confirmed_value != null)
+        return { counter_stock: confirmed.confirmed_value, counter_counted_on: dateStringVN(new Date(confirmed.confirmed_value_at!)), counter_counted_at: confirmed.confirmed_value_at, restock_since_count: 0 }
+    if (row.counter_counted_on !== dateStringVN()) return null
+    return row.prior_counted_on
+        ? { counter_stock: row.prior_counter_stock, counter_counted_on: row.prior_counted_on, counter_counted_at: row.prior_counted_at, restock_since_count: row.prior_restock_since }
+        : { counter_stock: 0, counter_counted_on: null, counter_counted_at: null, restock_since_count: 0 }
+}
+
 export default function IngredientDetailPage() {
     const navigate = useNavigate()
     const location = useLocation()
@@ -128,7 +140,10 @@ export default function IngredientDetailPage() {
     const fetchStockRow = useCallback(async (addressId: UUID | null) => {
         const row = (await fetchIngredientStocks(addressId)).find((s: Row) => s.ingredient === ingredientKey)
         // Thành phẩm chưa có dòng tồn: withCounterEstimate dựng dòng từ mẻ sản xuất.
-        return (await withCounterEstimate(row ? [row] : [], addressId, calcRef.current))?.find((s: Row) => s.ingredient === ingredientKey) ?? null
+        // Tồn quầy của trang này tính từ lần XÁC NHẬN kiểm kê gần nhất (bỏ qua số đang đếm dở): đơn bán mới vẫn trừ tiếp vào đó,
+        // chỉ khi có lần xác nhận mới thì mốc gốc mới đổi.
+        const base = row ? await confirmedCountBase(row, addressId) : null
+        return (await withCounterEstimate(row ? [{ ...row, ...base }] : [], addressId, calcRef.current))?.find((s: Row) => s.ingredient === ingredientKey) ?? null
     }, [ingredientKey, calcRef])
 
     useEffect(() => {
@@ -279,7 +294,7 @@ export default function IngredientDetailPage() {
                 }], null)
             }
             await reloadStock()
-            showToast('Đã sửa tồn quầy', 'success')
+            showToast('Đã sửa tồn quầy — hiện ở "Tồn quầy cuối kỳ" sau khi xác nhận kiểm kê', 'success')
         })
     }
 
