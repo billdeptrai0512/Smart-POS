@@ -1,28 +1,36 @@
 -- ============================================================
 -- Mô hình mới: 88.888đ/tháng/địa chỉ, full tính năng, KHÔNG còn trial / free.
 --   * Địa chỉ mới (0 row) → KHÓA (guest demo → đăng ký → paywall).
---   * Trial đang chạy → để hết hạn rồi khóa (không đụng row).
---   * Địa chỉ đang free vĩnh viễn (0 row) → ân hạn 7 ngày (row note='grace'), rồi khóa.
+--   * Trial / gói đang chạy → để hết hạn như thường (không đụng row).
+--   * Mọi địa chỉ hiện KHÔNG có gói hiệu lực (free vĩnh viễn 0 row, hoặc trial/gói đã hết hạn mà
+--     quán vẫn đang bán) → ân hạn 3 ngày (row note='grace', hôm nay → +2), rồi theo luật chung.
+--     CHỈ 1 LẦN lúc chuyển đổi (tối đa 6 ngày có "Bỏ qua" gồm cả 3 ngày quá hạn); về sau mọi gói chỉ
+--     theo luật chung: nhắc trước 7 ngày + 3 ngày quá hạn vẫn bỏ qua được.
 --
 -- 1. Bỏ trigger cấp trial lúc full-close (kéo theo nhánh reanchor kéo dài trial cũ).
--- 2. get_address_entitlement: bỏ nhánh trả 'all' tới 2099 cho địa chỉ 0 row.
--- 3. Backfill ân hạn 7 ngày cho địa chỉ 0 row hiện có.
+-- 2. Backfill ân hạn 3 ngày.
+-- 3. get_address_entitlement: bỏ nhánh trả 'all' tới 2099 cho địa chỉ 0 row; tính valid_to + 3.
 --
 -- Giữ nguyên ownership guard + SET search_path (CLAUDE.md). Signature không đổi.
--- ⚠️ Apply migration TRƯỚC khi deploy client. IDEMPOTENT.
+-- ⚠️ Apply migration TRƯỚC khi deploy client. Chạy lại trong 3 ngày ân hạn là no-op; chạy lại
+--    sau đó sẽ cấp ân hạn thêm lần nữa → chỉ apply 1 lần.
 -- ============================================================
 
 -- ── 1. Bỏ cấp trial ─────────────────────────────────────────────────────────
 DROP TRIGGER IF EXISTS trg_grant_trial_on_first_full_shift_close ON shift_closings;
 DROP FUNCTION IF EXISTS public.grant_trial_on_first_full_shift_close();
 
--- ── 2. Backfill ân hạn: PHẢI chạy trước khi đổi RPC (không thì địa chỉ 0 row bị khóa ngay) ──
+-- ── 2. Backfill ân hạn 3 ngày: PHẢI chạy trước khi đổi RPC (không thì địa chỉ 0 row bị khóa ngay) ──
 INSERT INTO address_subscriptions
     (address_id, tier, valid_from, valid_to, amount_paid, note)
-SELECT a.id, 'all', CURRENT_DATE, CURRENT_DATE + 7, 0, 'grace'
+SELECT a.id, 'all', CURRENT_DATE, CURRENT_DATE + 2, 0, 'grace'
 FROM addresses a
 WHERE a.deleted_at IS NULL
-  AND NOT EXISTS (SELECT 1 FROM address_subscriptions s WHERE s.address_id = a.id);
+  AND NOT EXISTS (
+      SELECT 1 FROM address_subscriptions s
+      WHERE s.address_id = a.id
+        AND s.valid_from <= CURRENT_DATE AND s.valid_to >= CURRENT_DATE
+  );
 
 -- ── 3. get_address_entitlement: chỉ trả row còn hạn ──────────────────────────
 CREATE OR REPLACE FUNCTION get_address_entitlement(p_address_id UUID)
