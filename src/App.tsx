@@ -5,6 +5,7 @@ import { AddressProvider, useAddress } from './contexts/AddressContext'
 import { AddressStatsProvider } from './contexts/AddressStatsContext'
 import { ConfirmProvider } from './contexts/ConfirmContext'
 import ErrorBoundary from './components/common/ErrorBoundary'
+import useWakeLock from './hooks/useWakeLock'
 import './index.css'
 
 // Vùng POS (providers + khung onboarding) nằm trong 1 chunk lazy — xem posShell.tsx. 3 lazy dùng
@@ -95,6 +96,7 @@ function ProtectedRoute() {
 // Requires a selected address before entering POS pages
 function RequireAddress() {
   const { selectedAddress, loading } = useAddress()
+  useWakeLock()
   if (loading) return <PageLoading />
   if (!selectedAddress) return <Navigate to="/addresses" replace />
   return <Outlet />
