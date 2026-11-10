@@ -8,25 +8,25 @@ import {
 } from '../../src/utils/menuSequence'
 
 describe('MENU_SEQUENCE shape', () => {
-    it('is the 4-stop dashboard line in order (Nhật ký → Tồn kho → Báo cáo → Công thức)', () => {
+    it('is the 4-stop dashboard line in order (Nhật ký → Báo cáo → Tồn kho → Danh mục)', () => {
         expect(MENU_SEQUENCE.map(s => s.key)).toEqual([
-            'sales', 'main', 'report', 'recipes',
+            'sales', 'report', 'main', 'recipes',
         ])
     })
 })
 
 describe('menuStep (bounded line, not a loop)', () => {
     it('steps forward through adjacent stops', () => {
-        expect(menuStep('sales', +1).key).toBe('main')
-        expect(menuStep('main', +1).key).toBe('report')
-        expect(menuStep('report', +1).key).toBe('recipes')
+        expect(menuStep('sales', +1).key).toBe('report')
+        expect(menuStep('report', +1).key).toBe('main')
+        expect(menuStep('main', +1).key).toBe('recipes')
     })
     it('steps backward through adjacent stops', () => {
-        expect(menuStep('recipes', -1).key).toBe('report')
-        expect(menuStep('report', -1).key).toBe('main')
-        expect(menuStep('main', -1).key).toBe('sales')
+        expect(menuStep('recipes', -1).key).toBe('main')
+        expect(menuStep('main', -1).key).toBe('report')
+        expect(menuStep('report', -1).key).toBe('sales')
     })
-    it('returns null past the last stop (goNext from Công thức)', () => {
+    it('returns null past the last stop (goNext from Danh mục)', () => {
         expect(menuStep('recipes', +1)).toBeNull()
     })
     it('returns null before the first stop (goBack from Nhật ký)', () => {
@@ -37,7 +37,7 @@ describe('menuStep (bounded line, not a loop)', () => {
         expect(menuStep(undefined, -1).key).toBe('sales')
     })
     it('resolves sub-tab keys to their page stop', () => {
-        expect(menuStep('expense', +1).key).toBe('main')
+        expect(menuStep('expense', +1).key).toBe('report')
         expect(menuStep('expense', -1)).toBeNull()
     })
 })
@@ -62,26 +62,26 @@ describe('goToMenuStep', () => {
         expect(ctx.navigate).toHaveBeenCalledWith(MENU_BOUNDARY_ROUTE)
     })
 
-    it('orders › goes to /inventory/management with from state', () => {
-        const ctx = makeCtx()
-        goToMenuStep('sales', +1, ctx)
-        expect(ctx.navigate).toHaveBeenCalledWith('/inventory/management', {
-            state: { from: '/pos', wizard: true },
-        })
-    })
-
-    it('inventory › goes to /report/cashflow carrying the date window', () => {
+    it('orders › goes to /report/cashflow carrying the date window', () => {
         const scopeState = { scope: 'week', offset: -1 }
         const ctx = makeCtx({ scopeState })
-        goToMenuStep('main', +1, ctx)
+        goToMenuStep('sales', +1, ctx)
         expect(ctx.navigate).toHaveBeenCalledWith('/report/cashflow', {
             state: { from: '/pos', wizard: true, ...scopeState },
         })
     })
 
-    it('back to /history/sales from inventory navigates with state', () => {
+    it('report › goes to /inventory/management without the date window (inventory is not dated)', () => {
+        const ctx = makeCtx({ scopeState: { scope: 'week', offset: -1 } })
+        goToMenuStep('report', +1, ctx)
+        expect(ctx.navigate).toHaveBeenCalledWith('/inventory/management', {
+            state: { from: '/pos', wizard: true },
+        })
+    })
+
+    it('back to /history/sales from report navigates with state', () => {
         const ctx = makeCtx({ wizard: true })
-        goToMenuStep('main', -1, ctx)
+        goToMenuStep('report', -1, ctx)
         expect(ctx.navigate).toHaveBeenCalledWith('/history/sales', {
             state: { from: '/pos', wizard: true },
         })

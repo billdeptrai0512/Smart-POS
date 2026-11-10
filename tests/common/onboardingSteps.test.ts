@@ -17,8 +17,8 @@ describe('guide nhắc nút bấm khi đã đủ việc', () => {
         const ctx = { ...DEFAULT_ONBOARDING_STATE, recipeRows: [] }
         const inv = STEPS[2]
         const inventory = (patch: Partial<typeof ctx.inventoryProgress>) => inv.items({ ...ctx, inventoryProgress: { ...ctx.inventoryProgress, ...patch } })
-        expect(firstUndone(inventory({}))).toMatch(/chi tiết/)
-        expect(firstUndone(inventory({ usedOpened: true }))).toMatch(/công thức/)
+        expect(firstUndone(inventory({}))).toMatch(/định lượng/)
+        expect(firstUndone(inventory({ usedOpened: true }))).toMatch(/Theo công thức/)
         expect(firstUndone(inventory({ usedOpened: true, theory: 951 }))).toMatch(/951g/)
         expect(firstUndone(inventory({ usedOpened: true, theoryOpened: true }))).toMatch(/cuối kỳ/)
         // nhập luôn mà bỏ qua 2 ô đầu thì không kẹt
