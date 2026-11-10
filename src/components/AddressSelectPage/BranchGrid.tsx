@@ -3,12 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import {
     Pencil, Trash2, ClipboardCopy, MoreVertical, X,
     Coffee, FileText, Package, ChevronRight, Eraser,
-    Banknote, Receipt, Wallet, TrendingUp, ChefHat, Warehouse, Printer, Archive, LayoutGrid, BadgePercent,
-    type LucideIcon,
+    Receipt, TrendingUp, Warehouse, Printer, LayoutGrid,
 } from 'lucide-react'
 import ErrorBanner from '../common/ErrorBanner'
 import Skeleton from '../common/Skeleton'
-import SegmentedControl from '../common/SegmentedControl'
 import { formatVND } from '../../utils'
 import { wipeAddressSalesData } from '../../services/adminService'
 import SubscriptionBadge from './SubscriptionBadge'
@@ -18,10 +16,8 @@ import PrinterIpModal from './PrinterIpModal'
 import WarehouseGroupModal from './WarehouseGroupModal'
 import ConfirmByNameModal from './ConfirmByNameModal'
 import { Dialog } from '../common/ModalShell'
-import { RECIPE_TABS, DISCOUNT_TAB } from '../../constants/menuTabs'
+import { RECIPE_TABS } from '../../constants/menuTabs'
 import type { Address, Row, UUID, WarehouseGroup } from '../../types/domain'
-
-const [OVERALL_TAB, RECIPES_TAB] = RECIPE_TABS
 
 const isManagerRole = (role?: string) => (role === 'manager' || role === 'co-manager') ? 1 : 0
 
@@ -31,28 +27,12 @@ const deltaPct = (cur: number, prev: number) => prev > 0 ? Math.round(((cur - pr
 
 type SubModal = { type: 'rename' | 'printers' | 'delete' | 'backup' | 'wipe' | 'group'; addressId: UUID }
 
-// Tab "Lối tắt": mỗi pill điều hướng tới `path` (bấm là đóng modal), riêng "Kho chung" (không
-// có path) mở sub-modal nhóm kho.
-interface Shortcut { icon: LucideIcon; label: string; tone: string; path?: string; wide?: boolean }
-const SHORTCUTS: { title: string; pills: Shortcut[] }[] = [
-    { title: 'Nhật ký', pills: [
-        { icon: Banknote, label: 'Bán hàng', tone: 'primary', path: '/history/sales' },
-        { icon: Receipt, label: 'Chi phí', tone: 'primary', path: '/history/expense' },
-    ] },
-    { title: 'Báo cáo', pills: [
-        { icon: Wallet, label: 'Dòng tiền', tone: 'success', path: '/report/cashflow' },
-        { icon: TrendingUp, label: 'Lợi nhuận', tone: 'success', path: '/report/revenue' },
-    ] },
-    { title: 'Tồn kho', pills: [
-        { icon: Package, label: 'Kiểm kê', tone: 'primary', path: '/inventory/management' },
-        { icon: Archive, label: 'Lưu trữ', tone: 'primary', path: '/inventory/stocking' },
-        { icon: Warehouse, label: 'Kho chung', tone: 'warning', wide: true },
-    ] },
-    { title: 'Danh mục', pills: [
-        { icon: LayoutGrid, label: OVERALL_TAB.label, tone: 'primary', path: `/category/${OVERALL_TAB.key}` },
-        { icon: ChefHat, label: RECIPES_TAB.label, tone: 'primary', path: `/category/${RECIPES_TAB.key}` },
-        { icon: BadgePercent, label: DISCOUNT_TAB.label, tone: 'primary', path: `/category/${DISCOUNT_TAB.key}`, wide: true },
-    ] },
+// Lối tắt: 1 pill / mục menu, vào trang đầu của mục (tab con chuyển bên trong trang).
+const SHORTCUTS = [
+    { icon: Receipt, label: 'Nhật ký', tone: 'primary', path: '/history/sales' },
+    { icon: TrendingUp, label: 'Báo cáo', tone: 'success', path: '/report/cashflow' },
+    { icon: Package, label: 'Tồn kho', tone: 'primary', path: '/inventory/management' },
+    { icon: LayoutGrid, label: 'Danh mục', tone: 'primary', path: `/category/${RECIPE_TABS[0].key}` },
 ]
 
 interface Props {
@@ -102,7 +82,6 @@ export default function BranchGrid({
     const [subModal, setSubModal] = useState<SubModal | null>(null)
     const closeSubModal = () => setSubModal(null)
     const [expandedActionsId, setExpandedActionsId] = useState<UUID | null>(null) // which card has the 3-action menu open
-    const [actionsTab, setActionsTab] = useState('shortcuts') // tab đang mở trong modal thao tác: 'shortcuts' | 'manage'
     const [actionsScrollFade, setActionsScrollFade] = useState(false) // còn nội dung bên dưới trong modal thao tác?
     const navigate = useNavigate()
 
@@ -208,7 +187,7 @@ export default function BranchGrid({
                                     dù hình tròn hiển thị chỉ 28px. */}
                                 {!isStaff ? (
                                     <button
-                                        onClick={(e) => { e.stopPropagation(); setExpandedActionsId(addr.id); setActionsTab('shortcuts') }}
+                                        onClick={(e) => { e.stopPropagation(); setExpandedActionsId(addr.id) }}
                                         className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full bg-surface-light border border-border/50 shadow-sm text-text-secondary hover:text-text hover:bg-border/40 active:scale-95 transition-all before:absolute before:-inset-2 before:content-['']"
                                         title="Lối tắt & quản lý"
                                         aria-label="Mở menu lối tắt và quản lý"
@@ -249,85 +228,71 @@ export default function BranchGrid({
                                             <X size={16} />
                                         </button>
                                     </div>
-                                    {!isStaff && (
-                                        <div className="px-3 pt-3 pb-2 shrink-0">
-                                            <SegmentedControl
-                                                options={[{ value: 'shortcuts', label: 'Lối tắt' }, { value: 'manage', label: 'Quản lý' }]}
-                                                value={actionsTab}
-                                                onChange={setActionsTab}
-                                                buttonClassName="flex-1 py-2 text-xs uppercase tracking-wider"
-                                            />
-                                        </div>
-                                    )}
                                     <div
-                                        className="overflow-y-auto"
+                                        className="overflow-y-auto px-3 pt-3 pb-5 flex flex-col gap-4"
                                         ref={checkActionsScrollFade}
                                         onScroll={(e) => checkActionsScrollFade(e.currentTarget)}
                                     >
-                                        {!isStaff && actionsTab === 'shortcuts' && (
-                                            <div className="px-3 pt-3 pb-5 flex flex-col gap-4">
-                                                {SHORTCUTS.map(group => (
-                                                    <div key={group.title}>
-                                                        <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">{group.title}</p>
-                                                        <div className="grid grid-cols-2 gap-2">
-                                                            {group.pills.map(p => (
-                                                                <ActionPill
-                                                                    key={p.label}
-                                                                    icon={<p.icon size={16} />}
-                                                                    label={p.label}
-                                                                    tone={p.tone}
-                                                                    className={p.wide ? 'col-span-2' : ''}
-                                                                    onClick={p.path
-                                                                        ? () => { onNavigate(addr, p.path!); setExpandedActionsId(null) }
-                                                                        : () => setSubModal({ type: 'group', addressId: addr.id })}
-                                                                />
-                                                            ))}
-                                                        </div>
-                                                    </div>
+                                        <div>
+                                            <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Lối tắt</p>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {SHORTCUTS.map(p => (
+                                                    <ActionPill
+                                                        key={p.label}
+                                                        icon={<p.icon size={16} />}
+                                                        label={p.label}
+                                                        tone={p.tone}
+                                                        onClick={() => { onNavigate(addr, p.path); setExpandedActionsId(null) }}
+                                                    />
                                                 ))}
                                             </div>
-                                        )}
+                                        </div>
 
-                                        {actionsTab === 'manage' && (
-                                            <div className="px-3 pt-3 pb-5">
-                                                <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-wider text-text-secondary">Quản lý</p>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <ActionPill
+                                                    icon={<Warehouse size={16} />}
+                                                    label="Kho chung"
+                                                    tone="warning"
+                                                    onClick={() => setSubModal({ type: 'group', addressId: addr.id })}
+                                                />
+                                                <ActionPill
+                                                    icon={<ClipboardCopy size={16} />}
+                                                    label="Nhân bản"
+                                                    tone="primary"
+                                                    onClick={() => setSubModal({ type: 'backup', addressId: addr.id })}
+                                                />
+                                                <ActionPill
+                                                    icon={<Pencil size={16} />}
+                                                    label="Đổi tên"
+                                                    tone="primary"
+                                                    onClick={() => { setSubModal({ type: 'rename', addressId: addr.id }); setError('') }}
+                                                />
+                                                {/* Chỉ dùng cho app native (Capacitor) — máy in ESC/POS qua mạng, xem
+                                                    escposBitmap.ts. Web bỏ qua, vẫn window.print() như cũ. */}
+                                                <ActionPill
+                                                    icon={<Printer size={16} />}
+                                                    label="Máy in"
+                                                    tone={addr.counter_printer_ip || addr.kitchen_printer_ip ? 'success' : 'primary'}
+                                                    onClick={() => { setSubModal({ type: 'printers', addressId: addr.id }); setError('') }}
+                                                />
+                                                {isAdmin && (
                                                     <ActionPill
-                                                        icon={<ClipboardCopy size={16} />}
-                                                        label="Nhân bản"
-                                                        tone="primary"
-                                                        onClick={() => setSubModal({ type: 'backup', addressId: addr.id })}
-                                                    />
-                                                    <ActionPill
-                                                        icon={<Pencil size={16} />}
-                                                        label="Đổi tên"
-                                                        tone="primary"
-                                                        onClick={() => { setSubModal({ type: 'rename', addressId: addr.id }); setError('') }}
-                                                    />
-                                                    {/* Chỉ dùng cho app native (Capacitor) — máy in ESC/POS qua mạng, xem
-                                                        escposBitmap.ts. Web bỏ qua, vẫn window.print() như cũ. */}
-                                                    <ActionPill
-                                                        icon={<Printer size={16} />}
-                                                        label="Máy in"
-                                                        tone={addr.counter_printer_ip || addr.kitchen_printer_ip ? 'success' : 'primary'}
-                                                        onClick={() => { setSubModal({ type: 'printers', addressId: addr.id }); setError('') }}
-                                                    />
-                                                    {isAdmin && (
-                                                        <ActionPill
-                                                            icon={<Eraser size={16} />}
-                                                            label="Reset dữ liệu"
-                                                            tone="danger"
-                                                            onClick={() => { setSubModal({ type: 'wipe', addressId: addr.id }); setError('') }}
-                                                        />
-                                                    )}
-                                                    <ActionPill
-                                                        icon={<Trash2 size={16} />}
-                                                        label="Xóa địa chỉ"
+                                                        icon={<Eraser size={16} />}
+                                                        label="Reset dữ liệu"
                                                         tone="danger"
-                                                        onClick={() => { setSubModal({ type: 'delete', addressId: addr.id }); setError('') }}
+                                                        onClick={() => { setSubModal({ type: 'wipe', addressId: addr.id }); setError('') }}
                                                     />
-                                                </div>
+                                                )}
+                                                <ActionPill
+                                                    icon={<Trash2 size={16} />}
+                                                    label="Xóa địa chỉ"
+                                                    tone="danger"
+                                                    onClick={() => { setSubModal({ type: 'delete', addressId: addr.id }); setError('') }}
+                                                />
                                             </div>
-                                        )}
+                                        </div>
                                     </div>
                                     {actionsScrollFade && (
                                         <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-surface to-transparent" />
@@ -479,11 +444,11 @@ const PILL_TONES: Record<string, string> = {
     warning: 'bg-warning/10 text-warning',
     danger: 'bg-danger/10 text-danger',
 }
-function ActionPill({ icon, label, tone = 'primary', onClick, className = '' }: { icon: ReactNode; label: string; tone?: string; onClick?: () => void; className?: string }) {
+function ActionPill({ icon, label, tone = 'primary', onClick }: { icon: ReactNode; label: string; tone?: string; onClick?: () => void }) {
     return (
         <button
             onClick={onClick}
-            className={`flex flex-col items-center gap-1.5 px-2 py-3 rounded-[14px] bg-surface-light border border-border/50 hover:border-primary/40 hover:bg-border/20 active:scale-95 transition-all text-center min-w-0 ${className}`}
+            className={`flex flex-col items-center gap-1.5 px-2 py-3 rounded-[14px] bg-surface-light border border-border/50 hover:border-primary/40 hover:bg-border/20 active:scale-95 transition-all text-center min-w-0`}
         >
             <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${PILL_TONES[tone]}`}>
                 {icon}
