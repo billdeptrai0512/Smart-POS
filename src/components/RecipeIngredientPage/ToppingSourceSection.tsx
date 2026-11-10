@@ -59,7 +59,7 @@ export default function ToppingSourceSection({ source, options, unitOf, canEdit,
                 )}
             </div>
             <p className="text-[12px] text-text-dim">
-                {source ? 'Mỗi phần bán trừ đúng lượng này từ nguồn.' : 'Chọn nguyên liệu mà topping này lấy từ kho. Topping tự nấu thì thêm từ 2 nguyên liệu ở trang topping sau khi tạo.'}
+                {source ? 'Mỗi phần bán trừ đúng lượng này từ nguồn.' : 'Chọn nguyên liệu / bán thành phẩm mà topping lấy từ kho. Topping tự nấu: tạo bán thành phẩm trước rồi chọn ở đây.'}
             </p>
         </section>
     )

@@ -24,7 +24,7 @@ import ProductCard from '../components/RecipeMenuPage/ProductCard'
 import CreateProductForm from '../components/RecipeMenuPage/CreateProductForm'
 import CreateBatchForm from '../components/RecipeMenuPage/CreateBatchForm'
 import CreateToppingForm from '../components/RecipeMenuPage/CreateToppingForm'
-import { insertTopping, updateToppingSource, fetchToppingIngredients, type ToppingSource } from '../services/toppingService'
+import { insertTopping, fetchToppingIngredients, type ToppingSource } from '../services/toppingService'
 import { upsertRecipes } from '../services/recipeService'
 import { goToMenuStep } from '../utils/menuSequence'
 import { useTabRoute } from '../hooks/useTabRoute'
@@ -237,10 +237,13 @@ export default function RecipeMenuPage() {
         showToast('Đã tạo thành phẩm', 'success')
     })
 
-    // insertTopping tự đăng ký luôn nguyên liệu cùng tên để topping hiện ở Kiểm kê.
+    // Có nguồn → topping chỉ trỏ vào nguồn, không tạo tồn riêng. Không nguồn (mua sẵn, đếm theo phần) → insertTopping tạo
+    // tồn cùng tên và topping trỏ vào chính nó 1 đv/phần: mọi topping bán ra đều trừ đúng 1 nguồn.
     const handleCreateTopping = (name: string, price: number, unit: string, source: ToppingSource | null) => withSaving('Tạo topping', async () => {
-        const topping = await insertTopping(name, price, addressId, unit)
-        if (source) await updateToppingSource(topping.id, source)
+        const key = normalizeIngredientKey(name)
+        // Trùng tên nguyên liệu / thành phẩm có sẵn → dùng luôn dòng đó, không ghi đè giá vốn.
+        if (!source && !(key in ingredientCosts)) await upsertIngredientCost(key, 0, addressId, unit)
+        await insertTopping(name, price, addressId, source ?? { ingredient: key, amount: 1 })
         refreshProducts?.()
         setCreateOpen(false)
         showToast('Đã tạo topping', 'success')

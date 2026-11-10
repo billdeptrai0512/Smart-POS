@@ -1,7 +1,5 @@
 import { supabase } from '../lib/supabaseClient'
 import * as localRepo from './localRepository'
-import { upsertIngredientCost } from './ingredientCostService'
-import { normalizeIngredientKey } from '../utils/ingredients'
 import type { UUID, Row, CartTopping } from '../types/domain'
 import type { ExtraIngredients } from '../utils/inventory'
 
@@ -25,14 +23,11 @@ export async function fetchToppings(addressId: UUID | null): Promise<CartTopping
     return data || []
 }
 
-// Tạo topping mới + đăng ký luôn 1 dòng ingredient_costs cùng tên (normalize key như mọi
-// nguyên liệu khác) để nó xuất hiện ngay trong màn kiểm kê, không cần thao tác gì thêm.
-export async function insertTopping(name: string, price: number, addressId: UUID | null, unit: string = 'đv') {
-    const ingredientKey = normalizeIngredientKey(name)
-    await upsertIngredientCost(ingredientKey, 0, addressId, unit)
-
+// Tạo topping trỏ vào 1 nguồn tồn kho (không tự tạo tồn riêng — dòng tồn do người gọi lo).
+export async function insertTopping(name: string, price: number, addressId: UUID | null, source: ToppingSource | null = null) {
     if (localRepo.isGuest()) return localRepo.insertLocalTopping({ name, price, address_id: addressId })
     const payload: Row = { name, price }
+    if (source) { payload.source_ingredient = source.ingredient; payload.source_amount = source.amount }
     if (addressId) payload.address_id = addressId
 
     let maxQuery = supabase.from('toppings').select('sort_order')

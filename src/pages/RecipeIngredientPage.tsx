@@ -33,7 +33,7 @@ import { useToast } from '../hooks/useToast'
 import { useSavingAction } from '../hooks/useSavingAction'
 import { useToppingDetail } from '../hooks/useToppingDetail'
 import MenuTabsBar from '../components/common/MenuTabsBar'
-import ToppingBatchSection from '../components/RecipeIngredientPage/ToppingBatchSection'
+import ToppingSourceSection from '../components/RecipeIngredientPage/ToppingSourceSection'
 import ProductLinksSection from '../components/common/ProductLinksSection'
 import { ICON_BTN_DANGER } from '../components/common/ModalShell'
 import { capitalizeWords } from '../utils'
@@ -392,34 +392,13 @@ export default function RecipeIngredientPage() {
                     <MenuTabsBar tabs={[{ key: 'detail', label: 'Chi tiết' }, { key: 'links', label: 'Món áp dụng' }]} activeTab={toppingTab} onSelect={setToppingTab} />
                 </EditableEntityHeader>
                 <main className="flex-1 overflow-y-auto px-4 max-[329px]:px-2 py-4 space-y-3 bg-bg">
-                    {toppingTab === 'detail' && <>
-                        <FastIngredientFill
-                            entries={td.rows}
-                            dbIngredients={dbIngredients.filter(k => k !== td.ownKey)}
-                            getUnit={(k) => getIngredientUnit(k, ingredientUnits?.[k], ingredientUnits)}
-                            categoryOf={categoryOf}
-                            groups={ingredientGroups}
-                            groupIdOf={groupIdOf}
-                            ingredientCosts={ingredientCosts}
-                            canEdit={canEdit}
-                            showCost
-                            onSetAmount={td.setAmount}
-                            onRemove={td.remove}
-                            onAddCustom={td.addCustom}
-                        />
-                        {!isGuest && td.rows.length >= 2 && <ToppingBatchSection
-                            yieldValue={td.cook.yield}
-                            serving={td.cook.serving}
-                            unit={getIngredientUnit(td.ownKey, ingredientUnits?.[td.ownKey], ingredientUnits)}
-                            canEdit={canEdit}
-                            onYield={td.cook.setYield}
-                            onServing={td.cook.setServing}
-                            onCommit={td.cook.commit}
-                        />}
-                        <p className="text-[12px] text-text-dim">
-                            {td.rows.length === 0 ? 'Thêm nguyên liệu mà topping này lấy từ kho.' : td.rows.length === 1 ? 'Mỗi phần bán trừ đúng lượng này từ kho.' : 'Từ 2 nguyên liệu: topping tự nấu theo mẻ, có tồn kho riêng và hiện ở màn Sản xuất.'}
-                        </p>
-                    </>}
+                    {toppingTab === 'detail' && !isGuest && <ToppingSourceSection
+                        source={td.source}
+                        options={dbIngredients}
+                        unitOf={(k) => getIngredientUnit(k, ingredientUnits?.[k], ingredientUnits)}
+                        canEdit={canEdit}
+                        onSave={td.saveSource}
+                    />}
                     {toppingTab === 'links' && <ProductLinksSection links={td.links} products={products} canEdit={canEdit} saving={saving} onSave={td.saveLinks} />}
                 </main>
                 {saving && (

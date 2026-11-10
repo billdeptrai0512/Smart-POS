@@ -512,6 +512,13 @@ const CONCURRENCY = 8
 // guest/local mode. Sheet trùng tên (Sản phẩm/Nguyên liệu/Topping/Tùy chọn thêm) đi theo nhánh
 // update riêng — cùng map tên→id với nhánh tạo mới nên bước sau (Công thức...) không cần biết
 // dòng nào mới/cũ. Mọi so khớp tên dùng chung normKey (NFC + lowercase) với resolveImportPlan.
+// Dòng tồn kho của topping mới: có "Nguồn tồn kho" → chính nguồn đó (đã có sẵn, RPC chèn ON CONFLICT DO NOTHING nên
+// không sinh dòng trùng tên topping); không nguồn → dòng cùng tên topping như cũ.
+// ponytail: mượn ingredientKey thay vì sửa RPC bulk_import_menu (khỏi migration); RPC đổi cách chèn thì xem lại chỗ này.
+function toppingStockKey(plan: ImportPlan, toppingName: string): string {
+    return plan.toppingSources.find(s => normKey(s.toppingName) === normKey(toppingName))?.ingredient ?? normalizeIngredientKey(toppingName)
+}
+
 async function commitImportPlanSequential(plan: ImportPlan, addressId: UUID | null, existing: ExistingData) {
     const productByName = new Map(existing.products.map(p => [normKey(p.name), p.id]))
     const toppingByName = new Map(existing.toppings.map(t => [normKey(t.name), t.id]))
@@ -529,7 +536,9 @@ async function commitImportPlanSequential(plan: ImportPlan, addressId: UUID | nu
     })
 
     await runWithConcurrency(plan.toppings, CONCURRENCY, async (t) => {
-        const row = await insertTopping(t.name, t.price, addressId, t.unit)
+        const key = normalizeIngredientKey(t.name)
+        if (toppingStockKey(plan, t.name) === key) await upsertIngredientCost(key, 0, addressId, t.unit) // có nguồn → không tạo tồn riêng
+        const row = await insertTopping(t.name, t.price, addressId)
         toppingByName.set(normKey(t.name), row.id)
     })
     await runWithConcurrency(plan.toppingUpdates, CONCURRENCY, async (t) => {
@@ -649,7 +658,7 @@ export function buildBulkPayload(plan: ImportPlan, existing: ExistingData) {
     const newToppings = plan.toppings.map(t => {
         const id = crypto.randomUUID()
         toppingId.set(normKey(t.name), id)
-        return { id, name: t.name, price: t.price, unit: t.unit, ingredientKey: normalizeIngredientKey(t.name) }
+        return { id, name: t.name, price: t.price, unit: t.unit, ingredientKey: toppingStockKey(plan, t.name) }
     })
     const extraId = new Map<string, string>() // `${productId}|${normKey(tên)}`
     for (const ex of existing.extras) {
