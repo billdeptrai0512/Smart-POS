@@ -2,7 +2,7 @@
 // Nguồn: src/utils/prepToday.ts
 
 import { describe, it, expect } from 'vitest'
-import { buildPrepTodayList, buildDepletedList, mergePrepItems, isPrepDone, buildWarehousePrepList, buildTodayBoughtMap, buildGroupPrepPlan } from '../../src/utils/prepToday'
+import { buildPrepTodayList, buildDepletedList, mergePrepItems, isPrepDone, buildTodayBoughtMap, buildGroupPrepPlan } from '../../src/utils/prepToday'
 
 const coffee = { ingredient: 'cà_phê', unit: 'g', pack_unit: 'bịch', pack_size: 1000, tare_weight: 0 }
 const base = { ingredientsList: [coffee], openingInputs: {}, openingStock: { cà_phê: 100 }, warehouseStocks: { cà_phê: 5000 }, effectiveWarehouseStocks: { cà_phê: 5000 }, restockInputs: {}, skipped: {} }
@@ -109,71 +109,6 @@ describe('buildTodayBoughtMap', () => {
             { is_refill: false, metadata: { ingredient: 'cà_phê', qty: 9 } },
         ])
         expect(out).toEqual({ cà_phê: 1500 })
-    })
-})
-
-describe('buildWarehousePrepList — món đã mua đủ giữ lại làm dòng xong', () => {
-    // quầy đã đếm 300, mai 2500 → rút 2200 = mức cần có ở kho. Kho 1000 + mua 2000 = 3000 → hết thiếu.
-    const args = { ...base, ingredientsList: [coffee], inventoryInputs: { cà_phê: '300' }, usedMap: {}, nextDowUsedMap: { cà_phê: 2500 } }
-    it('mua đủ → vẫn còn trong danh sách với done: true và lượng đã mua', () => {
-        const out = buildWarehousePrepList({ ...args, effectiveWarehouseStocks: { cà_phê: 3000 }, todayBoughtMap: { cà_phê: 2000 } })
-        expect(out).toHaveLength(1)
-        expect(out[0]).toMatchObject({ ingredient: 'cà_phê', done: true, boughtToday: 2000, packSize: 1000, warehouse: 3000, have: 300, minStock: 0 })
-    })
-    it('mua thiếu → vẫn là món chờ (không done), kèm lượng đã mua', () => {
-        const out = buildWarehousePrepList({ ...args, effectiveWarehouseStocks: { cà_phê: 2000 }, todayBoughtMap: { cà_phê: 1000 } })
-        expect(out[0].done).toBeUndefined()
-        expect(out[0]).toMatchObject({ need: 200, boughtToday: 1000 })
-    })
-    it('nhập kho tình cờ cho món vốn không thiếu → không vào danh sách', () => {
-        // kho 5000 đã đủ kể cả khi chưa mua 1000 (5000 − 1000 = 4000 ≥ 2200)
-        expect(buildWarehousePrepList({ ...args, effectiveWarehouseStocks: { cà_phê: 5000 }, todayBoughtMap: { cà_phê: 1000 } })).toEqual([])
-    })
-})
-
-describe('buildWarehousePrepList (Bổ sung tồn kho — cho mai)', () => {
-    const args = { ingredientsList: [{ ...coffee, min_stock: 0 }], effectiveWarehouseStocks: { cà_phê: 2000 }, restockInputs: {}, inventoryInputs: {}, openingInputs: {}, openingStock: {}, usedMap: {}, nextDowUsedMap: {}, todayBoughtMap: {} }
-
-    it('tổng tồn = (kho − nhập thêm) + quầy đã đếm; thiếu so với dự báo mai → mua theo bịch', () => {
-        const out = buildWarehousePrepList({ ...args, restockInputs: { cà_phê: '500' }, inventoryInputs: { cà_phê: '300' }, nextDowUsedMap: { cà_phê: 2500 } })
-        // tổng = 2000 − 500 + 300 = 1800; cần 2500 − 1800 = 700 → 1 bịch
-        expect(out).toHaveLength(1)
-        expect(out[0]).toMatchObject({ need: 700, needPacks: 1, warehouse: 1500, have: 300 })
-    })
-    it('chưa đếm Cuối kỳ → ước theo Lý thuyết (Đầu kỳ + Nhập thêm − Sử dụng)', () => {
-        const out = buildWarehousePrepList({ ...args, openingStock: { cà_phê: 400 }, usedMap: { cà_phê: 100 }, nextDowUsedMap: { cà_phê: 5000 } })
-        expect(out[0]).toMatchObject({ have: 300, need: 2700 }) // tổng 2000 + 300
-    })
-    it('đủ hàng cho mai (hoặc ≥ min_stock) → không vào danh sách', () => {
-        expect(buildWarehousePrepList({ ...args, nextDowUsedMap: { cà_phê: 1500 } })).toEqual([])
-    })
-    it('min_stock là sàn của KHO: kho thấp hơn ngưỡng → mua phần thiếu, kèm minStock', () => {
-        const out = buildWarehousePrepList({ ...args, ingredientsList: [{ ...coffee, min_stock: 3000 }] })
-        expect(out[0]).toMatchObject({ need: 1000, minStock: 3000 })
-    })
-    it('min_stock là sàn của kho, KHÔNG cộng chồng lên phần rút mai: mua theo mức lớn hơn', () => {
-        // kho 1000, quầy 300, mai cần 1500 → rút 1200 > sàn 1000 → cần kho 1200 → mua 200 (không phải 1200)
-        const rut = buildWarehousePrepList({ ...args, effectiveWarehouseStocks: { cà_phê: 1000 }, ingredientsList: [{ ...coffee, min_stock: 1000 }], inventoryInputs: { cà_phê: '300' }, nextDowUsedMap: { cà_phê: 1500 } })
-        expect(rut[0]).toMatchObject({ need: 200, warehouse: 1000, have: 300, minStock: 1000 })
-        // kho 500, quầy 300, mai cần 400 → rút 100 < sàn 1000 → sàn thắng → cần kho 1000 → mua 500
-        const san = buildWarehousePrepList({ ...args, effectiveWarehouseStocks: { cà_phê: 500 }, ingredientsList: [{ ...coffee, min_stock: 1000 }], inventoryInputs: { cà_phê: '300' }, nextDowUsedMap: { cà_phê: 400 } })
-        expect(san[0]).toMatchObject({ need: 500, minStock: 1000 })
-    })
-    it('kho cạn, sàn thấp hơn phần rút mai → mua đúng phần rút, vẫn mang minStock để card hiển thị', () => {
-        const out = buildWarehousePrepList({ ...args, effectiveWarehouseStocks: { cà_phê: 0 }, ingredientsList: [{ ...coffee, min_stock: 100 }], inventoryInputs: { cà_phê: '300' }, nextDowUsedMap: { cà_phê: 1000 } })
-        expect(out[0]).toMatchObject({ need: 700, minStock: 100 }) // rút 700 > sàn 100
-    })
-    it('item mang forecast = max(dùng hôm nay, cùng thứ tuần trước) để card giải thích số mua', () => {
-        const out = buildWarehousePrepList({ ...args, usedMap: { cà_phê: 300 }, nextDowUsedMap: { cà_phê: 2500 } })
-        expect(out[0].forecast).toBe(2500)
-    })
-    it('min_counter_stock nâng mức rút mai khi dự báo thấp', () => {
-        // quầy 100, sàn quầy 800 → rút 700; kho 500 → thiếu 200
-        const out = buildWarehousePrepList({ ...args, effectiveWarehouseStocks: { cà_phê: 500 }, ingredientsList: [{ ...coffee, min_counter_stock: 800 }], inventoryInputs: { cà_phê: '100' } })
-        expect(out[0].need).toBe(200)
-    })
-    it('kho đủ rút mai và đủ sàn → không vào danh sách', () => {
-        expect(buildWarehousePrepList({ ...args, ingredientsList: [{ ...coffee, min_stock: 1500 }], nextDowUsedMap: { cà_phê: 400 } })).toEqual([])
     })
 })
 

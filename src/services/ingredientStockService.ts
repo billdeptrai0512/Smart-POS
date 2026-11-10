@@ -75,11 +75,13 @@ async function fetchIngredientStocksUncached(addressId: UUID | null) {
 // warehouse_stock (from fetchIngredientStocks) to derive:
 //   warehouse_end_of_today   = current warehouse_stock
 //   warehouse_start_of_today = warehouse_end + today_restock − today_refill
+type DailyCtx = { today_refill: number; today_restock: number; confirmed_value?: number; confirmed_value_at?: string }
+
 export async function fetchIngredientDailyContext(addressId: UUID | null) {
     const startISO = startOfDayVN().toISOString()
     if (localRepo.isGuest()) {
         const startMs = new Date(startISO).getTime()
-        const result: Record<string, { today_refill: number; today_restock: number }> = {}
+        const result: Record<string, DailyCtx> = {}
         const expenses = localRepo.fetchAllLocalExpenses(addressId)
         for (const e of expenses) {
             if (!e.is_refill || !e.metadata?.ingredient) continue
@@ -105,7 +107,7 @@ export async function fetchIngredientDailyContext(addressId: UUID | null) {
         apply(supabase.from('expenses').select('metadata')).eq('is_refill', true).gte('created_at', startISO),
         apply(supabase.from('shift_closings').select('inventory_report')).gte('created_at', startISO)
     ])
-    const result: Record<string, { today_refill: number; today_restock: number }> = {}
+    const result: Record<string, DailyCtx> = {}
     for (const e of refillsRes.data || []) {
         const ing = e.metadata?.ingredient
         if (!ing) continue
@@ -117,6 +119,11 @@ export async function fetchIngredientDailyContext(addressId: UUID | null) {
             if (!item.ingredient) continue
             result[item.ingredient] = result[item.ingredient] || { today_refill: 0, today_restock: 0 }
             result[item.ingredient].today_restock += Number(item.restock || 0)
+            // Số + giờ lần xác nhận kiểm kê gần nhất hôm nay (set_inventory_confirm) — trang chi tiết NVL hiện theo số này.
+            if (item.confirmed_value != null) {
+                result[item.ingredient].confirmed_value = Number(item.confirmed_value)
+                result[item.ingredient].confirmed_value_at = item.confirmed_value_at
+            }
         }
     }
     return result

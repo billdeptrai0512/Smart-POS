@@ -182,7 +182,7 @@ export default function BranchGrid({
                                         {hasStats && (
                                             <>
                                                 <div className="flex items-baseline gap-1.5">
-                                                    <span className="text-text-secondary">Hôm nay bán:</span>
+                                                    <span className="text-text-secondary">Bán:</span>
                                                     <span className="text-text">{cups} ly</span>
                                                     <Delta pct={deltaPct(cups, prevCupsMap[addr.id] || 0)} />
                                                 </div>

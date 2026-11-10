@@ -7,19 +7,18 @@ import { useHistory } from '../../contexts/HistoryContext'
 import { useToast } from '../../hooks/useToast'
 import { useSavingAction } from '../../hooks/useSavingAction'
 import { useProducts } from '../../contexts/ProductContext'
-import { useWarehousePrep } from '../../hooks/usePrepNotice'
-import { processIngredientRestock, recordInvoicePayment } from '../../services/orderService'
-import { useCashClosedToday } from '../../hooks/useCashClosedToday'
-import { fetchIngredientDebts, type IngredientDebt } from '../../services/expenseService'
+import { useGroupPrep } from '../../hooks/useGroupPrep'
+import { recordInvoicePayment } from '../../services/orderService'
+import { fetchIngredientDebts, fetchTodayExpenses, type IngredientDebt } from '../../services/expenseService'
+import type { UsageMap } from '../../utils/inventory'
+import { buildHubBuyItems } from '../../utils/hubBuy'
+import { buildTodayBoughtMap } from '../../utils/prepToday'
 import { dateStringVN } from '../../utils/dateVN'
 import { formatVND } from '../../utils/money'
-import { getIngredientUnit, ingredientLabel } from '../../utils/ingredients'
-import { pack2Of } from '../../utils/inventory'
-import HubBuyNotice from './HubBuyNotice'
+import { ingredientLabel } from '../../utils/ingredients'
+import HubBuyNotice, { HubBuyBody } from './HubBuyNotice'
 import NoticeBar from '../common/NoticeBar'
 import NoticeSheet from '../common/NoticeSheet'
-import ShiftPrepCard from '../DailyReportPage/ShiftPrepCard'
-import RestockModal, { type RestockPayload } from './RestockModal'
 import InvoicePaymentSheet, { type InvoicePayment } from './InvoicePaymentSheet'
 import Toast from '../POSPage/Toast'
 import type { Row } from '../../types/domain'
@@ -49,22 +48,32 @@ export default function WarehousePrepNotice({ onRestocked, onOpenIngredient }: P
     if (!((isManager || isAdmin) && !isGuest && isOnline && addressId) || warehouseRole === 'member' || warehouseRole === 'pending') return null
     return warehouseRole === 'hub'
         ? <HubBuyNotice onRestocked={onRestocked} />
-        : <Notice addressId={addressId} onRestocked={onRestocked} onOpenIngredient={onOpenIngredient} />
+        : <Notice key={addressId} addressId={addressId} onRestocked={onRestocked} onOpenIngredient={onOpenIngredient} />
 }
 
 function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressId: string }) {
     const { profile } = useAuth()
-    const { ingredientUnits, refreshProducts } = useProducts()
+    const { refreshProducts } = useProducts()
     const { refreshTodayExpenses } = useHistory()
-    const { items, ready, ingredientsList, warehouseStocks, reload, toast } = useWarehousePrep()
+    // Cùng đường tính với dải "Việc cần làm" ở /addresses (useGroupPrep + buildHubBuyItems) → hai nơi luôn khớp.
+    const prep = useGroupPrep([{ id: addressId, name: '' }], true)
+    // "Đã mua hôm nay" đọc thẳng theo địa chỉ (context lịch sử chỉ có số liệu khi trang nào đó tải nó).
+    const [bought, setBought] = useState<UsageMap>() // undefined = chưa đọc xong: chưa tính để số đếm khỏi nhảy (món đã mua đủ chỉ có sau khi đọc)
+    const loadBought = useCallback(
+        () => fetchTodayExpenses(addressId).then(e => setBought(buildTodayBoughtMap(e))).catch(err => { console.error('fetchTodayExpenses', err); setBought(b => b ?? {}) }),
+        [addressId])
+    useEffect(() => { loadBought() }, [loadBought])
+    const ready = !!prep.plan && !!bought
+    const items = ready ? buildHubBuyItems(prep, bought, true) : []
     // Món đã mua đủ (done) vẫn nằm trong danh sách → đếm tiến độ "đã mua / tổng", mẫu số đứng yên suốt ngày.
     const total = items.length
     const doneCount = items.filter(it => it.done).length
     const [debts, setDebts] = useState<IngredientDebt[]>(() => debtSnapshots.get(addressId) ?? [])
-    const progress = total > 0 ? `${doneCount}/${total}` : debts.length // chỉ còn nợ (không món cần mua) → đếm số NVL nợ
+    // Chỉ còn nợ (không món cần mua) → đếm số NVL nợ; tính mua bị lỗi mà không có nợ → "!" để dải không biến mất im lặng (mở ra có nút Thử lại).
+    const progress = total > 0 ? `${doneCount}/${total}` : debts.length || (prep.error ? '!' : 0)
+    const show = total > 0 || debts.length > 0 || !!prep.error
     const [open, setOpen] = useState(reopenSheet)
     useEffect(() => { reopenSheet = false }, [])
-    const [restock, setRestock] = useState<{ ingredient: string; qty: number | null } | null>(null)
     const loadDebts = useCallback(
         () => fetchIngredientDebts(addressId).then(d => { debtSnapshots.set(addressId, d); setDebts(d) }).catch(err => console.error('fetchIngredientDebts', err)),
         [addressId])
@@ -80,26 +89,21 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
         showToast('Đã ghi nhận thanh toán', 'success')
     })
 
-    // Phân loại dòng tiền đúng (trước/sau chốt két) — refetch mỗi lần mở form nhập kho.
-    const cashClosedToday = useCashClosedToday(addressId, !!restock)
-
-    if (total === 0 && debts.length === 0 && !open && !restock) return null
-    const cfg = restock && (ingredientsList || []).find(i => i.ingredient === restock.ingredient)
+    if (!show && !open) return null
 
     return (
         <>
-            {(total > 0 || debts.length > 0) && (
+            {show && (
                 <NoticeBar
                     icon={<Package size={15} className="text-primary shrink-0" />}
                     label="Bổ sung tồn kho"
                     count={progress}
-                    onClick={ready ? () => setOpen(true) : undefined} // số từ ảnh chụp: chờ tính xong mới mở form nhập kho
+                    onClick={() => setOpen(true)} // chưa xong / lỗi: HubBuyBody tự hiện khung chờ / nút Thử lại
                 />
             )}
-            <Toast toast={toast} />
             <Toast toast={payToast} />
 
-            {open && !restock && !payInvoice && (ready || total > 0) && (
+            {open && !payInvoice && (
                 <NoticeSheet
                     icon={<Package size={18} className="text-primary shrink-0" />}
                     title="Bổ sung tồn kho"
@@ -127,14 +131,13 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
                             {total > 0 && <SectionHeading tone="neutral">Cần mua</SectionHeading>}
                         </>
                     )}
-                    <ShiftPrepCard
-                        packVerb="Mua"
-                        haveLabel="Tồn quầy cuối ca"
-                        emptyTitle="Kho tổng đủ cho mai!"
-                        emptyHint="Không cần đi chợ đắp thêm cho ngày mai."
-                        items={items}
-                        onOpen={onOpenIngredient && (ingredient => { reopenSheet = true; onOpenIngredient(ingredient) })}
-                        onRestock={(ingredient, qty) => setRestock({ ingredient, qty: qty > 0 ? qty : null })}
+                    <HubBuyBody
+                        addressId={addressId}
+                        prep={prep}
+                        bought={bought}
+                        minAsFloor
+                        onOpenIngredient={onOpenIngredient && (ingredient => { reopenSheet = true; onOpenIngredient(ingredient) })}
+                        onAfterRestock={() => Promise.all([refreshProducts?.(), refreshTodayExpenses?.(), onRestocked?.(), loadDebts(), loadBought()])}
                     />
                 </NoticeSheet>
             )}
@@ -143,28 +146,6 @@ function Notice({ addressId, onRestocked, onOpenIngredient }: Props & { addressI
                 <InvoicePaymentSheet invoice={payInvoice} saving={saving} onClose={() => setPayInvoice(null)} onConfirm={handlePay} />
             )}
 
-            {restock && (
-                <RestockModal
-                    ingredient={restock.ingredient}
-                    unit={getIngredientUnit(restock.ingredient, ingredientUnits[restock.ingredient])}
-                    packSize={cfg?.pack_size}
-                    packUnit={cfg?.pack_unit}
-                    pack2={pack2Of(cfg)}
-                    initialQty={restock.qty}
-                    cashClosedToday={cashClosedToday}
-                    onClose={() => setRestock(null)}
-                    onConfirm={async ({ ingredient: ing, qty, subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate }: RestockPayload) => {
-                        const wh = (warehouseStocks || {})[ing]
-                        const result = await processIngredientRestock(addressId, ing, qty, profile?.name ?? null, {
-                            subtotal, discount, extraCost, paid, paymentMethod, cashPhase, purchaseDate,
-                            ...(wh != null ? { beforeStock: wh } : {}),
-                        })
-                        // Kho đổi → tươi lại: danh sách của hook, context sản phẩm/chi phí, và list tồn của trang cha.
-                        await Promise.all([reload(), refreshProducts?.(), refreshTodayExpenses?.(), onRestocked?.(), loadDebts()])
-                        return result
-                    }}
-                />
-            )}
         </>
     )
 }

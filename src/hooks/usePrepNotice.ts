@@ -11,17 +11,17 @@ import { getPendingOrders } from './useOfflineSync'
 import { calculateEstimatedConsumption, orderItemsOf, isLiveOrder, forecastFromWeeks, r1 } from '../utils/inventory'
 import {
     buildPrepTodayList, buildDepletedList, type PrepConfirmed, mergePrepItems, isPrepDone, isPrepFilled,
-    buildWarehousePrepList, buildTodayBoughtMap, HISTORY_OFFSETS_TODAY, HISTORY_OFFSETS_TOMORROW, RECENT_OFFSETS_TODAY, RECENT_OFFSETS_TOMORROW, type SentMap,
+    HISTORY_OFFSETS_TODAY, RECENT_OFFSETS_TODAY, type SentMap,
 } from '../utils/prepToday'
 import { ingredientLabel } from '../utils/ingredients'
 import { productionUsage } from '../utils/production'
 import { isSameDayVN, dateStringVN } from '../utils/dateVN'
 import type { Row } from '../types/domain'
 
-// Notice dữ liệu ở đỉnh /pos ("Chuẩn bị hôm nay") và /inventory ("Bổ sung tồn kho"): danh sách tính
+// Notice dữ liệu ở đỉnh /pos ("Chuẩn bị hôm nay") và /inventory ("Soạn cho mai"; "Bổ sung tồn kho" tính ở WarehousePrepNotice): danh sách tính
 // TRỰC TIẾP theo đơn đang bán, ghi xuống qua đúng đường của /report (useShiftInventoryState.
 // pushInventory — merge RPC theo delta, Realtime) nên 2 máy không đè nhau. Mỗi hook chỉ mount ở trang
-// của mình — cùng lúc không bao giờ có 2 instance (3 trang là 3 route khác nhau).
+// của mình — cùng lúc không bao giờ có 2 instance (các trang là route khác nhau).
 
 // Ảnh chụp kết quả tính gần nhất theo (loại, địa chỉ, ngày). Vào lại trang thì dải hiện NGAY từ ảnh chụp
 // (stale-while-revalidate) thay vì đợi ~8 request mới có số — dải khỏi nháy vào/ra và khỏi đẩy nội dung trang xuống
@@ -225,30 +225,4 @@ export function usePrepNotice() {
     }, [skipped, restockInputs, inventory, schedulePush])
 
     return { ...view, ready, confirmPrep, toggleSkip, settle, toast }
-}
-
-// /inventory — "Bổ sung tồn kho": NVL cần MUA thêm cho ngày mai. Mua qua RestockModal của caller (không
-// ghi restock ở đây) nên chỉ trả danh sách + hàm tươi lại sau khi mua.
-export function useWarehousePrep() {
-    const { inventory, ready, common, forecastMap, todayExpenses, toast, handleLoadHistory } = useShiftPrepBase(HISTORY_OFFSETS_TOMORROW, RECENT_OFFSETS_TOMORROW)
-
-    const { batchKeys } = useProducts()
-    const items = useMemo(() => {
-        if (!ready) return []
-        return buildWarehousePrepList({
-            ...common, ingredientsList: common.ingredientsList?.filter(i => !batchKeys.has(i.ingredient)), effectiveWarehouseStocks: inventory.effectiveWarehouseStocks, restockInputs: inventory.restockInputs,
-            inventoryInputs: inventory.inventoryInputs, nextDowUsedMap: forecastMap, todayBoughtMap: buildTodayBoughtMap(todayExpenses),
-        })
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ready, todayExpenses, common.ingredientsList, common.openingInputs, common.openingStock, common.warehouseStocks, common.usedMap, common.producedMap, batchKeys,
-        inventory.effectiveWarehouseStocks, inventory.restockInputs, inventory.inventoryInputs, forecastMap])
-
-    // Sau khi mua/nhập kho: tươi lại tồn kho + danh sách NVL của hook để danh sách tính lại.
-    const reload = useCallback(
-        () => Promise.all([inventory.reloadStocks?.(), inventory.reloadIngredients?.(), handleLoadHistory()]),
-        [inventory, handleLoadHistory])
-
-    const view = useSnapshot('warehouse', { items }, ready)
-
-    return { items: view.items, ready, ingredientsList: inventory.ingredientsList, warehouseStocks: inventory.warehouseStocks, reload, toast }
 }

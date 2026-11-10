@@ -5,6 +5,7 @@ import { useAddress } from '../../contexts/AddressContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useConfirm } from '../../contexts/ConfirmContext'
 import { fetchDailyReportContext, invalidateDailyContext, updateShiftClosing } from '../../services/orderService'
+import { confirmInventory } from '../../services/reportService'
 import { useShiftInventoryState } from '../../hooks/useShiftInventoryState'
 import { useDailyReportData } from '../../hooks/useDailyReportData'
 import { useShiftFinalized } from '../../hooks/useShiftFinalized'
@@ -16,7 +17,7 @@ import type { Row } from '../../types/domain'
 import { useOnboardingProgress } from '../../hooks/useOnboardingProgress'
 import { useVisualViewportBox } from '../../hooks/useVisualViewportBox'
 import { getPendingOrders } from '../../hooks/useOfflineSync'
-import { calculateEstimatedConsumption, calculateConsumptionBreakdown, buildIngredientToProduct, orderItemsOf, isLiveOrder, sumLiveRevenue } from '../../utils/inventory'
+import { calculateEstimatedConsumption, calculateConsumptionBreakdown, buildIngredientToProduct, orderItemsOf, isLiveOrder, sumLiveRevenue, usedOf } from '../../utils/inventory'
 import { ingredientLabel } from '../../utils/ingredients'
 import { findIngredientByLabel, onboardingHintClass } from '../../utils/onboardingHint'
 import { isInventoryProgressDone } from '../../utils/onboardingStorage'
@@ -72,37 +73,65 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
         () => ({ isDayScope, seedReady: isDayScope && isAsyncReady, todayClosing: shiftClosing, yesterdayClosing }),
         [isDayScope, isAsyncReady, shiftClosing, yesterdayClosing]
     )
-    const inventory = useShiftInventoryState(addressId, selectedAddress?.ingredient_sort_order, todayISO, onFieldConflict, undefined, inventorySeed)
+    // Máy khác đếm / xác nhận: kéo inventory_report mới về để banner "Đã xác nhận" và mốc cắt đơn theo kịp.
+    const onRemoteRow = useCallback((row: Row) => {
+        if (row.inventory_report) setShiftClosing(prev => (prev ? { ...prev, inventory_report: row.inventory_report } : prev))
+    }, [setShiftClosing])
+    const inventory = useShiftInventoryState(addressId, selectedAddress?.ingredient_sort_order, todayISO, onFieldConflict, onRemoteRow, inventorySeed)
 
     const isTodaysClosing = !!shiftClosing?.closed_at && dateStringVN(new Date(shiftClosing.closed_at)) === todayISO
-    const shiftDone = useShiftFinalized({
+    useShiftFinalized({   // chỉ để ghi cờ "hoàn tất ca" (HistoryPage đọc), banner đã thay bằng nút Khóa
         shiftClosing, isTodaysClosing, ingredientsList: inventory.ingredientsList,
         isTodayScope, addressId, todayISO,
     })
 
-    // Lần lưu kiểm kê cuối = counted_at (server đóng khi số đếm đổi) lớn nhất trong phiếu hôm nay.
-    // ponytail: lưu chỉ sửa Nhập thêm/Đầu kỳ không đóng dấu mới → không dời mốc; null → hiện nhãn cũ.
-    const lastSavedAt = useMemo(() => {
-        const times = ((shiftClosing?.inventory_report as { counted_at?: string }[] | undefined) ?? [])
-            .map(e => e.counted_at ? new Date(e.counted_at).getTime() : NaN)
-            .filter(t => !Number.isNaN(t))
-        return times.length ? new Date(Math.max(...times)) : null
-    }, [shiftClosing])
+    // Giờ xác nhận kiểm kê lần cuối = confirmed_at (server đóng bởi set_inventory_confirm, mất khi số đếm đổi) lớn nhất
+    // trong phiếu hôm nay; có = số Cuối kỳ đã thành Tồn quầy đang có, đơn sau giờ này trừ tiếp vào đó.
+    // changedSince: có entry đã đếm mà chưa xác nhận (sửa số sau lần xác nhận trước). allCounted: mọi NVL đã đếm hoặc bỏ qua.
+    const { confirmedAt, confirmedByIng, changedSince, allCounted } = useMemo(() => {
+        const report = (shiftClosing?.inventory_report as { ingredient: string; remaining?: number | null; skipped?: boolean; confirmed_at?: string }[] | undefined) ?? []
+        const confirmedByIng = new Map(report.filter(e => e.confirmed_at).map(e => [e.ingredient, new Date(e.confirmed_at!).getTime()]))
+        const times = [...confirmedByIng.values()]
+        const byIng = new Map(report.map(e => [e.ingredient, e]))
+        return {
+            confirmedByIng,
+            confirmedAt: times.length ? new Date(Math.max(...times)) : null,
+            changedSince: times.length > 0 && report.some(e => e.remaining != null && !e.confirmed_at),
+            allCounted: inventory.ingredientsList.length > 0 && inventory.ingredientsList.every(ing => {
+                const e = byIng.get(ing.ingredient)
+                return e && (e.remaining != null || e.skipped)
+            }),
+        }
+    }, [shiftClosing, inventory.ingredientsList])
 
     // ── Hao hụt hôm nay: lượng tiêu hao ước tính từ đơn hôm nay (online + chờ đồng bộ) ──
     const offlineToday = useMemo(
         () => (isTodayScope ? getPendingOrders().filter(o => isSameDayVN(new Date(o.createdAt), new Date())) : []),
         [isTodayScope]
     )
-    const todayOrderItems = useMemo(
-        () => (isTodayScope ? [...todayOrders.filter(isLiveOrder), ...offlineToday].flatMap(o => orderItemsOf(o)) : []),
+    const ordersToday = useMemo(
+        () => (isTodayScope
+            ? [...todayOrders.filter(isLiveOrder).map(o => ({ at: new Date(o.created_at).getTime(), items: orderItemsOf(o) })),
+                ...offlineToday.map(o => ({ at: new Date(o.createdAt).getTime(), items: orderItemsOf(o) }))]
+            : []),
         [isTodayScope, todayOrders, offlineToday]
     )
-    // Hôm nay: tiêu hao từ đơn + ròng của mẻ sản xuất (nguyên liệu gốc +, thành phẩm −).
-    const usedMap = useMemo(
-        () => (isTodayScope ? mergeUsage(calculateEstimatedConsumption(todayOrderItems, recipes, extraIngredients), productionOnDay(productionRows, todayISO)) : calculateEstimatedConsumption(todayOrderItems, recipes, extraIngredients)),
-        [todayOrderItems, recipes, extraIngredients, isTodayScope, productionRows, todayISO]
+    // Đã xác nhận kiểm kê: đơn SAU giờ xác nhận thuộc kỳ mới (trừ vào số đã xác nhận), không tính vào hao hụt của kỳ vừa đếm.
+    // Chỉ dùng cho bảng "dùng cho món nào" (breakdown); Sử dụng từng NVL cắt theo giờ xác nhận RIÊNG của nó (usedMap).
+    const todayOrderItems = useMemo(
+        () => ordersToday.filter(o => !confirmedAt || o.at < confirmedAt.getTime()).flatMap(o => o.items),
+        [ordersToday, confirmedAt]
     )
+    // Hôm nay: tiêu hao từ đơn + ròng của mẻ sản xuất (nguyên liệu gốc +, thành phẩm −).
+    // NVL đã xác nhận chỉ tính đơn trước giờ xác nhận CỦA NÓ; NVL đếm lại sau đó (mất confirmed_at) tính đủ đơn tới giờ.
+    const usedMap = useMemo(() => {
+        const used = { ...calculateEstimatedConsumption(ordersToday.flatMap(o => o.items), recipes, extraIngredients) }
+        for (const at of new Set(confirmedByIng.values())) {
+            const before = calculateEstimatedConsumption(ordersToday.filter(o => o.at < at).flatMap(o => o.items), recipes, extraIngredients)
+            for (const [ing, t] of confirmedByIng) if (t === at) used[ing] = usedOf(before, ing)
+        }
+        return isTodayScope ? mergeUsage(used, productionOnDay(productionRows, todayISO)) : used
+    }, [ordersToday, confirmedByIng, recipes, extraIngredients, isTodayScope, productionRows, todayISO])
     // Phần thành phẩm làm ra hôm nay (dương) — cộng vào "Nhập thêm" khi hiển thị để Sử dụng chỉ còn phần bán.
     const madeMap = useMemo(
         () => isTodayScope ? madeOf(productionOnDay(productionRows, todayISO)) : {},
@@ -186,6 +215,23 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
             if (fresh?.shift_closing) inventory.setExistingClosing(fresh.shift_closing)
         } catch (err) {
             showError(err, 'Lưu báo cáo tồn kho')
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    // Xác nhận kiểm kê lần cuối: số Cuối kỳ thành Tồn quầy đang có, đơn sau giờ này trừ tiếp vào đó (migration 20261041).
+    const handleConfirmInventory = async () => {
+        if (!selectedAddress) return
+        setIsSaving(true)
+        try {
+            const row = await confirmInventory(addressId)
+            const [fresh] = await Promise.all([fetchDailyReportContext(addressId), inventory.reloadStocks()])
+            setShiftClosing(fresh?.shift_closing || row)
+            if (fresh?.shift_closing) inventory.setExistingClosing(fresh.shift_closing)
+            showToast('Đã xác nhận kiểm kê lần cuối', 'success')
+        } catch (err) {
+            showError(err, 'Xác nhận kiểm kê')
         } finally {
             setIsSaving(false)
         }
@@ -294,9 +340,24 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
 
                     {!isStaff && <MissingCupSuspicionCard candidates={missingCupCandidates} />}
 
-                    {shiftDone && (
-                        <div className="flex items-center justify-center gap-2 bg-success/10 border border-success/30 px-3 py-2 rounded-[10px] text-success">
-                            <span className="text-[12px] font-bold uppercase tracking-wide">{lastSavedAt ? `Lần cuối kiểm kê: ${timeStringVN(lastSavedAt)}` : 'Đã hoàn tất ca hôm nay'}</span>
+                    {!isGuest && (
+                        <div className={`flex items-center justify-between gap-3 rounded-[14px] border px-3 py-2.5 ${changedSince ? 'bg-warning/10 border-warning/30' : confirmedAt ? 'bg-success/10 border-success/30' : 'bg-surface border-border/40'}`}>
+                            <div className="min-w-0">
+                                <p className={`text-[12px] font-bold ${changedSince ? 'text-warning' : confirmedAt ? 'text-success' : 'text-text'}`}>
+                                    {changedSince ? `Có số mới sau lần xác nhận ${timeStringVN(confirmedAt!)}` : confirmedAt ? `Đã xác nhận kiểm kê lúc ${timeStringVN(confirmedAt)}` : 'Chưa xác nhận kiểm kê'}
+                                </p>
+                                <p className="text-[11px] text-text-dim">
+                                    {inventory.isDirty ? 'Đang có thay đổi chưa lưu' : !allCounted ? 'Đếm hết nguyên liệu để xác nhận' : 'Đơn mới sau giờ xác nhận trừ vào tồn quầy'}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                disabled={isSaving || inventory.isDirty || !allCounted || (!!confirmedAt && !changedSince)}   // đã xác nhận mà chưa có số mới: bấm lại sẽ dời mốc trừ đơn, tồn quầy nhảy ngược
+                                onClick={handleConfirmInventory}
+                                className={`shrink-0 rounded-[10px] px-3 py-2 text-[12px] font-bold disabled:opacity-40 ${confirmedAt && !changedSince ? 'border border-success/40 text-success' : 'bg-success text-bg'}`}
+                            >
+                                {confirmedAt ? 'Cập nhật' : 'Xác nhận'}
+                            </button>
                         </div>
                     )}
                 </div>

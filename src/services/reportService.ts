@@ -190,6 +190,15 @@ export async function mergeShiftClosingInventory(addressId: UUID | null, patches
     return Array.isArray(data) ? data[0] : data
 }
 
+// Xác nhận kiểm kê lần cuối hôm nay (RPC set_inventory_confirm): số Cuối kỳ thành Tồn quầy đang có, đơn sau giờ xác nhận trừ tiếp vào đó.
+export async function confirmInventory(addressId: UUID | null) {
+    invalidateReportCache(addressId)
+    const { data, error } = await supabase.rpc('set_inventory_confirm', { p_address_id: addressId })
+    if (error) throw error
+    invalidateInflight(addressId)
+    return Array.isArray(data) ? data[0] : data
+}
+
 // get_daily_report_context/get_report_by_date đã trả cash_closed_at thẳng trong shift_closing
 // (migration 20260818_report_rpc_cash_closed_at.sql) — không cần bù thêm PK lookup riêng nữa.
 
