@@ -13,6 +13,20 @@ const SUPPORT_LINKS = {
     facebook: 'https://www.facebook.com/groups/1540591197862324',
 }
 
+// 2 nút liên hệ (Facebook / Zalo) — dùng trong modal này và section "Hỗ trợ" của trang đăng ký gói.
+export function SupportLinks() {
+    return (
+        <div className="grid grid-cols-2 gap-3">
+            {([[SUPPORT_LINKS.facebook, '#1877f2', facebookImg, 'Facebook'], [SUPPORT_LINKS.zalo, '#0068ff', zaloImg, 'Zalo']] as const).map(([href, color, img, alt]) => (
+                // Màu nền 10% / viền 20% bằng hex alpha (1a / 33) — Tailwind không sinh class từ chuỗi ghép động.
+                <a key={alt} href={href} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: `${color}1a`, borderColor: `${color}33` }} className="flex items-center justify-center py-4 rounded-[14px] border transition-all active:scale-[0.98]">
+                    <img src={img} alt={alt} className="w-9 h-9 rounded-[11px] object-cover shadow-sm" />
+                </a>
+            ))}
+        </div>
+    )
+}
+
 export default function SupportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     const { profile } = useAuth()
     const { toast, showError } = useToast()
@@ -56,26 +70,7 @@ export default function SupportModal({ open, onClose }: { open: boolean; onClose
                     </button>
                 </div>
 
-                {/* Options List */}
-                <div className="grid grid-cols-2 gap-3">
-                    <a
-                        href={SUPPORT_LINKS.facebook}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-center py-4 rounded-[14px] bg-[#1877f2]/10 hover:bg-[#1877f2]/15 border border-[#1877f2]/20 transition-all active:scale-[0.98]"
-                    >
-                        <img src={facebookImg} alt="Facebook" className="w-9 h-9 rounded-[11px] object-cover shadow-sm" />
-                    </a>
-
-                    <a
-                        href={SUPPORT_LINKS.zalo}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-center py-4 rounded-[14px] bg-[#0068ff]/10 hover:bg-[#0068ff]/15 border border-[#0068ff]/20 transition-all active:scale-[0.98]"
-                    >
-                        <img src={zaloImg} alt="Zalo" className="w-9 h-9 rounded-[11px] object-cover shadow-sm" />
-                    </a>
-                </div>
+                <SupportLinks />
 
                 <div className="h-px bg-border/40" />
 

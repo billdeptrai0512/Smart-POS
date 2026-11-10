@@ -103,14 +103,15 @@ export function useMonetizationEnabled() {
  */
 export function useEntitlement() {
     const { selectedAddress } = useAddress()
-    const { isGuest } = useAuth()
+    const { isGuest, isAdmin } = useAuth()
     const { enabled, loading: configLoading } = useMonetizationEnabled()
 
     // selectedAddress?.id === null (not undefined) ⇒ "Mẫu mặc định" đang được chọn
     // (object có id, id=null) — phân biệt với "chưa chọn địa chỉ" (selectedAddress
     // chính nó null/undefined ⇒ ?.id trả undefined).
     const isDefaultTemplate = selectedAddress?.id === null
-    const bypass = !enabled || isGuest || isDefaultTemplate
+    // Admin: khớp cổng /addresses (admin luôn "Bỏ qua" được) — không thì vào bằng lối tắt bị đá sang paywall.
+    const bypass = !enabled || isGuest || isAdmin || isDefaultTemplate
 
     const [state, setState] = useState({ hasAccess: false, loading: true })
 

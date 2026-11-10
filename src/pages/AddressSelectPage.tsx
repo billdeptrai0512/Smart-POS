@@ -151,16 +151,17 @@ export default function AddressSelectPage() {
         return () => { cancelled = true; clearTimeout(t) }
     }, [newShareCode])
 
-    // Cổng gói: sắp/đã hết hạn → mở /subscription của địa chỉ (SubscriptionPage lo nút Bỏ qua). Admin/guest bỏ qua.
+    // Cổng gói: sắp/đã hết hạn → mở /subscription của địa chỉ (SubscriptionPage lo nút Bỏ qua; admin luôn bỏ qua được). Guest không qua cổng.
     // rowsOverride: địa chỉ vừa tạo chưa có trong subscriptionRowsMap → truyền [] (chưa đăng ký).
     function enter(addr: Address, path: string, state?: { from: string }, rowsOverride?: Row[]) {
-        const gate = isAdmin || isGuest ? { level: 'ok' as const, days: 0 } : computeAccessGate(rowsOverride ?? subscriptionRowsMap[addr.id])
-        if (gate.level === 'ok') {
+        const gate = isGuest ? 'ok' : computeAccessGate(rowsOverride ?? subscriptionRowsMap[addr.id])
+        if (gate === 'ok') {
             setSelectedAddress(addr)
             navigate(path, { replace: path === '/pos', state })
             return
         }
-        navigate('/subscription', { state: { preselectAddressId: addr.id, from: '/addresses', gate, skipTo: path, skipState: state } })
+        // locked: địa chỉ vừa tạo chưa có trong subscriptionRowsMap nên SubscriptionPage không tự tính ra 'hard' được.
+        navigate('/subscription', { state: { preselectAddressId: addr.id, from: '/addresses', locked: gate === 'hard', skipTo: path, skipState: state } })
     }
 
     const handleSelect = (addr: Address, rowsOverride?: Row[]) => enter(addr, '/pos', undefined, rowsOverride)

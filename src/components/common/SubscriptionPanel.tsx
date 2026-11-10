@@ -13,6 +13,7 @@ import { copyText } from '../../utils/clipboard'
 import { errorMessage } from '../../utils/errorMessage'
 import type { UUID } from '../../types/domain'
 import { BottomSheet, Dialog, ModalActions } from './ModalShell'
+import { SupportLinks } from './SupportModal'
 
 // Gradient vàng thương hiệu (đồng bộ badge "developed by").
 const GOLD = 'linear-gradient(135deg, #f8c577, #f59e0b, #d4882f, #b8732a)'
@@ -392,7 +393,10 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                 </div>
             </section>
 
-
+            <section className="flex flex-col gap-2.5">
+                <SectionHeader title="Liên hệ hỗ trợ" />
+                <SupportLinks />
+            </section>
 
             {/* ── Footer dính đáy: nút Reset (Admin). User thường xác nhận qua webhook. ── */}
             {isAdmin && (

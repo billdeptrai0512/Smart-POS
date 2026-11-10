@@ -24,7 +24,7 @@ export default function SubscriptionGuard() {
         const check = async () => {
             const res = await fetchSubscriptionStatuses([addressId])
             if (cancelled || !res) return
-            if (computeAccessGate(res.rowsMap[addressId]).level === 'hard') navigate('/addresses', { replace: true })
+            if (computeAccessGate(res.rowsMap[addressId]) === 'hard') navigate('/addresses', { replace: true })
         }
         check()
         const id = setInterval(check, RECHECK_MS)

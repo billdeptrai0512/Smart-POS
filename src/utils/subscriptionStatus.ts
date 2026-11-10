@@ -11,20 +11,20 @@ export const expiryTone = (daysLeft: number) => daysLeft <= 3 ? 'danger' : daysL
 // vẫn "Bỏ qua" được EXPIRED_GRACE_DAYS ngày, sau đó khoá cứng.
 // ⚠️ EXPIRED_GRACE_DAYS phải khớp `valid_to + 3` trong get_address_entitlement (20261041).
 export const RENEW_WARN_DAYS = 7
-export const EXPIRED_GRACE_DAYS = 3
+const EXPIRED_GRACE_DAYS = 3
 
-export type AccessGate = { level: 'ok' | 'warn' | 'soft' | 'hard'; days: number }
+// remind = mở paywall nhưng còn "Bỏ qua" được (sắp hết hạn, hoặc trong ân hạn sau hết hạn).
+export type AccessGate = 'ok' | 'remind' | 'hard'
 
 // rows == null (chưa tải / lỗi mạng) → 'ok': fail-open. [] = chưa từng đăng ký → 'hard'.
-// days: warn = số ngày còn lại; soft/hard = số ngày đã hết hạn.
 export function computeAccessGate(rows?: Row[] | null): AccessGate {
-    if (!rows) return { level: 'ok', days: 0 }
-    if (rows.length === 0) return { level: 'hard', days: 0 }
+    if (!rows) return 'ok'
+    if (rows.length === 0) return 'hard'
     const s = computeSubscriptionStatus(rows)
-    if (s.status !== 'none') return { level: s.daysLeft! <= RENEW_WARN_DAYS ? 'warn' : 'ok', days: s.daysLeft! }
+    if (s.status !== 'none') return s.daysLeft! <= RENEW_WARN_DAYS ? 'remind' : 'ok'
     const latest = rows.reduce((a, b) => (b.valid_to > a.valid_to ? b : a))
     const days = Math.round((startOfDayVN().getTime() - startOfDayVN(new Date(latest.valid_to)).getTime()) / 86400000)
-    return { level: days <= EXPIRED_GRACE_DAYS ? 'soft' : 'hard', days }
+    return days <= EXPIRED_GRACE_DAYS ? 'remind' : 'hard'
 }
 
 export function computeSubscriptionStatus(rows?: Row[] | null) {
