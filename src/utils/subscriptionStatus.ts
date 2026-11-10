@@ -9,7 +9,7 @@ export const expiryTone = (daysLeft: number) => daysLeft <= 3 ? 'danger' : daysL
 
 // Cổng vào địa chỉ: nhắc gia hạn khi còn ≤ RENEW_WARN_DAYS (cũng là mốc chấm vàng của badge); hết hạn thì
 // vẫn "Bỏ qua" được EXPIRED_GRACE_DAYS ngày, sau đó khoá cứng.
-// ⚠️ EXPIRED_GRACE_DAYS phải khớp `valid_to + 3` trong get_address_entitlement (20261041).
+// ⚠️ EXPIRED_GRACE_DAYS phải khớp `valid_to + 3` trong get_address_entitlement (20261044).
 export const RENEW_WARN_DAYS = 7
 const EXPIRED_GRACE_DAYS = 3
 
@@ -41,7 +41,7 @@ export function computeSubscriptionStatus(rows?: Row[] | null) {
     }
     const dominant = active.reduce((a, b) => (b.valid_to > a.valid_to ? b : a))
     return {
-        // 'grace' = ân hạn 7 ngày của địa chỉ free cũ (20261041) → hiển thị như dùng thử.
+        // 'grace' = ân hạn chuyển đổi 3 ngày (20261044) → hiển thị như dùng thử.
         status: dominant.note === 'trial' || dominant.note === 'grace' ? 'trial' : 'paid',
         daysLeft: Math.round((startOfDayVN(new Date(dominant.valid_to)).getTime() - today.getTime()) / 86400000),
         validTo: dominant.valid_to,

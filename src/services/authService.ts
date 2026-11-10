@@ -289,7 +289,7 @@ export async function fetchSubscriptionStatuses(addressIds: UUID[]): Promise<{ s
     ;(data || []).forEach(r => { rowsMap[r.address_id].push(r) })
     const statusMap: Record<string, string> = {}
     addressIds.forEach(id => {
-        // 0 row = chưa đăng ký (không còn free tạm từ 20261041) → computeSubscriptionStatus([]) = 'none'.
+        // 0 row = chưa đăng ký (không còn free tạm từ 20261044) → computeSubscriptionStatus([]) = 'none'.
         statusMap[id] = computeSubscriptionStatus(rowsMap[id]).status
     })
     return { statusMap, rowsMap }
