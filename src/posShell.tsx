@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from 'react-router-dom'
 import OnboardingGuide from './components/common/onboarding/OnboardingGuide'
+import SubscriptionGuard from './components/common/SubscriptionGuard'
 
 // Gom mọi thứ chỉ vùng POS cần (providers + khung onboarding) vào MỘT chunk để App.tsx lazy-load —
 // /login, /signup, /forgot-password khỏi tải orderService/POSContext/ProductContext.
@@ -13,6 +14,7 @@ export function OnboardingLayout() {
   const onPos = useLocation().pathname === '/pos'
   return (
     <div className="flex flex-col h-full">
+      <SubscriptionGuard />
       {!onPos && <OnboardingGuide />}
       <div className="flex-1 min-h-0">
         <Outlet />

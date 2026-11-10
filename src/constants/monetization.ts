@@ -7,16 +7,13 @@
 /** Giá trị tier lưu trong address_subscriptions cho gói all-access. */
 export const ALL_TIER = 'all'
 
-/** Gói duy nhất: 888,888đ / 6 tháng / 1 địa chỉ. */
+/** Gói duy nhất: 88.888đ / tháng / 1 địa chỉ, full tính năng. */
 export const PLAN = {
-    months: 6,
-    price: 888888,
-    label: 'Trọn bộ báo cáo',
-    periodLabel: '6 tháng',
+    months: 1,
+    price: 88888,
+    label: 'Trọn bộ',
+    periodLabel: '1 tháng',
 }
-
-/** Số ngày trial mặc định (khớp trigger grant_trial_on_first_full_shift_close). */
-export const TRIAL_DAYS = 7
 
 /**
  * Thông tin nhận chuyển khoản (mở khoá thủ công, giai đoạn chưa có webhook).

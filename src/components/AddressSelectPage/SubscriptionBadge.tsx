@@ -9,11 +9,9 @@ import { computeSubscriptionStatus, expiryTone } from '../../utils/subscriptionS
  * Thứ tự ưu tiên:
  *   - không bán hàng hôm nay (hasActivity=false) → "Không hoạt động", che mọi nhánh khác
  *     (gate chỉ có mở/khoá báo cáo; trial/pending/paid chỉ là LÝ DO)
- *   - pending (0 row address_subscriptions, chưa từng chốt ca) → "Đang dùng miễn phí", không đếm ngược;
- *     cố tình KHÁC chữ "Đang dùng thử" (trial thật có deadline) — xem docs/MONETIZATION.md §1
- *   - chưa có gói → "Chưa đăng ký"
- *   - có gói → "Đang dùng thử" (note='trial') | "Đã đăng ký" + còn X ngày. Lấy dòng valid_to muộn nhất
- *     làm gói hiệu lực nên paid nối tiếp trial hiện "Đã đăng ký". Chấm: ≤3 đỏ, ≤14 vàng, còn lại xanh.
+ *   - chưa có gói (0 row) → "Chưa đăng ký"; hết trial/ân hạn → "Hết dùng thử"
+ *   - có gói → "Đang dùng thử" (note='trial'|'grace') | "Đã đăng ký" + còn X ngày. Lấy dòng valid_to muộn nhất
+ *     làm gói hiệu lực nên paid nối tiếp trial hiện "Đã đăng ký". Chấm: ≤3 đỏ, ≤7 vàng, còn lại xanh.
  *
  * loading = rows thật chưa về (lúc này rỗng nên sẽ sai thành "Chưa đăng ký") → không render; ẩn
  * hẳn thay vì skeleton để footer không nhảy chiều cao.
@@ -23,13 +21,12 @@ import { computeSubscriptionStatus, expiryTone } from '../../utils/subscriptionS
 interface Props {
     addressId?: UUID | null
     rows?: Row[] | null
-    pending?: boolean
     hasActivity?: boolean
     loading?: boolean
     onRenewClick?: () => void
 }
 
-export default function SubscriptionBadge({ addressId, rows, pending, hasActivity, loading, onRenewClick }: Props) {
+export default function SubscriptionBadge({ addressId, rows, hasActivity, loading, onRenewClick }: Props) {
     const { enabled } = useMonetizationEnabled()
 
     // Monetization OFF, hoặc chưa có addressId, hoặc rows thật chưa về → không render
@@ -51,19 +48,6 @@ export default function SubscriptionBadge({ addressId, rows, pending, hasActivit
     }
 
     const { status, daysLeft = 0, trialEnded } = computeSubscriptionStatus(rows)
-
-    if (status === 'none' && pending) {
-        return (
-            <StatusLine
-                id={`sub-badge-pending-${addressId}`}
-                onClick={handleClick}
-                dotClass="bg-success"
-                textClass="text-text-secondary"
-            >
-                Đang dùng miễn phí
-            </StatusLine>
-        )
-    }
 
     if (status === 'none') {
         return (
@@ -97,7 +81,7 @@ export default function SubscriptionBadge({ addressId, rows, pending, hasActivit
 }
 
 // `right` (vd "Còn X ngày") tách hẳn sang lề phải hàng — chỉ nhánh trial/paid có, các nhánh
-// còn lại (Không hoạt động/Đang dùng miễn phí/Chưa đăng ký) không truyền thì layout co lại
+// còn lại (Không hoạt động/Chưa đăng ký) không truyền thì layout co lại
 // bám trái như cũ.
 function StatusLine({ id, onClick, dotClass, textClass, right, children }: { id: string; onClick: (e: MouseEvent) => void; dotClass: string; textClass: string; right?: string; children: ReactNode }) {
     return (

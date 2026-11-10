@@ -18,7 +18,7 @@ export interface AddressStatsContextValue {
     /** addressId → Tổng thực thu hôm nay; chỉ có key khi chi nhánh đã nhập tiền */
     actualTotals: BranchActualTotals
     sessionsMap: Record<string, { name: string; role: string }[]>
-    /** addressId → 'trial' | 'paid' | 'none' | 'pending' */
+    /** addressId → 'trial' | 'paid' | 'none' */
     subscriptionStatusMap: Record<string, string>
     subscriptionRowsMap: Record<string, Row[]>
     subscriptionLoading: boolean

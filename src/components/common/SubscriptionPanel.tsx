@@ -1,30 +1,30 @@
 import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react'
-import { Loader2, CheckCircle2, Check, ChevronDown, ClipboardCheck, Download } from 'lucide-react'
+import { Loader2, CheckCircle2, Check, ChevronDown, ClipboardCheck } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAddress } from '../../contexts/AddressContext'
 import { useAddressStats } from '../../contexts/AddressStatsContext'
-import { createPaymentIntent, grantSubscription, resetSubscription } from '../../services/adminService'
+import { createPaymentIntent, resetSubscription } from '../../services/adminService'
 import { usePaymentPoll } from '../../hooks/usePaymentPoll'
 import { formatVND } from '../../utils'
-import { PLAN, ALL_TIER, BANK_INFO, TRIAL_DAYS } from '../../constants/monetization'
+import { PLAN, BANK_INFO } from '../../constants/monetization'
 import { computeSubscriptionStatus, expiryTone } from '../../utils/subscriptionStatus'
 import { dateFullVN } from '../../utils/dateVN'
 import { copyText } from '../../utils/clipboard'
 import { errorMessage } from '../../utils/errorMessage'
 import type { UUID } from '../../types/domain'
-import { BottomSheet } from './ModalShell'
+import { BottomSheet, Dialog, ModalActions } from './ModalShell'
 
 // Gradient vàng thương hiệu (đồng bộ badge "developed by").
 const GOLD = 'linear-gradient(135deg, #f8c577, #f59e0b, #d4882f, #b8732a)'
 
-// Thứ tự danh sách địa chỉ: hết dùng thử / chưa đăng ký (cần xử lý) → đang dùng thử → đã đăng ký → đang dùng miễn phí.
-const statusRank = ({ status, pending }: ReturnType<typeof computeSubscriptionStatus>) =>
-    status === 'trial' ? 1 : status === 'paid' ? 2 : pending ? 3 : 0
+// Thứ tự danh sách địa chỉ: hết dùng thử / chưa đăng ký (cần xử lý) → đang dùng thử → đã đăng ký.
+const statusRank = ({ status }: ReturnType<typeof computeSubscriptionStatus>) =>
+    status === 'trial' ? 1 : status === 'paid' ? 2 : 0
 const PILL_TONE = { danger: 'bg-danger/10 text-danger', warning: 'bg-warning/10 text-warning', success: 'bg-success/10 text-success' }
 
 /**
  * SubscriptionPanel — thân trang đăng ký gói (checkout).
- * 1 gói duy nhất: 888,888đ / 6 tháng / 1 địa chỉ → mở khoá cả 3 view báo cáo.
+ * 1 gói duy nhất: 88.888đ / tháng / 1 địa chỉ → full tính năng.
  * Multi-branch: chọn nhiều chi nhánh → tổng = giá × số chi nhánh.
  *
  * Props: preselectAddressId, onDone
@@ -47,8 +47,6 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
         setSelectedAddressIds([valid])
         didInit.current = true
     }, [addresses, preselectAddressId, addressId])
-    const [isMocking, setIsMocking] = useState(false)
-    const [isTrialMock, setIsTrialMock] = useState(false) // Mock cấp trial 7 ngày (khác admin_override 6 tháng)
     const [isResetting, setIsResetting] = useState(false)
     const [confirmReset, setConfirmReset] = useState(false) // 2-step confirm (không dùng window.confirm — bị chặn trong webview)
     const [adminError, setAdminError] = useState<string | null>(null)
@@ -61,6 +59,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
     const [refError, setRefError] = useState(false)
     const [refRetry, setRefRetry] = useState(0) // tăng → chạy lại effect tạo intent
     const [reviewHold, setReviewHold] = useState(false) // CK sai số tiền → chờ admin duyệt tay
+    const [confirmSaveQr, setConfirmSaveQr] = useState(false) // chạm QR → hỏi trước khi tải ảnh
 
     // Trạng thái gói + valid_to (hạn) hiện tại của TỪNG chi nhánh → vừa hiện trạng thái từng dòng,
     // vừa tính "hiệu lực đến" sau khi trả (gia hạn nối tiếp). null = chưa có sub active.
@@ -113,7 +112,6 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
     // ── Tính tiền: giá cố định × số chi nhánh ────────────────────────────────────
     const addrCount = selectedAddressIds.length
     const total = PLAN.price * addrCount
-    const canSubmit = addrCount > 0
 
     // ── Hiệu lực đến: tính theo quy tắc gia hạn nối tiếp (§4) ─────────────────────
     // Đang có sub active → cộng tiếp sau hạn cũ; chưa có → tính từ hôm nay.
@@ -124,10 +122,6 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
         if (vt) {
             const next = new Date(vt + 'T00:00:00'); next.setDate(next.getDate() + 1)
             if (next > today) from = next
-        }
-        if (isTrialMock) {
-            const d = new Date(from); d.setDate(d.getDate() + TRIAL_DAYS)
-            return d
         }
         return addMonths(from, PLAN.months)
     }
@@ -170,26 +164,6 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
         window.open(qrUrl, '_blank')
     }
 
-    const handleMockPayment = async () => {
-        if (!canSubmit) return
-        setIsMocking(true)
-        setAdminError(null)
-        try {
-            // Cấp trial 7 ngày qua RPC admin_set_subscription (note='trial' → RPC tự dùng
-            // 7 ngày cố định, bỏ qua p_months — xem 20260709_admin_mock_trial_grant.sql).
-            // Dùng để test flow + cấp lại trial thủ công khi trial tự động bị chặn.
-            await grantSubscription(selectedAddressIds, [ALL_TIER], 1, 0, 'trial')
-            // Đi cùng đường với webhook thật → hiện panel xác nhận (test được UI success).
-            // handleConfirmed() tự invalidate cache + refresh sort bên dưới.
-            setIsTrialMock(true)
-            setIsMocking(false)
-            handleConfirmed()
-        } catch (err) {
-            setAdminError('Lỗi: ' + errorMessage(err, 'không rõ nguyên nhân'))
-            setIsMocking(false)
-        }
-    }
-
     // Reset (dev/test): xoá sub của các chi nhánh đã chọn → về lại trạng thái khoá.
     // 2-step confirm inline: window.confirm bị chặn/treo trong webview & preview panel.
     const handleReset = async () => {
@@ -222,12 +196,8 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                 <div className="rounded-[18px] border border-success/30 bg-success-soft/40 px-4 py-7 flex flex-col items-center gap-3 text-center">
                     <CheckCircle2 size={52} strokeWidth={1.6} className="text-success animate-scale-up" />
                     <div>
-                        <p className="text-[16px] font-black text-text">{isTrialMock ? 'Đã cấp trial' : 'Thanh toán thành công'}</p>
-                        <p className="text-[12px] text-text-secondary mt-1">
-                            {isTrialMock
-                                ? `Trial ${TRIAL_DAYS} ngày · ${addrCount} chi nhánh`
-                                : `Đã mở khoá ${addrCount} chi nhánh · ${formatVND(total)}`}
-                        </p>
+                        <p className="text-[16px] font-black text-text">Thanh toán thành công</p>
+                        <p className="text-[12px] text-text-secondary mt-1">Đã mở khoá {addrCount} chi nhánh · {formatVND(total)}</p>
                     </div>
                 </div>
 
@@ -235,7 +205,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                 {selectedAddressIds.map(id => (
                     <div key={id} className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2">
                         <CopyRow label="Địa chỉ" value={addresses.find(a => a.id === id)?.name || '—'} />
-                        <CopyRow label="Thời hạn" value={isTrialMock ? `${TRIAL_DAYS} ngày` : PLAN.periodLabel} />
+                        <CopyRow label="Thời hạn" value={PLAN.periodLabel} />
                         <CopyRow label="Sử dụng đến" value={dateFullVN(newExpiryFor(id))} />
                     </div>
                 ))}
@@ -252,7 +222,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
 
     return (
         <div className="flex flex-col gap-5 animate-fade-in">
-            {/* ── Địa chỉ + hạn: mỗi địa chỉ đã chọn 1 dòng "tên | đến ngày" (gia hạn nối tiếp nên hạn mỗi chi nhánh có thể khác nhau). "Đổi" mở sheet chọn. ── */}
+            {/* ── Địa chỉ + hạn: mỗi địa chỉ đã chọn 1 dòng "tên | dùng đến ngày" (gia hạn nối tiếp nên hạn mỗi chi nhánh có thể khác nhau). Bấm "Đổi" hoặc cả thẻ để mở sheet chọn. ── */}
             <section className="flex flex-col gap-2.5">
                 <SectionHeader
                     title="Địa chỉ"
@@ -262,17 +232,32 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                         </button>
                     )}
                 />
-                <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2 max-h-[168px] overflow-y-auto">
+                <button
+                    type="button"
+                    onClick={() => setPickerOpen(true)}
+                    disabled={addresses.length === 0}
+                    className="w-full text-left rounded-[18px] border border-border/60 bg-surface px-3.5 py-3 flex flex-col gap-2 max-h-[168px] overflow-y-auto active:bg-surface-light transition-colors"
+                >
                     {addrCount > 0 ? selectedAddressIds.map(id => (
-                        <div key={id} className="flex items-center justify-between gap-3">
+                        <span key={id} className="w-full flex items-center justify-between gap-3">
                             <span className="min-w-0 truncate text-[13px] font-bold text-text">{addresses.find(a => a.id === id)?.name || '—'}</span>
-                            <span className="shrink-0 text-[12px] text-text-secondary tabular-nums">đến {accessLoaded ? dateFullVN(newExpiryFor(id)) : '…'}</span>
-                        </div>
+                            <span className="shrink-0 text-[12px] text-text-secondary tabular-nums">dùng đến {accessLoaded ? dateFullVN(newExpiryFor(id)) : '…'}</span>
+                        </span>
                     )) : (
-                        <p className="text-[12px] text-text-secondary font-medium">{addresses.length === 0 ? 'Chưa có chi nhánh nào.' : 'Chọn chi nhánh để đăng ký'}</p>
+                        <span className="text-[12px] text-text-secondary font-medium">{addresses.length === 0 ? 'Chưa có chi nhánh nào.' : 'Chọn chi nhánh để đăng ký'}</span>
                     )}
-                </div>
+                </button>
             </section>
+
+            {confirmSaveQr && (
+                <Dialog onClose={() => setConfirmSaveQr(false)} panelClassName="w-full max-w-xs mx-4 bg-surface border border-border/60 rounded-[20px] shadow-2xl p-5 flex flex-col gap-4">
+                    <div className="flex flex-col gap-1">
+                        <p className="text-[15px] font-black text-text">Lưu ảnh mã QR?</p>
+                        <p className="text-[12.5px] text-text-secondary">Ảnh được lưu vào máy để mở trong app ngân hàng và quét chuyển khoản.</p>
+                    </div>
+                    <ModalActions confirmLabel="Lưu ảnh" onCancel={() => setConfirmSaveQr(false)} onConfirm={() => { setConfirmSaveQr(false); saveQr() }} />
+                </Dialog>
+            )}
 
             {pickerOpen && (
                 <BottomSheet onClose={() => setPickerOpen(false)} panelClassName="w-full max-w-lg bg-surface rounded-t-[24px] border-t border-border/60 shadow-2xl p-5 pb-6 flex flex-col gap-3 animate-slide-up max-h-[85dvh]">
@@ -297,10 +282,9 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                     <div className="min-h-0 flex flex-col gap-1.5 overflow-y-auto">
                         {filteredAddresses.map(addr => {
                             const active = selectedAddressIds.includes(addr.id)
-                            const { status, daysLeft = 0, pending, trialEnded } = subByAddr[addr.id]
+                            const { status, daysLeft = 0, trialEnded } = subByAddr[addr.id]
                             const [pillText, pillCls] = status !== 'none'
                                 ? [`${status === 'trial' ? 'Dùng thử · ' : ''}còn ${daysLeft} ngày`, PILL_TONE[expiryTone(daysLeft)]]
-                                : pending ? ['Đang dùng miễn phí', 'bg-surface text-text-dim']
                                 : [trialEnded ? 'Hết dùng thử' : 'Chưa đăng ký', 'bg-primary/10 text-primary']
                             return (
                                 <button
@@ -309,7 +293,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                                     className={`w-full flex items-center gap-2 text-left rounded-[12px] border px-3 py-2 transition-colors ${active ? 'border-primary bg-primary/[0.07]' : 'border-border/60 bg-surface-light'}`}
                                 >
                                     <span className={`min-w-0 flex-1 text-[13px] font-bold truncate ${active ? 'text-text' : 'text-text-secondary'}`}>{addr.name}</span>
-                                    {/* Pill: còn X ngày (đã đăng ký) / Dùng thử · còn X ngày — màu theo độ gấp như chấm của SubscriptionBadge (>14 xanh, ≤14 vàng, ≤3 đỏ); Đang dùng miễn phí (xám) / Hết dùng thử / Chưa đăng ký (cam). */}
+                                    {/* Pill: còn X ngày (đã đăng ký) / Dùng thử · còn X ngày — màu theo độ gấp như chấm của SubscriptionBadge (>7 xanh, ≤7 vàng, ≤3 đỏ); Hết dùng thử / Chưa đăng ký (cam). */}
                                     {accessLoaded && <span className={`shrink-0 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${pillCls}`}>{pillText}</span>}
                                     {active && <Check size={15} strokeWidth={3} className="shrink-0 text-primary" />}
                                 </button>
@@ -350,14 +334,19 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                 />
                 <div className="rounded-[18px] border border-border/60 bg-surface px-3.5 py-3.5">
                     {/* QR — đứng giữa, một mình */}
+                    {/* Chạm QR → hỏi xác nhận rồi lưu ảnh. Viền gạch đứt của khung = gợi ý bấm được, cùng ngôn ngữ với gạch chân chấm của CopyRow. */}
                     <div className="flex justify-center py-1">
-                        <div className="relative w-[min(62%,220px)] aspect-square shrink-0 rounded-[16px] border flex items-center justify-center overflow-hidden bg-surface-light border-border/60 text-text-dim">
+                        <div className={`relative w-[min(62%,220px)] aspect-square shrink-0 rounded-[16px] flex items-center justify-center overflow-hidden bg-surface-light text-text-dim ${reference ? 'p-1 border-2 border-dashed border-text-dim' : 'border border-border/60'}`}>
                             <Corner className="top-2 left-2 border-t-2 border-l-2 rounded-tl-[6px]" />
                             <Corner className="top-2 right-2 border-t-2 border-r-2 rounded-tr-[6px]" />
                             <Corner className="bottom-2 left-2 border-b-2 border-l-2 rounded-bl-[6px]" />
                             <Corner className="bottom-2 right-2 border-b-2 border-r-2 rounded-br-[6px]" />
                             {reference
-                                ? <img src={qrUrl} alt="QR chuyển khoản" className="w-full h-full object-contain p-2.5 bg-white" />
+                                ? (
+                                    <button onClick={() => setConfirmSaveQr(true)} aria-label="Lưu ảnh QR" className="w-full h-full p-2.5 bg-white rounded-[10px] active:opacity-60 transition-opacity">
+                                        <img src={qrUrl} alt="QR chuyển khoản" className="w-full h-full object-contain" />
+                                    </button>
+                                )
                                 : refError
                                     ? (
                                         <button onClick={() => setRefRetry(n => n + 1)} className="flex flex-col items-center gap-1 text-text-secondary">
@@ -371,17 +360,14 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
 
                     {/* Tổng tiền — ngay dưới QR, không nhãn */}
                     {addrCount > 0 && (
-                        <div className="mt-2 flex items-center justify-center gap-3">
-                            <span className="text-[22px] font-black bg-clip-text text-transparent" style={{ backgroundImage: GOLD }}>{formatVND(total)}</span>
-                            {reference && (
-                                <button
-                                    onClick={saveQr}
-                                    aria-label="Lưu ảnh QR"
-                                    className="shrink-0 w-8 h-8 flex items-center justify-center rounded-[10px] bg-surface-light border border-border/60 text-text-secondary hover:text-text active:scale-95 transition-all"
-                                >
-                                    <Download size={15} strokeWidth={2.5} />
-                                </button>
-                            )}
+                        <div className="mt-2 flex flex-col items-center gap-0.5">
+                            <span className="flex items-baseline gap-1">
+                                <span className="text-[22px] font-semibold tracking-tight bg-clip-text text-transparent" style={{ backgroundImage: GOLD }}>{formatVND(total)}</span>
+                                <span className="text-[12px] font-medium text-text-dim">/ tháng</span>
+                            </span>
+                            <span className="text-[11px] text-text-dim">
+                                ≈ {formatVND(Math.round(total / 30))} / ngày
+                            </span>
                         </div>
                     )}
 
@@ -408,7 +394,7 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
 
 
 
-            {/* ── Footer dính đáy: nút Mock + Reset (Admin). User thường xác nhận qua webhook. ── */}
+            {/* ── Footer dính đáy: nút Reset (Admin). User thường xác nhận qua webhook. ── */}
             {isAdmin && (
                 <div className="sticky bottom-0 -mx-4 px-4 pt-2 bg-bg/85 backdrop-blur-md border-t border-border/50 pb-[max(env(safe-area-inset-bottom),8px)] flex flex-col gap-2">
                     <button
@@ -420,15 +406,8 @@ export default function SubscriptionPanel({ preselectAddressId, onDone }: { pres
                     {adminOpen && (
                         <>
                             <button
-                                onClick={handleMockPayment}
-                                disabled={isMocking || isResetting || !canSubmit}
-                                className="w-full py-2.5 rounded-[12px] bg-danger/10 text-danger text-[12px] font-bold hover:bg-danger/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                            >
-                                {isMocking ? <Loader2 size={14} className="animate-spin" /> : `Mock trial ${TRIAL_DAYS} ngày (Admin)`}
-                            </button>
-                            <button
                                 onClick={handleReset}
-                                disabled={isMocking || isResetting || !selectedAddressIds.length}
+                                disabled={isResetting || !selectedAddressIds.length}
                                 className={`w-full py-2 rounded-[12px] text-[11px] font-bold active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50
                                     ${confirmReset ? 'bg-danger/15 text-danger hover:bg-danger/25' : 'bg-surface-light text-text-secondary hover:bg-border/40'}`}
                             >

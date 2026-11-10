@@ -9,7 +9,7 @@ import { ICON_BTN } from './ModalShell'
 /**
  * SubscriptionScreen — trang đăng ký gói full-screen DÙNG CHUNG.
  * Header form giống /history: nút back bo góc trái + chip tiêu đề canh giữa.
- * 1 gói duy nhất (888,888đ / 6 tháng) → không còn chọn chu kỳ.
+ * 1 gói duy nhất (88.888đ / tháng) → không còn chọn chu kỳ.
  *
  * Một UI duy nhất cho mọi luồng:
  *   - Route /subscription (từ SubscriptionBadge) → backTo = /addresses
@@ -17,9 +17,10 @@ import { ICON_BTN } from './ModalShell'
  *
  * Props: backTo, preselectAddressId, onDone
  */
-interface Props { backTo?: string; preselectAddressId?: UUID; onDone?: () => void }
+// notice: dòng nhắc hết hạn đầu trang; onSkip: nút "Bỏ qua" dính đáy (chỉ truyền khi chưa khoá cứng).
+interface Props { backTo?: string; preselectAddressId?: UUID; onDone?: () => void; notice?: string; onSkip?: () => void }
 
-export default function SubscriptionScreen({ backTo = '/addresses', preselectAddressId, onDone }: Props) {
+export default function SubscriptionScreen({ backTo = '/addresses', preselectAddressId, onDone, notice, onSkip }: Props) {
     const navigate = useNavigate()
     const [showSupport, setShowSupport] = useState(false)
 
@@ -44,11 +45,22 @@ export default function SubscriptionScreen({ backTo = '/addresses', preselectAdd
             </header>
 
             <div className="flex-1 overflow-y-auto px-4 pt-4">
+                {notice && (
+                    <p className="mb-4 rounded-[14px] border border-warning/30 bg-warning/10 px-3.5 py-2.5 text-[12.5px] font-bold text-text">{notice}</p>
+                )}
                 <SubscriptionPanel
                     preselectAddressId={preselectAddressId}
                     onDone={onDone || (() => navigate(backTo))}
                 />
             </div>
+
+            {onSkip && (
+                <div className="shrink-0 px-4 pt-2 pb-[max(env(safe-area-inset-bottom),12px)] border-t border-border/50 bg-bg">
+                    <button onClick={onSkip} className="w-full py-2.5 rounded-[12px] bg-surface-light border border-border/60 text-text-secondary text-[13px] font-bold active:scale-[0.98] transition">
+                        Bỏ qua
+                    </button>
+                </div>
+            )}
 
             <SupportModal open={showSupport} onClose={() => setShowSupport(false)} />
         </div>

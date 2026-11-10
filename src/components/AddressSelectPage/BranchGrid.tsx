@@ -226,7 +226,6 @@ export default function BranchGrid({
                                 <SubscriptionBadge
                                     addressId={addr.id}
                                     rows={subscriptionRowsMap[addr.id]}
-                                    pending={subscriptionStatusMap[addr.id] === 'pending'}
                                     hasActivity={cups > 0 || revenue > 0}
                                     loading={subscriptionLoading || !hasStats}
                                     onRenewClick={() => navigate('/subscription', {

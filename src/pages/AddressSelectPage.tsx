@@ -17,7 +17,8 @@ import { BottomSheet, SheetHeader, SHEET_PANEL } from '../components/common/Moda
 import { cacheKey as buildCacheKey, STORAGE_KEYS } from '../constants/storageKeys'
 import { writeJSON } from '../utils/storage'
 import { errorMessage } from '../utils/errorMessage'
-import type { Address, UUID } from '../types/domain'
+import { computeAccessGate } from '../utils/subscriptionStatus'
+import type { Address, Row, UUID } from '../types/domain'
 
 // Module scope, KHÔNG phải useRef: page này unmount mỗi lần sang /pos, nên ref sẽ
 // reset và prefetch chạy lại từ đầu mỗi lần quay về danh sách địa chỉ.
@@ -150,15 +151,20 @@ export default function AddressSelectPage() {
         return () => { cancelled = true; clearTimeout(t) }
     }, [newShareCode])
 
-    function handleSelect(addr: Address) {
-        setSelectedAddress(addr)
-        navigate('/pos', { replace: true })
+    // Cổng gói: sắp/đã hết hạn → mở /subscription của địa chỉ (SubscriptionPage lo nút Bỏ qua). Admin/guest bỏ qua.
+    // rowsOverride: địa chỉ vừa tạo chưa có trong subscriptionRowsMap → truyền [] (chưa đăng ký).
+    function enter(addr: Address, path: string, state?: { from: string }, rowsOverride?: Row[]) {
+        const gate = isAdmin || isGuest ? { level: 'ok' as const, days: 0 } : computeAccessGate(rowsOverride ?? subscriptionRowsMap[addr.id])
+        if (gate.level === 'ok') {
+            setSelectedAddress(addr)
+            navigate(path, { replace: path === '/pos', state })
+            return
+        }
+        navigate('/subscription', { state: { preselectAddressId: addr.id, from: '/addresses', gate, skipTo: path, skipState: state } })
     }
 
-    function handleNavigate(addr: Address, path: string) {
-        setSelectedAddress(addr)
-        navigate(path, { state: { from: '/addresses' } })
-    }
+    const handleSelect = (addr: Address, rowsOverride?: Row[]) => enter(addr, '/pos', undefined, rowsOverride)
+    const handleNavigate = (addr: Address, path: string) => enter(addr, path, { from: '/addresses' })
 
     async function handleCreate() {
         if (!newAddressName.trim()) return
@@ -176,7 +182,7 @@ export default function AddressSelectPage() {
             setNewAddressName('')
             setNewShareCode('')
             setShowCreateModal(false)
-            handleSelect(addr)
+            handleSelect(addr, [])
         } catch (err) {
             // Clone lỗi sau khi đã tạo địa chỉ → xoá địa chỉ nửa vời (mirror BackupModal).
             if (createdId && code) {

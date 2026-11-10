@@ -5,7 +5,27 @@ import type { Row } from '../types/domain'
 // Paid nối tiếp trial → dòng muộn nhất là paid → status 'paid'.
 // Dùng chung giữa SubscriptionBadge (hiển thị) và fetchSubscriptionStatuses (sort danh sách).
 // Độ gấp theo số ngày còn lại — dùng chung chấm của SubscriptionBadge và pill trong sheet chọn địa chỉ.
-export const expiryTone = (daysLeft: number) => daysLeft <= 3 ? 'danger' : daysLeft <= 14 ? 'warning' : 'success'
+export const expiryTone = (daysLeft: number) => daysLeft <= 3 ? 'danger' : daysLeft <= RENEW_WARN_DAYS ? 'warning' : 'success'
+
+// Cổng vào địa chỉ: nhắc gia hạn khi còn ≤ RENEW_WARN_DAYS (cũng là mốc chấm vàng của badge); hết hạn thì
+// vẫn "Bỏ qua" được EXPIRED_GRACE_DAYS ngày, sau đó khoá cứng.
+// ⚠️ EXPIRED_GRACE_DAYS phải khớp `valid_to + 3` trong get_address_entitlement (20261041).
+export const RENEW_WARN_DAYS = 7
+export const EXPIRED_GRACE_DAYS = 3
+
+export type AccessGate = { level: 'ok' | 'warn' | 'soft' | 'hard'; days: number }
+
+// rows == null (chưa tải / lỗi mạng) → 'ok': fail-open. [] = chưa từng đăng ký → 'hard'.
+// days: warn = số ngày còn lại; soft/hard = số ngày đã hết hạn.
+export function computeAccessGate(rows?: Row[] | null): AccessGate {
+    if (!rows) return { level: 'ok', days: 0 }
+    if (rows.length === 0) return { level: 'hard', days: 0 }
+    const s = computeSubscriptionStatus(rows)
+    if (s.status !== 'none') return { level: s.daysLeft! <= RENEW_WARN_DAYS ? 'warn' : 'ok', days: s.daysLeft! }
+    const latest = rows.reduce((a, b) => (b.valid_to > a.valid_to ? b : a))
+    const days = Math.round((startOfDayVN().getTime() - startOfDayVN(new Date(latest.valid_to)).getTime()) / 86400000)
+    return { level: days <= EXPIRED_GRACE_DAYS ? 'soft' : 'hard', days }
+}
 
 export function computeSubscriptionStatus(rows?: Row[] | null) {
     const today = startOfDayVN()
@@ -15,13 +35,14 @@ export function computeSubscriptionStatus(rows?: Row[] | null) {
         return from <= today && today <= to
     })
     if (active.length === 0) {
-        // Không dòng nào còn hạn: 0 dòng = chưa full-close lần nào (đang free tạm); có dòng mà dòng muộn nhất là trial = hết dùng thử.
+        // Không dòng nào còn hạn: 0 dòng = chưa đăng ký; dòng muộn nhất là trial/grace = hết dùng thử.
         const latest = (rows || []).reduce<Row | null>((a, b) => (!a || b.valid_to > a.valid_to ? b : a), null)
-        return { status: 'none', validTo: null, pending: !latest, trialEnded: latest?.note === 'trial' }
+        return { status: 'none', validTo: null, trialEnded: latest?.note === 'trial' || latest?.note === 'grace' }
     }
     const dominant = active.reduce((a, b) => (b.valid_to > a.valid_to ? b : a))
     return {
-        status: dominant.note === 'trial' ? 'trial' : 'paid',
+        // 'grace' = ân hạn 7 ngày của địa chỉ free cũ (20261041) → hiển thị như dùng thử.
+        status: dominant.note === 'trial' || dominant.note === 'grace' ? 'trial' : 'paid',
         daysLeft: Math.round((startOfDayVN(new Date(dominant.valid_to)).getTime() - today.getTime()) / 86400000),
         validTo: dominant.valid_to,
     }

@@ -284,15 +284,13 @@ export async function fetchSubscriptionStatuses(addressIds: UUID[]): Promise<{ s
         // thành sai (giống loadStats giữ số cũ khi rớt mạng, xem AddressStatsContext.tsx).
         return null
     }
-    const rowsMap: Record<string, Row[]> = {}
-    ;(data || []).forEach(r => { (rowsMap[r.address_id] ??= []).push(r) })
+    // Điền [] cho mọi địa chỉ: [] = chưa đăng ký, undefined = chưa tải (computeAccessGate phân biệt 2 ca này).
+    const rowsMap: Record<string, Row[]> = Object.fromEntries(addressIds.map(id => [id, []]))
+    ;(data || []).forEach(r => { rowsMap[r.address_id].push(r) })
     const statusMap: Record<string, string> = {}
     addressIds.forEach(id => {
-        // 0 row = địa chỉ chưa từng full-close lần nào → đang free tạm chờ ca full
-        // đầu tiên (trial không còn giới hạn theo SĐT, xem 20260717_trial_4_
-        // per_address_not_per_phone.sql) → luôn là 'pending', không có case nào
-        // khác nữa nên không cần RPC riêng để phân biệt.
-        statusMap[id] = rowsMap[id]?.length ? computeSubscriptionStatus(rowsMap[id]).status : 'pending'
+        // 0 row = chưa đăng ký (không còn free tạm từ 20261041) → computeSubscriptionStatus([]) = 'none'.
+        statusMap[id] = computeSubscriptionStatus(rowsMap[id]).status
     })
     return { statusMap, rowsMap }
 }
