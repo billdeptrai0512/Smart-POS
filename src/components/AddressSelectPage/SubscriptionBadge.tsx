@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import type { Row, UUID } from '../../types/domain'
 import { useMonetizationEnabled } from '../../hooks/useEntitlement'
 import { computeSubscriptionStatus, expiryTone } from '../../utils/subscriptionStatus'
@@ -16,29 +16,25 @@ import { computeSubscriptionStatus, expiryTone } from '../../utils/subscriptionS
  * loading = rows thật chưa về (lúc này rỗng nên sẽ sai thành "Chưa đăng ký") → không render; ẩn
  * hẳn thay vì skeleton để footer không nhảy chiều cao.
  * rows lấy 1 lần cho TẤT CẢ địa chỉ ở AddressStatsContext (tránh N+1 request).
- * Render bằng <span role="button"> vì có thể nằm trong button cha (button lồng button gây hydration error).
+ * Không tự bắt click: bấm footer = bấm card (BranchGrid), cổng gói tự mở paywall khi cần.
  */
 interface Props {
     addressId?: UUID | null
     rows?: Row[] | null
     hasActivity?: boolean
     loading?: boolean
-    onRenewClick?: () => void
 }
 
-export default function SubscriptionBadge({ addressId, rows, hasActivity, loading, onRenewClick }: Props) {
+export default function SubscriptionBadge({ addressId, rows, hasActivity, loading }: Props) {
     const { enabled } = useMonetizationEnabled()
 
     // Monetization OFF, hoặc chưa có addressId, hoặc rows thật chưa về → không render
     if (!enabled || !addressId || loading) return null
 
-    const handleClick = (e: MouseEvent) => { e.stopPropagation(); onRenewClick?.() }
-
     if (!hasActivity) {
         return (
             <StatusLine
                 id={`sub-badge-inactive-${addressId}`}
-                onClick={handleClick}
                 dotClass="bg-text-secondary"
                 textClass="text-text-secondary"
             >
@@ -53,7 +49,6 @@ export default function SubscriptionBadge({ addressId, rows, hasActivity, loadin
         return (
             <StatusLine
                 id={`sub-badge-locked-${addressId}`}
-                onClick={handleClick}
                 dotClass="bg-primary"
                 textClass="text-primary"
             >
@@ -70,7 +65,6 @@ export default function SubscriptionBadge({ addressId, rows, hasActivity, loadin
     return (
         <StatusLine
             id={`sub-badge-status-${addressId}`}
-            onClick={handleClick}
             dotClass={dotClass}
             textClass={textClass}
             right={`còn ${daysLeft} ngày`}
@@ -83,14 +77,11 @@ export default function SubscriptionBadge({ addressId, rows, hasActivity, loadin
 // `right` (vd "Còn X ngày") tách hẳn sang lề phải hàng — chỉ nhánh trial/paid có, các nhánh
 // còn lại (Không hoạt động/Chưa đăng ký) không truyền thì layout co lại
 // bám trái như cũ.
-function StatusLine({ id, onClick, dotClass, textClass, right, children }: { id: string; onClick: (e: MouseEvent) => void; dotClass: string; textClass: string; right?: string; children: ReactNode }) {
+function StatusLine({ id, dotClass, textClass, right, children }: { id: string; dotClass: string; textClass: string; right?: string; children: ReactNode }) {
     return (
         <span
             id={id}
-            role="button"
-            tabIndex={0}
-            onClick={onClick}
-            className="w-full flex items-center justify-between gap-2 text-[12px] font-bold cursor-pointer active:opacity-70 transition-opacity"
+            className="w-full flex items-center justify-between gap-2 text-[12px] font-bold"
         >
             <span className="inline-flex items-center gap-1.5">
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} />

@@ -1,5 +1,4 @@
 import { useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
 import {
     Pencil, Trash2, ClipboardCopy, MoreVertical, X,
     Coffee, FileText, Package, ChevronRight, Eraser,
@@ -83,7 +82,6 @@ export default function BranchGrid({
     const closeSubModal = () => setSubModal(null)
     const [expandedActionsId, setExpandedActionsId] = useState<UUID | null>(null) // which card has the 3-action menu open
     const [actionsScrollFade, setActionsScrollFade] = useState(false) // còn nội dung bên dưới trong modal thao tác?
-    const navigate = useNavigate()
 
     function checkActionsScrollFade(el: HTMLElement | null) {
         if (!el) return
@@ -199,17 +197,15 @@ export default function BranchGrid({
                                 )}
                             </div>
 
-                            {/* Footer: trạng thái gói (mọi role). px-3 khớp p-3 của header → thẳng hàng với tên quán. */}
-                            <div className="border-t border-border/40 px-3 py-2">
+                            {/* Footer: trạng thái gói (mọi role). px-3 khớp p-3 của header → thẳng hàng với tên quán.
+                                Bấm = bấm card: cổng gói ở onSelect tự mở paywall khi cần (≤7 ngày / ân hạn). */}
+                            <div onClick={() => onSelect(addr)} className="border-t border-border/40 px-3 py-2 cursor-pointer hover:bg-surface-light active:bg-border/30 transition-colors">
                                 {/* Tự ẩn khi monetization OFF (badge return null) */}
                                 <SubscriptionBadge
                                     addressId={addr.id}
                                     rows={subscriptionRowsMap[addr.id]}
                                     hasActivity={cups > 0 || revenue > 0}
                                     loading={subscriptionLoading || !hasStats}
-                                    onRenewClick={() => navigate('/subscription', {
-                                        state: { preselectAddressId: addr.id, from: '/addresses' },
-                                    })}
                                 />
                             </div>
 
