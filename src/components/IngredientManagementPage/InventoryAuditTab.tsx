@@ -138,10 +138,16 @@ export default function InventoryAuditTab({ dateScope, inventoryProgress, setInv
         [isTodayScope, productionRows, todayISO]
     )
     const periodMadeMap = useMemo(() => madeInPeriods(productionRows, inventory.openingPeriods, todayISO), [productionRows, inventory.openingPeriods, todayISO])
-    const consumptionBreakdown = useMemo(
-        () => calculateConsumptionBreakdown(todayOrderItems, recipes, extraIngredients, products, productExtras),
-        [todayOrderItems, recipes, extraIngredients, products, productExtras]
-    )
+    // Cắt đơn theo giờ xác nhận RIÊNG của từng NVL — cùng mốc với usedMap, để "Đã sử dụng" và danh sách mũi tên không lệch nhau.
+    const consumptionBreakdown = useMemo(() => {
+        const calc = (items: typeof todayOrderItems) => calculateConsumptionBreakdown(items, recipes, extraIngredients, products, productExtras)
+        const breakdown = calc(ordersToday.flatMap(o => o.items))
+        for (const at of new Set(confirmedByIng.values())) {
+            const before = calc(ordersToday.filter(o => o.at < at).flatMap(o => o.items))
+            for (const [ing, t] of confirmedByIng) if (t === at) { if (before[ing]) breakdown[ing] = before[ing]; else delete breakdown[ing] }
+        }
+        return breakdown
+    }, [ordersToday, confirmedByIng, recipes, extraIngredients, products, productExtras])
     const ingredientToProduct = useMemo(
         () => buildIngredientToProduct({ orderItems: todayOrderItems, recipes, products }),
         [recipes, products, todayOrderItems],
